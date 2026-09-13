@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+:root {
+  --page-background: #fffaf4;
+  --page-foreground: #1f2937;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--page-background);
+  color: var(--page-foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}

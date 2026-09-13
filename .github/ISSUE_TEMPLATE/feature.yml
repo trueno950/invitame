@@ -1,0 +1,83 @@
+name: Feature request
+description: Propose a product or engineering outcome
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user or business problem before prescribing implementation. This template is guidance; the
+        repository currently has no automated issue approval or label enforcement.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Who experiences the problem, and what is the observable impact?
+      placeholder: Describe the problem and the affected InvitaMe audience.
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should be true when this request is complete?
+      placeholder: Describe behavior and user-visible outcomes without prescribing internal code.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: What is included, and what must remain out of scope?
+      placeholder: List the bounded scope, explicit non-goals, and any product assumptions.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: Which observable scenarios define completion, including failure cases?
+      placeholder: List testable outcomes and important rejected/unauthorized cases.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which boundary is primarily affected?
+      options:
+        - Auth and users
+        - Categories, templates, packages, and features
+        - Invitations and publication
+        - Guests and RSVP
+        - Payments
+        - Media
+        - Analytics and admin
+        - Web or API foundation
+        - Documentation and process
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Data, security, and operational considerations
+      description: Note migrations, personal data, public routes, providers, secrets, or recovery concerns.
+      placeholder: Write "None known" only after considering the affected trust boundaries.
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Request readiness
+      options:
+        - label: I searched for an existing request or accepted decision covering this outcome.
+          required: true
+        - label: The request is bounded and does not assume that planned roadmap behavior already exists.
+          required: true
+        - label: I understand that architecture, security, destructive migration, external-service, and delivery decisions require human approval.
+          required: true

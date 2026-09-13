@@ -1,0 +1,21 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+
+# Build and test output
+.next/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+.codegraph/
+.atl/
+
+# Local environment files
+.env
+.env.*
+!**/.env.example
+!**/.env.local.example
+
+# Operating system files
+.DS_Store

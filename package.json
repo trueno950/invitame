@@ -1,0 +1,28 @@
+{
+  "name": "invitame",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.0.0 <27",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "db:check": "pnpm --filter @invitame/api prisma:check",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @invitame/api prisma:migrate:deploy && pnpm --filter @invitame/api prisma:generate",
+    "db:seed": "pnpm --filter @invitame/api prisma:seed",
+    "db:up": "docker compose up -d postgres",
+    "dev": "turbo run dev",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.13",
+    "turbo": "2.10.12"
+  }
+}
