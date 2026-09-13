@@ -55,6 +55,7 @@ For a bounded API smoke check, start the API in one terminal and call its databa
 from another:
 
 ```bash
+pnpm --filter @invitame/api build
 pnpm --filter @invitame/api start
 curl --fail --max-time 5 http://localhost:3001/health
 ```
@@ -75,6 +76,7 @@ Stop the API with `Ctrl-C`. Use `pnpm db:down` to stop the local PostgreSQL cont
 ## Implemented scope boundary
 
 The current runtime intentionally excludes authentication flows, invitations, RSVP and guest records, payments,
-analytics, media storage, CI/CD, and hosted deployment. Docker Compose is used only for local PostgreSQL. See
+analytics, media storage, continuous deployment (CD), and hosted deployment. Limited quality-gate CI exists, but
+CD and hosted deployment are not implemented. Docker Compose is used only for local PostgreSQL. See
 [`ROADMAP.md`](ROADMAP.md) for the planned sequence and [`docs/README.md`](docs/README.md) for documentation
 entry points.

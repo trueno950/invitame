@@ -1,7 +1,8 @@
 # Quality gates
 
 This document is the practical Definition of Done for the current repository. The commands below reflect the
-scripts that exist today; future CI/CD enforcement is deliberately labeled as planned.
+scripts that exist today. A limited quality-gate CI workflow is implemented; CD, hosted deployment, and required-
+check governance remain planned.
 
 ## Definition of Done
 
@@ -35,10 +36,11 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Database connection | `pnpm db:check` | Executes the API connection check and a real `SELECT 1`. | Database changes or any claim about database connectivity. |
 | Stop local PostgreSQL | `pnpm db:down` | Stops the local Compose services. | After local database work when the environment is no longer needed. |
 
-`.github/workflows/ci.yml` runs the format/lint/typecheck/test/build/diff-hygiene gates on every push and pull
-request. The repository still has no dedicated coverage, integration, browser E2E, or migration-validation
-automation. Do not report those gates as passing. Add the capability only as part of an approved work unit that
-defines its scope and ownership.
+`.github/workflows/ci.yml` runs the format/lint/typecheck/test/build/diff-hygiene gates on pushes to `master` and
+`main` and on pull requests. This is a limited quality workflow, not CD, hosted deployment, or required-check
+governance. The repository still has no dedicated coverage, real database integration, browser E2E, or
+migration-validation automation. Do not report those gaps as passing. Add the capability only as part of an
+approved work unit that defines its scope and ownership.
 
 ## Recommended local sequences
 
@@ -129,9 +131,9 @@ If Docker, PostgreSQL, a browser, a provider sandbox, credentials, or another re
 
 ## CI/CD status
 
-`.github/workflows/ci.yml` runs on every push to `main` and every pull request: `pnpm install --frozen-lockfile`,
-Prisma client generation, `format:check`, `lint`, `typecheck`, `test`, `build`, and `git diff --check`, in that
-order. It does not start PostgreSQL, so database/migration/seed verification stays a manual local gate (see the
-database change sequence above). Required status checks, hosted integration databases, browser runners, and
-deployment gates remain planned; adopt each through an explicit process change rather than assuming CI already
-covers them.
+The repository has a limited quality-gate CI workflow. It runs on pushes to `master` and `main` and every pull
+request: `pnpm install --frozen-lockfile`, Prisma client generation, `format:check`, `lint`, `typecheck`, `test`,
+`build`, and `git diff --check`, in that order. It does not start PostgreSQL, so database/migration/seed
+verification stays a manual local gate (see the database change sequence above). Required status checks, hosted
+integration databases, browser runners, CD, and deployment gates remain planned; adopt each through an explicit
+process change rather than assuming the limited CI workflow already covers them.

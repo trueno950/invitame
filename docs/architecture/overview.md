@@ -13,7 +13,7 @@ implemented.
 | API | `apps/api` has configuration, a global Prisma service, and `GET /health`. | Feature modules exposing stable REST contracts. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
-| Operations | Local Docker Compose database and workspace scripts only. | CI/CD, deployment, observability, and provider operations. **Planned.** |
+| Operations | Local Docker Compose database, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
 
 ## Context and runtime map
 

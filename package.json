@@ -13,7 +13,7 @@
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @invitame/api prisma:migrate:deploy && pnpm --filter @invitame/api prisma:generate",
     "db:seed": "pnpm --filter @invitame/api prisma:seed",
-    "db:up": "docker compose up -d postgres",
+    "db:up": "docker compose up -d --wait postgres",
     "dev": "turbo run dev",
     "format": "biome format --write .",
     "format:check": "biome format .",

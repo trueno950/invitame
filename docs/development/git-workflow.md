@@ -1,9 +1,10 @@
 # Git change workflow
 
 This is the intended workflow for reviewable InvitaMe changes. It documents procedure; it does not install hooks,
-create GitHub automation, or authorize delivery actions. The current checkout is a greenfield `master` branch with
-no commits or GitHub governance, so commands involving `main`, `origin`, or a pull request apply when that
-repository structure exists or after a human establishes it.
+create GitHub automation, or authorize delivery actions. The repository has a limited quality-gate CI workflow for
+pushes to `master` and `main` and pull requests, but no CD/hosted deployment automation or issue/PR enforcement.
+The current checkout is a greenfield `master` branch with no commits, so commands involving `main`, `origin`, or a
+pull request apply when that repository structure exists or after a human establishes it.
 
 ## 1. Start from a known base
 
@@ -162,7 +163,7 @@ The PR body should include:
 
 Issue linkage is recommended now as a planning habit and becomes required once GitHub governance explicitly
 adopts issue-first approval. This repository currently has no workflow that validates issues, labels, or PR bodies;
-the lightweight templates are guidance, not enforcement.
+the lightweight templates are guidance, not enforcement, and the quality-gate CI workflow does not change that.
 
 ## 7. Human approval and merge boundary
 
@@ -172,4 +173,4 @@ rewrite shared history, commit directly to `main`, or bypass review with `--no-v
 
 After review, the human merges only when the applicable quality gates pass. Release and deployment follow a
 separate human-approved procedure once environments and ownership exist; this repository does not claim those
-procedures or CI/CD automation today.
+procedures or CD/hosted deployment automation today.

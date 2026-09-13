@@ -27,12 +27,13 @@ foundation evidence from target design so that a planned document is never mista
 - The first Prisma migration contains the minimal user identity record, catalog, and immutable template-version
   foundations only; authentication behavior is still planned.
 - Root scripts provide local format, lint, typecheck, test, build, and Docker/PostgreSQL commands.
+- A limited GitHub Actions quality-gate CI workflow runs on pushes to `master` and `main` and on pull requests.
 
 ### Planned design
 
-The target module map, invitation flows, payment/media/guest/RSVP/analytics models, CI/CD, and release operations
-are documented for sequencing and decision-making. They are not implemented because they appear in a roadmap or
-architecture document.
+The target module map, invitation flows, payment/media/guest/RSVP/analytics models, CD, hosted deployment,
+required-check governance, issue/PR enforcement, and release operations are documented for sequencing and
+decision-making. They are not implemented because they appear in a roadmap or architecture document.
 
 Documentation states decisions and intent. Executable code, tests, package scripts, Prisma schema, migrations,
 seed data, and reproducible generated behavior remain the source of truth for runtime behavior. If a document and
