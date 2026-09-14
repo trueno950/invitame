@@ -36,6 +36,15 @@ body:
       required: true
 
   - type: textarea
+    id: sources
+    attributes:
+      label: Sources and vocabulary
+      description: Which roadmap, glossary, architecture, database, or accepted decision sources were consulted? Note any ambiguous terms.
+      placeholder: Link the relevant sources and define any term whose meaning affects scope or risk.
+    validations:
+      required: true
+
+  - type: textarea
     id: acceptance_criteria
     attributes:
       label: Acceptance criteria

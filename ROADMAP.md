@@ -29,7 +29,8 @@ product.
 - The current source and migration behavior remain accurately documented.
 - Template versions protect renderer identity, schema, and configuration from in-place rewrites.
 - Local verification commands are recorded and pass when their prerequisites are available.
-- No invitation, payment, authentication, media, guest, RSVP, analytics, CI/CD, or deployment behavior is claimed.
+- No invitation, payment, authentication, media, guest, RSVP, analytics, CD, required-check governance, or hosted
+  deployment behavior is claimed; the limited quality-gate CI workflow is intentionally scoped and documented.
 
 ### Deliberate non-goals
 
@@ -258,7 +259,7 @@ Make the approved MVP operable, recoverable, and releasable with explicit owners
 
 ### Key scope
 
-- CI/CD commands and branch protection after human approval;
+- Production CI/CD commands and branch protection after human approval;
 - deployment environment configuration and secret management;
 - migration/recovery and backup restoration exercises;
 - observability, alert ownership, rate limits, retention, and support runbooks;

@@ -32,6 +32,7 @@
 List exact commands and results. Do not describe blocked or unavailable checks as passing.
 
 - [ ] `pnpm format:check`
+- [ ] `pnpm docs:check`
 - [ ] `pnpm lint`
 - [ ] `pnpm typecheck`
 - [ ] `pnpm test`
@@ -39,6 +40,14 @@ List exact commands and results. Do not describe blocked or unavailable checks a
 - [ ] `git diff --check`
 - [ ] Database checks (when applicable):
 - [ ] Unavailable checks and residual risk are documented:
+
+## Documentation synchronization
+
+- [ ] I followed the AI operating model's source-reading path for this change.
+- [ ] Current behavior and planned design are labeled accurately in affected documentation.
+- [ ] Affected documentation, glossary terms, links, scripts, CI, and templates are synchronized, or the reason is
+      recorded in the outcome.
+- [ ] Any source-of-truth conflict and the evidence used to resolve it are recorded.
 
 ## Review checklist
 

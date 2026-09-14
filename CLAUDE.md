@@ -5,7 +5,11 @@
 `AGENTS.md` is the canonical policy and authority boundary. This file imports it for Claude and remains only a
 navigation index; it intentionally does not duplicate those rules.
 
+For every task, read this entrypoint, then `AGENTS.md` and the documentation index. Use the AI operating model to
+decide which additional sources are required before editing.
+
 - Product scope and implemented/planned status: [`ROADMAP.md`](ROADMAP.md)
+- Canonical product vocabulary: [`CONTEXT.md`](CONTEXT.md)
 - Runtime and target architecture: [`docs/architecture/overview.md`](docs/architecture/overview.md)
 - AI task lifecycle and handoffs: [`docs/architecture/ai-operating-model.md`](docs/architecture/ai-operating-model.md)
 - Real module structure: [`docs/architecture/module-template.md`](docs/architecture/module-template.md)
@@ -17,6 +21,6 @@ navigation index; it intentionally does not duplicate those rules.
 - Documentation index: [`docs/README.md`](docs/README.md)
 - Accepted decisions: [`docs/adr/`](docs/adr/)
 
-Before changing code, map the affected paths and confirm whether the requested behavior is implemented or
-planned. Before reporting completion, show the commands and evidence required by the quality gates. Human
-approval remains required for the authority boundaries defined in `AGENTS.md`.
+Before changing code or documentation, map the affected paths and confirm whether the requested behavior is
+implemented or planned. Before reporting completion, show the commands and evidence required by the quality gates.
+Human approval remains required for the authority boundaries defined in `AGENTS.md`.

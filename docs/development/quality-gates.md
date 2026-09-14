@@ -1,8 +1,8 @@
 # Quality gates
 
 This document is the practical Definition of Done for the current repository. The commands below reflect the
-scripts that exist today. A limited quality-gate CI workflow is implemented; CD, hosted deployment, and required-
-check governance remain planned.
+scripts that exist today. A narrow documentation consistency check and limited quality-gate CI workflow are
+implemented; CD, hosted deployment, and required-check governance remain planned.
 
 ## Definition of Done
 
@@ -12,6 +12,7 @@ A work unit is ready for human review when:
 - executable behavior, tests, and documentation agree, with current versus planned status labeled;
 - tests prove acceptance criteria and failure paths rather than only executing lines;
 - the applicable deterministic commands below pass with their real output;
+- documentation links and AI workflow invariants pass `pnpm docs:check`;
 - the complete diff has been read, including staged files and generated-file status;
 - no secrets, local environment files, unapproved dependencies, or unrelated refactors are included; and
 - blocked or unavailable checks are named with the exact reason and residual risk.
@@ -25,6 +26,7 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | --- | --- | --- | --- |
 | Format validation | `pnpm format:check` | Runs the repository Biome formatter through the existing validation script; keep the working tree unchanged and treat non-zero output as a gate failure. | Every change. |
 | Format repair | `pnpm format` | Writes Biome formatting changes; this is a repair command, not evidence by itself. | Before validation when needed. |
+| Documentation consistency | `pnpm docs:check` | Resolves local Markdown links, verifies required documentation entrypoints and workflow sections, and confirms CI invokes the check. It does not prove runtime behavior. | Every change; especially documentation, process, configuration, and CI changes. |
 | Lint | `pnpm lint` | Runs `biome lint .` through both workspace packages via Turborepo. | Every code or source-adjacent change. |
 | Type safety | `pnpm typecheck` | Runs strict TypeScript checks in `apps/api` and `apps/web`. | Every TypeScript/config change. |
 | Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner health suite; `apps/web` has no test script. | Every behavior change; documentation-only changes may record `N/A`. |
@@ -36,17 +38,18 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Database connection | `pnpm db:check` | Executes the API connection check and a real `SELECT 1`. | Database changes or any claim about database connectivity. |
 | Stop local PostgreSQL | `pnpm db:down` | Stops the local Compose services. | After local database work when the environment is no longer needed. |
 
-`.github/workflows/ci.yml` runs the format/lint/typecheck/test/build/diff-hygiene gates on pushes to `master` and
-`main` and on pull requests. This is a limited quality workflow, not CD, hosted deployment, or required-check
-governance. The repository still has no dedicated coverage, real database integration, browser E2E, or
-migration-validation automation. Do not report those gaps as passing. Add the capability only as part of an
-approved work unit that defines its scope and ownership.
+`.github/workflows/ci.yml` runs the documentation consistency, format/lint/typecheck/test/build/diff-hygiene gates
+on pushes to `master` and `main` and on pull requests. This is a limited quality workflow, not CD, hosted
+deployment, or required-check governance. The repository still has no dedicated coverage, real database
+integration, browser E2E, or migration-validation automation. Do not report those gaps as passing. Add the capability
+only as part of an approved work unit that defines its scope and ownership.
 
 ## Recommended local sequences
 
 ### Source-only or documentation change
 
 ```bash
+pnpm docs:check
 pnpm format:check
 pnpm lint
 pnpm typecheck
@@ -117,7 +120,7 @@ details, or cannot fail when the behavior breaks is not evidence.
 | Payment, media, email, or provider | Verify trust/signature handling, idempotency, retries, bounded input, adapter isolation, and provider failure behavior without real credentials in tests. |
 | Frontend interaction | Keep server-first rendering, test the user-visible outcome and failure state, and confirm the server remains the authority. |
 | Dependency or build configuration | Explain why it is needed now, update the lockfile intentionally, run format/lint/typecheck/build, and document runtime impact. |
-| Documentation/process | Check links and current/planned claims manually, run format/lint/typecheck/test as applicable, and use `git diff --check`. |
+| Documentation/process | Run `pnpm docs:check`, check current/planned claims, run format/lint/typecheck/test as applicable, and use `git diff --check`. |
 
 ## Honest handling of blocked checks
 
@@ -132,8 +135,8 @@ If Docker, PostgreSQL, a browser, a provider sandbox, credentials, or another re
 ## CI/CD status
 
 The repository has a limited quality-gate CI workflow. It runs on pushes to `master` and `main` and every pull
-request: `pnpm install --frozen-lockfile`, Prisma client generation, `format:check`, `lint`, `typecheck`, `test`,
-`build`, and `git diff --check`, in that order. It does not start PostgreSQL, so database/migration/seed
+request: `pnpm install --frozen-lockfile`, `docs:check`, Prisma client generation, `format:check`, `lint`,
+`typecheck`, `test`, `build`, and `git diff --check`, in that order. It does not start PostgreSQL, so database/migration/seed
 verification stays a manual local gate (see the database change sequence above). Required status checks, hosted
 integration databases, browser runners, CD, and deployment gates remain planned; adopt each through an explicit
 process change rather than assuming the limited CI workflow already covers them.

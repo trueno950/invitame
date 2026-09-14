@@ -18,13 +18,24 @@ Resolve conflicts in this order:
 1. Executable repository evidence: package scripts, TypeScript, tests, Prisma schema, migrations, seed data,
    environment examples, and generated behavior that is reproducible from source.
 2. This file for contributor policy and non-negotiable boundaries.
-3. Accepted ADRs for architectural decisions.
-4. Detailed architecture, database, development, and workflow documentation.
-5. `ROADMAP.md` for planned scope and sequence; task prompts are the lowest-level planning input.
+3. `CONTEXT.md` for canonical product vocabulary only; it is not runtime evidence.
+4. Accepted ADRs for architectural decisions.
+5. Detailed architecture, database, development, and workflow documentation.
+6. `ROADMAP.md` for planned scope and sequence; task prompts and prior memory are context, not runtime truth.
 
 When sources conflict, do not guess or update runtime code to make prose appear correct. Report the conflict,
 preserve the executable truth, ask for a decision when architecture or security is affected, and update the
 smallest stale document after the decision. Documentation must label current behavior versus target design.
+
+## Start and repeat the cycle
+
+- Start with [`CLAUDE.md`](CLAUDE.md), then use [`docs/README.md`](docs/README.md) to choose the relevant sources.
+- Execute the repeatable consultation, implementation, verification, documentation-sync, and handoff cycle in
+  [`docs/architecture/ai-operating-model.md`](docs/architecture/ai-operating-model.md).
+- Use [`CONTEXT.md`](CONTEXT.md) when a product term, boundary, or name is ambiguous; update it only for durable
+  shared vocabulary.
+- Use [`docs/development/quality-gates.md`](docs/development/quality-gates.md) for evidence and
+  [`docs/development/git-workflow.md`](docs/development/git-workflow.md) for human-owned delivery actions.
 
 ## Language
 
@@ -87,8 +98,8 @@ Spanish. Do not translate technical policy into product copy or put product prom
   Keep unit tests close to pure domain/application behavior and add integration or end-to-end coverage when a
   real database, browser, permission boundary, payment, publication, or webhook is involved.
 - A change is done only when scope and non-goals are clear, affected docs are current, tests cover the acceptance
-  criteria, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check` pass as
-  applicable, and unavailable checks are recorded honestly. See `docs/development/quality-gates.md`.
+  criteria, `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check`
+  pass as applicable, and unavailable checks are recorded honestly. See `docs/development/quality-gates.md`.
 - Use small vertical slices. Keep tests and documentation with the behavior they explain, avoid speculative
   dependencies, and do not pursue an unbounded AI task. Stop and split work when the acceptance boundary is no
   longer clear.
@@ -96,6 +107,7 @@ Spanish. Do not translate technical policy into product copy or put product prom
 ## Detailed references
 
 - Product sequence: `ROADMAP.md`.
+- Canonical product vocabulary: `CONTEXT.md`.
 - Runtime and target architecture: `docs/architecture/overview.md`.
 - AI workflow and handoffs: `docs/architecture/ai-operating-model.md`.
 - Module shape: `docs/architecture/module-template.md`.

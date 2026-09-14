@@ -17,6 +17,7 @@
     "dev": "turbo run dev",
     "format": "biome format --write .",
     "format:check": "biome format .",
+    "docs:check": "node scripts/check-docs.mjs",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"

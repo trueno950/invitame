@@ -8,7 +8,8 @@ landing page. It does not create or send invitations yet.
 
 - [`AGENTS.md`](AGENTS.md) — canonical contributor and AI policy.
 - [`CLAUDE.md`](CLAUDE.md) — short agent entrypoint and documentation links.
-- [`ROADMAP.md`](ROADMAP.md) — implemented foundation and ten planned milestones.
+- [`CONTEXT.md`](CONTEXT.md) — canonical product vocabulary.
+- [`ROADMAP.md`](ROADMAP.md) — implemented foundation and ten milestones with explicit current/planned status.
 - [`docs/README.md`](docs/README.md) — documentation index with current/planned labels.
 
 ## Quick start
@@ -18,7 +19,6 @@ Prerequisites: Node.js 26 (see `.nvmrc`), pnpm 10, and Docker with Docker Compos
 ```bash
 pnpm install
 cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.local.example apps/web/.env.local
 pnpm db:up
 pnpm db:migrate
 pnpm db:seed
@@ -39,6 +39,7 @@ pnpm db:migrate
 pnpm db:seed
 pnpm db:seed
 pnpm db:check
+pnpm docs:check
 pnpm format:check
 pnpm lint
 pnpm typecheck

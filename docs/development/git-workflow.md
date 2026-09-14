@@ -3,8 +3,8 @@
 This is the intended workflow for reviewable InvitaMe changes. It documents procedure; it does not install hooks,
 create GitHub automation, or authorize delivery actions. The repository has a limited quality-gate CI workflow for
 pushes to `master` and `main` and pull requests, but no CD/hosted deployment automation or issue/PR enforcement.
-The current checkout is a greenfield `master` branch with no commits, so commands involving `main`, `origin`, or a
-pull request apply when that repository structure exists or after a human establishes it.
+Branch names, remotes, and history are repository state: inspect them before using a command instead of copying an
+older branch assumption from this document.
 
 ## 1. Start from a known base
 
@@ -91,6 +91,7 @@ InvitaMe currently has no committed Husky hook or other local hook. Run this exa
 commit; it uses the commands that exist in the repository today:
 
 ```bash
+pnpm docs:check
 pnpm format:check
 pnpm lint
 pnpm typecheck
