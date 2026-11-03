@@ -9,7 +9,8 @@ preserve the executable behavior and surface the vocabulary conflict for a human
 | Term | Meaning | Do not confuse it with |
 | --- | --- | --- |
 | Catalog | The organized set of categories, features, packages, and templates used to describe invitation offerings. | The public invitation experience or a finished product. |
-| Category | A catalog grouping for an event type, such as a birthday or wedding. | A package or a renderer. |
+| Category | A catalog grouping for an event type, such as XV años, a wedding, or a birthday. | A package or a renderer. |
+| XV años | A quinceañera, the fifteenth-birthday celebration, offered as its own category. Code and keys use the English term `quinceanera`. | A generic birthday. |
 | Feature | A named catalog capability that can be included in a package. A feature key is data, not an executable behavior switch. | A code module or an authorization grant. |
 | Package | A catalog selection of included features and metadata for a future offering. | A payment record or proof that a customer has paid. |
 | Template | Mutable catalog metadata describing a design offering. | The immutable render contract used by an existing invitation. |

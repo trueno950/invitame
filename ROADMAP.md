@@ -4,6 +4,19 @@ This roadmap separates the implemented foundation from the planned invitation pr
 not evidence that its runtime behavior exists. Executable code, tests, Prisma schema, migrations, seed data, and
 package scripts remain the source of truth for the current repository.
 
+## Product direction
+
+**Status:** Planned direction; not implemented beyond the Milestone 1 catalog foundation.
+
+InvitaMe is planned as a self-service invitation service with no manual operator step between an order and its
+publication: a customer chooses a catalog design, completes the invitation, pays, and the backend publishes it after
+verifying the payment (Milestones 4, 5, and 7). The owner curates the catalog and adds, edits, or improves designs
+over time; each change is a new `TemplateVersion`, so existing invitations keep the version they pinned. Customer
+support, refunds, and moderation of customer-uploaded content remain operational work (Milestone 9).
+
+The first designs target XV años (quinceañera), weddings, and children's birthdays. Every catalog design follows the
+original-design guardrail at the end of this roadmap.
+
 ## Milestone 1 — Foundation and operating model
 
 **Status:** Implemented foundation; process documentation is maintained alongside it.
@@ -288,6 +301,8 @@ by this roadmap.
 
 - Catalog names, package names, and feature keys are data, not behavior switches.
 - Future invitations reference immutable `TemplateVersion` snapshots.
+- Catalog designs are original work: no licensed characters, brands, or franchise themes, including in children's
+  designs.
 - Schema changes belong to `apps/api` and require the database quality gates.
 - A milestone is not complete because its folders or documentation exist; observable behavior and exit evidence are
   required.

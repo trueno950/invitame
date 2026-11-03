@@ -15,6 +15,11 @@ const CATEGORY_SEEDS = [
     description: "Celebraciones de unión y momentos compartidos.",
   },
   {
+    key: "quinceanera",
+    name: "XV años",
+    description: "Celebraciones de quince años con un estilo elegante.",
+  },
+  {
     key: "baby-shower",
     name: "Baby shower",
     description: "Bienvenidas para nuevas familias.",
