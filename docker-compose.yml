@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: invitame
@@ -9,7 +9,9 @@ services:
     ports:
       - "127.0.0.1:5442:5432"
     volumes:
-      - invitame_postgres_data:/var/lib/postgresql/data
+      # PostgreSQL 17 cannot read PostgreSQL 16 data files, so it uses its own volume.
+      # Old PostgreSQL 16 data is not migrated automatically; run `pnpm db:migrate` and `pnpm db:seed`.
+      - invitame_postgres_data_pg17:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U invitame -d invitame"]
       interval: 5s
@@ -17,4 +19,4 @@ services:
       retries: 10
 
 volumes:
-  invitame_postgres_data:
+  invitame_postgres_data_pg17:
