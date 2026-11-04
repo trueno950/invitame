@@ -267,15 +267,24 @@ describe("AppModule shutdown", () => {
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
-    app.get(BackgroundTasks, { strict: false }).run("held_delivery", async () => {
+    const tasks = app.get(BackgroundTasks, { strict: false });
+    tasks.run("held_delivery", async () => {
       await held;
       order.push("task_finished");
     });
 
+    let lateAccepted: boolean | undefined;
     const closing = app.close();
-    setTimeout(release, 20);
+    setTimeout(() => {
+      // The HTTP server is still open while the drain runs, so a request can still get here.
+      lateAccepted = tasks.run("late_delivery", async () => {
+        order.push("late_task_ran");
+      });
+      release();
+    }, 20);
     await closing;
 
+    assert.equal(lateAccepted, false, "work scheduled after the drain started is refused");
     assert.deepEqual(order, ["task_finished", "database_disconnected"]);
   });
 });

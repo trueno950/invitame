@@ -87,8 +87,10 @@ only a `background_task_failed` event with the task name, the failed stage (`quo
 `invalidation`), and the error class. When the cap check or the role lookup fails, the code is invalidated
 before delivery. At most 100 deliveries wait per process; beyond that the code is discarded at once and a
 `background_task_rejected` warning is logged. On shutdown, pending tasks drain in the sign-in module's
-`onModuleDestroy`, which Nest runs before the global Prisma module disconnects. No log carries the code or the
-address.
+`onModuleDestroy`, which Nest runs before the global Prisma module disconnects. Nest closes the HTTP server only
+after those hooks, so a request can still arrive during the drain: from the moment the drain starts, every new
+task is refused with a `background_task_rejected_after_shutdown` warning, and the sender removes that code at
+once, as it does at capacity, while pending tasks still complete. No log carries the code or the address.
 
 ### Abuse limits (current)
 
@@ -100,12 +102,16 @@ sign-in limits for administrators come with that sign-in and are planned.
 - `/email-otp/send-verification-otp` and `/sign-in/email-otp` allow 3 requests per 60 seconds per client IP;
   the 4th gets Better Auth's `429`. Other paths keep the defaults of Better Auth and its email OTP plugin, such
   as 100 requests per 10 seconds per client IP.
-- Each address gets at most 5 codes per hour (`auth/abuse-limits.ts`). Every `sign-in` request counts, whatever
+- Each address gets at most 5 codes per fixed hour (`auth/abuse-limits.ts`): the hour starts at the first counted
+  code, later codes never move it, and the first request after it ends opens a new hour. Every `sign-in` request
+  counts, whatever
   its delivery outcome, in the background task, so the response timing does not depend on the address. Over the
   cap the response is the same `200 {"success":true}`, no email is sent, and the issued code is removed. The
   count is a `RateLimit` row keyed by `sign-in-code-email|` plus the SHA-256 of the lower-cased address; the
-  plain address is never stored. A rule that matches no path keeps Better Auth's pruning from deleting these
-  rows before the hour ends.
+  plain address is never stored. The row's `lastRequest` holds the hour's start, and a rule that matches no path
+  sets Better Auth's pruning cutoff to one hour, so pruning never deletes these rows before the hour ends. A
+  storage error while counting, other than a concurrent create of the same row, removes the code and is logged
+  with the `quota` stage.
 - The client IP comes from one configured header, `AUTH_CLIENT_IP_HEADER` (default `x-forwarded-for` outside
   production; required in production). Without `AUTH_TRUSTED_PROXIES`, only a single-address value is accepted;
   with it, trusted proxy hops are stripped from the right.

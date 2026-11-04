@@ -1,20 +1,31 @@
 import { Logger, Module, type OnModuleDestroy } from "@nestjs/common";
 
 import { EmailModule } from "../../email/email.module";
-import { MAX_PENDING_SIGN_IN_CODE_TASKS } from "../abuse-limits";
-import { BACKGROUND_TASK_EVENT, BackgroundTasks } from "./background-tasks";
+import {
+  BACKGROUND_TASK_EVENT,
+  type BackgroundTaskEvent,
+  BackgroundTasks,
+  MAX_PENDING_BACKGROUND_TASKS,
+} from "./background-tasks";
 import { SignInCodeSender } from "./sign-in-code-sender";
 
 /**
  * Background tasks bound to the application lifecycle. Pending deliveries drain in
  * `onModuleDestroy`: Nest runs that hook for this module before the global `PrismaModule`, whose
  * client disconnects in its own `onModuleDestroy`, and before every `beforeApplicationShutdown`.
+ * The HTTP server closes only after those hooks, so a request can still arrive during the drain;
+ * `shutdown` refuses its task, and the sender discards that code inline (L25).
  */
 class ApplicationBackgroundTasks extends BackgroundTasks implements OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
-    await this.drain();
+    await this.shutdown();
   }
 }
+
+const WARNING_EVENTS: ReadonlySet<BackgroundTaskEvent["event"]> = new Set([
+  BACKGROUND_TASK_EVENT.REJECTED,
+  BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN,
+]);
 
 /** Wires the sign-in code sender to `EmailDeliveryService` for the Better Auth registration. */
 @Module({
@@ -25,11 +36,8 @@ class ApplicationBackgroundTasks extends BackgroundTasks implements OnModuleDest
       useFactory: () => {
         const logger = new Logger("BackgroundTasks");
         return new ApplicationBackgroundTasks(
-          (event) =>
-            event.event === BACKGROUND_TASK_EVENT.REJECTED
-              ? logger.warn(event)
-              : logger.error(event),
-          MAX_PENDING_SIGN_IN_CODE_TASKS,
+          (event) => (WARNING_EVENTS.has(event.event) ? logger.warn(event) : logger.error(event)),
+          MAX_PENDING_BACKGROUND_TASKS,
         );
       },
     },
