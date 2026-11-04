@@ -1,8 +1,7 @@
 # Milestone 2 — Identity, ownership, and authorization
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
-[ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), and T2 (`cb07c29`) committed; T3 done on `feat/m2-identity-03-config`
-(L18), awaiting the size decision and commit approval.
+[ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed; T4 next (L19).
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +16,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; each later slice branches from and targets its parent. Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Push and pull requests need human approval. |
 
 ## Specs
 
@@ -88,7 +87,7 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T1 | Spike: Better Auth through `@thallesp/nestjs-better-auth` on NestJS 12 with the body parser disabled; prove the auth handler, JSON parsing, and the global `ValidationPipe`; decide integration or fallback. | S4, S13 | worker | `ebabb0d` |
 | T1b | Tooling: a dev and test runner that emits decorator metadata, Biome parameter decorators, and the Node engines floor; remove the spike test's workarounds and clarify its intent. | S32, S33, S34 | worker | `71ae169` |
 | T2 | Schema: map Better Auth's user onto `User`; add session, account, verification, and two-factor models and a server-side role; one additive migration; database gate; human migration review. | S2, S5, S13 | worker | `cb07c29` |
-| T3 | Configuration and origins: validate the auth secret, public base URL, and trusted origins at startup; credentialed CORS only for trusted origins, shared with Better Auth. | S8, S12 | inline | — |
+| T3 | Configuration and origins: validate the auth secret, public base URL, and trusted origins at startup; credentialed CORS only for trusted origins, shared with Better Auth. | S8, S12 | worker | `4cfdb26` |
 | T4 | Email port: application port, in-memory test adapter, Resend adapter, local mail catcher; bounded retries and failure handling. | S11, S23, S28, S29, S31 | inline | — |
 | T5 | Customer sign-in: email OTP with concrete expiry and attempt limits, enumeration-safe responses, persistent rate limiting and its failure mode. | S6, S10, S15, S19, S24, S25 | inline | — |
 | T6 | Authorization and profile: deny-by-default guard, explicit public routes, server-side role, `DISABLED` sign-in block and session revocation, own-profile endpoints as the first owned resource. | S1, S2, S9, S18 | inline | — |
@@ -177,3 +176,11 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   documented in the README and must be added to the example and local env files by hand. Size: about 747 changed
   lines (415 of them tests); the only cohesive split needs intermediate module and test states, so the slice is
   proposed as `size:exception`.
+- **L19** (2026-11-04) User, verbatim, answering "¿Commiteo T3 como un solo slice con `size:exception`?": "listo ya
+  agrege a los env, si comitea". T3 committed as `4cfdb26`; the user added the new variables to `apps/api/.env` and
+  `apps/api/.env.example` (the example keeps `BETTER_AUTH_SECRET` empty).
+- **L20** T3 native review (`review-71c31853c0109064`) findings and their owners: the integration guard reading the
+  session before honoring `@AllowAnonymous()`, so `/health` can return 500 when the database is down and a cookie is
+  present, goes to T6; the unproved origin-check pin and the untested runtime configuration branch go to T9; the
+  unexplained and unexercised user mapping goes to T5 and T10; Better Auth implicitly trusting the `baseURL` origin
+  goes to T8 and T10; duplicated test helpers go to T9.
