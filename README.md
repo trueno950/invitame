@@ -36,6 +36,13 @@ The API refuses to start until `apps/api/.env` defines its required variables. B
 - `CORS_ORIGIN`: a comma-separated list of trusted web origins, for example `http://localhost:3000`. The same
   list feeds credentialed CORS and Better Auth's origin checks.
 
+Rate limits run in every environment and are stored in PostgreSQL. They identify a client by its IP address:
+
+- `AUTH_CLIENT_IP_HEADER`: the request header that carries the client IP, as set by the trusted proxy in front
+  of the API. Optional outside production, where it defaults to `x-forwarded-for`; required in production.
+- `AUTH_TRUSTED_PROXIES`: optional comma-separated IP addresses or CIDR ranges of proxies that append to that
+  header. Without it, only a header holding a single address is accepted.
+
 ### Local email
 
 In development the API sends email, such as customer sign-in codes, to Mailpit, a local mail catcher. Codes are

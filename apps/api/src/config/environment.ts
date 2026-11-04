@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 export const NODE_ENVIRONMENT = {
   DEVELOPMENT: "development",
   PRODUCTION: "production",
@@ -25,6 +27,14 @@ export type EmailEnvironment =
   | { transport: typeof EMAIL_TRANSPORT.MAILPIT; from: string; mailpitUrl: string }
   | { transport: typeof EMAIL_TRANSPORT.MEMORY; from: string };
 
+/** How the API resolves a client IP for rate limiting, from the request header a trusted proxy sets. */
+export interface ClientIpEnvironment {
+  /** Lower-case header name, from `AUTH_CLIENT_IP_HEADER`. */
+  header: string;
+  /** IP addresses or CIDR ranges of proxies whose hops are stripped, from `AUTH_TRUSTED_PROXIES`. */
+  trustedProxies: readonly string[];
+}
+
 export interface RuntimeEnvironment {
   NODE_ENV: NodeEnvironment;
   PORT: number;
@@ -40,6 +50,8 @@ export interface RuntimeEnvironment {
   AUTH_BASE_URL: string;
   /** Email delivery transport and sender, from `EMAIL_TRANSPORT`, `EMAIL_FROM`, and adapter variables. */
   EMAIL: EmailEnvironment;
+  /** Client IP resolution for rate limits; production must name the header explicitly. */
+  AUTH_CLIENT_IP: ClientIpEnvironment;
 }
 
 const DEFAULT_PORT = 3001;
@@ -56,6 +68,11 @@ const EMAIL_ADDRESS_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const NAMED_EMAIL_ADDRESS_PATTERN = /^([^<>\r\n]*)<([^<>]+)>$/;
 const DATABASE_PROTOCOLS = ["postgresql:", "postgres:"] as const;
 const MINIMUM_AUTH_SECRET_LENGTH = 32;
+/** Better Auth's default client IP header; trusted only outside production by default. */
+const DEFAULT_CLIENT_IP_HEADER = "x-forwarded-for";
+// RFC 9110 field-name token characters: one header, never a list.
+const HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
+const IP_PREFIX_LIMITS: Record<number, number> = { 4: 32, 6: 128 };
 
 function readOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") {
@@ -234,6 +251,47 @@ function parseEmailEnvironment(
   }
 }
 
+function isIpOrCidr(entry: string): boolean {
+  const [address = "", prefix, ...rest] = entry.split("/");
+  const maximum = IP_PREFIX_LIMITS[isIP(address)];
+
+  if (maximum === undefined || rest.length > 0) {
+    return false;
+  }
+
+  return prefix === undefined || (/^\d{1,3}$/.test(prefix) && Number(prefix) <= maximum);
+}
+
+/**
+ * Production names the header its proxy sets, so rate limits never fall back to one shared bucket
+ * (L24). Development and test default to Better Auth's `x-forwarded-for` with no trusted proxies.
+ */
+function parseClientIpEnvironment(
+  environment: Record<string, unknown>,
+  nodeEnvironment: NodeEnvironment,
+): ClientIpEnvironment {
+  const configuredHeader = readOptionalString(environment.AUTH_CLIENT_IP_HEADER);
+
+  if (!configuredHeader && nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION) {
+    throw new Error("AUTH_CLIENT_IP_HEADER must be provided in production.");
+  }
+
+  const header = (configuredHeader ?? DEFAULT_CLIENT_IP_HEADER).toLowerCase();
+
+  if (!HEADER_NAME_PATTERN.test(header)) {
+    throw new Error("AUTH_CLIENT_IP_HEADER must be a single HTTP header name.");
+  }
+
+  const proxies = readOptionalString(environment.AUTH_TRUSTED_PROXIES);
+  const trustedProxies = proxies ? proxies.split(",").map((entry) => entry.trim()) : [];
+
+  if (!trustedProxies.every(isIpOrCidr)) {
+    throw new Error("AUTH_TRUSTED_PROXIES must list IP addresses or CIDR ranges.");
+  }
+
+  return { header, trustedProxies };
+}
+
 export function validateEnvironment(environment: Record<string, unknown>): RuntimeEnvironment {
   const nodeEnvironment = readOptionalString(environment.NODE_ENV) ?? NODE_ENVIRONMENT.DEVELOPMENT;
 
@@ -254,5 +312,6 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
       readRequiredString(environment, "AUTH_BASE_URL"),
     ),
     EMAIL: parseEmailEnvironment(environment, nodeEnvironment),
+    AUTH_CLIENT_IP: parseClientIpEnvironment(environment, nodeEnvironment),
   };
 }

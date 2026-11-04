@@ -8,6 +8,7 @@ import { Global, type INestApplication, Module } from "@nestjs/common";
 import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
 import { PrismaService } from "../database/prisma.service";
+import { BackgroundTasks } from "./sign-in-code/background-tasks";
 
 // Runtime wiring of AppModule through the shared createApp boundary (M2 T3): validated configuration,
 // project-owned credentialed CORS, Better Auth origin checks, and the public health route. The suite
@@ -21,6 +22,12 @@ const ALLOWED_METHODS = "GET,HEAD,POST,OPTIONS";
 
 class PrismaStub {
   queries = 0;
+
+  /** Better Auth's database rate limiter starts a fresh bucket on every request. */
+  readonly rateLimit = {
+    findMany: async () => [],
+    create: async ({ data }: { data: Record<string, unknown> }) => data,
+  };
 
   async $queryRaw(): Promise<never> {
     this.queries += 1;
@@ -83,6 +90,15 @@ describe("AppModule startup configuration", () => {
       "an AUTH_BASE_URL with a path",
       { AUTH_BASE_URL: "http://localhost:3001/api" },
       "AUTH_BASE_URL must not include a path, query, or fragment.",
+    ],
+    [
+      "production without a client IP header",
+      {
+        NODE_ENV: "production",
+        EMAIL_FROM: "InvitaMe <no-reply@example.test>",
+        RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
+      },
+      "AUTH_CLIENT_IP_HEADER must be provided in production.",
     ],
   ];
 
@@ -221,5 +237,45 @@ describe("AppModule runtime wiring", () => {
       assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), { success: true });
     }
+  });
+});
+
+describe("AppModule shutdown", () => {
+  it("drains pending sign-in code tasks before the database disconnects", async () => {
+    const order: string[] = [];
+
+    class RecordingPrisma extends PrismaStub {
+      async onModuleDestroy(): Promise<void> {
+        order.push("database_disconnected");
+      }
+    }
+
+    @Global()
+    @Module({
+      providers: [{ provide: PrismaService, useValue: new RecordingPrisma() }],
+      exports: [PrismaService],
+    })
+    class RecordingDatabaseModule {}
+
+    const app = await createApp(
+      AppModule.forRoot({ environment: testEnvironment(), database: RecordingDatabaseModule }),
+      { logger: false, abortOnError: false },
+    );
+    await app.init();
+
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    app.get(BackgroundTasks, { strict: false }).run("held_delivery", async () => {
+      await held;
+      order.push("task_finished");
+    });
+
+    const closing = app.close();
+    setTimeout(release, 20);
+    await closing;
+
+    assert.deepEqual(order, ["task_finished", "database_disconnected"]);
   });
 });

@@ -64,6 +64,7 @@ describe("EmailModule", () => {
         NODE_ENV: "production",
         EMAIL_FROM: "InvitaMe <no-reply@example.test>",
         RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
+        AUTH_CLIENT_IP_HEADER: "x-forwarded-for",
       }),
     );
 

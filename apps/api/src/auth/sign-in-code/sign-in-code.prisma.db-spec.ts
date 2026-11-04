@@ -10,6 +10,7 @@ import {
   EmailDeliveryService,
 } from "../../email/application/email-delivery.service";
 import type { EmailMessage, EmailSender } from "../../email/application/email-sender.port";
+import { emailCodeQuotaKey } from "../abuse-limits";
 import { createAuth } from "../auth.factory";
 import { BackgroundTasks } from "./background-tasks";
 import { SignInCodeSender } from "./sign-in-code-sender";
@@ -81,9 +82,14 @@ describe("sign-in codes through createAuth on the Prisma schema (real PostgreSQL
     trustedOrigins: [AUTH_BASE_URL],
     database: prismaAdapter(prisma, { provider: "postgresql" }),
     signInCodes: new SignInCodeSender(new EmailDeliveryService(sender, runtime), tasks),
+    clientIp: { header: "x-forwarded-for", trustedProxies: [] },
+    requireClientIp: false,
+    log: () => {},
   });
   const runId = randomUUID();
   const emails: string[] = [];
+  const clientPrefix = `198.18.${randomBytes(1)[0]}.`;
+  let clientCounter = 0;
 
   function newEmail(label: string): string {
     const email = `t5a-${label}-${runId}@example.test`;
@@ -92,10 +98,16 @@ describe("sign-in codes through createAuth on the Prisma schema (real PostgreSQL
   }
 
   function post(path: string, body: unknown): Promise<Response> {
+    clientCounter += 1;
     return auth.handler(
       new Request(`${AUTH_BASE_URL}${AUTH_PATH}${path}`, {
         method: "POST",
-        headers: { "content-type": "application/json", origin: AUTH_BASE_URL },
+        headers: {
+          "content-type": "application/json",
+          origin: AUTH_BASE_URL,
+          // A fresh client IP per request keeps the per-IP limit out of these flows.
+          "x-forwarded-for": `${clientPrefix}${clientCounter}`,
+        },
         body: JSON.stringify(body),
       }),
     );
@@ -115,6 +127,14 @@ describe("sign-in codes through createAuth on the Prisma schema (real PostgreSQL
       await prisma.user.deleteMany({ where: { email: { in: emails } } });
       await prisma.verification.deleteMany({
         where: { identifier: { in: emails.map((email) => `sign-in-otp-${email}`) } },
+      });
+      await prisma.rateLimit.deleteMany({
+        where: {
+          OR: [
+            { key: { in: emails.map(emailCodeQuotaKey) } },
+            { key: { startsWith: clientPrefix } },
+          ],
+        },
       });
     } finally {
       await prisma.$disconnect();
