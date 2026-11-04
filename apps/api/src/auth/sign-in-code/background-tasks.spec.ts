@@ -119,6 +119,38 @@ describe("BackgroundTasks", () => {
     );
   });
 
+  it("refuses every task once the shutdown drain starts and still completes pending work", async () => {
+    const events: BackgroundTaskEvent[] = [];
+    const tasks = new BackgroundTasks((event) => events.push(event));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const ran: string[] = [];
+
+    tasks.run("pending", () => gate.then(() => void ran.push("pending")));
+    const shuttingDown = tasks.shutdown();
+
+    assert.equal(
+      tasks.run("during-drain", async () => void ran.push("during-drain")),
+      false,
+    );
+    release();
+    await shuttingDown;
+    assert.equal(
+      tasks.run("after-drain", async () => void ran.push("after-drain")),
+      false,
+    );
+    await tasks.drain();
+
+    assert.deepEqual(ran, ["pending"], "pending work completed, refused work never ran");
+    assert.equal(tasks.pending, 0);
+    assert.deepEqual(events, [
+      { event: BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN, task: "during-drain" },
+      { event: BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN, task: "after-drain" },
+    ]);
+  });
+
   it("logs the failed stage and the cause's class, never the cause's message", async () => {
     const events: BackgroundTaskEvent[] = [];
     const tasks = new BackgroundTasks((event) => events.push(event));

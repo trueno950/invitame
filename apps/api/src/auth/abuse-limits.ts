@@ -9,8 +9,6 @@ export const EMAIL_CODE_SIGN_IN_PATH = "/sign-in/email-otp";
 export const CLIENT_IP_RATE_LIMIT = { window: 60, max: 3 } as const;
 /** S25, L23: at most 5 sign-in codes per hour per email address. */
 export const EMAIL_CODE_QUOTA = { window: 3600, max: 5 } as const;
-/** Bound on sign-in code deliveries waiting in the background, per process (L24). */
-export const MAX_PENDING_SIGN_IN_CODE_TASKS = 100;
 
 const EMAIL_CODE_QUOTA_KEY_PREFIX = "sign-in-code-email|";
 

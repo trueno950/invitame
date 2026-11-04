@@ -80,7 +80,8 @@ export class SignInCodeSender {
     }
 
     if (!this.tasks.run(SIGN_IN_CODE_DELIVERY_TASK, () => this.deliver(request, store))) {
-      // At capacity: the code is discarded rather than queued; the tracker logged the rejection.
+      // At capacity or shutting down: the code is discarded rather than queued, so no undelivered
+      // code stays valid; the tracker logged the rejection.
       await this.tasks.runInline(SIGN_IN_CODE_DISCARD_TASK, () => store.invalidateCode(request));
     }
   }

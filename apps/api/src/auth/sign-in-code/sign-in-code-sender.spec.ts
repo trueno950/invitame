@@ -190,6 +190,35 @@ describe("SignInCodeSender at background capacity (L24)", () => {
     assertNoPersonalData(events);
   });
 
+  it("discards a code inline once the shutdown drain starts and still delivers pending codes", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { sender, tasks, events, emailSender } = createSender();
+    const pending = scriptedStore({ consumeEmailQuota: () => gate.then(() => true) });
+    const late = scriptedStore();
+
+    await sender.handle(REQUEST, pending.store);
+    const shuttingDown = tasks.shutdown();
+    await sender.handle({ ...REQUEST, code: "135790" }, late.store);
+
+    assert.deepEqual(late.calls, ["invalidateCode"], "discarded at once, never scheduled");
+    release();
+    await shuttingDown;
+
+    assert.deepEqual(pending.calls, ["consumeEmailQuota", "findRole"]);
+    assert.deepEqual(
+      emailSender.delivered.map((message) => message.text.includes(CODE)),
+      [true],
+      "only the pending code was delivered",
+    );
+    assert.deepEqual(events, [
+      { event: BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN, task: SIGN_IN_CODE_DELIVERY_TASK },
+    ]);
+    assertNoPersonalData(events);
+  });
+
   it("keeps discarding other OTP types inline without consuming the per-email cap", async () => {
     const { sender, tasks } = createSender();
     const { store, calls } = scriptedStore();

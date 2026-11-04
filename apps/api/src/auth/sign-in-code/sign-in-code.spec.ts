@@ -13,8 +13,12 @@ import type { EmailMessage, EmailSender } from "../../email/application/email-se
 import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-sender";
 import { EMAIL_CODE_QUOTA, emailCodeQuotaKey } from "../abuse-limits";
 import { createAuth } from "../auth.factory";
-import { BackgroundTasks } from "./background-tasks";
-import { SignInCodeSender } from "./sign-in-code-sender";
+import { BACKGROUND_TASK_EVENT, BackgroundTasks } from "./background-tasks";
+import {
+  SIGN_IN_CODE_DELIVERY_TASK,
+  SIGN_IN_CODE_STAGE,
+  SignInCodeSender,
+} from "./sign-in-code-sender";
 
 // Customer sign-in code flow (M2 T5a; S6, S15, S23, S24) through Better Auth's own HTTP handler, with
 // the in-memory database adapter and a scripted email sender: no network and no database.
@@ -33,6 +37,23 @@ function nextClientIp(): string {
 }
 
 type MemoryDatabase = Record<string, Record<string, unknown>[]>;
+type DatabaseAdapter = ReturnType<typeof memoryAdapter>;
+type AdapterInstance = ReturnType<DatabaseAdapter>;
+
+/** Replaces `create` for the per-email count rows; every other call reaches the memory adapter. */
+function withQuotaCreate(
+  adapter: DatabaseAdapter,
+  create: (inner: AdapterInstance, query: Parameters<AdapterInstance["create"]>[0]) => unknown,
+): DatabaseAdapter {
+  return (options) => {
+    const inner = adapter(options);
+    const wrapped = ((query: Parameters<AdapterInstance["create"]>[0]) =>
+      query.model === "rateLimit" && String(query.data.key).startsWith("sign-in-code-email|")
+        ? create(inner, query)
+        : inner.create(query)) as AdapterInstance["create"];
+    return { ...inner, create: wrapped };
+  };
+}
 
 /** Sender whose next deliveries can be held open or failed by the test. */
 class ScriptedEmailSender implements EmailSender {
@@ -66,7 +87,10 @@ class ScriptedEmailSender implements EmailSender {
   }
 }
 
-function createHarness(sender: EmailSender = new InMemoryEmailSender()) {
+function createHarness(
+  sender: EmailSender = new InMemoryEmailSender(),
+  wrapAdapter: (adapter: DatabaseAdapter) => DatabaseAdapter = (adapter) => adapter,
+) {
   const database: MemoryDatabase = {
     user: [],
     session: [],
@@ -88,7 +112,7 @@ function createHarness(sender: EmailSender = new InMemoryEmailSender()) {
     secret: randomBytes(32).toString("base64url"),
     baseURL: AUTH_BASE_URL,
     trustedOrigins: [TRUSTED_ORIGIN],
-    database: memoryAdapter(database),
+    database: wrapAdapter(memoryAdapter(database)),
     signInCodes,
     clientIp: { header: CLIENT_IP_HEADER, trustedProxies: [] },
     requireClientIp: false,
@@ -526,6 +550,122 @@ describe("per-email code cap (S25, L24)", () => {
     await harness.requestCode(email);
     await harness.tasks.drain();
     assert.equal(sender.delivered.length, 6);
+  });
+});
+
+describe("fixed per-email code window (S25, L25)", () => {
+  const MINUTE = 60_000;
+  const START = Date.parse("2026-11-04T12:00:00Z");
+
+  /** Five codes at minutes 0, 12.5, 25, 37.5, and 50, the first from `firstClient`. */
+  async function fiveCodesOverFiftyMinutes(
+    harness: ReturnType<typeof createHarness>,
+    email: string,
+    firstClient: string,
+  ): Promise<void> {
+    for (let request = 0; request < EMAIL_CODE_QUOTA.max; request += 1) {
+      mock.timers.setTime(START + request * 12.5 * MINUTE);
+      await harness.requestCode(email, request === 0 ? firstClient : undefined);
+      await harness.tasks.drain();
+    }
+  }
+
+  it("refuses a 6th code 59 minutes after the first, even after Better Auth prunes old rows", async () => {
+    mock.timers.enable({ apis: ["Date"], now: START });
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender);
+    const email = newEmail("window-59");
+    const firstClient = nextClientIp();
+
+    await fiveCodesOverFiftyMinutes(harness, email, firstClient);
+    assert.equal(sender.delivered.length, 5);
+
+    // The first client's 60-second window restarts here, so Better Auth prunes RateLimit rows
+    // whose last request is older than its longest window (one hour) before the code is counted.
+    mock.timers.setTime(START + 59 * MINUTE);
+    assert.equal((await harness.requestCode(email, firstClient)).status, 200);
+    await harness.tasks.drain();
+
+    assert.equal(sender.attempts.length, 5, "no 6th delivery within the hour of the first code");
+    const row = harness.rateLimitRows().find((entry) => entry.key === emailCodeQuotaKey(email));
+    assert.ok(row, "the count was not pruned before its window ended");
+    assert.equal(row.count, 5);
+    assert.equal(Number(row.lastRequest), START, "the window start never moved");
+  });
+
+  it("allows a 6th code 61 minutes after the first, although the 5th was 11 minutes earlier", async () => {
+    mock.timers.enable({ apis: ["Date"], now: START });
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender);
+    const email = newEmail("window-61");
+
+    await fiveCodesOverFiftyMinutes(harness, email, nextClientIp());
+    assert.equal(sender.delivered.length, 5);
+
+    mock.timers.setTime(START + 61 * MINUTE);
+    assert.equal((await harness.requestCode(email)).status, 200);
+    await harness.tasks.drain();
+
+    assert.equal(sender.delivered.length, 6, "a new window starts with the 6th code");
+    const row = harness.rateLimitRows().find((entry) => entry.key === emailCodeQuotaKey(email));
+    assert.ok(row);
+    assert.equal(row.count, 1);
+    assert.equal(Number(row.lastRequest), START + 61 * MINUTE);
+  });
+});
+
+describe("per-email count storage errors (S23, L25)", () => {
+  it("surfaces a create error that is not a key conflict: the code is removed and the quota stage logged", async () => {
+    class QuotaStoreUnavailableError extends Error {
+      override name = "QuotaStoreUnavailableError";
+    }
+    let creates = 0;
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender, (adapter) =>
+      withQuotaCreate(adapter, async () => {
+        creates += 1;
+        throw new QuotaStoreUnavailableError("connection refused for sign-in-code-email|...");
+      }),
+    );
+    const email = newEmail("quota-store-down");
+
+    const response = await harness.requestCode(email);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true });
+    await harness.tasks.drain();
+
+    assert.equal(creates, 1, "a storage error is not retried as a concurrent create");
+    assert.equal(sender.attempts.length, 0);
+    assert.equal(harness.verificationRows(email).length, 0, "the undelivered code was removed");
+    assert.deepEqual(harness.taskEvents, [
+      {
+        event: BACKGROUND_TASK_EVENT.FAILED,
+        task: SIGN_IN_CODE_DELIVERY_TASK,
+        stage: SIGN_IN_CODE_STAGE.QUOTA,
+        error: "QuotaStoreUnavailableError",
+      },
+    ]);
+  });
+
+  it("counts against the row a concurrent request created when the create hits the key conflict", async () => {
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender, (adapter) =>
+      withQuotaCreate(adapter, async (inner, query) => {
+        // A concurrent request wins the race and stores the row first; this create then conflicts.
+        await inner.create(query);
+        throw new Error("Unique constraint failed on the fields: (`key`)");
+      }),
+    );
+    const email = newEmail("quota-race");
+
+    await harness.requestCode(email);
+    await harness.tasks.drain();
+
+    assert.equal(sender.delivered.length, 1);
+    assert.deepEqual(harness.taskEvents, []);
+    const rows = harness.rateLimitRows().filter((row) => row.key === emailCodeQuotaKey(email));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.count, 2, "both the concurrent and this request are counted");
   });
 });
 

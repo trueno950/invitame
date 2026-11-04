@@ -21,7 +21,8 @@ import type { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 /**
  * Better Auth's database rate limiter deletes every `RateLimit` row older than the longest window it
  * knows of. This entry never matches a request (paths start with "/"); it only declares the hour of
- * the per-email code count, so those rows survive pruning.
+ * the per-email code count. That row's `lastRequest` is its window start, so it survives pruning
+ * until its window has ended (L25).
  */
 const EMAIL_CODE_QUOTA_RETENTION_RULE = "email-code-quota-retention";
 

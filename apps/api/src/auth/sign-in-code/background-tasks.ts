@@ -1,9 +1,13 @@
 export const BACKGROUND_TASK_EVENT = {
   FAILED: "background_task_failed",
   REJECTED: "background_task_rejected",
+  REJECTED_AFTER_SHUTDOWN: "background_task_rejected_after_shutdown",
 } as const;
 
-/** Default bound on queued work; beyond it a task is refused instead of piling up in memory. */
+/**
+ * The single bound on queued work per process (L24, L25); beyond it a task is refused instead of
+ * piling up in memory.
+ */
 export const MAX_PENDING_BACKGROUND_TASKS = 100;
 
 /**
@@ -19,7 +23,8 @@ export type BackgroundTaskEvent =
       /** The stage whose failure led to the failed one, such as an invalidation after a lookup. */
       failedAfter?: string;
     }
-  | { event: typeof BACKGROUND_TASK_EVENT.REJECTED; task: string; pending: number };
+  | { event: typeof BACKGROUND_TASK_EVENT.REJECTED; task: string; pending: number }
+  | { event: typeof BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN; task: string };
 
 export type BackgroundTaskLog = (event: BackgroundTaskEvent) => void;
 
@@ -45,10 +50,13 @@ function errorClass(error: unknown): string {
  * on its way. A task can never crash the process: every rejection is caught and logged as a
  * structured event without personal data. At most `maxPending` tasks run at once; `run` refuses
  * more and reports it. `drain` awaits every pending task, including tasks scheduled while draining,
- * so tests and shutdown are deterministic.
+ * so tests are deterministic. `shutdown` refuses every task from the moment it starts, then drains:
+ * a request that reaches `run` while the application closes gets `false`, so nothing new starts
+ * after the drain began, and pending work still completes.
  */
 export class BackgroundTasks {
   private readonly running = new Set<Promise<void>>();
+  private shuttingDown = false;
 
   constructor(
     private readonly log: BackgroundTaskLog,
@@ -59,8 +67,16 @@ export class BackgroundTasks {
     return this.running.size;
   }
 
-  /** Schedules the task and returns true, or returns false without running it when at capacity. */
+  /**
+   * Schedules the task and returns true, or returns false without running it when at capacity or
+   * once `shutdown` has started.
+   */
   run(task: string, work: () => Promise<void>): boolean {
+    if (this.shuttingDown) {
+      this.emit({ event: BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN, task });
+      return false;
+    }
+
     if (this.running.size >= this.maxPending) {
       this.emit({ event: BACKGROUND_TASK_EVENT.REJECTED, task, pending: this.running.size });
       return false;
@@ -93,6 +109,12 @@ export class BackgroundTasks {
     while (this.running.size > 0) {
       await Promise.allSettled([...this.running]);
     }
+  }
+
+  /** Refuses every later task, then awaits the pending ones; it never reopens. */
+  async shutdown(): Promise<void> {
+    this.shuttingDown = true;
+    await this.drain();
   }
 
   private report(task: string, error: unknown): void {
