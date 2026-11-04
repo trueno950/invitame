@@ -1,4 +1,5 @@
 import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
+import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
 
 import { DATABASE_STATUS, HEALTH_STATUS, type HealthResponse } from "./health.contract";
 // biome-ignore lint/style/useImportType: Nest reads this runtime class from emitted constructor metadata.
@@ -8,6 +9,8 @@ import { HealthService } from "./health.service";
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
+  // Public by design: orchestration probes call it without a session.
+  @AllowAnonymous()
   @Get()
   async getHealth(): Promise<HealthResponse> {
     try {

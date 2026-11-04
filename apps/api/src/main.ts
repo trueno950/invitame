@@ -1,16 +1,15 @@
 import { ConfigService } from "@nestjs/config";
-import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module";
-import { configureApp } from "./app.setup";
+import { createApp } from "./app.setup";
+import type { RuntimeEnvironment } from "./config/environment";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
-  const configService = app.get(ConfigService);
-  const corsOrigin = configService.getOrThrow<string>("CORS_ORIGIN");
-  const port = configService.getOrThrow<number>("PORT");
-
-  configureApp(app, { corsOrigin });
+  // Reject instead of aborting, so a configuration error exits through the handler below.
+  const app = await createApp(AppModule.forRoot(), { abortOnError: false });
+  const port = app
+    .get<ConfigService<RuntimeEnvironment, true>>(ConfigService)
+    .get("PORT", { infer: true });
 
   await app.listen(port);
 }

@@ -9,12 +9,21 @@ export type NodeEnvironment = (typeof NODE_ENVIRONMENT)[keyof typeof NODE_ENVIRO
 export interface RuntimeEnvironment {
   NODE_ENV: NodeEnvironment;
   PORT: number;
-  CORS_ORIGIN: string;
+  /**
+   * Origins parsed from the comma-separated `CORS_ORIGIN` variable. The same list feeds credentialed
+   * CORS and Better Auth's `trustedOrigins`, so the two can never disagree.
+   */
+  TRUSTED_ORIGINS: readonly string[];
   DATABASE_URL: string;
+  /** Better Auth signing secret; never logged or echoed in error messages. */
+  BETTER_AUTH_SECRET: string;
+  /** Public origin of the API that serves the Better Auth routes. */
+  AUTH_BASE_URL: string;
 }
 
 const DEFAULT_PORT = 3001;
 const DATABASE_PROTOCOLS = ["postgresql:", "postgres:"] as const;
+const MINIMUM_AUTH_SECRET_LENGTH = 32;
 
 function readOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") {
@@ -55,24 +64,63 @@ function parsePort(value: unknown): number {
   return port;
 }
 
-function validateCorsOrigin(value: string): string {
+function validateHttpOrigin(name: string, value: string): string {
   let url: URL;
 
   try {
     url = new URL(value);
   } catch {
-    throw new Error("CORS_ORIGIN must be a valid HTTP origin.");
+    throw new Error(`${name} must be a valid HTTP origin.`);
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("CORS_ORIGIN must use HTTP or HTTPS.");
+    throw new Error(`${name} must use HTTP or HTTPS.`);
   }
 
   if (url.origin !== value.replace(/\/$/, "")) {
-    throw new Error("CORS_ORIGIN must not include a path, query, or fragment.");
+    throw new Error(`${name} must not include a path, query, or fragment.`);
   }
 
   return url.origin;
+}
+
+function parseTrustedOrigins(value: string): string[] {
+  const entries = value.split(",").map((entry) => entry.trim());
+
+  if (entries.some((entry) => entry.length === 0)) {
+    throw new Error("CORS_ORIGIN must not contain empty entries.");
+  }
+
+  return entries.map((entry) => {
+    // Better Auth treats "*" as a pattern while CORS matches exactly; reject it so both agree.
+    if (entry.includes("*")) {
+      throw new Error("CORS_ORIGIN must not contain wildcards.");
+    }
+
+    return validateHttpOrigin("CORS_ORIGIN", entry);
+  });
+}
+
+function validateAuthSecret(value: string): string {
+  if (value.length < MINIMUM_AUTH_SECRET_LENGTH) {
+    throw new Error(
+      `BETTER_AUTH_SECRET must be at least ${MINIMUM_AUTH_SECRET_LENGTH} characters long.`,
+    );
+  }
+
+  return value;
+}
+
+/**
+ * Better Auth silently appends this variable to its trusted origins. Reject it so the CORS list stays
+ * the single source of trusted origins.
+ */
+function rejectUnsupportedAuthOrigins(environment: Record<string, unknown>): void {
+  if (readOptionalString(environment.BETTER_AUTH_TRUSTED_ORIGINS)) {
+    throw new Error(
+      "BETTER_AUTH_TRUSTED_ORIGINS is not supported; list trusted origins in CORS_ORIGIN.",
+    );
+  }
 }
 
 function validateDatabaseUrl(value: string): string {
@@ -100,10 +148,17 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     throw new Error("NODE_ENV must be development, production, or test.");
   }
 
+  rejectUnsupportedAuthOrigins(environment);
+
   return {
     NODE_ENV: nodeEnvironment,
     PORT: parsePort(environment.PORT),
-    CORS_ORIGIN: validateCorsOrigin(readRequiredString(environment, "CORS_ORIGIN")),
+    TRUSTED_ORIGINS: parseTrustedOrigins(readRequiredString(environment, "CORS_ORIGIN")),
     DATABASE_URL: validateDatabaseUrl(readRequiredString(environment, "DATABASE_URL")),
+    BETTER_AUTH_SECRET: validateAuthSecret(readRequiredString(environment, "BETTER_AUTH_SECRET")),
+    AUTH_BASE_URL: validateHttpOrigin(
+      "AUTH_BASE_URL",
+      readRequiredString(environment, "AUTH_BASE_URL"),
+    ),
   };
 }
