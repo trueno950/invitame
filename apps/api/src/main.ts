@@ -1,9 +1,8 @@
-import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
-import helmet from "helmet";
 
 import { AppModule } from "./app.module";
+import { configureApp } from "./app.setup";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -11,21 +10,7 @@ async function bootstrap(): Promise<void> {
   const corsOrigin = configService.getOrThrow<string>("CORS_ORIGIN");
   const port = configService.getOrThrow<number>("PORT");
 
-  app.use(helmet());
-  app.enableCors({
-    origin: corsOrigin,
-    credentials: false,
-    methods: ["GET", "HEAD", "OPTIONS"],
-    allowedHeaders: ["Accept", "Content-Type"],
-  });
-  app.useGlobalPipes(
-    new ValidationPipe({
-      forbidNonWhitelisted: true,
-      transform: true,
-      whitelist: true,
-    }),
-  );
-  app.enableShutdownHooks(["SIGINT", "SIGTERM"]);
+  configureApp(app, { corsOrigin });
 
   await app.listen(port);
 }
