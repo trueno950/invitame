@@ -6,6 +6,25 @@ export const NODE_ENVIRONMENT = {
 
 export type NodeEnvironment = (typeof NODE_ENVIRONMENT)[keyof typeof NODE_ENVIRONMENT];
 
+export const EMAIL_TRANSPORT = {
+  RESEND: "resend",
+  MAILPIT: "mailpit",
+  MEMORY: "memory",
+} as const;
+
+export type EmailTransport = (typeof EMAIL_TRANSPORT)[keyof typeof EMAIL_TRANSPORT];
+
+/** Email adapter selection; each variant carries only the settings its adapter needs. */
+export type EmailEnvironment =
+  | {
+      transport: typeof EMAIL_TRANSPORT.RESEND;
+      from: string;
+      /** Resend API key; never logged or echoed in error messages. */
+      resendApiKey: string;
+    }
+  | { transport: typeof EMAIL_TRANSPORT.MAILPIT; from: string; mailpitUrl: string }
+  | { transport: typeof EMAIL_TRANSPORT.MEMORY; from: string };
+
 export interface RuntimeEnvironment {
   NODE_ENV: NodeEnvironment;
   PORT: number;
@@ -19,9 +38,22 @@ export interface RuntimeEnvironment {
   BETTER_AUTH_SECRET: string;
   /** Public origin of the API that serves the Better Auth routes. */
   AUTH_BASE_URL: string;
+  /** Email delivery transport and sender, from `EMAIL_TRANSPORT`, `EMAIL_FROM`, and adapter variables. */
+  EMAIL: EmailEnvironment;
 }
 
 const DEFAULT_PORT = 3001;
+const DEFAULT_EMAIL_TRANSPORT: Record<NodeEnvironment, EmailTransport> = {
+  development: EMAIL_TRANSPORT.MAILPIT,
+  test: EMAIL_TRANSPORT.MEMORY,
+  production: EMAIL_TRANSPORT.RESEND,
+};
+/** Reserved `.localhost` domain: this sender can never reach a real mailbox. */
+const LOCAL_EMAIL_FROM = "InvitaMe Local <no-reply@invitame.localhost>";
+const DEFAULT_MAILPIT_URL = "http://localhost:8025";
+// A bare address or `Name <address>`; no whitespace, angle brackets, or line breaks in the address.
+const EMAIL_ADDRESS_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+const NAMED_EMAIL_ADDRESS_PATTERN = /^([^<>\r\n]*)<([^<>]+)>$/;
 const DATABASE_PROTOCOLS = ["postgresql:", "postgres:"] as const;
 const MINIMUM_AUTH_SECRET_LENGTH = 32;
 
@@ -141,6 +173,67 @@ function validateDatabaseUrl(value: string): string {
   return value;
 }
 
+function isEmailTransport(value: string): value is EmailTransport {
+  return Object.values(EMAIL_TRANSPORT).some((transport) => transport === value);
+}
+
+function validateEmailFrom(value: string): string {
+  const namedAddress = NAMED_EMAIL_ADDRESS_PATTERN.exec(value);
+  const address = namedAddress ? namedAddress[2]?.trim() : value;
+
+  if (/[\r\n]/.test(value) || !address || !EMAIL_ADDRESS_PATTERN.test(address)) {
+    throw new Error('EMAIL_FROM must be an email address or "Name <address>".');
+  }
+
+  return value;
+}
+
+/**
+ * Production always sends through Resend: any other transport fails closed, and Resend needs both an
+ * explicit sender and its API key. Development and test work with no email variables at all.
+ */
+function parseEmailEnvironment(
+  environment: Record<string, unknown>,
+  nodeEnvironment: NodeEnvironment,
+): EmailEnvironment {
+  const transport =
+    readOptionalString(environment.EMAIL_TRANSPORT) ?? DEFAULT_EMAIL_TRANSPORT[nodeEnvironment];
+
+  if (!isEmailTransport(transport)) {
+    throw new Error("EMAIL_TRANSPORT must be resend, mailpit, or memory.");
+  }
+
+  if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION && transport !== EMAIL_TRANSPORT.RESEND) {
+    throw new Error("EMAIL_TRANSPORT must be resend in production.");
+  }
+
+  const from = validateEmailFrom(
+    nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION
+      ? readRequiredString(environment, "EMAIL_FROM")
+      : (readOptionalString(environment.EMAIL_FROM) ?? LOCAL_EMAIL_FROM),
+  );
+  const mailpitUrl = validateHttpOrigin(
+    "MAILPIT_URL",
+    readOptionalString(environment.MAILPIT_URL) ?? DEFAULT_MAILPIT_URL,
+  );
+
+  switch (transport) {
+    case EMAIL_TRANSPORT.RESEND: {
+      const resendApiKey = readOptionalString(environment.RESEND_API_KEY);
+
+      if (!resendApiKey) {
+        throw new Error("RESEND_API_KEY must be provided when EMAIL_TRANSPORT is resend.");
+      }
+
+      return { transport, from, resendApiKey };
+    }
+    case EMAIL_TRANSPORT.MAILPIT:
+      return { transport, from, mailpitUrl };
+    case EMAIL_TRANSPORT.MEMORY:
+      return { transport, from };
+  }
+}
+
 export function validateEnvironment(environment: Record<string, unknown>): RuntimeEnvironment {
   const nodeEnvironment = readOptionalString(environment.NODE_ENV) ?? NODE_ENVIRONMENT.DEVELOPMENT;
 
@@ -160,5 +253,6 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
       "AUTH_BASE_URL",
       readRequiredString(environment, "AUTH_BASE_URL"),
     ),
+    EMAIL: parseEmailEnvironment(environment, nodeEnvironment),
   };
 }

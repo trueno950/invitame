@@ -3,6 +3,7 @@ import { type DynamicModule, Module, type Type } from "@nestjs/common";
 import { registerAuthModule } from "./auth/auth.registration";
 import { createConfigModule } from "./config/config.module";
 import { PrismaModule } from "./database/prisma.module";
+import { EmailModule } from "./email/email.module";
 import { HealthModule } from "./health/health.module";
 
 export interface AppModuleOptions {
@@ -28,6 +29,7 @@ export class AppModule {
         createConfigModule(options.environment),
         options.database ?? PrismaModule,
         registerAuthModule(),
+        EmailModule,
         HealthModule,
       ],
     };

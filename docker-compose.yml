@@ -18,5 +18,13 @@ services:
       timeout: 5s
       retries: 10
 
+  # Local mail catcher for development email (`docker compose up -d mailpit`); `pnpm db:up` does not start it.
+  # Messages stay in the container and are lost when it is removed. UI and HTTP API: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+
 volumes:
   invitame_postgres_data_pg17:
