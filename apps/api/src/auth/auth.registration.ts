@@ -36,11 +36,13 @@ export function createAuthModuleOptions(
 }
 
 /**
- * Registers Better Auth at `/api/auth` with the integration's global guard, which denies every
- * route by default; public routes opt out with `@AllowAnonymous()`.
+ * Registers Better Auth at `/api/auth`. The integration's global guard is disabled because it reads
+ * the session before it honors `@AllowAnonymous()` (L20); `AccessControlModule` registers the
+ * project-owned guard instead, which denies every route by default.
  */
 export function registerAuthModule(): DynamicModule {
   return AuthModule.forRootAsync({
+    disableGlobalAuthGuard: true,
     imports: [SignInCodeModule],
     inject: [ConfigService, PrismaService, SignInCodeSender],
     useFactory: createAuthModuleOptions,

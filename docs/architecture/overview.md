@@ -10,7 +10,7 @@ implemented.
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
 | Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy. | Dashboard, authoring flows, and public invitation routes. **Planned.** |
-| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code. | Feature modules exposing stable REST contracts; administrator sign-in, roles, and account status. **Planned.** |
+| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code and a deny-by-default guard with an administrator role check. | Feature modules exposing stable REST contracts; administrator sign-in, account disabling, and the user's own profile. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
@@ -35,7 +35,7 @@ The current API tree is intentionally small:
 
 ```text
 apps/api/src/
-  auth/         Better Auth instance factory, integration registration, and sign-in code delivery
+  auth/         Better Auth instance factory, integration registration, access control, and sign-in code delivery
   config/       startup environment validation and the configuration module
   database/     Prisma module and service
   email/        email delivery port, retry/alert policy, and Resend, Mailpit, and in-memory adapters
@@ -47,21 +47,46 @@ apps/api/src/
 
 ### Authentication boundary (current)
 
-This is the implemented state; administrator sign-in and role and account status enforcement are planned (ADR
-0004). The abuse limits of ADR 0004 decision 7 for customer sign-in codes are current; see "Abuse limits" below.
+This is the implemented state; administrator sign-in (password and authenticator app) and the account-disabling
+command are planned (ADR 0004). The abuse limits of ADR 0004 decision 7 are current; see "Abuse limits" below,
+and "Access control" for roles and account status.
 
 - Better Auth runs inside the API through `@thallesp/nestjs-better-auth` and is mounted at `/api/auth`. It is
   built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`) and the shared Prisma
   client; the API refuses to start when any of them is missing or invalid.
-- The integration's global guard denies every route by default. Public routes are marked explicitly with
-  `@AllowAnonymous()`; today only `GET /health` is public. The guard resolves the session before it checks the
-  marker, on every request.
+- The integration's own global guard is disabled (`disableGlobalAuthGuard: true`); the project-owned guard
+  described in "Access control" replaces it.
 - `CORS_ORIGIN` is the single trusted-origins list. The project owns CORS (`credentials: true`; methods `GET`,
   `HEAD`, `POST`, `OPTIONS`; headers `Accept`, `Content-Type`) for those origins only, and the same list feeds
   Better Auth's origin checks. The integration's own CORS is disabled, and origin checks stay on in every
   `NODE_ENV`.
 - `createApp` in `app.setup.ts` is the single app-creation boundary for the runtime and integration tests; it
   disables NestJS's body parser, as Better Auth requires.
+
+### Access control (current)
+
+This is the implemented state of ADR 0004 decision 6.
+
+- `AccessControlGuard` (`auth/access-control/access-control.ts`) is the global guard, registered by
+  `AccessControlModule`. It denies every route by default.
+- `@Public()` marks a public route; the guard lets it through without reading any session, so `GET /health`
+  reports its own status (503 when the database is down) whether or not a cookie is present. Today only
+  `GET /health` is public.
+- Every other route needs a valid session whose stored user is `ACTIVE`; otherwise it answers `401`.
+- `@AdminOnly()` also needs the stored role `ADMIN`: anonymous requests get `401` and other users `403`. No
+  administrative route exists yet.
+- The integration's own markers (`@AllowAnonymous()`, `@Roles()`, and the rest) are refused with `500`, so they
+  can never open or seem to restrict a route.
+- The role and status are read from the stored user on every request. Better Auth's session cookie cache is
+  pinned off, so a revoked session or a `DISABLED` user is rejected on the next request.
+- `role` and `status` are server-side fields (`input: false`): a client value is ignored when an account is
+  created and rejected with `400 FIELD_NOT_ALLOWED` on `POST /api/auth/update-user`. Password sign-up is not
+  enabled.
+- A Better Auth `session.create.before` hook (`auth/auth.factory.ts`) refuses a session to a user who is not
+  `ACTIVE` on every sign-in path, and to an administrator on the email-code paths. On
+  `POST /api/auth/sign-in/email-otp` the refusal is the same `400 INVALID_OTP` as a wrong code.
+- `DISABLED` users and administrators receive no sign-in code; the request still gets the identical
+  `200 {"success":true}`.
 
 ### Customer sign-in code (current)
 
@@ -72,8 +97,8 @@ This is the implemented state of ADR 0004 decisions 3 and 8 (as amended) for cus
 2. The hook returns at once for every address, so the response is always `200 {"success":true}`, whether the
    address is unknown, a customer, or an administrator, and whatever happens to the email.
 3. In the background, `SignInCodeSender` first counts the request against the per-email cap; over the cap the
-   issued code is removed unsent. It then looks up the role. An administrator receives no code and the issued
-   code is removed. A customer's code goes through `EmailDeliveryService` in Spanish, with a random idempotency
+   issued code is removed unsent. It then looks up the account. An administrator or a `DISABLED` user receives
+   no code and the issued code is removed. A customer's code goes through `EmailDeliveryService` in Spanish, with a random idempotency
    key per send, so retries reuse the same code and message.
 4. When delivery still fails after the retries, exactly that code is removed, matched by its stored hash, so a
    newer code for the same address stays valid; the failure is not a wrong attempt.

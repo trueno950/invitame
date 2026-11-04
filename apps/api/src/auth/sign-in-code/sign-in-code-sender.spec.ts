@@ -40,7 +40,7 @@ function scriptedStore(script: StoreScript = {}) {
   };
   const store: SignInCodeStore = {
     consumeEmailQuota: () => call("consumeEmailQuota", true),
-    findRole: () => call("findRole", "CUSTOMER"),
+    findAccount: () => call("findAccount", { role: "CUSTOMER", status: "ACTIVE" }),
     invalidateCode: () => call("invalidateCode", undefined),
     discardCodes: () => call("discardCodes", undefined),
   };
@@ -83,7 +83,7 @@ describe("SignInCodeSender before delivery (L24)", () => {
     await sender.handle(REQUEST, store);
     await tasks.drain();
 
-    assert.deepEqual(calls, ["consumeEmailQuota", "findRole"]);
+    assert.deepEqual(calls, ["consumeEmailQuota", "findAccount"]);
     assert.equal(emailSender.delivered.length, 1);
   });
 
@@ -99,9 +99,37 @@ describe("SignInCodeSender before delivery (L24)", () => {
     assert.deepEqual(events, []);
   });
 
+  for (const account of [
+    { role: "ADMIN", status: "ACTIVE" },
+    { role: "CUSTOMER", status: "DISABLED" },
+    { role: "CUSTOMER", status: null },
+  ]) {
+    it(`sends no code and removes it for an account with ${JSON.stringify(account)}`, async () => {
+      const { sender, tasks, events, emailSender } = createSender();
+      const { store, calls } = scriptedStore({ findAccount: async () => account });
+
+      await sender.handle(REQUEST, store);
+      await tasks.drain();
+
+      assert.deepEqual(calls, ["consumeEmailQuota", "findAccount", "invalidateCode"]);
+      assert.equal(emailSender.attempts.length, 0);
+      assert.deepEqual(events, []);
+    });
+  }
+
+  it("sends the code to an unknown address, which signs up as a customer", async () => {
+    const { sender, tasks, emailSender } = createSender();
+    const { store } = scriptedStore({ findAccount: async () => null });
+
+    await sender.handle(REQUEST, store);
+    await tasks.drain();
+
+    assert.equal(emailSender.delivered.length, 1);
+  });
+
   for (const [stage, script, expectedCalls] of [
     [SIGN_IN_CODE_STAGE.QUOTA, { consumeEmailQuota: failing }, ["consumeEmailQuota"]],
-    [SIGN_IN_CODE_STAGE.LOOKUP, { findRole: failing }, ["consumeEmailQuota", "findRole"]],
+    [SIGN_IN_CODE_STAGE.LOOKUP, { findAccount: failing }, ["consumeEmailQuota", "findAccount"]],
   ] as const) {
     it(`invalidates the code and logs the ${stage} stage when it fails`, async () => {
       const { sender, tasks, events, emailSender } = createSender();
@@ -126,7 +154,7 @@ describe("SignInCodeSender before delivery (L24)", () => {
 
   it("logs the invalidation stage, and the stage before it, when the code cannot be removed", async () => {
     const { sender, tasks, events } = createSender();
-    const { store } = scriptedStore({ findRole: failing, invalidateCode: failing });
+    const { store } = scriptedStore({ findAccount: failing, invalidateCode: failing });
 
     await sender.handle(REQUEST, store);
     await tasks.drain();
@@ -153,7 +181,7 @@ describe("SignInCodeSender before delivery (L24)", () => {
     await sender.handle(REQUEST, store);
     await tasks.drain();
 
-    assert.deepEqual(calls, ["consumeEmailQuota", "findRole", "invalidateCode"]);
+    assert.deepEqual(calls, ["consumeEmailQuota", "findAccount", "invalidateCode"]);
     assert.deepEqual(events, [
       {
         event: BACKGROUND_TASK_EVENT.FAILED,
@@ -207,7 +235,7 @@ describe("SignInCodeSender at background capacity (L24)", () => {
     release();
     await shuttingDown;
 
-    assert.deepEqual(pending.calls, ["consumeEmailQuota", "findRole"]);
+    assert.deepEqual(pending.calls, ["consumeEmailQuota", "findAccount"]);
     assert.deepEqual(
       emailSender.delivered.map((message) => message.text.includes(CODE)),
       [true],

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { emailOTP } from "better-auth/plugins";
 
 import { EMAIL_CODE_QUOTA, emailCodeQuotaKey } from "../abuse-limits";
+import type { AccountAccess } from "../account-access";
 import type { SignInCodeRequest, SignInCodeStore } from "./sign-in-code-sender";
 
 type EmailOTPOptions = Parameters<typeof emailOTP>[0];
@@ -134,11 +135,12 @@ export function createBetterAuthSignInCodeStore(
       return countEvent(adapter, emailCodeQuotaKey(email), EMAIL_CODE_QUOTA);
     },
 
-    async findRole(email) {
+    async findAccount(email) {
       const found = await internalAdapter.findUserByEmail(email);
-      // `role` is the additional field declared in `createAuth`; this context type does not carry it.
-      const role: unknown = (found?.user as { role?: unknown } | undefined)?.role;
-      return typeof role === "string" ? role : null;
+      // `role` and `status` are additional fields declared in `createAuth`; this context type does
+      // not carry them.
+      const user = found?.user as AccountAccess | undefined;
+      return user ? { role: user.role, status: user.status } : null;
     },
 
     async invalidateCode(request) {

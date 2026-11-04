@@ -7,7 +7,7 @@ import { after, before, describe, it } from "node:test";
 
 import { Body, Controller, Get, HttpCode, Module, Post } from "@nestjs/common";
 import type { INestApplication } from "@nestjs/common";
-import { AllowAnonymous, AuthModule } from "@thallesp/nestjs-better-auth";
+import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { IsInt, IsString, Max, MaxLength, Min } from "class-validator";
 
@@ -16,6 +16,8 @@ import { createConfigModule } from "../config/config.module";
 import { EmailDeliveryService } from "../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../email/infrastructure/system-email-delivery-runtime";
+import { Public } from "./access-control/access-control";
+import { AccessControlModule } from "./access-control/access-control.module";
 import { createAuth } from "./auth.factory";
 import { BackgroundTasks } from "./sign-in-code/background-tasks";
 import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
@@ -40,7 +42,7 @@ class ProbeInputDto {
 @Controller("probe")
 class ProbeController {
   @Post("public")
-  @AllowAnonymous()
+  @Public()
   @HttpCode(200)
   acceptPublic(@Body() input: ProbeInputDto): { name: string; quantity: number } {
     return { name: input.name, quantity: input.quantity };
@@ -90,7 +92,9 @@ describe("Better Auth through @thallesp/nestjs-better-auth integration", () => {
           BETTER_AUTH_SECRET: secret,
           AUTH_BASE_URL: TEST_AUTH_BASE_URL,
         }),
-        AuthModule.forRoot({ auth, disableTrustedOriginsCors: true }),
+        // The runtime composition: the project-owned guard replaces the integration's (M2 T6a).
+        AuthModule.forRoot({ auth, disableTrustedOriginsCors: true, disableGlobalAuthGuard: true }),
+        AccessControlModule,
       ],
       controllers: [ProbeController],
     })
@@ -168,7 +172,7 @@ describe("Better Auth through @thallesp/nestjs-better-auth integration", () => {
     assert.deepEqual(body.message, ["property role should not exist"]);
   });
 
-  it("requires a session on undecorated routes through the default global guard", async () => {
+  it("requires a session on undecorated routes through the project-owned global guard", async () => {
     const getResponse = await fetch(`${baseUrl}/probe/protected`);
     assert.equal(getResponse.status, 401);
 
