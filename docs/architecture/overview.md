@@ -10,7 +10,7 @@ implemented.
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
 | Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy. | Dashboard, authoring flows, and public invitation routes. **Planned.** |
-| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code and a deny-by-default guard with an administrator role check. | Feature modules exposing stable REST contracts; administrator sign-in, account disabling, and the user's own profile. **Planned.** |
+| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, a deny-by-default guard with an administrator role check, and account disabling by a server-side command. | Feature modules exposing stable REST contracts; administrator sign-in and the user's own profile. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
@@ -40,6 +40,7 @@ apps/api/src/
   database/     Prisma module and service
   email/        email delivery port, retry/alert policy, and Resend, Mailpit, and in-memory adapters
   health/       database-backed health endpoint and tests
+  users/        disable-user use case, its Prisma adapter, and the `user:disable` command
   app.module.ts Nest composition root
   app.setup.ts  shared app creation: body parser off, Helmet, CORS, validation, shutdown hooks
   main.ts       HTTP bootstrap through the shared app creation
@@ -47,9 +48,9 @@ apps/api/src/
 
 ### Authentication boundary (current)
 
-This is the implemented state; administrator sign-in (password and authenticator app) and the account-disabling
-command are planned (ADR 0004). The abuse limits of ADR 0004 decision 7 are current; see "Abuse limits" below,
-and "Access control" for roles and account status.
+This is the implemented state; administrator sign-in (password and authenticator app) is planned (ADR 0004).
+The abuse limits of ADR 0004 decision 7 are current; see "Abuse limits" below, and "Access control" for roles
+and account status.
 
 - Better Auth runs inside the API through `@thallesp/nestjs-better-auth` and is mounted at `/api/auth`. It is
   built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`) and the shared Prisma
@@ -87,6 +88,8 @@ This is the implemented state of ADR 0004 decision 6.
   `POST /api/auth/sign-in/email-otp` the refusal is the same `400 INVALID_OTP` as a wrong code.
 - `DISABLED` users and administrators receive no sign-in code; the request still gets the identical
   `200 {"success":true}`.
+- `pnpm --filter @invitame/api user:disable -- <email>` (`users/`) sets a user to `DISABLED` and deletes all of
+  their sessions in one transaction. It is idempotent and logs the user id only.
 
 ### Customer sign-in code (current)
 

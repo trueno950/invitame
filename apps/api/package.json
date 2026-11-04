@@ -13,7 +13,8 @@
     "start": "node dist/main.js",
     "test": "node -r @swc-node/register --test \"src/**/*.spec.ts\"",
     "test:db": "node -e \"process.env.DATABASE_URL || (console.error('test:db requires an explicit DATABASE_URL'), process.exit(1))\" && node -r @swc-node/register --test \"src/**/*.db-spec.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "user:disable": "node -r @swc-node/register src/users/disable-user.command.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

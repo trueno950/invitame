@@ -98,6 +98,19 @@ curl --fail --max-time 5 http://localhost:3001/health
 
 Stop the API with `Ctrl-C`. Use `pnpm db:down` to stop the local PostgreSQL container when finished.
 
+### Disable a user
+
+Disabling a user is a server-side command; there is no administrator interface yet. It sets the user to
+`DISABLED` and deletes all of their sessions in one transaction, so the user loses access on the next request
+and can no longer sign in. It reads `DATABASE_URL` like the other Prisma scripts and is safe to run twice:
+
+```bash
+pnpm --filter @invitame/api user:disable -- <email>
+```
+
+It prints one JSON line with the user id and the number of revoked sessions, never the email address. Exit
+code 0 means disabled (or already disabled), 1 means no such user or a failure, and 2 means a usage error.
+
 ## Repository layout
 
 | Path | Purpose |
