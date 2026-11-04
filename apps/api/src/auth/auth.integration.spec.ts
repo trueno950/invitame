@@ -13,7 +13,12 @@ import { IsInt, IsString, Max, MaxLength, Min } from "class-validator";
 
 import { createApp } from "../app.setup";
 import { createConfigModule } from "../config/config.module";
+import { EmailDeliveryService } from "../email/application/email-delivery.service";
+import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
+import { SystemEmailDeliveryRuntime } from "../email/infrastructure/system-email-delivery-runtime";
 import { createAuth } from "./auth.factory";
+import { BackgroundTasks } from "./sign-in-code/background-tasks";
+import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 
 const AUTH_BASE_PATH = "/api/auth";
 const TEST_ORIGIN = "http://localhost:3000";
@@ -64,6 +69,11 @@ describe("Better Auth through @thallesp/nestjs-better-auth integration", () => {
       baseURL: TEST_AUTH_BASE_URL,
       trustedOrigins: [TEST_ORIGIN],
       database: memoryAdapter({}),
+      // No probe here requests a sign-in code; the in-memory sender keeps the suite offline.
+      signInCodes: new SignInCodeSender(
+        new EmailDeliveryService(new InMemoryEmailSender(), new SystemEmailDeliveryRuntime()),
+        new BackgroundTasks(() => {}),
+      ),
     });
 
     // Explicit configuration: the shared createApp boundary reads trusted origins from it and the

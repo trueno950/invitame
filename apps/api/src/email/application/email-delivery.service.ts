@@ -10,8 +10,8 @@ import {
 
 /**
  * Retry policy (ADR 0004 decision 8): 3 attempts in total, waiting 250 ms and then 500 ms between them.
- * With the adapters' 4 s request timeout, a failing send is bounded at about 13 s, which a sign-in
- * request can absorb, while two quick retries cover the brief provider errors worth retrying.
+ * With the adapters' 4 s request timeout, a failing send is bounded at about 13 s, which background
+ * sign-in code delivery absorbs, while two quick retries cover the brief provider errors worth retrying.
  */
 export const EMAIL_DELIVERY_MAX_ATTEMPTS = 3;
 export const EMAIL_DELIVERY_INITIAL_BACKOFF_MS = 250;
@@ -54,8 +54,8 @@ export const EMAIL_DELIVERY_RUNTIME = Symbol("EMAIL_DELIVERY_RUNTIME");
 
 /**
  * The only error callers see when a message could not be delivered, whatever the cause, so the
- * response never reveals anything about the recipient or the provider. Callers map it to a generic,
- * retryable response.
+ * response never reveals anything about the recipient or the provider. The sign-in code sender
+ * catches it in the background and invalidates the undelivered code (ADR 0004 decision 8, as amended).
  */
 export class EmailDeliveryUnavailableError extends Error {
   override readonly name = "EmailDeliveryUnavailableError";

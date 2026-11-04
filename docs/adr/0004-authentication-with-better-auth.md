@@ -5,7 +5,8 @@
 Accepted (2026-11-03). The human owner approved the library, customer sign-in by emailed one-time code,
 administrator sign-in with a password and a mandatory authenticator app, Resend for email, and Railway for hosting.
 Amended the same day, before any implementation, to define administrator enrollment (decision 3) and email
-failure handling (decision 8) after the native review.
+failure handling (decision 8) after the native review. Decision 8 was amended again on 2026-11-04, during
+implementation, to send codes in the background; the status stays Accepted.
 
 ## Context
 
@@ -76,6 +77,19 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    sign-ins: existing sessions keep working and administrator sign-in does not use email. A second provider can be
    added behind the same port but is not required for the first release. Tests use an in-memory adapter and local
    development uses a local mail catcher; codes never appear in logs.
+
+   **Amended (2026-11-04).** The generic retryable error above is replaced; the human owner approved this change.
+   Better Auth 1.7.16 stores the code before it calls the send hook, swallows a send error, and still returns
+   success, so an error could only surface by rewriting its response, and waiting for the send would let
+   response timing reveal the account and the provider outcome. Instead:
+
+   - The send request returns the same success response at once for new, existing, and administrator emails,
+     whatever the later delivery outcome. Administrator emails never receive a sign-in code (decision 3).
+   - Delivery runs in the background with the bounded retries above, which reuse the same code and message.
+   - When delivery still fails after the retries, that code is invalidated, never a newer code for the same
+     address. The failure counts toward the degraded alert and not as a wrong attempt.
+   - Logs omit the code and the recipient's address.
+   - Repeated failures must still raise an operational alert by the first production release.
 9. **Configuration.** The auth secret, public base URL, and trusted origins are required environment variables
    validated at startup; the API refuses to start without them.
 

@@ -10,7 +10,7 @@ implemented.
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
 | Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy. | Dashboard, authoring flows, and public invitation routes. **Planned.** |
-| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with no sign-in method enabled yet. | Feature modules exposing stable REST contracts; customer and administrator sign-in. **Planned.** |
+| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code. | Feature modules exposing stable REST contracts; administrator sign-in, roles, and account status. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
@@ -35,7 +35,7 @@ The current API tree is intentionally small:
 
 ```text
 apps/api/src/
-  auth/         Better Auth instance factory and integration registration
+  auth/         Better Auth instance factory, integration registration, and sign-in code delivery
   config/       startup environment validation and the configuration module
   database/     Prisma module and service
   email/        email delivery port, retry/alert policy, and Resend, Mailpit, and in-memory adapters
@@ -47,7 +47,8 @@ apps/api/src/
 
 ### Authentication boundary (current)
 
-This is the implemented state; sign-in methods, roles, and account status enforcement are planned (ADR 0004).
+This is the implemented state; administrator sign-in, role and account status enforcement, and the abuse limits
+of ADR 0004 decision 7 are planned (ADR 0004).
 
 - Better Auth runs inside the API through `@thallesp/nestjs-better-auth` and is mounted at `/api/auth`. It is
   built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`) and the shared Prisma
@@ -62,9 +63,33 @@ This is the implemented state; sign-in methods, roles, and account status enforc
 - `createApp` in `app.setup.ts` is the single app-creation boundary for the runtime and integration tests; it
   disables NestJS's body parser, as Better Auth requires.
 
+### Customer sign-in code (current)
+
+This is the implemented state of ADR 0004 decisions 3 and 8 (as amended) for customers. Rate limits, the
+per-address code cap, and the trusted client IP header are planned (ADR 0004 decision 7); Better Auth's own
+rate limiter is still its default, active only in production and stored in process memory.
+
+1. `POST /api/auth/email-otp/send-verification-otp` with `type: "sign-in"` stores a new 6-digit code that
+   expires after 300 seconds, as a SHA-256 hash with an attempt counter, then calls the `SignInCodeSender` hook.
+2. The hook returns at once for every address, so the response is always `200 {"success":true}`, whether the
+   address is unknown, a customer, or an administrator, and whatever happens to the email.
+3. In the background, `SignInCodeSender` looks up the role. An administrator receives no code and the issued
+   code is removed. A customer's code goes through `EmailDeliveryService` in Spanish, with a random idempotency
+   key per send, so retries reuse the same code and message.
+4. When delivery still fails after the retries, exactly that code is removed, matched by its stored hash, so a
+   newer code for the same address stays valid; the failure is not a wrong attempt.
+5. `POST /api/auth/sign-in/email-otp` accepts the code; 3 wrong codes lock it (`403 TOO_MANY_ATTEMPTS`) and an
+   expired code returns `400 OTP_EXPIRED`. The first sign-in creates a verified `CUSTOMER` and ignores a
+   client-supplied `name`, `image`, and `role`.
+
+The other OTP types (`email-verification`, `forget-password`) never send a message: their codes are deleted at
+once for every address. Background tasks (`auth/sign-in-code/background-tasks.ts`) catch every failure and log
+only a `background_task_failed` event with the task name and error class; shutdown waits for pending tasks. No
+log carries the code or the address.
+
 ### Email delivery (current)
 
-This is the implemented state; nothing sends email yet. Sign-in codes are planned to use it (ADR 0004 decision 8).
+This is the implemented state; customer sign-in codes are its only caller (ADR 0004 decision 8).
 
 - `email/application` owns the `EmailSender` port (DI token `EMAIL_SENDER`) and `EmailDeliveryService`, the only
   entry point for callers. `EmailModule` binds the port to the adapter selected by `EMAIL_TRANSPORT` and exports
@@ -75,7 +100,8 @@ This is the implemented state; nothing sends email yet. Sign-in codes are planne
   conflict) are retried, 3 attempts in total with 250 ms and 500 ms backoff. Every attempt sends the same message
   and the same `Idempotency-Key`, so Resend delivers it at most once within its 24-hour key window. Other 4xx
   responses are permanent and not retried.
-- Failures: callers receive only `EmailDeliveryUnavailableError`, a generic retryable error. A structured
+- Failures: callers receive only `EmailDeliveryUnavailableError`; the sign-in code sender invalidates the code
+  and never surfaces the error in a response. A structured
   `email_delivery_failed` warning records attempts, reason, and the transient flag, never the recipient, subject,
   body, code, or key. Five failed deliveries within five minutes emit one error-level `email_delivery_degraded`
   event, the hook for an operational alert; it re-arms after a failure-free window. The counter is per process.

@@ -6,6 +6,8 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import type { RuntimeEnvironment } from "../config/environment";
 import { PrismaService } from "../database/prisma.service";
 import { createAuth } from "./auth.factory";
+import { SignInCodeModule } from "./sign-in-code/sign-in-code.module";
+import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 
 /**
  * Builds the integration options from validated configuration and the shared Prisma client.
@@ -14,6 +16,7 @@ import { createAuth } from "./auth.factory";
 export function createAuthModuleOptions(
   config: ConfigService<RuntimeEnvironment, true>,
   prisma: PrismaService,
+  signInCodes: SignInCodeSender,
 ) {
   return {
     auth: createAuth({
@@ -21,6 +24,7 @@ export function createAuthModuleOptions(
       baseURL: config.get("AUTH_BASE_URL", { infer: true }),
       trustedOrigins: config.get("TRUSTED_ORIGINS", { infer: true }),
       database: prismaAdapter(prisma, { provider: "postgresql" }),
+      signInCodes,
     }),
     disableTrustedOriginsCors: true,
   };
@@ -32,7 +36,8 @@ export function createAuthModuleOptions(
  */
 export function registerAuthModule(): DynamicModule {
   return AuthModule.forRootAsync({
-    inject: [ConfigService, PrismaService],
+    imports: [SignInCodeModule],
+    inject: [ConfigService, PrismaService, SignInCodeSender],
     useFactory: createAuthModuleOptions,
   });
 }
