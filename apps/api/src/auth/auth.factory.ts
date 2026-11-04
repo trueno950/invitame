@@ -3,6 +3,7 @@ import { getIP } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 
 import type { ClientIpEnvironment } from "../config/environment";
+import { type AccountAccess, sessionRefusal, USER_ROLE, USER_STATUS } from "./account-access";
 import {
   CLIENT_IP_RATE_LIMIT,
   EMAIL_CODE_QUOTA,
@@ -59,6 +60,9 @@ export interface CreateAuthOptions {
  * an unresolved client IP is rejected with a generic 503 before any endpoint runs (S19).
  */
 export function createAuth(options: CreateAuthOptions): Auth {
+  // Assigned below; the session hook runs only after the instance exists.
+  let authContext: Auth["$context"] | undefined;
+
   const authOptions: BetterAuthOptions = {
     secret: options.secret,
     baseURL: options.baseURL,
@@ -84,19 +88,50 @@ export function createAuth(options: CreateAuthOptions): Auth {
         [EMAIL_CODE_QUOTA_RETENTION_RULE]: { ...EMAIL_CODE_QUOTA },
       },
     },
+    session: {
+      // Every session check reads the stored session and user, so a revoked session or a DISABLED
+      // user is rejected on the next request (S18). Better Auth enables this cache by default only
+      // without a database (1.7.16 `context/create-context.mjs`); pinned off so it never turns on.
+      cookieCache: { enabled: false },
+    },
     user: {
       // Better Auth's `name` is stored in the existing `User.displayName` column.
       fields: { name: "displayName" },
+      // `input: false`: a client value is replaced by the default on create and rejected with
+      // `400 FIELD_NOT_ALLOWED` on update (1.7.16 `db/schema.mjs`, `parseInputData`).
       additionalFields: {
         role: {
-          type: ["CUSTOMER", "ADMIN"],
+          type: [USER_ROLE.CUSTOMER, USER_ROLE.ADMIN],
           required: false,
           input: false,
-          defaultValue: "CUSTOMER",
+          defaultValue: USER_ROLE.CUSTOMER,
+        },
+        status: {
+          type: [USER_STATUS.ACTIVE, USER_STATUS.DISABLED],
+          required: false,
+          input: false,
+          defaultValue: USER_STATUS.ACTIVE,
         },
       },
     },
     databaseHooks: {
+      session: {
+        create: {
+          // Every sign-in path ends in `internalAdapter.createSession`, which runs this hook first.
+          // Throwing refuses the session; returning false would make the endpoint fail on a null
+          // session instead (1.7.16 `db/with-hooks.mjs`).
+          async before(session, context) {
+            const internalAdapter =
+              context?.context.internalAdapter ?? (await authContext)?.internalAdapter;
+            const user = await internalAdapter?.findUserById(session.userId);
+            const refusal = sessionRefusal((user as AccountAccess | null) ?? null, context?.path);
+
+            if (refusal) {
+              throw refusal;
+            }
+          },
+        },
+      },
       user: {
         create: {
           // The code sign-in endpoint accepts `name` and `image` from an unauthenticated client
@@ -132,6 +167,7 @@ export function createAuth(options: CreateAuthOptions): Auth {
   };
 
   const auth = betterAuth(authOptions);
+  authContext = auth.$context;
   const resolveClientIp = (request: Request) => getIP(request, authOptions);
 
   if (options.requireClientIp && resolveClientIp(new Request(options.baseURL)) !== null) {

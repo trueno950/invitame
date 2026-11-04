@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 
-import { Global, type INestApplication, Module } from "@nestjs/common";
+import { Controller, Get, Global, type INestApplication, Module } from "@nestjs/common";
 
 import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
@@ -22,6 +22,18 @@ const ALLOWED_METHODS = "GET,HEAD,POST,OPTIONS";
 
 class PrismaStub {
   queries = 0;
+  sessionLookups = 0;
+
+  /** Every session query fails, as it would with the database down. */
+  readonly session = new Proxy(
+    {},
+    {
+      get: () => async () => {
+        this.sessionLookups += 1;
+        throw new Error("No database in this suite.");
+      },
+    },
+  );
 
   /** Better Auth's database rate limiter starts a fresh bucket on every request. */
   readonly rateLimit = {
@@ -237,6 +249,72 @@ describe("AppModule runtime wiring", () => {
       assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), { success: true });
     }
+  });
+});
+
+/** A session cookie signed like Better Auth's, so a guard that reads it would query the database. */
+function signedSessionCookie(secret: string): string {
+  const token = randomBytes(24).toString("base64url");
+  const signature = createHmac("sha256", secret).update(token).digest("base64");
+  return `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+}
+
+describe("AppModule access control (M2 T6a; L12, L20)", () => {
+  const secret = randomBytes(32).toString("base64url");
+  let app: INestApplication;
+  let baseUrl: string;
+
+  // Registered next to AppModule only in this suite; the global guard applies to it like any route.
+  @Controller("wiring-probe")
+  class UndecoratedProbeController {
+    @Get()
+    read(): { ok: true } {
+      return { ok: true };
+    }
+  }
+
+  before(async () => {
+    @Module({
+      imports: [
+        AppModule.forRoot({
+          environment: testEnvironment({ BETTER_AUTH_SECRET: secret }),
+          database: StubDatabaseModule,
+        }),
+      ],
+      controllers: [UndecoratedProbeController],
+    })
+    class ProbedAppModule {}
+
+    app = await createApp(ProbedAppModule, { logger: false, abortOnError: false });
+    await app.listen(0, "127.0.0.1");
+    baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
+  });
+
+  after(async () => {
+    await app?.close();
+  });
+
+  it("answers GET /health with its own 503 when a session cookie is present and the database is down", async () => {
+    const lookupsBefore = prismaStub.sessionLookups;
+    const response = await fetch(`${baseUrl}/health`, {
+      headers: { cookie: signedSessionCookie(secret) },
+    });
+    const body = (await response.json()) as { status: string; database: string };
+
+    assert.equal(response.status, 503);
+    assert.equal(body.status, "unhealthy");
+    assert.equal(body.database, "unavailable");
+    assert.equal(
+      prismaStub.sessionLookups,
+      lookupsBefore,
+      "a public route never reads the session",
+    );
+  });
+
+  it("denies a new undecorated route with 401 without a session", async () => {
+    const response = await fetch(`${baseUrl}/wiring-probe`);
+
+    assert.equal(response.status, 401);
   });
 });
 

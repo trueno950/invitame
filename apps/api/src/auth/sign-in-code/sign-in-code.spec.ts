@@ -691,3 +691,84 @@ describe("client profile fields at sign-up (L16)", () => {
     assert.equal(user.role, "CUSTOMER");
   });
 });
+
+describe("account status and role at sign-in (S6, S9, S18, S22; L24, L26)", () => {
+  /** Issues a delivered code to a new customer, then applies the change before it is used. */
+  async function codeThenChange(
+    harness: ReturnType<typeof createHarness>,
+    sender: InMemoryEmailSender,
+    change: Record<string, unknown>,
+  ): Promise<{ email: string; code: string }> {
+    const email = newEmail("changed");
+    await harness.requestCode(email);
+    await harness.tasks.drain();
+    const code = codeFrom(sender.delivered.at(-1));
+    assert.equal((await harness.signIn(email, code)).status, 200, "the account now exists");
+    harness.database.session = [];
+
+    await harness.requestCode(email);
+    await harness.tasks.drain();
+    const second = codeFrom(sender.delivered.at(-1));
+    const [user] = harness.users(email);
+    assert.ok(user);
+    Object.assign(user, change);
+    return { email, code: second };
+  }
+
+  async function invalidCodeResponse(harness: ReturnType<typeof createHarness>) {
+    const email = newEmail("wrong");
+    await harness.requestCode(email);
+    await harness.tasks.drain();
+    const response = await harness.signIn(email, "000000");
+    return { status: response.status, body: await response.text() };
+  }
+
+  it("sends a DISABLED user no code and removes the issued one, with the identical response", async () => {
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender);
+    const { email } = await codeThenChange(harness, sender, { status: "DISABLED" });
+    // Drop the code the helper issued while the account was still active.
+    harness.database.verification = [];
+    sender.clear();
+
+    const response = await harness.requestCode(email);
+    assert.deepEqual(
+      { status: response.status, body: await response.text() },
+      { status: 200, body: '{"success":true}' },
+    );
+    await harness.tasks.drain();
+
+    assert.equal(sender.attempts.length, 0);
+    assert.equal(harness.verificationRows(email).length, 0);
+  });
+
+  for (const [label, change] of [
+    ["a DISABLED customer", { status: "DISABLED" }],
+    ["an administrator", { role: "ADMIN" }],
+  ] as const) {
+    it(`refuses an email-code session to ${label}, exactly like an invalid code`, async () => {
+      const sender = new InMemoryEmailSender();
+      const harness = createHarness(sender);
+      const { email, code } = await codeThenChange(harness, sender, change);
+      const expected = await invalidCodeResponse(harness);
+
+      const response = await harness.signIn(email, code);
+
+      assert.deepEqual({ status: response.status, body: await response.text() }, expected);
+      assert.equal(expected.status, 400);
+      assert.deepEqual(response.headers.getSetCookie(), []);
+      assert.equal(harness.database.session?.length, 0, "no session row was created");
+    });
+  }
+
+  it("refuses session creation for a DISABLED user on every path, server-side included", async () => {
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender);
+    const { email } = await codeThenChange(harness, sender, { status: "DISABLED" });
+    const [user] = harness.users(email);
+    const context = await harness.auth.$context;
+
+    await assert.rejects(context.internalAdapter.createSession(String(user?.id)));
+    assert.equal(harness.database.session?.length, 0);
+  });
+});

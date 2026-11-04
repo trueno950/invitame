@@ -6,12 +6,12 @@ import {
   EmailDeliveryService,
   EmailDeliveryUnavailableError,
 } from "../../email/application/email-delivery.service";
+import { type AccountAccess, mayReceiveSignInCode } from "../account-access";
 import { BackgroundTaskStageError, BackgroundTasks } from "./background-tasks";
 import { buildSignInCodeMessage } from "./sign-in-code-message";
 
 /** The only OTP type that delivers a message; customers have no password and sign in by code. */
 const SIGN_IN_TYPE = "sign-in";
-const ADMIN_ROLE = "ADMIN";
 export const SIGN_IN_CODE_DELIVERY_TASK = "sign_in_code_delivery";
 export const SIGN_IN_CODE_DISCARD_TASK = "sign_in_code_discard";
 
@@ -41,8 +41,8 @@ export interface SignInCodeStore {
    * (`EMAIL_CODE_QUOTA`) was already reached.
    */
   consumeEmailQuota(email: string): Promise<boolean>;
-  /** The stored role of the account with this address, or null when there is none. */
-  findRole(email: string): Promise<string | null>;
+  /** The stored role and status of the account with this address, or null when there is none. */
+  findAccount(email: string): Promise<AccountAccess | null>;
   /** Removes the rows that hold exactly this code; a newer code for the same address stays valid. */
   invalidateCode(request: SignInCodeRequest): Promise<void>;
   /** Removes every code of this type for the address, as Better Auth does for an unknown address. */
@@ -52,9 +52,10 @@ export interface SignInCodeStore {
 /**
  * Handles Better Auth's `sendVerificationOTP` hook (ADR 0004 decisions 3 and 8, as amended). The
  * hook returns at once for every address, so the response never waits for, or depends on, the
- * per-email cap, the role lookup, or the delivery. In the background, in this order: the request
- * counts against the per-email cap, and over the cap the code is removed unsent; an administrator
- * receives no code and the code is removed; a customer's code goes through `EmailDeliveryService`.
+ * per-email cap, the account lookup, or the delivery. In the background, in this order: the request
+ * counts against the per-email cap, and over the cap the code is removed unsent; an administrator or
+ * a DISABLED user receives no code and the code is removed; the code of an active customer, or of an
+ * unknown address that signs up as one, goes through `EmailDeliveryService`.
  * Whenever a stage fails before or during delivery, the code is invalidated, so no undelivered code
  * stays valid, and the failure is logged with its stage. A failed delivery does not count as a
  * wrong attempt.
@@ -95,10 +96,10 @@ export class SignInCodeSender {
       return;
     }
 
-    const role = await this.beforeDelivery(SIGN_IN_CODE_STAGE.LOOKUP, request, store, () =>
-      store.findRole(request.email),
+    const account = await this.beforeDelivery(SIGN_IN_CODE_STAGE.LOOKUP, request, store, () =>
+      store.findAccount(request.email),
     );
-    if (role === ADMIN_ROLE) {
+    if (account && !mayReceiveSignInCode(account)) {
       await this.invalidate(request, store);
       return;
     }
