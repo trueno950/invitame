@@ -1,7 +1,7 @@
 # Milestone 2 — Identity, ownership, and authorization
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
-[ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 done (GO, L9), awaiting commit approval; L10 decisions before T2.
+[ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 committed (`ebabb0d`); T1b done (L13), awaiting commit approval.
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -74,12 +74,17 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   assertion.
 - **S31** R4-provider-retry-duplicate-delivery (resilience, SUGGESTION): retries avoid duplicate delivery where the
   provider supports idempotency.
+- **S32** (L11) DTO validation runs under `pnpm dev` and `pnpm test`: the development and test runners emit decorator
+  metadata, so the global `ValidationPipe` receives DTO types without workarounds.
+- **S33** (L11) Biome accepts NestJS parameter decorators such as `@Body()`.
+- **S34** (L11) The root `engines.node` floor is at least the integration's `>=22.22.1`.
 
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | Spike: Better Auth through `@thallesp/nestjs-better-auth` on NestJS 12 with the body parser disabled; prove the auth handler, JSON parsing, and the global `ValidationPipe`; decide integration or fallback. | S4, S13 | worker | pending approval |
+| T1 | Spike: Better Auth through `@thallesp/nestjs-better-auth` on NestJS 12 with the body parser disabled; prove the auth handler, JSON parsing, and the global `ValidationPipe`; decide integration or fallback. | S4, S13 | worker | `ebabb0d` |
+| T1b | Tooling: a dev and test runner that emits decorator metadata, Biome parameter decorators, and the Node engines floor; remove the spike test's workarounds and clarify its intent. | S32, S33, S34 | worker | — |
 | T2 | Schema: map Better Auth's user onto `User`; add session, account, verification, and two-factor models and a server-side role; one additive migration; database gate; human migration review. | S2, S5, S13 | inline | — |
 | T3 | Configuration and origins: validate the auth secret, public base URL, and trusted origins at startup; credentialed CORS only for trusted origins, shared with Better Auth. | S8, S12 | inline | — |
 | T4 | Email port: application port, in-memory test adapter, Resend adapter, local mail catcher; bounded retries and failure handling. | S11, S23, S28, S29, S31 | inline | — |
@@ -124,3 +129,16 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   global `ValidationPipe` skips DTO validation under `pnpm dev` and `pnpm test` while the `tsc` build is unaffected;
   Biome rejects parameter decorators such as `@Body()` unless `unsafeParameterDecoratorsEnabled` is set; and the root
   `engines.node` floor (`>=22.0.0`) is below the integration's `>=22.22.1`.
+- **L11** (2026-11-03) User, verbatim, answering "¿Commiteo T1 y sigo con esas tres correcciones como la próxima
+  unidad, antes de T2?": "si". T1 committed as `ebabb0d`.
+- **L12** T1 native review (`review-c7ff91fc7592f205`) advisory findings and their owners:
+  R2-shared-boundary-omits-body-parser (WARNING) goes to T3; R3-test-glob-engine-floor (WARNING) goes to T1b (S34);
+  R3-guard-positive-path-unproved goes to T6 and T9; R2-spike-suite-made-permanent,
+  R2-body-passthrough-probe-intent-implicit, and R2-test-baseurl-differs-from-served-origin go to T1b;
+  R2-task-status-stale-on-commit is fixed by this update.
+- **L13** T1b evidence: the API `dev` and `test` scripts run through `@swc-node/register` 1.12.1 with `@swc/core`
+  1.16.21, which map `emitDecoratorMetadata` from `apps/api/tsconfig.json`; `tsx` remains only for the Prisma scripts.
+  RED: under `tsx`, the new metadata test and both 400 tests failed (3 of 11). GREEN: 11 of 11 pass under SWC, with
+  real `@Body()` decorators and no manual metadata. The dev script booted with inline environment variables and
+  served `GET /health` (503 without a database). Biome enables `unsafeParameterDecoratorsEnabled`; the root
+  `engines.node` floor is `>=22.22.1 <27`.

@@ -18,7 +18,7 @@ import { createAuth } from "./auth.factory";
 const AUTH_BASE_PATH = "/api/auth";
 const TEST_ORIGIN = "http://localhost:3000";
 
-class SpikeInputDto {
+class ProbeInputDto {
   @IsString()
   @MaxLength(50)
   name!: string;
@@ -29,18 +29,18 @@ class SpikeInputDto {
   quantity!: number;
 }
 
-@Controller("spike")
-class SpikeController {
+@Controller("probe")
+class ProbeController {
   @Post("public")
   @AllowAnonymous()
   @HttpCode(200)
-  acceptPublic(input: SpikeInputDto): { name: string; quantity: number } {
+  acceptPublic(@Body() input: ProbeInputDto): { name: string; quantity: number } {
     return { name: input.name, quantity: input.quantity };
   }
 
   @Post("protected")
   @HttpCode(200)
-  acceptProtected(input: SpikeInputDto): { name: string } {
+  acceptProtected(@Body() input: ProbeInputDto): { name: string } {
     return { name: input.name };
   }
 
@@ -50,36 +50,26 @@ class SpikeController {
   }
 }
 
-// The repository's Biome configuration rejects parameter decorator syntax, so the body
-// binding is applied programmatically; Nest reads the same route-argument metadata.
-// tsx (esbuild) does not emit decorator metadata either, so without the paramtypes
-// declaration the global ValidationPipe receives no DTO metatype and skips validation.
-// tsc emits the same metadata, so the declaration only fills the test runtime's gap.
-for (const method of ["acceptPublic", "acceptProtected"]) {
-  Body()(SpikeController.prototype, method, 0);
-  if (!Reflect.getMetadata("design:paramtypes", SpikeController.prototype, method)) {
-    Reflect.defineMetadata("design:paramtypes", [SpikeInputDto], SpikeController.prototype, method);
-  }
-}
-
-describe("Better Auth through @thallesp/nestjs-better-auth (spike)", () => {
+describe("Better Auth through @thallesp/nestjs-better-auth integration", () => {
   let app: INestApplication;
   let baseUrl: string;
 
   before(async () => {
     const auth = createAuth({
       secret: randomBytes(32).toString("base64url"),
+      // Fixed origin: the listening port is ephemeral and unknown until after the module is built.
+      // Better Auth uses baseURL only to build absolute URLs, which these probes never follow.
       baseURL: "http://localhost",
       database: memoryAdapter({}),
     });
 
     @Module({
       imports: [AuthModule.forRoot({ auth })],
-      controllers: [SpikeController],
+      controllers: [ProbeController],
     })
-    class SpikeTestModule {}
+    class AuthIntegrationTestModule {}
 
-    app = await NestFactory.create(SpikeTestModule, { bodyParser: false, logger: false });
+    app = await NestFactory.create(AuthIntegrationTestModule, { bodyParser: false, logger: false });
     configureApp(app, { corsOrigin: TEST_ORIGIN });
     await app.listen(0, "127.0.0.1");
 
@@ -99,6 +89,15 @@ describe("Better Auth through @thallesp/nestjs-better-auth (spike)", () => {
     });
   }
 
+  it("emits DTO decorator metadata under the test runner, as the tsc build does", () => {
+    for (const method of ["acceptPublic", "acceptProtected"]) {
+      assert.deepEqual(
+        Reflect.getMetadata("design:paramtypes", ProbeController.prototype, method),
+        [ProbeInputDto],
+      );
+    }
+  });
+
   it("serves the Better Auth health endpoint under the integration mount path", async () => {
     const response = await fetch(`${baseUrl}${AUTH_BASE_PATH}/ok`);
 
@@ -106,7 +105,9 @@ describe("Better Auth through @thallesp/nestjs-better-auth (spike)", () => {
     assert.deepEqual(await response.json(), { ok: true });
   });
 
-  it("passes the raw JSON body through to the Better Auth handler", async () => {
+  it("delivers the JSON request body to the Better Auth handler", async () => {
+    // Intent: with Nest's body parser disabled, PROVIDER_NOT_FOUND proves the handler still
+    // received and parsed `provider` from the body rather than rejecting an empty request.
     const response = await postJson(`${AUTH_BASE_PATH}/sign-in/social`, {
       provider: "not-configured",
       callbackURL: "/",
@@ -118,14 +119,14 @@ describe("Better Auth through @thallesp/nestjs-better-auth (spike)", () => {
   });
 
   it("parses and accepts a valid JSON body on a non-auth route", async () => {
-    const response = await postJson("/spike/public", { name: "Ana", quantity: 3 });
+    const response = await postJson("/probe/public", { name: "Ana", quantity: 3 });
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { name: "Ana", quantity: 3 });
   });
 
   it("rejects a wrongly typed property with 400 through the global ValidationPipe", async () => {
-    const response = await postJson("/spike/public", { name: "Ana", quantity: "three" });
+    const response = await postJson("/probe/public", { name: "Ana", quantity: "three" });
     const body = (await response.json()) as { statusCode: number; message: string[] };
 
     assert.equal(response.status, 400);
@@ -134,7 +135,7 @@ describe("Better Auth through @thallesp/nestjs-better-auth (spike)", () => {
   });
 
   it("rejects a non-whitelisted property with 400 through the global ValidationPipe", async () => {
-    const response = await postJson("/spike/public", { name: "Ana", quantity: 3, role: "admin" });
+    const response = await postJson("/probe/public", { name: "Ana", quantity: 3, role: "admin" });
     const body = (await response.json()) as { statusCode: number; message: string[] };
 
     assert.equal(response.status, 400);
@@ -142,22 +143,22 @@ describe("Better Auth through @thallesp/nestjs-better-auth (spike)", () => {
   });
 
   it("requires a session on undecorated routes through the default global guard", async () => {
-    const getResponse = await fetch(`${baseUrl}/spike/protected`);
+    const getResponse = await fetch(`${baseUrl}/probe/protected`);
     assert.equal(getResponse.status, 401);
 
-    const postResponse = await postJson("/spike/protected", { name: "Ana", quantity: 3 });
+    const postResponse = await postJson("/probe/protected", { name: "Ana", quantity: 3 });
     assert.equal(postResponse.status, 401);
   });
 
   it("denies an unauthenticated request before validating its body", async () => {
-    const response = await postJson("/spike/protected", { quantity: "three", role: "admin" });
+    const response = await postJson("/probe/protected", { quantity: "three", role: "admin" });
 
     assert.equal(response.status, 401);
   });
 
   it("keeps helmet security headers on Nest routes and Better Auth routes", async () => {
     const responses = await Promise.all([
-      postJson("/spike/public", { name: "Ana", quantity: 3 }),
+      postJson("/probe/public", { name: "Ana", quantity: 3 }),
       fetch(`${baseUrl}${AUTH_BASE_PATH}/ok`),
     ]);
 

@@ -29,7 +29,7 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Documentation consistency | `pnpm docs:check` | Resolves local Markdown links, verifies required documentation entrypoints and workflow sections, and confirms CI invokes the check. It does not prove runtime behavior. | Every change; especially documentation, process, configuration, and CI changes. |
 | Lint | `pnpm lint` | Runs `biome lint .` through both workspace packages via Turborepo. | Every code or source-adjacent change. |
 | Type safety | `pnpm typecheck` | Runs strict TypeScript checks in `apps/api` and `apps/web`. | Every TypeScript/config change. |
-| Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner health suite; `apps/web` has no test script. | Every behavior change; documentation-only changes may record `N/A`. |
+| Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner over `src/**/*.spec.ts` (health and auth integration suites) through `@swc-node/register`, which emits decorator metadata like the `tsc` build; `apps/web` has no test script. | Every behavior change; documentation-only changes may record `N/A`. |
 | Build | `pnpm build` | Builds the API with `tsc` and the web app with Next.js. Outputs are ignored build artifacts. | Runtime, dependency, configuration, or build changes; recommended for broad docs/process changes. |
 | Diff hygiene | `git diff --check` | Finds whitespace errors in the working diff. | Every change before review. |
 | Start local PostgreSQL | `pnpm db:up` | Starts the local Docker Compose PostgreSQL service. | Database or integration verification. |

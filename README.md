@@ -14,7 +14,8 @@ landing page. It does not create or send invitations yet.
 
 ## Quick start
 
-Prerequisites: Node.js 26 (see `.nvmrc`), pnpm 10, and Docker with Docker Compose.
+Prerequisites: Node.js 26 (see `.nvmrc`; `engines` accepts `>=22.22.1 <27`), pnpm 10, and Docker with Docker
+Compose.
 
 ```bash
 pnpm install
