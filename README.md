@@ -38,8 +38,10 @@ The API refuses to start until `apps/api/.env` defines its required variables. B
 
 ### Local email
 
-In development the API sends email to Mailpit, a local mail catcher. `pnpm db:up` starts only PostgreSQL; start
-Mailpit separately and read captured messages in its UI at `http://localhost:8025`:
+In development the API sends email, such as customer sign-in codes, to Mailpit, a local mail catcher. Codes are
+sent in the background, so a code request succeeds even when Mailpit is down; the code is then invalidated.
+`pnpm db:up` starts only PostgreSQL; start Mailpit separately and read captured messages in its UI at
+`http://localhost:8025`:
 
 ```bash
 docker compose up -d mailpit

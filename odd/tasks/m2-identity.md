@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); T5 next.
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a in progress.
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it, starting with `feat/m2-identity-07-sign-in-code` (L23). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -47,6 +47,7 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 - **S14** First review R1-001 (risk, SUGGESTION): scope the session cookie as narrowly as possible, and never serve
   untrusted content from a host that receives it.
 - **S15** First review R2-001 (readability, SUGGESTION): concrete values for code expiry and attempt limits.
+  Decided (L23): 6-digit codes that expire after 300 seconds, at most 3 wrong attempts per code, stored hashed.
 - **S16** First review R2-002 (readability, SUGGESTION): the exact cookie name, `Domain`, and lifetime.
 - **S17** R3-adr-test-coverage-gaps (reliability, WARNING): tests beyond the ADR minimum, such as untrusted origins,
   disabled password sign-up, a client-supplied role, and enumeration-safe responses.
@@ -61,11 +62,18 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 - **S22** R3-enrollment-gate-email-otp (reliability, WARNING): email OTP sign-in is rejected for administrator
   accounts in every enrollment state.
 - **S23** R3-send-failure-code-lifecycle (reliability, WARNING): what happens to a code whose email failed, and how it
-  counts against attempts.
+  counts against attempts. Decided (L23): the send request never waits for delivery; when delivery of a code fails
+  after the bounded retries, that code is invalidated (never a newer code), the failure counts toward the degraded
+  alert, and it does not count as a wrong attempt.
 - **S24** R3-send-failure-enumeration (reliability, WARNING): send-failure responses are identical for new, existing,
-  and administrator emails; an administrator email gets the same response as a customer email.
+  and administrator emails; an administrator email gets the same response as a customer email. Decided (L23): the
+  send endpoint returns the same immediate success response for new, existing, and administrator emails, whatever
+  the later delivery outcome, and administrator emails never receive a sign-in code. This amends ADR 0004 decision 8,
+  which asked for a generic retryable error.
 - **S25** R4-send-failure-rate-limit-interaction (resilience, WARNING): send failures neither lock customers out
-  through rate limits nor open an abuse path.
+  through rate limits nor open an abuse path. Decided (L23): persistent limits of 3 send requests per minute per
+  client IP and 5 codes per hour per email address; every send request consumes its token whatever the delivery
+  outcome, so one request causes at most 3 provider calls.
 - **S26** R2-duplicated-logging-rule (readability, SUGGESTION): a single logging rule in the ADR.
 - **S27** R2-unexplained-native-review-reference (readability, SUGGESTION): explain the native-review reference in
   the ADR status.
@@ -90,7 +98,8 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T2 | Schema: map Better Auth's user onto `User`; add session, account, verification, and two-factor models and a server-side role; one additive migration; database gate; human migration review. | S2, S5, S13 | worker | `cb07c29` |
 | T3 | Configuration and origins: validate the auth secret, public base URL, and trusted origins at startup; credentialed CORS only for trusted origins, shared with Better Auth. | S8, S12 | worker | `4cfdb26` |
 | T4 | Email port: application port, in-memory test adapter, Resend adapter, local mail catcher; bounded retries and failure handling. | S11, S23, S28, S29, S31 | worker | `01f44f5`, `f6cc504`, slice 6 (L22) |
-| T5 | Customer sign-in: email OTP with concrete expiry and attempt limits, enumeration-safe responses, persistent rate limiting and its failure mode. | S6, S10, S15, S19, S24, S25 | inline | — |
+| T5a | Sign-in code flow: customer email OTP with the S15 values, background delivery with a uniform response, invalidation of an undelivered code, no codes for administrators, bounded client profile fields; amend ADR 0004 decision 8. | S6, S15, S23, S24 | worker | — |
+| T5b | Abuse limits: persistent rate limits in every environment, the per-email cap, the trusted client IP header, and a rate-limit store that fails closed. | S10, S19, S25 | worker | — |
 | T6 | Authorization and profile: deny-by-default guard, explicit public routes, server-side role, `DISABLED` sign-in block and session revocation, own-profile endpoints as the first owned resource. | S1, S2, S9, S18 | inline | — |
 | T7 | Administrator: server-side creation command, password sign-in for administrators only, mandatory TOTP enrollment gate, backup codes, and enumeration-safe rejection of email OTP. | S6, S20, S21, S22 | inline | — |
 | T8 | Web session boundary: server-side cookie forwarding, customer sign-in pages, and administrator sign-in and TOTP enrollment pages in Spanish product copy; cookie scope settings. | S1, S7, S14, S16 | inline | — |
@@ -199,3 +208,12 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   S24 (permanent failures return faster than transient ones, so timing must not reveal anything about the address)
   and S25 (whether a failed send consumes a rate-limit token, since each request can make three provider calls).
   Known limits: the degraded-alert counter is per process, and `Retry-After` is not honored.
+- **L23** (2026-11-04) User, verbatim, answering "¿Apruebas el envío en segundo plano? Eso implica enmendar la
+  decisión 8 del ADR 0004, y lo haría como parte de T5.": "si, pero mergeea todos los pr". Asked whether that
+  included the tracker, the user chose "Dejar #1 hasta T11". Pull requests #2 to #7 were merged into the tracker with
+  merge commits after each diff was checked against it; the tracker tree equals slice 6, its CI passed, and #1 stays
+  a draft until T11. Evidence behind the decision: Better Auth 1.7.16 writes the Verification row before calling
+  `sendVerificationOTP`, logs and swallows a send error, and still returns 200, so the generic retryable error of
+  ADR 0004 decision 8 cannot surface without rewriting the response, and an awaited send leaks timing. The approved
+  design is the recommendation recorded in S15, S23, S24, and S25; the value of 5 codes per hour per email is the
+  orchestrator's choice within that design. T5 is split into T5a (sign-in code flow) and T5b (abuse limits).
