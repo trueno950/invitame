@@ -60,7 +60,8 @@ Give creators a verified account and a backend-enforced ownership model for thei
 
 ### Key scope
 
-- approved authentication library and session lifecycle;
+- authentication and session lifecycle with Better Auth, as decided in
+  [ADR 0004](docs/adr/0004-authentication-with-better-auth.md);
 - user profile and account status behavior;
 - API authorization policy for creator-owned resources and administrative actions;
 - secure session boundaries between `apps/web` and `apps/api`; and
