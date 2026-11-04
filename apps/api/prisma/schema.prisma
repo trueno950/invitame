@@ -12,6 +12,11 @@ enum UserStatus {
   DISABLED
 }
 
+enum UserRole {
+  CUSTOMER
+  ADMIN
+}
+
 enum PackageStatus {
   DRAFT
   ACTIVE
@@ -30,13 +35,94 @@ enum TemplateVersionStatus {
   RETIRED
 }
 
+// Better Auth `user` model. Better Auth's `name` field is mapped onto `displayName`.
+// `role` is server-side only and never accepted as client input.
 model User {
-  id          String     @id @default(uuid()) @db.Uuid
-  email       String     @unique @db.VarChar(320)
-  displayName String?    @db.VarChar(120)
-  status      UserStatus @default(ACTIVE)
-  createdAt   DateTime   @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime   @updatedAt @db.Timestamptz(6)
+  id               String     @id @default(uuid()) @db.Uuid
+  email            String     @unique @db.VarChar(320)
+  displayName      String?    @db.VarChar(120)
+  status           UserStatus @default(ACTIVE)
+  role             UserRole   @default(CUSTOMER)
+  emailVerified    Boolean    @default(false)
+  image            String?    @db.Text
+  twoFactorEnabled Boolean    @default(false)
+  createdAt        DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime   @updatedAt @db.Timestamptz(6)
+
+  sessions  Session[]
+  accounts  Account[]
+  twoFactor TwoFactor?
+}
+
+// Better Auth `session` model: database sessions carried by the API cookie.
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  token     String   @unique @db.Text
+  expiresAt DateTime @db.Timestamptz(6)
+  ipAddress String?  @db.Text
+  userAgent String?  @db.Text
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Better Auth `account` model: credential (password hash) or provider link per user.
+model Account {
+  id                    String    @id @default(uuid()) @db.Uuid
+  userId                String    @db.Uuid
+  accountId             String    @db.Text
+  providerId            String    @db.Text
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(6)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(6)
+  scope                 String?   @db.Text
+  password              String?   @db.Text
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+// Better Auth `verification` model: short-lived values such as email one-time codes.
+model Verification {
+  id         String   @id @default(uuid()) @db.Uuid
+  identifier String   @db.Text
+  value      String   @db.Text
+  expiresAt  DateTime @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([identifier])
+}
+
+// Better Auth two-factor plugin model: one encrypted TOTP secret and backup-code set per user.
+model TwoFactor {
+  id                      String    @id @default(uuid()) @db.Uuid
+  userId                  String    @unique @db.Uuid
+  secret                  String    @db.Text
+  backupCodes             String    @db.Text
+  verified                Boolean   @default(true)
+  failedVerificationCount Int       @default(0)
+  lockedUntil             DateTime? @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Better Auth persistent rate-limit storage (`rateLimit.storage = "database"`).
+model RateLimit {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique @db.Text
+  count       Int
+  lastRequest BigInt
 }
 
 model Category {

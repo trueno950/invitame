@@ -30,6 +30,7 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Lint | `pnpm lint` | Runs `biome lint .` through both workspace packages via Turborepo. | Every code or source-adjacent change. |
 | Type safety | `pnpm typecheck` | Runs strict TypeScript checks in `apps/api` and `apps/web`. | Every TypeScript/config change. |
 | Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner over `src/**/*.spec.ts` (health and auth integration suites) through `@swc-node/register`, which emits decorator metadata like the `tsc` build; `apps/web` has no test script. | Every behavior change; documentation-only changes may record `N/A`. |
+| Database integration tests | `DATABASE_URL=<local URL> pnpm --filter @invitame/api test:db` | Runs `apps/api/src/**/*.db-spec.ts` through the same SWC runner against a real, already migrated PostgreSQL. The script refuses to start without an explicit `DATABASE_URL`, and the suite refuses non-local hosts. It writes and then deletes its own rows; use a disposable database. CI does not run it. | Schema, migration, and auth persistence changes. |
 | Build | `pnpm build` | Builds the API with `tsc` and the web app with Next.js. Outputs are ignored build artifacts. | Runtime, dependency, configuration, or build changes; recommended for broad docs/process changes. |
 | Diff hygiene | `git diff --check` | Finds whitespace errors in the working diff. | Every change before review. |
 | Start local PostgreSQL | `pnpm db:up` | Starts the local Docker Compose PostgreSQL service. | Database or integration verification. |
@@ -40,8 +41,9 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 
 `.github/workflows/ci.yml` runs the documentation consistency, format/lint/typecheck/test/build/diff-hygiene gates
 on pushes to `master` and `main` and on pull requests. This is a limited quality workflow, not CD, hosted
-deployment, or required-check governance. The repository still has no dedicated coverage, real database
-integration, browser E2E, or migration-validation automation. Do not report those gaps as passing. Add the capability
+deployment, or required-check governance. The repository still has no dedicated coverage, automated real database
+integration (the manual `test:db` command above is the only database test), browser E2E, or migration-validation
+automation. Do not report those gaps as passing. Add the capability
 only as part of an approved work unit that defines its scope and ownership.
 
 ## Recommended local sequences
