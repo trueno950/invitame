@@ -4,6 +4,8 @@
 
 Accepted (2026-11-03). The human owner approved the library, customer sign-in by emailed one-time code,
 administrator sign-in with a password and a mandatory authenticator app, Resend for email, and Railway for hosting.
+Amended the same day, before any implementation, to define administrator enrollment (decision 3) and email
+failure handling (decision 8) after the native review.
 
 ## Context
 
@@ -45,7 +47,10 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    password. Administrators sign in with email and password plus a mandatory authenticator-app code (TOTP, Better
    Auth two-factor plugin) and keep backup codes offline. Better Auth enforces the second factor only on credential
    sign-in, not on email OTP sign-in, so email OTP sign-in is rejected for administrator accounts; otherwise it
-   would bypass both the password and the second factor.
+   would bypass both the password and the second factor. A server-side command creates each administrator and sets
+   the initial password without logging it. Until the administrator enrolls an authenticator app, confirmed by a
+   first valid code, the account holds no administrator authority: the guard rejects every administrative action,
+   and enrollment and sign-out are the only actions it can take.
 4. **Sessions and hosting.** Sessions are stored in the database and carried by an `HttpOnly`, `SameSite=Lax` cookie
    issued by the API, `Secure` outside local development. `apps/web` forwards the cookie from trusted server code and
    never stores it. Production runs web, API, and PostgreSQL in one Railway project under one registrable domain
@@ -63,8 +68,14 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    whether an email already has an account.
 8. **Email delivery.** Codes are sent through an application port whose production adapter uses Resend. Resend's
    free plan has a low daily sending limit (100 emails on 2026-11-03), so it serves development and testing only;
-   because every customer sign-in sends an email, the account moves to a paid plan before launch. Tests use an
-   in-memory adapter and local development uses a local mail catcher; codes never appear in logs.
+   because every customer sign-in sends an email, the account moves to a paid plan before launch. Transient
+   provider errors are retried a bounded number of times with the same code, so a retry never creates a second
+   valid code. When sending still fails, the API returns a generic, retryable error that does not reveal whether
+   the account exists and logs the failure without the code or the recipient's address; repeated failures must
+   raise an operational alert by the first production release. A provider outage blocks only new customer
+   sign-ins: existing sessions keep working and administrator sign-in does not use email. A second provider can be
+   added behind the same port but is not required for the first release. Tests use an in-memory adapter and local
+   development uses a local mail catcher; codes never appear in logs.
 9. **Configuration.** The auth secret, public base URL, and trusted origins are required environment variables
    validated at startup; the API refuses to start without them.
 
@@ -83,7 +94,7 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
   recovery procedure, documented before the first production release.
 - Integration tests with a real database must cover denied-by-default access, ownership, session expiry and
   revocation, disabled users, code expiry and attempt limits, rate limiting, the mandatory administrator second
-  factor, and rejection of email OTP sign-in for administrators.
+  factor and its enrollment gate, rejection of email OTP sign-in for administrators, and email send failures.
 
 ## Open decisions
 
