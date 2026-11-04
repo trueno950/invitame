@@ -29,6 +29,13 @@ pnpm dev
 
 The web app runs on `http://localhost:3000`; the API runs on `http://localhost:3001`.
 
+The API refuses to start until `apps/api/.env` defines its required variables. Besides `DATABASE_URL`, set:
+
+- `BETTER_AUTH_SECRET`: at least 32 characters; generate one with `openssl rand -base64 32` and never commit it.
+- `AUTH_BASE_URL`: the public origin of the API, for example `http://localhost:3001`.
+- `CORS_ORIGIN`: a comma-separated list of trusted web origins, for example `http://localhost:3000`. The same
+  list feeds credentialed CORS and Better Auth's origin checks.
+
 ## Verification
 
 Run the full local verification sequence after the database is running:

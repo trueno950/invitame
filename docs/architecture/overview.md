@@ -10,7 +10,7 @@ implemented.
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
 | Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy. | Dashboard, authoring flows, and public invitation routes. **Planned.** |
-| API | `apps/api` has configuration, a global Prisma service, and `GET /health`. | Feature modules exposing stable REST contracts. **Planned.** |
+| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with no sign-in method enabled yet. | Feature modules exposing stable REST contracts; customer and administrator sign-in. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
 | Operations | Local Docker Compose database, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
@@ -34,12 +34,31 @@ The current API tree is intentionally small:
 
 ```text
 apps/api/src/
-  config/       startup environment validation
+  auth/         Better Auth instance factory and integration registration
+  config/       startup environment validation and the configuration module
   database/     Prisma module and service
   health/       database-backed health endpoint and tests
   app.module.ts Nest composition root
-  main.ts       HTTP bootstrap, Helmet, CORS, validation, shutdown hooks
+  app.setup.ts  shared app creation: body parser off, Helmet, CORS, validation, shutdown hooks
+  main.ts       HTTP bootstrap through the shared app creation
 ```
+
+### Authentication boundary (current)
+
+This is the implemented state; sign-in methods, roles, and account status enforcement are planned (ADR 0004).
+
+- Better Auth runs inside the API through `@thallesp/nestjs-better-auth` and is mounted at `/api/auth`. It is
+  built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`) and the shared Prisma
+  client; the API refuses to start when any of them is missing or invalid.
+- The integration's global guard denies every route by default. Public routes are marked explicitly with
+  `@AllowAnonymous()`; today only `GET /health` is public. The guard resolves the session before it checks the
+  marker, on every request.
+- `CORS_ORIGIN` is the single trusted-origins list. The project owns CORS (`credentials: true`; methods `GET`,
+  `HEAD`, `POST`, `OPTIONS`; headers `Accept`, `Content-Type`) for those origins only, and the same list feeds
+  Better Auth's origin checks. The integration's own CORS is disabled, and origin checks stay on in every
+  `NODE_ENV`.
+- `createApp` in `app.setup.ts` is the single app-creation boundary for the runtime and integration tests; it
+  disables NestJS's body parser, as Better Auth requires.
 
 Do not add empty feature layers to this foundation. A real capability earns a feature module when it has business
 behavior, persistence, or an external boundary.

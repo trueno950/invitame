@@ -7,16 +7,19 @@ import { after, before, describe, it } from "node:test";
 
 import { Body, Controller, Get, HttpCode, Module, Post } from "@nestjs/common";
 import type { INestApplication } from "@nestjs/common";
-import { NestFactory } from "@nestjs/core";
 import { AllowAnonymous, AuthModule } from "@thallesp/nestjs-better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { IsInt, IsString, Max, MaxLength, Min } from "class-validator";
 
-import { configureApp } from "../app.setup";
+import { createApp } from "../app.setup";
+import { createConfigModule } from "../config/config.module";
 import { createAuth } from "./auth.factory";
 
 const AUTH_BASE_PATH = "/api/auth";
 const TEST_ORIGIN = "http://localhost:3000";
+// Fixed origin: the listening port is ephemeral and unknown until after the module is built.
+// Better Auth uses baseURL only to build absolute URLs, which these probes never follow.
+const TEST_AUTH_BASE_URL = "http://localhost:3001";
 
 class ProbeInputDto {
   @IsString()
@@ -55,22 +58,31 @@ describe("Better Auth through @thallesp/nestjs-better-auth integration", () => {
   let baseUrl: string;
 
   before(async () => {
+    const secret = randomBytes(32).toString("base64url");
     const auth = createAuth({
-      secret: randomBytes(32).toString("base64url"),
-      // Fixed origin: the listening port is ephemeral and unknown until after the module is built.
-      // Better Auth uses baseURL only to build absolute URLs, which these probes never follow.
-      baseURL: "http://localhost",
+      secret,
+      baseURL: TEST_AUTH_BASE_URL,
+      trustedOrigins: [TEST_ORIGIN],
       database: memoryAdapter({}),
     });
 
+    // Explicit configuration: the shared createApp boundary reads trusted origins from it and the
+    // suite never reads apps/api/.env.
     @Module({
-      imports: [AuthModule.forRoot({ auth })],
+      imports: [
+        createConfigModule({
+          CORS_ORIGIN: TEST_ORIGIN,
+          DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
+          BETTER_AUTH_SECRET: secret,
+          AUTH_BASE_URL: TEST_AUTH_BASE_URL,
+        }),
+        AuthModule.forRoot({ auth, disableTrustedOriginsCors: true }),
+      ],
       controllers: [ProbeController],
     })
     class AuthIntegrationTestModule {}
 
-    app = await NestFactory.create(AuthIntegrationTestModule, { bodyParser: false, logger: false });
-    configureApp(app, { corsOrigin: TEST_ORIGIN });
+    app = await createApp(AuthIntegrationTestModule, { logger: false });
     await app.listen(0, "127.0.0.1");
 
     const address = app.getHttpServer().address() as AddressInfo;

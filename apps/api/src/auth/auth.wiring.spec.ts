@@ -1,0 +1,225 @@
+import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
+import type { AddressInfo } from "node:net";
+import { after, before, describe, it } from "node:test";
+
+import { Global, type INestApplication, Module } from "@nestjs/common";
+
+import { AppModule } from "../app.module";
+import { createApp } from "../app.setup";
+import { PrismaService } from "../database/prisma.service";
+
+// Runtime wiring of AppModule through the shared createApp boundary (M2 T3): validated configuration,
+// project-owned credentialed CORS, Better Auth origin checks, and the public health route. The suite
+// passes an explicit environment and a Prisma stub, so it never reads apps/api/.env nor needs a database.
+
+const TRUSTED_ORIGIN = "http://localhost:3000";
+const SECOND_TRUSTED_ORIGIN = "https://app.example.test";
+const UNTRUSTED_ORIGIN = "https://untrusted.example.test";
+const AUTH_BASE_PATH = "/api/auth";
+const ALLOWED_METHODS = "GET,HEAD,POST,OPTIONS";
+
+class PrismaStub {
+  queries = 0;
+
+  async $queryRaw(): Promise<never> {
+    this.queries += 1;
+    throw new Error("No database in this suite.");
+  }
+}
+
+const prismaStub = new PrismaStub();
+
+@Global()
+@Module({
+  providers: [{ provide: PrismaService, useValue: prismaStub }],
+  exports: [PrismaService],
+})
+class StubDatabaseModule {}
+
+function testEnvironment(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const environment: Record<string, unknown> = {
+    NODE_ENV: "test",
+    CORS_ORIGIN: `${TRUSTED_ORIGIN}, ${SECOND_TRUSTED_ORIGIN}`,
+    // Syntactically valid and never connected: the stub replaces the Prisma client.
+    DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
+    BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
+    // Fixed origin: the listening port is ephemeral; Better Auth uses it only for absolute URLs.
+    AUTH_BASE_URL: "http://localhost:3001",
+  };
+
+  for (const [name, value] of Object.entries(overrides)) {
+    if (value === undefined) {
+      delete environment[name];
+    } else {
+      environment[name] = value;
+    }
+  }
+
+  return environment;
+}
+
+function createTestApp(environment: Record<string, unknown>): Promise<INestApplication> {
+  return createApp(AppModule.forRoot({ environment, database: StubDatabaseModule }), {
+    logger: false,
+    abortOnError: false,
+  });
+}
+
+describe("AppModule startup configuration", () => {
+  const cases: Array<[string, Record<string, unknown>, string]> = [
+    [
+      "a missing BETTER_AUTH_SECRET",
+      { BETTER_AUTH_SECRET: undefined },
+      "BETTER_AUTH_SECRET must be provided.",
+    ],
+    [
+      "a short BETTER_AUTH_SECRET",
+      { BETTER_AUTH_SECRET: "x".repeat(31) },
+      "BETTER_AUTH_SECRET must be at least 32 characters long.",
+    ],
+    ["a missing AUTH_BASE_URL", { AUTH_BASE_URL: undefined }, "AUTH_BASE_URL must be provided."],
+    [
+      "an AUTH_BASE_URL with a path",
+      { AUTH_BASE_URL: "http://localhost:3001/api" },
+      "AUTH_BASE_URL must not include a path, query, or fragment.",
+    ],
+  ];
+
+  for (const [label, overrides, message] of cases) {
+    it(`refuses to start with ${label}`, async () => {
+      await assert.rejects(createTestApp(testEnvironment(overrides)), { message });
+    });
+  }
+});
+
+describe("AppModule runtime wiring", () => {
+  let app: INestApplication;
+  let baseUrl: string;
+  let corsLayersAddedDuringInit = 0;
+
+  before(async () => {
+    app = await createTestApp(testEnvironment());
+
+    // createApp already registered the project-owned CORS layer. On Express a second layer added
+    // during init is shadowed rather than visible in headers, so count registrations directly.
+    const httpAdapter = app.getHttpAdapter();
+    const enableCors = httpAdapter.enableCors.bind(httpAdapter);
+    httpAdapter.enableCors = (...args: Parameters<typeof enableCors>) => {
+      corsLayersAddedDuringInit += 1;
+      return enableCors(...args);
+    };
+
+    await app.listen(0, "127.0.0.1");
+
+    const address = app.getHttpServer().address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  after(async () => {
+    await app?.close();
+  });
+
+  function preflight(path: string, origin: string): Promise<Response> {
+    return fetch(`${baseUrl}${path}`, {
+      method: "OPTIONS",
+      headers: {
+        origin,
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+  }
+
+  function signOut(origin: string): Promise<Response> {
+    return fetch(`${baseUrl}${AUTH_BASE_PATH}/sign-out`, {
+      method: "POST",
+      headers: {
+        origin,
+        "content-type": "application/json",
+        // Better Auth checks the Origin of state-changing requests that carry cookies. This cookie
+        // is not a session, so a trusted request signs out nothing and never reaches the database.
+        cookie: "unrelated=1",
+      },
+      body: "{}",
+    });
+  }
+
+  it("serves the Better Auth health endpoint through AppModule", async () => {
+    const response = await fetch(`${baseUrl}${AUTH_BASE_PATH}/ok`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true });
+  });
+
+  it("keeps GET /health public: no session yields 503 from the database check, never 401", async () => {
+    const queriesBefore = prismaStub.queries;
+    const response = await fetch(`${baseUrl}/health`);
+    const body = (await response.json()) as { status: string; database: string };
+
+    assert.equal(response.status, 503);
+    assert.equal(body.status, "unhealthy");
+    assert.equal(body.database, "unavailable");
+    assert.equal(prismaStub.queries, queriesBefore + 1);
+  });
+
+  for (const origin of [TRUSTED_ORIGIN, SECOND_TRUSTED_ORIGIN]) {
+    it(`answers a preflight from trusted origin ${origin} with one credentialed CORS header set`, async () => {
+      for (const path of [`${AUTH_BASE_PATH}/sign-out`, "/health"]) {
+        const response = await preflight(path, origin);
+
+        assert.equal(response.status, 204);
+        // Exact values: a second CORS layer would duplicate them ("a, a") or widen the methods.
+        assert.equal(response.headers.get("access-control-allow-origin"), origin);
+        assert.equal(response.headers.get("access-control-allow-credentials"), "true");
+        assert.equal(response.headers.get("access-control-allow-methods"), ALLOWED_METHODS);
+        assert.equal(response.headers.get("access-control-allow-headers"), "Accept,Content-Type");
+      }
+    });
+  }
+
+  it("registers no CORS layer besides the project-owned one", () => {
+    assert.equal(corsLayersAddedDuringInit, 0);
+  });
+
+  it("gives an untrusted origin no Access-Control-Allow-Origin", async () => {
+    for (const path of [`${AUTH_BASE_PATH}/sign-out`, "/health"]) {
+      const response = await preflight(path, UNTRUSTED_ORIGIN);
+
+      assert.equal(response.headers.get("access-control-allow-origin"), null);
+    }
+
+    const simple = await fetch(`${baseUrl}${AUTH_BASE_PATH}/ok`, {
+      headers: { origin: UNTRUSTED_ORIGIN },
+    });
+    assert.equal(simple.status, 200);
+    assert.equal(simple.headers.get("access-control-allow-origin"), null);
+  });
+
+  it("returns one credentialed CORS header set on a simple request from a trusted origin", async () => {
+    const response = await fetch(`${baseUrl}${AUTH_BASE_PATH}/ok`, {
+      headers: { origin: TRUSTED_ORIGIN },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("access-control-allow-origin"), TRUSTED_ORIGIN);
+    assert.equal(response.headers.get("access-control-allow-credentials"), "true");
+  });
+
+  it("rejects POST /api/auth/sign-out from an untrusted Origin with 403 INVALID_ORIGIN", async () => {
+    const response = await signOut(UNTRUSTED_ORIGIN);
+    const body = (await response.json()) as { code?: string };
+
+    assert.equal(response.status, 403);
+    assert.equal(body.code, "INVALID_ORIGIN");
+  });
+
+  it("accepts the same POST /api/auth/sign-out from every trusted Origin", async () => {
+    for (const origin of [TRUSTED_ORIGIN, SECOND_TRUSTED_ORIGIN]) {
+      const response = await signOut(origin);
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { success: true });
+    }
+  });
+});
