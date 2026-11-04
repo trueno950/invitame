@@ -1,7 +1,8 @@
 # Milestone 2 — Identity, ownership, and authorization
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
-[ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 committed (`ebabb0d`); T1b done (L13), awaiting commit approval.
+[ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`) and T1b (`71ae169`) committed; T2 done (L15), awaiting migration review, chain strategy,
+and commit approval.
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -16,6 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
+| Delivery | Review slices of about 400 authored lines. Slice 1 is T1 and T1b (`ebabb0d`, `71ae169`; 407 lines). The chain strategy, stacked pull requests to `master` or a feature-branch chain with a tracker, is a pending human decision (L14). |
 
 ## Specs
 
@@ -84,7 +86,7 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
 | T1 | Spike: Better Auth through `@thallesp/nestjs-better-auth` on NestJS 12 with the body parser disabled; prove the auth handler, JSON parsing, and the global `ValidationPipe`; decide integration or fallback. | S4, S13 | worker | `ebabb0d` |
-| T1b | Tooling: a dev and test runner that emits decorator metadata, Biome parameter decorators, and the Node engines floor; remove the spike test's workarounds and clarify its intent. | S32, S33, S34 | worker | — |
+| T1b | Tooling: a dev and test runner that emits decorator metadata, Biome parameter decorators, and the Node engines floor; remove the spike test's workarounds and clarify its intent. | S32, S33, S34 | worker | `71ae169` |
 | T2 | Schema: map Better Auth's user onto `User`; add session, account, verification, and two-factor models and a server-side role; one additive migration; database gate; human migration review. | S2, S5, S13 | inline | — |
 | T3 | Configuration and origins: validate the auth secret, public base URL, and trusted origins at startup; credentialed CORS only for trusted origins, shared with Better Auth. | S8, S12 | inline | — |
 | T4 | Email port: application port, in-memory test adapter, Resend adapter, local mail catcher; bounded retries and failure handling. | S11, S23, S28, S29, S31 | inline | — |
@@ -142,3 +144,17 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   real `@Body()` decorators and no manual metadata. The dev script booted with inline environment variables and
   served `GET /health` (503 without a database). Biome enables `unsafeParameterDecoratorsEnabled`; the root
   `engines.node` floor is `>=22.22.1 <27`.
+- **L14** (2026-11-03) User, verbatim, answering "¿Commiteo T1b?": "si". T1b committed as `71ae169`, closing slice 1
+  at 407 authored lines; the chain strategy will be asked before the T2 commit.
+- **L15** T2 evidence: migration `20261104030448_add_better_auth_identity` is additive: the `UserRole` enum; `User`
+  gains `emailVerified`, `image`, `role` (default `CUSTOMER`), and `twoFactorEnabled`, all with defaults or nullable;
+  new `Session`, `Account`, `Verification`, `TwoFactor`, and `RateLimit` tables, with cascading foreign keys from
+  `User`. Better Auth's `name` maps onto `displayName`; ids stay UUIDs (`generateId: "uuid"`); the role is not
+  accepted as input. The shapes come from Better Auth 1.7.16's own `getAuthTables()`. On a disposable PostgreSQL 17
+  the migration applied, the seed ran twice, and `test:db` passed 3 of 3 (email OTP creates a verified customer and
+  a session, consumes the verification row, persists rate-limit rows, and ignores a client-supplied role); RED before
+  the migration was 3 of 3 failing. `*.db-spec.ts` files are excluded from `pnpm test`, CI, and the build.
+- **L16** T2 follow-ups for later tasks: T3 owns real trusted origins and the base URL; T5 maps rate-limit storage
+  failures, configures the trusted client IP header (otherwise all clients share one bucket), and bounds or strips
+  client `name` and `image`; T6 enforces `role` and `status`, since cascades apply only to hard deletes; T7 relies on
+  the unique `(providerId, accountId)` and one `TwoFactor` row per user.
