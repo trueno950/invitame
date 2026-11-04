@@ -178,6 +178,156 @@ describe("validateEnvironment", () => {
     );
   });
 
+  describe("email delivery settings", () => {
+    // Generated per run, like the auth secret: no provider key lives in source.
+    const RESEND_KEY = `re_${randomBytes(16).toString("hex")}`;
+    const PRODUCTION_SENDER = "InvitaMe <no-reply@example.test>";
+
+    function productionEnvironment(
+      overrides: Record<string, unknown> = {},
+    ): Record<string, unknown> {
+      return environmentWith({
+        NODE_ENV: "production",
+        EMAIL_TRANSPORT: "resend",
+        EMAIL_FROM: PRODUCTION_SENDER,
+        RESEND_API_KEY: RESEND_KEY,
+        ...overrides,
+      });
+    }
+
+    it("defaults to the in-memory transport and a local sender in test", () => {
+      assert.deepEqual(validateEnvironment(environmentWith()).EMAIL, {
+        transport: "memory",
+        from: "InvitaMe Local <no-reply@invitame.localhost>",
+      });
+    });
+
+    it("defaults to the local mail catcher in development with no email variables", () => {
+      assert.deepEqual(validateEnvironment(environmentWith({ NODE_ENV: undefined })).EMAIL, {
+        transport: "mailpit",
+        from: "InvitaMe Local <no-reply@invitame.localhost>",
+        mailpitUrl: "http://localhost:8025",
+      });
+      assert.equal(
+        validateEnvironment(environmentWith({ NODE_ENV: "development" })).EMAIL.transport,
+        "mailpit",
+      );
+    });
+
+    it("accepts an explicit transport and a normalized MAILPIT_URL origin", () => {
+      const environment = validateEnvironment(
+        environmentWith({
+          EMAIL_TRANSPORT: " mailpit ",
+          MAILPIT_URL: "http://127.0.0.1:18025/",
+          EMAIL_FROM: "dev@example.test",
+        }),
+      );
+
+      assert.deepEqual(environment.EMAIL, {
+        transport: "mailpit",
+        from: "dev@example.test",
+        mailpitUrl: "http://127.0.0.1:18025",
+      });
+    });
+
+    it("rejects an unknown transport", () => {
+      assertRejected(
+        { EMAIL_TRANSPORT: "smtp" },
+        "EMAIL_TRANSPORT must be resend, mailpit, or memory.",
+      );
+    });
+
+    it("accepts production with Resend, an API key, and a sender", () => {
+      const environment = validateEnvironment(productionEnvironment());
+
+      assert.deepEqual(environment.EMAIL, {
+        transport: "resend",
+        from: PRODUCTION_SENDER,
+        resendApiKey: RESEND_KEY,
+      });
+    });
+
+    it("defaults production to Resend, so it still requires the API key", () => {
+      assertRejected(
+        { NODE_ENV: "production", EMAIL_FROM: PRODUCTION_SENDER },
+        "RESEND_API_KEY must be provided when EMAIL_TRANSPORT is resend.",
+      );
+    });
+
+    it("fails closed when production selects any transport other than Resend", () => {
+      const message = "EMAIL_TRANSPORT must be resend in production.";
+
+      assert.throws(
+        () => validateEnvironment(productionEnvironment({ EMAIL_TRANSPORT: "mailpit" })),
+        { message },
+      );
+      assert.throws(
+        () => validateEnvironment(productionEnvironment({ EMAIL_TRANSPORT: "memory" })),
+        { message },
+      );
+    });
+
+    it("requires EMAIL_FROM in production", () => {
+      assert.throws(() => validateEnvironment(productionEnvironment({ EMAIL_FROM: undefined })), {
+        message: "EMAIL_FROM must be provided.",
+      });
+      assert.throws(() => validateEnvironment(productionEnvironment({ EMAIL_FROM: "  " })), {
+        message: "EMAIL_FROM must be provided.",
+      });
+    });
+
+    it("rejects a malformed EMAIL_FROM, including header injection", () => {
+      const message = 'EMAIL_FROM must be an email address or "Name <address>".';
+
+      assertRejected({ EMAIL_FROM: "not-an-address" }, message);
+      assertRejected({ EMAIL_FROM: "InvitaMe <no-reply@example.test" }, message);
+      assertRejected({ EMAIL_FROM: "a@example.test\r\nBcc: victim@example.test" }, message);
+    });
+
+    it("requires RESEND_API_KEY whenever the transport is Resend, outside production too", () => {
+      assertRejected(
+        { EMAIL_TRANSPORT: "resend" },
+        "RESEND_API_KEY must be provided when EMAIL_TRANSPORT is resend.",
+      );
+      assertRejected(
+        { EMAIL_TRANSPORT: "resend", RESEND_API_KEY: "   " },
+        "RESEND_API_KEY must be provided when EMAIL_TRANSPORT is resend.",
+      );
+    });
+
+    it("never echoes the Resend API key in a startup error", () => {
+      assert.throws(
+        () =>
+          validateEnvironment(productionEnvironment({ EMAIL_FROM: undefined, MAILPIT_URL: "x" })),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal(error.message.includes(RESEND_KEY), false);
+          return true;
+        },
+      );
+    });
+
+    it("ignores RESEND_API_KEY when another transport is selected", () => {
+      const environment = validateEnvironment(
+        environmentWith({ EMAIL_TRANSPORT: "memory", RESEND_API_KEY: RESEND_KEY }),
+      );
+
+      assert.equal(JSON.stringify(environment).includes(RESEND_KEY), false);
+    });
+
+    it("rejects an invalid MAILPIT_URL", () => {
+      assertRejected({ MAILPIT_URL: "not a url" }, "MAILPIT_URL must be a valid HTTP origin.");
+      assertRejected(
+        { MAILPIT_URL: "smtp://localhost:1025" },
+        "MAILPIT_URL must use HTTP or HTTPS.",
+      );
+      assertRejected(
+        { MAILPIT_URL: "http://localhost:8025/api/v1" },
+        "MAILPIT_URL must not include a path, query, or fragment.",
+      );
+    });
+  });
+
   it("keeps the existing DATABASE_URL and PORT rules", () => {
     assertRejected({ DATABASE_URL: undefined }, "DATABASE_URL must be provided.");
     assertRejected(

@@ -36,6 +36,24 @@ The API refuses to start until `apps/api/.env` defines its required variables. B
 - `CORS_ORIGIN`: a comma-separated list of trusted web origins, for example `http://localhost:3000`. The same
   list feeds credentialed CORS and Better Auth's origin checks.
 
+### Local email
+
+In development the API sends email to Mailpit, a local mail catcher. `pnpm db:up` starts only PostgreSQL; start
+Mailpit separately and read captured messages in its UI at `http://localhost:8025`:
+
+```bash
+docker compose up -d mailpit
+```
+
+The email variables are optional outside production:
+
+- `EMAIL_TRANSPORT`: `mailpit` (development default), `memory` (test default), or `resend`. Production accepts
+  only `resend` and refuses to start otherwise.
+- `EMAIL_FROM`: the sender, as `address` or `Name <address>`. Required in production; development and test default
+  to `InvitaMe Local <no-reply@invitame.localhost>`.
+- `MAILPIT_URL`: the Mailpit origin, by default `http://localhost:8025`.
+- `RESEND_API_KEY`: required when `EMAIL_TRANSPORT` is `resend`; never commit it.
+
 ## Verification
 
 Run the full local verification sequence after the database is running:
@@ -86,6 +104,7 @@ Stop the API with `Ctrl-C`. Use `pnpm db:down` to stop the local PostgreSQL cont
 
 The current runtime intentionally excludes authentication flows, invitations, RSVP and guest records, payments,
 analytics, media storage, continuous deployment (CD), and hosted deployment. Limited quality-gate CI exists, but
-CD and hosted deployment are not implemented. Docker Compose is used only for local PostgreSQL. See
+CD and hosted deployment are not implemented. Docker Compose is used only for local PostgreSQL and the Mailpit mail
+catcher. See
 [`ROADMAP.md`](ROADMAP.md) for the planned sequence and [`docs/README.md`](docs/README.md) for documentation
 entry points.

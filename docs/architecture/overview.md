@@ -13,7 +13,7 @@ implemented.
 | API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with no sign-in method enabled yet. | Feature modules exposing stable REST contracts; customer and administrator sign-in. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
-| Operations | Local Docker Compose database, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
+| Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
 
 ## Context and runtime map
 
@@ -24,7 +24,8 @@ Browser
 
 apps/web ── REST/JSON ──► apps/api (NestJS)
                               ├── Prisma ──► PostgreSQL
-                              └── provider adapters ──► payment/media/email providers (planned)
+                              ├── email port ──► Resend (production) / Mailpit (local) / in-memory (test)
+                              └── provider adapters ──► payment/media providers (planned)
 ```
 
 `apps/web` never imports Prisma or connects to PostgreSQL. The API is the persistence boundary. Turborepo
@@ -37,6 +38,7 @@ apps/api/src/
   auth/         Better Auth instance factory and integration registration
   config/       startup environment validation and the configuration module
   database/     Prisma module and service
+  email/        email delivery port, retry/alert policy, and Resend, Mailpit, and in-memory adapters
   health/       database-backed health endpoint and tests
   app.module.ts Nest composition root
   app.setup.ts  shared app creation: body parser off, Helmet, CORS, validation, shutdown hooks
@@ -59,6 +61,24 @@ This is the implemented state; sign-in methods, roles, and account status enforc
   `NODE_ENV`.
 - `createApp` in `app.setup.ts` is the single app-creation boundary for the runtime and integration tests; it
   disables NestJS's body parser, as Better Auth requires.
+
+### Email delivery (current)
+
+This is the implemented state; nothing sends email yet. Sign-in codes are planned to use it (ADR 0004 decision 8).
+
+- `email/application` owns the `EmailSender` port (DI token `EMAIL_SENDER`) and `EmailDeliveryService`, the only
+  entry point for callers. `EmailModule` binds the port to the adapter selected by `EMAIL_TRANSPORT` and exports
+  only the service.
+- Transport: `resend` in production (required; any other value fails closed at startup, and `EMAIL_FROM` and
+  `RESEND_API_KEY` are required), `mailpit` by default in development, and `memory` by default in test.
+- Retries: only transient failures (network errors, 4 s timeouts, 429, 5xx, and Resend's in-progress idempotency
+  conflict) are retried, 3 attempts in total with 250 ms and 500 ms backoff. Every attempt sends the same message
+  and the same `Idempotency-Key`, so Resend delivers it at most once within its 24-hour key window. Other 4xx
+  responses are permanent and not retried.
+- Failures: callers receive only `EmailDeliveryUnavailableError`, a generic retryable error. A structured
+  `email_delivery_failed` warning records attempts, reason, and the transient flag, never the recipient, subject,
+  body, code, or key. Five failed deliveries within five minutes emit one error-level `email_delivery_degraded`
+  event, the hook for an operational alert; it re-arms after a failure-free window. The counter is per process.
 
 Do not add empty feature layers to this foundation. A real capability earns a feature module when it has business
 behavior, persistence, or an external boundary.
