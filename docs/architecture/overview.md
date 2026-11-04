@@ -47,8 +47,8 @@ apps/api/src/
 
 ### Authentication boundary (current)
 
-This is the implemented state; administrator sign-in, role and account status enforcement, and the abuse limits
-of ADR 0004 decision 7 are planned (ADR 0004).
+This is the implemented state; administrator sign-in and role and account status enforcement are planned (ADR
+0004). The abuse limits of ADR 0004 decision 7 for customer sign-in codes are current; see "Abuse limits" below.
 
 - Better Auth runs inside the API through `@thallesp/nestjs-better-auth` and is mounted at `/api/auth`. It is
   built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`) and the shared Prisma
@@ -65,15 +65,14 @@ of ADR 0004 decision 7 are planned (ADR 0004).
 
 ### Customer sign-in code (current)
 
-This is the implemented state of ADR 0004 decisions 3 and 8 (as amended) for customers. Rate limits, the
-per-address code cap, and the trusted client IP header are planned (ADR 0004 decision 7); Better Auth's own
-rate limiter is still its default, active only in production and stored in process memory.
+This is the implemented state of ADR 0004 decisions 3 and 8 (as amended) for customers.
 
 1. `POST /api/auth/email-otp/send-verification-otp` with `type: "sign-in"` stores a new 6-digit code that
    expires after 300 seconds, as a SHA-256 hash with an attempt counter, then calls the `SignInCodeSender` hook.
 2. The hook returns at once for every address, so the response is always `200 {"success":true}`, whether the
    address is unknown, a customer, or an administrator, and whatever happens to the email.
-3. In the background, `SignInCodeSender` looks up the role. An administrator receives no code and the issued
+3. In the background, `SignInCodeSender` first counts the request against the per-email cap; over the cap the
+   issued code is removed unsent. It then looks up the role. An administrator receives no code and the issued
    code is removed. A customer's code goes through `EmailDeliveryService` in Spanish, with a random idempotency
    key per send, so retries reuse the same code and message.
 4. When delivery still fails after the retries, exactly that code is removed, matched by its stored hash, so a
@@ -84,8 +83,39 @@ rate limiter is still its default, active only in production and stored in proce
 
 The other OTP types (`email-verification`, `forget-password`) never send a message: their codes are deleted at
 once for every address. Background tasks (`auth/sign-in-code/background-tasks.ts`) catch every failure and log
-only a `background_task_failed` event with the task name and error class; shutdown waits for pending tasks. No
-log carries the code or the address.
+only a `background_task_failed` event with the task name, the failed stage (`quota`, `lookup`, `delivery`, or
+`invalidation`), and the error class. When the cap check or the role lookup fails, the code is invalidated
+before delivery. At most 100 deliveries wait per process; beyond that the code is discarded at once and a
+`background_task_rejected` warning is logged. On shutdown, pending tasks drain in the sign-in module's
+`onModuleDestroy`, which Nest runs before the global Prisma module disconnects. No log carries the code or the
+address.
+
+### Abuse limits (current)
+
+This is the implemented state of ADR 0004 decision 7 and S10, S19, and S25 for the code endpoints. Password
+sign-in limits for administrators come with that sign-in and are planned.
+
+- Better Auth's rate limiter runs in every `NODE_ENV` and stores its counters in the `RateLimit` table through
+  the Prisma adapter (`auth/auth.factory.ts`); tests use the in-memory database adapter on the same path.
+- `/email-otp/send-verification-otp` and `/sign-in/email-otp` allow 3 requests per 60 seconds per client IP;
+  the 4th gets Better Auth's `429`. Other paths keep the defaults of Better Auth and its email OTP plugin, such
+  as 100 requests per 10 seconds per client IP.
+- Each address gets at most 5 codes per hour (`auth/abuse-limits.ts`). Every `sign-in` request counts, whatever
+  its delivery outcome, in the background task, so the response timing does not depend on the address. Over the
+  cap the response is the same `200 {"success":true}`, no email is sent, and the issued code is removed. The
+  count is a `RateLimit` row keyed by `sign-in-code-email|` plus the SHA-256 of the lower-cased address; the
+  plain address is never stored. A rule that matches no path keeps Better Auth's pruning from deleting these
+  rows before the hour ends.
+- The client IP comes from one configured header, `AUTH_CLIENT_IP_HEADER` (default `x-forwarded-for` outside
+  production; required in production). Without `AUTH_TRUSTED_PROXIES`, only a single-address value is accepted;
+  with it, trusted proxy hops are stripped from the right.
+- In production, a request whose client IP cannot be resolved gets the generic `503` below and a
+  `client_ip_unresolved` warning; it never shares one rate-limit bucket. Startup also fails when Better Auth's
+  own environment would map unknown clients to `127.0.0.1`.
+- When the rate-limit store fails, Better Auth throws before the endpoint runs. The wrapper in
+  `auth/auth-request-guard.ts` returns `503 {"code":"SERVICE_UNAVAILABLE",...}` with no internal detail and
+  logs an `auth_request_unavailable` warning with the path and error class only: no code row, no email.
+- Limits are per database, shared by every API instance; the background-task cap is per process.
 
 ### Email delivery (current)
 

@@ -191,6 +191,7 @@ describe("validateEnvironment", () => {
         EMAIL_TRANSPORT: "resend",
         EMAIL_FROM: PRODUCTION_SENDER,
         RESEND_API_KEY: RESEND_KEY,
+        AUTH_CLIENT_IP_HEADER: "x-forwarded-for",
         ...overrides,
       });
     }
@@ -325,6 +326,70 @@ describe("validateEnvironment", () => {
         { MAILPIT_URL: "http://localhost:8025/api/v1" },
         "MAILPIT_URL must not include a path, query, or fragment.",
       );
+    });
+  });
+
+  describe("client IP settings", () => {
+    function productionEnvironment(
+      overrides: Record<string, unknown> = {},
+    ): Record<string, unknown> {
+      return environmentWith({
+        NODE_ENV: "production",
+        EMAIL_FROM: "InvitaMe <no-reply@example.test>",
+        RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
+        AUTH_CLIENT_IP_HEADER: "x-real-ip",
+        ...overrides,
+      });
+    }
+
+    it("defaults to x-forwarded-for without trusted proxies in development and test", () => {
+      for (const NODE_ENV of ["development", "test"]) {
+        assert.deepEqual(validateEnvironment(environmentWith({ NODE_ENV })).AUTH_CLIENT_IP, {
+          header: "x-forwarded-for",
+          trustedProxies: [],
+        });
+      }
+    });
+
+    it("fails closed in production when no client IP header is configured", () => {
+      for (const header of [undefined, "  "]) {
+        assert.throws(
+          () => validateEnvironment(productionEnvironment({ AUTH_CLIENT_IP_HEADER: header })),
+          { message: "AUTH_CLIENT_IP_HEADER must be provided in production." },
+        );
+      }
+    });
+
+    it("normalizes the header name and parses a trusted proxy list", () => {
+      const environment = validateEnvironment(
+        productionEnvironment({
+          AUTH_CLIENT_IP_HEADER: " X-Real-IP ",
+          AUTH_TRUSTED_PROXIES: "10.0.0.0/8, 192.0.2.1,2001:db8::/32",
+        }),
+      );
+
+      assert.deepEqual(environment.AUTH_CLIENT_IP, {
+        header: "x-real-ip",
+        trustedProxies: ["10.0.0.0/8", "192.0.2.1", "2001:db8::/32"],
+      });
+    });
+
+    it("rejects a value that is not a single header name", () => {
+      for (const header of ["x real ip", "x-real-ip, x-forwarded-for", "x-ip:"]) {
+        assertRejected(
+          { AUTH_CLIENT_IP_HEADER: header },
+          "AUTH_CLIENT_IP_HEADER must be a single HTTP header name.",
+        );
+      }
+    });
+
+    it("rejects trusted proxy entries that are not an IP address or CIDR range", () => {
+      for (const proxies of ["not-an-ip", "10.0.0.0/33", "2001:db8::/129", "10.0.0.1,,10.0.0.2"]) {
+        assertRejected(
+          { AUTH_TRUSTED_PROXIES: proxies },
+          "AUTH_TRUSTED_PROXIES must list IP addresses or CIDR ranges.",
+        );
+      }
     });
   });
 

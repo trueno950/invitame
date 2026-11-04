@@ -1,9 +1,9 @@
-import type { DynamicModule } from "@nestjs/common";
+import { type DynamicModule, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 
-import type { RuntimeEnvironment } from "../config/environment";
+import { NODE_ENVIRONMENT, type RuntimeEnvironment } from "../config/environment";
 import { PrismaService } from "../database/prisma.service";
 import { createAuth } from "./auth.factory";
 import { SignInCodeModule } from "./sign-in-code/sign-in-code.module";
@@ -18,6 +18,8 @@ export function createAuthModuleOptions(
   prisma: PrismaService,
   signInCodes: SignInCodeSender,
 ) {
+  const logger = new Logger("AuthRequestGuard");
+
   return {
     auth: createAuth({
       secret: config.get("BETTER_AUTH_SECRET", { infer: true }),
@@ -25,6 +27,9 @@ export function createAuthModuleOptions(
       trustedOrigins: config.get("TRUSTED_ORIGINS", { infer: true }),
       database: prismaAdapter(prisma, { provider: "postgresql" }),
       signInCodes,
+      clientIp: config.get("AUTH_CLIENT_IP", { infer: true }),
+      requireClientIp: config.get("NODE_ENV", { infer: true }) === NODE_ENVIRONMENT.PRODUCTION,
+      log: (event) => logger.warn(event),
     }),
     disableTrustedOriginsCors: true,
   };

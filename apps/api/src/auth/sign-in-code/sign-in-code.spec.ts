@@ -11,6 +11,7 @@ import {
 } from "../../email/application/email-delivery.service";
 import type { EmailMessage, EmailSender } from "../../email/application/email-sender.port";
 import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-sender";
+import { EMAIL_CODE_QUOTA, emailCodeQuotaKey } from "../abuse-limits";
 import { createAuth } from "../auth.factory";
 import { BackgroundTasks } from "./background-tasks";
 import { SignInCodeSender } from "./sign-in-code-sender";
@@ -22,6 +23,14 @@ const AUTH_BASE_URL = "http://localhost:3001";
 const TRUSTED_ORIGIN = "http://localhost:3000";
 const AUTH_PATH = "/api/auth";
 const CODE_PATTERN = /\b(\d{6})\b/;
+const CLIENT_IP_HEADER = "x-forwarded-for";
+
+let clientCounter = 0;
+/** A fresh client IP per request, so the per-IP limit never hides the behavior under test. */
+function nextClientIp(): string {
+  clientCounter += 1;
+  return `10.${(clientCounter >> 16) & 255}.${(clientCounter >> 8) & 255}.${clientCounter & 255}`;
+}
 
 type MemoryDatabase = Record<string, Record<string, unknown>[]>;
 
@@ -58,7 +67,13 @@ class ScriptedEmailSender implements EmailSender {
 }
 
 function createHarness(sender: EmailSender = new InMemoryEmailSender()) {
-  const database: MemoryDatabase = { user: [], session: [], account: [], verification: [] };
+  const database: MemoryDatabase = {
+    user: [],
+    session: [],
+    account: [],
+    verification: [],
+    rateLimit: [],
+  };
   const deliveryEvents: EmailDeliveryEvent[] = [];
   const taskEvents: unknown[] = [];
   const runtime: EmailDeliveryRuntime = {
@@ -75,20 +90,31 @@ function createHarness(sender: EmailSender = new InMemoryEmailSender()) {
     trustedOrigins: [TRUSTED_ORIGIN],
     database: memoryAdapter(database),
     signInCodes,
+    clientIp: { header: CLIENT_IP_HEADER, trustedProxies: [] },
+    requireClientIp: false,
+    log: () => {},
   });
 
-  function post(path: string, body: unknown): Promise<Response> {
+  function post(path: string, body: unknown, clientIp = nextClientIp()): Promise<Response> {
     return auth.handler(
       new Request(`${AUTH_BASE_URL}${AUTH_PATH}${path}`, {
         method: "POST",
-        headers: { "content-type": "application/json", origin: TRUSTED_ORIGIN },
+        headers: {
+          "content-type": "application/json",
+          origin: TRUSTED_ORIGIN,
+          [CLIENT_IP_HEADER]: clientIp,
+        },
         body: JSON.stringify(body),
       }),
     );
   }
 
-  function requestCode(email: string): Promise<Response> {
-    return post("/email-otp/send-verification-otp", { email, type: "sign-in" });
+  function requestCode(email: string, clientIp?: string): Promise<Response> {
+    return post("/email-otp/send-verification-otp", { email, type: "sign-in" }, clientIp);
+  }
+
+  function rateLimitRows(): Record<string, unknown>[] {
+    return database.rateLimit ?? [];
   }
 
   function signIn(email: string, otp: string, extra: Record<string, unknown> = {}) {
@@ -117,7 +143,9 @@ function createHarness(sender: EmailSender = new InMemoryEmailSender()) {
     database,
     deliveryEvents,
     taskEvents,
+    post,
     requestCode,
+    rateLimitRows,
     signIn,
     verificationRows,
     users,
@@ -212,13 +240,7 @@ describe("sign-in code request (S24)", () => {
 
     for (const type of ["email-verification", "forget-password"]) {
       for (const email of [customer, newEmail("unknown")]) {
-        const response = await harness.auth.handler(
-          new Request(`${AUTH_BASE_URL}${AUTH_PATH}/email-otp/send-verification-otp`, {
-            method: "POST",
-            headers: { "content-type": "application/json", origin: TRUSTED_ORIGIN },
-            body: JSON.stringify({ email, type }),
-          }),
-        );
+        const response = await harness.post("/email-otp/send-verification-otp", { email, type });
         assert.equal(response.status, 200);
         assert.equal(await response.text(), '{"success":true}');
       }
@@ -394,6 +416,116 @@ describe("sign-in code values (S15)", () => {
     assert.equal(fourth.status, 403);
     assert.equal(await errorCode(fourth), "TOO_MANY_ATTEMPTS");
     assert.equal(harness.users(email).length, 0);
+  });
+});
+
+describe("per-email code cap (S25, L24)", () => {
+  async function snapshot(response: Response) {
+    return {
+      status: response.status,
+      body: await response.text(),
+      setCookie: response.headers.getSetCookie(),
+    };
+  }
+
+  it("answers the 6th request within an hour with the identical 200, sends nothing, and removes its code", async () => {
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender);
+    const email = newEmail("capped");
+    const other = newEmail("other");
+    const allowed = [];
+
+    for (let request = 1; request <= EMAIL_CODE_QUOTA.max; request += 1) {
+      allowed.push(await snapshot(await harness.requestCode(email)));
+    }
+    await harness.tasks.drain();
+    const rowsBefore = harness.verificationRows(email).map((row) => row.id);
+    assert.equal(sender.delivered.length, 5);
+
+    const capped = await snapshot(await harness.requestCode(email));
+    await harness.tasks.drain();
+
+    for (const response of allowed) {
+      assert.deepEqual(capped, response, "the capped response is identical");
+    }
+    assert.equal(sender.attempts.length, 5, "no 6th delivery was attempted");
+    assert.deepEqual(
+      harness.verificationRows(email).map((row) => row.id),
+      rowsBefore,
+      "the 6th code row is gone",
+    );
+
+    await harness.requestCode(other);
+    await harness.tasks.drain();
+    assert.equal(sender.delivered.at(-1)?.to, other, "another address is unaffected");
+
+    const keys = harness.rateLimitRows().map((row) => String(row.key));
+    assert.ok(keys.every((key) => !key.toLowerCase().includes(email.split("@")[0] ?? email)));
+    const row = harness.rateLimitRows().find((entry) => entry.key === emailCodeQuotaKey(email));
+    assert.ok(row, "the per-email count is stored under the hashed key");
+    assert.match(String(row.key), /^sign-in-code-email\|[0-9a-f]{64}$/);
+    assert.equal(row.count, 5);
+  });
+
+  it("counts requests whose delivery failed, and the address case does not matter", async () => {
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender);
+    const email = newEmail("failing");
+    sender.failNext(EMAIL_CODE_QUOTA.max, { transient: false });
+
+    for (let request = 1; request <= EMAIL_CODE_QUOTA.max; request += 1) {
+      await harness.requestCode(email);
+    }
+    await harness.tasks.drain();
+    assert.equal(sender.attempts.length, 5);
+    assert.equal(sender.delivered.length, 0);
+
+    assert.equal((await harness.requestCode(email.toUpperCase())).status, 200);
+    await harness.tasks.drain();
+    assert.equal(sender.attempts.length, 5, "the 6th request sent nothing");
+    assert.equal(harness.verificationRows(email).length, 0);
+  });
+
+  it("keeps the per-email count when Better Auth prunes expired client IP rows", async () => {
+    mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-11-04T12:00:00Z") });
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender);
+    const email = newEmail("pruned");
+    const client = nextClientIp();
+
+    await harness.requestCode(email, client);
+    for (let request = 2; request <= EMAIL_CODE_QUOTA.max; request += 1) {
+      await harness.requestCode(email);
+    }
+    await harness.tasks.drain();
+    assert.equal(sender.delivered.length, 5);
+
+    // The client's 60-second window has passed, so this request resets it and Better Auth prunes
+    // rows whose last request is older than its longest configured window.
+    mock.timers.tick(61_000);
+    assert.equal((await harness.requestCode(email, client)).status, 200);
+    await harness.tasks.drain();
+
+    assert.equal(sender.attempts.length, 5, "the per-email cap still holds");
+    assert.ok(harness.rateLimitRows().some((row) => row.key === emailCodeQuotaKey(email)));
+  });
+
+  it("allows codes for the address again once the hour has passed", async () => {
+    mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-11-04T12:00:00Z") });
+    const sender = new InMemoryEmailSender();
+    const harness = createHarness(sender);
+    const email = newEmail("hourly");
+
+    for (let request = 1; request <= EMAIL_CODE_QUOTA.max + 1; request += 1) {
+      await harness.requestCode(email);
+    }
+    await harness.tasks.drain();
+    assert.equal(sender.delivered.length, 5);
+
+    mock.timers.tick(EMAIL_CODE_QUOTA.window * 1000);
+    await harness.requestCode(email);
+    await harness.tasks.drain();
+    assert.equal(sender.delivered.length, 6);
   });
 });
 

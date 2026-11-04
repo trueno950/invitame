@@ -68,12 +68,16 @@ describe("Better Auth through @thallesp/nestjs-better-auth integration", () => {
       secret,
       baseURL: TEST_AUTH_BASE_URL,
       trustedOrigins: [TEST_ORIGIN],
-      database: memoryAdapter({}),
+      // Rate limits run in every environment and persist through this adapter.
+      database: memoryAdapter({ rateLimit: [] }),
       // No probe here requests a sign-in code; the in-memory sender keeps the suite offline.
       signInCodes: new SignInCodeSender(
         new EmailDeliveryService(new InMemoryEmailSender(), new SystemEmailDeliveryRuntime()),
         new BackgroundTasks(() => {}),
       ),
+      clientIp: { header: "x-forwarded-for", trustedProxies: [] },
+      requireClientIp: false,
+      log: () => {},
     });
 
     // Explicit configuration: the shared createApp boundary reads trusted origins from it and the
