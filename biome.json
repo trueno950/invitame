@@ -11,6 +11,11 @@
       "!**/*.prisma"
     ]
   },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    }
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
