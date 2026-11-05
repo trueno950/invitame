@@ -170,6 +170,8 @@ describe("own profile: GET /me and PATCH /me", () => {
       const { user, cookie } = await signedInCustomer();
       user.displayName = "Stored Name";
       user.role = "ADMIN";
+      // An enrolled administrator: an un-enrolled one holds no authority, `/me` included (T7, S21).
+      user.twoFactorEnabled = true;
 
       const body = (await (await getMe(cookie)).json()) as OwnProfile;
 

@@ -308,6 +308,8 @@ describe("access control through the project-owned global guard", () => {
       const user = storedUser(email);
 
       user.role = "ADMIN";
+      // An enrolled administrator: an un-enrolled one holds no authority (T7, S21).
+      user.twoFactorEnabled = true;
       for (const path of adminPaths) {
         assert.equal(
           (await get(path, cookie)).status,
