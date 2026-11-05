@@ -45,6 +45,12 @@ Rate limits run in every environment and are stored in PostgreSQL. They identify
   of the API. Optional outside production, where it defaults to `x-forwarded-for`; required in production.
 - `AUTH_TRUSTED_PROXIES`: optional comma-separated IP addresses or CIDR ranges of proxies that append to that
   header. Without it, only a header holding a single address is accepted.
+- `AUTH_PROXY_SECRET`: the shared web-to-API secret, at least 32 characters and different from
+  `BETTER_AUTH_SECRET`; generate it like the auth secret and never commit it. It travels in the
+  `x-invitame-proxy-secret` header, which the web proxy will send (**planned**, M2 T8b). Required in production,
+  where the API refuses every `/api/auth` request without it with a generic `403`; the client IP header is trusted
+  only next to a valid secret. Optional outside production: without it the API serves direct requests and trusts
+  the client IP header as before.
 
 ### Local email
 

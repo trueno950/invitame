@@ -55,6 +55,11 @@ export interface RuntimeEnvironment {
   EMAIL: EmailEnvironment;
   /** Client IP resolution for rate limits; production must name the header explicitly. */
   AUTH_CLIENT_IP: ClientIpEnvironment;
+  /**
+   * Shared web-to-API secret that proves a request to `/api/auth` came through the web proxy (L36).
+   * Required in production, optional elsewhere; never logged or echoed in error messages.
+   */
+  AUTH_PROXY_SECRET: string | undefined;
 }
 
 const DEFAULT_PORT = 3001;
@@ -161,6 +166,41 @@ function validateAuthSecret(value: string): string {
   }
 
   return value;
+}
+
+/**
+ * The web sends this secret on every request to the API, and the API trusts the client IP the web
+ * reports only next to it (L36). Production requires it; development and test may omit it, so a
+ * local API still serves direct requests.
+ */
+function parseProxySecret(
+  environment: Record<string, unknown>,
+  nodeEnvironment: NodeEnvironment,
+): string | undefined {
+  const value = readOptionalString(environment.AUTH_PROXY_SECRET);
+
+  if (!value) {
+    if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION) {
+      throw new Error("AUTH_PROXY_SECRET must be provided in production.");
+    }
+
+    return undefined;
+  }
+
+  if (value.length < MINIMUM_AUTH_SECRET_LENGTH) {
+    throw new Error(
+      `AUTH_PROXY_SECRET must be at least ${MINIMUM_AUTH_SECRET_LENGTH} characters long.`,
+    );
+  }
+
+  return value;
+}
+
+/** A leaked proxy secret must not also sign sessions, and the reverse. */
+function validateDistinctSecrets(proxySecret: string | undefined, authSecret: string): void {
+  if (proxySecret === authSecret) {
+    throw new Error("AUTH_PROXY_SECRET must differ from BETTER_AUTH_SECRET.");
+  }
 }
 
 /**
@@ -341,10 +381,12 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     ),
     EMAIL: parseEmailEnvironment(environment, nodeEnvironment),
     AUTH_CLIENT_IP: parseClientIpEnvironment(environment, nodeEnvironment),
+    AUTH_PROXY_SECRET: parseProxySecret(environment, nodeEnvironment),
   };
 
   // Cross-field rules run last, so every single-variable error keeps its precedence.
   validateAuthBaseUrl(validated.AUTH_BASE_URL, validated.TRUSTED_ORIGINS, nodeEnvironment);
+  validateDistinctSecrets(validated.AUTH_PROXY_SECRET, validated.BETTER_AUTH_SECRET);
 
   return validated;
 }
