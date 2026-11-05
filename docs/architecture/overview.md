@@ -10,7 +10,7 @@ implemented.
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
 | Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy. | Dashboard, authoring flows, and public invitation routes. **Planned.** |
-| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling by a server-side command. | Feature modules exposing stable REST contracts; the administrator creation command. **Planned.** |
+| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling and administrator creation by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
@@ -40,8 +40,8 @@ apps/api/src/
   database/     Prisma module and service
   email/        email delivery port, retry/alert policy, and Resend, Mailpit, and in-memory adapters
   health/       database-backed health endpoint and tests
-  users/        own profile (`GET /me`, `PATCH /me`), the disable-user use case, their Prisma adapters, and the
-                `user:disable` command
+  users/        own profile (`GET /me`, `PATCH /me`), the disable-user and create-administrator use cases, their
+                Prisma adapters, and the `user:disable` and `admin:create` commands
   app.module.ts Nest composition root
   app.setup.ts  shared app creation: body parser off, Helmet, CORS, validation, shutdown hooks
   main.ts       HTTP bootstrap through the shared app creation
@@ -154,8 +154,11 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
 - Email-code sign-in stays refused for administrators in every state (pending, enrolled, or expired window):
   no code is sent and the send request gets the identical `200 {"success":true}`; a code issued earlier gets
   the identical `400 INVALID_OTP`.
-- The server-side command that creates administrators and issues their initial password is planned; no API
-  route can create an administrator.
+- `pnpm --filter @invitame/api admin:create -- <email>` (`users/`) creates an `ACTIVE` `ADMIN` with a credential
+  account holding a generated 24-character password, hashed with Better Auth's own hasher, in one
+  transaction. For a pending administrator it replaces the password, restarts the window, drops an
+  unconfirmed enrollment, and deletes their sessions in one transaction. It refuses an enrolled or `DISABLED`
+  administrator and any customer address. See the README for usage.
 
 ### Own profile (current)
 

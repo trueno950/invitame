@@ -111,6 +111,33 @@ pnpm --filter @invitame/api user:disable -- <email>
 It prints one JSON line with the user id and the number of revoked sessions, never the email address. Exit
 code 0 means disabled (or already disabled), 1 means no such user or a failure, and 2 means a usage error.
 
+### Create an administrator
+
+Administrators are created by a server-side command; there is no sign-up for them. It reads `DATABASE_URL`
+like the other Prisma scripts and must run in an interactive terminal:
+
+```bash
+pnpm --filter @invitame/api admin:create -- <email>
+```
+
+It creates an `ACTIVE` administrator and generates a random 24-character initial password from letters and
+digits without look-alikes (`0`, `O`, `o`, `1`, `l`, `I`). The password is printed once, on its own line, for
+you to hand over through a secure channel; it is never logged or stored in plain text, and the command
+refuses to run when its output is redirected. The administrator signs in with it at
+`POST /api/auth/sign-in/email` and must enroll an authenticator app within **24 hours** of its issue. Until
+then the account holds no administrator authority. After 24 hours without enrollment, the password stops
+working and existing sessions end.
+
+Run the same command again to reissue: for an administrator who has not enrolled, it replaces the password,
+restarts the 24-hour window, discards an unconfirmed enrollment, and signs the administrator out everywhere,
+in one transaction. It refuses an administrator who has already enrolled (recovery is a separate
+procedure), a `DISABLED` administrator, and any customer address, which is never promoted. Milestone 2 offers
+no password change through the API.
+
+It prints one JSON line with the user id (and, on reissue, the number of revoked sessions), never the email
+address. Exit code 0 means a password was issued, 1 means refused or a failure, and 2 means a usage error or a
+non-interactive terminal.
+
 ## Repository layout
 
 | Path | Purpose |

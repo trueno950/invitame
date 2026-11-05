@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 in progress.
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 administrator sign-in merged as #15 and its creation command in progress (L31).
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), and T7 on `feat/m2-identity-14-admin-sign-in` (L23 to L30). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), and slice 15 `feat/m2-identity-15-admin-create` (T7 creation command) (L23 to L31). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -106,7 +106,7 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T5c | Abuse-limit hardening: refuse background work once the shutdown drain starts, a fixed per-email quota window, quota storage errors surfaced instead of masked, and one pending-task bound (L25). | S23, S25 | worker | `83997bb` (#10) |
 | T6a | Access control: deny-by-default guard with explicit public routes that never read the session, a server-side administrator role check, the `DISABLED` sign-in block on every path, session revocation on disable through a server-side command, and no email-code session for administrators (L26). | S1, S2, S9, S18 | worker | `3af25ea` (#11), `8d9beec` (#12) |
 | T6b | Own profile: read and update the signed-in user's own profile as the first owned resource, with validated, bounded fields (L26); refuse unsupported route markers at startup instead of per request (L27); refuse a session on Better Auth's own endpoints unless its stored user is `ACTIVE`, and route profile updates through the validated endpoint instead of Better Auth's `/update-user` (L28). | S1, S2, S9, S18 | worker | `81207e8` (#13), `8490cd5` (#14) |
-| T7 | Administrator: server-side creation command, password sign-in for administrators only, mandatory TOTP enrollment gate, backup codes, and enumeration-safe rejection of email OTP; initial password and enrollment window per S20 (L30). | S6, S20, S21, S22 | worker | — |
+| T7 | Administrator: server-side creation command, password sign-in for administrators only, mandatory TOTP enrollment gate, backup codes, and enumeration-safe rejection of email OTP; initial password and enrollment window per S20 (L30). | S6, S20, S21, S22 | worker | `8880096` (#15), slice 15 (L31) |
 | T8 | Web session boundary: server-side cookie forwarding, customer sign-in pages, and administrator sign-in and TOTP enrollment pages in Spanish product copy; cookie scope settings. | S1, S7, S14, S16 | inline | — |
 | T9 | Integration and E2E tests: every ADR obligation and finding against real PostgreSQL, each traced to a named assertion. | S2, S13, S17, S30 | inline | — |
 | T10 | Documentation: ADR wording fixes, architecture, database, and quality-gate docs, environment examples, and the administrator recovery procedure. | S13, S21, S26, S27 | inline | — |
@@ -327,3 +327,28 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   muestra una sola vez en la terminal, nunca en logs. Si el admin no enrola el TOTP en 24 horas, la contraseña deja de
   servir y hay que reemitirla con el mismo comando. En M2 no hay cambio de contraseña por API: se reemite con el
   comando." This decides S20.
+- **L31** (2026-11-05) The previous session split T7 into two slices separable by whole files, except for 7 lines of
+  the architecture overview (backup ref `refs/backup/t7-full`), and stopped before checking them. User, choosing an
+  option for "El slice A de T7 pasó los chequeos aislados (266/266 tests, test:db 22/22, estrés 5/5) y la revisión
+  nativa (alto riesgo, 4 lentes, aprobada; 9 hallazgos no bloqueantes que registro en el slice B). Con este slice, los
+  administradores entran con contraseña y una app autenticadora (TOTP) obligatoria. Un admin sin enrolar solo puede
+  ver su sesión, enrolar el TOTP y cerrar sesión, y su contraseña inicial deja de servir a las 24 horas. ¿Hago
+  commit, abro el PR contra el tracker (con size:exception, porque unas 1260 de las 1742 líneas son tests) y lo
+  mergeo cuando pase la CI? El slice B (comando admin:create) todavía tiene que pasar su propia revisión.": "Sí: A y
+  B", whose description reads: "Commit, PR y merge de A. Después preparo B (restaurar, chequeos, test:db, revisión
+  nativa) y, si su revisión aprueba sin corrección, también hago su commit, PR y merge sin volver a preguntar." Slice
+  14 (`8880096`, PR #15) holds administrator password sign-in, the TOTP enrollment gate and its 24-hour window, backup
+  codes, and the password and second-factor limits. It passed the gates in isolation (266 of 266 tests, `test:db` 22
+  of 22, 5 of 5 parallel runs) and its native review (`review-f7d52ae1fe049c79`, high tier, four lenses), which
+  approved with 9 advisory findings and none from the risk lens. PR #15 passed CI and was merged into the tracker,
+  whose tree equals slice 14, and CI on #1 passed. Slice 15 holds the `admin:create` command. Routing: T9 owns
+  R2-duplicated-test-helpers-diverge, R3-future-issue-time-branch-unproved,
+  R3-generate-backup-codes-enrolled-path-unproved, and R3-re-enable-replaces-secret-unproved; T9 and T11 own
+  R4-expired-window-refusal-unobservable (no log line when an expired window deletes a session); T10 owns
+  R2-hook-name-understates-behavior, R2-overview-claims-full-adr-implemented, R2-route-constants-live-in-abuse-limits,
+  and R2-second-factor-limit-rationale-says-above-but-equal (the limit of 5 second-factor codes per minute equals,
+  rather than exceeds, the 5 wrong codes one challenge allows). Parent's notes: Better Auth 1.7.16 refuses
+  `/two-factor/enable` with `400 TOTP_ALREADY_ENABLED` once the `TwoFactor` row is verified
+  (`plugins/two-factor/index.mjs:188`), so an enrolled administrator cannot replace the secret through it; T9 and T11
+  own proving that a TOTP confirmation that runs while `admin:create` reissues a password fails closed, because the
+  reissue deletes the `TwoFactor` row that the confirmation is about to mark verified.
