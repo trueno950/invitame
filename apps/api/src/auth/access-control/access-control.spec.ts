@@ -32,7 +32,8 @@ import { AccessControlModule } from "./access-control.module";
 // project-owned global guard, and Better Auth on the in-memory database adapter: no network, no database.
 
 const TRUSTED_ORIGIN = "http://localhost:3000";
-const AUTH_BASE_URL = "http://localhost:3001";
+// The public web origin, which must be one of the trusted origins (L33).
+const AUTH_BASE_URL = TRUSTED_ORIGIN;
 const SESSION_COOKIE = "better-auth.session_token";
 const CODE_PATTERN = /\b(\d{6})\b/;
 

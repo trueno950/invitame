@@ -17,6 +17,12 @@ import {
 import { enrollmentWindowOpen, TWO_FACTOR_OPTIONS } from "./administrator-enrollment";
 import { type AuthRequestLog, guardAuthHandler } from "./auth-request-guard";
 import { refuseInactiveSessions } from "./inactive-session-hook";
+import {
+  administratorSessionExpiresAt,
+  CUSTOMER_SESSION_EXPIRES_IN_SECONDS,
+  CUSTOMER_SESSION_UPDATE_AGE_SECONDS,
+  cookieOptions,
+} from "./session-settings";
 import { createBetterAuthSignInCodeStore } from "./sign-in-code/better-auth-sign-in-code-store";
 import {
   SIGN_IN_CODE_ALLOWED_ATTEMPTS,
@@ -73,7 +79,10 @@ export const DISABLED_AUTH_PATHS = [
 export interface CreateAuthOptions {
   /** Signing secret supplied by validated configuration; never hard-coded. */
   secret: string;
-  /** Public origin of the API that serves the auth routes. */
+  /**
+   * Public web origin through which the web proxies `/api/auth` (L33). Its scheme decides the cookie
+   * names and `Secure` (`session-settings.ts`); configuration requires it among the trusted origins.
+   */
   baseURL: string;
   /** Validated trusted origins; the same list feeds the project-owned CORS policy. */
   trustedOrigins: readonly string[];
@@ -128,6 +137,8 @@ export function createAuth(options: CreateAuthOptions): Auth {
     },
     advanced: {
       database: { generateId: "uuid" },
+      // S14, S16 (L33): host-only cookies on the web host; `__Host-` names over https.
+      ...cookieOptions(options.baseURL),
       // Better Auth skips origin checks by default when NODE_ENV=test or TEST is set. Pin them on
       // so a misconfigured environment can never disable them.
       disableOriginCheck: false,
@@ -151,6 +162,10 @@ export function createAuth(options: CreateAuthOptions): Auth {
       },
     },
     session: {
+      // S16 (L34): the customer lifetime, pinned instead of Better Auth's defaults. Administrator
+      // sessions are shortened and never extended by the session hooks below.
+      expiresIn: CUSTOMER_SESSION_EXPIRES_IN_SECONDS,
+      updateAge: CUSTOMER_SESSION_UPDATE_AGE_SECONDS,
       // Every session check reads the stored session and user, so a revoked session or a DISABLED
       // user is rejected on the next request (S18). Better Auth enables this cache by default only
       // without a database (1.7.16 `context/create-context.mjs`); pinned off so it never turns on.
@@ -199,6 +214,31 @@ export function createAuth(options: CreateAuthOptions): Auth {
 
             if (refusal) {
               throw refusal;
+            }
+
+            // S16 (L34): an administrator session, pending or enrolled, lasts 12 hours from its
+            // creation. The cookie keeps the customer Max-Age; the stored expiry decides.
+            if (user?.role === USER_ROLE.ADMIN) {
+              return {
+                data: { ...session, expiresAt: administratorSessionExpiresAt(session.createdAt) },
+              };
+            }
+          },
+        },
+        update: {
+          // Better Auth moves `expiresAt` only when `getSession` refreshes a session, after it has
+          // stored the session it read on the request context (1.7.16 `api/routes/session.mjs`;
+          // `/update-session` is disabled). The session hook already skips that refresh for
+          // administrators; this refuses any expiry change it cannot attribute to a customer's
+          // session read. Refusing makes `getSession` answer 401 and clear the cookie: fail closed.
+          async before(session, context) {
+            if (session.expiresAt === undefined) {
+              return;
+            }
+
+            const current = context?.context.session as { user?: AccountAccess } | null | undefined;
+            if (!current?.user || current.user.role !== USER_ROLE.CUSTOMER) {
+              return false;
             }
           },
         },

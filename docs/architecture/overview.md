@@ -64,6 +64,27 @@ and account status.
 - `createApp` in `app.setup.ts` is the single app-creation boundary for the runtime and integration tests; it
   disables NestJS's body parser, as Better Auth requires.
 
+### Sessions and cookies (current)
+
+This is the implemented API side of ADR 0004 decision 4 as amended on 2026-11-05 (S14, S16;
+`auth/session-settings.ts`, `auth/auth.factory.ts`, `auth/inactive-session-hook.ts`). The web proxy for
+`/api/auth` and the web server's API client are not implemented yet (**planned**, M2 T8b).
+
+- `AUTH_BASE_URL` is the public web origin through which the web will proxy `/api/auth`. Startup validation
+  requires it to be one of the `CORS_ORIGIN` entries, because Better Auth trusts that origin on its own, and
+  to use `https` in production.
+- Over `https` the session cookie is `__Host-better-auth.session_token`: `HttpOnly`, `Secure`, `SameSite=Lax`,
+  `Path=/`, and no `Domain`, so only the web host receives it. Every other Better Auth cookie (session data,
+  "don't remember", the two-factor challenge `__Host-better-auth.two_factor`, trusted device) has the same
+  prefix and attributes. Over local `http` the names drop the prefix (`better-auth.session_token`) and the
+  cookies are not `Secure`. Cross-subdomain cookies are pinned off.
+- A customer session lasts 7 days and is extended to 7 days from now at most once per day of use.
+- An administrator session, pending or enrolled, lasts 12 hours from its creation: the password sign-in of a
+  pending administrator, or the second factor of an enrolled one. It is never extended: the session hook
+  skips Better Auth's refresh for administrators, and a session update hook refuses any expiry change that is
+  not a customer's session refresh. The cookie keeps the 7-day `Max-Age`; the stored expiry decides, and
+  every request reads it.
+
 ### Access control (current)
 
 This is the implemented state of ADR 0004 decision 6.

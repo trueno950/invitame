@@ -46,7 +46,10 @@ export interface RuntimeEnvironment {
   DATABASE_URL: string;
   /** Better Auth signing secret; never logged or echoed in error messages. */
   BETTER_AUTH_SECRET: string;
-  /** Public origin of the API that serves the Better Auth routes. */
+  /**
+   * Public web origin through which the web proxies `/api/auth` to the API (L33). It is one of
+   * `TRUSTED_ORIGINS` and uses https in production, so every auth cookie is `Secure` there.
+   */
   AUTH_BASE_URL: string;
   /** Email delivery transport and sender, from `EMAIL_TRANSPORT`, `EMAIL_FROM`, and adapter variables. */
   EMAIL: EmailEnvironment;
@@ -170,6 +173,31 @@ function rejectUnsupportedAuthOrigins(environment: Record<string, unknown>): voi
       "BETTER_AUTH_TRUSTED_ORIGINS is not supported; list trusted origins in CORS_ORIGIN.",
     );
   }
+}
+
+/**
+ * Better Auth adds the origin of its base URL to its trusted origins on its own (1.7.16
+ * `context/helpers.mjs`, `getTrustedOrigins`). Requiring it in the CORS list makes that trust explicit
+ * (L20), so Better Auth never trusts an origin that CORS does not. In production it must use https:
+ * the session cookie is `Secure` and carries the `__Host-` prefix only over https (S14, L33).
+ */
+function validateAuthBaseUrl(
+  authBaseUrl: string,
+  trustedOrigins: readonly string[],
+  nodeEnvironment: NodeEnvironment,
+): string {
+  if (!trustedOrigins.includes(authBaseUrl)) {
+    throw new Error("AUTH_BASE_URL must be one of the trusted origins in CORS_ORIGIN.");
+  }
+
+  if (
+    nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION &&
+    new URL(authBaseUrl).protocol !== "https:"
+  ) {
+    throw new Error("AUTH_BASE_URL must use HTTPS in production.");
+  }
+
+  return authBaseUrl;
 }
 
 function validateDatabaseUrl(value: string): string {
@@ -301,7 +329,7 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
 
   rejectUnsupportedAuthOrigins(environment);
 
-  return {
+  const validated = {
     NODE_ENV: nodeEnvironment,
     PORT: parsePort(environment.PORT),
     TRUSTED_ORIGINS: parseTrustedOrigins(readRequiredString(environment, "CORS_ORIGIN")),
@@ -314,4 +342,9 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     EMAIL: parseEmailEnvironment(environment, nodeEnvironment),
     AUTH_CLIENT_IP: parseClientIpEnvironment(environment, nodeEnvironment),
   };
+
+  // Cross-field rules run last, so every single-variable error keeps its precedence.
+  validateAuthBaseUrl(validated.AUTH_BASE_URL, validated.TRUSTED_ORIGINS, nodeEnvironment);
+
+  return validated;
 }

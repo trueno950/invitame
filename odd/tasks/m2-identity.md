@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 administrator sign-in merged as #15 and its creation command in progress (L31).
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8 in progress (L33, L34).
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), and slice 15 `feat/m2-identity-15-admin-create` (T7 creation command) (L23 to L31). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), and T8a on `feat/m2-identity-16-session-settings` (L23 to L34). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -45,10 +45,16 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 - **S13** ADR 0004 consequences: the spike comes first, the `User` migration gets human review, and the listed
   integration tests exist.
 - **S14** First review R1-001 (risk, SUGGESTION): scope the session cookie as narrowly as possible, and never serve
-  untrusted content from a host that receives it.
+  untrusted content from a host that receives it. Decided (L33): the browser talks only to the web origin, which
+  proxies `/api/auth` to the API and calls the API from its server with the cookie; the session cookie is host-only
+  on the web host, with the `__Host-` prefix in production, so no other host, such as one for public invitations,
+  receives it.
 - **S15** First review R2-001 (readability, SUGGESTION): concrete values for code expiry and attempt limits.
   Decided (L23): 6-digit codes that expire after 300 seconds, at most 3 wrong attempts per code, stored hashed.
-- **S16** First review R2-002 (readability, SUGGESTION): the exact cookie name, `Domain`, and lifetime.
+- **S16** First review R2-002 (readability, SUGGESTION): the exact cookie name, `Domain`, and lifetime. Decided (L33,
+  L34): no `Domain` attribute (host-only on the web host); customer sessions last 7 days and are refreshed at most
+  once per day of use; administrator sessions last 12 hours from sign-in and are never refreshed. T8a fixes and
+  documents the exact cookie name.
 - **S17** R3-adr-test-coverage-gaps (reliability, WARNING): tests beyond the ADR minimum, such as untrusted origins,
   disabled password sign-up, a client-supplied role, and enumeration-safe responses.
 - **S18** R3-disable-revocation-cache (reliability, SUGGESTION): disabling a user takes effect on the next request; no
@@ -106,8 +112,11 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T5c | Abuse-limit hardening: refuse background work once the shutdown drain starts, a fixed per-email quota window, quota storage errors surfaced instead of masked, and one pending-task bound (L25). | S23, S25 | worker | `83997bb` (#10) |
 | T6a | Access control: deny-by-default guard with explicit public routes that never read the session, a server-side administrator role check, the `DISABLED` sign-in block on every path, session revocation on disable through a server-side command, and no email-code session for administrators (L26). | S1, S2, S9, S18 | worker | `3af25ea` (#11), `8d9beec` (#12) |
 | T6b | Own profile: read and update the signed-in user's own profile as the first owned resource, with validated, bounded fields (L26); refuse unsupported route markers at startup instead of per request (L27); refuse a session on Better Auth's own endpoints unless its stored user is `ACTIVE`, and route profile updates through the validated endpoint instead of Better Auth's `/update-user` (L28). | S1, S2, S9, S18 | worker | `81207e8` (#13), `8490cd5` (#14) |
-| T7 | Administrator: server-side creation command, password sign-in for administrators only, mandatory TOTP enrollment gate, backup codes, and enumeration-safe rejection of email OTP; initial password and enrollment window per S20 (L30). | S6, S20, S21, S22 | worker | `8880096` (#15), slice 15 (L31) |
-| T8 | Web session boundary: server-side cookie forwarding, customer sign-in pages, and administrator sign-in and TOTP enrollment pages in Spanish product copy; cookie scope settings. | S1, S7, S14, S16 | inline | — |
+| T7 | Administrator: server-side creation command, password sign-in for administrators only, mandatory TOTP enrollment gate, backup codes, and enumeration-safe rejection of email OTP; initial password and enrollment window per S20 (L30). | S6, S20, S21, S22 | worker | `8880096` (#15), `b4bb01f` (#16) |
+| T8a | Session settings: customer sessions of 7 days refreshed at most once a day, administrator sessions of 12 hours without refresh, and a host-only session cookie served through the web origin (`__Host-` prefix in production), with Better Auth's base URL set to the public web origin; ADR 0004 decision 4 states the mechanism, cookie name, `Domain`, and lifetimes (L33, L34). | S7, S14, S16 | worker | — |
+| T8b | Web proxy and server-side API client: the web forwards `/api/auth` to the API with the client IP and passes cookies through without storing them, and its server calls the API with the session cookie; server-only API configuration in `apps/web`; the API trusts the client IP only from the web hop (L33). | S1, S7, S14 | worker | — |
+| T8c | Customer pages in Spanish product copy: sign-in by email code, the own profile, and sign-out, all through the web server. | S1, S6 | worker | — |
+| T8d | Administrator pages in Spanish product copy: password sign-in, the TOTP challenge, enrollment with backup codes shown once, and sign-out. | S6, S21 | worker | — |
 | T9 | Integration and E2E tests: every ADR obligation and finding against real PostgreSQL, each traced to a named assertion. | S2, S13, S17, S30 | inline | — |
 | T10 | Documentation: ADR wording fixes, architecture, database, and quality-gate docs, environment examples, and the administrator recovery procedure. | S13, S21, S26, S27 | inline | — |
 | T11 | Security evidence: independent verification of every spec, and human sign-off of secret handling, session expiry, and error mapping. | S2 | verify | — |
@@ -352,3 +361,36 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   (`plugins/two-factor/index.mjs:188`), so an enrolled administrator cannot replace the secret through it; T9 and T11
   own proving that a TOTP confirmation that runs while `admin:create` reissues a password fails closed, because the
   reissue deletes the `TwoFactor` row that the confirmation is about to mark verified.
+- **L32** (2026-11-05) Slice 15 (`b4bb01f`, PR #16) holds the `admin:create` command. It passed the gates in isolation
+  (279 of 279 tests, `test:db` 29 of 29, 5 of 5 parallel runs) and a manual run on a disposable PostgreSQL 17, which
+  exited `2` without an address and with redirected output (no user stored), `0` on create and on reissue (a
+  different password, a restarted window, one credential account), and `1` for an enrolled administrator; it never
+  printed the address, and no plain password was stored. Its native review (`review-9d9f6d7b70171459`, four lenses)
+  ran although the native assessment rated the slice medium with no review due, because the user's approval in L31
+  named it; it approved with 8 advisory findings and none from the risk lens. PR #16 passed CI and was merged into
+  the tracker, whose tree equals slice 15, and CI on #1 passed. Routing: T9 owns R3-command-contract-unproved and
+  R3-concurrent-first-create-unproved; T9 and T11 own R3-disconnect-failure-bypasses-redaction; T10 owns
+  R2-enrollment-window-hours-hard-coded, R2-refusal-reason-inferred-from-status-only, R2-exit-code-doc-omits-non-tty,
+  R2-outcome-field-stutter, and R4-failure-log-drops-prisma-error-code.
+- **L33** (2026-11-05) User, choosing an option for "T7 quedó cerrada: #15 y #16 están mergeados y la CI del tracker
+  está en verde. Para T8 hay una decisión de seguridad pendiente. Hoy la cookie de sesión queda atada al host de la
+  API, así que el servidor de la web (app.) nunca la recibe, y el ADR 0004 solo dice que debe quedar "scoped so both
+  the browser and the web server can send it". ¿Cómo debe llegar la cookie al servidor de la web?": "Proxy por la
+  web (recomendado)", whose description reads: "El navegador habla solo con `app.<dominio>`: la web reenvía
+  `/api/auth` a la API y llama a la API desde su servidor con la cookie. La cookie vive solo en el host de la app (con
+  prefijo `__Host-` en producción), así ningún otro subdominio la recibe, por ejemplo uno futuro para invitaciones
+  públicas (S14). Costo: la web tiene que pasarle a la API la IP del cliente para los límites por IP." The other
+  option was a cookie shared across subdomains through `Domain`. This decides the mechanism of ADR 0004 decision 4,
+  S14, and the `Domain` of S16.
+- **L34** (2026-11-05) User, choosing an option for "Segunda decisión de seguridad para T8: ¿cuánto dura una sesión?
+  Hoy rige el valor por defecto de Better Auth: 7 días, renovados como máximo una vez al día mientras se usa la
+  cuenta, y es el mismo para clientes y administradores. El roadmap exige que la expiración de sesión tenga
+  aprobación humana, y S16 pide fijar la duración.": "Clientes 7 días, admins 12 horas (recomendado)", whose
+  description reads: "Clientes: 7 días, renovados como máximo una vez al día mientras usan la cuenta.
+  Administradores: 12 horas desde que entran, sin renovación; después piden de nuevo contraseña y código TOTP. Una
+  sesión robada de admin sirve como mucho 12 horas. Costo: un poco más de código y tests, porque Better Auth tiene
+  una sola duración global y la de admins la fija nuestro hook de sesión." The other option was 7 days for everyone.
+  This decides the lifetimes of S16. Orchestrator's split: T8 becomes T8a (session settings in the API), T8b (web
+  proxy and server-side API client), T8c (customer pages), and T8d (administrator pages), each a slice from the
+  tracker. T8a must check how Better Auth 1.7.16 names a secure cookie, because it prepends `__Secure-` to every
+  cookie name when cookies are secure.

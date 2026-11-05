@@ -1,4 +1,4 @@
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, setShouldSkipSessionRefresh } from "better-auth/api";
 
 import { TWO_FACTOR_PATH } from "./abuse-limits";
 import { type AccountAccess, isActive, isPendingAdministrator, USER_ROLE } from "./account-access";
@@ -36,6 +36,8 @@ const SECOND_FACTOR_VERIFY_PATHS: ReadonlySet<string> = new Set([
  * 4. Two-factor endpoints are for administrators only: a customer's session is hidden there too.
  * 5. On the second-factor endpoints `trustDevice` is forced to false, so a password sign-in always
  *    asks for the second factor; on enable, the TOTP issuer is always `InvitaMe`.
+ * 6. An administrator session is never refreshed (S16, L34): the request skips Better Auth's session
+ *    refresh, so its stored expiry stays 12 hours from sign-in and no cookie is reissued.
  *
  * Facts this relies on (Better Auth 1.7.16):
  * - HTTP routes and `auth.api.*` calls both run this hook before the endpoint
@@ -49,6 +51,9 @@ const SECOND_FACTOR_VERIFY_PATHS: ReadonlySet<string> = new Set([
  *   is pinned off (`db/internal-adapter.mjs`, `findSession`).
  * - Every session-reading endpoint looks the token up again (`api/routes/session.mjs`, `getSession`
  *   and the session middlewares); once the row is gone it finds no session.
+ * - `setShouldSkipSessionRefresh` is request state shared by this hook and every `getSession` run in
+ *   the same request (`api/state/should-session-refresh.mjs`); `getSession` then neither updates the
+ *   row nor sets a cookie.
  */
 export const refuseInactiveSessions = createAuthMiddleware(async (ctx) => {
   const overrides = secondFactorBodyOverrides(ctx);
@@ -68,8 +73,13 @@ export const refuseInactiveSessions = createAuthMiddleware(async (ctx) => {
     ) {
       // A failure here throws, so the request fails closed instead of using the session.
       await ctx.context.internalAdapter.deleteSession(token);
-    } else if (sessionHiddenOn(ctx.path, user)) {
-      overrides.headers = withoutSessionCookies(ctx);
+    } else {
+      if (user.role === USER_ROLE.ADMIN) {
+        await setShouldSkipSessionRefresh(true);
+      }
+      if (sessionHiddenOn(ctx.path, user)) {
+        overrides.headers = withoutSessionCookies(ctx);
+      }
     }
   }
 

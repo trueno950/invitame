@@ -32,7 +32,10 @@ The web app runs on `http://localhost:3000`; the API runs on `http://localhost:3
 The API refuses to start until `apps/api/.env` defines its required variables. Besides `DATABASE_URL`, set:
 
 - `BETTER_AUTH_SECRET`: at least 32 characters; generate one with `openssl rand -base64 32` and never commit it.
-- `AUTH_BASE_URL`: the public origin of the API, for example `http://localhost:3001`.
+- `AUTH_BASE_URL`: the public web origin through which the web proxies `/api/auth` to the API, for example
+  `http://localhost:3000`. It must be one of the `CORS_ORIGIN` entries, and production requires `https`. Over
+  `https` the session cookie is `__Host-better-auth.session_token` (`Secure`, no `Domain`); over local `http` it
+  is `better-auth.session_token` without `Secure`.
 - `CORS_ORIGIN`: a comma-separated list of trusted web origins, for example `http://localhost:3000`. The same
   list feeds credentialed CORS and Better Auth's origin checks.
 
