@@ -11,7 +11,7 @@ import { Reflector } from "@nestjs/core";
 import { AuthService } from "@thallesp/nestjs-better-auth";
 import { fromNodeHeaders } from "better-auth/node";
 
-import { type AccountAccess, isActive, USER_ROLE } from "../account-access";
+import { type AccountAccess, isActive, isPendingAdministrator, USER_ROLE } from "../account-access";
 
 const PUBLIC_ROUTE = Symbol("invitame:public-route");
 const ADMIN_ONLY = Symbol("invitame:admin-only");
@@ -71,7 +71,11 @@ interface GuardedRequest {
  * 2. A `@Public()` route passes without any session lookup.
  * 3. Every other route needs a session whose stored user is ACTIVE, otherwise 401. Better Auth
  *    reads the session and user from the database on every call: its cookie cache is pinned off.
- * 4. An `@AdminOnly()` route also needs the stored role `ADMIN`, otherwise 403.
+ * 4. An administrator who has not enrolled an authenticator app holds no authority at all (S6, S21):
+ *    every route, `@AdminOnly()` and `/me` included, answers the same generic 401 as without a
+ *    session. 401, not 403: the sign-in is incomplete until the first TOTP code confirms enrollment,
+ *    and the session hook already makes Better Auth's own endpoints answer as without a session.
+ * 5. An `@AdminOnly()` route also needs the stored role `ADMIN`, otherwise 403.
  * The session is attached to the request as the integration does, for `@Session()`.
  */
 @Injectable()
@@ -100,7 +104,7 @@ export class AccessControlGuard implements CanActivate {
     });
     const user = session?.user as AccountAccess | undefined;
 
-    if (!session || !user || !isActive(user)) {
+    if (!session || !user || !isActive(user) || isPendingAdministrator(user)) {
       throw new UnauthorizedException();
     }
 

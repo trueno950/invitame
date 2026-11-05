@@ -10,7 +10,7 @@ implemented.
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
 | Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy. | Dashboard, authoring flows, and public invitation routes. **Planned.** |
-| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, a deny-by-default guard with an administrator role check, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling by a server-side command. | Feature modules exposing stable REST contracts; administrator sign-in. **Planned.** |
+| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling by a server-side command. | Feature modules exposing stable REST contracts; the administrator creation command. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
@@ -49,8 +49,7 @@ apps/api/src/
 
 ### Authentication boundary (current)
 
-This is the implemented state; administrator sign-in (password and authenticator app) is planned (ADR 0004).
-The abuse limits of ADR 0004 decision 7 are current; see "Abuse limits" below, and "Access control" for roles
+This is the implemented state of ADR 0004; see "Administrator sign-in and enrollment gate" below. The abuse limits of ADR 0004 decision 7 are current; see "Abuse limits" below, and "Access control" for roles
 and account status.
 
 - Better Auth runs inside the API through `@thallesp/nestjs-better-auth` and is mounted at `/api/auth`. It is
@@ -91,20 +90,72 @@ This is the implemented state of ADR 0004 decision 6.
   everywhere.
 - `role` and `status` are server-side fields (`input: false`): a client value is ignored when an account is
   created and rejected with `400 FIELD_NOT_ALLOWED` by a server-side `auth.api.updateUser` call. Password
-  sign-up is not enabled.
-- Better Auth routes that change a user, an email address, an account link, or a password answer `404`
+  sign-up is disabled: `POST /api/auth/sign-up/email` answers `400 EMAIL_PASSWORD_SIGN_UP_DISABLED`.
+- Better Auth routes that change a user, an email address, an account link, a password, or a second factor
+  answer `404`
   (`disabledPaths`, `DISABLED_AUTH_PATHS` in `auth/auth.factory.ts`): `/update-user`, `/change-email`,
   `/delete-user` and its callback, `/change-password`, `/request-password-reset`, `/reset-password`, the
   email-code password reset, email change, and email verification routes, `/verify-email`,
-  `/send-verification-email`, `/update-session`, `/link-social`, and `/unlink-account`. Profile changes go
-  only through `PATCH /me`. The restriction covers HTTP, not server-side `auth.api.*` calls.
+  `/send-verification-email`, `/update-session`, `/link-social`, `/unlink-account`, `/two-factor/disable`,
+  `/two-factor/get-totp-uri`, `/two-factor/send-otp`, and `/two-factor/verify-otp`. Profile changes go only
+  through `PATCH /me`. `/set-password` is server-only and never routed. The restriction covers HTTP, not
+  server-side `auth.api.*` calls.
 - A Better Auth `session.create.before` hook (`auth/auth.factory.ts`) refuses a session to a user who is not
-  `ACTIVE` on every sign-in path, and to an administrator on the email-code paths. On
-  `POST /api/auth/sign-in/email-otp` the refusal is the same `400 INVALID_OTP` as a wrong code.
+  `ACTIVE` on every sign-in path, to an administrator on the email-code paths, to anyone but an administrator
+  on password sign-in, and to an un-enrolled administrator whose enrollment window has ended. On
+  `POST /api/auth/sign-in/email-otp` the refusal is the same `400 INVALID_OTP` as a wrong code; on
+  `POST /api/auth/sign-in/email` it is the same `401 INVALID_EMAIL_OR_PASSWORD` as a wrong password.
 - `DISABLED` users and administrators receive no sign-in code; the request still gets the identical
   `200 {"success":true}`.
 - `pnpm --filter @invitame/api user:disable -- <email>` (`users/`) sets a user to `DISABLED` and deletes all of
   their sessions in one transaction. It is idempotent and logs the user id only.
+
+### Administrator sign-in and enrollment gate (current)
+
+This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (`auth/account-access.ts`,
+`auth/administrator-enrollment.ts`, `auth/inactive-session-hook.ts`).
+
+- Administrators sign in with `POST /api/auth/sign-in/email` (email and password). A customer, an unknown
+  address, a wrong password, a `DISABLED` administrator, and an expired initial password all get the identical
+  `401 {"code":"INVALID_EMAIL_OR_PASSWORD","message":"Invalid email or password"}`. Milestone 2 offers no
+  password change or reset through the API.
+- An administrator is **enrolled** once `User.twoFactorEnabled` is `true`. Better Auth sets it only when the
+  first valid TOTP code confirms enrollment; `TwoFactor.verified` is never used, because its column defaults
+  to `true`.
+- The **enrollment window**: until enrolled, the initial password works for 24 hours from its issue, which is
+  the `createdAt` of the administrator's credential account. No API route can create or replace that account.
+  After the 24 hours, password sign-in answers like a wrong password, every existing session of that
+  administrator is deleted on its next use, and enrollment is therefore refused.
+- A **pending administrator** (role `ADMIN`, not enrolled, inside the window) holds no administrator
+  authority. Its session can do exactly four things on Better Auth's endpoints:
+  1. `GET /api/auth/get-session`: read the session (the user has `twoFactorEnabled: false`);
+  2. `POST /api/auth/two-factor/enable` with the password: returns the TOTP URI (issuer `InvitaMe`) and 10
+     backup codes; calling it again replaces both while enrollment is unconfirmed;
+  3. `POST /api/auth/two-factor/verify-totp` with a code from the app: confirms enrollment and replaces the
+     session with a new one;
+  4. `POST /api/auth/sign-out`.
+
+  Every other Better Auth endpoint answers exactly as without a session; the session itself stays valid.
+  Every project route, `@AdminOnly()` routes and `GET`/`PATCH /me` included, answers the generic
+  `401 {"message":"Unauthorized","statusCode":401}`: the sign-in is incomplete until enrollment.
+- Customer sessions are hidden from every `/two-factor/*` endpoint in the same way.
+- An **enrolled administrator** signs in in two steps. The password step answers
+  `200 {"twoFactorRedirect":true,"twoFactorMethods":["totp"]}` with only a `two_factor` challenge cookie (600
+  seconds); Better Auth deletes the session it created for the password step within the same request. The
+  second step, `POST /api/auth/two-factor/verify-totp` with a TOTP code or
+  `POST /api/auth/two-factor/verify-backup-code` with a backup code, creates the session. Trusted devices are
+  never honored (`trustDevice` is forced to `false`).
+- Each backup code works once; the 10 codes are stored encrypted with the auth secret, and
+  `POST /api/auth/two-factor/generate-backup-codes` (password required) replaces them for an enrolled
+  administrator. The second factor cannot be removed through the API.
+- Attempt limits: a challenge ends after 5 wrong codes (`400 TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE`); 10
+  consecutive failures across challenges lock the second factor for 15 minutes
+  (`429 ACCOUNT_TEMPORARILY_LOCKED`, `TwoFactor.failedVerificationCount` and `lockedUntil`).
+- Email-code sign-in stays refused for administrators in every state (pending, enrolled, or expired window):
+  no code is sent and the send request gets the identical `200 {"success":true}`; a code issued earlier gets
+  the identical `400 INVALID_OTP`.
+- The server-side command that creates administrators and issues their initial password is planned; no API
+  route can create an administrator.
 
 ### Own profile (current)
 
@@ -154,13 +205,17 @@ once, as it does at capacity, while pending tasks still complete. No log carries
 
 ### Abuse limits (current)
 
-This is the implemented state of ADR 0004 decision 7 and S10, S19, and S25 for the code endpoints. Password
-sign-in limits for administrators come with that sign-in and are planned.
+This is the implemented state of ADR 0004 decision 7 and S10, S19, and S25 for the code endpoints and for
+administrator sign-in.
 
 - Better Auth's rate limiter runs in every `NODE_ENV` and stores its counters in the `RateLimit` table through
   the Prisma adapter (`auth/auth.factory.ts`); tests use the in-memory database adapter on the same path.
 - `/email-otp/send-verification-otp` and `/sign-in/email-otp` allow 3 requests per 60 seconds per client IP;
-  the 4th gets Better Auth's `429`. Other paths keep the defaults of Better Auth and its email OTP plugin, such
+  the 4th gets Better Auth's `429`.
+- `/sign-in/email`, `/two-factor/enable`, and `/two-factor/generate-backup-codes`, which check a password,
+  allow 3 requests per 60 seconds per client IP. `/two-factor/verify-totp` and
+  `/two-factor/verify-backup-code` allow 5 per 60 seconds per client IP, above the 5 wrong codes one challenge
+  allows. Other paths keep the defaults of Better Auth and its email OTP plugin, such
   as 100 requests per 10 seconds per client IP.
 - Each address gets at most 5 codes per fixed hour (`auth/abuse-limits.ts`): the hour starts at the first counted
   code, later codes never move it, and the first request after it ends opens a new hour. Every `sign-in` request

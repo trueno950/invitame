@@ -6,7 +6,8 @@ Accepted (2026-11-03). The human owner approved the library, customer sign-in by
 administrator sign-in with a password and a mandatory authenticator app, Resend for email, and Railway for hosting.
 Amended the same day, before any implementation, to define administrator enrollment (decision 3) and email
 failure handling (decision 8) after the native review. Decision 8 was amended again on 2026-11-04, during
-implementation, to send codes in the background; the status stays Accepted.
+implementation, to send codes in the background, and decision 3 on the same day to bound the pre-enrollment
+window; the status stays Accepted.
 
 ## Context
 
@@ -52,6 +53,18 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    the initial password without logging it. Until the administrator enrolls an authenticator app, confirmed by a
    first valid code, the account holds no administrator authority: the guard rejects every administrative action,
    and enrollment and sign-out are the only actions it can take.
+
+   **Amended (2026-11-04).** The human owner fixed the pre-enrollment window (S20):
+
+   - The creation command generates a random 24-character initial password and shows it once in the
+     terminal, never in logs.
+   - Until the administrator enrolls an authenticator app, that password works for 24 hours from its issue.
+     After that, password sign-in answers like a wrong password, existing sessions stop working, and
+     enrollment is refused. Only the same command can issue a new password.
+   - Milestone 2 offers no password change or reset through the API.
+
+   An un-enrolled administrator's session can only read itself, enable the authenticator app, confirm it with
+   the first code, and sign out. It is refused on every project route, including the user's own profile.
 4. **Sessions and hosting.** Sessions are stored in the database and carried by an `HttpOnly`, `SameSite=Lax` cookie
    issued by the API, `Secure` outside local development. `apps/web` forwards the cookie from trusted server code and
    never stores it. Production runs web, API, and PostgreSQL in one Railway project under one registrable domain
