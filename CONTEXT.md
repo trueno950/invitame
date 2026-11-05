@@ -18,8 +18,22 @@ preserve the executable behavior and surface the vocabulary conflict for a human
 | Invitation | A future customer-specific invitation instance that references a chosen `TemplateVersion`. | A catalog template or a template version. |
 | Renderer | Reviewed application behavior that turns a `TemplateVersion` contract and allowed data into a presentation. | A module path, code expression, or code blob supplied by the database. |
 | Publication | A future backend-controlled transition that makes an invitation available through its public experience. | A hidden button, a client-side flag, or a catalog status change. |
+| Customer | A self-service buyer with an account. Customers sign in with a code sent to their email and have no password. | An administrator, who signs in with a password and an authenticator app. |
 | Current | Behavior or repository state evidenced by executable source, tests, schema, migrations, seed data, scripts, or reproducible commands. | A target architecture or a roadmap statement. |
 | Planned | An approved direction or design that is not evidence of implemented runtime behavior. | A promise that the corresponding route, model, provider, or control already exists. |
+
+## Customer voice and sign-in terms
+
+Customer-facing copy is neutral Mexican Spanish and addresses the customer with "tú" ("Ingresa tu correo"),
+never "usted". Sign-in copy never says whether an address has an account or what kind.
+
+| Spanish term | Meaning | Do not use |
+| --- | --- | --- |
+| Ingresar | To sign in, and the name of the sign-in page. | "Iniciar sesión", "Entrar", "Login". |
+| Código de acceso | The 6-digit one-time code emailed for sign-in. | "Contraseña", "OTP", "token". |
+| Cuenta | The customer's own account and its page. | "Perfil", "Usuario". |
+| Nombre para mostrar | The optional name the customer chooses for the account. | "Nombre de usuario". |
+| Cerrar sesión | To sign out. | "Salir", "Logout". |
 
 ## Usage rules
 

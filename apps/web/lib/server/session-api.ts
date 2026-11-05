@@ -12,13 +12,15 @@ import {
 import { getWebServerConfig } from "./config.ts";
 
 /**
- * The API client bound to the current request, for server components and server actions (M2 T8b;
- * L29, L33). `server-only` makes a client-component import fail the build.
+ * Profile reads and updates for server components and server actions (M2 T8b; L29, L33). The API
+ * client is one stateless instance per server process, created on first use; each call reads the
+ * current request's cookies through `cookies()` and passes them to the client, which keeps nothing
+ * between calls. `server-only` makes a client-component import fail the build.
  *
  * Reading the profile here does not extend the browser's session cookie: the API refreshes the
  * stored session but answers this server-to-server call without a `Set-Cookie` the browser could
- * receive. Pages must also trigger `GET /api/auth/get-session` through the proxy so the refreshed
- * cookie reaches the browser (L34).
+ * receive. `proxy.ts` runs `GET /api/auth/get-session` through the web's proxy before a signed-in
+ * page renders, so the refreshed cookie reaches the browser (L34; `session-refresh.ts`).
  */
 let client: ApiClient | undefined;
 

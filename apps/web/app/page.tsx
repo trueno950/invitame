@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const FOUNDATIONS = [
   {
     title: "Catálogo preparado",
@@ -22,9 +24,17 @@ export default function HomePage() {
         <div className="absolute inset-x-0 top-0 -z-10 h-80 bg-amber-100" aria-hidden="true" />
         <nav className="mx-auto flex max-w-6xl items-center justify-between" aria-label="Principal">
           <span className="text-xl font-black tracking-tight text-orange-700">InvitaMe</span>
-          <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-semibold text-orange-800">
-            Fundación inicial
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="hidden rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-semibold text-orange-800 sm:inline">
+              Fundación inicial
+            </span>
+            <Link
+              className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-950"
+              href="/ingresar"
+            >
+              Ingresar
+            </Link>
+          </div>
         </nav>
 
         <div className="mx-auto grid max-w-6xl gap-12 pb-8 pt-16 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:pt-24">

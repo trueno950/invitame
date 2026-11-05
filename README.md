@@ -57,7 +57,9 @@ Rate limits run in every environment and are stored in PostgreSQL. They identify
 The browser talks only to the web origin. The web proxies `/api/auth/*` to the API and calls the API from its
 server with the session cookie (ADR 0004 decision 4). Its settings live in `apps/web/.env.local`, are read only
 by server code, and never use the `NEXT_PUBLIC_` prefix, so they never reach the browser bundle. They are
-validated on first use:
+validated when the web server starts: an invalid value logs a `web_config_invalid` line that names the variable
+and stops the server with exit code 1. `next build` needs none of them. Because `pnpm --filter @invitame/web
+start` runs in production mode, it requires the production values below:
 
 - `API_ORIGIN`: the API's internal origin, by default `http://localhost:3001`; required in production.
 - `AUTH_PROXY_SECRET`: the same value as the API's; required in production.
@@ -86,6 +88,21 @@ The email variables are optional outside production:
   to `InvitaMe Local <no-reply@invitame.localhost>`.
 - `MAILPIT_URL`: the Mailpit origin, by default `http://localhost:8025`.
 - `RESEND_API_KEY`: required when `EMAIL_TRANSPORT` is `resend`; never commit it.
+
+### Try customer sign-in locally
+
+With the API and web running (`pnpm dev`) and Mailpit started:
+
+1. Open `http://localhost:3000/ingresar` and enter any email address.
+2. Open Mailpit at `http://localhost:8025` and copy the 6-digit code; it expires after 5 minutes.
+3. Enter the code. The browser goes to `http://localhost:3000/cuenta`, which shows the email and lets you
+   change or clear the display name and sign out.
+
+Every address gets the same answer, but an administrator's address never receives a code. Before each
+`/ingresar` and `/cuenta` render, and each `/cuenta` server action, the web refreshes the session through its
+own `/api/auth` proxy (`apps/web/proxy.ts`), so
+the browser's session cookie is extended while the customer uses the account; see "Customer pages" in
+[`docs/architecture/overview.md`](docs/architecture/overview.md).
 
 ## Verification
 
@@ -166,7 +183,7 @@ non-interactive terminal.
 
 | Path | Purpose |
 | --- | --- |
-| `apps/web` | Next.js 16 App Router landing page runtime, the `/api/auth` proxy, and the server-side API client |
+| `apps/web` | Next.js 16 App Router landing page, customer pages (`/ingresar`, `/cuenta`), the `/api/auth` proxy, and the server-side API client |
 | `apps/api` | NestJS REST API runtime and Prisma ownership boundary |
 | `docs/architecture` | Architecture decisions and operating model |
 | `docs/database` | Relational model and JSONB boundary |
@@ -175,7 +192,7 @@ non-interactive terminal.
 
 ## Implemented scope boundary
 
-The current runtime intentionally excludes authentication flows, invitations, RSVP and guest records, payments,
+The current runtime intentionally excludes administrator pages in the web, invitations, RSVP and guest records, payments,
 analytics, media storage, continuous deployment (CD), and hosted deployment. Limited quality-gate CI exists, but
 CD and hosted deployment are not implemented. Docker Compose is used only for local PostgreSQL and the Mailpit mail
 catcher. See
