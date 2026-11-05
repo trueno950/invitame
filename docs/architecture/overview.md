@@ -53,8 +53,16 @@ This is the implemented state of ADR 0004; see "Administrator sign-in and enroll
 and account status.
 
 - Better Auth runs inside the API through `@thallesp/nestjs-better-auth` and is mounted at `/api/auth`. It is
-  built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`) and the shared Prisma
-  client; the API refuses to start when any of them is missing or invalid.
+  built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`, and in production
+  `AUTH_PROXY_SECRET`) and the shared Prisma client; the API refuses to start when any of them is missing or
+  invalid.
+- In production every `/api/auth` request must carry the shared web-to-API secret (`AUTH_PROXY_SECRET`) in the
+  `x-invitame-proxy-secret` header (ADR 0004 decision 4, L36). Without it the API answers
+  `403 {"code":"FORBIDDEN"}` and logs an `auth_proxy_rejected` warning with the path only, before any endpoint,
+  hook, or rate-limit step runs; it compares SHA-256 digests in constant time. The API always removes that header,
+  and removes the client IP header unless the secret was valid. Outside production without a configured secret it
+  serves direct requests and trusts the client IP header as before. The web proxy that sends the secret is
+  **planned** (M2 T8b).
 - The integration's own global guard is disabled (`disableGlobalAuthGuard: true`); the project-owned guard
   described in "Access control" replaces it.
 - `CORS_ORIGIN` is the single trusted-origins list. The project owns CORS (`credentials: true`; methods `GET`,
@@ -252,7 +260,8 @@ administrator sign-in.
   storage error while counting, other than a concurrent create of the same row, removes the code and is logged
   with the `quota` stage.
 - The client IP comes from one configured header, `AUTH_CLIENT_IP_HEADER` (default `x-forwarded-for` outside
-  production; required in production). Without `AUTH_TRUSTED_PROXIES`, only a single-address value is accepted;
+  production; required in production), which the API trusts only next to a valid proxy secret when one is
+  configured. Without `AUTH_TRUSTED_PROXIES`, only a single-address value is accepted;
   with it, trusted proxy hops are stripped from the right.
 - In production, a request whose client IP cannot be resolved gets the generic `503` below and a
   `client_ip_unresolved` warning; it never shares one rate-limit bucket. Startup also fails when Better Auth's

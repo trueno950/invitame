@@ -19,6 +19,7 @@ export function createAuthModuleOptions(
   signInCodes: SignInCodeSender,
 ) {
   const logger = new Logger("AuthRequestGuard");
+  const production = config.get("NODE_ENV", { infer: true }) === NODE_ENVIRONMENT.PRODUCTION;
 
   return {
     auth: createAuth({
@@ -28,7 +29,9 @@ export function createAuthModuleOptions(
       database: prismaAdapter(prisma, { provider: "postgresql" }),
       signInCodes,
       clientIp: config.get("AUTH_CLIENT_IP", { infer: true }),
-      requireClientIp: config.get("NODE_ENV", { infer: true }) === NODE_ENVIRONMENT.PRODUCTION,
+      requireClientIp: production,
+      proxySecret: config.get("AUTH_PROXY_SECRET", { infer: true }),
+      requireProxySecret: production,
       log: (event) => logger.warn(event),
     }),
     disableTrustedOriginsCors: true,

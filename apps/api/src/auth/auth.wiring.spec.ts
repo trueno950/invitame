@@ -116,8 +116,21 @@ describe("AppModule startup configuration", () => {
         EMAIL_FROM: "InvitaMe <no-reply@example.test>",
         RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
         AUTH_CLIENT_IP_HEADER: "x-real-ip",
+        AUTH_PROXY_SECRET: randomBytes(32).toString("base64url"),
       },
       "AUTH_BASE_URL must use HTTPS in production.",
+    ],
+    [
+      "production without AUTH_PROXY_SECRET",
+      {
+        NODE_ENV: "production",
+        CORS_ORIGIN: SECOND_TRUSTED_ORIGIN,
+        AUTH_BASE_URL: SECOND_TRUSTED_ORIGIN,
+        EMAIL_FROM: "InvitaMe <no-reply@example.test>",
+        RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
+        AUTH_CLIENT_IP_HEADER: "x-real-ip",
+      },
+      "AUTH_PROXY_SECRET must be provided in production.",
     ],
     [
       "production without a client IP header",

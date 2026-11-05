@@ -7,8 +7,9 @@ administrator sign-in with a password and a mandatory authenticator app, Resend 
 Amended the same day, before any implementation, to define administrator enrollment (decision 3) and email
 failure handling (decision 8) after the native review. Decision 8 was amended again on 2026-11-04, during
 implementation, to send codes in the background, and decision 3 on the same day to bound the pre-enrollment
-window. Decision 4 was amended on 2026-11-05 to route the session cookie through the web origin and to fix the
-cookie name and the session lifetimes; the status stays Accepted.
+window. Decision 4 was amended on 2026-11-05 to route the session cookie through the web origin, to fix the
+cookie name and the session lifetimes, and to prove the web-to-API hop with a shared secret; the status stays
+Accepted.
 
 ## Context
 
@@ -88,6 +89,21 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    - An administrator session lasts 12 hours from sign-in and is never extended; after that the administrator
      signs in again with the password and the authenticator app. This applies before enrollment too, and the
      24-hour enrollment window of decision 3 is unchanged.
+   - The web proves each request to the API with a shared secret (`AUTH_PROXY_SECRET`, at least 32
+     characters, different from the auth secret) in the `x-invitame-proxy-secret` header. In production the
+     API refuses every `/api/auth` request without the right secret with a generic `403` before any endpoint,
+     hook, or rate-limit step runs, and the API refuses to start without the secret. The API compares SHA-256
+     digests in constant time and removes the header before Better Auth sees the request. This holds even if
+     the API is exposed to the internet by mistake.
+   - The client IP crosses the web hop in one header. The web reads it from a header the platform edge
+     overwrites on every request (`AUTH_EDGE_CLIENT_IP_HEADER`; `x-forwarded-for` and `forwarded` are refused
+     in production because a browser can set them), removes any browser copy of the client IP and secret
+     headers, and sets the API's `AUTH_CLIENT_IP_HEADER` itself. The API trusts that header only next to a
+     valid secret and otherwise removes it, so a direct caller can never choose its rate-limit bucket.
+   - The web stores no cookie. It forwards only an allow-list of request headers and returns every
+     `Set-Cookie` unchanged. The browser's session cookie is extended only when `/api/auth/get-session` runs
+     through the proxy; a session read by the web server refreshes the stored session but cannot set the
+     browser's cookie.
 5. **Origins.** CORS allows credentials only for configured trusted origins, and the same list feeds Better Auth's
    origin checks.
 6. **Authorization.** A global guard denies by default and public routes are marked explicitly. Public sign-up

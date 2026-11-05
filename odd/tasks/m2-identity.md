@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8 in progress (L33, L34).
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b in progress.
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), and T8a on `feat/m2-identity-16-session-settings` (L23 to L34). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), and T8b on `feat/m2-identity-17-web-proxy` (L23 to L35). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -113,8 +113,8 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T6a | Access control: deny-by-default guard with explicit public routes that never read the session, a server-side administrator role check, the `DISABLED` sign-in block on every path, session revocation on disable through a server-side command, and no email-code session for administrators (L26). | S1, S2, S9, S18 | worker | `3af25ea` (#11), `8d9beec` (#12) |
 | T6b | Own profile: read and update the signed-in user's own profile as the first owned resource, with validated, bounded fields (L26); refuse unsupported route markers at startup instead of per request (L27); refuse a session on Better Auth's own endpoints unless its stored user is `ACTIVE`, and route profile updates through the validated endpoint instead of Better Auth's `/update-user` (L28). | S1, S2, S9, S18 | worker | `81207e8` (#13), `8490cd5` (#14) |
 | T7 | Administrator: server-side creation command, password sign-in for administrators only, mandatory TOTP enrollment gate, backup codes, and enumeration-safe rejection of email OTP; initial password and enrollment window per S20 (L30). | S6, S20, S21, S22 | worker | `8880096` (#15), `b4bb01f` (#16) |
-| T8a | Session settings: customer sessions of 7 days refreshed at most once a day, administrator sessions of 12 hours without refresh, and a host-only session cookie served through the web origin (`__Host-` prefix in production), with Better Auth's base URL set to the public web origin; ADR 0004 decision 4 states the mechanism, cookie name, `Domain`, and lifetimes (L33, L34). | S7, S14, S16 | worker | — |
-| T8b | Web proxy and server-side API client: the web forwards `/api/auth` to the API with the client IP and passes cookies through without storing them, and its server calls the API with the session cookie; server-only API configuration in `apps/web`; the API trusts the client IP only from the web hop (L33). | S1, S7, S14 | worker | — |
+| T8a | Session settings: customer sessions of 7 days refreshed at most once a day, administrator sessions of 12 hours without refresh, and a host-only session cookie served through the web origin (`__Host-` prefix in production), with Better Auth's base URL set to the public web origin; ADR 0004 decision 4 states the mechanism, cookie name, `Domain`, and lifetimes (L33, L34). | S7, S14, S16 | worker | `41f6d06` (#17) |
+| T8b | Web proxy and server-side API client: the web forwards `/api/auth` to the API with the client IP and passes cookies through without storing them, and its server calls the API with the session cookie; server-only API configuration in `apps/web`; the API trusts the client IP only from the web hop, proven by a shared web-to-API secret that the API requires on every authentication request in production (L33, L36). | S1, S7, S14 | worker | — |
 | T8c | Customer pages in Spanish product copy: sign-in by email code, the own profile, and sign-out, all through the web server. | S1, S6 | worker | — |
 | T8d | Administrator pages in Spanish product copy: password sign-in, the TOTP challenge, enrollment with backup codes shown once, and sign-out. | S6, S21 | worker | — |
 | T9 | Integration and E2E tests: every ADR obligation and finding against real PostgreSQL, each traced to a named assertion. | S2, S13, S17, S30 | inline | — |
@@ -394,3 +394,36 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   proxy and server-side API client), T8c (customer pages), and T8d (administrator pages), each a slice from the
   tracker. T8a must check how Better Auth 1.7.16 names a secure cookie, because it prepends `__Secure-` to every
   cookie name when cookies are secure.
+- **L35** (2026-11-05) Slice 16 (`41f6d06`, PR #17) holds T8a. A worker implemented it; its startup rule that
+  `AUTH_BASE_URL` must be one of the `CORS_ORIGIN` entries broke the `AUTH_BASE_URL` fixtures of four test files
+  outside its edit surfaces, and the parent changed only those fixtures. It passed the gates in isolation (299 of 299
+  tests, `test:db` 30 of 30, 5 of 5 parallel runs) and its native review (`review-fec4566c40a28b60`, high tier, four
+  lenses), which approved with 8 advisory findings and none from the risk lens. User, choosing an option for "T8a
+  (ajustes de sesión en la API) pasó los chequeos: 299/299 tests, test:db 30/30 y estrés 5/5. También pasó la
+  revisión nativa (alto riesgo, 4 lentes), que lo aprobó con 8 hallazgos no bloqueantes, ninguno del lente de
+  riesgo. El slice deja: sesiones de clientes de 7 días, renovadas a lo sumo una vez al día; sesiones de admin de 12
+  horas, sin renovación; una cookie que vive solo en el host de la web (`__Host-better-auth.session_token` en
+  producción, sin Domain); la exigencia de que AUTH_BASE_URL esté entre los orígenes de CORS_ORIGIN y use https en
+  producción. Importante: después de esto, la API local no arranca hasta que cambies AUTH_BASE_URL a
+  http://localhost:3000 en apps/api/.env y apps/api/.env.example. Yo no puedo editar archivos .env. ¿Hago el commit,
+  abro el PR contra el tracker (con size:exception: 919 líneas, 650 de ellas tests) y lo mergeo cuando pase la CI?":
+  "Sí: commit, PR y merge", whose description reads: "Commit de T8a en feat/m2-identity-16-session-settings, PR
+  contra el tracker y merge cuando pase la CI. Después sigo con T8b (proxy de la web y cliente de la API del lado del
+  servidor)." PR #17 passed CI and was merged into the tracker, whose tree equals slice 16, and CI on #1 passed. Local
+  `apps/api/.env` and
+  `apps/api/.env.example` need `AUTH_BASE_URL=http://localhost:3000`, a human edit. Routing: T9 owns
+  R3-admin-cap-only-at-creation and R3-customer-refresh-via-guard-unproved (the parent read Better Auth 1.7.16:
+  `getSession` stores the session on the request context before it refreshes, and the update hook receives that
+  endpoint context, so a refresh through the project guard is expected to work); T9 and T11 own
+  R4-silent-session-update-refusal; T10 owns R2-admin-expiry-silent-now-fallback,
+  R2-update-hook-comment-overclaims-attribution, R2-auth-base-url-literal-not-tied-to-trusted-origin,
+  R2-https-rule-duplicated, and R2-session-cookie-name-unused-export.
+- **L36** (2026-11-05) User, choosing an option for "T8b (el proxy de la web) tiene una decisión de seguridad. La API
+  limita los intentos de login por IP. Con el proxy, todas las peticiones le llegan desde el servidor de la web, así
+  que la web le tiene que informar la IP real del cliente en un encabezado. Si alguien llamara a la API directamente,
+  podría inventar ese encabezado y saltarse los límites por IP. ¿Cómo protegemos ese salto web → API?": "Secreto
+  compartido web-API (recomendado)", whose description reads: "La web envía en cada petición a la API un secreto que
+  solo conocen las dos (una variable de entorno de 32 caracteres o más en cada servicio). En producción la API
+  rechaza cualquier petición de autenticación que no lo traiga, y solo entonces confía en la IP que informa la web.
+  Protege aunque la API quede expuesta en internet por error. Costo: un secreto más para configurar y rotar." The
+  other option was trusting the private network alone. This decides how T8b proves the web hop.

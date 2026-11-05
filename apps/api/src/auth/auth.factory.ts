@@ -97,6 +97,13 @@ export interface CreateAuthOptions {
    * client share one rate-limit bucket (L24).
    */
   requireClientIp: boolean;
+  /**
+   * Shared web-to-API secret (L36). When set, the client IP header is trusted only on requests that
+   * carry it in `AUTH_PROXY_SECRET_HEADER`; the header itself never reaches Better Auth.
+   */
+  proxySecret?: string | undefined;
+  /** Production: refuse every auth request without the proxy secret, before any endpoint runs. */
+  requireProxySecret?: boolean | undefined;
   /** Receives privacy-safe warnings about rejected auth requests. */
   log: AuthRequestLog;
 }
@@ -109,7 +116,8 @@ export interface CreateAuthOptions {
  *
  * Rate limits (ADR 0004 decision 7, S25) run in every environment and persist in the `RateLimit`
  * table through the same database adapter, keyed by client IP and path. The handler is wrapped so a failing rate-limit store or
- * an unresolved client IP is rejected with a generic 503 before any endpoint runs (S19).
+ * an unresolved client IP is rejected with a generic 503 before any endpoint runs (S19), and so a
+ * request that did not come through the web proxy is refused in production (L36).
  */
 export function createAuth(options: CreateAuthOptions): Auth {
   // Assigned below; the session hook runs only after the instance exists.
@@ -298,6 +306,11 @@ export function createAuth(options: CreateAuthOptions): Auth {
 
   const handler = guardAuthHandler(auth.handler, {
     resolveClientIp: options.requireClientIp ? resolveClientIp : undefined,
+    proxy: {
+      secret: options.proxySecret,
+      required: options.requireProxySecret ?? false,
+      clientIpHeader: options.clientIp.header,
+    },
     log: options.log,
   });
 
