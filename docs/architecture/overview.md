@@ -76,13 +76,27 @@ This is the implemented state of ADR 0004 decision 6.
 - Every other route needs a valid session whose stored user is `ACTIVE`; otherwise it answers `401`.
 - `@AdminOnly()` also needs the stored role `ADMIN`: anonymous requests get `401` and other users `403`. No
   administrative route exists yet.
-- The integration's own markers (`@AllowAnonymous()`, `@Roles()`, and the rest) are refused with `500`, so they
-  can never open or seem to restrict a route.
+- The integration's own markers (`@AllowAnonymous()`, `@Roles()`, and the rest) can never open or seem to
+  restrict a route. `RouteMarkerCheck` (`auth/access-control/route-marker-check.ts`) scans every registered
+  controller and handler during `app.init()` and refuses to start, naming the class, the handler, and the
+  marker. The guard still refuses such a route with `500` per request, as defense in depth.
 - The role and status are read from the stored user on every request. Better Auth's session cookie cache is
   pinned off, so a revoked session or a `DISABLED` user is rejected on the next request.
+- On Better Auth's own endpoints, a `hooks.before` hook (`auth/inactive-session-hook.ts`) reads the session and
+  its stored user from the database and deletes the session when the user is not `ACTIVE`. Every endpoint then
+  answers as it does without a session: `GET /api/auth/get-session` returns `200 null`, endpoints that need a
+  session return `401`, and sign-out still succeeds. The hook also runs for the guard's own session lookup.
+  This makes a session that survives `user:disable`, for example one created by a concurrent sign-in, useless
+  everywhere.
 - `role` and `status` are server-side fields (`input: false`): a client value is ignored when an account is
-  created and rejected with `400 FIELD_NOT_ALLOWED` on `POST /api/auth/update-user`. Password sign-up is not
-  enabled.
+  created and rejected with `400 FIELD_NOT_ALLOWED` by a server-side `auth.api.updateUser` call. Password
+  sign-up is not enabled.
+- Better Auth routes that change a user, an email address, an account link, or a password answer `404`
+  (`disabledPaths`, `DISABLED_AUTH_PATHS` in `auth/auth.factory.ts`): `/update-user`, `/change-email`,
+  `/delete-user` and its callback, `/change-password`, `/request-password-reset`, `/reset-password`, the
+  email-code password reset, email change, and email verification routes, `/verify-email`,
+  `/send-verification-email`, `/update-session`, `/link-social`, and `/unlink-account`. The restriction covers
+  HTTP, not server-side `auth.api.*` calls.
 - A Better Auth `session.create.before` hook (`auth/auth.factory.ts`) refuses a session to a user who is not
   `ACTIVE` on every sign-in path, and to an administrator on the email-code paths. On
   `POST /api/auth/sign-in/email-otp` the refusal is the same `400 INVALID_OTP` as a wrong code.

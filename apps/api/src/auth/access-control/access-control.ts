@@ -31,6 +31,24 @@ const UNSUPPORTED_INTEGRATION_KEYS = [
   "MEMBER_HAS_PERMISSION",
 ] as const;
 
+type MarkerTarget = Parameters<Reflector["getAllAndOverride"]>[1][number];
+
+/** The first unsupported integration marker on a handler or its controller, if any. */
+export function findUnsupportedMarker(
+  reflector: Reflector,
+  handler: MarkerTarget,
+  controller: MarkerTarget,
+): string | undefined {
+  return UNSUPPORTED_INTEGRATION_KEYS.find(
+    (key) => reflector.getAllAndOverride(key, [handler, controller]) !== undefined,
+  );
+}
+
+/** The refusal for a marked route, at startup and per request. */
+export function unsupportedMarkerMessage(route: string, marker: string): string {
+  return `${route} uses the unsupported integration marker ${marker}; use @Public() or @AdminOnly().`;
+}
+
 /** Marks a route or controller as public: the guard lets it through without reading any session. */
 export const Public = () => SetMetadata(PUBLIC_ROUTE, true);
 
@@ -48,6 +66,8 @@ interface GuardedRequest {
  * session before it honors `@AllowAnonymous()` (L20), so public routes failed when the session
  * store did. In order:
  * 1. A route marked with an integration decorator is refused as a programming error (500).
+ *    `RouteMarkerCheck` already refuses such an app at startup; this per-request check stays as
+ *    defense in depth for metadata the startup scan cannot see, at the cost of a few lookups.
  * 2. A `@Public()` route passes without any session lookup.
  * 3. Every other route needs a session whose stored user is ACTIVE, otherwise 401. Better Auth
  *    reads the session and user from the database on every call: its cookie cache is pinned off.
@@ -63,13 +83,10 @@ export class AccessControlGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const targets = [context.getHandler(), context.getClass()];
+    const marker = findUnsupportedMarker(this.reflector, context.getHandler(), context.getClass());
 
-    for (const key of UNSUPPORTED_INTEGRATION_KEYS) {
-      if (this.reflector.getAllAndOverride(key, targets) !== undefined) {
-        throw new Error(
-          `Route uses the unsupported integration marker ${key}; use @Public() or @AdminOnly().`,
-        );
-      }
+    if (marker) {
+      throw new Error(unsupportedMarkerMessage("Route", marker));
     }
 
     if (this.reflector.getAllAndOverride<boolean>(PUBLIC_ROUTE, targets)) {

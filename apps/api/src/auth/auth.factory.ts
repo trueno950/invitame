@@ -11,6 +11,7 @@ import {
   SIGN_IN_CODE_REQUEST_PATH,
 } from "./abuse-limits";
 import { type AuthRequestLog, guardAuthHandler } from "./auth-request-guard";
+import { refuseInactiveSessions } from "./inactive-session-hook";
 import { createBetterAuthSignInCodeStore } from "./sign-in-code/better-auth-sign-in-code-store";
 import {
   SIGN_IN_CODE_ALLOWED_ATTEMPTS,
@@ -26,6 +27,35 @@ import type { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
  * until its window has ended (L25).
  */
 const EMAIL_CODE_QUOTA_RETENTION_RULE = "email-code-quota-retention";
+
+/**
+ * Better Auth routes that change a user, an email address, an account link, or a password. Better Auth
+ * answers them with 404 before rate limiting or routing (1.7.16 `api/index.mjs`, `onRequest`); this
+ * covers HTTP only, not server-side `auth.api.*` calls. Clients cannot change a profile through Better
+ * Auth (L16, L28); email change and account deletion are not offered in Milestone 2; passwords
+ * belong to administrators (T7). The code-based password reset is disabled for good reason: it would
+ * create a credential password for a customer (1.7.16 `utils/password.mjs`, `resetCredentialPassword`).
+ */
+export const DISABLED_AUTH_PATHS = [
+  "/update-user",
+  "/change-email",
+  "/delete-user",
+  "/delete-user/callback",
+  "/change-password",
+  "/request-password-reset",
+  "/reset-password",
+  "/email-otp/request-password-reset",
+  "/forget-password/email-otp",
+  "/email-otp/reset-password",
+  "/email-otp/request-email-change",
+  "/email-otp/change-email",
+  "/email-otp/verify-email",
+  "/verify-email",
+  "/send-verification-email",
+  "/update-session",
+  "/link-social",
+  "/unlink-account",
+] as const;
 
 export interface CreateAuthOptions {
   /** Signing secret supplied by validated configuration; never hard-coded. */
@@ -69,6 +99,9 @@ export function createAuth(options: CreateAuthOptions): Auth {
     trustedOrigins: [...options.trustedOrigins],
     database: options.database,
     telemetry: { enabled: false },
+    disabledPaths: [...DISABLED_AUTH_PATHS],
+    // A session of a non-ACTIVE user is deleted before any endpoint can use it.
+    hooks: { before: refuseInactiveSessions },
     advanced: {
       database: { generateId: "uuid" },
       // Better Auth skips origin checks by default when NODE_ENV=test or TEST is set. Pin them on
