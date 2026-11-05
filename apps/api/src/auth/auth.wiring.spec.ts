@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 
 import { Controller, Get, Global, type INestApplication, Module } from "@nestjs/common";
+import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
 
 import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
@@ -315,6 +316,48 @@ describe("AppModule access control (M2 T6a; L12, L20)", () => {
     const response = await fetch(`${baseUrl}/wiring-probe`);
 
     assert.equal(response.status, 401);
+  });
+});
+
+describe("AppModule route marker check at startup (M2 T6b; L27)", () => {
+  it("starts the normal app", async () => {
+    const app = await createTestApp(testEnvironment());
+
+    try {
+      await app.init();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("refuses to start once a registered route carries @AllowAnonymous()", async () => {
+    @Controller("marked-probe")
+    class MarkedProbeController {
+      @AllowAnonymous()
+      @Get()
+      read(): { ok: true } {
+        return { ok: true };
+      }
+    }
+
+    @Module({
+      imports: [
+        AppModule.forRoot({ environment: testEnvironment(), database: StubDatabaseModule }),
+      ],
+      controllers: [MarkedProbeController],
+    })
+    class MarkedAppModule {}
+
+    const app = await createApp(MarkedAppModule, { logger: false, abortOnError: false });
+
+    try {
+      await assert.rejects(app.init(), {
+        message:
+          "MarkedProbeController.read uses the unsupported integration marker PUBLIC; use @Public() or @AdminOnly().",
+      });
+    } finally {
+      await app.close();
+    }
   });
 });
 

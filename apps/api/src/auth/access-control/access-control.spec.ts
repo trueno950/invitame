@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 
-import { Controller, Get, type INestApplication, Module } from "@nestjs/common";
-import { AllowAnonymous, AuthModule, Roles } from "@thallesp/nestjs-better-auth";
+import {
+  Controller,
+  type ExecutionContext,
+  Get,
+  type INestApplication,
+  Module,
+  type Type,
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { AllowAnonymous, AuthModule, type AuthService, Roles } from "@thallesp/nestjs-better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 
 import { createApp } from "../../app.setup";
@@ -17,7 +25,7 @@ import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-
 import { createAuth } from "../auth.factory";
 import { BackgroundTasks } from "../sign-in-code/background-tasks";
 import { SignInCodeSender } from "../sign-in-code/sign-in-code-sender";
-import { AdminOnly, Public } from "./access-control";
+import { AccessControlGuard, AdminOnly, Public } from "./access-control";
 import { AccessControlModule } from "./access-control.module";
 
 // Access control (M2 T6a; S1, S2, S9, S18; L12, L17, L20) through the shared createApp boundary, the
@@ -47,19 +55,6 @@ class ProbeController {
   readAdmin(): { ok: true } {
     return { ok: true };
   }
-
-  // The integration's own markers are not honored by the project guard: they must never open a route.
-  @AllowAnonymous()
-  @Get("integration-anonymous")
-  readIntegrationAnonymous(): { ok: true } {
-    return { ok: true };
-  }
-
-  @Roles(["ADMIN"])
-  @Get("integration-roles")
-  readIntegrationRoles(): { ok: true } {
-    return { ok: true };
-  }
 }
 
 @AdminOnly()
@@ -67,6 +62,26 @@ class ProbeController {
 class AdminProbeController {
   @Get()
   read(): { ok: true } {
+    return { ok: true };
+  }
+}
+
+// The integration's own markers are not honored by the project guard: an app that registers one must
+// not start (L27), and the guard still refuses such a route per request.
+@Controller("marker-probe")
+class HandlerMarkerProbeController {
+  @AllowAnonymous()
+  @Get()
+  readAnonymous(): { ok: true } {
+    return { ok: true };
+  }
+}
+
+@Roles(["ADMIN"])
+@Controller("class-marker-probe")
+class ClassMarkerProbeController {
+  @Get()
+  readWithRoles(): { ok: true } {
     return { ok: true };
   }
 }
@@ -105,7 +120,7 @@ describe("access control through the project-owned global guard", () => {
   let clientCounter = 0;
   let emailCounter = 0;
 
-  before(async () => {
+  function testModule(controllers: Type<unknown>[]): Type<unknown> {
     @Module({
       imports: [
         createConfigModule({
@@ -117,11 +132,15 @@ describe("access control through the project-owned global guard", () => {
         AuthModule.forRoot({ auth, disableTrustedOriginsCors: true, disableGlobalAuthGuard: true }),
         AccessControlModule,
       ],
-      controllers: [ProbeController, AdminProbeController],
+      controllers,
     })
     class AccessControlTestModule {}
 
-    app = await createApp(AccessControlTestModule, { logger: false });
+    return AccessControlTestModule;
+  }
+
+  before(async () => {
+    app = await createApp(testModule([ProbeController, AdminProbeController]), { logger: false });
     await app.listen(0, "127.0.0.1");
     baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   });
@@ -146,6 +165,34 @@ describe("access control through the project-owned global guard", () => {
 
   function get(path: string, cookie?: string): Promise<Response> {
     return fetch(`${baseUrl}${path}`, { headers: cookie ? { cookie } : {} });
+  }
+
+  function authGet(path: string, cookie?: string): Promise<Response> {
+    clientCounter += 1;
+    return fetch(`${baseUrl}/api/auth${path}`, {
+      headers: {
+        "x-forwarded-for": `10.20.${clientCounter >> 8}.${clientCounter & 255}`,
+        ...(cookie ? { cookie } : {}),
+      },
+    });
+  }
+
+  /**
+   * Creates a session for a stored ACTIVE user through Better Auth's own adapter and returns the signed
+   * cookie the browser would hold. Bypasses the email-code quota, which allows 5 codes per hour.
+   */
+  async function createSession(userId: string): Promise<{ cookie: string; token: string }> {
+    const context = await auth.$context;
+    const session = await context.internalAdapter.createSession(userId);
+    const signature = createHmac("sha256", secret).update(session.token).digest("base64");
+    return {
+      cookie: `${SESSION_COOKIE}=${encodeURIComponent(`${session.token}.${signature}`)}`,
+      token: session.token,
+    };
+  }
+
+  function storedSession(token: string): Record<string, unknown> | undefined {
+    return database.session?.find((row) => row.token === token);
   }
 
   /** Signs a new customer in through the real email-code flow and returns the session cookie. */
@@ -226,13 +273,16 @@ describe("access control through the project-owned global guard", () => {
       assert.equal((await get("/probe/undecorated", cookie)).status, 401);
     });
 
-    it("never opens a route marked only with the integration's own decorators", async () => {
-      const { cookie } = await signInCustomer();
+    it("deletes the session of a DISABLED user when the guard refuses it", async () => {
+      const { email, cookie } = await signInCustomer();
+      const user = storedUser(email);
+      user.status = "DISABLED";
 
-      for (const path of ["/probe/integration-anonymous", "/probe/integration-roles"]) {
-        assert.equal((await get(path)).status, 500, `${path} without a session`);
-        assert.equal((await get(path, cookie)).status, 500, `${path} with a customer session`);
-      }
+      assert.equal((await get("/probe/undecorated", cookie)).status, 401);
+      assert.equal(
+        database.session?.some((row) => row.userId === user.id),
+        false,
+      );
     });
   });
 
@@ -302,11 +352,13 @@ describe("access control through the project-owned global guard", () => {
       const { email, cookie } = await signInCustomer();
 
       for (const body of [{ role: "ADMIN" }, { status: "DISABLED" }, { status: "ACTIVE" }]) {
-        const response = await authPost("/update-user", body, cookie);
-        const error = (await response.json()) as { code?: string };
-
-        assert.equal(response.status, 400, JSON.stringify(body));
-        assert.equal(error.code, "FIELD_NOT_ALLOWED");
+        // Over HTTP the route is disabled (404); `input: false` still guards the server-side call.
+        assert.equal((await authPost("/update-user", body, cookie)).status, 404);
+        await assert.rejects(
+          auth.api.updateUser({ headers: new Headers({ cookie }), body: body as never }),
+          (error: { body?: { code?: string } }) => error.body?.code === "FIELD_NOT_ALLOWED",
+          JSON.stringify(body),
+        );
       }
 
       const user = storedUser(email);
@@ -350,6 +402,178 @@ describe("access control through the project-owned global guard", () => {
         database.user?.some((row) => row.email === email),
         false,
       );
+    });
+  });
+
+  describe("Better Auth user-mutating endpoints (L16, L28)", () => {
+    const disabledPaths = [
+      "/update-user",
+      "/change-email",
+      "/delete-user",
+      "/delete-user/callback",
+      "/change-password",
+      "/request-password-reset",
+      "/reset-password",
+      "/email-otp/request-password-reset",
+      "/forget-password/email-otp",
+      "/email-otp/reset-password",
+      "/email-otp/request-email-change",
+      "/email-otp/change-email",
+      "/email-otp/verify-email",
+      "/verify-email",
+      "/send-verification-email",
+      "/update-session",
+      "/link-social",
+      "/unlink-account",
+    ];
+
+    it("answers 404 on every disabled path, even with a valid session, and changes nothing", async () => {
+      const { email, cookie } = await signInCustomer();
+      const before = { ...storedUser(email) };
+      const body = {
+        name: "x".repeat(500),
+        image: "https://example.test/a.png",
+        newEmail: "other@example.test",
+        email,
+        newPassword: "a-long-enough-password",
+        otp: "000000",
+      };
+
+      for (const path of disabledPaths) {
+        assert.equal((await authPost(path, body, cookie)).status, 404, `POST ${path}`);
+        assert.equal((await authGet(path, cookie)).status, 404, `GET ${path}`);
+      }
+
+      assert.deepEqual(storedUser(email), before);
+      assert.equal((await authGet("/get-session", cookie)).status, 200, "the session still works");
+    });
+
+    it("keeps code sign-in and sign-out working; sign-out deletes the session", async () => {
+      const { cookie } = await signInCustomer();
+      const token = decodeURIComponent(cookie.split("=")[1] ?? "").split(".")[0] ?? "";
+      assert.ok(storedSession(token));
+
+      const response = await authPost("/sign-out", {}, cookie);
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { success: true });
+      assert.equal(storedSession(token), undefined);
+    });
+  });
+
+  describe("sessions of non-ACTIVE users on Better Auth's own endpoints (S18, L27, L28)", () => {
+    // Every enabled endpoint that reads a session. Each must answer a refused session exactly as it
+    // answers a request without one.
+    const sessionEndpoints: Array<{ method: "GET" | "POST"; path: string; body?: unknown }> = [
+      { method: "GET", path: "/get-session" },
+      { method: "GET", path: "/list-sessions" },
+      { method: "GET", path: "/list-accounts" },
+      { method: "GET", path: "/account-info" },
+      { method: "POST", path: "/revoke-session", body: { token: "unknown" } },
+      { method: "POST", path: "/revoke-sessions", body: {} },
+      { method: "POST", path: "/revoke-other-sessions", body: {} },
+      { method: "POST", path: "/verify-password", body: { password: "a-long-enough-password" } },
+      { method: "POST", path: "/get-access-token", body: { providerId: "google" } },
+      { method: "POST", path: "/refresh-token", body: { providerId: "google" } },
+      { method: "POST", path: "/sign-out", body: {} },
+    ];
+
+    async function call(endpoint: (typeof sessionEndpoints)[number], cookie?: string) {
+      const response =
+        endpoint.method === "GET"
+          ? await authGet(endpoint.path, cookie)
+          : await authPost(endpoint.path, endpoint.body, cookie);
+      return { status: response.status, body: await response.text() };
+    }
+
+    it("serves get-session and list-sessions to an ACTIVE user", async () => {
+      const { email, cookie } = await signInCustomer();
+
+      const session = await authGet("/get-session", cookie);
+      assert.equal(session.status, 200);
+      assert.equal(((await session.json()) as { user?: { email?: string } }).user?.email, email);
+      assert.equal((await authGet("/list-sessions", cookie)).status, 200);
+    });
+
+    for (const endpoint of sessionEndpoints) {
+      it(`${endpoint.method} ${endpoint.path} treats a DISABLED user's session as no session and deletes it`, async () => {
+        const { email } = await signInCustomer();
+        const user = storedUser(email);
+        const { cookie, token } = await createSession(String(user.id));
+        // The race of L28: the session exists, then the stored status changes behind its back.
+        user.status = "DISABLED";
+
+        const anonymous = await call(endpoint);
+        const refused = await call(endpoint, cookie);
+
+        assert.deepEqual(refused, anonymous);
+        assert.equal(storedSession(token), undefined, "the refused session row is deleted");
+      });
+    }
+
+    it("answers get-session with 200 null for any non-ACTIVE status, read on every request", async () => {
+      const { email } = await signInCustomer();
+      const user = storedUser(email);
+
+      for (const status of ["DISABLED", "UNKNOWN", undefined]) {
+        user.status = "ACTIVE";
+        const { cookie, token } = await createSession(String(user.id));
+        assert.notEqual(await (await authGet("/get-session", cookie)).text(), "null");
+
+        user.status = status;
+        const response = await authGet("/get-session", cookie);
+
+        assert.equal(response.status, 200, String(status));
+        assert.equal(await response.text(), "null");
+        assert.equal(storedSession(token), undefined);
+      }
+    });
+  });
+
+  describe("route markers at startup (L27)", () => {
+    for (const [label, controller, expected] of [
+      [
+        "a handler",
+        HandlerMarkerProbeController,
+        /HandlerMarkerProbeController\.readAnonymous.*PUBLIC/,
+      ],
+      [
+        "a controller",
+        ClassMarkerProbeController,
+        /ClassMarkerProbeController\.readWithRoles.*ROLES/,
+      ],
+    ] as const) {
+      it(`refuses to start when ${label} carries an unsupported integration marker`, async () => {
+        const marked = await createApp(testModule([ProbeController, controller]), {
+          logger: false,
+        });
+
+        try {
+          await assert.rejects(marked.init(), expected);
+        } finally {
+          await marked.close();
+        }
+      });
+    }
+
+    it("still refuses a marked route per request, before any session lookup", async () => {
+      let sessionLookups = 0;
+      const guard = new AccessControlGuard(new Reflector(), {
+        api: {
+          getSession: async () => {
+            sessionLookups += 1;
+            return null;
+          },
+        },
+      } as unknown as AuthService);
+      const context = {
+        getHandler: () => HandlerMarkerProbeController.prototype.readAnonymous,
+        getClass: () => HandlerMarkerProbeController,
+        switchToHttp: () => ({ getRequest: () => ({ headers: {} }) }),
+      } as unknown as ExecutionContext;
+
+      await assert.rejects(guard.canActivate(context), /unsupported integration marker PUBLIC/);
+      assert.equal(sessionLookups, 0);
     });
   });
 });
