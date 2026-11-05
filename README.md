@@ -20,6 +20,7 @@ Compose.
 ```bash
 pnpm install
 cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.local.example apps/web/.env.local
 pnpm db:up
 pnpm db:migrate
 pnpm db:seed
@@ -46,11 +47,25 @@ Rate limits run in every environment and are stored in PostgreSQL. They identify
 - `AUTH_TRUSTED_PROXIES`: optional comma-separated IP addresses or CIDR ranges of proxies that append to that
   header. Without it, only a header holding a single address is accepted.
 - `AUTH_PROXY_SECRET`: the shared web-to-API secret, at least 32 characters and different from
-  `BETTER_AUTH_SECRET`; generate it like the auth secret and never commit it. It travels in the
-  `x-invitame-proxy-secret` header, which the web proxy will send (**planned**, M2 T8b). Required in production,
-  where the API refuses every `/api/auth` request without it with a generic `403`; the client IP header is trusted
-  only next to a valid secret. Optional outside production: without it the API serves direct requests and trusts
-  the client IP header as before.
+  `BETTER_AUTH_SECRET`; generate it like the auth secret and never commit it. The web sends it in the
+  `x-invitame-proxy-secret` header. Required in production, where the API refuses every `/api/auth` request
+  without it with a generic `403`; the client IP header is trusted only next to a valid secret. Optional outside
+  production: without it the API serves direct requests and trusts the client IP header as before.
+
+### Web server settings
+
+The browser talks only to the web origin. The web proxies `/api/auth/*` to the API and calls the API from its
+server with the session cookie (ADR 0004 decision 4). Its settings live in `apps/web/.env.local`, are read only
+by server code, and never use the `NEXT_PUBLIC_` prefix, so they never reach the browser bundle. They are
+validated on first use:
+
+- `API_ORIGIN`: the API's internal origin, by default `http://localhost:3001`; required in production.
+- `AUTH_PROXY_SECRET`: the same value as the API's; required in production.
+- `AUTH_CLIENT_IP_HEADER`: the same value as the API's; the web sets it to the client IP. Defaults to
+  `x-forwarded-for` outside production; required in production.
+- `AUTH_EDGE_CLIENT_IP_HEADER`: the header the platform edge overwrites with the client IP, which the web reads.
+  Defaults to `x-forwarded-for` outside production, which Next.js fills from the socket; required in production,
+  where `x-forwarded-for` and `forwarded` are refused because a browser can set them.
 
 ### Local email
 
@@ -151,7 +166,7 @@ non-interactive terminal.
 
 | Path | Purpose |
 | --- | --- |
-| `apps/web` | Next.js 16 App Router landing page runtime |
+| `apps/web` | Next.js 16 App Router landing page runtime, the `/api/auth` proxy, and the server-side API client |
 | `apps/api` | NestJS REST API runtime and Prisma ownership boundary |
 | `docs/architecture` | Architecture decisions and operating model |
 | `docs/database` | Relational model and JSONB boundary |

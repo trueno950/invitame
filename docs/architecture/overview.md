@@ -9,7 +9,7 @@ implemented.
 
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
-| Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy. | Dashboard, authoring flows, and public invitation routes. **Planned.** |
+| Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy, a proxy for `/api/auth`, and a server-side API client (no sign-in pages yet). | Dashboard, authoring flows, and public invitation routes. **Planned.** |
 | API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling and administrator creation by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
@@ -56,13 +56,6 @@ and account status.
   built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`, and in production
   `AUTH_PROXY_SECRET`) and the shared Prisma client; the API refuses to start when any of them is missing or
   invalid.
-- In production every `/api/auth` request must carry the shared web-to-API secret (`AUTH_PROXY_SECRET`) in the
-  `x-invitame-proxy-secret` header (ADR 0004 decision 4, L36). Without it the API answers
-  `403 {"code":"FORBIDDEN"}` and logs an `auth_proxy_rejected` warning with the path only, before any endpoint,
-  hook, or rate-limit step runs; it compares SHA-256 digests in constant time. The API always removes that header,
-  and removes the client IP header unless the secret was valid. Outside production without a configured secret it
-  serves direct requests and trusts the client IP header as before. The web proxy that sends the secret is
-  **planned** (M2 T8b).
 - The integration's own global guard is disabled (`disableGlobalAuthGuard: true`); the project-owned guard
   described in "Access control" replaces it.
 - `CORS_ORIGIN` is the single trusted-origins list. The project owns CORS (`credentials: true`; methods `GET`,
@@ -75,8 +68,8 @@ and account status.
 ### Sessions and cookies (current)
 
 This is the implemented API side of ADR 0004 decision 4 as amended on 2026-11-05 (S14, S16;
-`auth/session-settings.ts`, `auth/auth.factory.ts`, `auth/inactive-session-hook.ts`). The web proxy for
-`/api/auth` and the web server's API client are not implemented yet (**planned**, M2 T8b).
+`auth/session-settings.ts`, `auth/auth.factory.ts`, `auth/inactive-session-hook.ts`). The web side is
+described in "Web boundary" below.
 
 - `AUTH_BASE_URL` is the public web origin through which the web will proxy `/api/auth`. Startup validation
   requires it to be one of the `CORS_ORIGIN` entries, because Better Auth trusts that origin on its own, and
@@ -92,6 +85,46 @@ This is the implemented API side of ADR 0004 decision 4 as amended on 2026-11-05
   skips Better Auth's refresh for administrators, and a session update hook refuses any expiry change that is
   not a customer's session refresh. The cookie keeps the 7-day `Max-Age`; the stored expiry decides, and
   every request reads it.
+
+### Web boundary (current)
+
+This is the implemented web side of ADR 0004 decision 4 as amended on 2026-11-05 (S7, S14; `apps/web/lib/server`,
+`apps/web/app/api/auth/[...path]/route.ts`, and `apps/api/src/auth/auth-request-guard.ts`). The sign-in and
+profile pages are **planned** (M2 T8c and T8d).
+
+```text
+Browser ──► apps/web /api/auth/* (proxy) ──► apps/api /api/auth/*
+                adds x-invitame-proxy-secret and the client IP header
+
+apps/web server components and actions ──► apps/api /me
+                Better Auth cookies and x-invitame-proxy-secret only
+```
+
+- The browser talks only to the web origin. `GET` and `POST /api/auth/*` are forwarded to the API's
+  `/api/auth/*` with the query string; other methods get `405`, paths outside `/api/auth/` get `404`.
+- The proxy forwards only `accept`, `accept-language`, `content-type`, `cookie`, `origin`, and `user-agent`; it
+  never forwards `host`, hop-by-hop headers, or a browser copy of the client IP or secret headers. It sets the
+  API's client IP header (`AUTH_CLIENT_IP_HEADER`) from the edge header (`AUTH_EDGE_CLIENT_IP_HEADER`) when that
+  holds one valid address, and the `x-invitame-proxy-secret` header from `AUTH_PROXY_SECRET`.
+- Bounds: request bodies up to 16 KiB (larger gets `413`) and 10 seconds for the whole upstream exchange.
+  Redirects are returned, not followed. The upstream status, body, and every `Set-Cookie` pass unchanged, without
+  hop-by-hop headers, and with `Cache-Control: no-store`. An unreachable API gets `502`, a timeout `504`, and an
+  API `5xx` keeps its status; all three return the generic `SERVICE_UNAVAILABLE` body and log an
+  `auth_proxy_upstream_failed` warning with the path, reason, and status only.
+- The API refuses every `/api/auth` request without the secret in production (`403 {"code":"FORBIDDEN"}` and an
+  `auth_proxy_rejected` warning with the path only) before any endpoint, hook, or rate-limit step runs. It
+  always removes the secret header, and removes the client IP header unless the secret was valid. Outside
+  production without a configured secret it serves direct requests and trusts the client IP header as before.
+- The server-side API client (`lib/server/api-client.ts`, bound to the request by `lib/server/session-api.ts`)
+  sends only Better Auth's cookies (`better-auth.*` and `__Host-better-auth.*`) and the secret. It calls
+  `GET /me` and `PATCH /me` (the browser cannot call `PATCH` because of CORS), maps `401` to "not signed in",
+  and maps other failures to a typed `ApiClientError` that never carries the response body. The API does not
+  check the secret on `/me` in Milestone 2.
+- Rolling sessions: a session read by the web server refreshes the stored session but sends the browser no
+  cookie. The browser's cookie is extended only when `GET /api/auth/get-session` runs through the proxy, so
+  the pages must trigger it (T8c).
+- The web settings have no `NEXT_PUBLIC_` prefix and are read only by server modules; the route handler and
+  `session-api.ts` import `server-only`. See the README for the variables.
 
 ### Access control (current)
 
@@ -261,7 +294,7 @@ administrator sign-in.
   with the `quota` stage.
 - The client IP comes from one configured header, `AUTH_CLIENT_IP_HEADER` (default `x-forwarded-for` outside
   production; required in production), which the API trusts only next to a valid proxy secret when one is
-  configured. Without `AUTH_TRUSTED_PROXIES`, only a single-address value is accepted;
+  configured (see "Web boundary"). Without `AUTH_TRUSTED_PROXIES`, only a single-address value is accepted;
   with it, trusted proxy hops are stripped from the right.
 - In production, a request whose client IP cannot be resolved gets the generic `503` below and a
   `client_ip_unresolved` warning; it never shares one rate-limit bucket. Startup also fails when Better Auth's
