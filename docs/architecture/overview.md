@@ -10,7 +10,7 @@ implemented.
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
 | Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy. | Dashboard, authoring flows, and public invitation routes. **Planned.** |
-| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, a deny-by-default guard with an administrator role check, and account disabling by a server-side command. | Feature modules exposing stable REST contracts; administrator sign-in and the user's own profile. **Planned.** |
+| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, a deny-by-default guard with an administrator role check, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling by a server-side command. | Feature modules exposing stable REST contracts; administrator sign-in. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
@@ -40,7 +40,8 @@ apps/api/src/
   database/     Prisma module and service
   email/        email delivery port, retry/alert policy, and Resend, Mailpit, and in-memory adapters
   health/       database-backed health endpoint and tests
-  users/        disable-user use case, its Prisma adapter, and the `user:disable` command
+  users/        own profile (`GET /me`, `PATCH /me`), the disable-user use case, their Prisma adapters, and the
+                `user:disable` command
   app.module.ts Nest composition root
   app.setup.ts  shared app creation: body parser off, Helmet, CORS, validation, shutdown hooks
   main.ts       HTTP bootstrap through the shared app creation
@@ -95,8 +96,8 @@ This is the implemented state of ADR 0004 decision 6.
   (`disabledPaths`, `DISABLED_AUTH_PATHS` in `auth/auth.factory.ts`): `/update-user`, `/change-email`,
   `/delete-user` and its callback, `/change-password`, `/request-password-reset`, `/reset-password`, the
   email-code password reset, email change, and email verification routes, `/verify-email`,
-  `/send-verification-email`, `/update-session`, `/link-social`, and `/unlink-account`. The restriction covers
-  HTTP, not server-side `auth.api.*` calls.
+  `/send-verification-email`, `/update-session`, `/link-social`, and `/unlink-account`. Profile changes go
+  only through `PATCH /me`. The restriction covers HTTP, not server-side `auth.api.*` calls.
 - A Better Auth `session.create.before` hook (`auth/auth.factory.ts`) refuses a session to a user who is not
   `ACTIVE` on every sign-in path, and to an administrator on the email-code paths. On
   `POST /api/auth/sign-in/email-otp` the refusal is the same `400 INVALID_OTP` as a wrong code.
@@ -104,6 +105,23 @@ This is the implemented state of ADR 0004 decision 6.
   `200 {"success":true}`.
 - `pnpm --filter @invitame/api user:disable -- <email>` (`users/`) sets a user to `DISABLED` and deletes all of
   their sessions in one transaction. It is idempotent and logs the user id only.
+
+### Own profile (current)
+
+The signed-in user's own profile is the first owned resource (`users/`, in the module template's layers).
+
+- `GET /me` returns `200 {"id","email","displayName","role"}` from the stored user of the session;
+  `displayName` is `null` when no name is set.
+- `PATCH /me` takes exactly `{"displayName": string | null}` and returns the updated profile. The name is
+  trimmed and must then have 1 to 120 characters (Unicode code points, as `VarChar(120)` counts them) with no
+  control character or unpaired surrogate; `null` clears it. Invalid values get `400` and change nothing.
+- The user id comes only from the session (`@SessionUserId()`), never from the path, query, or body. Any
+  other body field, including `id`, `email`, `role`, and `status`, gets `400`: the global `ValidationPipe`
+  runs with `whitelist` and `forbidNonWhitelisted` (`app.setup.ts`).
+- Anonymous, invalid, and non-`ACTIVE` sessions get `401` from the global guard, before the body is
+  validated.
+- Non-goals in Milestone 2: changing the email address and deleting the account; their Better Auth routes are
+  disabled.
 
 ### Customer sign-in code (current)
 
