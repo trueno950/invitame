@@ -25,7 +25,7 @@ import { UsersModule } from "./users.module";
 // disposable, already migrated local database. It is not part of `pnpm test` or CI.
 
 const TRUSTED_ORIGIN = "http://localhost:3000";
-const AUTH_BASE_URL = "http://localhost:3998";
+const AUTH_BASE_URL = "http://localhost:3000";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const SESSION_COOKIE = "better-auth.session_token";
 

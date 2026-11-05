@@ -64,8 +64,8 @@ function testEnvironment(overrides: Record<string, unknown> = {}): Record<string
     // Syntactically valid and never connected: the stub replaces the Prisma client.
     DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
     BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
-    // Fixed origin: the listening port is ephemeral; Better Auth uses it only for absolute URLs.
-    AUTH_BASE_URL: "http://localhost:3001",
+    // The public web origin (L33): one of the trusted origins. The listening port is ephemeral.
+    AUTH_BASE_URL: TRUSTED_ORIGIN,
   };
 
   for (const [name, value] of Object.entries(overrides)) {
@@ -103,6 +103,21 @@ describe("AppModule startup configuration", () => {
       "an AUTH_BASE_URL with a path",
       { AUTH_BASE_URL: "http://localhost:3001/api" },
       "AUTH_BASE_URL must not include a path, query, or fragment.",
+    ],
+    [
+      "an AUTH_BASE_URL outside the trusted origins",
+      { AUTH_BASE_URL: "http://localhost:3001" },
+      "AUTH_BASE_URL must be one of the trusted origins in CORS_ORIGIN.",
+    ],
+    [
+      "production with an http AUTH_BASE_URL",
+      {
+        NODE_ENV: "production",
+        EMAIL_FROM: "InvitaMe <no-reply@example.test>",
+        RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
+        AUTH_CLIENT_IP_HEADER: "x-real-ip",
+      },
+      "AUTH_BASE_URL must use HTTPS in production.",
     ],
     [
       "production without a client IP header",

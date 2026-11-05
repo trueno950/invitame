@@ -24,9 +24,9 @@ import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 
 const AUTH_BASE_PATH = "/api/auth";
 const TEST_ORIGIN = "http://localhost:3000";
-// Fixed origin: the listening port is ephemeral and unknown until after the module is built.
-// Better Auth uses baseURL only to build absolute URLs, which these probes never follow.
-const TEST_AUTH_BASE_URL = "http://localhost:3001";
+// The public web origin, which must be trusted (L33). The listening port is ephemeral; Better Auth
+// uses baseURL to build absolute URLs, which these probes never follow, and to name cookies.
+const TEST_AUTH_BASE_URL = TEST_ORIGIN;
 
 class ProbeInputDto {
   @IsString()

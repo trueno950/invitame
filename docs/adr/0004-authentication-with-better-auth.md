@@ -7,7 +7,8 @@ administrator sign-in with a password and a mandatory authenticator app, Resend 
 Amended the same day, before any implementation, to define administrator enrollment (decision 3) and email
 failure handling (decision 8) after the native review. Decision 8 was amended again on 2026-11-04, during
 implementation, to send codes in the background, and decision 3 on the same day to bound the pre-enrollment
-window; the status stays Accepted.
+window. Decision 4 was amended on 2026-11-05 to route the session cookie through the web origin and to fix the
+cookie name and the session lifetimes; the status stays Accepted.
 
 ## Context
 
@@ -71,6 +72,22 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    (`app.` and `api.` subdomains), with the cookie scoped so both the browser and the web server can send it. The
    Railway Hobby plan is for development; production moves to the Pro plan, which Railway positions for production
    workloads.
+
+   **Amended (2026-11-05).** The human owner chose how the cookie reaches the web server and how long a
+   session lasts (S14, S16):
+
+   - The browser talks only to the web origin. The web proxies `/api/auth` to the API and calls the API from its
+     server with the cookie. Better Auth's base URL (`AUTH_BASE_URL`) is that public web origin, and it must be
+     one of the trusted origins in `CORS_ORIGIN`.
+   - The session cookie is host-only on the web host: it has no `Domain` attribute, so no other host, such as a
+     future host for public invitations, receives it. In production it is named
+     `__Host-better-auth.session_token` and is `HttpOnly`, `Secure`, `SameSite=Lax`, and `Path=/`. Production
+     requires an `https` base URL. In local `http` development it is named `better-auth.session_token` and is
+     not `Secure`. Every other Better Auth cookie follows the same rule.
+   - A customer session lasts 7 days and is extended to 7 days from now at most once per day of use.
+   - An administrator session lasts 12 hours from sign-in and is never extended; after that the administrator
+     signs in again with the password and the authenticator app. This applies before enrollment too, and the
+     24-hour enrollment window of decision 3 is unchanged.
 5. **Origins.** CORS allows credentials only for configured trusted origins, and the same list feeds Better Auth's
    origin checks.
 6. **Authorization.** A global guard denies by default and public routes are marked explicitly. Public sign-up

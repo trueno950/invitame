@@ -30,7 +30,7 @@ import { OwnProfileController } from "./own-profile.controller";
 // in `own-profile.prisma.db-spec.ts`.
 
 const TRUSTED_ORIGIN = "http://localhost:3000";
-const AUTH_BASE_URL = "http://localhost:3001";
+const AUTH_BASE_URL = "http://localhost:3000";
 const SESSION_COOKIE = "better-auth.session_token";
 
 type Row = Record<string, unknown>;

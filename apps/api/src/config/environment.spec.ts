@@ -6,6 +6,7 @@ import { validateEnvironment } from "./environment";
 
 // Generated per run: secrets never live in source.
 const SECRET = randomBytes(32).toString("base64url");
+const PRODUCTION_ORIGIN = "https://app.example.test";
 
 function environmentWith(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const environment: Record<string, unknown> = {
@@ -14,7 +15,8 @@ function environmentWith(overrides: Record<string, unknown> = {}): Record<string
     CORS_ORIGIN: "http://localhost:3000",
     DATABASE_URL: "postgresql://invitame:invitame@localhost:5432/invitame",
     BETTER_AUTH_SECRET: SECRET,
-    AUTH_BASE_URL: "http://localhost:3001",
+    // The public web origin through which the web proxies `/api/auth` (L33).
+    AUTH_BASE_URL: "http://localhost:3000",
   };
 
   for (const [name, value] of Object.entries(overrides)) {
@@ -37,7 +39,7 @@ describe("validateEnvironment", () => {
     const environment = validateEnvironment(environmentWith());
 
     assert.equal(environment.BETTER_AUTH_SECRET, SECRET);
-    assert.equal(environment.AUTH_BASE_URL, "http://localhost:3001");
+    assert.equal(environment.AUTH_BASE_URL, "http://localhost:3000");
     assert.deepEqual(environment.TRUSTED_ORIGINS, ["http://localhost:3000"]);
   });
 
@@ -101,10 +103,73 @@ describe("validateEnvironment", () => {
 
     it("normalizes a trailing slash and surrounding whitespace to the origin", () => {
       const environment = validateEnvironment(
-        environmentWith({ AUTH_BASE_URL: " https://api.example.test/ " }),
+        environmentWith({
+          AUTH_BASE_URL: " https://app.example.test/ ",
+          CORS_ORIGIN: "https://app.example.test",
+        }),
       );
 
-      assert.equal(environment.AUTH_BASE_URL, "https://api.example.test");
+      assert.equal(environment.AUTH_BASE_URL, "https://app.example.test");
+    });
+
+    // L20, L33: Better Auth silently trusts the origin of its base URL. Requiring it in the CORS list
+    // makes that trust explicit, so the two lists can never disagree.
+    it("must be one of the trusted origins in CORS_ORIGIN", () => {
+      const message = "AUTH_BASE_URL must be one of the trusted origins in CORS_ORIGIN.";
+
+      assertRejected({ AUTH_BASE_URL: "http://localhost:3001" }, message);
+      assertRejected(
+        { AUTH_BASE_URL: "https://localhost:3000", CORS_ORIGIN: "http://localhost:3000" },
+        message,
+      );
+    });
+
+    it("accepts any entry of the trusted-origins list", () => {
+      const environment = validateEnvironment(
+        environmentWith({
+          AUTH_BASE_URL: "https://app.example.test",
+          CORS_ORIGIN: "http://localhost:3000,https://app.example.test/",
+        }),
+      );
+
+      assert.equal(environment.AUTH_BASE_URL, "https://app.example.test");
+    });
+
+    it("must use https in production, so every cookie is Secure (S14)", () => {
+      const production = {
+        NODE_ENV: "production",
+        EMAIL_FROM: "InvitaMe <no-reply@example.test>",
+        RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
+        AUTH_CLIENT_IP_HEADER: "x-real-ip",
+      };
+
+      assertRejected(
+        {
+          ...production,
+          AUTH_BASE_URL: "http://app.example.test",
+          CORS_ORIGIN: "http://app.example.test",
+        },
+        "AUTH_BASE_URL must use HTTPS in production.",
+      );
+      assert.equal(
+        validateEnvironment(
+          environmentWith({
+            ...production,
+            AUTH_BASE_URL: "https://app.example.test",
+            CORS_ORIGIN: "https://app.example.test",
+          }),
+        ).AUTH_BASE_URL,
+        "https://app.example.test",
+      );
+    });
+
+    it("may use http outside production, for local development", () => {
+      for (const NODE_ENV of ["development", "test"]) {
+        assert.equal(
+          validateEnvironment(environmentWith({ NODE_ENV })).AUTH_BASE_URL,
+          "http://localhost:3000",
+        );
+      }
     });
   });
 
@@ -188,6 +253,8 @@ describe("validateEnvironment", () => {
     ): Record<string, unknown> {
       return environmentWith({
         NODE_ENV: "production",
+        CORS_ORIGIN: PRODUCTION_ORIGIN,
+        AUTH_BASE_URL: PRODUCTION_ORIGIN,
         EMAIL_TRANSPORT: "resend",
         EMAIL_FROM: PRODUCTION_SENDER,
         RESEND_API_KEY: RESEND_KEY,
@@ -335,6 +402,8 @@ describe("validateEnvironment", () => {
     ): Record<string, unknown> {
       return environmentWith({
         NODE_ENV: "production",
+        CORS_ORIGIN: PRODUCTION_ORIGIN,
+        AUTH_BASE_URL: PRODUCTION_ORIGIN,
         EMAIL_FROM: "InvitaMe <no-reply@example.test>",
         RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
         AUTH_CLIENT_IP_HEADER: "x-real-ip",

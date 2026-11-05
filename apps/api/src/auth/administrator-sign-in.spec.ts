@@ -35,7 +35,8 @@ import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 // `generateTOTP` endpoint.
 
 const TRUSTED_ORIGIN = "http://localhost:3000";
-const AUTH_BASE_URL = "http://localhost:3001";
+// The public web origin, which must be one of the trusted origins (L33).
+const AUTH_BASE_URL = TRUSTED_ORIGIN;
 const SESSION_COOKIE = "better-auth.session_token";
 const TWO_FACTOR_COOKIE = "better-auth.two_factor";
 const TRUST_DEVICE_COOKIE = "better-auth.trust_device";

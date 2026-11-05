@@ -22,7 +22,7 @@ function baseEnvironment(overrides: Record<string, unknown>): Record<string, unk
     CORS_ORIGIN: "http://localhost:3000",
     DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
     BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
-    AUTH_BASE_URL: "http://localhost:3001",
+    AUTH_BASE_URL: "http://localhost:3000",
     ...overrides,
   };
 }
@@ -62,6 +62,8 @@ describe("EmailModule", () => {
     const sender = await resolveSender(
       baseEnvironment({
         NODE_ENV: "production",
+        CORS_ORIGIN: "https://app.example.test",
+        AUTH_BASE_URL: "https://app.example.test",
         EMAIL_FROM: "InvitaMe <no-reply@example.test>",
         RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
         AUTH_CLIENT_IP_HEADER: "x-forwarded-for",

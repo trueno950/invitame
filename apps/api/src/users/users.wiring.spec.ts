@@ -33,7 +33,7 @@ describe("AppModule own profile wiring", () => {
           // Syntactically valid and never connected: the stub replaces the Prisma client.
           DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
           BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
-          AUTH_BASE_URL: "http://localhost:3001",
+          AUTH_BASE_URL: "http://localhost:3000",
         },
         database: StubDatabaseModule,
       }),

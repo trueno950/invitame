@@ -236,6 +236,38 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
     );
   });
 
+  it("stores an administrator session for 12 hours from sign-in and never extends it (S16)", async () => {
+    const admin = await seedAdministrator();
+    const before = Date.now();
+    const signedIn = await signIn(admin.email, admin.password);
+    const after = Date.now();
+    assert.equal(signedIn.status, 200);
+    const cookie = cookieFrom(signedIn, SESSION_COOKIE);
+    assert.ok(cookie);
+
+    const stored = await prisma.session.findFirstOrThrow({ where: { userId: admin.id } });
+    assert.equal(stored.expiresAt.getTime() - stored.createdAt.getTime(), 12 * HOUR_MS);
+    assert.ok(stored.expiresAt.getTime() >= before + 12 * HOUR_MS - 5_000);
+    assert.ok(stored.expiresAt.getTime() <= after + 12 * HOUR_MS + 5_000);
+
+    // Eleven hours in: Better Auth's own rule would extend the session to 7 days from now.
+    const expiresAt = new Date(Date.now() + HOUR_MS);
+    const createdAt = new Date(expiresAt.getTime() - 12 * HOUR_MS);
+    await prisma.session.update({
+      where: { id: stored.id },
+      data: { createdAt, updatedAt: createdAt, expiresAt },
+    });
+
+    const read = await call("/get-session", undefined, cookie);
+
+    assert.equal(read.status, 200);
+    assert.equal(((await read.json()) as { user: { id: string } }).user.id, admin.id);
+    assert.equal(cookieFrom(read, SESSION_COOKIE), undefined, "no cookie is reissued");
+    const unchanged = await prisma.session.findUniqueOrThrow({ where: { id: stored.id } });
+    assert.equal(unchanged.expiresAt.getTime(), expiresAt.getTime());
+    assert.equal(unchanged.updatedAt.getTime(), createdAt.getTime(), "the row was not rewritten");
+  });
+
   it("deletes a pre-enrollment session once the window ends and refuses enrollment", async () => {
     const admin = await seedAdministrator();
     const pending = cookieFrom(await signIn(admin.email, admin.password), SESSION_COOKIE);
