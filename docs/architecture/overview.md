@@ -9,7 +9,7 @@ implemented.
 
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
-| Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy, a proxy for `/api/auth`, and a server-side API client (no sign-in pages yet). | Dashboard, authoring flows, and public invitation routes. **Planned.** |
+| Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy, a proxy for `/api/auth`, a server-side API client, and the customer pages `/ingresar` (sign-in by emailed code) and `/cuenta` (own profile and sign-out); administrator pages are planned (M2 T8d). | Dashboard, authoring flows, and public invitation routes. **Planned.** |
 | API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling and administrator creation by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
@@ -89,8 +89,8 @@ described in "Web boundary" below.
 ### Web boundary (current)
 
 This is the implemented web side of ADR 0004 decision 4 as amended on 2026-11-05 (S7, S14; `apps/web/lib/server`,
-`apps/web/app/api/auth/[...path]/route.ts`, and `apps/api/src/auth/auth-request-guard.ts`). The sign-in and
-profile pages are **planned** (M2 T8c and T8d).
+`apps/web/app/api/auth/[...path]/route.ts`, and `apps/api/src/auth/auth-request-guard.ts`). The customer pages
+are described in "Customer pages" below; the administrator pages are **planned** (M2 T8d).
 
 ```text
 Browser ──► apps/web /api/auth/* (proxy) ──► apps/api /api/auth/*
@@ -121,10 +121,38 @@ apps/web server components and actions ──► apps/api /me
   and maps other failures to a typed `ApiClientError` that never carries the response body. The API does not
   check the secret on `/me` in Milestone 2.
 - Rolling sessions: a session read by the web server refreshes the stored session but sends the browser no
-  cookie. The browser's cookie is extended only when `GET /api/auth/get-session` runs through the proxy, so
-  the pages must trigger it (T8c).
+  cookie. The browser's cookie is extended only when `GET /api/auth/get-session` runs through the proxy; see
+  "Customer pages" for why the web runs it before a signed-in page renders.
 - The web settings have no `NEXT_PUBLIC_` prefix and are read only by server modules; the route handler and
-  `session-api.ts` import `server-only`. See the README for the variables.
+  `session-api.ts` import `server-only`. `instrumentation.ts` validates them when the Node.js server starts;
+  on an invalid setting it logs one `web_config_invalid` line that names the variable (never its value) and
+  exits with code 1, because Next.js 16.3.5 would otherwise keep running and answer every request with `500`.
+  `next build` skips this check and needs none of the variables. See the README for the variables.
+
+### Customer pages (current)
+
+This is M2 T8c (S1, S6; L34, L39): `apps/web/app/ingresar`, `apps/web/app/cuenta`, `apps/web/proxy.ts`, and
+`apps/web/lib/customer`. Product copy is Spanish and addresses the customer with "tú" (see `CONTEXT.md`).
+
+- `/ingresar` signs a customer in by emailed code. The browser sends `POST /api/auth/email-otp/send-verification-otp`
+  with `{ email, type: "sign-in" }`, then `POST /api/auth/sign-in/email-otp` with `{ email, otp }`, both to the
+  same-origin proxy, so the browser receives the session cookie directly. The copy is the same for every
+  address (S24). A wrong or expired code (`400 INVALID_OTP` or `OTP_EXPIRED`), a rate limit (`429`), and every
+  other failure each map to one fixed Spanish message; the API's text is never shown. A visitor who is already
+  signed in is sent to `/cuenta`.
+- `/cuenta` is a server component that reads `GET /me` on the web server. Without a session it redirects to
+  `/ingresar`; when the API fails it shows a retry notice. A customer sees the email and display name and can
+  change or clear the name through a server action that calls `PATCH /me`; a `400` becomes the Spanish length
+  message (1 to 120 characters). An administrator sees only a neutral notice and the sign-out button.
+- Sign-out sends `POST /api/auth/sign-out` from the browser through the proxy, then loads `/ingresar`.
+- Rolling sessions: Better Auth sends the refreshed session cookie only in the same `getSession` call that
+  moves the stored expiry, and the API guard behind `GET /me` also runs that refresh. A refresh started by the
+  browser after the render would therefore find a fresh session and receive no cookie. So `proxy.ts` (the
+  Next.js proxy, formerly middleware) runs `GET /api/auth/get-session` through the web's `/api/auth` proxy
+  before every page whose render reads the session (`/ingresar`, `/cuenta`, and the paths under `/cuenta`),
+  and returns every `Set-Cookie` with the page. It runs for a page `GET` and for a server action's `POST`
+  that carry a Better Auth cookie, waits at most 3 seconds, and never blocks the page: on any failure the page
+  renders and its own `GET /me` decides. A new page that reads the session must join the same matcher.
 
 ### Access control (current)
 

@@ -3,7 +3,8 @@ import { AUTH_PROXY_SECRET_HEADER } from "./proxy-headers.ts";
 /**
  * Server-only settings of the web runtime (M2 T8b; L33, L36). None of them has the `NEXT_PUBLIC_`
  * prefix, so Next.js never inlines them into a browser bundle, and only server modules import this
- * file. They are validated on first use, not at import, so `next build` needs none of them.
+ * file. They are validated when the Node.js server starts (`instrumentation.ts`) and on first use,
+ * never at import, so `next build` needs none of them.
  */
 export interface WebServerConfig {
   /** Internal origin of the API, from `API_ORIGIN`. */
