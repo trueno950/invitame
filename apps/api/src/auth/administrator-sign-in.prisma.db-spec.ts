@@ -10,7 +10,10 @@ import { EmailDeliveryService } from "../email/application/email-delivery.servic
 import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../email/infrastructure/system-email-delivery-runtime";
 import type { IssueInitialPasswordResult } from "../users/application/administrator-account.repository";
+import { DisableUserUseCase } from "../users/application/disable-user.use-case";
 import { PrismaAdministratorAccountRepository } from "../users/infrastructure/prisma-administrator-account.repository";
+import { PrismaUserAccessRepository } from "../users/infrastructure/prisma-user-access.repository";
+import type { AuthRequestLog } from "./auth-request-guard";
 import { createAuth } from "./auth.factory";
 import { BackgroundTasks } from "./sign-in-code/background-tasks";
 import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
@@ -50,8 +53,8 @@ function cookieFrom(response: Response, name: string): string | undefined {
 describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
 
-  /** The production `createAuth` on a given Prisma client; the race probe passes a wrapped one. */
-  function buildAuth(client: PrismaClient) {
+  /** The production `createAuth` on a given Prisma client; the race probes pass a wrapped one. */
+  function buildAuth(client: PrismaClient, log: AuthRequestLog = () => {}) {
     return createAuth({
       secret: randomBytes(32).toString("base64url"),
       baseURL: AUTH_BASE_URL,
@@ -64,7 +67,7 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
       ),
       clientIp: { header: "x-forwarded-for", trustedProxies: [] },
       requireClientIp: false,
-      log: () => {},
+      log,
     });
   }
 
@@ -398,20 +401,14 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
     }
   });
 
-  // L31 (T9, T11): `admin:create` reissues a password while the first TOTP code of an enrollment is
-  // being confirmed. The reissue deletes the unconfirmed `TwoFactor` row, every session, and the old
-  // credential account, so the confirmation must not enroll the administrator or leave a session. The
-  // race is forced deterministically: the wrapped Prisma client runs the real reissue transaction right
-  // after the confirmation has read the `TwoFactor` row, before it writes anything.
-  //
-  // DEFECT (T9a-D1, routed to the parent): today the confirmation still answers 200, stores a 12-hour
-  // session and sets its cookie, and sets `twoFactorEnabled` although the `TwoFactor` row is gone.
-  // Better Auth 1.7.16 `verify-totp` writes the user and the session without a condition, and the
-  // Prisma adapter turns the update of the deleted row into `null` instead of an error. Marked `todo`
-  // so the run stays green while the failure stays visible; remove the option once it is fixed.
-  it("fails closed when admin:create reissues the password during the first TOTP confirmation", {
-    todo: "DEFECT T9a-D1: verify-totp enrolls and signs in after a concurrent admin:create reissue",
-  }, async () => {
+  // T9a-D1, fixed by T7c (L31, L48, S39): something commits while the first TOTP code of an
+  // enrollment is being confirmed. Better Auth 1.7.16 `verify-totp` sets `twoFactorEnabled` and then
+  // creates the enrolled session, each in its own statement, so the session-create hook must refuse
+  // the session and revert the flag. The race is forced deterministically: a wrapped Prisma client
+  // runs `during` right after the confirmation has read the `TwoFactor` row, before it writes.
+  const SUPERSEDED = { status: 401, code: "ENROLLMENT_SUPERSEDED" };
+
+  async function racingEnrollment(label: string) {
     let interpose: (() => Promise<void>) | undefined;
     const racing = prisma.$extends({
       query: {
@@ -426,9 +423,10 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
         },
       },
     });
-    const raceAuth = buildAuth(racing as unknown as PrismaClient);
+    const events: unknown[] = [];
+    const raceAuth = buildAuth(racing as unknown as PrismaClient, (event) => events.push(event));
     const accounts = new PrismaAdministratorAccountRepository(prisma);
-    const email = `t9-race-${runId}@example.test`;
+    const email = `t7c-${label}-${runId}@example.test`;
     emails.push(email);
     const issue = async (password: string) =>
       accounts.issueInitialPassword({
@@ -437,8 +435,8 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
         issuedAt: new Date(),
       });
     const oldPassword = randomBytes(18).toString("base64url");
-    const newPassword = randomBytes(18).toString("base64url");
     assert.equal((await issue(oldPassword)).outcome, "created");
+    const userId = (await prisma.user.findUniqueOrThrow({ where: { email } })).id;
 
     const pending = cookieFrom(await signIn(email, oldPassword, raceAuth), SESSION_COOKIE);
     assert.ok(pending);
@@ -447,36 +445,182 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
     const { totpURI } = (await enable.json()) as { totpURI: string };
     const rawSecret = decodeBase32(new URL(totpURI).searchParams.get("secret") ?? "");
 
-    let reissue: IssueInitialPasswordResult | undefined;
-    interpose = async () => {
-      reissue = await issue(newPassword);
-    };
-    const confirmation = await call(
-      "/two-factor/verify-totp",
-      { code: await totpCode(rawSecret) },
-      pending,
+    return {
       raceAuth,
-    );
+      events,
+      email,
+      userId,
+      oldPassword,
+      issue,
+      /** Confirms the first code with the pending session while `during` commits in between. */
+      async confirm(during: () => Promise<void>) {
+        let ran = false;
+        interpose = async () => {
+          await during();
+          ran = true;
+        };
+        const response = await call(
+          "/two-factor/verify-totp",
+          { code: await totpCode(rawSecret) },
+          pending,
+          raceAuth,
+        );
+        // A harness failure must not pass as a refusal (L48 R3-race-todo-masks-harness-failure).
+        assert.equal(ran, true, "the interposed step completed inside the confirmation");
+        return response;
+      },
+    };
+  }
+
+  async function refusal(response: Response) {
+    const body = await response.text();
+    let code: unknown;
+    try {
+      code = (JSON.parse(body) as { code?: unknown } | null)?.code;
+    } catch {
+      code = body;
+    }
+    return {
+      status: response.status,
+      code,
+      sessionCookie: cookieFrom(response, SESSION_COOKIE) !== undefined,
+    };
+  }
+
+  async function storedEnrollment(userId: string) {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    return {
+      sessionRows: await prisma.session.count({ where: { userId } }),
+      twoFactorEnabled: user.twoFactorEnabled,
+      twoFactorRows: await prisma.twoFactor.count({ where: { userId } }),
+    };
+  }
+
+  it("fails closed when admin:create reissues the password during the first TOTP confirmation", async () => {
+    const race = await racingEnrollment("reissue");
+    const newPassword = randomBytes(18).toString("base64url");
+    let reissue: IssueInitialPasswordResult | undefined;
+
+    const confirmation = await race.confirm(async () => {
+      reissue = await race.issue(newPassword);
+    });
 
     assert.equal(reissue?.outcome, "reissued", "the reissue committed inside the confirmation");
-    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
-    assert.deepEqual(
-      {
-        sessionCookie: cookieFrom(confirmation, SESSION_COOKIE) !== undefined,
-        sessionRows: await prisma.session.count({ where: { userId: user.id } }),
-        twoFactorEnabled: user.twoFactorEnabled,
-        twoFactorRows: await prisma.twoFactor.count({ where: { userId: user.id } }),
-      },
-      { sessionCookie: false, sessionRows: 0, twoFactorEnabled: false, twoFactorRows: 0 },
-      `confirmation answered ${confirmation.status}`,
+    assert.deepEqual(await refusal(confirmation), { ...SUPERSEDED, sessionCookie: false });
+    assert.deepEqual(await storedEnrollment(race.userId), {
+      sessionRows: 0,
+      twoFactorEnabled: false,
+      twoFactorRows: 0,
+    });
+    // Only the reissued password works; it opens a pending session (`enroll` asserts it) that enrolls.
+    assert.equal((await signIn(race.email, race.oldPassword, race.raceAuth)).status, 401);
+    await enroll({ email: race.email, password: newPassword }, race.raceAuth);
+    assert.equal((await storedEnrollment(race.userId)).twoFactorEnabled, true);
+  });
+
+  it("logs one enrollment_superseded event without personal data when it reverts a confirmation", async () => {
+    const race = await racingEnrollment("log");
+
+    await race.confirm(async () => {
+      await race.issue(randomBytes(18).toString("base64url"));
+    });
+
+    assert.deepEqual(race.events, [
+      { event: "administrator_enrollment_superseded", path: "/two-factor/verify-totp" },
+    ]);
+    const logged = JSON.stringify(race.events);
+    for (const personal of [race.email, race.userId, race.oldPassword]) {
+      assert.equal(logged.includes(personal), false);
+    }
+  });
+
+  it("refuses the old confirmation after the reissued password has started a new enrollment", async () => {
+    const race = await racingEnrollment("re-enable");
+    const newPassword = randomBytes(18).toString("base64url");
+    let newPending: string | undefined;
+    let newSecret = "";
+
+    const confirmation = await race.confirm(async () => {
+      assert.equal((await race.issue(newPassword)).outcome, "reissued");
+      // The same auth instance throughout: each test instance signs cookies with its own secret.
+      newPending = cookieFrom(await signIn(race.email, newPassword, race.raceAuth), SESSION_COOKIE);
+      assert.ok(newPending);
+      const enable = await call(
+        "/two-factor/enable",
+        { password: newPassword },
+        newPending,
+        race.raceAuth,
+      );
+      assert.equal(enable.status, 200);
+      const { totpURI } = (await enable.json()) as { totpURI: string };
+      newSecret = decodeBase32(new URL(totpURI).searchParams.get("secret") ?? "");
+    });
+
+    assert.deepEqual(await refusal(confirmation), { ...SUPERSEDED, sessionCookie: false });
+    assert.deepEqual(await storedEnrollment(race.userId), {
+      sessionRows: 1,
+      twoFactorEnabled: false,
+      twoFactorRows: 1,
+    });
+    assert.equal(
+      (await prisma.twoFactor.findUniqueOrThrow({ where: { userId: race.userId } })).verified,
+      false,
+      "the new enrollment is still unconfirmed",
     );
-    // Only the reissued password works, and it opens a pending session that must enroll again.
-    assert.equal((await signIn(email, oldPassword, raceAuth)).status, 401);
-    const fresh = await signIn(email, newPassword, raceAuth);
-    assert.equal(fresh.status, 200);
-    assert.ok(
-      cookieFrom(fresh, SESSION_COOKIE),
-      "a pending session, not a second-factor challenge",
+
+    // The new holder confirms the new enrollment; a normal first confirmation logs nothing.
+    const confirmed = await call(
+      "/two-factor/verify-totp",
+      { code: await totpCode(newSecret) },
+      newPending,
+      race.raceAuth,
+    );
+    assert.equal(confirmed.status, 200);
+    assert.ok(cookieFrom(confirmed, SESSION_COOKIE));
+    assert.equal((await storedEnrollment(race.userId)).twoFactorEnabled, true);
+    assert.equal(race.events.length, 1);
+  });
+
+  it("refuses a first TOTP confirmation that races user:disable and leaves no session", async () => {
+    const race = await racingEnrollment("disable");
+    const disable = new DisableUserUseCase(new PrismaUserAccessRepository(prisma), () => {});
+
+    const confirmation = await race.confirm(async () => {
+      assert.ok(await disable.execute(race.email));
+    });
+
+    assert.deepEqual(await refusal(confirmation), { ...SUPERSEDED, sessionCookie: false });
+    const stored = await storedEnrollment(race.userId);
+    assert.deepEqual(
+      { sessionRows: stored.sessionRows, twoFactorEnabled: stored.twoFactorEnabled },
+      { sessionRows: 0, twoFactorEnabled: false },
+    );
+    assert.equal(
+      (await prisma.user.findUniqueOrThrow({ where: { id: race.userId } })).status,
+      "DISABLED",
+    );
+  });
+
+  it("lets an enrolled administrator pass the sign-in challenge with a stale session cookie", async () => {
+    const admin = await seedAdministrator();
+    const { rawSecret, session: stale } = await enroll(admin);
+    assert.ok(stale);
+    await prisma.session.deleteMany({ where: { userId: admin.id } });
+    const challenge = cookieFrom(await signIn(admin.email, admin.password), TWO_FACTOR_COOKIE);
+    assert.ok(challenge);
+
+    const verified = await call(
+      "/two-factor/verify-totp",
+      { code: await totpCode(rawSecret) },
+      `${stale}; ${challenge}`,
+    );
+
+    assert.equal(verified.status, 200);
+    assert.ok(cookieFrom(verified, SESSION_COOKIE));
+    assert.equal(await prisma.session.count({ where: { userId: admin.id } }), 1);
+    assert.equal(
+      (await prisma.user.findUniqueOrThrow({ where: { id: admin.id } })).twoFactorEnabled,
+      true,
     );
   });
 });

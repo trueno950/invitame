@@ -2,7 +2,7 @@
 
 Maps every test obligation of [ADR 0004](../adr/0004-authentication-with-better-auth.md) (its Consequences) and
 every S17 case of the Milestone 2 plan to a named assertion (S13, S30). Status: current as of Milestone 2 task
-T9a. Browser end-to-end coverage is planned for T9b and is not claimed here.
+T7c. Browser end-to-end coverage is planned for T9b and is not claimed here.
 
 ## How the evidence runs
 
@@ -16,7 +16,7 @@ T9a. Browser end-to-end coverage is planned for T9b and is not claimed here.
   with controlled clocks, through `pnpm test` in the `quality-gates` job.
 
 A test name below is quoted exactly; `›` separates a `describe` block from its test. "Added" marks assertions
-written in T9a; every other row existed before it.
+written in T9a and "added in T7c" those of the T9a-D1 fix; every other row existed before them.
 
 ### Suite legend
 
@@ -55,7 +55,7 @@ written in T9a; every other row existed before it.
 | 7 | Attempt limits | DB-code: "refuses the right code after 3 wrong attempts and stores no user or session" (added); DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor" (stored `failedVerificationCount`). | U-code: "rejects the 4th attempt with TOO_MANY_ATTEMPTS after 3 wrong codes, even with the right code"; U-admin: "ends a challenge after 5 wrong codes", "locks the second factor for 15 minutes after 10 consecutive failures". |
 | 8 | Rate limiting | DB-limits: "persists client IP buckets and answers the 4th request from one IP with 429", "stores the per-email count under a hashed key and sends no 6th code within the hour"; DB-proxy: "stores the client IP bucket and the code for a request with the secret"; DB-auth: "writes rate-limit rows to the database". | U-limits: "client IP rate limits (S10, S25)" block, "rate-limit store failure (S19) › rejects code requests and code sign-ins with a generic 503 before the endpoint runs"; U-admin: "answers the 4th password attempt from one client IP within a minute with 429", "answers the 6th second-factor attempt from one client IP within a minute with 429". |
 | 9 | Mandatory administrator second factor | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor". | U-admin: "requires a second factor after the password once enrolled: no session before the code", "never trusts a device: the next password sign-in still asks for the second factor", "disables two-factor removal, URI re-reading, and email two-factor codes". |
-| 10 | Enrollment gate | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor", "deletes a pre-enrollment session once the window ends and refuses enrollment", "refuses an expired initial password exactly like a wrong one and creates no session", "fails closed when admin:create reissues the password during the first TOTP confirmation" (added, `todo`: defect T9a-D1 below). | U-admin: "enrollment gate (S6, S21)" and "pre-enrollment window of 24 hours (S20)" blocks. |
+| 10 | Enrollment gate | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor", "deletes a pre-enrollment session once the window ends and refuses enrollment", "refuses an expired initial password exactly like a wrong one and creates no session", "fails closed when admin:create reissues the password during the first TOTP confirmation" (added; required since T7c, defect T9a-D1 below), "refuses the old confirmation after the reissued password has started a new enrollment", "refuses a first TOTP confirmation that races user:disable and leaves no session", "logs one enrollment_superseded event without personal data when it reverts a confirmation", and "lets an enrolled administrator pass the sign-in challenge with a stale session cookie" (added in T7c). | U-admin: "enrollment gate (S6, S21)" and "pre-enrollment window of 24 hours (S20)" blocks. |
 | 11 | Email OTP sign-in rejected for administrators | DB-code: "sends an administrator no code and removes the issued row", "refuses an email-code session to an administrator (<state>) exactly like an invalid code" for `pending`, `enrolled`, and `expired` (added). | U-admin: "email codes for administrators in every enrollment state (S22)" block. |
 | 12 | Email send failures | DB-code: "invalidates only a code whose delivery failed, keeping a newer code valid". | U-code: "invalidates a code whose delivery fails after the retries, without logging the code or the address"; U-sender: "logs the delivery stage for an unexpected delivery error and still invalidates the code"; U-email: "stops at the attempt limit and surfaces only the generic retryable error". |
 
@@ -87,21 +87,33 @@ T9b and are listed here without a test.
 | L40 | R3-proxy-composition-unproved, R3-session-api-cookie-roundtrip-still-unproved, R4-cuenta-outage-latency-serialized | Web proxy and cookie round trip through a browser: T9b. |
 | L43 | R3-admin-form-transitions-untested, R3-get-auth-session-wiring-unproved, R4-admin-session-failure-undiagnosable (T9, T11) | Web form transitions and server wiring: T9b. |
 | L44 | R3-activar-page-routing-unproved, R3-enrollment-flow-transitions-untested, R3-qr-medium-correction-test-vacuous | Enrollment page, its transitions, and the QR test: T9b. |
-| L31 | A TOTP confirmation that runs while `admin:create` reissues a password must fail closed (T9, T11). | DB-admin: "fails closed when admin:create reissues the password during the first TOTP confirmation" fails today; see defect T9a-D1. |
+| L31 | A TOTP confirmation that runs while `admin:create` reissues a password must fail closed (T9, T11). | DB-admin: "fails closed when admin:create reissues the password during the first TOTP confirmation" and the T7c variants in row 10; see defect T9a-D1 (fixed). |
 
 Earlier database-suite findings also resolved by the shared harness: the order coupling, cleanup outside
 `finally`, identifier substring match, and random client IP collisions of L17, and
 R3-db-spec-client-ip-collisions of L25. Other findings routed to T9 before L35 are not revisited in T9a.
 
-## Open defect
+## Fixed defect
 
-**T9a-D1: an enrollment confirmation that races an `admin:create` reissue enrolls the administrator.** The
-DB-admin test forces the race deterministically: a wrapped Prisma client runs the real reissue transaction right
-after `/two-factor/verify-totp` has read the unconfirmed `TwoFactor` row. Observed on PostgreSQL 17: the
-confirmation answers 200, sets a session cookie, stores a 12-hour session, and sets `twoFactorEnabled` to true,
-although the reissue deleted the `TwoFactor` row and every session. Whoever holds the old initial password gets an
-enrolled administrator session without a stored second factor, and the account is then enrolled without a secret,
-so `admin:create` refuses to reissue it. Cause: Better Auth 1.7.16 `verify-totp` updates the user and creates the
-session without a condition, and the Prisma adapter returns `null` for the update of the deleted row instead of
-failing. The test carries the node:test `todo` option, so `test:db` stays green while the failure stays visible;
-remove the option once the defect is fixed.
+**T9a-D1: an enrollment confirmation that raced an `admin:create` reissue enrolled the administrator.** Fixed in
+T7c (S39, L48). The DB-admin tests force the race deterministically: a wrapped Prisma client runs the real
+reissue transaction (or `user:disable`) right after `/two-factor/verify-totp` has read the unconfirmed
+`TwoFactor` row. Before the fix, observed on PostgreSQL 17, the confirmation answered 200, set a session cookie,
+stored a 12-hour session, and set `twoFactorEnabled` to true although the reissue had deleted the `TwoFactor` row
+and every session. Cause: Better Auth 1.7.16 `verify-totp` sets the flag, creates the session, and sets the
+cookie in separate statements without a condition.
+
+Current behavior: the session-create hook (`auth/auth.factory.ts`, `isSupersededFirstConfirmation` and
+`revertSupersededEnrollment` in `auth/administrator-enrollment.ts`) checks every session that `verify-totp`
+creates for an `ADMIN` whose flag is already true. A verified `TwoFactor` row means a sign-in challenge and is
+not checked further. Otherwise it is a first confirmation, and the session named by the request's signed session
+cookie must still exist and belong to the same user. If it does not, the hook sets `twoFactorEnabled` from true
+back to false for that user only, logs one `administrator_enrollment_superseded` event with the path and no
+personal data, and refuses with `401 {"code":"ENROLLMENT_SUPERSEDED"}`, so no session row and no cookie exist.
+The reissued password then signs in to a pending session and can enroll. The tests above are required; none
+carries the `todo` option.
+
+Residual risk (accepted in L48): if the process stops between Better Auth's flag update and the compensating
+update, the flag stays true with no `TwoFactor` row and no session. The account then fails closed:
+`admin:create` refuses to reissue an enrolled administrator, and only the manual recovery procedure (T10)
+releases it.
