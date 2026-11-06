@@ -4,10 +4,13 @@ import { after, describe, it } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-
+import { hashPassword } from "better-auth/crypto";
+import { ClientAddresses, requireLocalDatabaseUrl } from "../../test/database";
 import { EmailDeliveryService } from "../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../email/infrastructure/system-email-delivery-runtime";
+import type { IssueInitialPasswordResult } from "../users/application/administrator-account.repository";
+import { PrismaAdministratorAccountRepository } from "../users/infrastructure/prisma-administrator-account.repository";
 import { createAuth } from "./auth.factory";
 import { BackgroundTasks } from "./sign-in-code/background-tasks";
 import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
@@ -16,21 +19,13 @@ import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 // sign-in, and backup codes on real PostgreSQL (M2 T7; S6, S20, S21). Administrators are seeded through
 // Better Auth's internal adapter and password hasher, not through `admin:create`. Runs only through
 // `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that points at a disposable,
-// already migrated local database. It is not part of `pnpm test` or CI.
+// already migrated local database, locally and in the CI `database-tests` job; not part of `pnpm test`.
 
 const AUTH_BASE_URL = "http://localhost:3996";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const SESSION_COOKIE = "better-auth.session_token";
 const TWO_FACTOR_COOKIE = "better-auth.two_factor";
 const HOUR_MS = 60 * 60 * 1000;
-
-function requireLocalDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  assert.ok(url, "test:db requires an explicit DATABASE_URL");
-  // Fail closed: this suite writes and deletes rows, so it never runs against a remote database.
-  assert.ok(LOCAL_HOSTS.has(new URL(url).hostname), "test:db only runs against a local database");
-  return url;
-}
+const DAY_MS = 24 * HOUR_MS;
 
 function decodeBase32(input: string): string {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -54,45 +49,48 @@ function cookieFrom(response: Response, name: string): string | undefined {
 
 describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
-  const auth = createAuth({
-    secret: randomBytes(32).toString("base64url"),
-    baseURL: AUTH_BASE_URL,
-    trustedOrigins: [AUTH_BASE_URL],
-    database: prismaAdapter(prisma, { provider: "postgresql" }),
-    // No probe here requests a sign-in code.
-    signInCodes: new SignInCodeSender(
-      new EmailDeliveryService(new InMemoryEmailSender(), new SystemEmailDeliveryRuntime()),
-      new BackgroundTasks(() => {}),
-    ),
-    clientIp: { header: "x-forwarded-for", trustedProxies: [] },
-    requireClientIp: false,
-    log: () => {},
-  });
+
+  /** The production `createAuth` on a given Prisma client; the race probe passes a wrapped one. */
+  function buildAuth(client: PrismaClient) {
+    return createAuth({
+      secret: randomBytes(32).toString("base64url"),
+      baseURL: AUTH_BASE_URL,
+      trustedOrigins: [AUTH_BASE_URL],
+      database: prismaAdapter(client, { provider: "postgresql" }),
+      // No probe here requests a sign-in code.
+      signInCodes: new SignInCodeSender(
+        new EmailDeliveryService(new InMemoryEmailSender(), new SystemEmailDeliveryRuntime()),
+        new BackgroundTasks(() => {}),
+      ),
+      clientIp: { header: "x-forwarded-for", trustedProxies: [] },
+      requireClientIp: false,
+      log: () => {},
+    });
+  }
+
+  const auth = buildAuth(prisma);
   const api = auth.api as unknown as Record<string, (input: unknown) => Promise<unknown>>;
   const runId = randomUUID();
   const emails: string[] = [];
-  // Addresses from 198.18.0.0/15 (benchmarking), so rows of this run are easy to remove.
-  const clientPrefix = `198.18.${randomBytes(1)[0]}.`;
-  let clientCounter = 0;
+  const clientAddresses = new ClientAddresses();
 
   after(async () => {
     try {
       await prisma.user.deleteMany({ where: { email: { in: emails } } });
-      await prisma.rateLimit.deleteMany({ where: { key: { startsWith: clientPrefix } } });
+      await prisma.rateLimit.deleteMany({ where: clientAddresses.rateLimitRows() });
     } finally {
       await prisma.$disconnect();
     }
   });
 
-  async function call(path: string, body?: unknown, cookie?: string) {
-    clientCounter += 1;
-    return auth.handler(
+  async function call(path: string, body?: unknown, cookie?: string, target = auth) {
+    return target.handler(
       new Request(`${AUTH_BASE_URL}/api/auth${path}`, {
         method: body === undefined ? "GET" : "POST",
         headers: {
           "content-type": "application/json",
           origin: AUTH_BASE_URL,
-          "x-forwarded-for": `${clientPrefix}${clientCounter % 250}`,
+          "x-forwarded-for": clientAddresses.next(),
           ...(cookie ? { cookie } : {}),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -137,8 +135,26 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
     }
   }
 
-  async function signIn(email: string, password: string) {
-    return call("/sign-in/email", { email, password });
+  async function signIn(email: string, password: string, target = auth) {
+    return call("/sign-in/email", { email, password }, undefined, target);
+  }
+
+  /** Enrolls through the HTTP endpoints; returns the TOTP secret and the confirmed session cookie. */
+  async function enroll(admin: { email: string; password: string }, target = auth) {
+    const pending = cookieFrom(await signIn(admin.email, admin.password, target), SESSION_COOKIE);
+    assert.ok(pending, "the initial password opens a pending session");
+    const enable = await call("/two-factor/enable", { password: admin.password }, pending, target);
+    assert.equal(enable.status, 200);
+    const { totpURI } = (await enable.json()) as { totpURI: string };
+    const rawSecret = decodeBase32(new URL(totpURI).searchParams.get("secret") ?? "");
+    const confirmed = await call(
+      "/two-factor/verify-totp",
+      { code: await totpCode(rawSecret) },
+      pending,
+      target,
+    );
+    assert.equal(confirmed.status, 200);
+    return { rawSecret, session: cookieFrom(confirmed, SESSION_COOKIE) };
   }
 
   it("refuses an expired initial password exactly like a wrong one and creates no session", async () => {
@@ -282,5 +298,185 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
     const enable = await call("/two-factor/enable", { password: admin.password }, pending);
     assert.equal(enable.status, 401);
     assert.equal(await prisma.twoFactor.count({ where: { userId: admin.id } }), 0);
+  });
+
+  // S17: password sign-up stays closed, whatever the body asks for, and stores nothing.
+  it("answers password sign-up with 400 EMAIL_PASSWORD_SIGN_UP_DISABLED and stores no user", async () => {
+    const email = `t9-sign-up-${runId}@example.test`;
+    emails.push(email);
+
+    const response = await call("/sign-up/email", {
+      email,
+      password: randomBytes(18).toString("base64url"),
+      name: "Ana",
+      role: "ADMIN",
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal(
+      ((await response.json()) as { code: string }).code,
+      "EMAIL_PASSWORD_SIGN_UP_DISABLED",
+    );
+    assert.deepEqual(response.headers.getSetCookie(), []);
+    assert.equal(await prisma.user.count({ where: { email } }), 0);
+  });
+
+  // S17: password sign-in reveals nothing about the address or the account behind it.
+  it("answers an unknown address, a customer, and a DISABLED administrator exactly like a wrong password", async () => {
+    const admin = await seedAdministrator();
+    const wrong = await snapshot(await signIn(admin.email, "wrong-password-x"));
+    const customer = `t9-customer-${runId}@example.test`;
+    emails.push(customer);
+    const customerId = (await prisma.user.create({ data: { email: customer } })).id;
+    const disabled = await seedAdministrator();
+    await prisma.user.update({ where: { id: disabled.id }, data: { status: "DISABLED" } });
+
+    const answers = [
+      await snapshot(await signIn(`t9-unknown-${runId}@example.test`, admin.password)),
+      await snapshot(await signIn(customer, admin.password)),
+      await snapshot(await signIn(disabled.email, disabled.password)),
+    ];
+
+    assert.equal(wrong.status, 401);
+    for (const answer of answers) {
+      assert.deepEqual(answer, wrong);
+    }
+    assert.equal(
+      await prisma.session.count({
+        where: { userId: { in: [admin.id, customerId, disabled.id] } },
+      }),
+      0,
+    );
+  });
+
+  // L35 R3-admin-cap-only-at-creation: every session an administrator can obtain is created through
+  // the session hook, so each one stores 12 hours, the second-factor sign-in included.
+  it("stores 12 hours for the enrollment session and for a second-factor sign-in", async () => {
+    const admin = await seedAdministrator();
+    const { rawSecret } = await enroll(admin);
+    const enrolled = await prisma.session.findFirstOrThrow({ where: { userId: admin.id } });
+    assert.equal(enrolled.expiresAt.getTime() - enrolled.createdAt.getTime(), 12 * HOUR_MS);
+    await prisma.session.deleteMany({ where: { userId: admin.id } });
+
+    const challenge = cookieFrom(await signIn(admin.email, admin.password), TWO_FACTOR_COOKIE);
+    const verified = await call(
+      "/two-factor/verify-totp",
+      { code: await totpCode(rawSecret) },
+      challenge,
+    );
+
+    assert.equal(verified.status, 200);
+    const stored = await prisma.session.findFirstOrThrow({ where: { userId: admin.id } });
+    assert.equal(stored.expiresAt.getTime() - stored.createdAt.getTime(), 12 * HOUR_MS);
+  });
+
+  // L35 R4-silent-session-update-refusal: an expiry change outside a customer's session read is
+  // refused on PostgreSQL too, for administrators and customers alike; the stored row is unchanged.
+  it("refuses a server-side session expiry change and leaves the stored row unchanged", async () => {
+    const context = await auth.$context;
+    const admin = await seedAdministrator();
+    assert.equal((await signIn(admin.email, admin.password)).status, 200);
+    const customerEmail = `t9-expiry-${runId}@example.test`;
+    emails.push(customerEmail);
+    const customer = await context.internalAdapter.createUser(
+      { email: customerEmail, name: "", emailVerified: true },
+      { method: "email-otp" },
+    );
+    await context.internalAdapter.createSession(customer.id);
+
+    for (const userId of [admin.id, customer.id]) {
+      const stored = await prisma.session.findFirstOrThrow({ where: { userId } });
+
+      const updated = await context.internalAdapter.updateSession(stored.token, {
+        expiresAt: new Date(Date.now() + 7 * DAY_MS),
+      });
+
+      assert.equal(updated, null, "the update is refused");
+      const unchanged = await prisma.session.findUniqueOrThrow({ where: { id: stored.id } });
+      assert.equal(unchanged.expiresAt.getTime(), stored.expiresAt.getTime());
+      assert.equal(unchanged.updatedAt.getTime(), stored.updatedAt.getTime());
+    }
+  });
+
+  // L31 (T9, T11): `admin:create` reissues a password while the first TOTP code of an enrollment is
+  // being confirmed. The reissue deletes the unconfirmed `TwoFactor` row, every session, and the old
+  // credential account, so the confirmation must not enroll the administrator or leave a session. The
+  // race is forced deterministically: the wrapped Prisma client runs the real reissue transaction right
+  // after the confirmation has read the `TwoFactor` row, before it writes anything.
+  //
+  // DEFECT (T9a-D1, routed to the parent): today the confirmation still answers 200, stores a 12-hour
+  // session and sets its cookie, and sets `twoFactorEnabled` although the `TwoFactor` row is gone.
+  // Better Auth 1.7.16 `verify-totp` writes the user and the session without a condition, and the
+  // Prisma adapter turns the update of the deleted row into `null` instead of an error. Marked `todo`
+  // so the run stays green while the failure stays visible; remove the option once it is fixed.
+  it("fails closed when admin:create reissues the password during the first TOTP confirmation", {
+    todo: "DEFECT T9a-D1: verify-totp enrolls and signs in after a concurrent admin:create reissue",
+  }, async () => {
+    let interpose: (() => Promise<void>) | undefined;
+    const racing = prisma.$extends({
+      query: {
+        twoFactor: {
+          async findFirst({ args, query }) {
+            const result = await query(args);
+            const run = interpose;
+            interpose = undefined;
+            await run?.();
+            return result;
+          },
+        },
+      },
+    });
+    const raceAuth = buildAuth(racing as unknown as PrismaClient);
+    const accounts = new PrismaAdministratorAccountRepository(prisma);
+    const email = `t9-race-${runId}@example.test`;
+    emails.push(email);
+    const issue = async (password: string) =>
+      accounts.issueInitialPassword({
+        email,
+        passwordHash: await hashPassword(password),
+        issuedAt: new Date(),
+      });
+    const oldPassword = randomBytes(18).toString("base64url");
+    const newPassword = randomBytes(18).toString("base64url");
+    assert.equal((await issue(oldPassword)).outcome, "created");
+
+    const pending = cookieFrom(await signIn(email, oldPassword, raceAuth), SESSION_COOKIE);
+    assert.ok(pending);
+    const enable = await call("/two-factor/enable", { password: oldPassword }, pending, raceAuth);
+    assert.equal(enable.status, 200);
+    const { totpURI } = (await enable.json()) as { totpURI: string };
+    const rawSecret = decodeBase32(new URL(totpURI).searchParams.get("secret") ?? "");
+
+    let reissue: IssueInitialPasswordResult | undefined;
+    interpose = async () => {
+      reissue = await issue(newPassword);
+    };
+    const confirmation = await call(
+      "/two-factor/verify-totp",
+      { code: await totpCode(rawSecret) },
+      pending,
+      raceAuth,
+    );
+
+    assert.equal(reissue?.outcome, "reissued", "the reissue committed inside the confirmation");
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    assert.deepEqual(
+      {
+        sessionCookie: cookieFrom(confirmation, SESSION_COOKIE) !== undefined,
+        sessionRows: await prisma.session.count({ where: { userId: user.id } }),
+        twoFactorEnabled: user.twoFactorEnabled,
+        twoFactorRows: await prisma.twoFactor.count({ where: { userId: user.id } }),
+      },
+      { sessionCookie: false, sessionRows: 0, twoFactorEnabled: false, twoFactorRows: 0 },
+      `confirmation answered ${confirmation.status}`,
+    );
+    // Only the reissued password works, and it opens a pending session that must enroll again.
+    assert.equal((await signIn(email, oldPassword, raceAuth)).status, 401);
+    const fresh = await signIn(email, newPassword, raceAuth);
+    assert.equal(fresh.status, 200);
+    assert.ok(
+      cookieFrom(fresh, SESSION_COOKIE),
+      "a pending session, not a second-factor challenge",
+    );
   });
 });

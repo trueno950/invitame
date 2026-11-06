@@ -4,33 +4,24 @@ import { after, describe, it } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-
+import { ClientAddresses, requireLocalDatabaseUrl } from "../../test/database";
 import {
   type EmailDeliveryRuntime,
   EmailDeliveryService,
 } from "../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
-import { EMAIL_CODE_QUOTA, SIGN_IN_CODE_REQUEST_PATH, emailCodeQuotaKey } from "./abuse-limits";
+import { EMAIL_CODE_QUOTA, emailCodeQuotaKey, SIGN_IN_CODE_REQUEST_PATH } from "./abuse-limits";
 import { createAuth } from "./auth.factory";
 import { BackgroundTasks } from "./sign-in-code/background-tasks";
 import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 
 // Abuse limits through the production `createAuth` on the Prisma adapter (M2 T5b). Runs only through
-// `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that points at a disposable,
-// already migrated local database. It is not part of `pnpm test` or CI.
+// `pnpm --filter @invitame/api test:db` (locally and in the CI `database-tests` job) with an explicit
+// DATABASE_URL that points at a disposable, already migrated local database; not part of `pnpm test`.
 
 const AUTH_BASE_URL = "http://localhost:3999";
 const AUTH_PATH = "/api/auth";
 const CLIENT_IP_HEADER = "x-real-ip";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
-function requireLocalDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  assert.ok(url, "test:db requires an explicit DATABASE_URL");
-  // Fail closed: this suite writes and deletes rows, so it never runs against a remote database.
-  assert.ok(LOCAL_HOSTS.has(new URL(url).hostname), "test:db only runs against a local database");
-  return url;
-}
 
 describe("abuse limits on the PostgreSQL RateLimit table", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
@@ -53,17 +44,12 @@ describe("abuse limits on the PostgreSQL RateLimit table", () => {
     log: () => {},
   });
   const runId = randomUUID();
-  // Documentation range (RFC 5737), unique per run so parallel or repeated runs never collide.
-  const clientPrefix = `198.18.${randomBytes(1)[0]}.`;
+  // This suite counts rows on one address, so it draws from the range no other suite shares.
+  const clientAddresses = new ClientAddresses("counted");
   const email = `t5b-quota-${runId}@example.test`;
-  const clientIps: string[] = [];
-  let clientCounter = 0;
 
   function nextClientIp(): string {
-    clientCounter += 1;
-    const ip = `${clientPrefix}${clientCounter}`;
-    clientIps.push(ip);
-    return ip;
+    return clientAddresses.next();
   }
 
   function requestCode(address: string, clientIp: string): Promise<Response> {
@@ -86,10 +72,7 @@ describe("abuse limits on the PostgreSQL RateLimit table", () => {
       await prisma.verification.deleteMany({ where: { identifier: `sign-in-otp-${email}` } });
       await prisma.rateLimit.deleteMany({
         where: {
-          OR: [
-            { key: emailCodeQuotaKey(email) },
-            ...clientIps.map((ip) => ({ key: { startsWith: `${ip}|` } })),
-          ],
+          OR: [{ key: emailCodeQuotaKey(email) }, ...clientAddresses.rateLimitRows().OR],
         },
       });
     } finally {

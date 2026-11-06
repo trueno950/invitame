@@ -4,7 +4,7 @@ import { after, describe, it } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-
+import { ClientAddresses, requireLocalDatabaseUrl } from "../../../test/database";
 import {
   type EmailDeliveryRuntime,
   EmailDeliveryService,
@@ -16,21 +16,14 @@ import { BackgroundTasks } from "./background-tasks";
 import { SignInCodeSender } from "./sign-in-code-sender";
 
 // The production `createAuth` sign-in code flow on the Prisma adapter (M2 T5a). Runs only through
-// `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that points at a disposable,
-// already migrated local database. It is not part of `pnpm test` or CI.
+// `pnpm --filter @invitame/api test:db` (locally and in the CI `database-tests` job) with an explicit
+// DATABASE_URL that points at a disposable, already migrated local database; not part of `pnpm test`.
 
 const AUTH_BASE_URL = "http://localhost:3999";
 const AUTH_PATH = "/api/auth";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const CODE_PATTERN = /\b(\d{6})\b/;
-
-function requireLocalDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  assert.ok(url, "test:db requires an explicit DATABASE_URL");
-  // Fail closed: this suite writes and deletes rows, so it never runs against a remote database.
-  assert.ok(LOCAL_HOSTS.has(new URL(url).hostname), "test:db only runs against a local database");
-  return url;
-}
+const CODE_LIFETIME_MS = 300_000;
+const HOUR_MS = 60 * 60 * 1000;
 
 /** Delivers at once unless the next send is held; a held send fails when released. */
 class HoldingEmailSender implements EmailSender {
@@ -58,6 +51,14 @@ class HoldingEmailSender implements EmailSender {
 
     this.delivered.push(message);
   }
+}
+
+async function snapshot(response: Response) {
+  return {
+    status: response.status,
+    body: await response.text(),
+    setCookie: response.headers.getSetCookie(),
+  };
 }
 
 function codeFrom(message: EmailMessage | undefined): string {
@@ -88,8 +89,7 @@ describe("sign-in codes through createAuth on the Prisma schema (real PostgreSQL
   });
   const runId = randomUUID();
   const emails: string[] = [];
-  const clientPrefix = `198.18.${randomBytes(1)[0]}.`;
-  let clientCounter = 0;
+  const clientAddresses = new ClientAddresses();
 
   function newEmail(label: string): string {
     const email = `t5a-${label}-${runId}@example.test`;
@@ -98,7 +98,6 @@ describe("sign-in codes through createAuth on the Prisma schema (real PostgreSQL
   }
 
   function post(path: string, body: unknown): Promise<Response> {
-    clientCounter += 1;
     return auth.handler(
       new Request(`${AUTH_BASE_URL}${AUTH_PATH}${path}`, {
         method: "POST",
@@ -106,7 +105,7 @@ describe("sign-in codes through createAuth on the Prisma schema (real PostgreSQL
           "content-type": "application/json",
           origin: AUTH_BASE_URL,
           // A fresh client IP per request keeps the per-IP limit out of these flows.
-          "x-forwarded-for": `${clientPrefix}${clientCounter}`,
+          "x-forwarded-for": clientAddresses.next(),
         },
         body: JSON.stringify(body),
       }),
@@ -132,7 +131,7 @@ describe("sign-in codes through createAuth on the Prisma schema (real PostgreSQL
         where: {
           OR: [
             { key: { in: emails.map(emailCodeQuotaKey) } },
-            { key: { startsWith: clientPrefix } },
+            ...clientAddresses.rateLimitRows().OR,
           ],
         },
       });
@@ -203,4 +202,125 @@ describe("sign-in codes through createAuth on the Prisma schema (real PostgreSQL
     assert.equal(sender.attempts.length, attemptsBefore);
     assert.equal((await verificationRows(email)).length, 0);
   });
+
+  // ADR 0004 consequences: code expiry and attempt limits on the stored Verification row (S15).
+  it("stores a 300-second expiry and refuses an expired code without creating a user or session", async () => {
+    const email = newEmail("expired");
+    const before = Date.now();
+    assert.equal((await requestCode(email)).status, 200);
+    const after = Date.now();
+    await tasks.drain();
+    const code = codeFrom(sender.delivered.filter((message) => message.to === email).at(-1));
+
+    const [row] = await verificationRows(email);
+    assert.ok(row);
+    assert.ok(row.expiresAt.getTime() >= before + CODE_LIFETIME_MS);
+    assert.ok(row.expiresAt.getTime() <= after + CODE_LIFETIME_MS);
+
+    // The stored expiry, not a process clock, decides: move it one second into the past.
+    await prisma.verification.update({
+      where: { id: row.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    const expired = await post("/sign-in/email-otp", { email, otp: code });
+
+    assert.equal(expired.status, 400);
+    assert.equal(((await expired.json()) as { code: string }).code, "OTP_EXPIRED");
+    assert.deepEqual(expired.headers.getSetCookie(), []);
+    assert.equal(await prisma.user.count({ where: { email } }), 0);
+  });
+
+  it("refuses the right code after 3 wrong attempts and stores no user or session", async () => {
+    const email = newEmail("attempts");
+    assert.equal((await requestCode(email)).status, 200);
+    await tasks.drain();
+    const code = codeFrom(sender.delivered.filter((message) => message.to === email).at(-1));
+    const wrong = code === "000000" ? "111111" : "000000";
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const response = await post("/sign-in/email-otp", { email, otp: wrong });
+      assert.equal(response.status, 400, `wrong attempt ${attempt}`);
+      const [row] = await verificationRows(email);
+      assert.equal(row?.value.endsWith(`:${attempt}`), true, "the attempt count is stored");
+    }
+
+    const fourth = await post("/sign-in/email-otp", { email, otp: code });
+    assert.equal(fourth.status, 403);
+    assert.equal(((await fourth.json()) as { code: string }).code, "TOO_MANY_ATTEMPTS");
+    assert.deepEqual(fourth.headers.getSetCookie(), []);
+    assert.equal(await prisma.user.count({ where: { email } }), 0);
+    assert.equal((await verificationRows(email)).length, 0, "the exhausted code is deleted");
+  });
+
+  // S17 and S24: the request answers identically whatever the stored account, so it reveals nothing.
+  it("answers a code request identically for unknown, customer, administrator, and DISABLED addresses", async () => {
+    const unknown = newEmail("enum-unknown");
+    const customer = newEmail("enum-customer");
+    const administrator = newEmail("enum-admin");
+    const disabled = newEmail("enum-disabled");
+    await prisma.user.create({ data: { email: customer, emailVerified: true } });
+    await prisma.user.create({ data: { email: administrator, role: "ADMIN" } });
+    await prisma.user.create({ data: { email: disabled, status: "DISABLED" } });
+
+    const answers = [];
+    for (const email of [unknown, customer, administrator, disabled]) {
+      answers.push(await snapshot(await requestCode(email)));
+    }
+    await tasks.drain();
+
+    for (const answer of answers) {
+      assert.deepEqual(answer, { status: 200, body: '{"success":true}', setCookie: [] });
+    }
+    const recipients = new Set(sender.delivered.map((message) => message.to));
+    assert.deepEqual(
+      [unknown, customer, administrator, disabled].map((email) => recipients.has(email)),
+      [true, true, false, false],
+    );
+    assert.equal((await verificationRows(administrator)).length, 0);
+    assert.equal((await verificationRows(disabled)).length, 0);
+  });
+
+  // S22: a code issued while the address was a customer never signs in an administrator.
+  for (const state of ["pending", "enrolled", "expired"] as const) {
+    it(`refuses an email-code session to an administrator (${state}) exactly like an invalid code`, async () => {
+      const other = newEmail(`s22-control-${state}`);
+      assert.equal((await requestCode(other)).status, 200);
+      const email = newEmail(`s22-${state}`);
+      assert.equal((await requestCode(email)).status, 200);
+      await tasks.drain();
+      const code = codeFrom(sender.delivered.filter((message) => message.to === email).at(-1));
+      const control = codeFrom(sender.delivered.filter((message) => message.to === other).at(-1));
+      const invalid = await snapshot(
+        await post("/sign-in/email-otp", {
+          email: other,
+          otp: control === "000000" ? "111111" : "000000",
+        }),
+      );
+
+      // The address becomes an administrator before the code is used.
+      const user = await prisma.user.create({
+        data: { email, role: "ADMIN", twoFactorEnabled: state === "enrolled" },
+      });
+      await prisma.account.create({
+        data: {
+          userId: user.id,
+          providerId: "credential",
+          accountId: user.id,
+          password: "not-a-real-hash",
+          createdAt: new Date(Date.now() - (state === "expired" ? 25 * HOUR_MS : 0)),
+        },
+      });
+
+      const refused = await snapshot(await post("/sign-in/email-otp", { email, otp: code }));
+
+      assert.deepEqual(refused, invalid);
+      assert.equal(invalid.status, 400);
+      assert.equal(await prisma.session.count({ where: { userId: user.id } }), 0);
+      assert.equal(
+        (await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).role,
+        "ADMIN",
+        "the code changed nothing on the account",
+      );
+    });
+  }
 });

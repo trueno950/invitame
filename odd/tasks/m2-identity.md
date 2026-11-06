@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l in progress (L45).
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l merged as #24 (L45, L46); T9a in progress (L47).
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), and T8l on `feat/m2-identity-23-landing` (L23 to L45). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), slice 23 `feat/m2-identity-23-landing` (T8l themed landing, #24, merged), and T9a on `feat/m2-identity-24-integration-tests` (L23 to L47). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -119,6 +119,14 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   «hecha a mano» ni WhatsApp. Cada sección se activa cuando su función exista." No copy claims a feature that does not
   exist yet (catalog, personalization, sharing, attendance confirmation, countdown, location), and every product
   action except «Ingresar» is labeled «Próximamente».
+- **S38** (L47) Testing approach, approved as: "El CI levanta PostgreSQL y corre las pruebas contra la base real.
+  Completo las pruebas que exige el ADR, cada una con nombre. Sumo pruebas en navegador real con @playwright/test
+  (dependencia de desarrollo nueva; el CI descarga Chromium y tarda unos minutos más) para el ingreso de clientes, la
+  cuenta, el ingreso de administradores y la activación del segundo factor." PostgreSQL runs as a CI service and the
+  database suites run there on every push. Browser tests use `@playwright/test`, an approved development dependency,
+  and drive the real web and API against PostgreSQL. No test path may weaken production behavior: emailed codes and
+  TOTP secrets reach a test only through the test harness's own composition, never through a production endpoint,
+  flag, or log.
 
 ## Tasks
 
@@ -140,8 +148,9 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T8c | Customer pages in Spanish product copy addressed with tú (L39): sign-in by email code at `/ingresar`, the own profile at `/cuenta`, and sign-out, all through the web server; the pages extend the session cookie through the proxy before every session read (L34, L37, L40), and the web settings are validated at startup (L38). | S1, S6 | worker | `5ecd5f6` (#20) |
 | T8t | Visual theme foundations (L41): the S35 tokens and fonts in `apps/web` (Tailwind theme and `next/font`), fine-line ornaments as static SVG assets, the shared components in `app/_components`, `/ingresar` and `/cuenta` restyled with unchanged copy and behavior, the current landing moved onto the tokens without new sections, a contrast test over the token pairs, and `docs/design/theme.md`. | S35 | worker | `0de8136` (#21) |
 | T8d | Administrator pages in Spanish product copy addressed with tú, on the S35 theme (L42): password sign-in with the TOTP or backup-code challenge at `/admin/ingresar`, enrollment with a QR code (`lean-qr`) and backup codes shown once at `/admin/activar`, a minimal panel with sign-out at `/admin`, and the T8c sign-out and account-logging findings (L40). | S6, S21, S35, S36 | worker | `219ec1d` (#22), `efc54cd` (#23) |
-| T8l | Themed landing page (L41, L45): the approved concept's sections and the draw-on bouquet in `apps/web/app/page.tsx`, as an honest pre-launch page (S37). | S35, S37 | worker | — |
-| T9 | Integration and E2E tests: every ADR obligation and finding against real PostgreSQL, each traced to a named assertion. | S2, S13, S17, S30 | inline | — |
+| T8l | Themed landing page (L41, L45): the approved concept's sections and the draw-on bouquet in `apps/web/app/page.tsx`, as an honest pre-launch page (S37). | S35, S37 | worker | `26e3e4a` (#24) |
+| T9a | Integration tests on real PostgreSQL in CI (L47): a PostgreSQL service in the CI workflow runs the migrations and `test:db` on every push, and every ADR 0004 test obligation and S17 case maps to a named assertion (S13, S30), together with the database-bound findings routed to T9 in L35 to L44. | S2, S13, S17, S30, S38 | worker | — |
+| T9b | Browser end-to-end tests with `@playwright/test` (L47): customer sign-in by emailed code, the account and sign-out, administrator sign-in with the second factor, and authenticator enrollment, against the real web, API, and PostgreSQL in CI, together with the browser-bound findings routed to T9 in L35 to L44. | S2, S38 | worker | — |
 | T10 | Documentation: ADR wording fixes, architecture, database, and quality-gate docs, environment examples, and the administrator recovery procedure. | S13, S21, S26, S27 | inline | — |
 | T11 | Security evidence: independent verification of every spec, and human sign-off of secret handling, session expiry, and error mapping. | S2 | verify | — |
 
@@ -626,3 +635,24 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   «Próximamente» en el catálogo, secciones de «Así funcionará» y solo «Ingresar» como acción activa. Sin «hecha a
   mano» ni WhatsApp. Cada sección se activa cuando su función exista." The other options were the final launch copy
   now and a minimal landing. This adds S37. Slice 23 (`feat/m2-identity-23-landing`, from `3a9c876`) holds T8l.
+- **L46** (2026-11-06) Slice 23 (`26e3e4a`, PR #24) holds the themed pre-launch landing (T8l). Its gates passed (web
+  214 of 214 and API 315 of 315 tests, 5 of 5 parallel web runs); the copy test failed 7 of 8 against the concept's
+  original claims and passes 8 of 8, and `/` is prerendered as static with no client JavaScript. The risk assessment
+  rated it medium and under budget, so no native review was due. User, choosing an option for "T8l (la portada de
+  pre-lanzamiento) pasó los 7 checks. ¿Apruebas el commit, el PR contra feat/m2-identity y el merge cuando pase el
+  CI?": "Sí: commit, PR y merge (recomendado)", whose description reads: "Commit de la portada verificada (43
+  archivos, 3,691 líneas), PR marcado como excepción de tamaño y merge cuando pase el CI. Las ilustraciones de
+  muestra conservan el botón «Confirmar asistencia» y la cuenta regresiva, marcadas como ejemplo." The other options
+  were removing those sample elements, running the native review first, and holding, so the receipt-driven reminder
+  for this candidate was answered as left unreviewed by the owner. This settles the S37 reading: non-interactive
+  sample illustrations labeled as examples may show coming features. PR #24 passed CI and was merged into the
+  tracker as `1adcf88`, whose tree equals slice 23; CI on #1 passed after #24.
+- **L47** (2026-11-06) T9 approach. Continuous integration ran no PostgreSQL (the nine `*.db-spec.ts` suites ran only
+  locally through `test:db`), and no browser tests existed. User, choosing an option for "¿Cómo armamos T9, las
+  pruebas de integración y de punta a punta?": "PostgreSQL en el CI y navegador (recomendado)", whose description
+  reads: "El CI levanta PostgreSQL y corre las pruebas contra la base real. Completo las pruebas que exige el ADR, cada
+  una con nombre. Sumo pruebas en navegador real con @playwright/test (dependencia de desarrollo nueva; el CI descarga
+  Chromium y tarda unos minutos más) para el ingreso de clientes, la cuenta, el ingreso de administradores y la
+  activación del segundo factor." The other option was HTTP-only end-to-end tests without a browser. This approves
+  `@playwright/test` as a development dependency and a PostgreSQL service in CI, adds S38, and splits T9 into T9a
+  (slice 24, `feat/m2-identity-24-integration-tests`, from `1adcf88`) and T9b.

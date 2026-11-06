@@ -4,7 +4,7 @@ import { after, describe, it } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-
+import { ClientAddresses, requireLocalDatabaseUrl } from "../../../test/database";
 import { emailCodeQuotaKey } from "../../auth/abuse-limits";
 import { createAuth } from "../../auth/auth.factory";
 import { BackgroundTasks } from "../../auth/sign-in-code/background-tasks";
@@ -15,21 +15,12 @@ import { DisableUserUseCase } from "../application/disable-user.use-case";
 import { PrismaUserAccessRepository } from "./prisma-user-access.repository";
 
 // Disabling a user on real PostgreSQL (M2 T6a; ADR 0004 decision 6, S9, S18). Runs only through
-// `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that points at a disposable,
-// already migrated local database. It is not part of `pnpm test` or CI.
+// `pnpm --filter @invitame/api test:db` (locally and in the CI `database-tests` job) with an explicit
+// DATABASE_URL that points at a disposable, already migrated local database; not part of `pnpm test`.
 
 const AUTH_BASE_URL = "http://localhost:3999";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const CODE_PATTERN = /\b(\d{6})\b/;
 const SESSION_COOKIE = "better-auth.session_token";
-
-function requireLocalDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  assert.ok(url, "test:db requires an explicit DATABASE_URL");
-  // Fail closed: this suite writes and deletes rows, so it never runs against a remote database.
-  assert.ok(LOCAL_HOSTS.has(new URL(url).hostname), "test:db only runs against a local database");
-  return url;
-}
 
 describe("disabling a user on the Prisma schema (real PostgreSQL)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
@@ -59,8 +50,7 @@ describe("disabling a user on the Prisma schema (real PostgreSQL)", () => {
   );
   const runId = randomUUID();
   const emails: string[] = [];
-  const clientPrefix = `198.18.${randomBytes(1)[0]}.`;
-  let clientCounter = 0;
+  const clientAddresses = new ClientAddresses();
 
   function newEmail(label: string): string {
     const email = `t6a-${label}-${runId}@example.test`;
@@ -69,14 +59,13 @@ describe("disabling a user on the Prisma schema (real PostgreSQL)", () => {
   }
 
   function post(path: string, body: unknown): Promise<Response> {
-    clientCounter += 1;
     return auth.handler(
       new Request(`${AUTH_BASE_URL}/api/auth${path}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
           origin: AUTH_BASE_URL,
-          "x-forwarded-for": `${clientPrefix}${clientCounter}`,
+          "x-forwarded-for": clientAddresses.next(),
         },
         body: JSON.stringify(body),
       }),
@@ -120,7 +109,7 @@ describe("disabling a user on the Prisma schema (real PostgreSQL)", () => {
         where: {
           OR: [
             { key: { in: emails.map(emailCodeQuotaKey) } },
-            { key: { startsWith: clientPrefix } },
+            ...clientAddresses.rateLimitRows().OR,
           ],
         },
       });

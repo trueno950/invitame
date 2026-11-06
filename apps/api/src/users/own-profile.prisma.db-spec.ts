@@ -7,7 +7,7 @@ import { Global, type INestApplication, Module } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-
+import { ClientAddresses, requireLocalDatabaseUrl } from "../../test/database";
 import { createApp } from "../app.setup";
 import { AccessControlModule } from "../auth/access-control/access-control.module";
 import { createAuth } from "../auth/auth.factory";
@@ -22,20 +22,14 @@ import { UsersModule } from "./users.module";
 
 // Own profile on real PostgreSQL (M2 T6b; S1, S2, S9, S18). Runs only
 // through `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that points at a
-// disposable, already migrated local database. It is not part of `pnpm test` or CI.
+// disposable, already migrated local database, locally and in the CI `database-tests` job; it is not
+// part of `pnpm test`.
 
 const TRUSTED_ORIGIN = "http://localhost:3000";
 const AUTH_BASE_URL = "http://localhost:3000";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const SESSION_COOKIE = "better-auth.session_token";
-
-function requireLocalDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  assert.ok(url, "test:db requires an explicit DATABASE_URL");
-  // Fail closed: this suite writes and deletes rows, so it never runs against a remote database.
-  assert.ok(LOCAL_HOSTS.has(new URL(url).hostname), "test:db only runs against a local database");
-  return url;
-}
+const UNTRUSTED_ORIGIN = "https://attacker.example.test";
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("own profile on the Prisma schema (real PostgreSQL)", () => {
   const databaseUrl = requireLocalDatabaseUrl();
@@ -57,8 +51,7 @@ describe("own profile on the Prisma schema (real PostgreSQL)", () => {
   });
   const runId = randomUUID();
   const emails: string[] = [];
-  const clientPrefix = `198.19.${randomBytes(1)[0]}.`;
-  let clientCounter = 0;
+  const clientAddresses = new ClientAddresses();
   let app: INestApplication;
   let baseUrl: string;
 
@@ -92,7 +85,7 @@ describe("own profile on the Prisma schema (real PostgreSQL)", () => {
     try {
       await app?.close();
       await prisma.user.deleteMany({ where: { email: { in: emails } } });
-      await prisma.rateLimit.deleteMany({ where: { key: { startsWith: clientPrefix } } });
+      await prisma.rateLimit.deleteMany({ where: clientAddresses.rateLimitRows() });
     } finally {
       await prisma.$disconnect();
     }
@@ -100,15 +93,14 @@ describe("own profile on the Prisma schema (real PostgreSQL)", () => {
 
   function request(
     path: string,
-    init: { method?: string; body?: unknown; cookie?: string | undefined } = {},
+    init: { method?: string; body?: unknown; cookie?: string | undefined; origin?: string } = {},
   ) {
-    clientCounter += 1;
     return fetch(`${baseUrl}${path}`, {
       method: init.method ?? "GET",
       headers: {
         "content-type": "application/json",
-        origin: TRUSTED_ORIGIN,
-        "x-forwarded-for": `${clientPrefix}${clientCounter}`,
+        origin: init.origin ?? TRUSTED_ORIGIN,
+        "x-forwarded-for": clientAddresses.next(),
         ...(init.cookie ? { cookie: init.cookie } : {}),
       },
       ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
@@ -143,7 +135,7 @@ describe("own profile on the Prisma schema (real PostgreSQL)", () => {
   }
 
   it("runs against the explicit local database", () => {
-    assert.ok(LOCAL_HOSTS.has(new URL(databaseUrl).hostname));
+    assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(new URL(databaseUrl).hostname));
   });
 
   describe("PATCH /me", () => {
@@ -241,6 +233,122 @@ describe("own profile on the Prisma schema (real PostgreSQL)", () => {
         (await prisma.user.findUniqueOrThrow({ where: { id: userId } })).displayName,
         "",
       );
+    });
+  });
+
+  // ADR 0004 consequences: denied-by-default access, ownership, session expiry and revocation, through
+  // the project guard and Better Auth's mount in one Nest app on real PostgreSQL (S2, S13, S30).
+  describe("denied by default", () => {
+    it("answers GET /me and PATCH /me with 401 without a usable session and writes nothing", async () => {
+      const userId = await createCustomer("denied");
+      const { cookie, token } = await createSession(userId);
+      const [name, value = ""] = cookie.split("=");
+      const tampered = `${name}=${value.slice(0, -4)}AAAA`;
+      await prisma.session.deleteMany({ where: { token } });
+
+      for (const sessionCookie of [undefined, tampered, cookie]) {
+        for (const init of [{}, { method: "PATCH", body: { displayName: "Intruso" } }]) {
+          const response = await request("/me", { ...init, cookie: sessionCookie });
+          assert.equal(response.status, 401, `${init.method ?? "GET"} ${sessionCookie ?? "none"}`);
+        }
+      }
+      assert.equal(
+        (await prisma.user.findUniqueOrThrow({ where: { id: userId } })).displayName,
+        "",
+      );
+    });
+  });
+
+  describe("ownership", () => {
+    it("reads and writes only the session's own user, whatever user id the request names", async () => {
+      const ownerId = await createCustomer("owner");
+      const otherId = await createCustomer("other");
+      const { cookie } = await createSession(ownerId);
+
+      const read = await request(`/me?id=${otherId}&userId=${otherId}`, { cookie });
+      assert.equal(read.status, 200);
+      assert.equal(((await read.json()) as { id: string }).id, ownerId);
+
+      const written = await request(`/me?id=${otherId}&userId=${otherId}`, {
+        method: "PATCH",
+        body: { displayName: "Ana" },
+        cookie,
+      });
+      assert.equal(written.status, 200);
+      const [owner, other] = await Promise.all([
+        prisma.user.findUniqueOrThrow({ where: { id: ownerId } }),
+        prisma.user.findUniqueOrThrow({ where: { id: otherId } }),
+      ]);
+      assert.equal(owner.displayName, "Ana");
+      assert.equal(other.displayName, "", "the other user's row is untouched");
+    });
+  });
+
+  describe("session expiry and revocation", () => {
+    it("refuses a customer session past its stored expiry with 401", async () => {
+      const userId = await createCustomer("expired");
+      const { cookie, token } = await createSession(userId);
+      await prisma.session.update({
+        where: { token },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+
+      assert.equal((await request("/me", { cookie })).status, 401);
+      const stored = await prisma.session.findUnique({ where: { token } });
+      assert.ok(stored === null || stored.expiresAt.getTime() < Date.now(), "never extended");
+    });
+
+    // L35 R3-customer-refresh-via-guard-unproved: a read through the project guard refreshes a
+    // customer session once a day of use has passed, exactly as Better Auth's own endpoint does.
+    it("extends a customer session read through the project guard a day after its last refresh", async () => {
+      const userId = await createCustomer("refresh");
+      const { cookie, token } = await createSession(userId);
+      const lastRefresh = new Date(Date.now() - 2 * DAY_MS);
+      await prisma.session.update({
+        where: { token },
+        data: { updatedAt: lastRefresh, expiresAt: new Date(lastRefresh.getTime() + 7 * DAY_MS) },
+      });
+      const before = Date.now();
+
+      assert.equal((await request("/me", { cookie })).status, 200);
+
+      const stored = await prisma.session.findUniqueOrThrow({ where: { token } });
+      assert.ok(stored.expiresAt.getTime() >= before + 7 * DAY_MS - 5_000, "7 days from now");
+      assert.ok(stored.expiresAt.getTime() <= Date.now() + 7 * DAY_MS + 5_000);
+      assert.ok(stored.updatedAt.getTime() >= before - 5_000, "the refresh time is stored");
+    });
+
+    it("revokes the session on sign-out, so the same cookie gets 401 on /me", async () => {
+      const userId = await createCustomer("sign-out");
+      const { cookie, token } = await createSession(userId);
+      assert.equal((await request("/me", { cookie })).status, 200);
+
+      const signedOut = await request("/api/auth/sign-out", { method: "POST", body: {}, cookie });
+
+      assert.equal(signedOut.status, 200);
+      assert.equal(await prisma.session.count({ where: { token } }), 0);
+      assert.equal((await request("/me", { cookie })).status, 401);
+    });
+  });
+
+  // S17: a cross-site request carrying the victim's cookie cannot end or change the session.
+  describe("untrusted origins", () => {
+    it("answers sign-out from an untrusted Origin with 403 INVALID_ORIGIN and keeps the session", async () => {
+      const userId = await createCustomer("origin");
+      const { cookie, token } = await createSession(userId);
+
+      const refused = await request("/api/auth/sign-out", {
+        method: "POST",
+        body: {},
+        cookie,
+        origin: UNTRUSTED_ORIGIN,
+      });
+
+      assert.equal(refused.status, 403);
+      assert.equal(((await refused.json()) as { code: string }).code, "INVALID_ORIGIN");
+      assert.equal(refused.headers.get("access-control-allow-origin"), null);
+      assert.equal(await prisma.session.count({ where: { token } }), 1);
+      assert.equal((await request("/me", { cookie })).status, 200);
     });
   });
 });

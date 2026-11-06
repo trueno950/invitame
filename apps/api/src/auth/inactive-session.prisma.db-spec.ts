@@ -4,7 +4,7 @@ import { after, describe, it } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-
+import { ClientAddresses, requireLocalDatabaseUrl } from "../../test/database";
 import { EmailDeliveryService } from "../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../email/infrastructure/system-email-delivery-runtime";
@@ -13,20 +13,12 @@ import { BackgroundTasks } from "./sign-in-code/background-tasks";
 import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 
 // Sessions of non-ACTIVE users on Better Auth's own endpoints, on real PostgreSQL (M2 T6b; S9, S18;
-// L27, L28). Runs only through `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that
-// points at a disposable, already migrated local database. It is not part of `pnpm test` or CI.
+// L27, L28). Runs only through `pnpm --filter @invitame/api test:db` (locally and in the CI
+// `database-tests` job) with an explicit DATABASE_URL that points at a disposable, already migrated
+// local database; not part of `pnpm test`.
 
 const AUTH_BASE_URL = "http://localhost:3997";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const SESSION_COOKIE = "better-auth.session_token";
-
-function requireLocalDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  assert.ok(url, "test:db requires an explicit DATABASE_URL");
-  // Fail closed: this suite writes and deletes rows, so it never runs against a remote database.
-  assert.ok(LOCAL_HOSTS.has(new URL(url).hostname), "test:db only runs against a local database");
-  return url;
-}
 
 describe("sessions of non-ACTIVE users on Better Auth's endpoints (real PostgreSQL)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
@@ -47,8 +39,7 @@ describe("sessions of non-ACTIVE users on Better Auth's endpoints (real PostgreS
   });
   const runId = randomUUID();
   const emails: string[] = [];
-  const clientPrefix = `198.19.${randomBytes(1)[0]}.`;
-  let clientCounter = 0;
+  const clientAddresses = new ClientAddresses();
 
   // Every enabled Better Auth endpoint that reads a session.
   const endpoints: Array<{ method: "GET" | "POST"; path: string; body?: unknown }> = [
@@ -68,21 +59,20 @@ describe("sessions of non-ACTIVE users on Better Auth's endpoints (real PostgreS
   after(async () => {
     try {
       await prisma.user.deleteMany({ where: { email: { in: emails } } });
-      await prisma.rateLimit.deleteMany({ where: { key: { startsWith: clientPrefix } } });
+      await prisma.rateLimit.deleteMany({ where: clientAddresses.rateLimitRows() });
     } finally {
       await prisma.$disconnect();
     }
   });
 
   async function call(endpoint: (typeof endpoints)[number], cookie?: string) {
-    clientCounter += 1;
     const response = await auth.handler(
       new Request(`${AUTH_BASE_URL}/api/auth${endpoint.path}`, {
         method: endpoint.method,
         headers: {
           "content-type": "application/json",
           origin: AUTH_BASE_URL,
-          "x-forwarded-for": `${clientPrefix}${clientCounter}`,
+          "x-forwarded-for": clientAddresses.next(),
           ...(cookie ? { cookie } : {}),
         },
         ...(endpoint.body === undefined ? {} : { body: JSON.stringify(endpoint.body) }),

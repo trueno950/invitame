@@ -4,7 +4,7 @@ import { after, describe, it } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-
+import { ClientAddresses, requireLocalDatabaseUrl } from "../../test/database";
 import {
   type EmailDeliveryRuntime,
   EmailDeliveryService,
@@ -19,20 +19,11 @@ import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 // The production proxy-secret requirement (M2 T8b; L36) through `createAuth` on the Prisma adapter:
 // a refused request leaves no RateLimit or Verification row. Runs only through
 // `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that points at a disposable,
-// already migrated local database. It is not part of `pnpm test` or CI.
+// already migrated local database, locally and in the CI `database-tests` job; not part of `pnpm test`.
 
 const AUTH_BASE_URL = "http://localhost:3999";
 const AUTH_PATH = "/api/auth";
 const CLIENT_IP_HEADER = "x-invitame-client-ip";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
-function requireLocalDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  assert.ok(url, "test:db requires an explicit DATABASE_URL");
-  // Fail closed: this suite writes and deletes rows, so it never runs against a remote database.
-  assert.ok(LOCAL_HOSTS.has(new URL(url).hostname), "test:db only runs against a local database");
-  return url;
-}
 
 describe("the proxy secret on the PostgreSQL store (L36)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
@@ -58,16 +49,14 @@ describe("the proxy secret on the PostgreSQL store (L36)", () => {
     log: () => {},
   });
   const runId = randomUUID();
-  // Benchmarking range (RFC 2544), unique per run so parallel or repeated runs never collide.
-  const clientPrefix = `198.19.${randomBytes(1)[0]}.`;
+  // This suite counts rows on one address, so it draws from the range no other suite shares.
+  const clientAddresses = new ClientAddresses("counted");
   const emails: string[] = [];
-  const clientIps: string[] = [];
 
   function requestCode(label: string, headers: Record<string, string>) {
     const email = `t8b-${label}-${runId}@example.test`;
-    const clientIp = `${clientPrefix}${clientIps.length + 1}`;
+    const clientIp = clientAddresses.next();
     emails.push(email);
-    clientIps.push(clientIp);
     const response = auth.handler(
       new Request(`${AUTH_BASE_URL}${AUTH_PATH}${SIGN_IN_CODE_REQUEST_PATH}`, {
         method: "POST",
@@ -104,7 +93,7 @@ describe("the proxy secret on the PostgreSQL store (L36)", () => {
         where: {
           OR: [
             ...emails.map((email) => ({ key: emailCodeQuotaKey(email) })),
-            ...clientIps.map((ip) => ({ key: { startsWith: `${ip}|` } })),
+            ...clientAddresses.rateLimitRows().OR,
           ],
         },
       });
