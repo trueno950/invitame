@@ -7,6 +7,7 @@
       "!**/.next/**",
       "!**/dist/**",
       "!**/coverage/**",
+      "!**/.atl/**",
       "!**/.turbo/**",
       "!**/*.prisma"
     ]
@@ -14,6 +15,11 @@
   "javascript": {
     "parser": {
       "unsafeParameterDecoratorsEnabled": true
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
     }
   },
   "formatter": {

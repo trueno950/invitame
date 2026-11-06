@@ -23,6 +23,7 @@ to be checked before prose, and it defines when a human decision is required.
 | --- | --- | --- |
 | Product scope, milestone, or non-goal | [`../ROADMAP.md`](../ROADMAP.md) | Current source, tests, schema, migrations, seed data, and scripts. |
 | Runtime boundary or API/web architecture | [`architecture/overview.md`](architecture/overview.md) | `apps/web`, `apps/api`, package scripts, and tests. |
+| Web page look, colors, fonts, ornaments, or shared UI classes | [`design/theme.md`](design/theme.md) | `apps/web/app/globals.css`, `apps/web/app/_components`, and `apps/web/lib/theme/contrast.test.ts`. |
 | New API capability or module placement | [`architecture/module-template.md`](architecture/module-template.md) | Existing module tree and the affected imports. |
 | Prisma, migration, seed, or persistence work | [`database/model.md`](database/model.md), [`database/future-model.md`](database/future-model.md), and [`development/quality-gates.md`](development/quality-gates.md) | `apps/api/prisma/schema.prisma`, migrations, seed, and database commands. |
 | Security, authorization, provider, public route, or trust boundary | [`../AGENTS.md`](../AGENTS.md) and [`development/anti-patterns.md`](development/anti-patterns.md) | The real API/web boundary, tests, and relevant accepted ADRs. |
@@ -36,6 +37,7 @@ to be checked before prose, and it defines when a human decision is required.
 - [`../ROADMAP.md`](../ROADMAP.md) — ten milestones with explicit current/planned status and non-goals.
 - [`architecture/ai-operating-model.md`](architecture/ai-operating-model.md) — repeatable AI development cycle and reading map.
 - [`architecture/overview.md`](architecture/overview.md) — current runtime map and planned module boundaries.
+- [`design/theme.md`](design/theme.md) — the current visual theme: tokens, fonts, ornaments, motion, and contrast rules.
 - [`development/quality-gates.md`](development/quality-gates.md) — current scripts and Definition of Done.
 - [`development/git-workflow.md`](development/git-workflow.md) — branch, work-unit, staged-diff, and PR procedure.
 - [`development/anti-patterns.md`](development/anti-patterns.md) — failure modes and preferred alternatives.
@@ -48,7 +50,8 @@ to be checked before prose, and it defines when a human decision is required.
 
 ### Implemented foundation
 
-- `apps/web` contains the current Next.js 16 landing page.
+- `apps/web` contains the current Next.js 16 landing page and the customer pages, styled with the visual theme in
+  [`design/theme.md`](design/theme.md); the full concept landing page is planned (M2 T8l).
 - `apps/api` contains configuration, Prisma ownership, the health module, and a database-backed health check.
 - The first Prisma migration contains the minimal user identity record, catalog, and immutable template-version
   foundations only; authentication behavior is still planned.

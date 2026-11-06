@@ -28,9 +28,11 @@ export default async function SignInPage() {
   return (
     <CustomerShell
       aside={
-        <div className="mt-10 max-w-lg border-t border-orange-200 pt-6">
-          <h2 className="text-base font-black text-slate-950">{SIGN_IN_COPY.asideHeading}</h2>
-          <p className="mt-2 leading-7 text-slate-700">{SIGN_IN_COPY.asideBody}</p>
+        <div className="mt-8 max-w-sm px-2 text-center">
+          <h2 className="font-display text-xl font-semibold text-ink">
+            {SIGN_IN_COPY.asideHeading}
+          </h2>
+          <p className="mt-1.5 text-sm leading-6 text-muted">{SIGN_IN_COPY.asideBody}</p>
         </div>
       }
       eyebrow={SIGN_IN_COPY.eyebrow}

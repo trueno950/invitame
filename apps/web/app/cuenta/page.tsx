@@ -39,30 +39,28 @@ export default async function AccountPage() {
         <div className="flex flex-col gap-8">
           <dl className="grid gap-5">
             <div>
-              <dt className="text-xs font-bold uppercase tracking-wider text-orange-700">
+              <dt className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
                 {ACCOUNT_COPY.emailLabel}
               </dt>
-              <dd className="mt-1 text-lg font-bold break-all text-slate-950">
-                {view.profile.email}
-              </dd>
+              <dd className="mt-1 text-lg font-medium break-all text-ink">{view.profile.email}</dd>
             </div>
             <div>
-              <dt className="text-xs font-bold uppercase tracking-wider text-orange-700">
+              <dt className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
                 {ACCOUNT_COPY.nameLabel}
               </dt>
-              <dd className="mt-1 text-lg break-words text-slate-950">
+              <dd className="mt-1 text-lg break-words text-ink">
                 {view.profile.displayName ?? (
-                  <span className="text-slate-500">{ACCOUNT_COPY.nameEmpty}</span>
+                  <span className="text-muted">{ACCOUNT_COPY.nameEmpty}</span>
                 )}
               </dd>
             </div>
           </dl>
 
-          <div className="border-t border-orange-100 pt-8">
+          <div className="border-t border-gold/40 pt-8">
             <DisplayNameForm displayName={view.profile.displayName} />
           </div>
 
-          <div className="border-t border-orange-100 pt-8">
+          <div className="border-t border-gold/40 pt-8">
             <SignOutButton />
           </div>
         </div>
@@ -70,13 +68,13 @@ export default async function AccountPage() {
 
       {view.kind === "not-customer" ? (
         <div className="flex flex-col gap-8">
-          <p className="leading-7 text-slate-700">{ACCOUNT_COPY.notCustomer}</p>
+          <p className="text-center leading-7 text-muted">{ACCOUNT_COPY.notCustomer}</p>
           <SignOutButton />
         </div>
       ) : null}
 
       {view.kind === "unavailable" ? (
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap justify-center gap-3">
           <a className={quietButton} href="/cuenta">
             {ACCOUNT_COPY.retry}
           </a>

@@ -183,7 +183,7 @@ non-interactive terminal.
 
 | Path | Purpose |
 | --- | --- |
-| `apps/web` | Next.js 16 App Router landing page, customer pages (`/ingresar`, `/cuenta`), the `/api/auth` proxy, and the server-side API client |
+| `apps/web` | Next.js 16 App Router landing page, customer pages (`/ingresar`, `/cuenta`), the `/api/auth` proxy, and the server-side API client, styled with the visual theme in [`docs/design/theme.md`](docs/design/theme.md) |
 | `apps/api` | NestJS REST API runtime and Prisma ownership boundary |
 | `docs/architecture` | Architecture decisions and operating model |
 | `docs/database` | Relational model and JSONB boundary |
