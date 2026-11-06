@@ -4,7 +4,7 @@ Status: **current** for the web foundations (M2 T8t, S35). The owner approved ve
 «A · Rosa y vino» on 2026-11-05 (L41 of `odd/tasks/m2-identity.md`). The tokens, fonts, ornaments, shared
 components, `/ingresar`, `/cuenta`, and the token-based landing page are implemented. The full concept landing
 page, with its sections and the draw-on bouquet, is **planned** for M2 T8l, after the owner reviews every product
-claim in its copy. The administrator pages (T8d: `/admin/ingresar` and `/admin`; `/admin/activar` follows) use the same
+claim in its copy. The administrator pages (T8d: `/admin/ingresar`, `/admin/activar`, `/admin`) use the same
 frame and components.
 
 ## Principles
@@ -90,6 +90,8 @@ meaning, and never sit under text where they reduce its contrast. Keep each file
   heading, and intro).
 - `app/_components/sign-out-button.tsx`: the wine «Cerrar sesión» button shared by customers and administrators,
   with its failure note.
+- The enrollment QR code (`app/admin/activar/qr-code.tsx`) is drawn in `ink` on `surface` with a 4-module quiet
+  zone and a gold hairline, the highest-contrast pair, so a phone camera reads it reliably.
 
 ## Motion
 
