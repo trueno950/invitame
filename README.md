@@ -165,8 +165,8 @@ It creates an `ACTIVE` administrator and generates a random 24-character initial
 digits without look-alikes (`0`, `O`, `o`, `1`, `l`, `I`). The password is printed once, on its own line, for
 you to hand over through a secure channel; it is never logged or stored in plain text, and the command
 refuses to run when its output is redirected. The administrator signs in with it at
-`http://localhost:3000/admin/ingresar` and must enroll an authenticator app within **24 hours** of its issue
-(the enrollment page `/admin/activar` lands in the next slice of M2 T8d). Until then the
+`http://localhost:3000/admin/ingresar` and must enroll an authenticator app at `/admin/activar` (QR code or
+setup key, the first code, and 10 backup codes shown once) within **24 hours** of its issue. Until then the
 account holds no administrator authority. After 24 hours without enrollment, the password stops
 working and existing sessions end.
 
@@ -184,7 +184,7 @@ non-interactive terminal.
 
 | Path | Purpose |
 | --- | --- |
-| `apps/web` | Next.js 16 App Router landing page, customer pages (`/ingresar`, `/cuenta`), administrator pages (`/admin/ingresar`, `/admin`; `/admin/activar` is next), the `/api/auth` proxy, and the server-side API client, styled with the visual theme in [`docs/design/theme.md`](docs/design/theme.md) |
+| `apps/web` | Next.js 16 App Router landing page, customer pages (`/ingresar`, `/cuenta`), administrator pages (`/admin/ingresar`, `/admin/activar`, `/admin`), the `/api/auth` proxy, and the server-side API client, styled with the visual theme in [`docs/design/theme.md`](docs/design/theme.md) |
 | `apps/api` | NestJS REST API runtime and Prisma ownership boundary |
 | `docs/architecture` | Architecture decisions and operating model |
 | `docs/database` | Relational model and JSONB boundary |
@@ -193,7 +193,7 @@ non-interactive terminal.
 
 ## Implemented scope boundary
 
-The current runtime intentionally excludes administrative tools beyond sign-in and a minimal panel, invitations, RSVP and guest records, payments,
+The current runtime intentionally excludes administrative tools beyond sign-in, enrollment, and a minimal panel, invitations, RSVP and guest records, payments,
 analytics, media storage, continuous deployment (CD), and hosted deployment. Limited quality-gate CI exists, but
 CD and hosted deployment are not implemented. Docker Compose is used only for local PostgreSQL and the Mailpit mail
 catcher. See

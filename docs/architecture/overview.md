@@ -177,7 +177,7 @@ sees: the API authorizes every action.
   sessions are never extended (L34), so the pages stay out of the `proxy.ts` matcher.
 - Routing: anonymous visitors go to `/admin/ingresar`, pending administrators (role `ADMIN`, `twoFactorEnabled`
   not `true`) to `/admin/activar`, enrolled administrators to `/admin`, and customers to `/cuenta`. When the read
-  fails, `/admin` shows a retry notice, `/admin/ingresar` shows the form, and the web logs one
+  fails, `/admin` and `/admin/activar` show a retry notice, `/admin/ingresar` shows the form, and the web logs one
   `{"event":"auth_session_read_failed","error":"<class>"}` line.
 - `/admin/ingresar` sends `POST /api/auth/sign-in/email` with `{ email, password }`. An enrolled administrator
   gets `twoFactorRedirect` and enters the 6-digit code (`POST /api/auth/two-factor/verify-totp`) or, as an
@@ -187,9 +187,12 @@ sees: the API authorizes every action.
   S22). The rate limit (`429`), a wrong code, a used or wrong backup code, an expired challenge, 5 wrong codes in
   one challenge, and the 15-minute lock each have their own message; an expired challenge and 5 wrong codes send
   the administrator back to the password step.
-- `/admin/activar`, enrollment with a QR code, the first code, and backup codes shown once (S36), lands in the
-  next slice of M2 T8d. Until then a pending administrator who signs in reaches a missing page; nothing is
-  deployed.
+- `/admin/activar` asks for the password (`POST /api/auth/two-factor/enable`), shows the TOTP URI as a QR code
+  drawn in the browser by `lean-qr` with the setup key in groups of 4 as a fallback, confirms with the first code
+  (`POST /api/auth/two-factor/verify-totp` with the session, which replaces it with an enrolled one), and then
+  shows the 10 backup codes once. Continuing to `/admin` needs an explicit «Ya los guardé» with a checked box.
+  The URI, the setup key, and the backup codes exist only in the memory of the client component: never in a URL,
+  a log, web storage, a cookie, a server action, or a third-party service.
 - `/admin` shows the administrator's address, a note that the session ends 12 hours after sign-in, and «Cerrar
   sesión», which ends on `/admin/ingresar` even when the session is already gone.
 

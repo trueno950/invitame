@@ -35,7 +35,7 @@ account or what kind.
 | Cuenta | The customer's own account and its page. | "Perfil", "Usuario". |
 | Nombre para mostrar | The optional name the customer chooses for the account. | "Nombre de usuario". |
 | Cerrar sesión | To sign out. | "Salir", "Logout". |
-| App autenticadora | The authenticator app (TOTP) an administrator enrolls at `/admin/activar` (planned in the next slice of M2 T8d). | "Token", "2FA", "OTP". |
+| App autenticadora | The authenticator app (TOTP) an administrator enrolls at `/admin/activar`. | "Token", "2FA", "OTP". |
 | Código de respaldo | One of the 10 single-use codes an administrator saves at enrollment, used instead of the app's code. | "Código de recuperación", "backup code". |
 | Panel de administración | The administrator's page at `/admin`. | "Dashboard", "Backoffice". |
 
