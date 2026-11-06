@@ -1,8 +1,9 @@
 # InvitaMe
 
 InvitaMe is an early foundation for a future invitation product. The implemented milestone establishes the
-catalog, immutable template-version contract, secure API baseline, local database workflow, and a small public
-landing page. It does not create or send invitations yet.
+catalog, immutable template-version contract, secure API baseline, local database workflow, and an honest
+pre-launch landing page: its sample designs and steps are labeled «Próximamente» and «Así funcionará», and
+«Ingresar» is its only active action. It does not create or send invitations yet.
 
 ## Start with the operating model
 
@@ -184,7 +185,7 @@ non-interactive terminal.
 
 | Path | Purpose |
 | --- | --- |
-| `apps/web` | Next.js 16 App Router landing page, customer pages (`/ingresar`, `/cuenta`), administrator pages (`/admin/ingresar`, `/admin/activar`, `/admin`), the `/api/auth` proxy, and the server-side API client, styled with the visual theme in [`docs/design/theme.md`](docs/design/theme.md) |
+| `apps/web` | Next.js 16 App Router pre-launch landing page (copy in `lib/landing/copy.ts`), customer pages (`/ingresar`, `/cuenta`), administrator pages (`/admin/ingresar`, `/admin/activar`, `/admin`), the `/api/auth` proxy, and the server-side API client, styled with the visual theme in [`docs/design/theme.md`](docs/design/theme.md) |
 | `apps/api` | NestJS REST API runtime and Prisma ownership boundary |
 | `docs/architecture` | Architecture decisions and operating model |
 | `docs/database` | Relational model and JSONB boundary |

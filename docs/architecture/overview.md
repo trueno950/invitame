@@ -1,15 +1,15 @@
 # Architecture overview
 
 InvitaMe is a modular monolith with two independently runnable applications. The repository currently contains
-only the foundation: catalog/version data, API configuration and health, Prisma ownership, and a small public
-landing page. The module map and flows below describe the target product and are explicitly planned unless marked
-implemented.
+only the foundation: catalog/version data, API configuration and health, Prisma ownership, and an honest
+pre-launch landing page. The module map and flows below describe the target product and are explicitly planned
+unless marked implemented.
 
 ## Current versus target status
 
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
-| Web | `apps/web` is a Next.js 16 App Router landing page with Spanish product copy, a proxy for `/api/auth`, a server-side API client, and the customer pages `/ingresar` (sign-in by emailed code) and `/cuenta` (own profile and sign-out), and the administrator pages `/admin/ingresar` (password and second factor), `/admin/activar` (authenticator-app enrollment), and `/admin` (a minimal panel with sign-out); the pages use the visual theme «A · Rosa y vino» ([`docs/design/theme.md`](../design/theme.md): Tailwind tokens, `next/font` fonts, fine-line SVG ornaments, and a contrast test). The full concept landing page (M2 T8l) is planned. | Dashboard, authoring flows, and public invitation routes. **Planned.** |
+| Web | `apps/web` is a Next.js 16 App Router app with an honest pre-launch landing page at `/` (see Landing page below), a proxy for `/api/auth`, a server-side API client, and the customer pages `/ingresar` (sign-in by emailed code) and `/cuenta` (own profile and sign-out), and the administrator pages `/admin/ingresar` (password and second factor), `/admin/activar` (authenticator-app enrollment), and `/admin` (a minimal panel with sign-out); the pages use the visual theme «A · Rosa y vino» ([`docs/design/theme.md`](../design/theme.md): Tailwind tokens, `next/font` fonts, fine-line SVG ornaments, and a contrast test). | Dashboard, authoring flows, and public invitation routes. **Planned.** |
 | API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling and administrator creation by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
 | Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
@@ -128,6 +128,27 @@ apps/web server components and actions ──► apps/api /me
   on an invalid setting it logs one `web_config_invalid` line that names the variable (never its value) and
   exits with code 1, because Next.js 16.3.5 would otherwise keep running and answer every request with `500`.
   `next build` skips this check and needs none of the variables. See the README for the variables.
+
+### Landing page (current)
+
+This is M2 T8l (S35, S37; L41, L45): `apps/web/app/page.tsx`, `apps/web/app/_components/landing/`, and
+`apps/web/lib/landing/copy.ts`. The page rebuilds the approved concept «A · Rosa y vino» version 3 (hero with
+invitations fanned out of an envelope, the occasions band, the sample gallery, the steps, the guest experience on a
+phone, the closing band, and the footer) as a static server component with no client JavaScript.
+
+- It is an honest pre-launch page (S37): only customer sign-in, the own account, and the administrator pages
+  exist, so «Ingresar» (to `/ingresar`) is the only active product action. Every other product action is a
+  «Próximamente» label that is neither a link nor a button; in-page anchors only scroll to `#disenos` or
+  `#como-funcionara`. The gallery is «Diseños de muestra», the steps are «Así funcionará» in the future tense,
+  and the guest phone is labeled «Ejemplo de invitación». No public page links to `/admin`.
+- All landing copy, including the default page title and description in `app/layout.tsx`, lives in
+  `lib/landing/copy.ts`. `lib/landing/copy.test.ts` rejects the claims the owner ruled out (handmade, brand names,
+  usage numbers, an active «Crear mi invitación» or «Ver diseño»), checks that every action is «Ingresar» to
+  `/ingresar`, a «Próximamente» label, or an anchor to a section of the page, and checks that the landing
+  components take every link target from the copy and render no button. When a feature ships, its section changes
+  in the copy after the owner reviews the claim.
+- The hero bouquet draws itself from the CSS inside `public/ornaments/bouquet-draw.svg`; with reduced motion the
+  page shows the same bouquet already drawn (see [`docs/design/theme.md`](../design/theme.md)).
 
 ### Customer pages (current)
 

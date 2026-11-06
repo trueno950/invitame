@@ -1,11 +1,10 @@
 # Visual theme «A · Rosa y vino»
 
-Status: **current** for the web foundations (M2 T8t, S35). The owner approved version 3 of the concept
-«A · Rosa y vino» on 2026-11-05 (L41 of `odd/tasks/m2-identity.md`). The tokens, fonts, ornaments, shared
-components, `/ingresar`, `/cuenta`, and the token-based landing page are implemented. The full concept landing
-page, with its sections and the draw-on bouquet, is **planned** for M2 T8l, after the owner reviews every product
-claim in its copy. The administrator pages (T8d: `/admin/ingresar`, `/admin/activar`, `/admin`) use the same
-frame and components.
+Status: **current** (M2 T8t, T8l; S35, S37). The owner approved version 3 of the concept «A · Rosa y vino» on
+2026-11-05 (L41 of `odd/tasks/m2-identity.md`). The tokens, fonts, ornaments, shared components, `/ingresar`,
+`/cuenta`, and the full concept landing page at `/` (T8l: every section and the draw-on bouquet, with the honest
+pre-launch copy the owner approved in L45) are implemented. The administrator pages (T8d: `/admin/ingresar`,
+`/admin/activar`, `/admin`) use the same frame and components as the customer pages.
 
 ## Principles
 
@@ -31,7 +30,7 @@ Every color lives in the `@theme` block of `apps/web/app/globals.css`. Tailwind'
 | `muted` | `#6B3A4C` | Secondary text: intros, hints, descriptions. Derived from S35. |
 | `placeholder` | `#8A6070` | Field placeholders (from the approved concept); passes 4.5:1 on white and `rose-50`. |
 | `primary` | `#8C1C3A` | Wine: buttons, links, eyebrows, focus outlines. |
-| `primary-deep` | `#6E1530` | Deep wine: button gradient and hover, error note text, the landing card. |
+| `primary-deep` | `#6E1530` | Deep wine: button gradient and hover, error note text, shadows. |
 | `on-primary` | `#FFFFFF` | Text on `primary` and `primary-deep`. |
 | `field-border` | `#A06E7E` | Field and quiet-button outlines; reaches 3:1 on `surface` and `background`. |
 | `rose` | `#E9A3B5` | Flowers, inner card hairline, link underline. |
@@ -44,7 +43,7 @@ class or a stylesheet.
 Radii: `rounded-field` (1 rem) for fields and notes, `rounded-panel` (1.6 rem) for the inner card,
 `rounded-card` (2 rem) for the outer card frame; buttons are `rounded-full`. Shadows: `shadow-soft` (header and
 small cards), `shadow-paper` (the main card), and `shadow-button` (the wine button). The `paper-wash` utility
-draws the pale pink wash behind the customer pages and the landing hero.
+draws the pale pink wash behind the customer pages; the landing draws its own washes from the same tokens.
 
 ## Typography
 
@@ -53,8 +52,8 @@ subset, `display: swap`) and sets their variables on `<html>`; the `@theme inlin
 
 | Utility | Font | Weights | Use |
 | --- | --- | --- | --- |
-| `font-display` | Cormorant Garamond | 500, 600 | Headings, the wordmark's "Invita", large numbers. |
-| `font-script` | Great Vibes | 400 | Names and accents only: the wordmark's "Me" today; couple and guest names on future invitations. Never body text, labels, buttons, or anything a person must read quickly. |
+| `font-display` | Cormorant Garamond | 500, 600, normal and italic | Headings, the wordmark's "Invita", large numbers; the italic for the accented words of the landing headings. |
+| `font-script` | Great Vibes | 400 | Names and accents only: the wordmark's "Me", the names on the landing's sample stationery, and «Para cada celebración»; couple and guest names on future invitations. Never body text, labels, buttons, or anything a person must read quickly. |
 | `font-sans` | Jost | 400, 500 | Interface and body text, labels, buttons, fields (the default body font). |
 
 Add a weight or the italic only when a page uses it, so the build ships no unused font files.
@@ -66,15 +65,23 @@ animation and draw-on hooks removed, numbers rounded):
 
 | File | Use |
 | --- | --- |
-| `corner-floral.svg` (about 38 KB, 12 KB gzipped) | A spray of roses, buds, leaves, and gold sprigs in two corners of the customer pages (one flipped). |
+| `corner-floral.svg` (about 38 KB, 12 KB gzipped) | A spray of roses, buds, leaves, and gold sprigs in two corners of the customer pages (one flipped); on the landing, the hero, gallery, guest-experience, and closing bouquets, and the drawn hero bouquet with reduced motion. |
+| `bouquet-draw.svg` (about 38 KB, 12 KB gzipped) | The same bouquet with its own draw-on CSS, for the landing hero only (see Motion). |
+| `garland.svg`, `card-corner.svg`, `arch-sprig.svg`, `envelope-spray.svg`, `doily.svg`, `crest.svg`, `swash.svg`, `petal.svg` | Landing line art: the garland on the sample cards and phones, the corners of the XV card, the sprig on the hero arch, the spray on the envelope, the doilies behind the step medallions, the laurel around the closing seal, the gold underline of «enamoran», and the drifting petals. |
+| `icon-*.svg` | Landing line icons: tiara, rings, and balloons for the occasions band; cards, quill, and envelope for the steps; calendar, pin, and heart for the guest experience. |
+| `envelope.svg`, `wax-seal.svg`, `crown.svg`, `balloons.svg`, `bunting.svg`, `damask.svg`, `lace-edge.svg`, `paper-fiber.svg`, `deckle-mask.svg` | Sample stationery of the landing: the envelope, the wax seal, the XV crown, the party balloons and bunting, the wine damask band, the lace edge of the occasions band, the paper fibre on every card, and the deckled edge of the garden card. |
 | `flourish-divider.svg` | The gold flourish between the eyebrow and the heading. |
 | `rose-bud.svg` | The bullet of eyebrows. |
 | `wordmark-rose.svg` | The small rose after the wordmark. |
 
 Rules: fine-line engraving in wine (`primary`, `primary-deep`) and gold, with at most a faint `rose` wash; no
-filled illustrations or gradients beyond the gold stroke. Ornaments are decoration, so they render through
-`Ornament` (`app/_components/ornament.tsx`) as `<img alt="" aria-hidden="true">` with intrinsic sizes, never carry
-meaning, and never sit under text where they reduce its contrast. Keep each file under 40 KB.
+filled illustrations or gradients beyond the gold stroke. The one exception is the sample stationery of the
+landing, which depicts printed invitations as the approved concept draws them (a wax seal, colored balloons and
+bunting, a damask band); it stays on the sample cards and never becomes a page ornament. Ornaments are
+decoration, so they render through `Ornament` (`app/_components/ornament.tsx`) as `<img alt="" aria-hidden="true">`
+with intrinsic sizes, never carry meaning, and never sit under text where they reduce its contrast. The landing
+renders its drawings the same way through `Art` (`app/_components/landing/art.tsx`) and loads the ones below the
+first screen lazily. Keep each file under 40 KB.
 
 ## Components
 
@@ -90,6 +97,12 @@ meaning, and never sit under text where they reduce its contrast. Keep each file
   heading, and intro).
 - `app/_components/sign-out-button.tsx`: the wine «Cerrar sesión» button shared by customers and administrators,
   with its failure note.
+- `app/_components/landing/`: the landing sections (`hero.tsx`, `sections.tsx`, `closing.tsx`), the sample
+  stationery (`stationery.tsx`), the drawings (`art.tsx`), and the three action shapes (`actions.tsx`):
+  `SignInLink` (the wine button to `/ingresar`), `AnchorLink` (a button-shaped link that only scrolls), and
+  `ComingSoon` (a «Próximamente» label, never a link or a button). `landing.module.css` holds the concept's
+  styles on the tokens: every color is a token or a `color-mix` of tokens, and the hero illustration and sample
+  cards scale with container query units.
 - The enrollment QR code (`app/admin/activar/qr-code.tsx`) is drawn in `ink` on `surface` with a 4-module quiet
   zone and a gold hairline, the highest-contrast pair, so a phone camera reads it reliably.
 
@@ -98,8 +111,20 @@ meaning, and never sit under text where they reduce its contrast. Keep each file
 Motion is decoration and stays short: buttons press to 97 % scale in 150 ms with `ease-out-soft`, and colors
 fade on hover. With `prefers-reduced-motion: reduce`, an unlayered rule in `globals.css` ends every transition and
 animation at once, and smooth scrolling is enabled only without that preference. The ornament files contain no
-animation. The draw-on bouquet of the concept is planned for T8l and must show the finished drawing with reduced
-motion.
+animation, except `bouquet-draw.svg`.
+
+The landing moves only `transform` and `opacity`: the sample cards and the hero phone float, sparkles twinkle,
+petals drift down behind the illustration, and the guest-experience chip bobs. The concept's moving gold shimmer
+is left static, so nothing repaints once the page settles. With reduced motion every animation ends at its final
+frame and the petals are hidden.
+
+The hero bouquet draws itself on load without a script: `public/ornaments/bouquet-draw.svg` carries its own CSS.
+Each group of strokes is dashed with `pathLength="1"` and its dash offset runs to zero in 1.1 s, staggered by
+105 ms (about 2.9 s in total); the shading fades in. At the end the dash is dropped so joins render cleanly, and the
+finished drawing is identical to `corner-floral.svg`. Chromium does not pass the page's reduced-motion preference
+into an SVG image, so `DrawnBouquet` (`app/_components/landing/art.tsx`) wraps the image in a `<picture>` whose
+`(prefers-reduced-motion: reduce)` source is `corner-floral.svg`: with reduced motion the bouquet appears already
+drawn.
 
 ## Accessibility
 
@@ -121,3 +146,5 @@ motion.
 | Ornament files | `apps/web/public/ornaments/` |
 | Contrast helper and test | `apps/web/lib/theme/` |
 | Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/admin/`, `apps/web/app/page.tsx` |
+| Landing sections, styles, and drawings | `apps/web/app/_components/landing/` |
+| Landing copy and its honesty test (S37) | `apps/web/lib/landing/` |
