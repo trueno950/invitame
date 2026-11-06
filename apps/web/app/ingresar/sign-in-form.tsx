@@ -151,7 +151,7 @@ export function SignInForm() {
   return (
     <div className="flex flex-col gap-6">
       {step === "code" ? (
-        <h2 className="text-2xl font-black tracking-tight text-slate-950">
+        <h2 className="text-center font-display text-[1.75rem] font-semibold leading-tight text-ink">
           {SIGN_IN_COPY.codeHeading}
         </h2>
       ) : null}
@@ -198,7 +198,7 @@ export function SignInForm() {
               aria-describedby={describedByError ? `${codeHintId} ${errorId}` : codeHintId}
               aria-invalid={error ? true : undefined}
               autoComplete="one-time-code"
-              className={`${textField} text-center text-2xl font-black tracking-[0.4em] tabular-nums`}
+              className={`${textField} text-center text-2xl font-medium tracking-[0.4em] tabular-nums`}
               id={codeId}
               inputMode="numeric"
               name="otp"
@@ -216,7 +216,7 @@ export function SignInForm() {
           <button className={primaryButton} disabled={pending !== null} type="submit">
             {pending === "verify" ? SIGN_IN_COPY.verifying : SIGN_IN_COPY.signIn}
           </button>
-          <div className="flex flex-wrap gap-x-6 gap-y-3">
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-3">
             <button
               className={textButton}
               disabled={pending !== null}

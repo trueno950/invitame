@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c in progress (L39).
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); the visual theme was chosen (L41), and T8t is in progress.
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), and T8c on `feat/m2-identity-19-customer-pages` (L23 to L39). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), and T8t on `feat/m2-identity-20-theme` (L23 to L41). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -97,6 +97,16 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   metadata, so the global `ValidationPipe` receives DTO types without workarounds.
 - **S33** (L11) Biome accepts NestJS parameter decorators such as `@Body()`.
 - **S34** (L11) The root `engines.node` floor is at least the integration's `>=22.22.1`.
+- **S35** (L41) Visual theme «A · Rosa y vino» (version 3), approved as: "Queda como tema. Lo implemento en dos
+  partes. Primero colores, tipografías, ornamentos y componentes, con /ingresar y /cuenta ya con el tema; T8d
+  (administrador) se construye sobre eso. Después, la portada completa, revisando contigo los textos que hoy prometen
+  cosas que no existen." Light backgrounds only, never dark. Tokens: background `#FFF7F5`, surface `#FFFFFF`, text
+  `#3B1424`, primary wine `#8C1C3A` (buttons with white text), rose `#E9A3B5`, gold `#C29A54` (ornaments and
+  hairlines, never small text), leaf `#8FAF8C` (botanicals only); derived muted text `#6B3A4C`, deep wine `#6E1530`,
+  and pink tints `#FDEEF2` and `#F8D7E0`. Fonts: Cormorant Garamond (display), Great Vibes (script, names and accents
+  only), and Jost (interface). Flowers and ornaments are fine-line botanical engraving in wine and gold ("Flores de
+  línea fina, sin IA"). Motion respects `prefers-reduced-motion`. Text meets WCAG AA (4.5:1), and component borders
+  reach 3:1.
 
 ## Tasks
 
@@ -115,8 +125,10 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T7 | Administrator: server-side creation command, password sign-in for administrators only, mandatory TOTP enrollment gate, backup codes, and enumeration-safe rejection of email OTP; initial password and enrollment window per S20 (L30). | S6, S20, S21, S22 | worker | `8880096` (#15), `b4bb01f` (#16) |
 | T8a | Session settings: customer sessions of 7 days refreshed at most once a day, administrator sessions of 12 hours without refresh, and a host-only session cookie served through the web origin (`__Host-` prefix in production), with Better Auth's base URL set to the public web origin; ADR 0004 decision 4 states the mechanism, cookie name, `Domain`, and lifetimes (L33, L34). | S7, S14, S16 | worker | `41f6d06` (#17) |
 | T8b | Web proxy and server-side API client: the web forwards `/api/auth` to the API with the client IP and passes cookies through without storing them, and its server calls the API with the session cookie; server-only API configuration in `apps/web`; the API trusts the client IP only from the web hop, proven by a shared web-to-API secret that the API requires on every authentication request in production (L33, L36). | S1, S7, S14 | worker | `e41a42a` (#18), `6c66236` (#19) |
-| T8c | Customer pages in Spanish product copy addressed with tú (L39): sign-in by email code at `/ingresar`, the own profile at `/cuenta`, and sign-out, all through the web server; the pages extend the session cookie through the proxy (L34, L37), and the web settings are validated at startup (L38). | S1, S6 | worker | — |
-| T8d | Administrator pages in Spanish product copy: password sign-in, the TOTP challenge, enrollment with backup codes shown once, and sign-out. | S6, S21 | worker | — |
+| T8c | Customer pages in Spanish product copy addressed with tú (L39): sign-in by email code at `/ingresar`, the own profile at `/cuenta`, and sign-out, all through the web server; the pages extend the session cookie through the proxy before every session read (L34, L37, L40), and the web settings are validated at startup (L38). | S1, S6 | worker | `5ecd5f6` (#20) |
+| T8t | Visual theme foundations (L41): the S35 tokens and fonts in `apps/web` (Tailwind theme and `next/font`), fine-line ornaments as static SVG assets, the shared components in `app/_components`, `/ingresar` and `/cuenta` restyled with unchanged copy and behavior, the current landing moved onto the tokens without new sections, a contrast test over the token pairs, and `docs/design/theme.md`. | S35 | worker | — |
+| T8d | Administrator pages in Spanish product copy, on the S35 theme: password sign-in, the TOTP challenge, enrollment with backup codes shown once, and sign-out. | S6, S21, S35 | worker | — |
+| T8l | Themed landing page (L41): the approved concept's sections and the draw-on bouquet in `apps/web/app/page.tsx`, after the owner reviews every product claim in its copy. | S35 | worker | — |
 | T9 | Integration and E2E tests: every ADR obligation and finding against real PostgreSQL, each traced to a named assertion. | S2, S13, S17, S30 | inline | — |
 | T10 | Documentation: ADR wording fixes, architecture, database, and quality-gate docs, environment examples, and the administrator recovery procedure. | S13, S21, S26, S27 | inline | — |
 | T11 | Security evidence: independent verification of every spec, and human sign-off of secret handling, session expiry, and error mapping. | S2 | verify | — |
@@ -474,3 +486,60 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   apps de consumo en México: «Ingresa tu correo y te enviamos un código de 6 dígitos». Las páginas quedarían en
   /ingresar y /cuenta, con el mismo estilo de la portada actual." The other option was usted. This decides the voice
   of the customer product copy and the routes of T8c.
+- **L40** (2026-11-05) Slice 19 (`5ecd5f6`, PR #20) holds the customer pages. After the gates passed, the user chose
+  "Revisión nativa y luego commit (recomendado)": run the four-lens native review, because the change touches the
+  renewal of the session cookie, and commit, publish, and merge without asking again only if the review approved
+  without correction (the verbatim question and description were lost to a context compaction; these are its terms).
+  The native review (`review-f054199d107c490d`, medium tier, four lenses and a refuter) required one correction for
+  R3-ingresar-get-me-consumes-refresh-window (CRITICAL, reliability, introduced): the `/ingresar` render and the
+  `/cuenta` server action read the session through the API outside the refresh, so the stored expiry moved without a
+  cookie for the browser, and a customer who always entered through the landing page would be signed out on day 7.
+  The 62-line correction makes `proxy.ts` refresh before every page or server action that reads the session (matcher
+  `/ingresar`, `/cuenta`, and `/cuenta/:path*`; `GET` and `POST`), and the targeted validator approved it. Its first
+  relay run ended after 908 seconds on a model safeguards flag without a verdict; the one permitted relaunch
+  succeeded. The gates passed (web 83 of 83 and API 315 of 315 tests; 5 of 5 parallel web runs before the
+  correction), and the build manifest holds the matcher. Because the review required a correction, the user was
+  asked again. User, choosing an option for "La revisión pidió una corrección, que ya está aplicada y validada.
+  ¿Apruebas hacer el commit de T8c, abrir el PR contra feat/m2-identity y hacer merge cuando pase el CI?": "Sí:
+  commit, PR y merge (recomendado)", whose description reads: "Commit de la versión revisada tal cual, con los dos
+  agregados que hizo el worker sin que se los pidieran: el enlace «Ingresar» en la portada y el aviso para
+  administradores en /cuenta. Abro el PR (debería ser el #20) marcado como excepción de tamaño, hago merge cuando
+  pase el CI y actualizo el PR #1." This keeps both additions. PR #20 passed CI and was merged into the tracker as
+  `2174d90`, whose tree equals slice 19; CI on #1 passed after #20. From the L38 routing, T8c closed
+  R4-web-config-validated-only-on-first-request (startup validation) and
+  R2-session-api-doc-says-request-bound-but-client-is-process-singleton (the `session-api.ts` comment); the cookie
+  round trip stays open. Routing of the 12 advisory findings: T8d owns R3-sign-out-fails-without-cookie and
+  R4-sign-out-stuck-when-already-signed-out (sign-out must still end on `/ingresar` when the session is already
+  gone) and R4-account-catch-all-unlogged; T9 owns R3-proxy-composition-unproved,
+  R3-session-api-cookie-roundtrip-still-unproved, and R4-cuenta-outage-latency-serialized; T10 owns R2-001 to
+  R2-005 (readability in `sign-in.ts`, `copy.ts`, `ui.ts`, `app/page.tsx`, and `sign-out-button.tsx`); the
+  correction resolved R4-ingresar-and-patch-me-consume-session-roll-without-cookie. Slice 19 ends at `5ecd5f6`; slice 20
+  starts from `2174d90` (L41).
+- **L41** (2026-11-05) Visual theme. Before T8d the user asked: "antes de contonuar con la ultima tarea que ya es
+  crear las paginas me gustarias que definieramos el tema, para ello tenemos gentle design, genera 4 opciones para yo
+  poder elegir un diseno y de ahi continuar con todo el roadmap". No "gentle design" tool exists in this environment
+  and Codex image generation had no credentials, so every option was built as an HTML concept under the gitignored
+  `.atl/`. Round 1 (four design-system boards in `.atl/theme-options/`) was rejected. User, answering "¿Qué
+  dirección visual usamos para InvitaMe? Será el tema de todas las páginas: portada, cliente, administrador y las que
+  vengan en el roadmap." with a custom response: "No me gusto ninguno, siento muy simple los disenos, para ser una
+  pagina de invitaciones debemos reflejar estilo para llamar la atención, aun no me dice nada de esos los disenos, la
+  paleta debe ser claros contrastando con cololes elegantes tal vez un rojito o moradito, rosita, no me des opciones
+  obscuros pero si metele mas al diseno debe reflejar ese experiencia para enamorar al cliente". Round 2 built four
+  light landing concepts in `.atl/theme-v2/` (A Rosa y vino, B Lavanda real, C Rosa brillo, D Carmín mexicano).
+  User, answering "¿Con cuál dirección visual seguimos para InvitaMe? Será el tema de la portada y de todas las
+  páginas: cliente, administrador y las que vengan en el roadmap." with a custom response: "Me gusto el a solo que
+  siento que los elementos son muy simples por ejemplo las flores, vinetas etc pudieramos mejorar mas". After a
+  layered-vector illustration pass, User, answering "¿Apruebas la versión 2 de «A · Rosa y vino» como el tema de
+  InvitaMe?" with a custom response: "Mejoro un poco pero las flores no me convencieron". User, choosing an option for
+  "¿Cómo resolvemos las flores del tema «A · Rosa y vino»?": "Flores de línea fina, sin IA", whose description reads:
+  "Dibujo botánico tipo grabado en trazo fino vino y oro, como las invitaciones de letterpress. Sin login ni cuota."
+  The other option was flowers painted with AI. User, choosing an option for "¿Apruebas la versión 3 de «A · Rosa y
+  vino», con flores de línea fina, como el tema de InvitaMe?": "Aprobar y continuar (recomendado)", whose description
+  reads: "Queda como tema. Lo implemento en dos partes. Primero colores, tipografías, ornamentos y componentes, con
+  /ingresar y /cuenta ya con el tema; T8d (administrador) se construye sobre eso. Después, la portada completa,
+  revisando contigo los textos que hoy prometen cosas que no existen." This adds S35 and the tasks T8t (theme
+  foundations, before T8d) and T8l (themed landing, after T8d). The approved concept is `.atl/theme-v2/a/`
+  (`index.html`, `styles.css`, `art/`, and screenshots, with earlier versions as `*-v1.png` and `*-v2.png`); it is a
+  local, uncommitted blueprint, so S35 records its tokens. Its sample copy makes claims the product cannot keep yet
+  ("hecha a mano", "Envíala por WhatsApp", a catalog that does not exist), which T8l reviews with the owner. Slice 20
+  (`feat/m2-identity-20-theme`, from `2174d90`) holds T8t; the admin routes and voice of T8d are still open.
