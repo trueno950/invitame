@@ -30,7 +30,7 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Lint | `pnpm lint` | Runs `biome lint .` through both workspace packages via Turborepo. | Every code or source-adjacent change. |
 | Type safety | `pnpm typecheck` | Runs strict TypeScript checks in `apps/api` and `apps/web`. | Every TypeScript/config change. |
 | Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner over `src/**/*.spec.ts` (health and auth integration suites) through `@swc-node/register`, which emits decorator metadata like the `tsc` build; `apps/web` runs the Node test runner over `lib/**/*.test.ts` with Node's built-in TypeScript type stripping (erasable syntax only, no extra dependency). | Every behavior change; documentation-only changes may record `N/A`. |
-| Database integration tests | `DATABASE_URL=<local URL> pnpm --filter @invitame/api test:db` | Runs `apps/api/src/**/*.db-spec.ts` through the same SWC runner against a real, already migrated PostgreSQL. The script refuses to start without an explicit `DATABASE_URL`, and the suite refuses non-local hosts. It writes and then deletes its own rows; use a disposable database. CI does not run it. | Schema, migration, and auth persistence changes. |
+| Database integration tests | `DATABASE_URL=<local URL> pnpm --filter @invitame/api test:db` | Runs `apps/api/src/**/*.db-spec.ts` through the same SWC runner against a real, already migrated PostgreSQL. The script refuses to start without an explicit `DATABASE_URL`, and the suite refuses non-local hosts. It writes and then deletes its own rows; use a disposable database. CI runs it in the `database-tests` job against a PostgreSQL 17 service. | Schema, migration, and auth persistence changes. |
 | Build | `pnpm build` | Builds the API with `tsc` and the web app with Next.js. Outputs are ignored build artifacts. | Runtime, dependency, configuration, or build changes; recommended for broad docs/process changes. |
 | Diff hygiene | `git diff --check` | Finds whitespace errors in the working diff. | Every change before review. |
 | Start local PostgreSQL | `pnpm db:up` | Starts the local Docker Compose PostgreSQL service. | Database or integration verification. |
@@ -40,10 +40,10 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Stop local PostgreSQL | `pnpm db:down` | Stops the local Compose services. | After local database work when the environment is no longer needed. |
 
 `.github/workflows/ci.yml` runs the documentation consistency, format/lint/typecheck/test/build/diff-hygiene gates
-on pushes to `master` and `main` and on pull requests. This is a limited quality workflow, not CD, hosted
-deployment, or required-check governance. The repository still has no dedicated coverage, automated real database
-integration (the manual `test:db` command above is the only database test), browser E2E, or migration-validation
-automation. Do not report those gaps as passing. Add the capability
+on pushes to `master` and `main` and on pull requests, and a separate `database-tests` job that applies the
+migrations to a disposable PostgreSQL 17 service and runs `test:db`. This is a limited quality workflow, not CD,
+hosted deployment, or required-check governance. The repository still has no dedicated coverage, browser E2E, seed
+or migration-validation automation beyond applying the migrations before `test:db`. Do not report those gaps as passing. Add the capability
 only as part of an approved work unit that defines its scope and ownership.
 
 ## Recommended local sequences
@@ -93,7 +93,8 @@ it:
    The current repository has only the API health behavior suite, which tests healthy and unavailable database
    paths through a mocked Prisma boundary.
 3. **Integration tests** — real PostgreSQL, Prisma, migrations, constraints, transactions, and seed behavior.
-   This layer is planned for the first persisted business workflows.
+   The `*.db-spec.ts` suites cover authentication, sessions, and the own profile; every ADR 0004 test obligation
+   maps to a named assertion in [ADR 0004 test traceability](adr-0004-test-traceability.md).
 4. **End-to-end tests** — browser/API journeys across real trust boundaries. This layer is planned for authoring,
    publication, payment, and RSVP workflows.
 
@@ -107,7 +108,7 @@ details, or cannot fail when the behavior breaks is not evidence.
 | --- | --- | --- |
 | Payments | Planned; no provider or payment model exists. | Unit tests for state transitions, integration tests for persistence/idempotency, and provider webhook tests with signature failure and replay cases. |
 | Publication | Planned; no invitation runtime exists. | Application authorization tests, integration tests for state and `TemplateVersion`, and public-route E2E coverage for unpublished and published states. |
-| Permissions | Planned; current API has no authentication flow. | Deny-by-default unit/application cases, API integration tests for ownership/roles, and E2E coverage for direct unauthorized requests. |
+| Permissions | Identity and own-profile authorization implemented (Milestone 2); see [ADR 0004 test traceability](adr-0004-test-traceability.md). Browser E2E is planned. | Deny-by-default unit/application cases, API integration tests for ownership/roles, and E2E coverage for direct unauthorized requests. |
 | RSVP | Planned; no guest or RSVP model exists. | Domain/application behavior tests, database uniqueness/transaction tests, and public journey tests for valid, duplicate, and expired responses. |
 | Template snapshots | Foundation implemented. | Existing migration/seed evidence plus tests that future code references the immutable version rather than mutable template metadata. |
 
@@ -138,7 +139,9 @@ If Docker, PostgreSQL, a browser, a provider sandbox, credentials, or another re
 
 The repository has a limited quality-gate CI workflow. It runs on pushes to `master` and `main` and every pull
 request: `pnpm install --frozen-lockfile`, `docs:check`, Prisma client generation, `format:check`, `lint`,
-`typecheck`, `test`, `build`, and `git diff --check`, in that order. It does not start PostgreSQL, so database/migration/seed
-verification stays a manual local gate (see the database change sequence above). Required status checks, hosted
+`typecheck`, `test`, `build`, and `git diff --check`, in that order. The `database-tests` job starts a PostgreSQL 17
+service with trust authentication (no password in the workflow), generates the Prisma client, runs
+`prisma:migrate:deploy`, and runs `test:db`. Seed and connection checks stay a manual local gate (see the database
+change sequence above). Required status checks, hosted
 integration databases, browser runners, CD, and deployment gates remain planned; adopt each through an explicit
 process change rather than assuming the limited CI workflow already covers them.

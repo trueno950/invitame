@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomBytes, randomInt, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import { PrismaClient } from "@prisma/client";
@@ -7,21 +7,15 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { emailOTP, twoFactor } from "better-auth/plugins";
 
+import { ClientAddresses, requireLocalDatabaseUrl } from "../../test/database";
+
 // Database integration test for the Better Auth persistence mapping (M2 T2).
-// Runs only through `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that
-// points at a disposable, already migrated local database. It is not part of `pnpm test` or CI.
+// Runs only through `pnpm --filter @invitame/api test:db` (locally and in the CI `database-tests` job)
+// with an explicit DATABASE_URL that points at a disposable, already migrated local database; not part
+// of `pnpm test`.
 
 const AUTH_BASE_URL = "http://localhost:3999";
 const AUTH_PATH = "/api/auth";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
-function requireLocalDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  assert.ok(url, "test:db requires an explicit DATABASE_URL");
-  // Fail closed: this suite writes and deletes rows, so it never runs against a remote database.
-  assert.ok(LOCAL_HOSTS.has(new URL(url).hostname), "test:db only runs against a local database");
-  return url;
-}
 
 function createTestAuth(prisma: PrismaClient, sentCodes: Map<string, string>) {
   return betterAuth({
@@ -60,8 +54,9 @@ describe("Better Auth on the Prisma schema (real PostgreSQL)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
   const sentCodes = new Map<string, string>();
   const runId = randomUUID();
-  // A per-run documentation-range client address isolates this run's rate-limit rows.
-  const clientIp = `198.51.100.${randomInt(1, 255)}`;
+  // One address for the whole suite, from the range no other suite shares (L17, L37).
+  const clientAddresses = new ClientAddresses("counted");
+  const clientIp = clientAddresses.next();
   const emails: string[] = [];
   let auth: TestAuth;
 
@@ -94,7 +89,7 @@ describe("Better Auth on the Prisma schema (real PostgreSQL)", () => {
   }
 
   function verificationRowsFor(email: string) {
-    return prisma.verification.findMany({ where: { identifier: { contains: email } } });
+    return prisma.verification.findMany({ where: { identifier: `sign-in-otp-${email}` } });
   }
 
   before(() => {
@@ -102,12 +97,15 @@ describe("Better Auth on the Prisma schema (real PostgreSQL)", () => {
   });
 
   after(async () => {
-    await prisma.user.deleteMany({ where: { email: { in: emails } } });
-    await prisma.verification.deleteMany({
-      where: { OR: emails.map((email) => ({ identifier: { contains: email } })) },
-    });
-    await prisma.rateLimit.deleteMany({ where: { key: { startsWith: `${clientIp}|` } } });
-    await prisma.$disconnect();
+    try {
+      await prisma.user.deleteMany({ where: { email: { in: emails } } });
+      await prisma.verification.deleteMany({
+        where: { identifier: { in: emails.map((email) => `sign-in-otp-${email}`) } },
+      });
+      await prisma.rateLimit.deleteMany({ where: clientAddresses.rateLimitRows() });
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   it("creates a verified customer User and a Session from an email code and consumes the Verification row", async () => {
@@ -144,6 +142,8 @@ describe("Better Auth on the Prisma schema (real PostgreSQL)", () => {
   });
 
   it("writes rate-limit rows to the database", async () => {
+    // Self-contained: the test makes its own request instead of relying on an earlier test (L17).
+    await requestCode(newEmail("rate-limit"));
     const rows = await prisma.rateLimit.findMany({
       where: { key: { startsWith: `${clientIp}|` } },
     });

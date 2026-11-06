@@ -54,3 +54,50 @@ jobs:
 
       - name: Diff hygiene
         run: git diff --check
+
+  database-tests:
+    name: Database tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          # A disposable service reachable only from this job, so no password is stored here.
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: invitame_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d invitame_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The database suites refuse any host that is not local (apps/api/test/database.ts).
+      DATABASE_URL: postgresql://postgres@localhost:5432/invitame_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @invitame/api prisma:generate
+
+      - name: Apply migrations
+        run: pnpm --filter @invitame/api prisma:migrate:deploy
+
+      - name: Database integration tests
+        run: pnpm --filter @invitame/api test:db

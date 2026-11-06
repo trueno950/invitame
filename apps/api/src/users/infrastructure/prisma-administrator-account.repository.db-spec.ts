@@ -5,7 +5,7 @@ import { after, describe, it } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { hashPassword } from "better-auth/crypto";
-
+import { ClientAddresses, requireLocalDatabaseUrl } from "../../../test/database";
 import { createAuth } from "../../auth/auth.factory";
 import { BackgroundTasks } from "../../auth/sign-in-code/background-tasks";
 import { SignInCodeSender } from "../../auth/sign-in-code/sign-in-code-sender";
@@ -20,22 +20,13 @@ import { PrismaAdministratorAccountRepository } from "./prisma-administrator-acc
 
 // The administrator creation command's transaction on real PostgreSQL (M2 T7; ADR 0004 decision 3,
 // S20): the use case with Better Auth's own hasher and the Prisma adapter, checked against Better
-// Auth's real password sign-in. Runs only through `pnpm --filter @invitame/api test:db` with an
-// explicit DATABASE_URL that points at a disposable, already migrated local database. It is not
-// part of `pnpm test` or CI.
+// Auth's real password sign-in. Runs only through `pnpm --filter @invitame/api test:db` (locally and
+// in the CI `database-tests` job) with an explicit DATABASE_URL that points at a disposable, already
+// migrated local database; not part of `pnpm test`.
 
 const AUTH_BASE_URL = "http://localhost:3995";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const SESSION_COOKIE = "better-auth.session_token";
 const HOUR_MS = 60 * 60 * 1000;
-
-function requireLocalDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  assert.ok(url, "test:db requires an explicit DATABASE_URL");
-  // Fail closed: this suite writes and deletes rows, so it never runs against a remote database.
-  assert.ok(LOCAL_HOSTS.has(new URL(url).hostname), "test:db only runs against a local database");
-  return url;
-}
 
 describe("creating an administrator on the Prisma schema (real PostgreSQL)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
@@ -60,13 +51,12 @@ describe("creating an administrator on the Prisma schema (real PostgreSQL)", () 
   });
   const runId = randomUUID();
   const emails: string[] = [];
-  const clientPrefix = `198.19.${randomBytes(1)[0]}.`;
-  let clientCounter = 0;
+  const clientAddresses = new ClientAddresses();
 
   after(async () => {
     try {
       await prisma.user.deleteMany({ where: { email: { in: emails } } });
-      await prisma.rateLimit.deleteMany({ where: { key: { startsWith: clientPrefix } } });
+      await prisma.rateLimit.deleteMany({ where: clientAddresses.rateLimitRows() });
     } finally {
       await prisma.$disconnect();
     }
@@ -79,14 +69,13 @@ describe("creating an administrator on the Prisma schema (real PostgreSQL)", () 
   }
 
   async function signIn(email: string, password: string) {
-    clientCounter += 1;
     const response = await auth.handler(
       new Request(`${AUTH_BASE_URL}/api/auth/sign-in/email`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
           origin: AUTH_BASE_URL,
-          "x-forwarded-for": `${clientPrefix}${clientCounter % 250}`,
+          "x-forwarded-for": clientAddresses.next(),
         },
         body: JSON.stringify({ email, password }),
       }),
