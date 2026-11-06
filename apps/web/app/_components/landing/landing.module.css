@@ -1,0 +1,2173 @@
+/*
+ * The landing page (M2 T8l; S35, S37): the approved concept «A · Rosa y vino» version 3, rebuilt on
+ * the theme tokens of `app/globals.css`. Every color is a token or a `color-mix` of tokens. The hero
+ * illustration and the sample stationery scale as one drawing with container query units (`cqw`).
+ * Motion only moves `transform` and `opacity`; with reduced motion the global rule of `globals.css`
+ * ends every animation at once.
+ */
+
+.page {
+  --gold-soft: color-mix(in srgb, var(--color-gold) 45%, var(--color-surface));
+  --gold-deep: color-mix(in srgb, var(--color-gold) 80%, var(--color-primary-deep));
+  --foil: linear-gradient(
+    115deg,
+    var(--gold-deep) 0%,
+    var(--gold-soft) 22%,
+    var(--color-gold) 42%,
+    color-mix(in srgb, var(--color-gold) 30%, var(--color-surface)) 58%,
+    color-mix(in srgb, var(--color-gold) 88%, var(--color-primary-deep)) 78%,
+    color-mix(in srgb, var(--color-gold) 60%, var(--color-surface)) 100%
+  );
+  --shade: var(--color-primary-deep);
+  --hairline: color-mix(in srgb, var(--color-gold) 45%, transparent);
+  --rose-gold-1: color-mix(in srgb, var(--color-gold) 14%, var(--color-rose-50));
+  --rose-gold-2: color-mix(in srgb, var(--color-gold) 38%, var(--color-rose-100));
+  --rose-gold-3: color-mix(in srgb, var(--color-gold) 52%, var(--color-rose));
+  --wine-light: color-mix(in srgb, var(--color-primary) 88%, var(--color-surface));
+  --wine-gradient: linear-gradient(
+    180deg,
+    var(--wine-light) 0%,
+    var(--color-primary) 55%,
+    var(--color-primary-deep) 100%
+  );
+
+  position: relative;
+  overflow-x: clip;
+  color: var(--color-ink);
+  font-size: 1.0625rem;
+}
+
+.wrap {
+  width: min(77.5rem, 100% - 3rem);
+  margin-inline: auto;
+}
+
+.skip {
+  position: absolute;
+  left: -999px;
+  top: 0.5rem;
+  z-index: 70;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.skip:focus-visible {
+  left: 1rem;
+}
+
+/* ---------- header ---------- */
+.header {
+  position: sticky;
+  top: 1rem;
+  z-index: 40;
+  margin-top: 1rem;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+  width: min(77.5rem, 100% - 2rem);
+  margin-inline: auto;
+  padding: 0.625rem 0.625rem 0.625rem 1.625rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 35%, transparent),
+    0 12px 32px -18px color-mix(in srgb, var(--shade) 35%, transparent);
+}
+
+.navLinks {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.navLink {
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--color-ink);
+  text-decoration: none;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .navLink:hover {
+    background: var(--color-rose-50);
+    color: var(--color-primary);
+  }
+}
+
+/* ---------- buttons, anchors, and the coming-soon pill ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-height: 3.25rem;
+  padding: 0.375rem 0.375rem 0.375rem 1.625rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  transition:
+    transform 160ms var(--ease-out-soft),
+    box-shadow 240ms ease,
+    background-color 200ms ease;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btnPrimary {
+  background: var(--wine-gradient);
+  color: var(--color-on-primary);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-on-primary) 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-primary-deep) 90%, transparent),
+    0 14px 30px -12px color-mix(in srgb, var(--color-primary) 65%, transparent);
+}
+
+.btnGhost {
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  color: var(--color-primary);
+  box-shadow: inset 0 0 0 1.5px var(--color-field-border);
+}
+
+.btnSmall {
+  min-height: 2.75rem;
+  padding: 0.25rem 0.25rem 0.25rem 1.25rem;
+  font-size: 0.9375rem;
+}
+
+.btnIcon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  transition: transform 260ms var(--ease-out-soft);
+}
+
+.btnSmall .btnIcon {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.btnIcon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.btnPrimary .btnIcon {
+  background: color-mix(in srgb, var(--color-on-primary) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold-soft) 60%, transparent);
+}
+
+.btnGhost .btnIcon {
+  background: var(--color-rose-50);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover .btnIcon {
+    transform: translate(2px, -1px) scale(1.06);
+  }
+  .btnPrimary:hover {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--color-on-primary) 22%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--color-primary-deep) 90%, transparent),
+      0 18px 36px -12px color-mix(in srgb, var(--color-primary) 75%, transparent);
+  }
+  .btnGhost:hover {
+    background: var(--color-surface);
+  }
+}
+
+/* A product action that does not exist yet: a quiet label, never a link or a button (S37). */
+.soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0.25rem 0.875rem 0.25rem 0.625rem;
+  border-radius: 999px;
+  background: var(--color-rose-50);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 55%, transparent);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  cursor: default;
+  user-select: none;
+}
+
+.soon img {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ---------- typography helpers ---------- */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.4375rem 1rem 0.4375rem 0.75rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface) 75%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 55%, transparent);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.eyebrow img {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.accent {
+  font-style: italic;
+  color: var(--color-primary);
+}
+
+.sectionHead {
+  max-width: 42.5rem;
+  margin: 0 auto 4.375rem;
+  text-align: center;
+}
+
+.sectionTitle {
+  margin: 1.375rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(2.375rem, 4.4vw, 3.875rem);
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.sectionIntro {
+  max-width: 32.5rem;
+  margin: 1.125rem auto 0;
+  font-size: 1.125rem;
+  color: var(--color-muted);
+  text-wrap: pretty;
+}
+
+.flourish {
+  display: block;
+  width: 16.25rem;
+  height: auto;
+  margin: 0.625rem auto -0.5rem;
+}
+
+/* ---------- hero ---------- */
+.hero {
+  position: relative;
+  margin-top: -5.25rem;
+  padding: 9.375rem 0 5.625rem;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      60% 55% at 78% 40%,
+      color-mix(in srgb, var(--color-rose) 38%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 40% at 8% 90%,
+      color-mix(in srgb, var(--color-rose) 22%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      35% 30% at 30% 10%,
+      color-mix(in srgb, var(--gold-soft) 25%, transparent),
+      transparent 70%
+    ),
+    var(--color-background);
+}
+
+.heroGrid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  align-items: center;
+  gap: 2.5rem;
+}
+
+.heroCopy {
+  position: relative;
+  z-index: 3;
+  padding-bottom: 1.25rem;
+}
+
+.heroTitle {
+  margin: 1.625rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(2.75rem, 5.4vw, 5rem);
+  line-height: 0.98;
+  letter-spacing: -0.015em;
+}
+
+.heroTitle .accent {
+  position: relative;
+  display: inline-block;
+}
+
+/* the gold swash under the accent */
+.heroTitle .accent::after {
+  content: "";
+  position: absolute;
+  left: -2%;
+  right: -6%;
+  bottom: -0.2em;
+  height: 0.34em;
+  background: url("/ornaments/swash.svg") center / 100% 100% no-repeat;
+}
+
+.heroLead {
+  max-width: 29.375rem;
+  margin: 1.75rem 0 0;
+  font-size: 1.1875rem;
+  line-height: 1.65;
+  color: var(--color-muted);
+  text-wrap: pretty;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem;
+  margin-top: 2.375rem;
+}
+
+.heroNotes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem 1.375rem;
+  margin: 2.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.heroNotes li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5625rem;
+}
+
+.heroNotes img {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* ---------- hero stage: one illustration that scales with its width ---------- */
+.stage {
+  position: relative;
+  container-type: inline-size;
+  width: 100%;
+  aspect-ratio: 1 / 0.9;
+}
+
+.stage > * {
+  position: absolute;
+}
+
+.arch {
+  left: 15%;
+  right: 3%;
+  top: 0;
+  bottom: 7%;
+  border-radius: 50cqw 50cqw 2.4cqw 2.4cqw;
+  background:
+    radial-gradient(
+      70% 50% at 50% 30%,
+      color-mix(in srgb, var(--color-surface) 90%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-rose-100) 70%, var(--color-rose-50)) 0%,
+      var(--color-rose-50) 60%,
+      var(--color-background) 100%
+    );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 35%, transparent),
+    var(--shadow-soft);
+}
+
+.arch::before {
+  content: "";
+  position: absolute;
+  inset: 1.8cqw;
+  border-radius: 48cqw 48cqw 1.2cqw 1.2cqw;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 70%, transparent);
+}
+
+.arch::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 4.2cqw;
+  width: 24cqw;
+  height: 12cqw;
+  transform: translateX(-50%);
+  background: url("/ornaments/arch-sprig.svg") center / contain no-repeat;
+}
+
+.sparkle {
+  width: 2.6cqw;
+  aspect-ratio: 1;
+  background: var(--foil);
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+  z-index: 7;
+  animation: twinkle 3.6s cubic-bezier(0.32, 0.72, 0, 1) infinite;
+}
+
+.envelope {
+  left: 1%;
+  bottom: 3%;
+  width: 55cqw;
+  z-index: 1;
+  transform: rotate(-7deg);
+  filter: drop-shadow(0 2.4cqw 2.6cqw color-mix(in srgb, var(--shade) 22%, transparent));
+}
+
+.envelope > img:first-child {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.envelopeSpray {
+  position: absolute;
+  z-index: 1;
+  left: 8%;
+  top: 50%;
+  width: 76%;
+  height: auto;
+  transform: rotate(4deg);
+}
+
+.seal {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 58%;
+  display: grid;
+  place-items: center;
+  width: 16cqw;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(8deg);
+  background: url("/ornaments/wax-seal.svg") center / contain no-repeat;
+  filter: drop-shadow(0 0.8cqw 1cqw color-mix(in srgb, var(--shade) 45%, transparent));
+}
+
+.monogram {
+  padding: 0 0.6cqw 0.2cqw 0.2cqw;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-style: italic;
+  font-size: 5.2cqw;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  background: linear-gradient(
+    115deg,
+    color-mix(in srgb, var(--color-gold) 75%, var(--color-surface)) 0%,
+    color-mix(in srgb, var(--color-gold) 25%, var(--color-surface)) 25%,
+    color-mix(in srgb, var(--color-gold) 65%, var(--color-surface)) 45%,
+    color-mix(in srgb, var(--color-gold) 18%, var(--color-surface)) 60%,
+    var(--color-gold) 80%,
+    color-mix(in srgb, var(--color-gold) 45%, var(--color-surface)) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 -1px 0 color-mix(in srgb, var(--color-ink) 70%, transparent));
+}
+
+/* ---------- sample stationery, shared by the hero and the gallery ---------- */
+.card {
+  width: var(--w);
+  aspect-ratio: 5 / 7;
+  transform: rotate(var(--r));
+  animation: float var(--dur, 7s) cubic-bezier(0.32, 0.72, 0, 1) var(--delay, 0s) infinite alternate;
+  filter: drop-shadow(0 0.4cqw 0.5cqw color-mix(in srgb, var(--shade) 10%, transparent))
+    drop-shadow(0 2.6cqw 3cqw color-mix(in srgb, var(--shade) 22%, transparent));
+}
+
+.cardBody {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 3cqw 2.2cqw 2.6cqw;
+  border-radius: 0.8cqw;
+  overflow: hidden;
+}
+
+.cardBody > :not(.corner, .foilFrame, .archFrame, .damask) {
+  position: relative;
+  z-index: 2;
+}
+
+/* paper fibre */
+.cardBody::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: url("/ornaments/paper-fiber.svg");
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+  border-radius: inherit;
+}
+
+.scalloped::before {
+  content: "";
+  position: absolute;
+  inset: -0.9cqw;
+  background:
+    radial-gradient(circle, var(--paper) 0.88cqw, transparent calc(0.88cqw + 0.5px)) 0 0 / 1.8cqw
+    1.8cqw;
+  border-radius: 1cqw;
+}
+
+.kicker {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.75cqw;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.name {
+  font-family: var(--font-script);
+  font-size: 6cqw;
+  line-height: 1.05;
+  color: var(--color-primary);
+  text-shadow:
+    0 1px 0 color-mix(in srgb, var(--color-surface) 85%, transparent),
+    0 -0.5px 0 color-mix(in srgb, var(--shade) 28%, transparent);
+}
+
+.date {
+  font-weight: 500;
+  font-size: 1.32cqw;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+}
+
+.when {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.3cqw;
+  color: var(--color-ink);
+}
+
+.rule {
+  width: 46%;
+  height: 1.4cqw;
+  margin: 1cqw auto;
+  background:
+    linear-gradient(90deg, transparent, var(--color-gold) 20%, var(--color-gold) 80%, transparent)
+    center / 100% 1px no-repeat,
+    radial-gradient(circle, var(--color-gold) 0.45cqw, transparent 0.5cqw) center / 1.4cqw 1.4cqw
+    no-repeat;
+}
+
+.corner {
+  position: absolute;
+  z-index: 1;
+  width: 42%;
+  height: auto;
+  pointer-events: none;
+}
+
+.cornerStart {
+  left: -3%;
+  top: -3%;
+}
+
+.cornerEnd {
+  right: -3%;
+  bottom: -3%;
+  transform: rotate(180deg);
+}
+
+/* double gold rule */
+.foilFrame {
+  position: absolute;
+  inset: 1.5cqw;
+  pointer-events: none;
+  border-radius: 0.4cqw;
+  border: 1px solid var(--color-gold);
+}
+
+.foilFrame::after {
+  content: "";
+  position: absolute;
+  inset: 0.6cqw;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 55%, transparent);
+  border-radius: inherit;
+}
+
+.foilFrameLeaf {
+  border-color: var(--color-leaf);
+}
+
+.cardXv {
+  --w: 25cqw;
+  --r: -12deg;
+  --paper: color-mix(in srgb, var(--color-rose-100) 75%, var(--color-rose-50));
+  --dur: 6.5s;
+  left: 0%;
+  top: 19%;
+  z-index: 2;
+}
+
+.cardXv .cardBody {
+  background:
+    radial-gradient(
+      80% 60% at 50% 0%,
+      color-mix(in srgb, var(--color-surface) 85%, transparent),
+      transparent 70%
+    ),
+    var(--paper);
+}
+
+.crown {
+  width: 9cqw;
+  height: auto;
+  margin-bottom: 1cqw;
+}
+
+.cardWedding {
+  --w: 27cqw;
+  --r: -2deg;
+  --dur: 7.5s;
+  --delay: -2s;
+  left: 23%;
+  top: 3%;
+  z-index: 4;
+}
+
+.cardWedding .cardBody {
+  justify-content: flex-start;
+  padding-top: 0;
+  background: linear-gradient(
+    180deg,
+    var(--color-surface) 0%,
+    color-mix(in srgb, var(--color-background) 50%, var(--color-surface)) 100%
+  );
+  border-radius: 13.5cqw 13.5cqw 0.8cqw 0.8cqw;
+}
+
+.archFrame {
+  position: absolute;
+  inset: 1.4cqw;
+  border-radius: 12.1cqw 12.1cqw 0.4cqw 0.4cqw;
+  border: 1px solid var(--color-gold);
+}
+
+.archFrame::after {
+  content: "";
+  position: absolute;
+  inset: 0.7cqw;
+  border-radius: 11.4cqw 11.4cqw 0.2cqw 0.2cqw;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 50%, transparent);
+}
+
+.cardWedding .garland {
+  width: 128%;
+  max-width: none;
+  height: auto;
+  margin: 4.2cqw 0 0.4cqw;
+}
+
+.cardWedding .name {
+  margin-top: 0.6cqw;
+  font-size: 5.6cqw;
+}
+
+.cardBirthday {
+  --w: 24cqw;
+  --r: 9deg;
+  --paper: color-mix(in srgb, var(--color-gold) 10%, var(--color-surface));
+  --dur: 6s;
+  --delay: -4s;
+  left: 47%;
+  top: 15%;
+  z-index: 3;
+}
+
+.cardBirthday .cardBody {
+  padding-top: 1.4cqw;
+  background:
+    radial-gradient(
+      60% 40% at 50% 100%,
+      color-mix(in srgb, var(--color-leaf) 25%, transparent),
+      transparent 70%
+    ),
+    var(--paper);
+}
+
+.bunting {
+  width: 100%;
+  height: auto;
+  margin-bottom: 0.6cqw;
+}
+
+.balloons {
+  width: 11cqw;
+  height: auto;
+  margin-bottom: 0.4cqw;
+}
+
+.cardBirthday .name {
+  font-size: 5.4cqw;
+}
+
+.age {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 2.6cqw;
+  line-height: 1;
+  color: var(--color-ink);
+}
+
+.age b {
+  font-size: 4.4cqw;
+  color: var(--color-primary);
+}
+
+/* ---------- phones ---------- */
+.phone {
+  --r: 5deg;
+  right: 1%;
+  top: 11%;
+  z-index: 5;
+  width: 29cqw;
+  aspect-ratio: 9 / 18.6;
+  padding: 1.1cqw;
+  border-radius: 4.6cqw;
+  background: linear-gradient(
+    145deg,
+    var(--rose-gold-1) 0%,
+    var(--rose-gold-2) 45%,
+    var(--rose-gold-1) 70%,
+    var(--rose-gold-3) 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-surface) 80%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--rose-gold-3) 60%, transparent),
+    0 3cqw 5cqw -1.4cqw color-mix(in srgb, var(--shade) 40%, transparent),
+    0 1cqw 1.6cqw color-mix(in srgb, var(--shade) 12%, transparent);
+  transform: rotate(var(--r));
+  animation: float 8s cubic-bezier(0.32, 0.72, 0, 1) -1s infinite alternate;
+}
+
+.screen {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  border-radius: 3.6cqw;
+  background: var(--color-background);
+}
+
+.island {
+  position: absolute;
+  top: 1cqw;
+  left: 50%;
+  z-index: 2;
+  width: 8cqw;
+  height: 2cqw;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--color-ink);
+}
+
+.cover {
+  position: relative;
+  width: 100%;
+  height: 44%;
+  display: grid;
+  place-items: end center;
+  padding-bottom: 1.6cqw;
+  background:
+    radial-gradient(60% 50% at 50% 40%, var(--color-surface), transparent 70%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-rose) 55%, var(--color-rose-100)) 0%,
+      var(--color-rose-50) 70%,
+      var(--color-background) 100%
+    );
+}
+
+/* as in the concept, the image's max-width of 100% caps the width, so the garland sits to the left */
+.cover > img {
+  position: absolute;
+  left: -32%;
+  top: 22%;
+  width: 165%;
+  max-width: 100%;
+  height: auto;
+}
+
+.cover .name {
+  position: relative;
+  font-size: 5.4cqw;
+}
+
+.screen .kicker {
+  margin-top: 0.4cqw;
+  font-size: 1.4cqw;
+}
+
+.screen .date {
+  margin-top: 0.8cqw;
+  font-size: 1.15cqw;
+}
+
+.countLabel {
+  margin-top: 2cqw;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 2.3cqw;
+  color: var(--color-primary);
+}
+
+.count {
+  display: flex;
+  gap: 0.8cqw;
+  margin-top: 0.9cqw;
+}
+
+.count > span {
+  display: grid;
+  width: 5.2cqw;
+  padding: 0.7cqw 0 0.5cqw;
+  border-radius: 1cqw;
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 60%, transparent);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 2.3cqw;
+  line-height: 1;
+  color: var(--color-ink);
+}
+
+.count small {
+  margin-top: 0.4cqw;
+  font-family: var(--font-sans);
+  font-size: 0.95cqw;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+}
+
+.reply {
+  margin-top: auto;
+  margin-bottom: 2.6cqw;
+  padding: 1.3cqw 2.4cqw;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 1.4cqw;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  box-shadow: 0 1cqw 2cqw -0.8cqw color-mix(in srgb, var(--color-primary) 70%, transparent);
+}
+
+/* ---------- hero flowers and petals ---------- */
+.rosesFront {
+  left: -8%;
+  bottom: -7%;
+  z-index: 6;
+  width: 46cqw;
+  height: auto;
+}
+
+.rosesFront img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.rosesBack {
+  right: -10%;
+  top: -6%;
+  z-index: 0;
+  width: 34cqw;
+  height: auto;
+  transform: scale(-1, -1);
+  opacity: 0.95;
+}
+
+.rosesLow {
+  right: -6%;
+  bottom: -3%;
+  z-index: 6;
+  width: 28cqw;
+  height: auto;
+  transform: scaleX(-1) rotate(-8deg);
+}
+
+.petals {
+  position: absolute;
+  inset: 0 0 0 46%;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.petals img {
+  position: absolute;
+  top: -2.5rem;
+  left: var(--x);
+  width: var(--s);
+  height: auto;
+  opacity: 0;
+  animation: drift var(--t) linear var(--d) infinite;
+}
+
+@keyframes drift {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.9;
+  }
+  85% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(var(--dx), 105vh, 0) rotate(300deg);
+    opacity: 0;
+  }
+}
+
+@keyframes float {
+  from {
+    transform: translateY(0) rotate(var(--r));
+  }
+  to {
+    transform: translateY(-1.4cqw) rotate(calc(var(--r) + 1deg));
+  }
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1) rotate(45deg);
+  }
+}
+
+@keyframes bob {
+  to {
+    transform: translateY(-10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .petals {
+    display: none;
+  }
+}
+
+/* ---------- shared sections ---------- */
+.section {
+  position: relative;
+  padding: 7.25rem 0;
+  scroll-margin-top: 4rem;
+}
+
+/* ---------- occasions band: lace edges, illustrated medals, gold fleurons ---------- */
+.occasions {
+  position: relative;
+  z-index: 3;
+  padding: 2.875rem 0;
+  border-block: 1px solid color-mix(in srgb, var(--color-gold) 55%, transparent);
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--color-surface) 70%, transparent) 50%,
+      transparent 100%
+    ),
+    var(--color-rose-50);
+}
+
+.occasions::before,
+.occasions::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 22px;
+  background: url("/ornaments/lace-edge.svg") 0 0 / 40px 22px repeat-x;
+}
+
+.occasions::before {
+  top: 0;
+}
+
+.occasions::after {
+  bottom: 0;
+  transform: scaleY(-1);
+}
+
+.occasionList {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1.125rem 2.5rem;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.occasion {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.9375rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.occasion + .occasion::before {
+  content: "";
+  width: 1rem;
+  height: 1rem;
+  margin-right: 1.5rem;
+  background: var(--foil);
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+}
+
+.occasionLead {
+  font-family: var(--font-script);
+  font-size: 2.125rem;
+  color: var(--color-primary);
+}
+
+.medal {
+  display: grid;
+  place-items: center;
+  width: 3.875rem;
+  height: 3.875rem;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 80%, transparent),
+    inset 0 0 0 4px var(--color-surface),
+    inset 0 0 0 5px color-mix(in srgb, var(--color-rose) 60%, transparent),
+    0 8px 18px -10px color-mix(in srgb, var(--shade) 45%, transparent);
+}
+
+.medal img {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+/* ---------- gallery of sample designs ---------- */
+.gallery {
+  background:
+    radial-gradient(
+      50% 40% at 0% 20%,
+      color-mix(in srgb, var(--color-rose) 20%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      35% 28% at 100% 55%,
+      color-mix(in srgb, var(--color-leaf) 14%, transparent),
+      transparent 70%
+    );
+}
+
+.designs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.design {
+  display: flex;
+  flex-direction: column;
+}
+
+.shell {
+  display: block;
+  padding: 0.5rem;
+  border-radius: 1.875rem;
+  background: color-mix(in srgb, var(--color-surface) 55%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 40%, transparent),
+    0 30px 50px -36px color-mix(in srgb, var(--shade) 50%, transparent);
+}
+
+.design:nth-child(even) .shell {
+  margin-top: 2.5rem;
+}
+
+.thumb {
+  position: relative;
+  container-type: inline-size;
+  aspect-ratio: 4 / 5;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 1.375rem;
+  background: var(--tint);
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--color-surface) 80%, transparent);
+}
+
+.thumb::before {
+  content: "";
+  position: absolute;
+  right: -26cqw;
+  bottom: -18cqw;
+  width: 78cqw;
+  aspect-ratio: 520 / 420;
+  background: url("/ornaments/corner-floral.svg") center / contain no-repeat;
+  transform: scaleX(-1);
+  opacity: 0.5;
+}
+
+.tintGarden {
+  --tint: color-mix(in srgb, var(--color-rose-50) 60%, var(--color-background));
+}
+
+.tintXv {
+  --tint: color-mix(in srgb, var(--color-rose-100) 65%, var(--color-rose-50));
+}
+
+.tintWine {
+  --tint: color-mix(in srgb, var(--color-rose-100) 35%, var(--color-background));
+}
+
+.tintParty {
+  --tint: color-mix(in srgb, var(--color-leaf) 14%, var(--color-background));
+}
+
+.designMeta {
+  padding: 1.25rem 0.375rem 0;
+}
+
+.tag {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.designName {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.6875rem;
+  line-height: 1.1;
+}
+
+.design .soon {
+  align-self: flex-start;
+  margin: 1rem 0.375rem 0;
+}
+
+/* mini invitations inside the thumbnails */
+.mini {
+  --r: -3deg;
+  position: relative;
+  display: block;
+  z-index: 1;
+  width: 60cqw;
+  aspect-ratio: 5 / 7;
+  transform: rotate(var(--r));
+  filter: drop-shadow(0 1cqw 1cqw color-mix(in srgb, var(--shade) 10%, transparent))
+    drop-shadow(0 6cqw 7cqw color-mix(in srgb, var(--shade) 26%, transparent));
+}
+
+.mini .cardBody {
+  justify-content: center;
+  padding: 6cqw 4cqw 5cqw;
+  border-radius: 1.4cqw;
+}
+
+.mini .kicker {
+  font-size: 3.3cqw;
+}
+
+.mini .name {
+  font-size: 10.5cqw;
+}
+
+.mini .date {
+  font-size: 2.6cqw;
+}
+
+.mini .when {
+  font-size: 4cqw;
+}
+
+.mini .rule {
+  height: 3cqw;
+  margin: 2.2cqw auto;
+  background:
+    linear-gradient(90deg, transparent, var(--color-gold) 20%, var(--color-gold) 80%, transparent)
+    center / 100% 1px no-repeat,
+    radial-gradient(circle, var(--color-gold) 0.9cqw, transparent 1cqw) center / 3cqw 3cqw no-repeat;
+}
+
+.mini.scalloped::before {
+  inset: -1.6cqw;
+  background:
+    radial-gradient(circle, var(--paper) 1.58cqw, transparent calc(1.58cqw + 0.5px)) 0 0 / 3.2cqw
+    3.2cqw;
+}
+
+.mini .foilFrame {
+  inset: 3.2cqw;
+}
+
+.mini .foilFrame::after {
+  inset: 1.2cqw;
+}
+
+.mini .corner {
+  width: 46%;
+}
+
+.miniGarden {
+  --r: -3deg;
+}
+
+.miniGarden .cardBody {
+  justify-content: flex-start;
+  padding-top: 0;
+  background: var(--color-surface);
+  mask: url("/ornaments/deckle-mask.svg") 0 0 / 100% 100% no-repeat;
+}
+
+.miniGarden .garland {
+  width: 134%;
+  max-width: none;
+  height: auto;
+  margin: 7cqw 0 1cqw;
+}
+
+.miniGarden .name {
+  font-size: 9.4cqw;
+}
+
+.miniXv {
+  --r: 3deg;
+  --paper: color-mix(in srgb, var(--color-rose-100) 85%, var(--color-rose));
+}
+
+.miniXv .cardBody {
+  background:
+    radial-gradient(80% 50% at 50% 0%, var(--color-surface), transparent 70%), var(--paper);
+}
+
+.miniXv .crown {
+  width: 20cqw;
+  margin-bottom: 2cqw;
+}
+
+.miniWine {
+  --r: -2deg;
+}
+
+.miniWine .cardBody {
+  justify-content: flex-start;
+  padding-top: 0;
+  background: var(--color-surface);
+}
+
+.damask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 30%;
+  background:
+    url("/ornaments/damask.svg") center / 9cqw auto,
+    var(--color-primary);
+  border-bottom: 1.5cqw solid var(--color-gold);
+}
+
+.miniWine .seal {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: 19cqw;
+  margin-top: 11cqw;
+  transform: rotate(-6deg);
+}
+
+.miniWine .monogram {
+  font-size: 6cqw;
+}
+
+.miniWine .name {
+  margin-top: 2cqw;
+  font-size: 9cqw;
+}
+
+.miniParty {
+  --r: 3deg;
+  --paper: color-mix(in srgb, var(--color-gold) 10%, var(--color-surface));
+}
+
+.miniParty .cardBody {
+  padding-top: 3cqw;
+  background:
+    radial-gradient(
+      70% 40% at 50% 100%,
+      color-mix(in srgb, var(--color-leaf) 28%, transparent),
+      transparent 70%
+    ),
+    var(--paper);
+}
+
+.miniParty .balloons {
+  width: 26cqw;
+  margin: 1cqw 0;
+}
+
+.miniParty .age {
+  font-size: 5.6cqw;
+}
+
+.miniParty .age b {
+  font-size: 9cqw;
+}
+
+/* ---------- how it will work ---------- */
+.steps {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--color-rose-50) 80%, transparent) 30%,
+    color-mix(in srgb, var(--color-rose-50) 80%, transparent) 70%,
+    transparent
+  );
+}
+
+.stepList {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* the dotted gold line between the medallions */
+.stepList::before {
+  content: "";
+  position: absolute;
+  top: 77px;
+  left: 17%;
+  right: 17%;
+  height: 3px;
+  background:
+    radial-gradient(circle, var(--color-gold) 1.2px, transparent 1.6px) 0 0 / 11px 3px repeat-x;
+  opacity: 0.9;
+}
+
+.step {
+  position: relative;
+  padding: 0 0.75rem;
+  text-align: center;
+}
+
+.medallion {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: 156px;
+  height: 156px;
+  margin: 0 auto 1.875rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--color-surface), var(--color-rose-50) 75%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 90%, transparent),
+    inset 0 0 0 6px var(--color-surface),
+    inset 0 0 0 7px color-mix(in srgb, var(--color-rose) 60%, transparent),
+    0 20px 34px -22px color-mix(in srgb, var(--shade) 55%, transparent);
+}
+
+/* a paper doily behind each medallion */
+.medallion::before {
+  content: "";
+  position: absolute;
+  inset: -34px;
+  z-index: -1;
+  background: url("/ornaments/doily.svg") center / contain no-repeat;
+}
+
+.medallion img {
+  width: 84px;
+  height: 84px;
+}
+
+.stepNumber {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 1.25rem;
+  box-shadow:
+    0 0 0 3px var(--color-surface),
+    0 0 0 4px color-mix(in srgb, var(--color-gold) 80%, transparent);
+}
+
+.stepTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.875rem;
+  line-height: 1.15;
+}
+
+.stepBody {
+  max-width: 18.75rem;
+  margin: 0.75rem auto 0;
+  color: var(--color-muted);
+}
+
+/* ---------- guest experience (an example) ---------- */
+.experienceGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 3.75rem;
+}
+
+.experience .sectionHead {
+  margin: 0;
+  text-align: left;
+}
+
+.experience .sectionIntro {
+  margin-left: 0;
+}
+
+.perks {
+  display: grid;
+  gap: 1.125rem;
+  margin: 2.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.perk {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.125rem;
+  padding: 1.125rem 1.375rem;
+  border-radius: 1.375rem;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 30%, transparent);
+}
+
+.perkIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 3.125rem;
+  height: 3.125rem;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 70%, transparent);
+}
+
+.perkIcon img {
+  width: 2rem;
+  height: 2rem;
+}
+
+.perkTitle {
+  display: block;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.4375rem;
+  line-height: 1.2;
+}
+
+.perkBody {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--color-muted);
+}
+
+.showcase {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 3.125rem 0;
+}
+
+.halo {
+  position: absolute;
+  width: 480px;
+  height: 640px;
+  border-radius: 240px 240px 28px 28px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-rose-100) 80%, var(--color-rose)),
+    var(--color-rose-50) 70%,
+    transparent
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 45%, transparent);
+}
+
+.halo::before {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border-radius: 226px 226px 18px 18px;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 60%, transparent);
+}
+
+.showcaseRoses {
+  position: absolute;
+  z-index: 1;
+  width: 300px;
+  height: auto;
+}
+
+.showcaseRosesLow {
+  left: -30px;
+  bottom: 10px;
+}
+
+.showcaseRosesHigh {
+  right: -20px;
+  top: 20px;
+  transform: scale(-1, -1);
+}
+
+.phoneLarge {
+  position: relative;
+  z-index: 2;
+  width: 340px;
+  padding: 12px;
+  border-radius: 54px;
+  background: linear-gradient(
+    145deg,
+    var(--rose-gold-1) 0%,
+    var(--rose-gold-2) 45%,
+    var(--rose-gold-1) 70%,
+    var(--rose-gold-3) 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-surface) 85%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--rose-gold-3) 60%, transparent),
+    0 50px 80px -30px color-mix(in srgb, var(--shade) 50%, transparent),
+    0 12px 24px color-mix(in srgb, var(--shade) 10%, transparent);
+}
+
+/* inside the large phone, sizes are fixed; `cqw` is for the hero stage only */
+.phoneLarge .screen {
+  padding-bottom: 22px;
+  border-radius: 43px;
+}
+
+.phoneLarge .island {
+  top: 12px;
+  width: 96px;
+  height: 26px;
+}
+
+.phoneLarge .cover {
+  height: 300px;
+  padding-bottom: 18px;
+  align-content: end;
+  gap: 2px;
+}
+
+.phoneLarge .cover > img {
+  top: 92px;
+  left: -35%;
+  width: 170%;
+}
+
+.phoneLarge .kicker {
+  position: relative;
+  margin: 0;
+  font-size: 12px;
+}
+
+.phoneLarge .cover .name {
+  font-size: 56px;
+}
+
+.phoneLarge .date {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.venue {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 36px);
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 45%, transparent),
+    0 10px 20px -16px color-mix(in srgb, var(--shade) 50%, transparent);
+  text-align: left;
+}
+
+.venueIcon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+
+.venueName {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.venueNote {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.phoneLarge .countLabel {
+  margin-top: 18px;
+  font-size: 22px;
+}
+
+.phoneLarge .count {
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.phoneLarge .count > span {
+  width: 60px;
+  padding: 9px 0 7px;
+  border-radius: 14px;
+  font-size: 26px;
+}
+
+.phoneLarge .count small {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.phoneLarge .reply {
+  display: grid;
+  place-items: center;
+  min-height: 50px;
+  margin: 18px 0 6px;
+  padding: 0 30px;
+  background: var(--wine-gradient);
+  font-size: 15px;
+  box-shadow: 0 14px 24px -14px color-mix(in srgb, var(--color-primary) 90%, transparent);
+}
+
+.chip {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px 12px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 50%, transparent),
+    0 22px 40px -22px color-mix(in srgb, var(--shade) 55%, transparent);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--color-ink);
+  animation: bob 6s cubic-bezier(0.32, 0.72, 0, 1) infinite alternate;
+}
+
+.chipValue {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-primary);
+}
+
+.chipExample {
+  left: 0;
+  top: 120px;
+}
+
+.chipCountdown {
+  right: 0;
+  bottom: 150px;
+  animation-delay: -3s;
+}
+
+.chipDot {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--color-rose-50);
+  box-shadow: inset 0 0 0 1px var(--color-gold);
+}
+
+.chipIcon {
+  width: 22px;
+  height: 22px;
+}
+
+/* ---------- closing band ---------- */
+.closingShell {
+  padding: 10px;
+  border-radius: 46px;
+  background: color-mix(in srgb, var(--color-surface) 60%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 45%, transparent),
+    0 40px 80px -50px color-mix(in srgb, var(--shade) 55%, transparent);
+}
+
+.closing {
+  position: relative;
+  overflow: hidden;
+  padding: 6.875rem 2.5rem 7.5rem;
+  border-radius: 36px;
+  text-align: center;
+  background:
+    radial-gradient(
+      50% 70% at 50% 0%,
+      color-mix(in srgb, var(--color-surface) 95%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--color-rose-100) 70%, var(--color-rose-50)) 0%,
+      var(--color-rose-50) 45%,
+      var(--color-rose-100) 100%
+    );
+}
+
+.closing::before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 70%, transparent);
+  pointer-events: none;
+}
+
+.closing > :not(.closingRoses) {
+  position: relative;
+  z-index: 2;
+}
+
+.closingTitle {
+  max-width: 47.5rem;
+  margin: 0 auto;
+}
+
+.closingBody {
+  max-width: 30rem;
+  margin: 1.25rem auto 2.25rem;
+  font-size: 1.125rem;
+  color: var(--color-muted);
+  text-wrap: pretty;
+}
+
+.closingActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem 1.25rem;
+}
+
+.closingUpcoming {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.closingRoses {
+  position: absolute;
+  width: 380px;
+  height: auto;
+  pointer-events: none;
+}
+
+.closingRosesLow {
+  left: -70px;
+  bottom: -60px;
+}
+
+.closingRosesHigh {
+  right: -70px;
+  top: -50px;
+  transform: scale(-1, -1);
+}
+
+.crest {
+  display: grid;
+  place-items: center;
+  width: 170px;
+  height: 176px;
+  margin: -40px auto 6px;
+  background: url("/ornaments/crest.svg") center / contain no-repeat;
+}
+
+.crest .seal {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: 104px;
+  margin-top: 4px;
+  transform: rotate(-6deg);
+}
+
+.crest .monogram {
+  font-size: 40px;
+}
+
+/* ---------- footer ---------- */
+.footer {
+  padding: 4.375rem 0 3.75rem;
+}
+
+.footerDivider {
+  display: block;
+  width: 18.75rem;
+  height: auto;
+  margin: 0 auto 1.125rem;
+}
+
+.footerRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.footerNav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem 1.75rem;
+}
+
+.footerLink {
+  border-radius: 0.375rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .footerLink:hover {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-decoration-color: var(--color-rose);
+    text-underline-offset: 4px;
+  }
+}
+
+.footerNote {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 1080px) {
+  .heroGrid {
+    grid-template-columns: 1fr;
+    gap: 3.5rem;
+  }
+  .heroCopy {
+    text-align: center;
+  }
+  .heroLead {
+    margin-inline: auto;
+  }
+  .heroActions,
+  .heroNotes {
+    justify-content: center;
+  }
+  .stage {
+    max-width: 45rem;
+    margin-inline: auto;
+  }
+  .designs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2.125rem 1.5rem;
+  }
+  .design:nth-child(even) .shell {
+    margin-top: 0;
+  }
+  .experienceGrid {
+    grid-template-columns: 1fr;
+  }
+  .experience .sectionHead {
+    margin-inline: auto;
+    text-align: center;
+  }
+  .experience .sectionIntro {
+    margin-inline: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    font-size: 1rem;
+  }
+  .wrap {
+    width: min(100% - 2rem, 77.5rem);
+  }
+  .header {
+    top: 0.625rem;
+    margin-top: 0.625rem;
+  }
+  .nav {
+    width: calc(100% - 1.25rem);
+    gap: 0.75rem;
+    padding: 0.375rem 0.375rem 0.375rem 1.125rem;
+  }
+  .navLinks {
+    display: none;
+  }
+  .nav .btn {
+    margin-left: auto;
+  }
+  .hero {
+    margin-top: -4.375rem;
+    padding: 6.75rem 0 3.5rem;
+  }
+  .heroTitle {
+    margin-top: 1.25rem;
+    font-size: 2.8125rem;
+    line-height: 1.02;
+  }
+  .heroLead {
+    margin-top: 1.25rem;
+    font-size: 1.0625rem;
+  }
+  .heroActions {
+    margin-top: 1.75rem;
+    gap: 0.625rem;
+  }
+  .heroNotes {
+    flex-direction: column;
+    align-items: flex-start;
+    width: max-content;
+    max-width: 100%;
+    margin: 1.75rem auto 0;
+  }
+  .heroGrid {
+    gap: 2.125rem;
+  }
+  .stage {
+    width: 104%;
+    margin-left: -2%;
+  }
+  .petals {
+    inset: 62% 0 0 0;
+  }
+  .section {
+    padding: 5.25rem 0;
+  }
+  .sectionHead {
+    margin-bottom: 2.75rem;
+  }
+  .sectionIntro {
+    font-size: 1rem;
+  }
+  .flourish {
+    width: 15rem;
+  }
+  .occasions {
+    padding: 2.25rem 0;
+  }
+  .occasionList {
+    flex-direction: column;
+    align-items: flex-start;
+    width: max-content;
+    margin-inline: auto;
+    gap: 0.875rem;
+  }
+  .occasion {
+    font-size: 1.75rem;
+  }
+  .occasion + .occasion::before {
+    display: none;
+  }
+  .occasionLead {
+    align-self: center;
+    font-size: 1.875rem;
+  }
+  .medal {
+    width: 3.25rem;
+    height: 3.25rem;
+  }
+  .medal img {
+    width: 2.125rem;
+    height: 2.125rem;
+  }
+  .designs {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+  .thumb {
+    aspect-ratio: 1 / 1;
+  }
+  .mini {
+    width: 52cqw;
+  }
+  .designName {
+    font-size: 1.5625rem;
+  }
+  .stepList {
+    grid-template-columns: 1fr;
+    gap: 3.125rem;
+  }
+  .stepList::before {
+    display: none;
+  }
+  .medallion {
+    width: 132px;
+    height: 132px;
+  }
+  .medallion::before {
+    inset: -26px;
+  }
+  .medallion img {
+    width: 72px;
+    height: 72px;
+  }
+  .perk {
+    padding: 1rem;
+  }
+  .showcase {
+    padding: 4.5rem 0 0.625rem;
+  }
+  .halo {
+    width: 340px;
+    height: 560px;
+    border-radius: 170px 170px 24px 24px;
+  }
+  .halo::before {
+    border-radius: 156px 156px 14px 14px;
+  }
+  .showcaseRoses {
+    width: 200px;
+  }
+  .phoneLarge {
+    width: 300px;
+    border-radius: 48px;
+  }
+  .phoneLarge .screen {
+    border-radius: 38px;
+  }
+  .phoneLarge .cover {
+    height: 270px;
+  }
+  .phoneLarge .count > span {
+    width: 54px;
+  }
+  .chip {
+    padding: 9px 14px 9px 9px;
+    font-size: 13px;
+  }
+  .chipValue {
+    font-size: 19px;
+  }
+  .chipDot {
+    width: 34px;
+    height: 34px;
+  }
+  .chipExample {
+    top: 4px;
+    left: 50%;
+    translate: -50% 0;
+  }
+  .chipCountdown {
+    display: none;
+  }
+  .closing {
+    padding: 5rem 1.375rem 5.625rem;
+  }
+  .closingRoses {
+    width: 220px;
+  }
+  .footerRow {
+    flex-direction: column;
+    text-align: center;
+  }
+}

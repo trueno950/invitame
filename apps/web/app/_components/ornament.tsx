@@ -18,7 +18,8 @@ export type OrnamentName = keyof typeof ORNAMENTS;
 
 interface OrnamentProperties {
   name: OrnamentName;
-  className?: string;
+  /** CSS-module classes are typed `string | undefined`, so `undefined` is accepted. */
+  className?: string | undefined;
 }
 
 export function Ornament({ name, className }: OrnamentProperties) {
