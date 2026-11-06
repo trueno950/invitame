@@ -16,6 +16,7 @@ export type SignInOutcome = { ok: true } | { ok: false; failure: SignInFailure }
 const SEND_CODE_PATH = "/api/auth/email-otp/send-verification-otp";
 const SIGN_IN_PATH = "/api/auth/sign-in/email-otp";
 const SIGN_OUT_PATH = "/api/auth/sign-out";
+const SESSION_PATH = "/api/auth/get-session";
 /** Better Auth 1.7.16 email OTP error codes for a wrong and an expired code; both answer 400. */
 const INVALID_CODE_ERRORS = new Set(["INVALID_OTP", "OTP_EXPIRED"]);
 /** RFC 5321 caps a forward path at 256 octets, so an address has at most 254 characters. */
@@ -122,7 +123,30 @@ export function signInWithCode(
   return send(fetch, SIGN_IN_PATH, { email, otp });
 }
 
-/** Ends the session; the API deletes it and the proxy passes the cleared cookies back. */
+/** Whether the browser's cookies still carry a session: `get-session` answers `200 null` without one. */
+async function sessionIsGone(fetch: BrowserFetch): Promise<boolean> {
+  try {
+    const response = await fetch(SESSION_PATH, {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    return response.status === 200 && (await response.json()) === null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ends the session; the API deletes it and the proxy passes the cleared cookies back. Shared by the
+ * customer and administrator pages (M2 T8d). When the sign-out request fails, a session that is
+ * already gone (expired, revoked, or without a cookie) still counts as signed out, so the page can
+ * move on to its sign-in page instead of offering a button that can never succeed (L40). It reports
+ * failure only while a session is still there or the API cannot say.
+ */
 export async function signOut(fetch: BrowserFetch): Promise<boolean> {
-  return (await send(fetch, SIGN_OUT_PATH, {})).ok;
+  if ((await send(fetch, SIGN_OUT_PATH, {})).ok) {
+    return true;
+  }
+  return sessionIsGone(fetch);
 }

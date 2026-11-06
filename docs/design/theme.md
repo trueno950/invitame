@@ -4,7 +4,8 @@ Status: **current** for the web foundations (M2 T8t, S35). The owner approved ve
 «A · Rosa y vino» on 2026-11-05 (L41 of `odd/tasks/m2-identity.md`). The tokens, fonts, ornaments, shared
 components, `/ingresar`, `/cuenta`, and the token-based landing page are implemented. The full concept landing
 page, with its sections and the draw-on bouquet, is **planned** for M2 T8l, after the owner reviews every product
-claim in its copy. Administrator pages (T8d) are planned and build on this theme.
+claim in its copy. The administrator pages (T8d: `/admin/ingresar` and `/admin`; `/admin/activar` follows) use the same
+frame and components.
 
 ## Principles
 
@@ -84,8 +85,11 @@ meaning, and never sit under text where they reduce its contrast. Keep each file
 - `app/_components/wordmark.tsx`: "Invita" in the display serif, "Me" in the wine script, and the rose; read by
   assistive technology as "InvitaMe".
 - `app/_components/ornament.tsx`: the decorative images above.
-- `app/_components/customer-shell.tsx`: the frame of `/ingresar` and `/cuenta` (the paper wash, corner flowers,
-  the header with the wordmark, and one centered card with the eyebrow, flourish, heading, and intro).
+- `app/_components/customer-shell.tsx`: the frame of `/ingresar`, `/cuenta`, and the administrator pages (the
+  paper wash, corner flowers, the header with the wordmark, and one centered card with the eyebrow, flourish,
+  heading, and intro).
+- `app/_components/sign-out-button.tsx`: the wine «Cerrar sesión» button shared by customers and administrators,
+  with its failure note.
 
 ## Motion
 
@@ -114,4 +118,4 @@ motion.
 | Shared classes and components | `apps/web/app/_components/` |
 | Ornament files | `apps/web/public/ornaments/` |
 | Contrast helper and test | `apps/web/lib/theme/` |
-| Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/page.tsx` |
+| Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/admin/`, `apps/web/app/page.tsx` |

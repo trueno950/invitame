@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 /**
  * `/cuenta`: the signed-in customer's own profile (M2 T8c; S1, L29, L39). `proxy.ts` refreshes the
  * browser's session cookie before this render (L34); the profile comes from `GET /me` on the web
- * server. Administrators see nothing role-specific here (their pages are T8d).
+ * server. An administrator sees a notice that links to the panel at `/admin` (T8d; S36).
  */
 export default async function AccountPage() {
   // Render per request: the session read below swallows errors, including Next.js's prerender bailout.
@@ -69,6 +69,11 @@ export default async function AccountPage() {
       {view.kind === "not-customer" ? (
         <div className="flex flex-col gap-8">
           <p className="text-center leading-7 text-muted">{ACCOUNT_COPY.notCustomer}</p>
+          <div className="flex justify-center">
+            <Link className={quietButton} href="/admin">
+              {ACCOUNT_COPY.adminPanel}
+            </Link>
+          </div>
           <SignOutButton />
         </div>
       ) : null}

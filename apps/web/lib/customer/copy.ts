@@ -57,5 +57,7 @@ export const ACCOUNT_COPY = {
   unavailableBody: "Inténtalo de nuevo en unos minutos.",
   retry: "Volver a intentar",
   notCustomer: "Esta página es para cuentas de clientes.",
+  /** The administrator notice links to the panel (M2 T8d; S36); no public page links to `/admin`. */
+  adminPanel: "Ir al panel de administración",
   home: "Ir al inicio",
 } as const;
