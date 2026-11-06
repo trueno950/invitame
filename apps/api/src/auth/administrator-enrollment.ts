@@ -1,4 +1,5 @@
-import type { Auth } from "better-auth";
+import type { Auth, BetterAuthOptions } from "better-auth";
+import { APIError } from "better-auth/api";
 import type { twoFactor } from "better-auth/plugins";
 
 import { TWO_FACTOR_PATH } from "./abuse-limits";
@@ -6,6 +7,7 @@ import {
   type AccountAccess,
   isPendingAdministrator,
   isWithinEnrollmentWindow,
+  USER_ROLE,
 } from "./account-access";
 
 /** The issuer label of the TOTP URI shown at enrollment (decision 3). */
@@ -48,6 +50,90 @@ export const PENDING_ADMINISTRATOR_ENDPOINTS: ReadonlySet<string> = new Set([
 ]);
 
 type InternalAdapter = Awaited<Auth["$context"]>["internalAdapter"];
+
+type SessionCreateBefore = NonNullable<
+  NonNullable<NonNullable<BetterAuthOptions["databaseHooks"]>["session"]>["create"]
+>["before"];
+/** The endpoint context Better Auth passes to the session-create hook (null outside an endpoint). */
+export type SessionCreateContext = NonNullable<Parameters<NonNullable<SessionCreateBefore>>[1]>;
+
+/**
+ * The refusal of a first TOTP confirmation that lost a race (S39, T7c): `401` with a stable code.
+ * The web treats every `401` from `verify-totp` other than `INVALID_CODE` as an ended session.
+ */
+export const ENROLLMENT_SUPERSEDED = {
+  code: "ENROLLMENT_SUPERSEDED",
+  message: "The enrollment is no longer valid. Sign in again.",
+} as const;
+
+/**
+ * Whether the session Better Auth is about to create on `verify-totp` belongs to a first TOTP
+ * confirmation whose pending session is gone (T9a-D1, S39). Better Auth 1.7.16 confirms a first
+ * code by setting `twoFactorEnabled`, then creating the enrolled session, then setting its cookie,
+ * then deleting the pending session, and finally marking the `TwoFactor` row verified, each in its
+ * own statement (`plugins/two-factor/totp/index.mjs`, `verifyTOTP`). Once the flag commits, the
+ * reissue of `admin:create` is refused, so a reissue or a `user:disable` that won the race has
+ * already deleted the pending session by the time this runs.
+ *
+ * Only an ADMIN whose flag is already true on the TOTP path is checked. A verified `TwoFactor` row
+ * means a sign-in challenge (Better Auth refuses a challenge on an unverified row), which carries no
+ * session and needs no check. Otherwise (no row, or an unverified one) it is a first confirmation,
+ * and the session named by the request's signed session cookie, the one `verify-totp` resolved, must
+ * still exist and belong to this user. The checks use the raw adapter, which runs no hooks.
+ */
+export async function isSupersededFirstConfirmation(
+  context: SessionCreateContext,
+  user: AccountAccess & { id: string },
+): Promise<boolean> {
+  if (
+    context.path !== TWO_FACTOR_PATH.VERIFY_TOTP ||
+    user.role !== USER_ROLE.ADMIN ||
+    user.twoFactorEnabled !== true
+  ) {
+    return false;
+  }
+
+  const { adapter, authCookies, secret } = context.context;
+  const enrollment = await adapter.findOne<{ verified?: unknown }>({
+    model: "twoFactor",
+    where: [{ field: "userId", value: user.id }],
+  });
+  if (enrollment?.verified === true) {
+    return false;
+  }
+
+  const token = await context.getSignedCookie(authCookies.sessionToken.name, secret);
+  const pending =
+    typeof token === "string" && token !== ""
+      ? await adapter.findOne<{ userId?: unknown }>({
+          model: "session",
+          where: [{ field: "token", value: token }],
+        })
+      : null;
+  return pending?.userId !== user.id;
+}
+
+/**
+ * Compensates a superseded first confirmation (S39): sets `twoFactorEnabled` back to false for this
+ * user only if it is still true, and changes no other column (Prisma still stamps `updatedAt`).
+ * Returns the error the session-create hook throws, so no session row and no cookie exist. If the
+ * process stops before this update, the flag stays true with no `TwoFactor` row and no session: the
+ * account is locked, fails closed, and only the manual recovery procedure (T10) releases it.
+ */
+export async function revertSupersededEnrollment(
+  context: SessionCreateContext,
+  userId: string,
+): Promise<APIError> {
+  await context.context.adapter.updateMany({
+    model: "user",
+    where: [
+      { field: "id", value: userId },
+      { field: "twoFactorEnabled", value: true },
+    ],
+    update: { twoFactorEnabled: false },
+  });
+  return APIError.from("UNAUTHORIZED", ENROLLMENT_SUPERSEDED);
+}
 
 /**
  * Whether an administrator who has not enrolled may still use the initial password (S20). The issue

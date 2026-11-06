@@ -14,8 +14,18 @@ import {
   SIGN_IN_CODE_REQUEST_PATH,
   TWO_FACTOR_PATH,
 } from "./abuse-limits";
-import { enrollmentWindowOpen, TWO_FACTOR_OPTIONS } from "./administrator-enrollment";
-import { type AuthRequestLog, guardAuthHandler } from "./auth-request-guard";
+import {
+  enrollmentWindowOpen,
+  isSupersededFirstConfirmation,
+  revertSupersededEnrollment,
+  TWO_FACTOR_OPTIONS,
+} from "./administrator-enrollment";
+import {
+  AUTH_REQUEST_EVENT,
+  type AuthRequestLog,
+  guardAuthHandler,
+  logSafely,
+} from "./auth-request-guard";
 import { refuseInactiveSessions } from "./inactive-session-hook";
 import {
   administratorSessionExpiresAt,
@@ -214,6 +224,19 @@ export function createAuth(options: CreateAuthOptions): Auth {
               | (AccountAccess & { id: string })
               | null
               | undefined;
+
+            // S39 (T9a-D1): a first TOTP confirmation whose pending session was deleted by an
+            // `admin:create` reissue or a `user:disable` reverts the enrollment flag and gets no
+            // session. Checked first, so a disable that won the race is reverted too.
+            if (context && user && (await isSupersededFirstConfirmation(context, user))) {
+              const refusal = await revertSupersededEnrollment(context, user.id);
+              logSafely(options.log, {
+                event: AUTH_REQUEST_EVENT.ENROLLMENT_SUPERSEDED,
+                path: context.path,
+              });
+              throw refusal;
+            }
+
             const windowOpen =
               user && internalAdapter
                 ? await enrollmentWindowOpen(internalAdapter, user.id, user)

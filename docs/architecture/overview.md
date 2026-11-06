@@ -285,7 +285,8 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
   2. `POST /api/auth/two-factor/enable` with the password: returns the TOTP URI (issuer `InvitaMe`) and 10
      backup codes; calling it again replaces both while enrollment is unconfirmed;
   3. `POST /api/auth/two-factor/verify-totp` with a code from the app: confirms enrollment and replaces the
-     session with a new one;
+     session with a new one, only while the pending session that sent the code still exists (see the
+     confirmation race below);
   4. `POST /api/auth/sign-out`.
 
   Every other Better Auth endpoint answers exactly as without a session; the session itself stays valid.
@@ -312,6 +313,17 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
   transaction. For a pending administrator it replaces the password, restarts the window, drops an
   unconfirmed enrollment, and deletes their sessions in one transaction. It refuses an enrolled or `DISABLED`
   administrator and any customer address. See the README for usage.
+- **Confirmation race** (S39, T7c): Better Auth sets `twoFactorEnabled` before it creates the enrolled
+  session, in separate statements. The session-create hook therefore treats every session that
+  `verify-totp` creates for an `ADMIN` whose flag is already true as a first confirmation unless the
+  `TwoFactor` row is verified (a sign-in challenge, not checked further). A first confirmation needs the
+  session named by the request's signed session cookie to still exist for the same user. When an
+  `admin:create` reissue or `user:disable` deleted it during the confirmation, the hook sets
+  `twoFactorEnabled` back to false for that user only, logs one `administrator_enrollment_superseded` event
+  without personal data, and answers `401 {"code":"ENROLLMENT_SUPERSEDED"}` with no session and no cookie;
+  the reissued password can then enroll. `/admin/activar` shows that `401` as an ended session. If the process
+  stops between the two writes, the account stays enrolled without a secret or a session and only the manual
+  recovery procedure (T10) releases it.
 
 ### Own profile (current)
 

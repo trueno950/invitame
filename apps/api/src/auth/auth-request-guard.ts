@@ -10,13 +10,16 @@ export const AUTH_REQUEST_EVENT = {
   CLIENT_IP_UNRESOLVED: "client_ip_unresolved",
   PROXY_REJECTED: "auth_proxy_rejected",
   UNAVAILABLE: "auth_request_unavailable",
+  /** A first TOTP confirmation lost a race to a reissue or a disable and was reverted (S39). */
+  ENROLLMENT_SUPERSEDED: "administrator_enrollment_superseded",
 } as const;
 
 /** Structured warning without personal data: the request path and, for a failure, the error class. */
 export type AuthRequestEvent =
   | { event: typeof AUTH_REQUEST_EVENT.CLIENT_IP_UNRESOLVED; path: string }
   | { event: typeof AUTH_REQUEST_EVENT.PROXY_REJECTED; path: string }
-  | { event: typeof AUTH_REQUEST_EVENT.UNAVAILABLE; path: string; error: string };
+  | { event: typeof AUTH_REQUEST_EVENT.UNAVAILABLE; path: string; error: string }
+  | { event: typeof AUTH_REQUEST_EVENT.ENROLLMENT_SUPERSEDED; path: string };
 
 export type AuthRequestLog = (event: AuthRequestEvent) => void;
 
@@ -92,7 +95,7 @@ function withoutProxyHeaders(
   return new Request(request, { headers });
 }
 
-function logSafely(log: AuthRequestLog, event: AuthRequestEvent): void {
+export function logSafely(log: AuthRequestLog, event: AuthRequestEvent): void {
   try {
     log(event);
   } catch {
