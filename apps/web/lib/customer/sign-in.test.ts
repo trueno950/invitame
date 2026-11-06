@@ -207,6 +207,42 @@ describe("signOut", () => {
     assert.equal(calls[0]?.init.method, "POST");
     assert.equal(calls[0]?.init.credentials, "same-origin");
     assert.equal(calls[0]?.init.body, "{}");
+    assert.equal(calls.length, 1, "a successful sign-out needs no session check");
+  });
+
+  // R3-sign-out-fails-without-cookie, R4-sign-out-stuck-when-already-signed-out (M2 T8d; L40): a
+  // sign-out whose session is already gone must still end on the sign-in page.
+  it("reports success when the sign-out fails but the session is already gone", async () => {
+    for (const status of [403, 401, 502]) {
+      const { fetch, calls } = fakeFetch((call) =>
+        call.input === "/api/auth/sign-out" ? json(status, { code: "X" }) : json(200, null),
+      );
+
+      assert.equal(await signOut(fetch), true, String(status));
+      assert.equal(calls.length, 2);
+      assert.equal(calls[1]?.input, "/api/auth/get-session");
+      assert.equal(calls[1]?.init.method, "GET");
+      assert.equal(calls[1]?.init.credentials, "same-origin");
+      assert.equal(calls[1]?.init.cache, "no-store");
+    }
+  });
+
+  it("reports failure when the sign-out fails and the session is still there", async () => {
+    const { fetch } = fakeFetch((call) =>
+      call.input === "/api/auth/sign-out"
+        ? json(403, {})
+        : json(200, { session: { id: "s1" }, user: { id: "u1" } }),
+    );
+
+    assert.equal(await signOut(fetch), false);
+  });
+
+  it("reports failure when neither the sign-out nor the session check gets an answer", async () => {
+    const { fetch } = fakeFetch((call) =>
+      call.input === "/api/auth/sign-out" ? json(503, {}) : json(503, {}),
+    );
+
+    assert.equal(await signOut(fetch), false);
   });
 
   it("reports failure on a non-2xx answer or a network error, without throwing", async () => {

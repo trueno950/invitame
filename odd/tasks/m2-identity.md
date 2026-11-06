@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); the visual theme was chosen (L41), and T8t is in progress.
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d in progress (L42).
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), and T8t on `feat/m2-identity-20-theme` (L23 to L41). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), and T8d on `feat/m2-identity-21-admin-pages` (L23 to L42). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -107,6 +107,13 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   only), and Jost (interface). Flowers and ornaments are fine-line botanical engraving in wine and gold ("Flores de
   línea fina, sin IA"). Motion respects `prefers-reduced-motion`. Text meets WCAG AA (4.5:1), and component borders
   reach 3:1.
+- **S36** (L42) Administrator pages, approved as: "Ingreso en /admin/ingresar (correo y contraseña, luego el código
+  de la app o uno de respaldo), activación en /admin/activar (código QR, confirmación con el primer código y códigos
+  de respaldo mostrados una sola vez) y un panel mínimo en /admin con tu cuenta y «Cerrar sesión». Mismo trato de tú
+  que los clientes. Ninguna página pública enlaza a /admin; el aviso para administradores en /cuenta sí lleva al
+  panel." The QR code is drawn in the browser with `lean-qr` (an approved new dependency, L42) from the enrollment
+  response the browser already holds; the TOTP secret and the backup codes never reach a third-party service, a log,
+  or storage outside the API.
 
 ## Tasks
 
@@ -126,8 +133,8 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T8a | Session settings: customer sessions of 7 days refreshed at most once a day, administrator sessions of 12 hours without refresh, and a host-only session cookie served through the web origin (`__Host-` prefix in production), with Better Auth's base URL set to the public web origin; ADR 0004 decision 4 states the mechanism, cookie name, `Domain`, and lifetimes (L33, L34). | S7, S14, S16 | worker | `41f6d06` (#17) |
 | T8b | Web proxy and server-side API client: the web forwards `/api/auth` to the API with the client IP and passes cookies through without storing them, and its server calls the API with the session cookie; server-only API configuration in `apps/web`; the API trusts the client IP only from the web hop, proven by a shared web-to-API secret that the API requires on every authentication request in production (L33, L36). | S1, S7, S14 | worker | `e41a42a` (#18), `6c66236` (#19) |
 | T8c | Customer pages in Spanish product copy addressed with tú (L39): sign-in by email code at `/ingresar`, the own profile at `/cuenta`, and sign-out, all through the web server; the pages extend the session cookie through the proxy before every session read (L34, L37, L40), and the web settings are validated at startup (L38). | S1, S6 | worker | `5ecd5f6` (#20) |
-| T8t | Visual theme foundations (L41): the S35 tokens and fonts in `apps/web` (Tailwind theme and `next/font`), fine-line ornaments as static SVG assets, the shared components in `app/_components`, `/ingresar` and `/cuenta` restyled with unchanged copy and behavior, the current landing moved onto the tokens without new sections, a contrast test over the token pairs, and `docs/design/theme.md`. | S35 | worker | — |
-| T8d | Administrator pages in Spanish product copy, on the S35 theme: password sign-in, the TOTP challenge, enrollment with backup codes shown once, and sign-out. | S6, S21, S35 | worker | — |
+| T8t | Visual theme foundations (L41): the S35 tokens and fonts in `apps/web` (Tailwind theme and `next/font`), fine-line ornaments as static SVG assets, the shared components in `app/_components`, `/ingresar` and `/cuenta` restyled with unchanged copy and behavior, the current landing moved onto the tokens without new sections, a contrast test over the token pairs, and `docs/design/theme.md`. | S35 | worker | `0de8136` (#21) |
+| T8d | Administrator pages in Spanish product copy addressed with tú, on the S35 theme (L42): password sign-in with the TOTP or backup-code challenge at `/admin/ingresar`, enrollment with a QR code (`lean-qr`) and backup codes shown once at `/admin/activar`, a minimal panel with sign-out at `/admin`, and the T8c sign-out and account-logging findings (L40). | S6, S21, S35, S36 | worker | — |
 | T8l | Themed landing page (L41): the approved concept's sections and the draw-on bouquet in `apps/web/app/page.tsx`, after the owner reviews every product claim in its copy. | S35 | worker | — |
 | T9 | Integration and E2E tests: every ADR obligation and finding against real PostgreSQL, each traced to a named assertion. | S2, S13, S17, S30 | inline | — |
 | T10 | Documentation: ADR wording fixes, architecture, database, and quality-gate docs, environment examples, and the administrator recovery procedure. | S13, S21, S26, S27 | inline | — |
@@ -543,3 +550,28 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   local, uncommitted blueprint, so S35 records its tokens. Its sample copy makes claims the product cannot keep yet
   ("hecha a mano", "Envíala por WhatsApp", a catalog that does not exist), which T8l reviews with the owner. Slice 20
   (`feat/m2-identity-20-theme`, from `2174d90`) holds T8t; the admin routes and voice of T8d are still open.
+- **L42** (2026-11-06) Slice 20 (`0de8136`, PR #21) holds the theme foundations (T8t). Its gates passed (web 108 of
+  108 and API 315 of 315 tests, 5 of 5 parallel web runs; the contrast test failed with 15 of 20 before the tokens
+  existed and passes with 25 of 25), and screenshots of the real app matched the approved concept. The native review
+  was not run: its risk assessment rated the candidate medium and under budget. User, choosing an option for "T8t (la
+  base del tema «Rosa y vino») pasó los 7 checks y lo verifiqué contra las capturas de la app real. ¿Apruebas el
+  commit, el PR contra feat/m2-identity y el merge cuando pase el CI?": "Sí: commit, PR y merge (recomendado)", whose
+  description reads: "Commit de lo verificado (22 archivos, 856 líneas), PR marcado como excepción de tamaño, merge
+  cuando pase el CI y actualizo el PR #1. La evaluación de riesgo no pide revisión nativa." PR #21 passed CI and was
+  merged into the tracker as `275eb8c`, whose tree equals slice 20. While it merged, User, choosing an option for
+  "Mientras se integra el tema, defino lo que sigue. T8d crea las páginas de administrador con el tema «Rosa y vino»:
+  ingreso con contraseña, el código de la app autenticadora, la activación de esa app con códigos de respaldo que se
+  muestran una sola vez, y cerrar sesión. ¿Qué rutas y qué trato usan?": "/admin, con tú y sin enlace público
+  (recomendado)", whose description reads: "Ingreso en /admin/ingresar (correo y contraseña, luego el código de la
+  app o uno de respaldo), activación en /admin/activar (código QR, confirmación con el primer código y códigos de
+  respaldo mostrados una sola vez) y un panel mínimo en /admin con tu cuenta y «Cerrar sesión». Mismo trato de tú
+  que los clientes. Ninguna página pública enlaza a /admin; el aviso para administradores en /cuenta sí lleva al
+  panel." The other option was usted. No QR encoder was installed (`apps/web` depends only on `next`, `react`, and
+  `react-dom`), so, User, choosing an option for "Para mostrar el código QR en /admin/activar hace falta una
+  dependencia nueva en la web, y eso requiere tu aprobación. ¿Cómo lo resolvemos?": "Agregar lean-qr (recomendado)",
+  whose description reads: "Librería MIT sin dependencias propias, versión estable 2.7.4, actualizada en septiembre
+  de 2026. El QR se dibuja en el navegador con el dato que ya recibe al activar; el secreto nunca sale a un servicio
+  externo. Es una sola dependencia nueva en apps/web." The other option was a typed setup key without a QR code. This
+  adds S36. CI on #1 passed after #21. T8d ships as two slices: slice 21 (`feat/m2-identity-21-admin-pages`, from
+  `275eb8c`) holds sign-in, the panel, the shared sign-out, and the server log; slice 22 holds enrollment with the
+  QR code and `lean-qr`.
