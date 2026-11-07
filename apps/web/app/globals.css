@@ -54,8 +54,8 @@
 }
 
 /*
- * Font families. `app/layout.tsx` loads the fonts with `next/font/google` and sets these variables
- * on <html>; `inline` makes the utilities read them where they are used.
+ * Font families. `app/layout.tsx` loads the fonts from `app/fonts/` with `next/font/local` and sets
+ * these variables on <html>; `inline` makes the utilities read them where they are used.
  * display: Cormorant Garamond for headings; script: Great Vibes for names and accents only;
  * sans: Jost for the interface and body text.
  */
