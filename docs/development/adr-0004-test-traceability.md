@@ -2,7 +2,8 @@
 
 Maps every test obligation of [ADR 0004](../adr/0004-authentication-with-better-auth.md) (its Consequences) and
 every S17 case of the Milestone 2 plan to a named assertion (S13, S30). Status: current as of Milestone 2 task
-T7d. Browser end-to-end coverage is planned for T9b and is not claimed here.
+T9b part A. Browser end-to-end coverage exists for the customer flows only (see the L40 row below); the
+administrator flows are planned for T9b part B and are not claimed here.
 
 ## How the evidence runs
 
@@ -14,6 +15,11 @@ T7d. Browser end-to-end coverage is planned for T9b and is not claimed here.
   refuses a missing or non-local `DATABASE_URL` and gives every suite its own client addresses.
 - **Unit suites** (`apps/api/src/**/*.spec.ts`) run the same `createAuth` on Better Auth's in-memory adapter,
   with controlled clocks, through `pnpm test` in the `quality-gates` job.
+- **Browser suite** (`apps/web/e2e/**/*.spec.ts`, T9b) drives Chromium through the production build of the web,
+  which proxies `/api/auth` to the built API and reads `GET /me` from its server; the API runs on a migrated
+  PostgreSQL 17 and delivers sign-in codes through Mailpit, where the tests read them. It runs through
+  `pnpm --filter @invitame/web test:e2e`, in CI in the `browser-tests` job; see
+  [Browser end-to-end tests](quality-gates.md#browser-end-to-end-tests).
 
 A test name below is quoted exactly; `›` separates a `describe` block from its test. "Added" marks assertions
 written in T9a, "added in T7c" those of the T9a-D1 fix, and "added in T7d" those of its hardening (S40); every
@@ -42,6 +48,7 @@ other row existed before them.
 | U-sender | [`auth/sign-in-code/sign-in-code-sender.spec.ts`](../../apps/api/src/auth/sign-in-code/sign-in-code-sender.spec.ts) |
 | U-email | [`email/application/email-delivery.service.spec.ts`](../../apps/api/src/email/application/email-delivery.service.spec.ts) |
 | U-profile | [`users/presentation/own-profile.controller.spec.ts`](../../apps/api/src/users/presentation/own-profile.controller.spec.ts) |
+| E2E-customer | [`apps/web/e2e/customer-session.spec.ts`](../../apps/web/e2e/customer-session.spec.ts) |
 
 ## ADR 0004 obligations
 
@@ -74,7 +81,7 @@ Response timing is not measured by any suite; the code request answers before de
 ## Findings routed to T9 (plan Log L35 to L44)
 
 API- and database-bound findings are resolved in T9a. Findings in `apps/web` or that need a browser belong to
-T9b and are listed here without a test.
+T9b: part A resolves the two L40 findings below; the others are listed without a test until parts B and C.
 
 | Log | Finding | Disposition |
 | --- | --- | --- |
@@ -84,10 +91,12 @@ T9b and are listed here without a test.
 | L37 | R3-registration-require-proxy-secret-unproved | U-registration: production configuration refuses a request without the secret or with a wrong one with 403 before any query and logs the rejection; a request with the secret and a non-production request are served. |
 | L37 | R3-db-spec-client-prefix-collision | Fixed in the harness: `ClientAddresses` draws each address at random, never repeats it within a suite, cleans up only its own rows, and keeps suites that count rows on one address in a range no other suite uses. |
 | L37 | Worker notes: `/me` does not check the proxy secret; behind the proxy, Better Auth's `Sec-Fetch` check falls back to its origin check. | Recorded for T11; not a T9a test. |
-| L38 | R3-api-client-body-timeout-misclassified, R3-api-origin-rejects-equivalent-origins, R3-cookie-name-parse-without-equals, R4-proxy-ignores-client-abort, R4-api-client-unavailable-drops-cause-and-logs-nothing (T9, T11), R4-api-client-body-timeout-misclassified (T9, T11) | `apps/web` server code: T9b. |
-| L40 | R3-proxy-composition-unproved, R3-session-api-cookie-roundtrip-still-unproved, R4-cuenta-outage-latency-serialized | Web proxy and cookie round trip through a browser: T9b. |
-| L43 | R3-admin-form-transitions-untested, R3-get-auth-session-wiring-unproved, R4-admin-session-failure-undiagnosable (T9, T11) | Web form transitions and server wiring: T9b. |
-| L44 | R3-activar-page-routing-unproved, R3-enrollment-flow-transitions-untested, R3-qr-medium-correction-test-vacuous | Enrollment page, its transitions, and the QR test: T9b. |
+| L38 | R3-api-client-body-timeout-misclassified, R3-api-origin-rejects-equivalent-origins, R3-cookie-name-parse-without-equals, R4-proxy-ignores-client-abort, R4-api-client-unavailable-drops-cause-and-logs-nothing (T9, T11), R4-api-client-body-timeout-misclassified (T9, T11) | `apps/web` server code: T9b part C. |
+| L40 | R3-proxy-composition-unproved | E2E-customer (T9b part A). The route handler `app/api/auth/[...path]/route.ts` with the validated production web settings: "signs in through the web origin only and shows the account that GET /me returns" requests and enters a code through the proxy, receives the session cookie host-only on the web host (`localhost`, no `Domain`, `HttpOnly`, `SameSite=Lax`), and sends no request to any origin but the web's. `proxy.ts`: "ends the session, and the old session cookie no longer authorizes anything" replays the revoked cookie; `/` (outside the matcher) keeps it, and `/cuenta` returns it cleared, which only `proxy.ts`'s session read through the proxy can do. Not proved in a browser: the extension of a live cookie after a day of use, which needs a day-old session; DB-profile "› extends a customer session read through the project guard a day after its last refresh" and the web unit tests of `session-refresh.ts` cover it. |
+| L40 | R3-session-api-cookie-roundtrip-still-unproved | E2E-customer (T9b part A): `/cuenta` shows the email that only `GET /me` returns for the browser's cookie ("signs in through the web origin only..."); "shows each customer only their own account when two customers browse at once" proves the process-wide API client uses each request's own cookie; after sign-out, a replayed cookie gets no account on `/cuenta` and `null` from `GET /api/auth/get-session` ("ends the session..."). |
+| L40 | R4-cuenta-outage-latency-serialized | Outage latency of `/cuenta`: T9b part C. |
+| L43 | R3-admin-form-transitions-untested, R3-get-auth-session-wiring-unproved, R4-admin-session-failure-undiagnosable (T9, T11) | Web form transitions and server wiring: T9b part B. |
+| L44 | R3-activar-page-routing-unproved, R3-enrollment-flow-transitions-untested, R3-qr-medium-correction-test-vacuous | Enrollment page, its transitions, and the QR test: T9b part B. |
 | L31 | A TOTP confirmation that runs while `admin:create` reissues a password must fail closed (T9, T11). | DB-admin: "fails closed when admin:create reissues the password during the first TOTP confirmation" and the T7c variants in row 10; see defect T9a-D1 (fixed). |
 
 Earlier database-suite findings also resolved by the shared harness: the order coupling, cleanup outside
