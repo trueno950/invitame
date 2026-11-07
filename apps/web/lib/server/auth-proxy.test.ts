@@ -421,7 +421,11 @@ describe("bounds and failures", () => {
     ]);
   });
 
-  it("stops the API call when the browser goes away, and logs no upstream failure", async () => {
+  // Bounded well below the proxy's own 5-second timeout, so a regression fails in about 2 seconds
+  // instead of waiting on the API or hanging the suite (R3-abort-test-hangs-on-regression).
+  it("stops the API call when the browser goes away, and logs no upstream failure", {
+    timeout: 2_000,
+  }, async () => {
     let upstreamClosed: () => void = () => {};
     const closed = new Promise<void>((resolve) => {
       upstreamClosed = resolve;

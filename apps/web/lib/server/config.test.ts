@@ -78,6 +78,11 @@ describe("parseWebServerConfig", () => {
       ["http://API:3001", "http://api:3001"],
       ["http://api:80", "http://api"],
       ["https://api:443/", "https://api"],
+      // Proposed by the part C1 verification (L59): an upper-case scheme, a lone dot segment, and a
+      // trailing slash are the same origin.
+      ["HTTP://api:3001", "http://api:3001"],
+      ["http://api:3001/.", "http://api:3001"],
+      ["http://api:3001/", "http://api:3001"],
     ] as const) {
       assert.equal(
         parseWebServerConfig(production({ API_ORIGIN: origin })).apiOrigin,

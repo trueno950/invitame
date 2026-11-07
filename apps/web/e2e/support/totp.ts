@@ -49,11 +49,18 @@ export function totpCode(setupKey: string, atMs = Date.now()): string {
   return hotp(decodeBase32(setupKey), timeStep(atMs));
 }
 
+/**
+ * Time steps, relative to the step of `atMs`, whose codes the API may accept for a wrong code typed
+ * now: the API accepts its own step and one on each side (-1 to +1), and the request may reach it
+ * after the next step boundary, where it accepts 0 to +2 (R2-wrong-totp-offset-window-unexplained).
+ */
+const STEPS_ACCEPTED_SOON = [-1, 0, 1, 2] as const;
+
 /** A 6-digit code that the API refuses now and in the next time step. */
 export function wrongTotpCode(setupKey: string, atMs = Date.now()): string {
   const secret = decodeBase32(setupKey);
   const step = timeStep(atMs);
-  const accepted = new Set([-1, 0, 1, 2].map((offset) => hotp(secret, step + offset)));
+  const accepted = new Set(STEPS_ACCEPTED_SOON.map((offset) => hotp(secret, step + offset)));
   for (let candidate = 0; ; candidate += 1) {
     const code = String(candidate).padStart(TOTP_DIGITS, "0");
     if (!accepted.has(code)) {

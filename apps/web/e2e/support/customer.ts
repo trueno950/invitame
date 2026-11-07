@@ -20,9 +20,14 @@ export function randomClientIp(): string {
   return `10.${randomInt(0, 256)}.${randomInt(0, 256)}.${randomInt(1, 255)}`;
 }
 
+/** A fresh address of one kind of test user, in the reserved `.test` domain (RFC 2606). */
+export function newTestEmail(kind: "customer" | "admin"): string {
+  return `${kind}-${randomUUID()}@e2e.invitame.test`;
+}
+
 /** A fresh customer address: its emails, user, and per-email quota belong to one test alone. */
 export function newCustomerEmail(): string {
-  return `customer-${randomUUID()}@e2e.invitame.test`;
+  return newTestEmail("customer");
 }
 
 interface CustomerFixtures {

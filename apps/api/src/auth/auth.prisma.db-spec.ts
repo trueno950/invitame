@@ -54,8 +54,8 @@ describe("Better Auth on the Prisma schema (real PostgreSQL)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
   const sentCodes = new Map<string, string>();
   const runId = randomUUID();
-  // One address for the whole suite, from the range no other suite shares (L17, L37).
-  const clientAddresses = new ClientAddresses("counted");
+  // One address for the whole suite, from this suite's own block (L17, L37).
+  const clientAddresses = new ClientAddresses("auth.prisma");
   const clientIp = clientAddresses.next();
   const emails: string[] = [];
   let auth: TestAuth;

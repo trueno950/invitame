@@ -3,6 +3,7 @@ import type { Page, Request } from "@playwright/test";
 import { ADMIN_PANEL_COPY, ADMIN_SIGN_IN_COPY } from "../lib/admin/copy.ts";
 import { ENROLLMENT_COPY } from "../lib/admin/enrollment-copy.ts";
 import {
+  BACKUP_CODE_COUNT,
   expect,
   readBackupCodes,
   setupKeyFigure,
@@ -110,8 +111,8 @@ test.describe("administrator enrollment at /admin/activar", () => {
     // Step 3: ten backup codes, shown once; the key and the QR code are gone.
     await expect(page.getByRole("heading", { name: ENROLLMENT_COPY.backupHeading })).toBeVisible();
     const backupCodes = await readBackupCodes(page);
-    await expect(page.getByText(ENROLLMENT_COPY.backupCount(10))).toBeVisible();
-    expect(new Set(backupCodes).size).toBe(10);
+    await expect(page.getByText(ENROLLMENT_COPY.backupCount(BACKUP_CODE_COUNT))).toBeVisible();
+    expect(new Set(backupCodes).size).toBe(BACKUP_CODE_COUNT);
     await expect(setupKeyFigure(page)).toHaveCount(0);
     await expect(page.getByRole("img", { name: ENROLLMENT_COPY.qrLabel })).toHaveCount(0);
     expect((await readSession(page))?.user.twoFactorEnabled).toBe(true);

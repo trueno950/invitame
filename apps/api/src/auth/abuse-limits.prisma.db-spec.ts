@@ -44,8 +44,8 @@ describe("abuse limits on the PostgreSQL RateLimit table", () => {
     log: () => {},
   });
   const runId = randomUUID();
-  // This suite counts rows on one address, so it draws from the range no other suite shares.
-  const clientAddresses = new ClientAddresses("counted");
+  // This suite counts rows on one address, so it draws from its own block, which no other suite shares.
+  const clientAddresses = new ClientAddresses("abuse-limits.prisma");
   const email = `t5b-quota-${runId}@example.test`;
 
   function nextClientIp(): string {

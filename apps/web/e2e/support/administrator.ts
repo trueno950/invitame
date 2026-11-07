@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -7,7 +6,7 @@ import type { Browser, Page } from "@playwright/test";
 
 import { ADMIN_SIGN_IN_COPY } from "../../lib/admin/copy.ts";
 import { ENROLLMENT_COPY } from "../../lib/admin/enrollment-copy.ts";
-import { test as customerTest, expect, randomClientIp } from "./customer.ts";
+import { test as customerTest, expect, newTestEmail, randomClientIp } from "./customer.ts";
 import { EDGE_CLIENT_IP_HEADER, requireLocalUrl, WEB_ORIGIN } from "./environment.ts";
 import { totpCode } from "./totp.ts";
 
@@ -19,6 +18,8 @@ import { totpCode } from "./totp.ts";
  */
 
 const API_DIRECTORY = resolve(__dirname, "../../../api");
+/** The backup codes enrollment shows: the API's `backupCodeOptions.amount` (`administrator-enrollment.ts`). */
+export const BACKUP_CODE_COUNT = 10;
 const run = promisify(execFile);
 
 export interface Administrator {
@@ -33,7 +34,7 @@ export interface EnrolledAdministrator extends Administrator {
 }
 
 export async function createAdministrator(): Promise<Administrator> {
-  const email = `admin-${randomUUID()}@e2e.invitame.test`;
+  const email = newTestEmail("admin");
   const { stdout } = await run(
     "node",
     ["-r", "@swc-node/register", "test/create-e2e-administrator.ts", email],
@@ -80,7 +81,7 @@ export async function startEnrollment(page: Page, admin: Administrator): Promise
 /** Reads the backup codes of the last step, in the order shown. */
 export async function readBackupCodes(page: Page): Promise<string[]> {
   const list = page.getByRole("list");
-  await expect(list.getByRole("listitem")).toHaveCount(10);
+  await expect(list.getByRole("listitem")).toHaveCount(BACKUP_CODE_COUNT);
   return (await list.getByRole("listitem").allInnerTexts()).map((code) => code.trim());
 }
 
@@ -88,6 +89,8 @@ export async function readBackupCodes(page: Page): Promise<string[]> {
 export async function enroll(browser: Browser, admin: Administrator) {
   const context = await browser.newContext({
     baseURL: WEB_ORIGIN,
+    // Enrollment needs JavaScript, also for a test file that turns it off for its own pages.
+    javaScriptEnabled: true,
     extraHTTPHeaders: { [EDGE_CLIENT_IP_HEADER]: randomClientIp() },
   });
   try {

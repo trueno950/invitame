@@ -7,7 +7,7 @@
     "dev": "next dev",
     "lint": "biome lint .",
     "start": "next start",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/**/*.test.ts\" \"e2e/**/*.test.ts\"",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/**/*.test.ts\" \"e2e/**/*.test.ts\" proxy.test.ts",
     "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test",
     "test:e2e:install": "PLAYWRIGHT_BROWSERS_PATH=0 playwright install --only-shell chromium",
     "typecheck": "tsc --noEmit"

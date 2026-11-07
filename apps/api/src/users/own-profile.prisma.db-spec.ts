@@ -242,16 +242,28 @@ describe("own profile on the Prisma schema (real PostgreSQL)", () => {
     it("answers GET /me and PATCH /me with 401 without a usable session and writes nothing", async () => {
       const userId = await createCustomer("denied");
       const { cookie, token } = await createSession(userId);
-      const [name, value = ""] = cookie.split("=");
-      const tampered = `${name}=${value.slice(0, -4)}AAAA`;
-      await prisma.session.deleteMany({ where: { token } });
+      // The live session's own token, signed with another secret: only the signature check can refuse
+      // it, because the session row still exists (R3-tampered-cookie-case-vacuous).
+      const otherSecret = randomBytes(32).toString("base64url");
+      const forged = createHmac("sha256", otherSecret).update(token).digest("base64");
+      const tampered = `${SESSION_COOKIE}=${encodeURIComponent(`${token}.${forged}`)}`;
 
-      for (const sessionCookie of [undefined, tampered, cookie]) {
+      async function assertDenied(sessionCookie: string | undefined, label: string) {
         for (const init of [{}, { method: "PATCH", body: { displayName: "Intruso" } }]) {
           const response = await request("/me", { ...init, cookie: sessionCookie });
-          assert.equal(response.status, 401, `${init.method ?? "GET"} ${sessionCookie ?? "none"}`);
+          assert.equal(response.status, 401, `${init.method ?? "GET"} ${label}`);
         }
       }
+
+      await assertDenied(undefined, "without a cookie");
+      await assertDenied(tampered, "with a tampered signature");
+      assert.equal(
+        (await request("/me", { cookie })).status,
+        200,
+        "the same session, signed right",
+      );
+      await prisma.session.deleteMany({ where: { token } });
+      await assertDenied(cookie, "after the session row is gone");
       assert.equal(
         (await prisma.user.findUniqueOrThrow({ where: { id: userId } })).displayName,
         "",
