@@ -171,6 +171,12 @@ This is M2 T8c (S1, S6; L34, L39): `apps/web/app/ingresar`, `apps/web/app/cuenta
   gone (expired, revoked, or without a cookie), so the page still loads the sign-in page. The failure notice
   appears only while a session remains or the API cannot answer. Customers and administrators share this
   button (`app/_components/sign-out-button.tsx`).
+- Forms never put a field in a URL (M2 T8e; S42). The forms of `/ingresar`, `/admin/ingresar`, and
+  `/admin/activar` send only through JavaScript: each declares `method="post"`, and their submit buttons and the
+  shared sign-out button stay disabled until the page is interactive (`useInteractive` in
+  `lib/customer/interactive.ts`, which reads `false` in the server render and during hydration). So neither a
+  click nor Enter submits a form natively before React handles it, and without JavaScript the page shows one
+  line asking for it, kept in the page's copy module. The browser suite proves it with JavaScript disabled.
 - Rolling sessions: Better Auth sends the refreshed session cookie only in the same `getSession` call that
   moves the stored expiry, and the API guard behind `GET /me` also runs that refresh. A refresh started by the
   browser after the render would therefore find a fresh session and receive no cookie. So `proxy.ts` (the
@@ -217,6 +223,8 @@ sees: the API authorizes every action.
   a log, web storage, a cookie, a server action, or a third-party service.
 - `/admin` shows the administrator's address, a note that the session ends 12 hours after sign-in, and «Cerrar
   sesión», which ends on `/admin/ingresar` even when the session is already gone.
+- The forms of `/admin/ingresar` and `/admin/activar` and the sign-out button follow the customer pages' rule:
+  they send only through JavaScript and stay disabled until the page is interactive (T8e; S42).
 
 ### Access control (current)
 

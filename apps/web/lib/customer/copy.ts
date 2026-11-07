@@ -16,6 +16,8 @@ export const SIGN_IN_COPY = {
   emailInvalid: "Escribe un correo válido, por ejemplo nombre@ejemplo.com.",
   sendCode: "Enviar código",
   sending: "Enviando…",
+  /** Shown only when the browser runs no JavaScript: the form needs it to ask for a code. */
+  noScript: "Para pedir tu código, activa JavaScript en tu navegador.",
   codeHeading: "Revisa tu correo",
   codeRequested: (email: string) =>
     `Pedimos un código para ${email}. Puede tardar un par de minutos en llegar y vence en 5 minutos.`,
@@ -52,6 +54,7 @@ export const ACCOUNT_COPY = {
   nameFailed: "No pudimos guardar tu nombre. Inténtalo de nuevo en unos minutos.",
   signOut: "Cerrar sesión",
   signingOut: "Cerrando sesión…",
+  noScript: "Para cerrar sesión, activa JavaScript en tu navegador.",
   signOutFailed: "No pudimos cerrar tu sesión. Inténtalo de nuevo.",
   unavailableHeading: "No pudimos cargar tu cuenta",
   unavailableBody: "Inténtalo de nuevo en unos minutos.",

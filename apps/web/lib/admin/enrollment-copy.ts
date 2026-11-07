@@ -15,6 +15,8 @@ export const ENROLLMENT_COPY = {
   passwordMissing: "Escribe tu contraseña.",
   start: "Continuar",
   starting: "Preparando…",
+  /** Shown only when the browser runs no JavaScript: the activation needs it at every step. */
+  noScript: "Para activar tu app, necesitas JavaScript en tu navegador.",
   scanStep: "Paso 2 de 3",
   scanIntro:
     "Abre tu app autenticadora, elige agregar una cuenta y escanea este código. Después escribe el código de 6 dígitos que te muestra.",

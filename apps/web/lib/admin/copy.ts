@@ -17,6 +17,8 @@ export const ADMIN_SIGN_IN_COPY = {
   passwordMissing: "Escribe tu contraseña.",
   continue: "Continuar",
   checking: "Verificando…",
+  /** Shown only when the browser runs no JavaScript: the form needs it to send anything. */
+  noScript: "Para ingresar, activa JavaScript en tu navegador.",
   invalidCredentials:
     "El correo o la contraseña no son correctos. Revísalos y vuelve a intentarlo.",
   codeHeading: "Confirma que eres tú",
@@ -56,6 +58,7 @@ export const ADMIN_PANEL_COPY = {
   sessionNote: "Por seguridad, tu sesión termina 12 horas después de ingresar.",
   signOut: "Cerrar sesión",
   signingOut: "Cerrando sesión…",
+  noScript: "Para cerrar sesión, activa JavaScript en tu navegador.",
   signOutFailed: "No pudimos cerrar tu sesión. Inténtalo de nuevo.",
   unavailableHeading: "No pudimos cargar el panel",
   unavailableBody: "Inténtalo de nuevo en unos minutos.",

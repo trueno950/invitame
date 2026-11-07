@@ -35,4 +35,9 @@ describe("customer copy", () => {
     assert.match(sent, /ana@ejemplo\.mx/);
     assert.doesNotMatch(sent, /registrad|existe|administrador|cuenta nueva/i);
   });
+
+  it("tells a browser without JavaScript why each button stays disabled (T8e; S42)", () => {
+    assert.match(SIGN_IN_COPY.noScript, /^Para pedir tu código, .*JavaScript en tu navegador\.$/);
+    assert.match(ACCOUNT_COPY.noScript, /^Para cerrar sesión, .*JavaScript en tu navegador\.$/);
+  });
 });

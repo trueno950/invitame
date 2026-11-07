@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Request } from "@playwright/test";
 
 import { ADMIN_PANEL_COPY, ADMIN_SIGN_IN_COPY } from "../lib/admin/copy.ts";
 import { ENROLLMENT_COPY } from "../lib/admin/enrollment-copy.ts";
@@ -30,16 +30,28 @@ function heading(page: Page, name: string) {
 }
 
 /**
- * Clicks «Cerrar sesión» until the sign-in page loads. The panel arrives by a full navigation, and a
- * click that lands before React has hydrated the button does nothing, so the click is retried.
+ * Clicks «Cerrar sesión» once and waits for the sign-in page. The button stays disabled until the page
+ * is interactive (T8e; S42), so one click on the enabled button signs out, with exactly one request
+ * (R3-sign-out-retry-not-idempotent, R4-signout-retry-cannot-recover-after-navigation).
  */
 async function signOutOfPanel(page: Page) {
-  await expect(async () => {
-    await page.getByRole("button", { name: ADMIN_PANEL_COPY.signOut }).click({ timeout: 1_000 });
-    await expect(page).toHaveURL("/admin/ingresar", { timeout: 1_000 });
-  }).toPass();
+  const signOutRequests: string[] = [];
+  const countSignOut = (request: Request) => {
+    if (new URL(request.url()).pathname === "/api/auth/sign-out") {
+      signOutRequests.push(request.method());
+    }
+  };
+  page.on("request", countSignOut);
+
+  const button = page.getByRole("button", { name: ADMIN_PANEL_COPY.signOut });
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect(page).toHaveURL("/admin/ingresar");
   // Like `page.goto`, wait for the page's scripts before using its form.
   await page.waitForLoadState();
+
+  page.off("request", countSignOut);
+  expect(signOutRequests).toEqual(["POST"]);
 }
 
 /** The session Better Auth's own endpoint reads for this browser's cookie, through the proxy. */

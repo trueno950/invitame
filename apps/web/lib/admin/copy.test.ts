@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { ADMIN_PANEL_COPY, ADMIN_SIGN_IN_COPY } from "./copy.ts";
+import { ENROLLMENT_COPY } from "./enrollment-copy.ts";
 
 // Administrator product copy (M2 T8d; S20, S22, S36, L42): Spanish, addressed with "tú" like the
 // customers, in one reviewable module, and never revealing whether an address has an account.
@@ -62,5 +63,17 @@ describe("administrator copy", () => {
   it("labels the panel's sign-out «Cerrar sesión», as on the customer pages", () => {
     assert.equal(ADMIN_PANEL_COPY.signOut, "Cerrar sesión");
     assert.equal(ADMIN_PANEL_COPY.emailLabel, "Correo electrónico");
+  });
+
+  it("tells a browser without JavaScript why each button stays disabled (T8e; S42)", () => {
+    const lines = [
+      ADMIN_SIGN_IN_COPY.noScript,
+      ENROLLMENT_COPY.noScript,
+      ADMIN_PANEL_COPY.noScript,
+    ];
+    for (const line of lines) {
+      assert.match(line, /JavaScript en tu navegador\.$/);
+    }
+    assert.equal(new Set(lines).size, lines.length);
   });
 });
