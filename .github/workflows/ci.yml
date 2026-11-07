@@ -167,3 +167,14 @@ jobs:
 
       - name: Browser tests
         run: pnpm --filter @invitame/web test:e2e
+
+      # Screenshots and traces of failed tests only; the server output is already in the job log.
+      # They hold the per-run test accounts of a database that ends with the job, nothing else.
+      - name: Upload browser test failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-failures
+          path: apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7

@@ -104,7 +104,9 @@ first screen lazily. Keep each file under 40 KB.
   styles on the tokens: every color is a token or a `color-mix` of tokens, and the hero illustration and sample
   cards scale with container query units.
 - The enrollment QR code (`app/admin/activar/qr-code.tsx`) is drawn in `ink` on `surface` with a 4-module quiet
-  zone and a gold hairline, the highest-contrast pair, so a phone camera reads it reliably.
+  zone and a gold hairline, the highest-contrast pair, so a phone camera reads it reliably. Below it, the setup
+  key for manual entry is set in monospace `ink` on a pink tint, in groups of 4 and selectable as a whole, with a
+  visually hidden caption that names it for screen readers.
 
 ## Motion
 

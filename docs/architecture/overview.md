@@ -209,7 +209,8 @@ sees: the API authorizes every action.
   one challenge, and the 15-minute lock each have their own message; an expired challenge and 5 wrong codes send
   the administrator back to the password step.
 - `/admin/activar` asks for the password (`POST /api/auth/two-factor/enable`), shows the TOTP URI as a QR code
-  drawn in the browser by `lean-qr` with the setup key in groups of 4 as a fallback, confirms with the first code
+  drawn in the browser by `lean-qr` with the setup key in groups of 4 below it for manual entry (S41; a visually
+  hidden caption names it «Clave de configuración»), confirms with the first code
   (`POST /api/auth/two-factor/verify-totp` with the session, which replaces it with an enrolled one), and then
   shows the 10 backup codes once. Continuing to `/admin` needs an explicit «Ya los guardé» with a checked box.
   The URI, the setup key, and the backup codes exist only in the memory of the client component: never in a URL,

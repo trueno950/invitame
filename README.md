@@ -166,8 +166,8 @@ It creates an `ACTIVE` administrator and generates a random 24-character initial
 digits without look-alikes (`0`, `O`, `o`, `1`, `l`, `I`). The password is printed once, on its own line, for
 you to hand over through a secure channel; it is never logged or stored in plain text, and the command
 refuses to run when its output is redirected. The administrator signs in with it at
-`http://localhost:3000/admin/ingresar` and must enroll an authenticator app at `/admin/activar` (QR code or
-setup key, the first code, and 10 backup codes shown once) within **24 hours** of its issue. Until then the
+`http://localhost:3000/admin/ingresar` and must enroll an authenticator app at `/admin/activar` (QR code or the
+setup key shown below it for manual entry, the first code, and 10 backup codes shown once) within **24 hours** of its issue. Until then the
 account holds no administrator authority. After 24 hours without enrollment, the password stops
 working and existing sessions end.
 

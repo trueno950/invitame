@@ -10,7 +10,7 @@ import {
 
 import { SIGN_IN_COPY } from "../../lib/customer/copy.ts";
 import { EDGE_CLIENT_IP_HEADER } from "./environment.ts";
-import { waitForSignInEmails } from "./mailpit.ts";
+import { receiveSignInCode } from "./mailpit.ts";
 
 /** Better Auth's session cookie over local http (ADR 0004 decision 4; `session-settings.ts`). */
 export const SESSION_COOKIE = "better-auth.session_token";
@@ -18,6 +18,11 @@ export const SESSION_COOKIE = "better-auth.session_token";
 /** A private client address with about 16 million values, so no two tests share a rate limit. */
 export function randomClientIp(): string {
   return `10.${randomInt(0, 256)}.${randomInt(0, 256)}.${randomInt(1, 255)}`;
+}
+
+/** A fresh customer address: its emails, user, and per-email quota belong to one test alone. */
+export function newCustomerEmail(): string {
+  return `customer-${randomUUID()}@e2e.invitame.test`;
 }
 
 interface CustomerFixtures {
@@ -38,7 +43,7 @@ export const test = base.extend<CustomerFixtures>({
   },
   // biome-ignore lint/correctness/noEmptyPattern: Playwright reads fixture dependencies from this pattern.
   customerEmail: async ({}, use) => {
-    await use(`customer-${randomUUID()}@e2e.invitame.test`);
+    await use(newCustomerEmail());
   },
   extraHTTPHeaders: async ({ clientIp }, use) => {
     await use({ [EDGE_CLIENT_IP_HEADER]: clientIp });
@@ -70,11 +75,7 @@ export async function submitCode(page: Page, code: string): Promise<void> {
 /** The full sign-in by emailed code, ending signed in on `/cuenta`. */
 export async function signIn(page: Page, email: string): Promise<void> {
   await requestCode(page, email);
-  const [message] = await waitForSignInEmails(email);
-  if (!message) {
-    throw new Error("No sign-in email arrived.");
-  }
-  await submitCode(page, message.code);
+  await submitCode(page, await receiveSignInCode(email));
   await expect(page).toHaveURL("/cuenta");
 }
 
