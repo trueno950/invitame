@@ -1,6 +1,6 @@
 # Visual theme «A · Rosa y vino»
 
-Status: **current** (M2 T8t, T8l; S35, S37). The owner approved version 3 of the concept «A · Rosa y vino» on
+Status: **current** (M2 T8t, T8l, T8f; S35, S37, S43). The owner approved version 3 of the concept «A · Rosa y vino» on
 2026-11-05 (L41 of `odd/tasks/m2-identity.md`). The tokens, fonts, ornaments, shared components, `/ingresar`,
 `/cuenta`, and the full concept landing page at `/` (T8l: every section and the draw-on bouquet, with the honest
 pre-launch copy the owner approved in L45) are implemented. The administrator pages (T8d: `/admin/ingresar`,
@@ -47,8 +47,11 @@ draws the pale pink wash behind the customer pages; the landing draws its own wa
 
 ## Typography
 
-`apps/web/app/layout.tsx` loads three Google fonts through `next/font/google` (self-hosted at build time, Latin
-subset, `display: swap`) and sets their variables on `<html>`; the `@theme inline` block maps them to utilities.
+`apps/web/app/layout.tsx` loads three Google Fonts families through `next/font/local` from woff2 files committed in
+`apps/web/app/fonts/` (Latin subset, `display: swap`) and sets their variables on `<html>`; the `@theme inline` block
+maps them to utilities. The build fetches no font over the network (S43); a unit test in
+`apps/web/lib/theme/fonts.test.ts` fails if any `apps/web` source imports `next/font/google` again, or if a font
+file the layout names is missing, is not woff2, or has no license next to it.
 
 | Utility | Font | Weights | Use |
 | --- | --- | --- | --- |
@@ -57,6 +60,36 @@ subset, `display: swap`) and sets their variables on `<html>`; the `@theme inlin
 | `font-sans` | Jost | 400, 500 | Interface and body text, labels, buttons, fields (the default body font). |
 
 Add a weight or the italic only when a page uses it, so the build ships no unused font files.
+
+### Font files and licenses
+
+Each family has its own folder under `apps/web/app/fonts/` with its woff2 files and its SIL Open Font License 1.1
+(`OFL.txt`, copied byte for byte from `ofl/<family>/OFL.txt` in the [google/fonts](https://github.com/google/fonts)
+repository). The files are the same Latin-subset files `next/font/google` used to download:
+
+| Folder | Files | Declared weights |
+| --- | --- | --- |
+| `cormorant-garamond/` | `cormorant-garamond-latin-normal.woff2`, `cormorant-garamond-latin-italic.woff2` (variable) | `500 600` |
+| `great-vibes/` | `great-vibes-latin-normal.woff2` | `400` |
+| `jost/` | `jost-latin-normal.woff2` (variable) | `400 500` |
+
+The fallback faces keep the fonts `next/font/google` used: `adjustFontFallback: "Times New Roman"` for Cormorant
+Garamond and `"Arial"` for Great Vibes and Jost. `next/font/local` computes the fallback metrics from the files, so
+the ascent and descent match the old ones and `size-adjust` differs by up to about five points (Great Vibes); it
+affects only the fallback shown before a font loads. `apps/web/app/fonts/.gitattributes` marks the woff2 files as
+binary and keeps `git diff --check` from flagging the trailing spaces of the upstream license text.
+
+To add or update a font, a weight, or a style:
+
+1. Request `https://fonts.googleapis.com/css2?family=<Family>:<axes>&display=swap` with a modern browser
+   User-Agent, so the answer names woff2 files, and keep only the `/* latin */` blocks. When several weights point
+   to one file, it is a variable font: keep that one file and declare the weight range (`"500 600"`).
+2. Treat downloads as untrusted: save each in a new empty temporary directory outside the repository, execute
+   nothing from it, check that each font starts with the woff2 signature `wOF2`, and record its source URL, size,
+   and SHA-256 in the change description.
+3. Copy the files and the family's `OFL.txt` from google/fonts into `apps/web/app/fonts/<family>/`, add them to
+   the `src` list in `layout.tsx` with their weight and style, and update the table above.
+4. Run `pnpm --filter @invitame/web test` and `pnpm build`, and compare the pages before and after.
 
 ## Ornaments
 
@@ -144,9 +177,10 @@ drawn.
 | --- | --- |
 | Tokens, font mapping, `paper-wash`, base styles, reduced motion | `apps/web/app/globals.css` |
 | Font loading | `apps/web/app/layout.tsx` |
+| Font files and their licenses | `apps/web/app/fonts/<family>/` |
 | Shared classes and components | `apps/web/app/_components/` |
 | Ornament files | `apps/web/public/ornaments/` |
-| Contrast helper and test | `apps/web/lib/theme/` |
+| Contrast helper and test, font loading test | `apps/web/lib/theme/` |
 | Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/admin/`, `apps/web/app/page.tsx` |
 | Landing sections, styles, and drawings | `apps/web/app/_components/landing/` |
 | Landing copy and its honesty test (S37) | `apps/web/lib/landing/` |
