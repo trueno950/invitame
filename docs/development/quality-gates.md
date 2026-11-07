@@ -28,8 +28,8 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Format repair | `pnpm format` | Writes Biome formatting changes; this is a repair command, not evidence by itself. | Before validation when needed. |
 | Documentation consistency | `pnpm docs:check` | Resolves local Markdown links, verifies required documentation entrypoints and workflow sections, and confirms CI invokes the check. It does not prove runtime behavior. | Every change; especially documentation, process, configuration, and CI changes. |
 | Lint | `pnpm lint` | Runs `biome lint .` through both workspace packages via Turborepo. | Every code or source-adjacent change. |
-| Type safety | `pnpm typecheck` | Runs strict TypeScript checks in `apps/api` and `apps/web`. | Every TypeScript/config change. |
-| Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner over `src/**/*.spec.ts` (health and auth integration suites) through `@swc-node/register`, which emits decorator metadata like the `tsc` build; `apps/web` runs the Node test runner over `lib/**/*.test.ts` and the browser harness's `e2e/**/*.test.ts` with Node's built-in TypeScript type stripping (erasable syntax only, no extra dependency). | Every behavior change; documentation-only changes may record `N/A`. |
+| Type safety | `pnpm typecheck` | Runs strict TypeScript checks in `apps/api` (including the test harness in `apps/api/test`, which the build excludes) and `apps/web`. | Every TypeScript/config change. |
+| Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner over `src/**/*.spec.ts` (health and auth integration suites) through `@swc-node/register`, which emits decorator metadata like the `tsc` build; `apps/web` runs the Node test runner over `lib/**/*.test.ts`, the browser harness's `e2e/**/*.test.ts`, and `proxy.test.ts` with Node's built-in TypeScript type stripping (erasable syntax only, no extra dependency). | Every behavior change; documentation-only changes may record `N/A`. |
 | Database integration tests | `DATABASE_URL=<local URL> pnpm --filter @invitame/api test:db` | Runs `apps/api/src/**/*.db-spec.ts` through the same SWC runner against a real, already migrated PostgreSQL. The script refuses to start without an explicit `DATABASE_URL`, and the suite refuses non-local hosts. It writes and then deletes its own rows; use a disposable database. CI runs it in the `database-tests` job against a PostgreSQL 17 service. | Schema, migration, and auth persistence changes. |
 | Browser end-to-end tests | `pnpm --filter @invitame/web test:e2e` | Runs `apps/web/e2e/**/*.spec.ts` with `@playwright/test` in Chromium only, against the built API (`apps/api/dist`) and the production build of the web (`next start`), which the harness starts on the dedicated ports 3410 (web) and 3411 (API), with its API gate on 3412, or `E2E_WEB_PORT`, `E2E_API_PORT`, and `E2E_GATE_PORT`. It needs `pnpm build`, Chromium from `pnpm --filter @invitame/web test:e2e:install`, and an explicit `E2E_DATABASE_URL` (migrated) and `E2E_MAILPIT_URL`; it refuses missing or non-local values and never attaches to a server that is already listening. It is not part of `pnpm test`. CI runs it in the `browser-tests` job. See [Browser end-to-end tests](#browser-end-to-end-tests). | Changes to the web pages, their forms, the web's `/api/auth` proxy, `proxy.ts`, the server-side API client, or the auth flows they drive. |
 | Build | `pnpm build` | Builds the API with `tsc` and the web app with Next.js. Outputs are ignored build artifacts. | Runtime, dependency, configuration, or build changes; recommended for broad docs/process changes. |
@@ -99,7 +99,9 @@ enabled «Cerrar sesión» with exactly one `POST /api/auth/sign-out` (M2 T8e). 
 (`e2e/form-submission.spec.ts`, T8e; S42), it fills `/admin/ingresar`, `/admin/activar` (with a pending
 administrator's session), and `/ingresar`, tries to submit each by a click and by Enter, and proves that no
 request carries a field value in its URL, that the page URL keeps no query string, and that the form shows its
-line asking for JavaScript; a failure names the query keys only, never their values. The browser talks only to the
+line asking for JavaScript; a failure names the query keys only, never their values. The same file shows that
+the submit buttons stay disabled in the server's render and are enabled once the page is interactive, and that
+the disabled sign-out button on `/cuenta` and `/admin` shows its line asking for JavaScript (T9b part C2). The browser talks only to the
 web origin; the web proxies `/api/auth` to the real API and reads `GET /me` and `get-session` from its server,
 and the API stores users and sessions in PostgreSQL.
 
@@ -117,7 +119,8 @@ How the harness is composed (`apps/web/playwright.config.ts`, `apps/web/e2e/supp
   password to the test. The TOTP codes come from the setup key the test reads on `/admin/activar` (S41), computed
   with RFC 6238 in `e2e/support/totp.ts`; the backup codes come from the page's last step.
 - The web reaches the API through a harness-only gate (`e2e/support/api-gate-server.ts`), started as a third
-  server, which forwards every request unchanged. A test can ask it to hold the web's `GET /me` reads of two
+  server by `e2e/support/api-gate-main.ts`, which forwards every request unchanged and breaks off the web's
+  request when the API's answer breaks off. A test can ask it to hold the web's `GET /me` reads of two
   session cookies until both are in flight and then release them together, so "shows each customer only their
   own account when two customers browse at once" proves that the shared API client keeps each request's cookie
   while both renders overlap; the hold reports `timeout` and the test fails when they do not. The gate never
@@ -126,10 +129,15 @@ How the harness is composed (`apps/web/playwright.config.ts`, `apps/web/e2e/supp
   the web requires in production; each test also uses its own email address, so rate limits never couple two
   tests. No test sleeps for a fixed time, and failed tests are not retried.
 - Test output goes to `apps/web/test-results` (ignored), or to `E2E_OUTPUT_DIR` when it is set: a screenshot and
-  a trace of each failed test only. CI uploads that folder as the `browser-test-failures` artifact (7 days) when
-  the job fails; the servers' output is in the job log.
-- `pnpm --filter @invitame/web test` also runs the harness's own unit tests (`e2e/**/*.test.ts`): the refusal of
-  a missing or remote `E2E_DATABASE_URL` or `E2E_MAILPIT_URL`, and the TOTP helper against the RFC test vectors.
+  a trace of each failed test only. CI uploads that folder as the `browser-test-failures` artifact (1 day) when
+  the job fails; the servers' output is in the job log. A trace records the browser's requests and responses,
+  so it can hold that run's test addresses, initial passwords, sign-in codes, TOTP setup keys, backup codes, and
+  session cookies; they work only against the job's database, which ends with the job.
+- `pnpm --filter @invitame/web test` also runs the harness's own unit tests (`e2e/**/*.test.ts`), which the
+  browser suite never collects: the refusal of a missing or remote `E2E_DATABASE_URL` or `E2E_MAILPIT_URL`, the
+  administrator script's refusal of no argument (exit 2) and of a missing or non-local `DATABASE_URL` (exit 1,
+  before Prisma loads, with no password printed), the gate's handling of a broken API answer, and the TOTP
+  helper against the RFC test vectors.
 
 Run it locally against disposable containers on free ports, never against the development database or mail
 catcher:
@@ -216,7 +224,7 @@ service with trust authentication (no password in the workflow), generates the P
 `prisma:migrate:deploy`, and runs `test:db`. The `browser-tests` job starts PostgreSQL 17 (trust authentication)
 and Mailpit (`axllent/mailpit:v1.33.0`) services, generates the Prisma client, applies the migrations, runs
 `pnpm build`, installs Chromium only with its system dependencies (`test:e2e:install --with-deps`), runs
-`test:e2e` with two workers, and uploads the failed tests' screenshots and traces when it fails. Seed and connection checks stay a manual local gate (see the database
+`test:e2e` with two workers, and uploads the failed tests' screenshots and traces for one day when it fails. Seed and connection checks stay a manual local gate (see the database
 change sequence above). Required status checks, hosted
 integration databases, CD, and deployment gates remain planned; adopt each through an explicit
 process change rather than assuming the limited CI workflow already covers them.

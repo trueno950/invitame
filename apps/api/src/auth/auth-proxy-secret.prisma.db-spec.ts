@@ -49,8 +49,8 @@ describe("the proxy secret on the PostgreSQL store (L36)", () => {
     log: () => {},
   });
   const runId = randomUUID();
-  // This suite counts rows on one address, so it draws from the range no other suite shares.
-  const clientAddresses = new ClientAddresses("counted");
+  // This suite counts rows on one address, so it draws from its own block, which no other suite shares.
+  const clientAddresses = new ClientAddresses("auth-proxy-secret.prisma");
   const emails: string[] = [];
 
   function requestCode(label: string, headers: Record<string, string>) {

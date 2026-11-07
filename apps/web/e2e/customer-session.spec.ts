@@ -107,12 +107,18 @@ test.describe("customer sign-in by emailed code", () => {
     try {
       const otherPage = await otherContext.newPage();
       await Promise.all([signIn(page, customerEmail), signIn(otherPage, otherEmail)]);
-      const tokens = await Promise.all([page.context(), otherContext].map(sessionCookie));
+      const cookies = await Promise.all([page.context(), otherContext].map(sessionCookie));
+      // A missing cookie fails here, by name, not as the gate's refusal of an empty token
+      // (R2-missing-cookie-masked-as-gate-refusal).
+      const tokens = cookies.map((cookie, index) => {
+        expect(cookie, `customer ${index + 1}'s session cookie`).toBeDefined();
+        return cookie?.value ?? "";
+      });
 
       // One API client serves every request of the web process; each render must use its own cookie.
       // The harness's gate holds both renders' GET /me until both are in flight, so they overlap
       // (R3-concurrent-cookie-isolation-not-forced).
-      const hold = await holdAccountReads(tokens.map((cookie) => cookie?.value ?? ""));
+      const hold = await holdAccountReads(tokens);
       await Promise.all([page.reload(), otherPage.reload()]);
       expect(await hold.outcome).toBe("released");
 

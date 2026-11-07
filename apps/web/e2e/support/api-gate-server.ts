@@ -1,4 +1,10 @@
-import { createServer, type IncomingMessage, request, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  request,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 
 import {
   GATE_HOLD_PATH,
@@ -6,11 +12,11 @@ import {
   GATE_READY_PATH,
   type HoldOutcome,
 } from "./api-gate.ts";
-import { API_ORIGIN, GATE_PORT } from "./environment.ts";
 
 /**
- * The API gate's server, started by `playwright.config.ts` as a harness process (see `api-gate.ts`).
+ * The API gate's server (see `api-gate.ts`), which `api-gate-main.ts` starts as a harness process.
  * Every request is forwarded to the API as received; only the `GET /me` reads named by a hold wait.
+ * One gate per process: `createApiGateServer` sets the API it forwards to.
  */
 
 interface HeldRead {
@@ -28,23 +34,28 @@ interface HeldGroup {
 }
 
 const groups = new Set<HeldGroup>();
-const apiHost = new URL(API_ORIGIN).host;
+let apiOrigin = "";
 
 function forward(incoming: IncomingMessage, outgoing: ServerResponse): void {
   const upstream = request(
-    new URL(incoming.url ?? "/", API_ORIGIN),
-    { method: incoming.method, headers: { ...incoming.headers, host: apiHost } },
+    new URL(incoming.url ?? "/", apiOrigin),
+    { method: incoming.method, headers: { ...incoming.headers, host: new URL(apiOrigin).host } },
     (answer) => {
+      // An answer that breaks off ends the web's request too; unhandled, the web's request stayed
+      // open until its own timeout (R3-gate-upstream-response-error-unhandled).
+      answer.on("error", () => outgoing.destroy());
       outgoing.writeHead(answer.statusCode ?? 502, answer.headers);
       answer.pipe(outgoing);
     },
   );
   upstream.on("error", () => {
-    if (!outgoing.headersSent) {
-      outgoing.writeHead(502);
+    if (outgoing.headersSent) {
+      outgoing.destroy();
+      return;
     }
-    outgoing.end();
+    outgoing.writeHead(502).end();
   });
+  incoming.on("error", () => upstream.destroy());
   incoming.pipe(upstream);
 }
 
@@ -121,8 +132,8 @@ function hold(incoming: IncomingMessage, outgoing: ServerResponse): boolean {
   return false;
 }
 
-const server = createServer((incoming, outgoing) => {
-  const path = new URL(incoming.url ?? "/", API_ORIGIN).pathname;
+function handle(incoming: IncomingMessage, outgoing: ServerResponse): void {
+  const path = new URL(incoming.url ?? "/", apiOrigin).pathname;
 
   if (path === GATE_READY_PATH) {
     outgoing.writeHead(204).end();
@@ -136,6 +147,10 @@ const server = createServer((incoming, outgoing) => {
     return;
   }
   forward(incoming, outgoing);
-});
+}
 
-server.listen(GATE_PORT, "127.0.0.1");
+/** A gate in front of the API at `origin`; the caller decides where it listens. */
+export function createApiGateServer(origin: string): Server {
+  apiOrigin = origin;
+  return createServer(handle);
+}

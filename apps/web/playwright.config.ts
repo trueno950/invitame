@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
+import { GATE_READY_PATH } from "./e2e/support/api-gate.ts";
 import {
   API_ORIGIN,
   API_PORT,
@@ -66,6 +67,8 @@ const webEnvironment = {
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
+  // The harness's own unit tests run under `node --test` (`pnpm test`), never in the browser suite.
+  testIgnore: "**/*.test.ts",
   outputDir: process.env.E2E_OUTPUT_DIR ?? "test-results",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
@@ -96,9 +99,9 @@ export default defineConfig({
     },
     {
       name: "gate",
-      command: "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON e2e/support/api-gate-server.ts",
+      command: "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON e2e/support/api-gate-main.ts",
       cwd: __dirname,
-      url: `${GATE_ORIGIN}/__e2e/ready`,
+      url: `${GATE_ORIGIN}${GATE_READY_PATH}`,
       reuseExistingServer: false,
       timeout: 30_000,
       stdout: "pipe",

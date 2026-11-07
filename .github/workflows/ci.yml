@@ -169,7 +169,11 @@ jobs:
         run: pnpm --filter @invitame/web test:e2e
 
       # Screenshots and traces of failed tests only; the server output is already in the job log.
-      # They hold the per-run test accounts of a database that ends with the job, nothing else.
+      # A trace records the failed test's pages and the browser's requests and responses, so it can
+      # hold that run's test addresses, initial passwords, sign-in codes, TOTP setup keys, backup
+      # codes, and session cookies. They work only against this job's database, which ends with the
+      # job, and the API and proxy secrets never reach the browser. Kept for one day only
+      # (R1-ci-failure-artifact-holds-test-credentials).
       - name: Upload browser test failures
         if: failure()
         uses: actions/upload-artifact@v4
@@ -177,4 +181,4 @@ jobs:
           name: browser-test-failures
           path: apps/web/test-results
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1

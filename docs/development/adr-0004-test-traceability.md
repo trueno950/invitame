@@ -2,10 +2,10 @@
 
 Maps every test obligation of [ADR 0004](../adr/0004-authentication-with-better-auth.md) (its Consequences) and
 every S17 case of the Milestone 2 plan to a named assertion (S13, S30). Status: current as of Milestone 2 task
-T9b part C1. Browser end-to-end coverage exists for the customer flows (see the L40 rows below), the administrator flows
+T9b part C2. Browser end-to-end coverage exists for the customer flows (see the L40 rows below), the administrator flows
 (see the L43, L44, and L52 rows), and form submission without JavaScript (see the L55 rows); T9b part C1
-resolves the web server findings in the L38, L40, and L52 rows, and the part C2 findings are listed without a
-test.
+resolves the web server findings in the L38, L40, and L52 rows, and part C2 the test and harness findings in the
+L48, L55, L56, and L59 rows.
 
 ## How the evidence runs
 
@@ -14,7 +14,8 @@ test.
   `pnpm --filter @invitame/api test:db`, locally against a disposable database and in CI in the
   `database-tests` job of [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), on every push to `master`
   or `main` and every pull request. The shared harness [`apps/api/test/database.ts`](../../apps/api/test/database.ts)
-  refuses a missing or non-local `DATABASE_URL` and gives every suite its own client addresses.
+  refuses a missing or non-local `DATABASE_URL` and gives every suite its own client addresses; each suite that
+  counts rate-limit rows draws from its own block, which no other suite uses (T9b part C2).
 - **Unit suites** (`apps/api/src/**/*.spec.ts`) run the same `createAuth` on Better Auth's in-memory adapter,
   with controlled clocks, through `pnpm test` in the `quality-gates` job.
 - **Browser suite** (`apps/web/e2e/**/*.spec.ts`, T9b) drives Chromium through the production build of the web,
@@ -99,7 +100,7 @@ U-client, U-proxy, U-log, U-refresh, and U-config are the web unit suites `lib/s
 | L35 | R3-customer-refresh-via-guard-unproved | DB-profile: "› extends a customer session read through the project guard a day after its last refresh". |
 | L35 | R4-silent-session-update-refusal (T9, T11) | DB-admin: "refuses a server-side session expiry change and leaves the stored row unchanged". The refusal still logs nothing; whether it should is a T11 decision. |
 | L37 | R3-registration-require-proxy-secret-unproved | U-registration: production configuration refuses a request without the secret or with a wrong one with 403 before any query and logs the rejection; a request with the secret and a non-production request are served. |
-| L37 | R3-db-spec-client-prefix-collision | Fixed in the harness: `ClientAddresses` draws each address at random, never repeats it within a suite, cleans up only its own rows, and keeps suites that count rows on one address in a range no other suite uses. |
+| L37 | R3-db-spec-client-prefix-collision | Fixed in the harness: `ClientAddresses` draws each address at random, never repeats it within a suite, cleans up only its own rows, and gives each suite that counts rows on one address its own block (part C2, below). |
 | L37 | Worker notes: `/me` does not check the proxy secret; behind the proxy, Better Auth's `Sec-Fetch` check falls back to its origin check. | Recorded for T11; not a T9a test. |
 | L38 | R3-api-client-body-timeout-misclassified, R4-api-client-body-timeout-misclassified (T9, T11) | Fixed in part C1: U-client "getOwnProfile failures while the body arrives › maps a body that stalls past the deadline or breaks off to unavailable, not invalid-response". The client reads the body as text under the same deadline, so only a complete body that is not the contract is `invalid-response`. |
 | L38 | R3-cookie-name-parse-without-equals | Fixed in part C1: U-client "sessionCookieHeader › drops a pair without '=', whatever its text (R3-cookie-name-parse-without-equals)". |
@@ -123,6 +124,17 @@ U-client, U-proxy, U-log, U-refresh, and U-config are the web unit suites `lib/s
 | L52 | Verification: a browser without a cookie, and the harness's refusal of a missing or remote URL | E2E-customer "sends a browser without a session cookie from /cuenta to /ingresar" (also `null` from `get-session`); `e2e/support/environment.test.ts`, run by `pnpm --filter @invitame/web test`. |
 | L55 | S42: no form puts a field in a URL, also without JavaScript (T8e) | E2E-forms: "/admin/ingresar never puts the email or the password in a URL", "/admin/activar never puts the password in a URL" (with a pending administrator's session), and "/ingresar never puts the email in a URL" each submit by a click and by Enter on a fresh page; no request carries a field value in its URL, the page URL has no query string, and the form shows its line asking for JavaScript. Against the forms before T8e every attempt failed, naming `/admin/ingresar?email=…&password=…`, `/admin/activar?password=…`, and `/ingresar?email=…`. With JavaScript, the submit and sign-out buttons wait for the page to be interactive (`lib/customer/interactive.test.ts`), and E2E-customer and E2E-admin keep passing. |
 | L55 | R3-sign-out-retry-not-idempotent, R4-signout-retry-cannot-recover-after-navigation | Fixed in E2E-admin (T8e): `signOutOfPanel` waits for the enabled «Cerrar sesión», clicks it once, and requires exactly one `POST /api/auth/sign-out` before the sign-in page; it no longer retries the click. |
+| L48 | R3-counted-range-shared-by-three-suites | Fixed in part C2: DB-auth, DB-limits, and DB-proxy each draw from their own block of 198.19.0.0/16 (`ClientAddresses("auth.prisma")` and so on), so suites in parallel processes cannot share a counted address. |
+| L48 | R3-tampered-cookie-case-vacuous | Fixed in part C2: DB-profile "denied by default › answers GET /me and PATCH /me with 401 without a usable session and writes nothing" signs the live session's token with another secret and gets 401, while the same token signed right gets 200; only then is the row deleted. Signed with the real secret, the case fails (200). |
+| L55 | R1-ci-failure-artifact-holds-test-credentials | Part C2: the `browser-test-failures` artifact is kept for one day, and the workflow and [quality gates](quality-gates.md#browser-end-to-end-tests) say what a trace can hold (that run's test addresses, passwords, codes, setup keys, and cookies, valid only against the job's database). |
+| L55 | R2-backup-code-count-literal-repeated, R2-test-address-domain-duplicated, R2-wrong-totp-offset-window-unexplained | Fixed in part C2: `BACKUP_CODE_COUNT` and `newTestEmail()` replace the copies, and `STEPS_ACCEPTED_SOON` explains the window in `e2e/support/totp.ts`. |
+| L55 | R3-e2e-unit-tests-collected-by-playwright | Part C2: not reproduced (`testMatch` already listed only the 17 `*.spec.ts` tests); `testIgnore` now excludes `*.test.ts` explicitly. |
+| L55 | Verification: the administrator script's refusal; `apps/api/test` under `pnpm typecheck`; the QR level; the CI comment | Part C2: `e2e/support/administrator-script.test.ts` (exit 2 and the usage line without exactly one argument; exit 1, `AssertionError`, and no output for a missing or non-local `DATABASE_URL`); `apps/api/tsconfig.json` includes `test/**/*.ts` and the build excludes it; `lib/admin/qr.test.ts` "uses at least the medium error correction..." accepts M, Q, or H and fails when the floor is removed; the CI comment as above. |
+| L56 | R3-interactive-transition-asserted-by-constants, R3-signout-noscript-line-unproved | E2E-forms (part C2): "controls that act only through JavaScript › stay disabled in the server's render and are enabled once the page is interactive" fails when the hook never turns true, and "› sign-out shows its line asking for JavaScript on /cuenta and /admin" fails without the button's `<noscript>`. |
+| L59 | R3-abort-test-hangs-on-regression | Fixed in part C2: U-proxy "bounds and failures › stops the API call when the browser goes away..." has a 2-second test timeout; without the browser's signal it fails after 2 seconds. |
+| L59 | R3-outage-header-wiring-unproved | `proxy.test.ts` (part C2) drives `proxy.ts` against a local API: a browser's own `x-invitame-api-unavailable` never reaches the page, with or without a refresh, and the proxy sets it only when its own refresh gets a 5xx. It fails when `proxy.ts` passes the browser's headers through or ignores the refresh outcome. |
+| L59 | R3-gate-upstream-response-error-unhandled, R2-gate-ready-path-duplicated-literal, R2-missing-cookie-masked-as-gate-refusal | Fixed in part C2: `e2e/support/api-gate-server.test.ts` "breaks off the web's request when the API's answer breaks off, and keeps serving" (without the fix the request stayed open, and the test fails at its 5-second bound); `playwright.config.ts` reads `GATE_READY_PATH`; E2E-customer requires both session cookies by name before arming the hold. |
+| L59 | Verification: more `API_ORIGIN` spellings | U-config "› accepts any spelling of a bare http(s) origin..." also stores `HTTP://api:3001`, `http://api:3001/.`, and `http://api:3001/` as `http://api:3001` (part C2). |
 | L31 | A TOTP confirmation that runs while `admin:create` reissues a password must fail closed (T9, T11). | DB-admin: "fails closed when admin:create reissues the password during the first TOTP confirmation" and the T7c variants in row 10; see defect T9a-D1 (fixed). |
 
 Earlier database-suite findings also resolved by the shared harness: the order coupling, cleanup outside
