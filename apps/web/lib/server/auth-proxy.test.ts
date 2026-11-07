@@ -421,6 +421,34 @@ describe("bounds and failures", () => {
     ]);
   });
 
+  it("stops the API call when the browser goes away, and logs no upstream failure", async () => {
+    let upstreamClosed: () => void = () => {};
+    const closed = new Promise<void>((resolve) => {
+      upstreamClosed = resolve;
+    });
+    respond = (_request, response) => {
+      // Never answers; the web hop must close this request once the browser has gone.
+      response.on("close", () => upstreamClosed());
+    };
+    const browser = new AbortController();
+    const events: AuthProxyEvent[] = [];
+    const startedAt = Date.now();
+
+    const answer = proxy(browserRequest("/api/auth/get-session", { signal: browser.signal }), {
+      timeoutMs: 5_000,
+      events,
+    });
+    while (received.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    browser.abort();
+    await closed;
+    await answer;
+
+    assert.ok(Date.now() - startedAt < 2_000, "the API call ends with the browser's request");
+    assert.deepEqual(events, []);
+  });
+
   it("never logs cookies, bodies, query strings, or the secret", async () => {
     respond = (_request, response) => {
       response.writeHead(503, { "content-type": "application/json" });

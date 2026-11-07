@@ -58,20 +58,26 @@ function readSetting(
   return fallback;
 }
 
+const API_ORIGIN_ERROR =
+  "API_ORIGIN must be an http or https origin without a path, query, fragment, or credentials.";
+
+/**
+ * Any spelling of a bare http(s) origin, stored in its normalized form, which the proxy compares
+ * against (R3-api-origin-rejects-equivalent-origins): `http://API:3001` is `http://api:3001`, and a
+ * default port or a lone trailing `/` is dropped. Only then is the serialized URL its origin plus `/`,
+ * so a path, a query or fragment (even an empty one), and credentials are refused.
+ */
 function parseApiOrigin(value: string): string {
   let url: URL;
 
   try {
     url = new URL(value);
   } catch {
-    throw new Error("API_ORIGIN must be an http or https origin without a path.");
+    throw new Error(API_ORIGIN_ERROR);
   }
 
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.origin !== value.replace(/\/$/, "")
-  ) {
-    throw new Error("API_ORIGIN must be an http or https origin without a path.");
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.href !== `${url.origin}/`) {
+    throw new Error(API_ORIGIN_ERROR);
   }
 
   return url.origin;

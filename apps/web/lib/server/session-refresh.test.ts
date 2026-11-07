@@ -4,11 +4,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { after, before, beforeEach, describe, it } from "node:test";
 
+import { ApiClientError } from "./api-client.ts";
 import { proxyAuthRequest } from "./auth-proxy.ts";
 import type { WebServerConfig } from "./config.ts";
 import {
+  API_UNAVAILABLE_HEADER,
   appendSetCookies,
   isSessionPagePath,
+  pageRequestHeaders,
+  readUnlessApiUnavailable,
   refreshSessionCookies,
   shouldRefreshSession,
 } from "./session-refresh.ts";
@@ -76,7 +80,7 @@ describe("shouldRefreshSession", () => {
 describe("refreshSessionCookies with a fake proxy", () => {
   it("sends one bodiless GET /api/auth/get-session with the page request's headers", async () => {
     const requests: Request[] = [];
-    const cookies = await refreshSessionCookies(
+    const { cookies } = await refreshSessionCookies(
       page("/cuenta?tab=1", { headers: { "x-real-ip": "203.0.113.7" } }),
       async (request) => {
         requests.push(request);
@@ -100,11 +104,15 @@ describe("refreshSessionCookies with a fake proxy", () => {
         headers.append("set-cookie", cookie);
       }
 
-      const cookies = await refreshSessionCookies(page("/cuenta"), async () => {
+      const refresh = await refreshSessionCookies(page("/cuenta"), async () => {
         return new Response("{}", { status, headers });
       });
 
-      assert.deepEqual(cookies, REFRESHED_COOKIES, String(status));
+      assert.deepEqual(
+        refresh,
+        { cookies: REFRESHED_COOKIES, apiUnavailable: false },
+        String(status),
+      );
     }
   });
 
@@ -113,8 +121,53 @@ describe("refreshSessionCookies with a fake proxy", () => {
       await refreshSessionCookies(page("/cuenta"), async () => {
         throw new Error("misconfigured");
       }),
-      [],
+      { cookies: [], apiUnavailable: true },
     );
+  });
+
+  it("reports the API unavailable on a 5xx from the proxy, and available otherwise", async () => {
+    for (const [status, apiUnavailable] of [
+      [200, false],
+      [401, false],
+      [429, false],
+      [500, true],
+      [502, true],
+      [504, true],
+    ] as const) {
+      const refresh = await refreshSessionCookies(page("/cuenta"), async () => {
+        return new Response(null, { status });
+      });
+      assert.equal(refresh.apiUnavailable, apiUnavailable, String(status));
+    }
+  });
+});
+
+describe("the outage notice for the page (R4-cuenta-outage-latency-serialized)", () => {
+  it("never lets a browser's own copy of the header reach the page", () => {
+    const request = page("/cuenta", { headers: { [API_UNAVAILABLE_HEADER]: "1" } });
+
+    assert.equal(pageRequestHeaders(request, false).has(API_UNAVAILABLE_HEADER), false);
+    assert.equal(pageRequestHeaders(request, true).get(API_UNAVAILABLE_HEADER), "1");
+    assert.equal(
+      pageRequestHeaders(request, false).get("cookie"),
+      `theme=light; ${SESSION_COOKIE}`,
+    );
+  });
+
+  it("answers unavailable at once, without the API read, after a failed refresh", async () => {
+    let reads = 0;
+    const read = async () => {
+      reads += 1;
+      return "profile";
+    };
+
+    await assert.rejects(
+      readUnlessApiUnavailable(new Headers({ [API_UNAVAILABLE_HEADER]: "1" }), read),
+      (error: unknown) => error instanceof ApiClientError && error.kind === "unavailable",
+    );
+    assert.equal(reads, 0);
+    assert.equal(await readUnlessApiUnavailable(new Headers(), read), "profile");
+    assert.equal(reads, 1);
   });
 });
 
@@ -176,12 +229,12 @@ describe("refreshSessionCookies through the real proxy", () => {
       response.end('{"session":{},"user":{}}');
     };
 
-    const cookies = await refreshSessionCookies(
+    const refresh = await refreshSessionCookies(
       page("/cuenta", { headers: { "x-real-ip": "203.0.113.7" } }),
       (request) => proxyAuthRequest(request, { config: config(), log: () => {} }),
     );
 
-    assert.deepEqual(cookies, REFRESHED_COOKIES);
+    assert.deepEqual(refresh, { cookies: REFRESHED_COOKIES, apiUnavailable: false });
     assert.equal(received.length, 1);
     assert.equal(received[0]?.method, "GET");
     assert.equal(received[0]?.url, "/api/auth/get-session");
@@ -194,11 +247,11 @@ describe("refreshSessionCookies through the real proxy", () => {
     respond = () => {};
 
     const startedAt = Date.now();
-    const cookies = await refreshSessionCookies(page("/cuenta"), (request) =>
+    const refresh = await refreshSessionCookies(page("/cuenta"), (request) =>
       proxyAuthRequest(request, { config: config(), timeoutMs: 50, log: () => {} }),
     );
 
-    assert.deepEqual(cookies, []);
+    assert.deepEqual(refresh, { cookies: [], apiUnavailable: true });
     assert.ok(Date.now() - startedAt < 2_000, "the page is not held beyond the timeout");
   });
 });

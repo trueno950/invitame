@@ -1,6 +1,7 @@
 import type { Page, Response } from "@playwright/test";
 
 import { ACCOUNT_COPY, SIGN_IN_COPY } from "../lib/customer/copy.ts";
+import { holdAccountReads } from "./support/api-gate.ts";
 import {
   expect,
   newCustomerEmail,
@@ -106,9 +107,14 @@ test.describe("customer sign-in by emailed code", () => {
     try {
       const otherPage = await otherContext.newPage();
       await Promise.all([signIn(page, customerEmail), signIn(otherPage, otherEmail)]);
+      const tokens = await Promise.all([page.context(), otherContext].map(sessionCookie));
 
       // One API client serves every request of the web process; each render must use its own cookie.
+      // The harness's gate holds both renders' GET /me until both are in flight, so they overlap
+      // (R3-concurrent-cookie-isolation-not-forced).
+      const hold = await holdAccountReads(tokens.map((cookie) => cookie?.value ?? ""));
       await Promise.all([page.reload(), otherPage.reload()]);
+      expect(await hold.outcome).toBe("released");
 
       await expect(page.getByRole("definition").first()).toHaveText(customerEmail);
       await expect(otherPage.getByRole("definition").first()).toHaveText(otherEmail);
@@ -226,9 +232,12 @@ test.describe("customer sign-out", () => {
     await page.goto("/cuenta");
     await expect(page).toHaveURL("/ingresar");
 
-    // Replay the old cookie. A page outside `proxy.ts`'s matcher leaves it in place...
+    // Replay the old cookie. A page outside `proxy.ts`'s matcher leaves it in place... (read without
+    // a browser page: the landing's link prefetches `/ingresar`, whose refresh would clear it first)
     await context.addCookies([oldCookie]);
-    await page.goto("/");
+    const landing = await page.request.get("/");
+    expect(landing.status()).toBe(200);
+    expect(landing.headers()["set-cookie"]).toBeUndefined();
     expect((await sessionCookie(context))?.value).toBe(oldCookie.value);
 
     // ...while `/cuenta` gets no account: `GET /me` refuses it, and `proxy.ts`'s session read

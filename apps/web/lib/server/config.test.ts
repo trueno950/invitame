@@ -73,11 +73,49 @@ describe("parseWebServerConfig", () => {
     }
   });
 
-  it("rejects an API_ORIGIN that is not an http(s) origin", () => {
-    for (const origin of ["not a url", "ftp://api.example.test", "http://localhost:3001/api"]) {
-      assert.throws(() => parseWebServerConfig({ API_ORIGIN: origin }), {
-        message: "API_ORIGIN must be an http or https origin without a path.",
-      });
+  it("accepts any spelling of a bare http(s) origin and stores its normalized form (R3-api-origin-rejects-equivalent-origins)", () => {
+    for (const [origin, normalized] of [
+      ["http://API:3001", "http://api:3001"],
+      ["http://api:80", "http://api"],
+      ["https://api:443/", "https://api"],
+    ] as const) {
+      assert.equal(
+        parseWebServerConfig(production({ API_ORIGIN: origin })).apiOrigin,
+        normalized,
+        origin,
+      );
+    }
+  });
+
+  it("rejects an API_ORIGIN that is not a bare http(s) origin, without echoing it", () => {
+    for (const origin of [
+      "not a url",
+      "http://api:99999",
+      "ftp://api.example.test",
+      "file:///etc/api",
+      "http://localhost:3001/api",
+      "http://localhost:3001/api/",
+      "http://localhost:3001?probe=1",
+      "http://localhost:3001/?",
+      "http://localhost:3001#probe",
+      "http://localhost:3001/#",
+      "http://probe-user@localhost:3001",
+      "http://probe-user:probe-pass@localhost:3001",
+    ]) {
+      assert.throws(
+        () => parseWebServerConfig({ API_ORIGIN: origin }),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal(
+            error.message,
+            "API_ORIGIN must be an http or https origin without a path, query, fragment, or credentials.",
+            origin,
+          );
+          assert.ok(!error.message.includes("probe"), origin);
+          return true;
+        },
+        origin,
+      );
     }
   });
 
