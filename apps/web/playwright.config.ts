@@ -73,7 +73,8 @@ export default defineConfig({
   use: {
     baseURL: WEB_ORIGIN,
     locale: "es-MX",
-    trace: "off",
+    // Kept for failed tests only, and uploaded by CI (R4-browser-tests-failure-artifacts-discarded).
+    trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
@@ -94,7 +95,7 @@ export default defineConfig({
       name: "web",
       command: `next start --hostname 127.0.0.1 --port ${WEB_PORT}`,
       cwd: __dirname,
-      url: `http://127.0.0.1:${WEB_PORT}/`,
+      url: `${WEB_ORIGIN}/`,
       env: webEnvironment,
       reuseExistingServer: false,
       timeout: 60_000,

@@ -29,7 +29,7 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Documentation consistency | `pnpm docs:check` | Resolves local Markdown links, verifies required documentation entrypoints and workflow sections, and confirms CI invokes the check. It does not prove runtime behavior. | Every change; especially documentation, process, configuration, and CI changes. |
 | Lint | `pnpm lint` | Runs `biome lint .` through both workspace packages via Turborepo. | Every code or source-adjacent change. |
 | Type safety | `pnpm typecheck` | Runs strict TypeScript checks in `apps/api` and `apps/web`. | Every TypeScript/config change. |
-| Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner over `src/**/*.spec.ts` (health and auth integration suites) through `@swc-node/register`, which emits decorator metadata like the `tsc` build; `apps/web` runs the Node test runner over `lib/**/*.test.ts` with Node's built-in TypeScript type stripping (erasable syntax only, no extra dependency). | Every behavior change; documentation-only changes may record `N/A`. |
+| Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner over `src/**/*.spec.ts` (health and auth integration suites) through `@swc-node/register`, which emits decorator metadata like the `tsc` build; `apps/web` runs the Node test runner over `lib/**/*.test.ts` and the browser harness's `e2e/**/*.test.ts` with Node's built-in TypeScript type stripping (erasable syntax only, no extra dependency). | Every behavior change; documentation-only changes may record `N/A`. |
 | Database integration tests | `DATABASE_URL=<local URL> pnpm --filter @invitame/api test:db` | Runs `apps/api/src/**/*.db-spec.ts` through the same SWC runner against a real, already migrated PostgreSQL. The script refuses to start without an explicit `DATABASE_URL`, and the suite refuses non-local hosts. It writes and then deletes its own rows; use a disposable database. CI runs it in the `database-tests` job against a PostgreSQL 17 service. | Schema, migration, and auth persistence changes. |
 | Browser end-to-end tests | `pnpm --filter @invitame/web test:e2e` | Runs `apps/web/e2e/**/*.spec.ts` with `@playwright/test` in Chromium only, against the built API (`apps/api/dist`) and the production build of the web (`next start`), which the harness starts on the dedicated ports 3410 (web) and 3411 (API), or `E2E_WEB_PORT` and `E2E_API_PORT`. It needs `pnpm build`, Chromium from `pnpm --filter @invitame/web test:e2e:install`, and an explicit `E2E_DATABASE_URL` (migrated) and `E2E_MAILPIT_URL`; it refuses missing or non-local values and never attaches to a server that is already listening. It is not part of `pnpm test`. CI runs it in the `browser-tests` job. See [Browser end-to-end tests](#browser-end-to-end-tests). | Changes to the web pages, the web's `/api/auth` proxy, `proxy.ts`, the server-side API client, or the auth flows they drive. |
 | Build | `pnpm build` | Builds the API with `tsc` and the web app with Next.js. Outputs are ignored build artifacts. | Runtime, dependency, configuration, or build changes; recommended for broad docs/process changes. |
@@ -46,7 +46,7 @@ migrations to a disposable PostgreSQL 17 service and runs `test:db`, and a `brow
 browser end-to-end suite against PostgreSQL 17 and Mailpit services. This is a limited quality workflow, not CD,
 hosted deployment, or required-check governance. The repository still has no dedicated coverage, seed or
 migration-validation automation beyond applying the migrations before `test:db` and the browser suite, and the
-browser suite covers only the customer flows listed below. Do not report those gaps as passing. Add the capability
+browser suite covers only the customer and administrator flows listed below. Do not report those gaps as passing. Add the capability
 only as part of an approved work unit that defines its scope and ownership.
 
 ## Recommended local sequences
@@ -90,9 +90,13 @@ human approval, a recovery plan, and explicit verification before it is applied 
 
 The suite in `apps/web/e2e` drives Chromium through the customer pages (M2 T9b part A): sign-in by emailed code
 at `/ingresar`, the own account at `/cuenta`, and sign-out, including a wrong code, the per-client attempt limit,
-an invalid address, and a replayed session cookie after sign-out. The browser talks only to the web origin; the
-web proxies `/api/auth` to the real API and reads `GET /me` from its server, and the API stores users and sessions
-in PostgreSQL. Administrator flows are planned (T9b part B).
+an invalid address, a visit to `/cuenta` without a cookie, and a replayed session cookie after sign-out. It also
+drives the administrator pages (part B): enrollment at `/admin/activar` with the setup key read below the QR code
+and the backup codes shown once, sign-in at `/admin/ingresar` with the password and then the app's code or a
+backup code, the panel at `/admin`, sign-out with a replayed cookie, the routing of anonymous visitors, customers,
+and pending and enrolled administrators, and the failure messages of each step. The browser talks only to the
+web origin; the web proxies `/api/auth` to the real API and reads `GET /me` and `get-session` from its server,
+and the API stores users and sessions in PostgreSQL.
 
 How the harness is composed (`apps/web/playwright.config.ts`, `apps/web/e2e/support/`):
 
@@ -102,10 +106,19 @@ How the harness is composed (`apps/web/playwright.config.ts`, `apps/web/e2e/supp
   processes; nothing is committed.
 - The API sends each code through its existing `mailpit` email provider, and the tests read it through Mailpit's
   HTTP API. Production code has no test endpoint, flag, branch, or log (S38).
+- Each administrator test creates its own pending administrator with the harness-only script
+  `apps/api/test/create-e2e-administrator.ts`, which runs the same use case, repository, and Better Auth hasher
+  as `admin:create` against `E2E_DATABASE_URL` (refused when missing or not local) and hands the initial
+  password to the test. The TOTP codes come from the setup key the test reads on `/admin/activar` (S41), computed
+  with RFC 6238 in `e2e/support/totp.ts`; the backup codes come from the page's last step.
 - The browser sends a per-test client IP in `x-e2e-edge-client-ip`, standing in for the platform edge header
   the web requires in production; each test also uses its own email address, so rate limits never couple two
   tests. No test sleeps for a fixed time, and failed tests are not retried.
-- Test output goes to `apps/web/test-results` (ignored), or to `E2E_OUTPUT_DIR` when it is set.
+- Test output goes to `apps/web/test-results` (ignored), or to `E2E_OUTPUT_DIR` when it is set: a screenshot and
+  a trace of each failed test only. CI uploads that folder as the `browser-test-failures` artifact (7 days) when
+  the job fails; the servers' output is in the job log.
+- `pnpm --filter @invitame/web test` also runs the harness's own unit tests (`e2e/**/*.test.ts`): the refusal of
+  a missing or remote `E2E_DATABASE_URL` or `E2E_MAILPIT_URL`, and the TOTP helper against the RFC test vectors.
 
 Run it locally against disposable containers on free ports, never against the development database or mail
 catcher:
@@ -142,8 +155,9 @@ it:
    The `*.db-spec.ts` suites cover authentication, sessions, and the own profile; every ADR 0004 test obligation
    maps to a named assertion in [ADR 0004 test traceability](adr-0004-test-traceability.md).
 4. **End-to-end tests** — browser/API journeys across real trust boundaries. The `apps/web/e2e` suite covers the
-   customer sign-in, account, and sign-out journeys (see [Browser end-to-end tests](#browser-end-to-end-tests));
-   administrator flows and the authoring, publication, payment, and RSVP workflows are planned.
+   customer and administrator sign-in, account, enrollment, and sign-out journeys (see
+   [Browser end-to-end tests](#browser-end-to-end-tests)); the authoring, publication, payment, and RSVP
+   workflows are planned.
 
 There is no 100% coverage goal. Coverage is a diagnostic and, once a future suite exists, a guard against obvious
 gaps; it is not a substitute for meaningful behavior tests. A test that always passes, asserts implementation
@@ -155,7 +169,7 @@ details, or cannot fail when the behavior breaks is not evidence.
 | --- | --- | --- |
 | Payments | Planned; no provider or payment model exists. | Unit tests for state transitions, integration tests for persistence/idempotency, and provider webhook tests with signature failure and replay cases. |
 | Publication | Planned; no invitation runtime exists. | Application authorization tests, integration tests for state and `TemplateVersion`, and public-route E2E coverage for unpublished and published states. |
-| Permissions | Identity and own-profile authorization implemented (Milestone 2); see [ADR 0004 test traceability](adr-0004-test-traceability.md). Browser E2E covers the customer session; administrator flows are planned. | Deny-by-default unit/application cases, API integration tests for ownership/roles, and E2E coverage for direct unauthorized requests. |
+| Permissions | Identity and own-profile authorization implemented (Milestone 2); see [ADR 0004 test traceability](adr-0004-test-traceability.md). Browser E2E covers the customer session and the administrator enrollment, sign-in, panel, and sign-out. | Deny-by-default unit/application cases, API integration tests for ownership/roles, and E2E coverage for direct unauthorized requests. |
 | RSVP | Planned; no guest or RSVP model exists. | Domain/application behavior tests, database uniqueness/transaction tests, and public journey tests for valid, duplicate, and expired responses. |
 | Template snapshots | Foundation implemented. | Existing migration/seed evidence plus tests that future code references the immutable version rather than mutable template metadata. |
 
@@ -190,8 +204,8 @@ request: `pnpm install --frozen-lockfile`, `docs:check`, Prisma client generatio
 service with trust authentication (no password in the workflow), generates the Prisma client, runs
 `prisma:migrate:deploy`, and runs `test:db`. The `browser-tests` job starts PostgreSQL 17 (trust authentication)
 and Mailpit (`axllent/mailpit:v1.33.0`) services, generates the Prisma client, applies the migrations, runs
-`pnpm build`, installs Chromium only with its system dependencies (`test:e2e:install --with-deps`), and runs
-`test:e2e` with two workers. Seed and connection checks stay a manual local gate (see the database
+`pnpm build`, installs Chromium only with its system dependencies (`test:e2e:install --with-deps`), runs
+`test:e2e` with two workers, and uploads the failed tests' screenshots and traces when it fails. Seed and connection checks stay a manual local gate (see the database
 change sequence above). Required status checks, hosted
 integration databases, CD, and deployment gates remain planned; adopt each through an explicit
 process change rather than assuming the limited CI workflow already covers them.

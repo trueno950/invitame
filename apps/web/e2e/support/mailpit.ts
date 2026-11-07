@@ -35,12 +35,12 @@ export interface SignInEmail {
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(new URL(path, requireLocalUrl("E2E_MAILPIT_URL")));
+  const url = new URL(path, requireLocalUrl("E2E_MAILPIT_URL"));
+  const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error(
-      `Mailpit answered ${response.status} for ${new URL(path, "http://x").pathname}.`,
-    );
+    // The path only: the query names a test address.
+    throw new Error(`Mailpit answered ${response.status} for ${url.pathname}.`);
   }
 
   return (await response.json()) as T;
@@ -83,4 +83,13 @@ export async function waitForSignInEmails(email: string, count = 1): Promise<Sig
     .toBe(count);
 
   return Promise.all((await messagesTo(email)).map((message) => readSignInEmail(message.ID)));
+}
+
+/** The code of the one sign-in email delivered to `email`. */
+export async function receiveSignInCode(email: string): Promise<string> {
+  const [message] = await waitForSignInEmails(email);
+  if (!message) {
+    throw new Error("No sign-in email arrived.");
+  }
+  return message.code;
 }

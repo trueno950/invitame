@@ -1,10 +1,9 @@
-import { randomUUID } from "node:crypto";
-
 import type { Page, Response } from "@playwright/test";
 
 import { ACCOUNT_COPY, SIGN_IN_COPY } from "../lib/customer/copy.ts";
 import {
   expect,
+  newCustomerEmail,
   otherCode,
   randomClientIp,
   requestCode,
@@ -14,7 +13,7 @@ import {
   test,
 } from "./support/customer.ts";
 import { EDGE_CLIENT_IP_HEADER, WEB_ORIGIN } from "./support/environment.ts";
-import { waitForSignInEmails } from "./support/mailpit.ts";
+import { receiveSignInCode, waitForSignInEmails } from "./support/mailpit.ts";
 
 /**
  * Customer sign-in, account, and sign-out in a real browser (M2 T9b part A; S2, S38). The browser
@@ -83,7 +82,7 @@ test.describe("customer sign-in by emailed code", () => {
 
     // The session cookie is host-only on the web host: no `Domain`, so no other host receives it.
     expect(await sessionCookie(context)).toMatchObject({
-      domain: "localhost",
+      domain: new URL(WEB_ORIGIN).hostname,
       path: "/",
       httpOnly: true,
       secure: false,
@@ -98,7 +97,7 @@ test.describe("customer sign-in by emailed code", () => {
     page,
     customerEmail,
   }) => {
-    const otherEmail = `customer-${randomUUID()}@e2e.invitame.test`;
+    const otherEmail = newCustomerEmail();
     const otherContext = await browser.newContext({
       baseURL: WEB_ORIGIN,
       extraHTTPHeaders: { [EDGE_CLIENT_IP_HEADER]: randomClientIp() },
@@ -126,12 +125,9 @@ test.describe("customer sign-in by emailed code", () => {
     customerEmail,
   }) => {
     await requestCode(page, customerEmail);
-    const [message] = await waitForSignInEmails(customerEmail);
-    if (!message) {
-      throw new Error("No sign-in email arrived.");
-    }
+    const code = await receiveSignInCode(customerEmail);
 
-    const answer = await submitCodeAndWait(page, otherCode(message.code));
+    const answer = await submitCodeAndWait(page, otherCode(code));
 
     expect(answer.status()).toBe(400);
     await expect(alertWith(page, SIGN_IN_COPY.invalidCode)).toBeVisible();
@@ -149,19 +145,17 @@ test.describe("customer sign-in by emailed code", () => {
     customerEmail,
   }) => {
     await requestCode(page, customerEmail);
-    const [message] = await waitForSignInEmails(customerEmail);
-    if (!message) {
-      throw new Error("No sign-in email arrived.");
-    }
+    const code = await receiveSignInCode(customerEmail);
 
-    // S25: 3 code sign-in requests per minute per client IP.
+    // S25: 3 code sign-in requests per minute per client IP. Each answer is checked by its status:
+    // the alert keeps the same text across wrong attempts, so it proves only the last one.
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      const answer = await submitCodeAndWait(page, otherCode(message.code));
+      const answer = await submitCodeAndWait(page, otherCode(code));
       expect(answer.status()).toBe(400);
-      await expect(alertWith(page, SIGN_IN_COPY.invalidCode)).toBeVisible();
     }
+    await expect(alertWith(page, SIGN_IN_COPY.invalidCode)).toBeVisible();
 
-    const answer = await submitCodeAndWait(page, message.code);
+    const answer = await submitCodeAndWait(page, code);
 
     expect(answer.status()).toBe(429);
     await expect(alertWith(page, SIGN_IN_COPY.tooManyAttempts)).toBeVisible();
@@ -187,6 +181,23 @@ test.describe("customer sign-in by emailed code", () => {
     await expect(alertWith(page, SIGN_IN_COPY.emailInvalid)).toBeVisible();
     await expect(page.getByLabel(SIGN_IN_COPY.codeLabel)).toHaveCount(0);
     expect(authRequests).toEqual([]);
+  });
+});
+
+test.describe("customer account without a session", () => {
+  test("sends a browser without a session cookie from /cuenta to /ingresar", async ({
+    page,
+    context,
+  }) => {
+    expect(await sessionCookie(context)).toBeUndefined();
+
+    await page.goto("/cuenta");
+
+    await expect(page).toHaveURL("/ingresar");
+    await expect(signInHeading(page)).toBeVisible();
+    const session = await page.request.get("/api/auth/get-session");
+    expect(session.status()).toBe(200);
+    expect(await session.json()).toBeNull();
   });
 });
 

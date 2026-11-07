@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { correction, generate } from "lean-qr";
+import { toSvgPath } from "lean-qr/extras/svg";
 
 import { QR_QUIET_ZONE, qrCodeOutline } from "./qr.ts";
 
@@ -24,8 +25,16 @@ describe("qrCodeOutline", () => {
   });
 
   it("uses at least the medium error correction, so a phone camera reads it from a screen", () => {
-    const low = generate(URI);
-    assert.ok(qrCodeOutline(URI).size >= low.size);
+    // Without a floor, lean-qr picks the smallest version at the lowest level. For this URI the lowest
+    // level fits a smaller version than medium, so a code drawn without the floor would differ.
+    const lowest = generate(URI);
+    const medium = generate(URI, { minCorrectionLevel: correction.M });
+    assert.ok(medium.size > lowest.size, "precondition: the URI tells the two levels apart");
+
+    const outline = qrCodeOutline(URI);
+
+    assert.equal(outline.path, toSvgPath(medium));
+    assert.notEqual(outline.path, toSvgPath(lowest));
   });
 
   it("is deterministic for one URI and differs for another", () => {

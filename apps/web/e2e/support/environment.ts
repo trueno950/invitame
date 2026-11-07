@@ -70,7 +70,11 @@ if (WEB_PORT === API_PORT) {
   throw new Error("E2E_WEB_PORT and E2E_API_PORT must differ.");
 }
 
-/** The only origin the browser talks to; Better Auth's base URL and the API's trusted origin. */
-export const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
+/**
+ * The only origin the browser talks to; Better Auth's base URL and the API's trusted origin. It
+ * names the IPv4 address the web binds to, not `localhost`, which may resolve to `::1` first
+ * (R3-web-bound-ipv4-browser-uses-localhost).
+ */
+export const WEB_ORIGIN = `http://127.0.0.1:${WEB_PORT}`;
 /** The API's internal origin, reached only by the web server. */
 export const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;

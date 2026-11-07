@@ -197,10 +197,13 @@ export function EnrollmentFlow() {
           <div className="rounded-field bg-rose-50 px-4 py-3 text-center">
             <p className="text-sm font-medium text-ink">{ENROLLMENT_COPY.setupKeyHeading}</p>
             <p className="mt-1 text-sm leading-6 text-muted">{ENROLLMENT_COPY.setupKeyIntro}</p>
-            <p className="sr-only">{ENROLLMENT_COPY.setupKeyLabel}</p>
-            <code className="mt-2 block font-mono text-[0.9375rem] font-medium leading-7 tracking-[0.08em] break-words text-ink select-all">
-              {groupSetupKey(enrollment.setupKey)}
-            </code>
+            {/* The hidden caption names the key for assistive technology (S41). */}
+            <figure className="mt-2">
+              <figcaption className="sr-only">{ENROLLMENT_COPY.setupKeyLabel}</figcaption>
+              <code className="block font-mono text-[0.9375rem] font-medium leading-7 tracking-[0.08em] break-words text-ink select-all">
+                {groupSetupKey(enrollment.setupKey)}
+              </code>
+            </figure>
           </div>
           <div>
             <label className={fieldLabel} htmlFor={`${ids}-code`}>
