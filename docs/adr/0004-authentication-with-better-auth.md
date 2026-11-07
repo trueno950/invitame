@@ -5,11 +5,17 @@
 Accepted (2026-11-03). The human owner approved the library, customer sign-in by emailed one-time code,
 administrator sign-in with a password and a mandatory authenticator app, Resend for email, and Railway for hosting.
 Amended the same day, before any implementation, to define administrator enrollment (decision 3) and email
-failure handling (decision 8) after the native review. Decision 8 was amended again on 2026-11-04, during
-implementation, to send codes in the background, and decision 3 on the same day to bound the pre-enrollment
+failure handling (decision 8) after the first automated review of this ADR. That review is an advisory AI design
+review, not a human approval (see
+[Roles and review separation](../architecture/ai-operating-model.md#roles-and-review-separation)); it reports
+each finding by ID, severity, and location, and the findings of its two runs and their resolutions are recorded as
+S14 to S31 in the [Milestone 2 plan](../../odd/tasks/m2-identity.md). Decision 8 was amended again on 2026-11-04,
+during implementation, to send codes in the background, and decision 3 on the same day to bound the pre-enrollment
 window. Decision 4 was amended on 2026-11-05 to route the session cookie through the web origin, to fix the
-cookie name and the session lifetimes, and to prove the web-to-API hop with a shared secret; the status stays
-Accepted.
+cookie name and the session lifetimes, and to prove the web-to-API hop with a shared secret. On 2026-11-07,
+after implementation, decision 3 gained a clarification of the pre-enrollment account, decision 9 an amendment
+with the full set of validated variables, and the Consequences an outcome record; the logging rule of decision 8
+now appears once, and a pronoun in decision 3 names the account. No decision changed. The status stays Accepted.
 
 ## Context
 
@@ -54,7 +60,7 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    would bypass both the password and the second factor. A server-side command creates each administrator and sets
    the initial password without logging it. Until the administrator enrolls an authenticator app, confirmed by a
    first valid code, the account holds no administrator authority: the guard rejects every administrative action,
-   and enrollment and sign-out are the only actions it can take.
+   and enrollment and sign-out are the only actions the account can take.
 
    **Amended (2026-11-04).** The human owner fixed the pre-enrollment window (S20):
 
@@ -67,6 +73,20 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
 
    An un-enrolled administrator's session can only read itself, enable the authenticator app, confirm it with
    the first code, and sign out. It is refused on every project route, including the user's own profile.
+
+   **Clarified (2026-11-07).** What a pre-enrollment administrator account can and cannot do, as implemented
+   (`apps/api/src/auth/administrator-enrollment.ts`, `PENDING_ADMINISTRATOR_ENDPOINTS`;
+   `apps/api/src/auth/inactive-session-hook.ts`; `apps/api/src/auth/access-control/access-control.ts`):
+
+   - Inside the 24-hour window, its session can call exactly four Better Auth endpoints:
+     `GET /api/auth/get-session`, `POST /api/auth/two-factor/enable` (with the password),
+     `POST /api/auth/two-factor/verify-totp` (the first code confirms enrollment), and
+     `POST /api/auth/sign-out`.
+   - Every other Better Auth endpoint answers as if the request had no session. Every project route, including
+     `GET` and `PATCH /me` and every administrator-only route, answers `401`.
+   - It never receives an email sign-in code (above).
+   - After the window ends, its password is refused like a wrong password and each of its sessions is deleted
+     on its next use, so it can do nothing until an operator issues a new initial password.
 4. **Sessions and hosting.** Sessions are stored in the database and carried by an `HttpOnly`, `SameSite=Lax` cookie
    issued by the API, `Secure` outside local development. `apps/web` forwards the cookie from trusted server code and
    never stores it. Production runs web, API, and PostgreSQL in one Railway project under one registrable domain
@@ -118,11 +138,11 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    because every customer sign-in sends an email, the account moves to a paid plan before launch. Transient
    provider errors are retried a bounded number of times with the same code, so a retry never creates a second
    valid code. When sending still fails, the API returns a generic, retryable error that does not reveal whether
-   the account exists and logs the failure without the code or the recipient's address; repeated failures must
-   raise an operational alert by the first production release. A provider outage blocks only new customer
-   sign-ins: existing sessions keep working and administrator sign-in does not use email. A second provider can be
-   added behind the same port but is not required for the first release. Tests use an in-memory adapter and local
-   development uses a local mail catcher; codes never appear in logs.
+   the account exists; repeated failures must raise an operational alert by the first production release. A
+   provider outage blocks only new customer sign-ins: existing sessions keep working and administrator sign-in
+   does not use email. A second provider can be added behind the same port but is not required for the first
+   release. Tests use an in-memory adapter and local development uses a local mail catcher. No log carries a
+   sign-in code or a recipient's address, including the log of a failed send.
 
    **Amended (2026-11-04).** The generic retryable error above is replaced; the human owner approved this change.
    Better Auth 1.7.16 stores the code before it calls the send hook, swallows a send error, and still returns
@@ -134,10 +154,28 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    - Delivery runs in the background with the bounded retries above, which reuse the same code and message.
    - When delivery still fails after the retries, that code is invalidated, never a newer code for the same
      address. The failure counts toward the degraded alert and not as a wrong attempt.
-   - Logs omit the code and the recipient's address.
    - Repeated failures must still raise an operational alert by the first production release.
 9. **Configuration.** The auth secret, public base URL, and trusted origins are required environment variables
    validated at startup; the API refuses to start without them.
+
+   **Amended (2026-11-07).** The decisions above added variables; this is the full set the API validates at
+   startup (`apps/api/src/config/environment.ts`). It refuses to start when a rule fails, and its error names
+   the variable, never a secret value.
+
+   | Variable | Rule |
+   | --- | --- |
+   | `CORS_ORIGIN`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `AUTH_BASE_URL` | Required in every environment. The secret has at least 32 characters; `AUTH_BASE_URL` is one of the `CORS_ORIGIN` entries and uses `https` in production. |
+   | `AUTH_PROXY_SECRET` | Required in production; optional elsewhere. At least 32 characters, different from `BETTER_AUTH_SECRET` (decision 4). |
+   | `AUTH_CLIENT_IP_HEADER` | Required in production; elsewhere defaults to `x-forwarded-for` (decision 7). |
+   | `EMAIL_FROM` | Required in production; elsewhere defaults to a local sender on the reserved `.localhost` domain. |
+   | `EMAIL_TRANSPORT`, `RESEND_API_KEY` | Production accepts only `resend`, its default there. `RESEND_API_KEY` is required whenever the transport is `resend`. |
+   | `NODE_ENV`, `PORT`, `AUTH_TRUSTED_PROXIES`, `MAILPIT_URL` | Optional and validated when set. |
+   | `BETTER_AUTH_TRUSTED_ORIGINS` | Refused, so `CORS_ORIGIN` stays the only list of trusted origins. |
+
+   The web server validates its own settings when it starts and refuses to run with an invalid one. In production
+   it requires `API_ORIGIN`, `AUTH_PROXY_SECRET`, `AUTH_CLIENT_IP_HEADER`, and `AUTH_EDGE_CLIENT_IP_HEADER`
+   (`apps/web/lib/server/config.ts`). [Environment variables](../../README.md#environment-variables) in the
+   README lists every variable with its default.
 
 ## Consequences
 
@@ -155,6 +193,25 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
 - Integration tests with a real database must cover denied-by-default access, ownership, session expiry and
   revocation, disabled users, code expiry and attempt limits, rate limiting, the mandatory administrator second
   factor and its enrollment gate, rejection of email OTP sign-in for administrators, and email send failures.
+
+**Outcome (2026-11-07).** Status of the consequences above after the Milestone 2 implementation. Task and log
+references (T1, L9) point to the [Milestone 2 plan](../../odd/tasks/m2-identity.md).
+
+- The spike came first. T1 (`ebabb0d`) proved Better Auth 1.7.16 through `@thallesp/nestjs-better-auth` 2.8.0 on
+  NestJS 12 with the body parser disabled: the auth handler answers, JSON bodies parse, and the global
+  `ValidationPipe` rejects invalid bodies on non-auth routes (L9). The fallback of decision 1 was not needed. The
+  spike's test still runs in `pnpm test` as
+  [`auth.integration.spec.ts`](../../apps/api/src/auth/auth.integration.spec.ts).
+- The `User` migration is `20261104030448_add_better_auth_identity`. It is additive, passed the database gates,
+  and the human owner approved it before its commit (L15, L17).
+- The listed integration tests exist. Each obligation maps to named assertions on real PostgreSQL in
+  [ADR 0004 test traceability](../development/adr-0004-test-traceability.md), and CI runs those suites in its
+  `database-tests` job.
+- The administrator recovery procedure exists: the `admin:reset-second-factor` operator command, described in
+  [Recover a locked administrator](../../README.md#recover-a-locked-administrator).
+- Still open: the domain registration, the sending domain's SPF, DKIM, and DMARC records, the paid Resend plan,
+  Railway hosting, and the operational alert. The API logs an `email_delivery_degraded` event for repeated send
+  failures, but nothing routes it to an alert yet.
 
 ## Open decisions
 

@@ -1,17 +1,18 @@
 # Architecture overview
 
 InvitaMe is a modular monolith with two independently runnable applications. The repository currently contains
-only the foundation: catalog/version data, API configuration and health, Prisma ownership, and an honest
-pre-launch landing page. The module map and flows below describe the target product and are explicitly planned
-unless marked implemented.
+the foundation (catalog/version data, API configuration and health, Prisma ownership, and an honest pre-launch
+landing page) and the Milestone 2 identity work: customer and administrator sign-in, sessions, access control,
+the own profile, and the operator commands. The module map and flows below describe the target product and are
+explicitly planned unless marked current.
 
 ## Current versus target status
 
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
 | Web | `apps/web` is a Next.js 16 App Router app with an honest pre-launch landing page at `/` (see Landing page below), a proxy for `/api/auth`, a server-side API client, and the customer pages `/ingresar` (sign-in by emailed code) and `/cuenta` (own profile and sign-out), and the administrator pages `/admin/ingresar` (password and second factor), `/admin/activar` (authenticator-app enrollment), and `/admin` (a minimal panel with sign-out); the pages use the visual theme «A · Rosa y vino» ([`docs/design/theme.md`](../design/theme.md): Tailwind tokens, fonts committed in the repository and loaded with `next/font/local` so the build needs no network for them, fine-line SVG ornaments, and a contrast test). | Dashboard, authoring flows, and public invitation routes. **Planned.** |
-| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling and administrator creation by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
-| Database | PostgreSQL and Prisma own a minimal `User` foundation plus the catalog, packages, features, templates, and immutable template versions; authentication behavior is not implemented. | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
+| API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling, administrator creation, and administrator recovery by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
+| Database | PostgreSQL and Prisma own `User` and the identity tables Better Auth reads and writes (sessions, credential accounts, verification codes, two-factor records, and rate-limit counters) plus the catalog, packages, features, templates, and immutable template versions; see [`model.md`](../database/model.md). | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
 
@@ -40,8 +41,9 @@ apps/api/src/
   database/     Prisma module and service
   email/        email delivery port, retry/alert policy, and Resend, Mailpit, and in-memory adapters
   health/       database-backed health endpoint and tests
-  users/        own profile (`GET /me`, `PATCH /me`), the disable-user and create-administrator use cases, their
-                Prisma adapters, and the `user:disable` and `admin:create` commands
+  users/        own profile (`GET /me`, `PATCH /me`), the disable-user, create-administrator, and
+                reset-second-factor use cases, their Prisma adapters, and the `user:disable`, `admin:create`, and
+                `admin:reset-second-factor` commands
   app.module.ts Nest composition root
   app.setup.ts  shared app creation: body parser off, Helmet, CORS, validation, shutdown hooks
   main.ts       HTTP bootstrap through the shared app creation
@@ -49,8 +51,13 @@ apps/api/src/
 
 ### Authentication boundary (current)
 
-This is the implemented state of ADR 0004; see "Administrator sign-in and enrollment gate" below. The abuse limits of ADR 0004 decision 7 are current; see "Abuse limits" below, and "Access control" for roles
-and account status.
+The sections below, up to "Email delivery", describe what the code implements of ADR 0004. Decisions 1 to 3,
+5 to 7, and 9 are implemented in the API and the web. Decision 4 is implemented except its hosting part: nothing
+is deployed, so the Railway project, the registered domain, and the production `https` origin do not exist yet.
+Decision 8 is implemented in code, with Mailpit locally and a Resend adapter, but no production Resend account or
+sending domain is set up (a Milestone 2 non-goal), and nothing routes the `email_delivery_degraded` event to an
+alert. Start with "Access control" for roles and account status, "Administrator sign-in and enrollment gate" for
+decision 3, and "Abuse limits" for decision 7.
 
 - Better Auth runs inside the API through `@thallesp/nestjs-better-auth` and is mounted at `/api/auth`. It is
   built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`, and in production
@@ -71,7 +78,7 @@ This is the implemented API side of ADR 0004 decision 4 as amended on 2026-11-05
 `auth/session-settings.ts`, `auth/auth.factory.ts`, `auth/inactive-session-hook.ts`). The web side is
 described in "Web boundary" below.
 
-- `AUTH_BASE_URL` is the public web origin through which the web will proxy `/api/auth`. Startup validation
+- `AUTH_BASE_URL` is the public web origin through which the web proxies `/api/auth`. Startup validation
   requires it to be one of the `CORS_ORIGIN` entries, because Better Auth trusts that origin on its own, and
   to use `https` in production.
 - Over `https` the session cookie is `__Host-better-auth.session_token`: `HttpOnly`, `Secure`, `SameSite=Lax`,
@@ -414,9 +421,9 @@ administrator sign-in.
   the 4th gets Better Auth's `429`.
 - `/sign-in/email`, `/two-factor/enable`, and `/two-factor/generate-backup-codes`, which check a password,
   allow 3 requests per 60 seconds per client IP. `/two-factor/verify-totp` and
-  `/two-factor/verify-backup-code` allow 5 per 60 seconds per client IP, above the 5 wrong codes one challenge
-  allows. Other paths keep the defaults of Better Auth and its email OTP plugin, such
-  as 100 requests per 10 seconds per client IP.
+  `/two-factor/verify-backup-code` allow 5 per 60 seconds per client IP, as many as the 5 wrong codes one
+  challenge allows, so one honest challenge is never cut short. Other paths keep the defaults of Better Auth and
+  its email OTP plugin, such as 100 requests per 10 seconds per client IP.
 - Each address gets at most 5 codes per fixed hour (`auth/abuse-limits.ts`): the hour starts at the first counted
   code, later codes never move it, and the first request after it ends opens a new hour. Every `sign-in` request
   counts, whatever
