@@ -13,6 +13,7 @@ import { proxyAuthRequest } from "./auth-proxy.ts";
 import { type AuthSessionUser, readAuthSession } from "./auth-session.ts";
 import { getWebServerConfig } from "./config.ts";
 import { logReadFailure, SERVER_LOG_EVENT } from "./server-log.ts";
+import { readUnlessApiUnavailable } from "./session-refresh.ts";
 
 /**
  * Session reads and profile updates for server components and server actions (M2 T8b, T8d; L29,
@@ -26,8 +27,10 @@ import { logReadFailure, SERVER_LOG_EVENT } from "./server-log.ts";
  * customer page renders, so the refreshed cookie reaches the browser (L34; `session-refresh.ts`).
  * The administrator pages read the session without any refresh (`auth-session.ts`).
  *
- * An unexpected failure of a read is logged once, as its event name and error class
+ * An unexpected failure of a call is logged once, as its event name, classes, and kind
  * (`server-log.ts`, R4-account-catch-all-unlogged), and rethrown for the page to show its notice.
+ * When `proxy.ts` has just found the API failing, the profile calls answer unavailable at once
+ * (`session-refresh.ts`, R4-cuenta-outage-latency-serialized).
  */
 let client: ApiClient | undefined;
 
@@ -42,14 +45,20 @@ async function requestCookieHeader(): Promise<string> {
 
 export async function getOwnProfile(): Promise<SessionResult<OwnProfile>> {
   return logReadFailure(SERVER_LOG_EVENT.OWN_PROFILE_READ_FAILED, async () =>
-    apiClient().getOwnProfile(await requestCookieHeader()),
+    readUnlessApiUnavailable(await headers(), async () =>
+      apiClient().getOwnProfile(await requestCookieHeader()),
+    ),
   );
 }
 
 export async function updateOwnProfile(
   update: OwnProfileUpdate,
 ): Promise<SessionResult<OwnProfile>> {
-  return apiClient().updateOwnProfile(await requestCookieHeader(), update);
+  return logReadFailure(SERVER_LOG_EVENT.OWN_PROFILE_UPDATE_FAILED, async () =>
+    readUnlessApiUnavailable(await headers(), async () =>
+      apiClient().updateOwnProfile(await requestCookieHeader(), update),
+    ),
+  );
 }
 
 /**

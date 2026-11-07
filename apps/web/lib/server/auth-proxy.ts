@@ -222,8 +222,11 @@ export async function proxyAuthRequest(
   let upstreamBody: ArrayBuffer;
 
   try {
-    // One deadline covers the response headers and the body.
-    const signal = AbortSignal.timeout(options.timeoutMs ?? AUTH_PROXY_TIMEOUT_MS);
+    // One deadline covers the response headers and the body; a browser that goes away ends the call.
+    const signal = AbortSignal.any([
+      request.signal,
+      AbortSignal.timeout(options.timeoutMs ?? AUTH_PROXY_TIMEOUT_MS),
+    ]);
     upstream = await (options.fetch ?? fetch)(target, {
       method: request.method,
       headers: upstreamHeaders(request, config),
@@ -234,6 +237,11 @@ export async function proxyAuthRequest(
     });
     upstreamBody = await upstream.arrayBuffer();
   } catch (error) {
+    if (request.signal.aborted) {
+      // The browser left (R4-proxy-ignores-client-abort): no one reads this, and the API did not fail.
+      return jsonError(502, SERVICE_UNAVAILABLE_BODY);
+    }
+
     const timedOut = isTimeout(error);
     log({
       event: "auth_proxy_upstream_failed",

@@ -67,7 +67,31 @@ describe("logReadFailure", () => {
       ),
       (error: unknown) => error === failure,
     );
-    assert.deepEqual(events, [{ event: "auth_session_read_failed", error: "ApiClientError" }]);
+    assert.deepEqual(events, [
+      { event: "auth_session_read_failed", error: "ApiClientError", kind: "unavailable" },
+    ]);
+  });
+
+  it("adds the API client's fixed kind and the class of the cause, never their messages", async () => {
+    const lines: string[] = [];
+    const cause = new DOMException("admin@example.test timed out", "TimeoutError");
+
+    await assert.rejects(
+      logReadFailure(
+        SERVER_LOG_EVENT.OWN_PROFILE_UPDATE_FAILED,
+        async () => {
+          throw new ApiClientError("unavailable", undefined, { cause });
+        },
+        createServerLog((line) => lines.push(line)),
+      ),
+    );
+    assert.deepEqual(JSON.parse(lines[0] ?? ""), {
+      event: "own_profile_update_failed",
+      error: "ApiClientError",
+      kind: "unavailable",
+      cause: "TimeoutError",
+    });
+    assert.doesNotMatch(lines[0] ?? "", /admin@example|timed out/);
   });
 
   it("keeps the message and other details out of the event", async () => {

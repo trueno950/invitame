@@ -88,6 +88,20 @@ describe("sessionCookieHeader", () => {
     );
   });
 
+  it("drops a pair without '=', whatever its text (R3-cookie-name-parse-without-equals)", () => {
+    for (const header of [
+      "better-auth.session_tokenX",
+      "__Host-better-auth.ab",
+      "better-auth.xy ",
+    ]) {
+      assert.equal(sessionCookieHeader(header), undefined, header);
+    }
+    assert.equal(
+      sessionCookieHeader("better-auth.session_tokenX; better-auth.session_token=a.b"),
+      "better-auth.session_token=a.b",
+    );
+  });
+
   it("returns undefined when there is no Better Auth cookie", () => {
     for (const header of [undefined, null, "", "theme=dark; _ga=GA1", "   "]) {
       assert.equal(sessionCookieHeader(header), undefined);
@@ -171,6 +185,53 @@ describe("getOwnProfile", () => {
     await assert.rejects(client({}, 50).getOwnProfile(SESSION_COOKIE), {
       name: "ApiClientError",
       kind: "unavailable",
+    });
+  });
+});
+
+describe("getOwnProfile failures while the body arrives", () => {
+  it("maps a body that stalls past the deadline or breaks off to unavailable, not invalid-response", async () => {
+    respond = (_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write('{"id":');
+      // Never ends: the client's single deadline must cover the body too.
+    };
+    await assert.rejects(client({}, 100).getOwnProfile(SESSION_COOKIE), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "unavailable");
+      assert.equal((error.cause as Error | undefined)?.name, "TimeoutError");
+      return true;
+    });
+
+    respond = (_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write('{"id":');
+      setTimeout(() => response.socket?.destroy(), 20);
+    };
+    await assert.rejects(client().getOwnProfile(SESSION_COOKIE), {
+      name: "ApiClientError",
+      kind: "unavailable",
+    });
+  });
+
+  it("keeps the original error as the cause of an unavailable failure", async () => {
+    await assert.rejects(
+      client({ apiOrigin: "http://127.0.0.1:1" }).getOwnProfile(SESSION_COOKIE),
+      (error: unknown) => {
+        assert.ok(error instanceof ApiClientError);
+        assert.equal(error.kind, "unavailable");
+        assert.equal((error.cause as Error | undefined)?.name, "TypeError");
+        return true;
+      },
+    );
+
+    respond = () => {
+      // Never answers.
+    };
+    await assert.rejects(client({}, 50).getOwnProfile(SESSION_COOKIE), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal((error.cause as Error | undefined)?.name, "TimeoutError");
+      return true;
     });
   });
 });

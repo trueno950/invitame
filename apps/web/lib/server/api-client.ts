@@ -30,14 +30,18 @@ export type SessionResult<T> = { signedIn: true; value: T } | { signedIn: false 
  */
 export type ApiClientErrorKind = "rejected" | "unavailable" | "invalid-response";
 
-/** A typed failure that never carries the API's response body. */
+/**
+ * A typed failure that never carries the API's response body. An `unavailable` failure keeps the
+ * network or timeout error as its `cause` (R4-api-client-unavailable-drops-cause-and-logs-nothing);
+ * the server log records only that cause's class (`server-log.ts`).
+ */
 export class ApiClientError extends Error {
   override readonly name = "ApiClientError";
   readonly kind: ApiClientErrorKind;
   readonly status: number | undefined;
 
-  constructor(kind: ApiClientErrorKind, status?: number) {
-    super(`API request failed: ${kind}${status === undefined ? "" : ` (${status})`}.`);
+  constructor(kind: ApiClientErrorKind, status?: number, options?: ErrorOptions) {
+    super(`API request failed: ${kind}${status === undefined ? "" : ` (${status})`}.`, options);
     this.kind = kind;
     this.status = status;
   }
@@ -49,7 +53,8 @@ export function sessionCookieHeader(cookieHeader: string | null | undefined): st
     .split(";")
     .map((pair) => pair.trim())
     .filter((pair) => {
-      const name = pair.slice(0, pair.indexOf("=")).trim();
+      // A pair without `=` has no name (RFC 6265bis), so it is never a session cookie.
+      const name = pair.includes("=") ? pair.slice(0, pair.indexOf("=")).trim() : "";
       return SESSION_COOKIE_PREFIXES.some(
         (prefix) => name.startsWith(prefix) && name.length > prefix.length,
       );
@@ -135,13 +140,19 @@ export function createApiClient(options: ApiClientOptions) {
         );
       }
 
-      payload = await response.json().catch(() => undefined);
+      // A body that stalls past the deadline or breaks off is an outage, not a contract mismatch.
+      const text = await response.text();
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = undefined;
+      }
     } catch (error) {
       if (error instanceof ApiClientError) {
         throw error;
       }
 
-      throw new ApiClientError("unavailable");
+      throw new ApiClientError("unavailable", undefined, { cause: error });
     }
 
     if (!isOwnProfile(payload)) {

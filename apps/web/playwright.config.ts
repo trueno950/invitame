@@ -8,6 +8,7 @@ import {
   API_PORT,
   CLIENT_IP_HEADER,
   EDGE_CLIENT_IP_HEADER,
+  GATE_ORIGIN,
   requireLocalUrl,
   WEB_ORIGIN,
   WEB_PORT,
@@ -15,8 +16,9 @@ import {
 
 /**
  * Browser end-to-end tests (M2 T9b; S38): `pnpm --filter @invitame/web test:e2e`. Playwright starts
- * the built API (`apps/api/dist`) and the production build of the web (`next start`) on dedicated
- * ports, then drives Chromium against the web origin only. Build both apps, migrate the database,
+ * the built API (`apps/api/dist`), the production build of the web (`next start`), and the
+ * harness-only API gate between them (`e2e/support/api-gate.ts`) on dedicated ports, then drives
+ * Chromium against the web origin only. Build both apps, migrate the database,
  * and name a disposable local PostgreSQL and Mailpit in `E2E_DATABASE_URL` and `E2E_MAILPIT_URL`
  * first; see `docs/development/quality-gates.md`.
  *
@@ -53,7 +55,8 @@ const apiEnvironment = {
 const webEnvironment = {
   // `next start` serves the production build with the production configuration rules.
   NODE_ENV: "production",
-  API_ORIGIN,
+  // Every web-to-API call crosses the gate, which forwards it unchanged unless a test holds it.
+  API_ORIGIN: GATE_ORIGIN,
   AUTH_PROXY_SECRET: proxySecret,
   AUTH_CLIENT_IP_HEADER: CLIENT_IP_HEADER,
   AUTH_EDGE_CLIENT_IP_HEADER: EDGE_CLIENT_IP_HEADER,
@@ -88,6 +91,16 @@ export default defineConfig({
       // Never attach to a server that is already listening: it would not be this harness's.
       reuseExistingServer: false,
       timeout: 60_000,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+    {
+      name: "gate",
+      command: "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON e2e/support/api-gate-server.ts",
+      cwd: __dirname,
+      url: `${GATE_ORIGIN}/__e2e/ready`,
+      reuseExistingServer: false,
+      timeout: 30_000,
       stdout: "pipe",
       stderr: "pipe",
     },

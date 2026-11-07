@@ -12,6 +12,7 @@ const LOCAL_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::
 /** Dedicated defaults, away from the development servers on 3000 and 3001. */
 const DEFAULT_WEB_PORT = 3410;
 const DEFAULT_API_PORT = 3411;
+const DEFAULT_GATE_PORT = 3412;
 
 /**
  * The header the test browser sends in place of a platform edge: the web in production mode only
@@ -65,9 +66,11 @@ export function requireLocalUrl(name: "E2E_DATABASE_URL" | "E2E_MAILPIT_URL"): s
 
 export const WEB_PORT = readPort("E2E_WEB_PORT", DEFAULT_WEB_PORT);
 export const API_PORT = readPort("E2E_API_PORT", DEFAULT_API_PORT);
+/** The harness-only API gate between the web and the API (`api-gate.ts`). */
+export const GATE_PORT = readPort("E2E_GATE_PORT", DEFAULT_GATE_PORT);
 
-if (WEB_PORT === API_PORT) {
-  throw new Error("E2E_WEB_PORT and E2E_API_PORT must differ.");
+if (new Set([WEB_PORT, API_PORT, GATE_PORT]).size !== 3) {
+  throw new Error("E2E_WEB_PORT, E2E_API_PORT, and E2E_GATE_PORT must differ.");
 }
 
 /**
@@ -76,5 +79,7 @@ if (WEB_PORT === API_PORT) {
  * (R3-web-bound-ipv4-browser-uses-localhost).
  */
 export const WEB_ORIGIN = `http://127.0.0.1:${WEB_PORT}`;
-/** The API's internal origin, reached only by the web server. */
+/** The API's internal origin, reached only through the gate. */
 export const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
+/** The web server's `API_ORIGIN`: the gate, which forwards every request to the API. */
+export const GATE_ORIGIN = `http://127.0.0.1:${GATE_PORT}`;

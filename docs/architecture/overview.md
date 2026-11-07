@@ -110,7 +110,8 @@ apps/web server components and actions ──► apps/api /me
   Redirects are returned, not followed. The upstream status, body, and every `Set-Cookie` pass unchanged, without
   hop-by-hop headers, and with `Cache-Control: no-store`. An unreachable API gets `502`, a timeout `504`, and an
   API `5xx` keeps its status; all three return the generic `SERVICE_UNAVAILABLE` body and log an
-  `auth_proxy_upstream_failed` warning with the path, reason, and status only.
+  `auth_proxy_upstream_failed` warning with the path, reason, and status only. When the browser goes away, the
+  proxy ends its API call too and logs nothing, since the API did not fail (T9b part C1).
 - The API refuses every `/api/auth` request without the secret in production (`403 {"code":"FORBIDDEN"}` and an
   `auth_proxy_rejected` warning with the path only) before any endpoint, hook, or rate-limit step runs. It
   always removes the secret header, and removes the client IP header unless the secret was valid. Outside
@@ -118,7 +119,10 @@ apps/web server components and actions ──► apps/api /me
 - The server-side API client (`lib/server/api-client.ts`, bound to the request by `lib/server/session-api.ts`)
   sends only Better Auth's cookies (`better-auth.*` and `__Host-better-auth.*`) and the secret. It calls
   `GET /me` and `PATCH /me` (the browser cannot call `PATCH` because of CORS), maps `401` to "not signed in",
-  and maps other failures to a typed `ApiClientError` that never carries the response body. The API does not
+  and maps other failures to a typed `ApiClientError` that never carries the response body. One 10-second
+  deadline covers the headers and the body: a body that stalls or breaks off is `unavailable`, and only a
+  complete body that does not match the contract is `invalid-response`. An `unavailable` error keeps the
+  network or timeout error as its `cause`. A cookie pair without `=` is never forwarded. The API does not
   check the secret on `/me` in Milestone 2.
 - Rolling sessions: a session read by the web server refreshes the stored session but sends the browser no
   cookie. The browser's cookie is extended only when `GET /api/auth/get-session` runs through the proxy; see
@@ -183,12 +187,17 @@ This is M2 T8c (S1, S6; L34, L39): `apps/web/app/ingresar`, `apps/web/app/cuenta
   Next.js proxy, formerly middleware) runs `GET /api/auth/get-session` through the web's `/api/auth` proxy
   before every page whose render reads the session (`/ingresar`, `/cuenta`, and the paths under `/cuenta`),
   and returns every `Set-Cookie` with the page. It runs for a page `GET` and for a server action's `POST`
-  that carry a Better Auth cookie, waits at most 3 seconds, and never blocks the page: on any failure the page
-  renders and its own `GET /me` decides. A new customer page that reads the session must join the same
-  matcher; the administrator pages stay out of it (see below).
-- An unexpected failure of the `GET /me` read on the web server is logged once as
-  `{"event":"own_profile_read_failed","error":"<class>"}` (`lib/server/server-log.ts`): the event name and the
-  error class only, never a message, an address, a cookie, a token, or a response body.
+  that carry a Better Auth cookie, waits at most 3 seconds, and never blocks the page. When the refresh fails or
+  the API answers it with a `5xx`, `proxy.ts` passes the render the request header `x-invitame-api-unavailable`,
+  and the page's `GET /me` or `PATCH /me` answers unavailable at once instead of waiting up to 10 more seconds
+  (R4-cuenta-outage-latency-serialized); `proxy.ts` removes any copy of that header the browser sent. Otherwise
+  the page's own `GET /me` decides. A new customer page that reads the session must join the same matcher; the
+  administrator pages stay out of it (see below).
+- An unexpected failure of the `GET /me` read or the `PATCH /me` update on the web server is logged once as
+  `{"event":"own_profile_read_failed","error":"<class>","kind":"<kind>","cause":"<class>"}` (or
+  `own_profile_update_failed`; `lib/server/server-log.ts`): the event name, the error class, the API client's
+  fixed failure kind, and the class of the error's cause (such as `TimeoutError` or `TypeError`) when present,
+  never a message, an address, a cookie, a token, or a response body.
 
 ### Administrator pages (current)
 
@@ -205,7 +214,8 @@ sees: the API authorizes every action.
 - Routing: anonymous visitors go to `/admin/ingresar`, pending administrators (role `ADMIN`, `twoFactorEnabled`
   not `true`) to `/admin/activar`, enrolled administrators to `/admin`, and customers to `/cuenta`. When the read
   fails, `/admin` and `/admin/activar` show a retry notice, `/admin/ingresar` shows the form, and the web logs one
-  `{"event":"auth_session_read_failed","error":"<class>"}` line.
+  `{"event":"auth_session_read_failed","error":"<class>","kind":"<kind>"}` line, with the API client's fixed
+  failure kind and, when the error has a cause, a `"cause"` class; never a status, message, or body.
 - `/admin/ingresar` sends `POST /api/auth/sign-in/email` with `{ email, password }`. An enrolled administrator
   gets `twoFactorRedirect` and enters the 6-digit code (`POST /api/auth/two-factor/verify-totp`) or, as an
   alternative, a backup code (`POST /api/auth/two-factor/verify-backup-code`); a pending administrator gets a
