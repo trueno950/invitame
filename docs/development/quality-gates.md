@@ -111,7 +111,8 @@ How the harness is composed (`apps/web/playwright.config.ts`, `apps/web/e2e/supp
   production mode, passing every setting explicitly. Both servers still load their env files at startup: the API
   reads `apps/api/.env` (`apps/api/src/config/config.module.ts`) and Next.js reads `apps/web/.env*`. A process
   variable takes precedence over a file value, and the harness sets every variable the servers validate, empty
-  when unused, so no value from a developer's env files reaches the servers. The API secret and the web-to-API
+  when unused, so a developer's env files cannot change a validated setting; a variable the servers do not
+  validate could still come from those files. The API secret and the web-to-API
   proxy secret are random per run and exist only in the two server processes; nothing is committed.
 - The API sends each code through its existing `mailpit` email provider, and the tests read it through Mailpit's
   HTTP API. Production code has no test endpoint, flag, branch, or log (S38).

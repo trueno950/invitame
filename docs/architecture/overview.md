@@ -422,8 +422,8 @@ administrator sign-in.
 - `/sign-in/email`, `/two-factor/enable`, and `/two-factor/generate-backup-codes`, which check a password,
   allow 3 requests per 60 seconds per client IP. `/two-factor/verify-totp` and
   `/two-factor/verify-backup-code` allow 5 per 60 seconds per client IP, as many as the 5 wrong codes one
-  challenge allows, so one honest challenge is never cut short. Other paths keep the defaults of Better Auth and
-  its email OTP plugin, such as 100 requests per 10 seconds per client IP.
+  challenge allows. Other paths keep the defaults of Better Auth and its email OTP plugin, such as 100 requests
+  per 10 seconds per client IP.
 - Each address gets at most 5 codes per fixed hour (`auth/abuse-limits.ts`): the hour starts at the first counted
   code, later codes never move it, and the first request after it ends opens a new hour. Every `sign-in` request
   counts, whatever

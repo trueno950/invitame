@@ -55,8 +55,9 @@ to be checked before prose, and it defines when a human decision is required.
 - `apps/api` contains configuration, Prisma ownership, the health module, Better Auth sign-in and sessions
   ([ADR 0004](adr/0004-authentication-with-better-auth.md)), access control, the own profile, and the operator
   commands; see [`architecture/overview.md`](architecture/overview.md).
-- The first Prisma migration contains the catalog and immutable template-version foundations; the second adds
-  the identity tables that Better Auth uses (see [`database/model.md`](database/model.md)).
+- The first Prisma migration contains the minimal user identity record and the catalog and immutable
+  template-version foundations; the second maps Better Auth's user onto that record and adds the session,
+  account, verification, two-factor, and rate-limit tables (see [`database/model.md`](database/model.md)).
 - Root scripts provide local documentation consistency, format, lint, typecheck, test, build, and Docker/PostgreSQL
   commands.
 - A limited GitHub Actions quality-gate CI workflow runs documentation consistency, format, lint, typecheck, test,
