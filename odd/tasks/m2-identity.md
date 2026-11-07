@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l merged as #24 (L45, L46); T9a merged as #25 (L47, L48); T7c merged as #26 (L48, L49); T7d in progress (L49).
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l merged as #24 (L45, L46); T9a merged as #25 (L47, L48); T7c merged as #26 (L48, L49); T7d merged as #27 (L49, L50); T9b in progress (L50).
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), slice 23 `feat/m2-identity-23-landing` (T8l themed landing, #24, merged), slice 24 `feat/m2-identity-24-integration-tests` (T9a database tests in CI, #25, merged), slice 25 `feat/m2-identity-25-enrollment-race` (T7c enrollment race fix, #26, merged), and T7d on `feat/m2-identity-26-enrollment-hardening` (L23 to L49). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), slice 23 `feat/m2-identity-23-landing` (T8l themed landing, #24, merged), slice 24 `feat/m2-identity-24-integration-tests` (T9a database tests in CI, #25, merged), slice 25 `feat/m2-identity-25-enrollment-race` (T7c enrollment race fix, #26, merged), slice 26 `feat/m2-identity-26-enrollment-hardening` (T7d enrollment hardening, #27, merged), and T9b on `feat/m2-identity-27-browser-tests` (L23 to L50). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -144,6 +144,11 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   alone, so that refusal first ends every session of the administrator (native review correction). A failed revert is
   logged with the error class only and still refused. A successful first confirmation ends every other session of
   the administrator, so no session opened with the password alone keeps authority after enrollment. No migration.
+- **S41** (L51) Manual enrollment key, approved as: "Agrego bajo el QR la clave para escribirla a mano en la app (por
+  ejemplo, «¿No puedes escanear? Escribe esta clave»). Resuelve el caso del teléfono, la prueba la lee como lo haría
+  una persona y S38 queda intacta. Cambia la página y su texto: unas 60 a 100 líneas más en la parte B, con su
+  revisión." Below the QR code, `/admin/activar` shows the TOTP secret as text the administrator can type into an
+  authenticator app, and the T9b browser tests read the secret from that text.
 
 ## Tasks
 
@@ -168,8 +173,8 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T8l | Themed landing page (L41, L45): the approved concept's sections and the draw-on bouquet in `apps/web/app/page.tsx`, as an honest pre-launch page (S37). | S35, S37 | worker | `26e3e4a` (#24) |
 | T9a | Integration tests on real PostgreSQL in CI (L47): a PostgreSQL service in the CI workflow runs the migrations and `test:db` on every push, and every ADR 0004 test obligation and S17 case maps to a named assertion (S13, S30), together with the database-bound findings routed to T9 in L35 to L44. | S2, S13, S17, S30, S38 | worker | `b47cfe1` (#25) |
 | T7c | Fail closed when the first TOTP confirmation races an `admin:create` reissue (T9a-D1, L48): in the session-create hook, a first confirmation whose pending session is gone reverts `twoFactorEnabled` and refuses without a session or cookie; the T9a `todo` test becomes a required test, together with the re-enable and `user:disable` variants and an unaffected sign-in challenge. | S6, S21, S39 | worker | `3e8620b` (#26) |
-| T7d | Harden the first TOTP confirmation (L49, S40): tell the sign-in challenge apart by the session the endpoint resolved, refuse a superseded confirmation without reverting when another confirmation completed or is completing, log a failed revert, and end every other session of the administrator at a successful first confirmation; race tests on PostgreSQL. | S6, S21, S39, S40 | worker | — |
-| T9b | Browser end-to-end tests with `@playwright/test` (L47): customer sign-in by emailed code, the account and sign-out, administrator sign-in with the second factor, and authenticator enrollment, against the real web, API, and PostgreSQL in CI, together with the browser-bound findings routed to T9 in L35 to L44. | S2, S38 | worker | — |
+| T7d | Harden the first TOTP confirmation (L49, S40): tell the sign-in challenge apart by the session the endpoint resolved, refuse a superseded confirmation without reverting when another confirmation completed or is completing, log a failed revert, and end every other session of the administrator at a successful first confirmation; race tests on PostgreSQL. | S6, S21, S39, S40 | worker | `68a3a07` (#27) |
+| T9b | Browser end-to-end tests with `@playwright/test` (L47) against the real web, API, and PostgreSQL in CI, in three slices (L50). Part A (slice 27): the harness inside `apps/web` (no new workspace) with PostgreSQL and Mailpit, a CI job, and the customer flows (sign-in by emailed code, the account, and sign-out), with R3-proxy-composition-unproved and R3-session-api-cookie-roundtrip-still-unproved. Part B (slice 28): the manual enrollment key (S41, L51), authenticator enrollment, administrator sign-in with the second factor or a backup code, the panel, and sign-out, with the L43 and L44 findings. Part C (slice 29): the other routed findings: the L38 findings, R4-cuenta-outage-latency-serialized, R3-counted-range-shared-by-three-suites, and R3-tampered-cookie-case-vacuous. | S2, S38, S41 | worker | — |
 | T10 | Documentation: ADR wording fixes, architecture, database, and quality-gate docs, environment examples, and the administrator recovery procedure. | S13, S21, S26, S27 | inline | — |
 | T11 | Security evidence: independent verification of every spec, and human sign-off of secret handling, session expiry, and error mapping. | S2 | verify | — |
 
@@ -740,3 +745,51 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   R2-revert-returns-error-name, and R2-log-test-name-event-mismatch; this record fixes
   R2-t7c-task-row-misstates-trigger; T10 owns the `/admin/activar` message for `401 ENROLLMENT_SUPERSEDED`. Slice 26
   (`feat/m2-identity-26-enrollment-hardening`, from `6ba88bc`) holds T7d.
+- **L50** (2026-11-06) Slice 26 (`68a3a07`, PR #27) holds T7d. The native review (`review-dbeb69c8becfe4c4`, high
+  tier, four lenses) required one correction, R3-newer-session-refuse-keeps-flag-with-password-session: a newer
+  session that was a second tab's password-only session made the hook refuse while keeping `twoFactorEnabled` true and
+  that session alive, so the second tab gained administrator authority without a second factor. The correction ends
+  every session of the administrator before that refusal (S40); its new test failed first (19 of 20 tests in the file
+  passed, and the second tab still read the user) and passes now. Gates passed (API 318 of 318 and web 214 of 214
+  tests; `test:db` 60 of 60 in two runs). TDD caveat: the "401, not 500" assertion of the failed-revert test never had
+  a valid RED run. The targeted validator first hit the Pi host relay bound (924782 ms against 924548 ms) without a
+  verdict. User, choosing an option for "La corrección de T7d ya está probada: la prueba de dos pestañas falló antes
+  del arreglo y ahora pasa, los 7 checks están en verde y la base de datos pasó 60/60 dos veces. Pero el validador de
+  la revisión se cortó por tiempo (15 min 25 s, con límite de 15 min 24.5 s) sin dar veredicto. Reintentar igual
+  chocaría con el mismo límite, y ese límite solo se cambia en el entorno con el que arrancas Pi. ¿Cómo seguimos?":
+  "Subir el límite y reintentar (recomendado)", whose description reads: "Cierras Pi y lo vuelves a abrir con
+  GENTLE_PI_REVIEW_RELAY_PI_TIMEOUT_MS=3600000 (1 hora; el máximo es 2 horas), por ejemplo con un export en tu
+  terminal antes de abrirlo, y retomas esta sesión. Yo consulto el estado de la revisión y relanzo el validador una
+  sola vez. Cuesta una ejecución más del modelo." After the restart with that bound, the provider-issued sync (the
+  managed assets were outdated again), and a fresh status, the validator approved the correction with six advisory
+  findings, and the acknowledgement burned the authority. User, choosing an option for "La revisión nativa de T7d
+  quedó aprobada: el validador confirmó la corrección del hallazgo crítico y la autoridad ya se quemó. Pruebas sobre
+  el árbol revisado: 7 checks en verde, API 318/318, web 214/214 y base de datos 60/60 en dos corridas. Cambios de
+  comportamiento: un doble envío al activar la app autenticadora cierra todas las sesiones y obliga a ingresar de
+  nuevo con contraseña y código; si una segunda pestaña coincide con un cierre de sesión durante la activación, la
+  cuenta queda bloqueada hasta la recuperación manual de T10. Riesgos residuales (todos fallan cerrado): la ventana
+  entre comprobar y revertir, el desfase de reloj entre admin:create y la API, y ese caso de segunda pestaña. Aviso de
+  TDD: la parte «401, no 500» de la prueba de reversión fallida nunca tuvo una corrida RED válida. Quedan 6 hallazgos
+  no bloqueantes (3 advertencias y 3 sugerencias) que repartiría entre T10 y T11. ¿Apruebas commit, PR y merge de
+  T7d?": "Commit, PR y merge (recomendado)", whose description reads: "Commit «fix(api): harden the first TOTP
+  confirmation» del árbol revisado, PR #27 al tracker y merge cuando pase el CI; actualizo #1. Después abro T9b y
+  registro L50 con estas decisiones y el reparto de los 6 hallazgos." PR #27 passed CI and was merged into the tracker
+  as `21d66b6`, whose tree equals slice 26; the tracker description now lists slices 1 to 26, and CI on #1 passed
+  after #27. Routing of the T7d
+  findings: T10 owns R2-compensation-failed-test-name-abbreviates-event, R2-decide-function-hides-session-deletion,
+  R2-racing-enrollment-doc-describes-return-member-as-option, and R4-reverted-logged-before-attempt; T11 owns
+  R4-allow-path-write-failure-unlogged and R4-double-submit-deletes-sibling-session. T9b, with about 17 routed findings,
+  a new harness, and a CI job, does not fit one reviewable slice, so it is split into parts A to C (see the T9b row);
+  part A needs no product decision. Slice 27 (`feat/m2-identity-27-browser-tests`, from `21d66b6`) holds T9b part A.
+- **L51** (2026-11-06) T9b part B needs the TOTP secret in a browser test. `/admin/activar` draws only the QR code, so no
+  secret reaches a test without a production channel, and an administrator who opens the page on the phone that holds
+  the authenticator app cannot scan it. User, choosing an option for "Para la parte B de T9b (activación del segundo
+  factor e ingreso de administradores en el navegador), la prueba necesita el secreto TOTP para generar los códigos.
+  Hoy /admin/activar solo dibuja el QR: el secreto no aparece como texto en la página, y S38 prohíbe que llegue a la
+  prueba por un endpoint, flag o log de producción. Además, quien abre esa página en el mismo teléfono donde tiene la
+  app autenticadora no puede escanear su propia pantalla. ¿Cómo obtiene la prueba el secreto?": "Mostrar la clave
+  manual (recomendado)", whose description reads: "Agrego bajo el QR la clave para escribirla a mano en la app (por
+  ejemplo, «¿No puedes escanear? Escribe esta clave»). Resuelve el caso del teléfono, la prueba la lee como lo haría
+  una persona y S38 queda intacta. Cambia la página y su texto: unas 60 a 100 líneas más en la parte B, con su
+  revisión." The other options were reading the browser's own enable response, with a rewording of S38, and
+  decrypting the stored secret from PostgreSQL in the harness. This adds S41 and puts the manual key in T9b part B.
