@@ -33,9 +33,13 @@ not add tables.
 
 ## Identity tables
 
-Current status: the identity tables exist in the schema, but no runtime wiring uses them yet. The API does not mount
-Better Auth on this database, and there is no sign-in, session, or role enforcement until the Milestone 2 tasks that
-configure them land. Only the database integration test (`pnpm --filter @invitame/api test:db`) exercises them.
+Current status: the API uses these tables at runtime. Better Auth, mounted at `/api/auth` with its Prisma adapter
+(`apps/api/src/auth/auth.registration.ts`), stores sessions in `Session`, administrator password hashes in `Account`,
+hashed email sign-in codes in `Verification`, authenticator secrets and backup codes in `TwoFactor`, and rate-limit
+counters in `RateLimit`. The project guard reads `User.role` and `User.status` on every request, and the
+`user:disable`, `admin:create`, and `admin:reset-second-factor` commands write these tables directly through
+Prisma. The database suites (`pnpm --filter @invitame/api test:db`) exercise them on real PostgreSQL; see
+[`architecture/overview.md`](../architecture/overview.md) for the behavior.
 
 - Better Auth's `user` model is the existing `User`. Its required `name` field is mapped onto the nullable
   `displayName` column through `user.fields`, so no duplicate name column exists.

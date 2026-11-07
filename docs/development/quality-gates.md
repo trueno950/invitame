@@ -29,7 +29,7 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Documentation consistency | `pnpm docs:check` | Resolves local Markdown links, verifies required documentation entrypoints and workflow sections, and confirms CI invokes the check. It does not prove runtime behavior. | Every change; especially documentation, process, configuration, and CI changes. |
 | Lint | `pnpm lint` | Runs `biome lint .` through both workspace packages via Turborepo. | Every code or source-adjacent change. |
 | Type safety | `pnpm typecheck` | Runs strict TypeScript checks in `apps/api` (including the test harness in `apps/api/test`, which the build excludes) and `apps/web`. | Every TypeScript/config change. |
-| Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner over `src/**/*.spec.ts` (health and auth integration suites) through `@swc-node/register`, which emits decorator metadata like the `tsc` build; `apps/web` runs the Node test runner over `lib/**/*.test.ts`, the browser harness's `e2e/**/*.test.ts`, and `proxy.test.ts` with Node's built-in TypeScript type stripping (erasable syntax only, no extra dependency). | Every behavior change; documentation-only changes may record `N/A`. |
+| Unit tests | `pnpm test` | Runs package test scripts exposed to Turborepo. Today `apps/api` runs the Node test runner over `src/**/*.spec.ts` (health, configuration, email, auth, and users suites) through `@swc-node/register`, which emits decorator metadata like the `tsc` build; `apps/web` runs the Node test runner over `lib/**/*.test.ts`, the browser harness's `e2e/**/*.test.ts`, and `proxy.test.ts` with Node's built-in TypeScript type stripping (erasable syntax only, no extra dependency). | Every behavior change; documentation-only changes may record `N/A`. |
 | Database integration tests | `DATABASE_URL=<local URL> pnpm --filter @invitame/api test:db` | Runs `apps/api/src/**/*.db-spec.ts` through the same SWC runner against a real, already migrated PostgreSQL. The script refuses to start without an explicit `DATABASE_URL`, and the suite refuses non-local hosts. It writes and then deletes its own rows; use a disposable database. CI runs it in the `database-tests` job against a PostgreSQL 17 service. | Schema, migration, and auth persistence changes. |
 | Browser end-to-end tests | `pnpm --filter @invitame/web test:e2e` | Runs `apps/web/e2e/**/*.spec.ts` with `@playwright/test` in Chromium only, against the built API (`apps/api/dist`) and the production build of the web (`next start`), which the harness starts on the dedicated ports 3410 (web) and 3411 (API), with its API gate on 3412, or `E2E_WEB_PORT`, `E2E_API_PORT`, and `E2E_GATE_PORT`. It needs `pnpm build`, Chromium from `pnpm --filter @invitame/web test:e2e:install`, and an explicit `E2E_DATABASE_URL` (migrated) and `E2E_MAILPIT_URL`; it refuses missing or non-local values and never attaches to a server that is already listening. It is not part of `pnpm test`. CI runs it in the `browser-tests` job. See [Browser end-to-end tests](#browser-end-to-end-tests). | Changes to the web pages, their forms, the web's `/api/auth` proxy, `proxy.ts`, the server-side API client, or the auth flows they drive. |
 | Build | `pnpm build` | Builds the API with `tsc` and the web app with Next.js. Outputs are ignored build artifacts. | Runtime, dependency, configuration, or build changes; recommended for broad docs/process changes. |
@@ -108,12 +108,16 @@ and the API stores users and sessions in PostgreSQL.
 How the harness is composed (`apps/web/playwright.config.ts`, `apps/web/e2e/support/`):
 
 - Playwright starts the API with `node dist/main.js` in development mode and the web with `next start` in
-  production mode, passing every setting explicitly, so neither server reads a value from a developer's env
-  files. The API secret and the web-to-API proxy secret are random per run and exist only in the two server
-  processes; nothing is committed.
+  production mode, passing every setting explicitly. Both servers still load their env files at startup: the API
+  reads `apps/api/.env` (`apps/api/src/config/config.module.ts`) and Next.js reads `apps/web/.env*`. A process
+  variable takes precedence over a file value, and the harness sets every variable the servers validate, empty
+  when unused, so a developer's env files cannot change a validated setting; a variable the servers do not
+  validate could still come from those files. The API secret and the web-to-API
+  proxy secret are random per run and exist only in the two server processes; nothing is committed.
 - The API sends each code through its existing `mailpit` email provider, and the tests read it through Mailpit's
   HTTP API. Production code has no test endpoint, flag, branch, or log (S38).
-- Each administrator test creates its own pending administrator with the harness-only script
+- Each administrator test that needs an administrator creates its own pending administrator with the
+  harness-only script
   `apps/api/test/create-e2e-administrator.ts`, which runs the same use case, repository, and Better Auth hasher
   as `admin:create` against `E2E_DATABASE_URL` (refused when missing or not local) and hands the initial
   password to the test. The TOTP codes come from the setup key the test reads on `/admin/activar` (S41), computed
@@ -168,8 +172,9 @@ it:
 
 1. **Static checks** — formatting, lint, and strict types catch deterministic shape and dependency mistakes.
 2. **Unit tests** — pure domain rules and application orchestration with ports replaced by controlled test doubles.
-   The current repository has only the API health behavior suite, which tests healthy and unavailable database
-   paths through a mocked Prisma boundary.
+   `pnpm test` runs them: the API's `src/**/*.spec.ts` suites (health, configuration, email, auth, and users;
+   the auth suites run Better Auth on its in-memory adapter) and the web's `*.test.ts` suites for its pages'
+   logic, server modules, theme, and browser harness.
 3. **Integration tests** — real PostgreSQL, Prisma, migrations, constraints, transactions, and seed behavior.
    The `*.db-spec.ts` suites cover authentication, sessions, and the own profile; every ADR 0004 test obligation
    maps to a named assertion in [ADR 0004 test traceability](adr-0004-test-traceability.md).

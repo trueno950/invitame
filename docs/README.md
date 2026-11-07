@@ -50,11 +50,14 @@ to be checked before prose, and it defines when a human decision is required.
 
 ### Implemented foundation
 
-- `apps/web` contains the current Next.js 16 landing page and the customer pages, styled with the visual theme in
-  [`design/theme.md`](design/theme.md); the full concept landing page is planned (M2 T8l).
-- `apps/api` contains configuration, Prisma ownership, the health module, and a database-backed health check.
-- The first Prisma migration contains the minimal user identity record, catalog, and immutable template-version
-  foundations only; authentication behavior is still planned.
+- `apps/web` contains the Next.js 16 pre-launch landing page, the customer pages, the administrator pages, and the
+  `/api/auth` proxy, styled with the visual theme in [`design/theme.md`](design/theme.md).
+- `apps/api` contains configuration, Prisma ownership, the health module, Better Auth sign-in and sessions
+  ([ADR 0004](adr/0004-authentication-with-better-auth.md)), access control, the own profile, and the operator
+  commands; see [`architecture/overview.md`](architecture/overview.md).
+- The first Prisma migration contains the minimal user identity record and the catalog and immutable
+  template-version foundations; the second maps Better Auth's user onto that record and adds the session,
+  account, verification, two-factor, and rate-limit tables (see [`database/model.md`](database/model.md)).
 - Root scripts provide local documentation consistency, format, lint, typecheck, test, build, and Docker/PostgreSQL
   commands.
 - A limited GitHub Actions quality-gate CI workflow runs documentation consistency, format, lint, typecheck, test,

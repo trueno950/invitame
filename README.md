@@ -21,7 +21,6 @@ Compose.
 ```bash
 pnpm install
 cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.local.example apps/web/.env.local
 pnpm db:up
 pnpm db:migrate
 pnpm db:seed
@@ -31,44 +30,61 @@ pnpm dev
 
 The web app runs on `http://localhost:3000`; the API runs on `http://localhost:3001`.
 
-The API refuses to start until `apps/api/.env` defines its required variables. Besides `DATABASE_URL`, set:
+Check `apps/api/.env` against the API table below before `pnpm dev`. The API refuses to start until the file sets
+a `BETTER_AUTH_SECRET` of at least 32 characters and an `AUTH_BASE_URL` that is one of the `CORS_ORIGIN` entries:
+locally, `http://localhost:3000` for both. The web needs no env file for local development, because each of its
+settings has a development default; to override one, put it in `apps/web/.env.local`. Process variables take
+precedence over both files.
 
-- `BETTER_AUTH_SECRET`: at least 32 characters; generate one with `openssl rand -base64 32` and never commit it.
-- `AUTH_BASE_URL`: the public web origin through which the web proxies `/api/auth` to the API, for example
-  `http://localhost:3000`. It must be one of the `CORS_ORIGIN` entries, and production requires `https`. Over
-  `https` the session cookie is `__Host-better-auth.session_token` (`Secure`, no `Domain`); over local `http` it
-  is `better-auth.session_token` without `Secure`.
-- `CORS_ORIGIN`: a comma-separated list of trusted web origins, for example `http://localhost:3000`. The same
-  list feeds credentialed CORS and Better Auth's origin checks.
+### Environment variables
 
-Rate limits run in every environment and are stored in PostgreSQL. They identify a client by its IP address:
+Startup validation reads these names and rules from `apps/api/src/config/environment.ts` (API) and
+`apps/web/lib/server/config.ts` (web). An empty value counts as unset. Error messages name the variable, never
+a secret value.
 
-- `AUTH_CLIENT_IP_HEADER`: the request header that carries the client IP, as set by the trusted proxy in front
-  of the API. Optional outside production, where it defaults to `x-forwarded-for`; required in production.
-- `AUTH_TRUSTED_PROXIES`: optional comma-separated IP addresses or CIDR ranges of proxies that append to that
-  header. Without it, only a header holding a single address is accepted.
-- `AUTH_PROXY_SECRET`: the shared web-to-API secret, at least 32 characters and different from
-  `BETTER_AUTH_SECRET`; generate it like the auth secret and never commit it. The web sends it in the
-  `x-invitame-proxy-secret` header. Required in production, where the API refuses every `/api/auth` request
-  without it with a generic `403`; the client IP header is trusted only next to a valid secret. Optional outside
-  production: without it the API serves direct requests and trusts the client IP header as before.
+API (`apps/api/.env`):
 
-### Web server settings
+| Variable | Required | Default and rules |
+| --- | --- | --- |
+| `NODE_ENV` | No | `development`; also `test` or `production`. |
+| `PORT` | No | `3001`; an integer from 1 to 65535. |
+| `CORS_ORIGIN` | Always | Comma-separated trusted web origins, for example `http://localhost:3000`: no path, empty entry, or wildcard. The same list feeds credentialed CORS and Better Auth's origin checks. |
+| `DATABASE_URL` | Always | A `postgresql:` or `postgres:` URL. `pnpm db:up` serves `postgresql://invitame:invitame_local_only@localhost:5442/invitame?schema=public`. |
+| `BETTER_AUTH_SECRET` | Always | At least 32 characters. Generate one with `openssl rand -base64 32` and never commit it. |
+| `AUTH_BASE_URL` | Always | The public web origin through which the web proxies `/api/auth`. It must be one of the `CORS_ORIGIN` entries and use `https` in production. |
+| `AUTH_PROXY_SECRET` | Production | The shared web-to-API secret: at least 32 characters, different from `BETTER_AUTH_SECRET`, and the same value in the web. |
+| `AUTH_CLIENT_IP_HEADER` | Production | The header that carries the client IP for rate limits; `x-forwarded-for` outside production. |
+| `AUTH_TRUSTED_PROXIES` | No | Comma-separated IP addresses or CIDR ranges of proxies that append to that header. |
+| `EMAIL_TRANSPORT` | No | `mailpit` in development, `memory` in test, and `resend` in production, which accepts no other value. |
+| `EMAIL_FROM` | Production | The sender, as `address` or `Name <address>`; `InvitaMe Local <no-reply@invitame.localhost>` outside production. |
+| `MAILPIT_URL` | No | `http://localhost:8025`; an `http` or `https` origin. |
+| `RESEND_API_KEY` | With `resend` | Required whenever `EMAIL_TRANSPORT` is `resend`, so always in production. Never commit it. |
+
+The API also refuses `BETTER_AUTH_TRUSTED_ORIGINS`, so `CORS_ORIGIN` stays the only list of trusted origins.
+
+Over `https` the session cookie is `__Host-better-auth.session_token` (`Secure`, no `Domain`); over local
+`http` it is `better-auth.session_token` without `Secure`. Rate limits run in every environment and are stored in
+PostgreSQL; they identify a client by the IP in `AUTH_CLIENT_IP_HEADER`. Without `AUTH_TRUSTED_PROXIES`, only a
+header holding a single address is accepted. The web sends `AUTH_PROXY_SECRET` in the `x-invitame-proxy-secret`
+header. In production the API refuses every `/api/auth` request without it with a generic `403`, and trusts the
+client IP header only next to a valid secret. Outside production without a secret, the API serves direct
+requests and trusts the client IP header.
+
+Web (`apps/web/.env.local`, optional locally):
+
+| Variable | Required | Default and rules |
+| --- | --- | --- |
+| `API_ORIGIN` | Production | The API's internal origin; `http://localhost:3001` outside production. No path, query, fragment, or credentials. |
+| `AUTH_PROXY_SECRET` | Production | The same value as the API's; at least 32 characters. |
+| `AUTH_CLIENT_IP_HEADER` | Production | The same value as the API's; the web sets that header to the client IP. `x-forwarded-for` outside production. |
+| `AUTH_EDGE_CLIENT_IP_HEADER` | Production | The header the platform edge overwrites with the client IP, which the web reads. `x-forwarded-for` outside production, which Next.js fills from the socket; production refuses `x-forwarded-for` and `forwarded`, because a browser can set them. |
 
 The browser talks only to the web origin. The web proxies `/api/auth/*` to the API and calls the API from its
-server with the session cookie (ADR 0004 decision 4). Its settings live in `apps/web/.env.local`, are read only
-by server code, and never use the `NEXT_PUBLIC_` prefix, so they never reach the browser bundle. They are
-validated when the web server starts: an invalid value logs a `web_config_invalid` line that names the variable
-and stops the server with exit code 1. `next build` needs none of them. Because `pnpm --filter @invitame/web
-start` runs in production mode, it requires the production values below:
-
-- `API_ORIGIN`: the API's internal origin, by default `http://localhost:3001`; required in production.
-- `AUTH_PROXY_SECRET`: the same value as the API's; required in production.
-- `AUTH_CLIENT_IP_HEADER`: the same value as the API's; the web sets it to the client IP. Defaults to
-  `x-forwarded-for` outside production; required in production.
-- `AUTH_EDGE_CLIENT_IP_HEADER`: the header the platform edge overwrites with the client IP, which the web reads.
-  Defaults to `x-forwarded-for` outside production, which Next.js fills from the socket; required in production,
-  where `x-forwarded-for` and `forwarded` are refused because a browser can set them.
+server with the session cookie (ADR 0004 decision 4). Its settings are read only by server code and never use
+the `NEXT_PUBLIC_` prefix, so they never reach the browser bundle. They are validated when the web server starts:
+an invalid value logs a `web_config_invalid` line that names the variable and stops the server with exit code 1.
+`next build` needs none of them. Because `pnpm --filter @invitame/web start` runs in production mode, it requires
+the production values.
 
 ### Local email
 
@@ -81,14 +97,7 @@ sent in the background, so a code request succeeds even when Mailpit is down; th
 docker compose up -d mailpit
 ```
 
-The email variables are optional outside production:
-
-- `EMAIL_TRANSPORT`: `mailpit` (development default), `memory` (test default), or `resend`. Production accepts
-  only `resend` and refuses to start otherwise.
-- `EMAIL_FROM`: the sender, as `address` or `Name <address>`. Required in production; development and test default
-  to `InvitaMe Local <no-reply@invitame.localhost>`.
-- `MAILPIT_URL`: the Mailpit origin, by default `http://localhost:8025`.
-- `RESEND_API_KEY`: required when `EMAIL_TRANSPORT` is `resend`; never commit it.
+The email variables are optional outside production; see the API table above.
 
 ### Try customer sign-in locally
 
