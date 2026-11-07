@@ -214,7 +214,8 @@ sees: the API authorizes every action.
 - Routing: anonymous visitors go to `/admin/ingresar`, pending administrators (role `ADMIN`, `twoFactorEnabled`
   not `true`) to `/admin/activar`, enrolled administrators to `/admin`, and customers to `/cuenta`. When the read
   fails, `/admin` and `/admin/activar` show a retry notice, `/admin/ingresar` shows the form, and the web logs one
-  `{"event":"auth_session_read_failed","error":"<class>"}` line.
+  `{"event":"auth_session_read_failed","error":"<class>","kind":"<kind>"}` line, with the API client's fixed
+  failure kind and, when the error has a cause, a `"cause"` class; never a status, message, or body.
 - `/admin/ingresar` sends `POST /api/auth/sign-in/email` with `{ email, password }`. An enrolled administrator
   gets `twoFactorRedirect` and enters the 6-digit code (`POST /api/auth/two-factor/verify-totp`) or, as an
   alternative, a backup code (`POST /api/auth/two-factor/verify-backup-code`); a pending administrator gets a
