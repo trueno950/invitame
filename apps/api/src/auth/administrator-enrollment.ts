@@ -5,10 +5,12 @@ import type { twoFactor } from "better-auth/plugins";
 import { TWO_FACTOR_PATH } from "./abuse-limits";
 import {
   type AccountAccess,
+  isActive,
   isPendingAdministrator,
   isWithinEnrollmentWindow,
   USER_ROLE,
 } from "./account-access";
+import { AUTH_REQUEST_EVENT, type AuthRequestLog, logSafely } from "./auth-request-guard";
 
 /** The issuer label of the TOTP URI shown at enrollment (decision 3). */
 export const TOTP_ISSUER = "InvitaMe";
@@ -67,71 +69,173 @@ export const ENROLLMENT_SUPERSEDED = {
 } as const;
 
 /**
- * Whether the session Better Auth is about to create on `verify-totp` belongs to a first TOTP
- * confirmation whose pending session is gone (T9a-D1, S39). Better Auth 1.7.16 confirms a first
- * code by setting `twoFactorEnabled`, then creating the enrolled session, then setting its cookie,
- * then deleting the pending session, and finally marking the `TwoFactor` row verified, each in its
- * own statement (`plugins/two-factor/totp/index.mjs`, `verifyTOTP`). Once the flag commits, the
- * reissue of `admin:create` is refused, so a reissue or a `user:disable` that won the race has
- * already deleted the pending session by the time this runs.
- *
- * Only an ADMIN whose flag is already true on the TOTP path is checked. A verified `TwoFactor` row
- * means a sign-in challenge (Better Auth refuses a challenge on an unverified row), which carries no
- * session and needs no check. Otherwise (no row, or an unverified one) it is a first confirmation,
- * and the session named by the request's signed session cookie, the one `verify-totp` resolved, must
- * still exist and belong to this user. The checks use the raw adapter, which runs no hooks.
+ * What the session-create hook does with a session Better Auth is about to create (S39, S40):
+ * `allow` it, `refuse` it and leave the enrollment as it is, or `revert` the enrollment and refuse.
  */
-export async function isSupersededFirstConfirmation(
+export type FirstConfirmationDecision = "allow" | "refuse" | "revert";
+
+/** The pending session `verify-totp` resolved for a first confirmation. */
+interface ResolvedSession {
+  token?: unknown;
+  createdAt?: unknown;
+}
+
+/**
+ * Decides a session Better Auth is about to create on `verify-totp` (T9a-D1, S39, S40). Better Auth
+ * 1.7.16 confirms a first code by setting `twoFactorEnabled`, then creating the enrolled session,
+ * then setting its cookie, then deleting the pending session, and finally marking the `TwoFactor`
+ * row verified, each in its own statement (`plugins/two-factor/totp/index.mjs`, `verifyTOTP`). Once
+ * the flag commits, the reissue of `admin:create` is refused and a password sign-in needs the
+ * second factor.
+ *
+ * Only an ADMIN whose flag is already true on the TOTP path is decided; everything else is allowed
+ * and left to the other checks. The endpoint tells the two uses apart: it resolves the request's
+ * session first and stores it on its context (`context.context.session`, the same object this hook
+ * receives); a sign-in challenge has none and is allowed (`plugins/two-factor/verify-two-factor.mjs`).
+ * A first confirmation is allowed only while its pending session still exists for this user; every
+ * other session of the user is then ended, so no session opened with the password alone keeps
+ * authority once the administrator is enrolled. Otherwise the confirmation was superseded:
+ * 1. a verified `TwoFactor` row means another confirmation completed: refuse;
+ * 2. a user who is not ACTIVE, or a credential account that is missing or was issued after the
+ *    pending session began (an `admin:create` reissue): revert;
+ * 3. a session of this user created at or after the pending one means a duplicate submit may be
+ *    completing, or a second tab signed in with the password alone: every session of the user is
+ *    ended, then refuse;
+ * 4. otherwise (a sign-out, or a reissue the clocks hide): revert.
+ * Every query uses the raw adapter, which runs no hooks.
+ */
+export async function decideFirstConfirmation(
   context: SessionCreateContext,
   user: AccountAccess & { id: string },
-): Promise<boolean> {
+): Promise<FirstConfirmationDecision> {
   if (
     context.path !== TWO_FACTOR_PATH.VERIFY_TOTP ||
     user.role !== USER_ROLE.ADMIN ||
     user.twoFactorEnabled !== true
   ) {
-    return false;
+    return "allow";
   }
 
-  const { adapter, authCookies, secret } = context.context;
+  const resolved = context.context.session as { session?: ResolvedSession | null } | null;
+  const snapshot = resolved?.session;
+  if (!snapshot) {
+    return "allow";
+  }
+
+  const { adapter } = context.context;
+  const token = typeof snapshot.token === "string" ? snapshot.token : "";
+  const pending =
+    token === ""
+      ? null
+      : await adapter.findOne<{ userId?: unknown }>({
+          model: "session",
+          where: [{ field: "token", value: token }],
+        });
+  if (pending?.userId === user.id) {
+    await adapter.deleteMany({
+      model: "session",
+      where: [
+        { field: "userId", value: user.id },
+        { field: "token", operator: "ne", value: token },
+      ],
+    });
+    return "allow";
+  }
+
+  return supersededDecision(context, user, snapshot);
+}
+
+async function supersededDecision(
+  context: SessionCreateContext,
+  user: AccountAccess & { id: string },
+  snapshot: ResolvedSession,
+): Promise<"refuse" | "revert"> {
+  const { adapter, internalAdapter } = context.context;
   const enrollment = await adapter.findOne<{ verified?: unknown }>({
     model: "twoFactor",
     where: [{ field: "userId", value: user.id }],
   });
   if (enrollment?.verified === true) {
-    return false;
+    return "refuse";
+  }
+  if (!isActive(user)) {
+    return "revert";
   }
 
-  const token = await context.getSignedCookie(authCookies.sessionToken.name, secret);
-  const pending =
-    typeof token === "string" && token !== ""
-      ? await adapter.findOne<{ userId?: unknown }>({
-          model: "session",
-          where: [{ field: "token", value: token }],
-        })
-      : null;
-  return pending?.userId !== user.id;
+  const startedAt = timeOf(snapshot.createdAt);
+  const issuedAt = timeOf((await internalAdapter.findCredentialAccount(user.id))?.createdAt);
+  if (startedAt === undefined || issuedAt === undefined || issuedAt > startedAt) {
+    return "revert";
+  }
+
+  const completing = await adapter.count({
+    model: "session",
+    where: [
+      { field: "userId", value: user.id },
+      { field: "createdAt", operator: "gte", value: new Date(startedAt) },
+    ],
+  });
+  if (completing === 0) {
+    return "revert";
+  }
+  // A newer session may be a sibling confirmation or a second tab signed in with the password alone;
+  // they cannot be told apart, so every session of the user ends before the refusal.
+  await adapter.deleteMany({ model: "session", where: [{ field: "userId", value: user.id }] });
+  return "refuse";
+}
+
+/** Milliseconds since the epoch, or undefined for anything that is not a valid date. */
+function timeOf(value: unknown): number | undefined {
+  if (!(value instanceof Date) && typeof value !== "string") {
+    return undefined;
+  }
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? undefined : time;
 }
 
 /**
- * Compensates a superseded first confirmation (S39): sets `twoFactorEnabled` back to false for this
- * user only if it is still true, and changes no other column (Prisma still stamps `updatedAt`).
- * Returns the error the session-create hook throws, so no session row and no cookie exist. If the
- * process stops before this update, the flag stays true with no `TwoFactor` row and no session: the
- * account is locked, fails closed, and only the manual recovery procedure (T10) releases it.
+ * Refuses a superseded first confirmation (S39, S40) and returns the error the session-create hook
+ * throws, so no session row and no cookie exist. It first logs one `administrator_enrollment_superseded`
+ * event whose `compensation` names the chosen compensation: `skipped` for `refuse`, `reverted` for
+ * `revert`. A revert sets `twoFactorEnabled` back to false for this user only if it is still true, and
+ * changes no other column (Prisma still stamps `updatedAt`). If that update throws, one
+ * `administrator_enrollment_compensation_failed` event with the error class follows and the refusal
+ * stands. Then, as when the process stops before the update, the flag stays true without a session:
+ * the account is locked, fails closed, and only the manual recovery procedure (T10) releases it.
  */
-export async function revertSupersededEnrollment(
+export async function refuseSupersededConfirmation(
   context: SessionCreateContext,
   userId: string,
+  decision: "refuse" | "revert",
+  log: AuthRequestLog,
 ): Promise<APIError> {
-  await context.context.adapter.updateMany({
-    model: "user",
-    where: [
-      { field: "id", value: userId },
-      { field: "twoFactorEnabled", value: true },
-    ],
-    update: { twoFactorEnabled: false },
+  const path = context.path;
+  logSafely(log, {
+    event: AUTH_REQUEST_EVENT.ENROLLMENT_SUPERSEDED,
+    path,
+    compensation: decision === "revert" ? "reverted" : "skipped",
   });
+
+  if (decision === "revert") {
+    try {
+      await context.context.adapter.updateMany({
+        model: "user",
+        where: [
+          { field: "id", value: userId },
+          { field: "twoFactorEnabled", value: true },
+        ],
+        update: { twoFactorEnabled: false },
+      });
+    } catch (error) {
+      logSafely(log, {
+        event: AUTH_REQUEST_EVENT.ENROLLMENT_COMPENSATION_FAILED,
+        path,
+        // The class name is safe to log; a message may carry SQL or an address.
+        error: error instanceof Error ? error.name : "unknown",
+      });
+    }
+  }
+
   return APIError.from("UNAUTHORIZED", ENROLLMENT_SUPERSEDED);
 }
 

@@ -313,17 +313,23 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
   transaction. For a pending administrator it replaces the password, restarts the window, drops an
   unconfirmed enrollment, and deletes their sessions in one transaction. It refuses an enrolled or `DISABLED`
   administrator and any customer address. See the README for usage.
-- **Confirmation race** (S39, T7c): Better Auth sets `twoFactorEnabled` before it creates the enrolled
-  session, in separate statements. The session-create hook therefore treats every session that
-  `verify-totp` creates for an `ADMIN` whose flag is already true as a first confirmation unless the
-  `TwoFactor` row is verified (a sign-in challenge, not checked further). A first confirmation needs the
-  session named by the request's signed session cookie to still exist for the same user. When an
-  `admin:create` reissue or `user:disable` deleted it during the confirmation, the hook sets
-  `twoFactorEnabled` back to false for that user only, logs one `administrator_enrollment_superseded` event
-  without personal data, and answers `401 {"code":"ENROLLMENT_SUPERSEDED"}` with no session and no cookie;
-  the reissued password can then enroll. `/admin/activar` shows that `401` as an ended session. If the process
-  stops between the two writes, the account stays enrolled without a secret or a session and only the manual
-  recovery procedure (T10) releases it.
+- **Confirmation race** (S39, S40; T7c, T7d): Better Auth sets `twoFactorEnabled` before it creates the
+  enrolled session, in separate statements. The session-create hook decides every session that `verify-totp`
+  creates for an `ADMIN` whose flag is already true. A sign-in challenge resolves no session on the endpoint and
+  is allowed. A first confirmation is allowed only while its pending session still exists for the same user;
+  the hook then deletes every other session of that administrator, so no session opened with the password
+  alone keeps authority after enrollment. A superseded first confirmation answers
+  `401 {"code":"ENROLLMENT_SUPERSEDED"}` with no session and no cookie. It is refused without reverting when
+  another confirmation completed or is completing (a verified `TwoFactor` row, or a newer session of the
+  user; since a newer session may be a second tab signed in with the password alone, the hook first deletes
+  every session of that administrator). It is reverted, `twoFactorEnabled` back to false for that user only,
+  when an `admin:create` reissue, a `user:disable`, or a sign-out removed its pending session; the reissued or
+  same password can then enroll.
+  The hook logs one `administrator_enrollment_superseded` event with `compensation` (`reverted` or `skipped`)
+  and no personal data, and one `administrator_enrollment_compensation_failed` event with the error class if
+  the revert throws. `/admin/activar` shows that `401` as an ended session. If the revert fails or the process
+  stops before it, the account stays enrolled without a session and only the manual recovery procedure (T10)
+  releases it.
 
 ### Own profile (current)
 

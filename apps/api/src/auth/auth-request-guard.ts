@@ -10,8 +10,10 @@ export const AUTH_REQUEST_EVENT = {
   CLIENT_IP_UNRESOLVED: "client_ip_unresolved",
   PROXY_REJECTED: "auth_proxy_rejected",
   UNAVAILABLE: "auth_request_unavailable",
-  /** A first TOTP confirmation lost a race to a reissue or a disable and was reverted (S39). */
+  /** A first TOTP confirmation was superseded and refused, reverted or not (S39, S40). */
   ENROLLMENT_SUPERSEDED: "administrator_enrollment_superseded",
+  /** The revert of a superseded first confirmation failed; the account stays locked (S40). */
+  ENROLLMENT_COMPENSATION_FAILED: "administrator_enrollment_compensation_failed",
 } as const;
 
 /** Structured warning without personal data: the request path and, for a failure, the error class. */
@@ -19,7 +21,16 @@ export type AuthRequestEvent =
   | { event: typeof AUTH_REQUEST_EVENT.CLIENT_IP_UNRESOLVED; path: string }
   | { event: typeof AUTH_REQUEST_EVENT.PROXY_REJECTED; path: string }
   | { event: typeof AUTH_REQUEST_EVENT.UNAVAILABLE; path: string; error: string }
-  | { event: typeof AUTH_REQUEST_EVENT.ENROLLMENT_SUPERSEDED; path: string };
+  | {
+      event: typeof AUTH_REQUEST_EVENT.ENROLLMENT_SUPERSEDED;
+      path: string;
+      compensation: "reverted" | "skipped";
+    }
+  | {
+      event: typeof AUTH_REQUEST_EVENT.ENROLLMENT_COMPENSATION_FAILED;
+      path: string;
+      error: string;
+    };
 
 export type AuthRequestLog = (event: AuthRequestEvent) => void;
 
