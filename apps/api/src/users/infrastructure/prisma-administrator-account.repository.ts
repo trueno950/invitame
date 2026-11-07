@@ -1,9 +1,11 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import type {
   AdministratorAccountRepository,
+  AdministratorRecoveryRepository,
   IssueInitialPassword,
   IssueInitialPasswordResult,
+  ResetSecondFactorResult,
 } from "../application/administrator-account.repository";
 
 /**
@@ -13,24 +15,45 @@ import type {
  */
 const CREDENTIAL_PROVIDER_ID = "credential";
 
-export class PrismaAdministratorAccountRepository implements AdministratorAccountRepository {
+function credentialAccount(userId: string, { passwordHash, issuedAt }: IssueInitialPassword) {
+  return {
+    userId,
+    providerId: CREDENTIAL_PROVIDER_ID,
+    accountId: userId,
+    password: passwordHash,
+    createdAt: issuedAt,
+    updatedAt: issuedAt,
+  };
+}
+
+/**
+ * The shared reissue step, run inside the caller's transaction after its conditional user update:
+ * a new credential account restarts the window; the second factor (an unconfirmed enrollment secret
+ * that may have been seen with the old password, or a confirmed one with its backup codes) and every
+ * session are deleted. Returns the number of revoked sessions.
+ */
+async function replaceCredentialAndRevoke(
+  transaction: Prisma.TransactionClient,
+  userId: string,
+  input: IssueInitialPassword,
+): Promise<number> {
+  await transaction.account.deleteMany({
+    where: { userId, providerId: CREDENTIAL_PROVIDER_ID },
+  });
+  await transaction.account.create({ data: credentialAccount(userId, input) });
+  await transaction.twoFactor.deleteMany({ where: { userId } });
+  const { count } = await transaction.session.deleteMany({ where: { userId } });
+  return count;
+}
+
+export class PrismaAdministratorAccountRepository
+  implements AdministratorAccountRepository, AdministratorRecoveryRepository
+{
   constructor(private readonly prisma: PrismaClient) {}
 
-  issueInitialPassword({
-    email,
-    passwordHash,
-    issuedAt,
-  }: IssueInitialPassword): Promise<IssueInitialPasswordResult> {
+  issueInitialPassword(input: IssueInitialPassword): Promise<IssueInitialPasswordResult> {
+    const { email, issuedAt } = input;
     return this.prisma.$transaction(async (transaction) => {
-      const credential = (userId: string) => ({
-        userId,
-        providerId: CREDENTIAL_PROVIDER_ID,
-        accountId: userId,
-        password: passwordHash,
-        createdAt: issuedAt,
-        updatedAt: issuedAt,
-      });
-
       const existing = await transaction.user.findUnique({
         where: { email },
         select: { id: true, role: true },
@@ -42,7 +65,7 @@ export class PrismaAdministratorAccountRepository implements AdministratorAccoun
           data: { email, displayName: "", role: "ADMIN", status: "ACTIVE" },
           select: { id: true },
         });
-        await transaction.account.create({ data: credential(created.id) });
+        await transaction.account.create({ data: credentialAccount(created.id, input) });
         return { outcome: "created", userId: created.id };
       }
 
@@ -65,18 +88,39 @@ export class PrismaAdministratorAccountRepository implements AdministratorAccoun
         return { outcome: "refused", userId: existing.id, reason };
       }
 
-      // A new credential account restarts the window; an unconfirmed enrollment secret, which may
-      // have been seen with the old password, is dropped with it.
-      await transaction.account.deleteMany({
-        where: { userId: existing.id, providerId: CREDENTIAL_PROVIDER_ID },
-      });
-      await transaction.account.create({ data: credential(existing.id) });
-      await transaction.twoFactor.deleteMany({ where: { userId: existing.id } });
-      const { count: revokedSessions } = await transaction.session.deleteMany({
-        where: { userId: existing.id },
-      });
-
+      const revokedSessions = await replaceCredentialAndRevoke(transaction, existing.id, input);
       return { outcome: "reissued", userId: existing.id, revokedSessions };
+    });
+  }
+
+  resetSecondFactor(input: IssueInitialPassword): Promise<ResetSecondFactorResult> {
+    const { email, issuedAt } = input;
+    return this.prisma.$transaction(async (transaction) => {
+      const existing = await transaction.user.findUnique({
+        where: { email },
+        select: { id: true, role: true },
+      });
+      if (!existing) {
+        return { outcome: "refused", reason: "unknown" };
+      }
+      if (existing.role !== "ADMIN") {
+        return { outcome: "refused", userId: existing.id, reason: "customer" };
+      }
+
+      // Conditional update, enrolled or not: it locks the row until commit, so a disable that
+      // commits first makes this match nothing and the recovery is refused. A first confirmation
+      // that commits its flag after this one finds its pending session gone and a newer credential,
+      // so the session-create hook reverts it (S39, S40).
+      const { count: eligible } = await transaction.user.updateMany({
+        where: { id: existing.id, role: "ADMIN", status: "ACTIVE" },
+        data: { twoFactorEnabled: false, updatedAt: issuedAt },
+      });
+      if (eligible === 0) {
+        return { outcome: "refused", userId: existing.id, reason: "disabled" };
+      }
+
+      const revokedSessions = await replaceCredentialAndRevoke(transaction, existing.id, input);
+      return { outcome: "reset", userId: existing.id, revokedSessions };
     });
   }
 }

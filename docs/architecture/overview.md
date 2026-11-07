@@ -332,6 +332,13 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
   transaction. For a pending administrator it replaces the password, restarts the window, drops an
   unconfirmed enrollment, and deletes their sessions in one transaction. It refuses an enrolled or `DISABLED`
   administrator and any customer address. See the README for usage.
+- `pnpm --filter @invitame/api admin:reset-second-factor -- <email>` (`users/`, S44, T10a) recovers a locked
+  `ACTIVE` `ADMIN`, enrolled or not, with the same terminal-only safeguards. Its user update is conditional on
+  `role = ADMIN` and `status = ACTIVE` and sets `twoFactorEnabled` to false; in the same transaction it reuses
+  the reissue step of `admin:create` (a new credential account, so a new 24-hour window; the `TwoFactor` row
+  and its backup codes deleted; every session deleted). A first confirmation racing it is reverted by the
+  hook below. It refuses unknown addresses, customers, and `DISABLED` administrators unchanged, and logs the
+  user id only. The README has the operator procedure, including the out-of-band identity check.
 - **Confirmation race** (S39, S40; T7c, T7d): Better Auth sets `twoFactorEnabled` before it creates the
   enrolled session, in separate statements. The session-create hook decides every session that `verify-totp`
   creates for an `ADMIN` whose flag is already true. A sign-in challenge resolves no session on the endpoint and
@@ -347,7 +354,7 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
   The hook logs one `administrator_enrollment_superseded` event with `compensation` (`reverted` or `skipped`)
   and no personal data, and one `administrator_enrollment_compensation_failed` event with the error class if
   the revert throws. `/admin/activar` shows that `401` as an ended session. If the revert fails or the process
-  stops before it, the account stays enrolled without a session and only the manual recovery procedure (T10)
+  stops before it, the account stays enrolled without a session and only `admin:reset-second-factor`
   releases it.
 
 ### Own profile (current)

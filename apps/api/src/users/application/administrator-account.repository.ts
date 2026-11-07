@@ -26,3 +26,22 @@ export interface AdministratorAccountRepository {
    */
   issueInitialPassword(input: IssueInitialPassword): Promise<IssueInitialPasswordResult>;
 }
+
+/** Why a recovery was refused: nobody is created, promoted, or re-enabled (S44). */
+export type ResetRefusalReason = "unknown" | "customer" | "disabled";
+
+export type ResetSecondFactorResult =
+  | { outcome: "reset"; userId: string; revokedSessions: number }
+  | { outcome: "refused"; reason: "unknown" }
+  | { outcome: "refused"; userId: string; reason: "customer" | "disabled" };
+
+/** Persistence port for the administrator recovery command (S44); the adapter owns the transaction. */
+export interface AdministratorRecoveryRepository {
+  /**
+   * In one transaction, for an ACTIVE ADMIN whether enrolled or not: clears `twoFactorEnabled`,
+   * deletes the second factor and its backup codes, deletes all their sessions, and replaces the
+   * credential account (new hash, new `createdAt`, so a new 24-hour enrollment window, S20). Anyone
+   * else: changes nothing and reports why.
+   */
+  resetSecondFactor(input: IssueInitialPassword): Promise<ResetSecondFactorResult>;
+}
