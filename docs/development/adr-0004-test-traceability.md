@@ -2,7 +2,7 @@
 
 Maps every test obligation of [ADR 0004](../adr/0004-authentication-with-better-auth.md) (its Consequences) and
 every S17 case of the Milestone 2 plan to a named assertion (S13, S30). Status: current as of Milestone 2 task
-T7c. Browser end-to-end coverage is planned for T9b and is not claimed here.
+T7d. Browser end-to-end coverage is planned for T9b and is not claimed here.
 
 ## How the evidence runs
 
@@ -16,7 +16,8 @@ T7c. Browser end-to-end coverage is planned for T9b and is not claimed here.
   with controlled clocks, through `pnpm test` in the `quality-gates` job.
 
 A test name below is quoted exactly; `›` separates a `describe` block from its test. "Added" marks assertions
-written in T9a and "added in T7c" those of the T9a-D1 fix; every other row existed before them.
+written in T9a, "added in T7c" those of the T9a-D1 fix, and "added in T7d" those of its hardening (S40); every
+other row existed before them.
 
 ### Suite legend
 
@@ -55,7 +56,7 @@ written in T9a and "added in T7c" those of the T9a-D1 fix; every other row exist
 | 7 | Attempt limits | DB-code: "refuses the right code after 3 wrong attempts and stores no user or session" (added); DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor" (stored `failedVerificationCount`). | U-code: "rejects the 4th attempt with TOO_MANY_ATTEMPTS after 3 wrong codes, even with the right code"; U-admin: "ends a challenge after 5 wrong codes", "locks the second factor for 15 minutes after 10 consecutive failures". |
 | 8 | Rate limiting | DB-limits: "persists client IP buckets and answers the 4th request from one IP with 429", "stores the per-email count under a hashed key and sends no 6th code within the hour"; DB-proxy: "stores the client IP bucket and the code for a request with the secret"; DB-auth: "writes rate-limit rows to the database". | U-limits: "client IP rate limits (S10, S25)" block, "rate-limit store failure (S19) › rejects code requests and code sign-ins with a generic 503 before the endpoint runs"; U-admin: "answers the 4th password attempt from one client IP within a minute with 429", "answers the 6th second-factor attempt from one client IP within a minute with 429". |
 | 9 | Mandatory administrator second factor | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor". | U-admin: "requires a second factor after the password once enrolled: no session before the code", "never trusts a device: the next password sign-in still asks for the second factor", "disables two-factor removal, URI re-reading, and email two-factor codes". |
-| 10 | Enrollment gate | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor", "deletes a pre-enrollment session once the window ends and refuses enrollment", "refuses an expired initial password exactly like a wrong one and creates no session", "fails closed when admin:create reissues the password during the first TOTP confirmation" (added; required since T7c, defect T9a-D1 below), "refuses the old confirmation after the reissued password has started a new enrollment", "refuses a first TOTP confirmation that races user:disable and leaves no session", "logs one enrollment_superseded event without personal data when it reverts a confirmation", and "lets an enrolled administrator pass the sign-in challenge with a stale session cookie" (added in T7c). | U-admin: "enrollment gate (S6, S21)" and "pre-enrollment window of 24 hours (S20)" blocks. |
+| 10 | Enrollment gate | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor", "deletes a pre-enrollment session once the window ends and refuses enrollment", "refuses an expired initial password exactly like a wrong one and creates no session", "fails closed when admin:create reissues the password during the first TOTP confirmation" (added; required since T7c, defect T9a-D1 below), "refuses the old confirmation after the reissued password has started a new enrollment", "refuses a first TOTP confirmation that races user:disable and leaves no session", "logs one administrator_enrollment_superseded event without personal data when it reverts a confirmation", and "lets an enrolled administrator pass the sign-in challenge with a stale session cookie" (added in T7c); "refuses a stale first confirmation without reverting after the reissued password enrolled", "refuses a duplicate first confirmation without reverting when the sibling completed first", "refuses a duplicate first confirmation without reverting and ends every session while the sibling is completing", "reverts a first confirmation that races a sign-out, then lets the password enroll", "ends a second tab's session when it refuses a confirmation that races a sign-out", "refuses with 401 and logs compensation_failed when the revert itself fails", and "ends every other session of the administrator at a successful first confirmation" (added in T7d). | U-admin: "enrollment gate (S6, S21)" and "pre-enrollment window of 24 hours (S20)" blocks. |
 | 11 | Email OTP sign-in rejected for administrators | DB-code: "sends an administrator no code and removes the issued row", "refuses an email-code session to an administrator (<state>) exactly like an invalid code" for `pending`, `enrolled`, and `expired` (added). | U-admin: "email codes for administrators in every enrollment state (S22)" block. |
 | 12 | Email send failures | DB-code: "invalidates only a code whose delivery failed, keeping a newer code valid". | U-code: "invalidates a code whose delivery fails after the retries, without logging the code or the address"; U-sender: "logs the delivery stage for an unexpected delivery error and still invalidates the code"; U-email: "stops at the attempt limit and surfaces only the generic retryable error". |
 
@@ -103,17 +104,36 @@ stored a 12-hour session, and set `twoFactorEnabled` to true although the reissu
 and every session. Cause: Better Auth 1.7.16 `verify-totp` sets the flag, creates the session, and sets the
 cookie in separate statements without a condition.
 
-Current behavior: the session-create hook (`auth/auth.factory.ts`, `isSupersededFirstConfirmation` and
-`revertSupersededEnrollment` in `auth/administrator-enrollment.ts`) checks every session that `verify-totp`
-creates for an `ADMIN` whose flag is already true. A verified `TwoFactor` row means a sign-in challenge and is
-not checked further. Otherwise it is a first confirmation, and the session named by the request's signed session
-cookie must still exist and belong to the same user. If it does not, the hook sets `twoFactorEnabled` from true
-back to false for that user only, logs one `administrator_enrollment_superseded` event with the path and no
-personal data, and refuses with `401 {"code":"ENROLLMENT_SUPERSEDED"}`, so no session row and no cookie exist.
-The reissued password then signs in to a pending session and can enroll. The tests above are required; none
-carries the `todo` option.
+Before T7d, observed on PostgreSQL 17: a stale confirmation that finished after the reissued password had enrolled,
+and a duplicate submit whose sibling had completed, answered 200 with a session cookie; a duplicate submit whose
+sibling was still completing reverted the sibling's enrollment; and a pending session opened in a second tab
+still read itself after enrollment completed in the first.
 
-Residual risk (accepted in L48): if the process stops between Better Auth's flag update and the compensating
-update, the flag stays true with no `TwoFactor` row and no session. The account then fails closed:
-`admin:create` refuses to reissue an enrolled administrator, and only the manual recovery procedure (T10)
-releases it.
+Current behavior (T7c, hardened in T7d, S40): the session-create hook (`auth/auth.factory.ts`,
+`decideFirstConfirmation` and `refuseSupersededConfirmation` in `auth/administrator-enrollment.ts`) decides
+every session that `verify-totp` creates for an `ADMIN` whose flag is already true. The endpoint stores the
+session it resolved on its own context, which the hook receives; a sign-in challenge has none and is allowed.
+A first confirmation is allowed only while its pending session still exists for the same user, and the hook
+then deletes every other session of that user, so no session opened with the password alone keeps authority
+after enrollment. Otherwise the confirmation was superseded and is refused with
+`401 {"code":"ENROLLMENT_SUPERSEDED"}`, so no session row and no cookie exist:
+
+- without reverting (`compensation: "skipped"`) when the `TwoFactor` row is verified (another confirmation
+  completed) or when a session of the user was created at or after the pending one (a duplicate submit may be
+  completing, or a second tab signed in with the password alone). For a newer session the hook first deletes
+  every session of the user, so no session keeps authority without the second factor;
+- with a revert (`compensation: "reverted"`) when the user is not `ACTIVE`, the credential account is missing or
+  was issued after the pending session began (an `admin:create` reissue), or nothing else explains the missing
+  session (a sign-out). The revert sets `twoFactorEnabled` from true back to false for that user only, and the
+  reissued or same password then signs in to a pending session and can enroll.
+
+The hook logs one `administrator_enrollment_superseded` event with the path and `compensation` and no personal
+data. If the revert throws, one `administrator_enrollment_compensation_failed` event with the path and the error
+class follows and the refusal stands. The tests above are required; none carries the `todo` option.
+
+Residual risk (accepted in L48 and L49): if the revert fails or the process stops between Better Auth's flag
+update and the revert, the flag stays true without a session (and, after a reissue, without a `TwoFactor` row).
+The account then fails closed: `admin:create` refuses to reissue an enrolled administrator, and only the manual
+recovery procedure (T10) releases it. The same locked state follows the remaining races, which all fail closed:
+the window between the hook's checks and the revert, clock skew between `admin:create` and the API, and a second
+tab that confirms like a double submit.

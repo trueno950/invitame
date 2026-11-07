@@ -407,9 +407,24 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
   // the session and revert the flag. The race is forced deterministically: a wrapped Prisma client
   // runs `during` right after the confirmation has read the `TwoFactor` row, before it writes.
   const SUPERSEDED = { status: 401, code: "ENROLLMENT_SUPERSEDED" };
+  const SUPERSEDED_EVENT = {
+    event: "administrator_enrollment_superseded",
+    path: "/two-factor/verify-totp",
+  } as const;
 
-  async function racingEnrollment(label: string) {
+  /** The simulated failure of the compensating update (T7d, S40). */
+  class RevertOutage extends Error {
+    override name = "RevertOutage";
+  }
+
+  /**
+   * `failRevert`: the compensating `updateMany` that sets `twoFactorEnabled` back to false throws.
+   * `pauseVerifiedUpdate` holds the next `verified: true` write of a `TwoFactor` row, the last step of
+   * a first confirmation, until `release` is called; `reached` resolves when that write is held.
+   */
+  async function racingEnrollment(label: string, options: { failRevert?: boolean } = {}) {
     let interpose: (() => Promise<void>) | undefined;
+    let holdVerified: (() => Promise<void>) | undefined;
     const racing = prisma.$extends({
       query: {
         twoFactor: {
@@ -419,6 +434,27 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
             interpose = undefined;
             await run?.();
             return result;
+          },
+          async update({ args, query }) {
+            if ((args.data as { verified?: unknown }).verified === true) {
+              const hold = holdVerified;
+              holdVerified = undefined;
+              await hold?.();
+            }
+            return query(args);
+          },
+        },
+        user: {
+          async updateMany({ args, query }) {
+            // The compensating update: flag false where it is still true (the adapter nests the
+            // condition under `AND`, so the filter is matched by field name).
+            const clearsFlag =
+              (args.data as { twoFactorEnabled?: unknown }).twoFactorEnabled === false;
+            const guardedByFlag = JSON.stringify(args.where ?? {}).includes('"twoFactorEnabled"');
+            if (options.failRevert && clearsFlag && guardedByFlag) {
+              throw new RevertOutage("simulated outage");
+            }
+            return query(args);
           },
         },
       },
@@ -452,6 +488,24 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
       userId,
       oldPassword,
       issue,
+      pending,
+      rawSecret,
+      /** Holds the next `verified: true` write until `release` is called. */
+      pauseVerifiedUpdate() {
+        let release = () => {};
+        const released = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let reachedResolve = () => {};
+        const reached = new Promise<void>((resolve) => {
+          reachedResolve = resolve;
+        });
+        holdVerified = async () => {
+          reachedResolve();
+          await released;
+        };
+        return { reached, release };
+      },
       /** Confirms the first code with the pending session while `during` commits in between. */
       async confirm(during: () => Promise<void>) {
         let ran = false;
@@ -518,16 +572,14 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
     assert.equal((await storedEnrollment(race.userId)).twoFactorEnabled, true);
   });
 
-  it("logs one enrollment_superseded event without personal data when it reverts a confirmation", async () => {
+  it("logs one administrator_enrollment_superseded event without personal data when it reverts a confirmation", async () => {
     const race = await racingEnrollment("log");
 
     await race.confirm(async () => {
       await race.issue(randomBytes(18).toString("base64url"));
     });
 
-    assert.deepEqual(race.events, [
-      { event: "administrator_enrollment_superseded", path: "/two-factor/verify-totp" },
-    ]);
+    assert.deepEqual(race.events, [{ ...SUPERSEDED_EVENT, compensation: "reverted" }]);
     const logged = JSON.stringify(race.events);
     for (const personal of [race.email, race.userId, race.oldPassword]) {
       assert.equal(logged.includes(personal), false);
@@ -599,6 +651,224 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
       (await prisma.user.findUniqueOrThrow({ where: { id: race.userId } })).status,
       "DISABLED",
     );
+  });
+
+  /** Confirms the first code with the pending session of `race`, as a second browser submit would. */
+  async function siblingConfirmation(race: Awaited<ReturnType<typeof racingEnrollment>>) {
+    return call(
+      "/two-factor/verify-totp",
+      { code: await totpCode(race.rawSecret) },
+      race.pending,
+      race.raceAuth,
+    );
+  }
+
+  async function readsSession(cookie: string | undefined, target: typeof auth) {
+    const response = await call("/get-session", undefined, cookie, target);
+    return ((await response.json()) as { user?: { id: string } } | null)?.user?.id ?? null;
+  }
+
+  // T7d (S40, L49 R3-verified-row-shortcut-admits-stale-confirmation): the reissued password enrolls
+  // completely while the old confirmation is in flight; the old one must not get a session.
+  it("refuses a stale first confirmation without reverting after the reissued password enrolled", async () => {
+    const race = await racingEnrollment("stale");
+    const newPassword = randomBytes(18).toString("base64url");
+    let newSession: string | undefined;
+
+    const confirmation = await race.confirm(async () => {
+      assert.equal((await race.issue(newPassword)).outcome, "reissued");
+      ({ session: newSession } = await enroll(
+        { email: race.email, password: newPassword },
+        race.raceAuth,
+      ));
+    });
+
+    assert.deepEqual(await refusal(confirmation), { ...SUPERSEDED, sessionCookie: false });
+    assert.deepEqual(await storedEnrollment(race.userId), {
+      sessionRows: 1,
+      twoFactorEnabled: true,
+      twoFactorRows: 1,
+    });
+    assert.equal(
+      await prisma.twoFactor.count({ where: { userId: race.userId, verified: true } }),
+      1,
+    );
+    assert.equal(await readsSession(newSession, race.raceAuth), race.userId);
+    assert.deepEqual(race.events, [{ ...SUPERSEDED_EVENT, compensation: "skipped" }]);
+  });
+
+  // T7d (S40, L49 R4-concurrent-first-confirmation-reverts-success): a double submit of the same code.
+  it("refuses a duplicate first confirmation without reverting when the sibling completed first", async () => {
+    const race = await racingEnrollment("double-done");
+    let sibling: Response | undefined;
+
+    const confirmation = await race.confirm(async () => {
+      sibling = await siblingConfirmation(race);
+    });
+
+    assert.equal(sibling?.status, 200);
+    assert.deepEqual(await refusal(confirmation), { ...SUPERSEDED, sessionCookie: false });
+    assert.deepEqual(await storedEnrollment(race.userId), {
+      sessionRows: 1,
+      twoFactorEnabled: true,
+      twoFactorRows: 1,
+    });
+    assert.equal(
+      await readsSession(sibling && cookieFrom(sibling, SESSION_COOKIE), race.raceAuth),
+      race.userId,
+    );
+    assert.deepEqual(race.events, [{ ...SUPERSEDED_EVENT, compensation: "skipped" }]);
+  });
+
+  it("refuses a duplicate first confirmation without reverting and ends every session while the sibling is completing", async () => {
+    const race = await racingEnrollment("double-midway");
+    const held = race.pauseVerifiedUpdate();
+    let sibling: Promise<Response> | undefined;
+
+    // The sibling deleted the pending session and stored its own, but has not marked the row verified.
+    const confirmation = await race.confirm(async () => {
+      sibling = siblingConfirmation(race);
+      await held.reached;
+    });
+    const refused = await refusal(confirmation);
+    held.release();
+    const completed = await sibling;
+
+    assert.deepEqual(refused, { ...SUPERSEDED, sessionCookie: false });
+    assert.equal(completed?.status, 200);
+    assert.deepEqual(await storedEnrollment(race.userId), {
+      sessionRows: 0,
+      twoFactorEnabled: true,
+      twoFactorRows: 1,
+    });
+    assert.equal(
+      await prisma.twoFactor.count({ where: { userId: race.userId, verified: true } }),
+      1,
+    );
+    assert.equal(
+      await readsSession(completed && cookieFrom(completed, SESSION_COOKIE), race.raceAuth),
+      null,
+    );
+    assert.deepEqual(race.events, [{ ...SUPERSEDED_EVENT, compensation: "skipped" }]);
+
+    // Enrolled all the same: the password and the second factor open a session again.
+    const signedIn = await signIn(race.email, race.oldPassword, race.raceAuth);
+    const challenge = cookieFrom(signedIn, TWO_FACTOR_COOKIE);
+    assert.ok(challenge);
+    const code = await totpCode(race.rawSecret);
+    const verified = await call("/two-factor/verify-totp", { code }, challenge, race.raceAuth);
+    const session = cookieFrom(verified, SESSION_COOKIE);
+    assert.equal(await readsSession(session, race.raceAuth), race.userId);
+  });
+
+  it("reverts a first confirmation that races a sign-out, then lets the password enroll", async () => {
+    const race = await racingEnrollment("sign-out");
+
+    const confirmation = await race.confirm(async () => {
+      const signedOut = await call("/sign-out", {}, race.pending, race.raceAuth);
+      assert.equal(signedOut.status, 200);
+    });
+
+    assert.deepEqual(await refusal(confirmation), { ...SUPERSEDED, sessionCookie: false });
+    const stored = await storedEnrollment(race.userId);
+    assert.deepEqual(
+      { sessionRows: stored.sessionRows, twoFactorEnabled: stored.twoFactorEnabled },
+      { sessionRows: 0, twoFactorEnabled: false },
+    );
+    assert.deepEqual(race.events, [{ ...SUPERSEDED_EVENT, compensation: "reverted" }]);
+    await enroll({ email: race.email, password: race.oldPassword }, race.raceAuth);
+    assert.equal((await storedEnrollment(race.userId)).twoFactorEnabled, true);
+  });
+
+  // T7d review correction (R3-newer-session-refuse-keeps-flag-with-password-session): a newer
+  // password session from a second tab must not gain authority when the refusal keeps the flag.
+  it("ends a second tab's session when it refuses a confirmation that races a sign-out", async () => {
+    const race = await racingEnrollment("second-tab");
+    const secondTab = cookieFrom(
+      await signIn(race.email, race.oldPassword, race.raceAuth),
+      SESSION_COOKIE,
+    );
+    assert.ok(secondTab);
+
+    const confirmation = await race.confirm(async () => {
+      const signedOut = await call("/sign-out", {}, race.pending, race.raceAuth);
+      assert.equal(signedOut.status, 200);
+    });
+
+    assert.deepEqual(await refusal(confirmation), { ...SUPERSEDED, sessionCookie: false });
+    assert.equal(await readsSession(secondTab, race.raceAuth), null);
+    assert.deepEqual(await storedEnrollment(race.userId), {
+      sessionRows: 0,
+      twoFactorEnabled: true,
+      twoFactorRows: 1,
+    });
+    assert.equal(
+      await prisma.twoFactor.count({ where: { userId: race.userId, verified: true } }),
+      0,
+    );
+    assert.deepEqual(race.events, [{ ...SUPERSEDED_EVENT, compensation: "skipped" }]);
+  });
+
+  // T7d (S40, L49 R3-revert-failure-locks-without-log): the account stays locked, fails closed, and
+  // the failure is logged with the error class only.
+  it("refuses with 401 and logs compensation_failed when the revert itself fails", async () => {
+    const race = await racingEnrollment("revert-fails", { failRevert: true });
+
+    const confirmation = await race.confirm(async () => {
+      await race.issue(randomBytes(18).toString("base64url"));
+    });
+
+    assert.deepEqual(await refusal(confirmation), { ...SUPERSEDED, sessionCookie: false });
+    assert.deepEqual(race.events, [
+      { ...SUPERSEDED_EVENT, compensation: "reverted" },
+      {
+        event: "administrator_enrollment_compensation_failed",
+        path: "/two-factor/verify-totp",
+        error: "RevertOutage",
+      },
+    ]);
+    assert.deepEqual(await storedEnrollment(race.userId), {
+      sessionRows: 0,
+      twoFactorEnabled: true,
+      twoFactorRows: 0,
+    });
+  });
+
+  // T7d (S40, L49): a session opened with the password alone must not gain administrator authority
+  // when enrollment completes in another session.
+  it("ends every other session of the administrator at a successful first confirmation", async () => {
+    const events: unknown[] = [];
+    const logged = buildAuth(prisma, (event) => events.push(event));
+    const admin = await seedAdministrator();
+    const tabA = cookieFrom(await signIn(admin.email, admin.password, logged), SESSION_COOKIE);
+    const tabB = cookieFrom(await signIn(admin.email, admin.password, logged), SESSION_COOKIE);
+    assert.ok(tabA && tabB);
+    const enable = await call("/two-factor/enable", { password: admin.password }, tabA, logged);
+    const { totpURI } = (await enable.json()) as { totpURI: string };
+    const rawSecret = decodeBase32(new URL(totpURI).searchParams.get("secret") ?? "");
+
+    const confirmed = await call(
+      "/two-factor/verify-totp",
+      { code: await totpCode(rawSecret) },
+      tabA,
+      logged,
+    );
+
+    assert.equal(confirmed.status, 200);
+    assert.equal(await (await call("/get-session", undefined, tabB, logged)).text(), "null");
+    const listed = await snapshot(await call("/list-sessions", undefined, tabB, logged));
+    assert.equal(listed.status, 401);
+    assert.deepEqual(
+      listed,
+      await snapshot(await call("/list-sessions", undefined, undefined, logged)),
+    );
+    assert.equal(await prisma.session.count({ where: { userId: admin.id } }), 1);
+    assert.equal(
+      await readsSession(cookieFrom(confirmed, SESSION_COOKIE), logged),
+      admin.id,
+      "the enrolled session is the one that remains",
+    );
+    assert.deepEqual(events, [], "a normal first confirmation logs nothing");
   });
 
   it("lets an enrolled administrator pass the sign-in challenge with a stale session cookie", async () => {
