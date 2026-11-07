@@ -16,6 +16,7 @@ import {
   isCompleteAuthenticatorCode,
   normalizeAuthenticatorCode,
 } from "../../../lib/admin/sign-in.ts";
+import { useInteractive } from "../../../lib/customer/interactive.ts";
 import type { BrowserFetch } from "../../../lib/customer/sign-in.ts";
 import {
   errorNote,
@@ -43,6 +44,9 @@ const stepLabel = "text-center text-xs font-medium uppercase tracking-[0.18em] t
  * The enrollment answer (TOTP URI, setup key, backup codes) lives only in this component's state:
  * it is never put in a URL, web storage, a cookie, a log, or a server action, and it is gone once the
  * page is left. The password is cleared as soon as the API has answered.
+ *
+ * The forms send nothing by themselves (M2 T8e; S42): they declare `post`, and their buttons stay
+ * disabled until the page is interactive, so the password never reaches the URL by a native submit.
  */
 export function EnrollmentFlow() {
   const [step, setStep] = useState<Step>("password");
@@ -54,6 +58,8 @@ export function EnrollmentFlow() {
   const [error, setError] = useState("");
   const [sessionEnded, setSessionEnded] = useState(false);
   const [pending, setPending] = useState(false);
+  const interactive = useInteractive();
+  const locked = pending || !interactive;
   const passwordField = useRef<HTMLInputElement>(null);
   const codeField = useRef<HTMLInputElement>(null);
   const savedField = useRef<HTMLInputElement>(null);
@@ -156,7 +162,7 @@ export function EnrollmentFlow() {
   return (
     <div className="flex flex-col gap-6">
       {step === "password" ? (
-        <form className="flex flex-col gap-6" noValidate onSubmit={submitPassword}>
+        <form className="flex flex-col gap-6" method="post" noValidate onSubmit={submitPassword}>
           <p className={stepLabel}>{ENROLLMENT_COPY.passwordStep}</p>
           <p className="-mt-3 text-center text-[0.9375rem] leading-relaxed text-muted">
             {ENROLLMENT_COPY.passwordIntro}
@@ -179,14 +185,17 @@ export function EnrollmentFlow() {
               value={password}
             />
           </div>
-          <button className={primaryButton} disabled={pending} type="submit">
+          <button className={primaryButton} disabled={locked} type="submit">
             {pending ? ENROLLMENT_COPY.starting : ENROLLMENT_COPY.start}
           </button>
+          <noscript>
+            <p className={`${fieldHint} -mt-3 text-center`}>{ENROLLMENT_COPY.noScript}</p>
+          </noscript>
         </form>
       ) : null}
 
       {step === "scan" && enrollment ? (
-        <form className="flex flex-col gap-6" noValidate onSubmit={submitCode}>
+        <form className="flex flex-col gap-6" method="post" noValidate onSubmit={submitCode}>
           <p className={stepLabel}>{ENROLLMENT_COPY.scanStep}</p>
           <p className="-mt-3 text-center text-[0.9375rem] leading-relaxed text-pretty text-muted">
             {ENROLLMENT_COPY.scanIntro}
@@ -228,14 +237,14 @@ export function EnrollmentFlow() {
               {ENROLLMENT_COPY.codeHint}
             </p>
           </div>
-          <button className={primaryButton} disabled={pending} type="submit">
+          <button className={primaryButton} disabled={locked} type="submit">
             {pending ? ENROLLMENT_COPY.confirming : ENROLLMENT_COPY.confirm}
           </button>
         </form>
       ) : null}
 
       {step === "backup" ? (
-        <form className="flex flex-col gap-6" noValidate onSubmit={finish}>
+        <form className="flex flex-col gap-6" method="post" noValidate onSubmit={finish}>
           <div className="text-center">
             <p className={stepLabel}>{ENROLLMENT_COPY.backupStep}</p>
             <h2
@@ -278,7 +287,7 @@ export function EnrollmentFlow() {
             />
             {ENROLLMENT_COPY.savedCheck}
           </label>
-          <button className={primaryButton} disabled={pending} type="submit">
+          <button className={primaryButton} disabled={locked} type="submit">
             {ENROLLMENT_COPY.savedCodes}
           </button>
         </form>

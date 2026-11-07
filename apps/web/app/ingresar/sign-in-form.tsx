@@ -4,6 +4,7 @@ import { type FormEvent, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { SIGN_IN_COPY } from "../../lib/customer/copy.ts";
+import { useInteractive } from "../../lib/customer/interactive.ts";
 import {
   type BrowserFetch,
   isCompleteCode,
@@ -34,6 +35,9 @@ type Pending = "send" | "verify" | null;
  * Two steps (M2 T8c; S6, L39): the email, then the 6-digit code. Status and errors are announced
  * through live regions that stay mounted across both steps, and focus moves to the field that
  * needs attention.
+ *
+ * The forms send nothing by themselves (M2 T8e; S42): they declare `post`, and their buttons stay
+ * disabled until the page is interactive, so the email never reaches the URL by a native submit.
  */
 export function SignInForm() {
   const [step, setStep] = useState<Step>("email");
@@ -42,6 +46,8 @@ export function SignInForm() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState<Pending>(null);
+  const interactive = useInteractive();
+  const locked = pending !== null || !interactive;
   const emailField = useRef<HTMLInputElement>(null);
   const codeField = useRef<HTMLInputElement>(null);
   const ids = useId();
@@ -161,7 +167,7 @@ export function SignInForm() {
       </div>
 
       {step === "email" ? (
-        <form className="flex flex-col gap-6" noValidate onSubmit={sendCode}>
+        <form className="flex flex-col gap-6" method="post" noValidate onSubmit={sendCode}>
           <div>
             <label className={fieldLabel} htmlFor={emailId}>
               {SIGN_IN_COPY.emailLabel}
@@ -184,12 +190,15 @@ export function SignInForm() {
               value={email}
             />
           </div>
-          <button className={primaryButton} disabled={pending !== null} type="submit">
+          <button className={primaryButton} disabled={locked} type="submit">
             {pending === "send" ? SIGN_IN_COPY.sending : SIGN_IN_COPY.sendCode}
           </button>
+          <noscript>
+            <p className={`${fieldHint} -mt-3 text-center`}>{SIGN_IN_COPY.noScript}</p>
+          </noscript>
         </form>
       ) : (
-        <form className="flex flex-col gap-6" noValidate onSubmit={verifyCode}>
+        <form className="flex flex-col gap-6" method="post" noValidate onSubmit={verifyCode}>
           <div>
             <label className={fieldLabel} htmlFor={codeId}>
               {SIGN_IN_COPY.codeLabel}
@@ -213,7 +222,7 @@ export function SignInForm() {
               {SIGN_IN_COPY.codeHint}
             </p>
           </div>
-          <button className={primaryButton} disabled={pending !== null} type="submit">
+          <button className={primaryButton} disabled={locked} type="submit">
             {pending === "verify" ? SIGN_IN_COPY.verifying : SIGN_IN_COPY.signIn}
           </button>
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-3">

@@ -16,6 +16,7 @@ import {
   verifyAuthenticatorCode,
   verifyBackupCode,
 } from "../../../lib/admin/sign-in.ts";
+import { useInteractive } from "../../../lib/customer/interactive.ts";
 import {
   type BrowserFetch,
   isPlausibleEmail,
@@ -41,6 +42,10 @@ type Step = "password" | "code" | "backup";
  * authenticator app's 6-digit code or, as an alternative, a backup code. Status and errors are
  * announced through live regions that stay mounted across the steps, and focus moves to the field
  * that needs attention. The password is cleared from memory once the first step is answered.
+ *
+ * The forms send nothing by themselves (M2 T8e; S42): they declare `post`, and their buttons stay
+ * disabled until the page is interactive, so neither a click nor Enter submits the fields natively
+ * into the URL before React handles them or without JavaScript.
  */
 export function AdminSignInForm() {
   const [step, setStep] = useState<Step>("password");
@@ -51,6 +56,8 @@ export function AdminSignInForm() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const interactive = useInteractive();
+  const locked = pending || !interactive;
   const emailField = useRef<HTMLInputElement>(null);
   const passwordField = useRef<HTMLInputElement>(null);
   const codeField = useRef<HTMLInputElement>(null);
@@ -188,7 +195,7 @@ export function AdminSignInForm() {
       </div>
 
       {step === "password" ? (
-        <form className="flex flex-col gap-6" noValidate onSubmit={submitPassword}>
+        <form className="flex flex-col gap-6" method="post" noValidate onSubmit={submitPassword}>
           <div>
             <label className={fieldLabel} htmlFor={`${ids}-email`}>
               {ADMIN_SIGN_IN_COPY.emailLabel}
@@ -229,14 +236,17 @@ export function AdminSignInForm() {
               value={password}
             />
           </div>
-          <button className={primaryButton} disabled={pending} type="submit">
+          <button className={primaryButton} disabled={locked} type="submit">
             {pending ? ADMIN_SIGN_IN_COPY.checking : ADMIN_SIGN_IN_COPY.continue}
           </button>
+          <noscript>
+            <p className={`${fieldHint} -mt-3 text-center`}>{ADMIN_SIGN_IN_COPY.noScript}</p>
+          </noscript>
         </form>
       ) : null}
 
       {step === "code" ? (
-        <form className="flex flex-col gap-6" noValidate onSubmit={submitCode}>
+        <form className="flex flex-col gap-6" method="post" noValidate onSubmit={submitCode}>
           <div>
             <label className={fieldLabel} htmlFor={`${ids}-code`}>
               {ADMIN_SIGN_IN_COPY.codeLabel}
@@ -260,14 +270,14 @@ export function AdminSignInForm() {
               {ADMIN_SIGN_IN_COPY.codeHint}
             </p>
           </div>
-          <button className={primaryButton} disabled={pending} type="submit">
+          <button className={primaryButton} disabled={locked} type="submit">
             {pending ? ADMIN_SIGN_IN_COPY.checking : ADMIN_SIGN_IN_COPY.signIn}
           </button>
         </form>
       ) : null}
 
       {step === "backup" ? (
-        <form className="flex flex-col gap-6" noValidate onSubmit={submitBackupCode}>
+        <form className="flex flex-col gap-6" method="post" noValidate onSubmit={submitBackupCode}>
           <div>
             <label className={fieldLabel} htmlFor={`${ids}-backup`}>
               {ADMIN_SIGN_IN_COPY.backupLabel}
@@ -292,7 +302,7 @@ export function AdminSignInForm() {
               {ADMIN_SIGN_IN_COPY.backupHint}
             </p>
           </div>
-          <button className={primaryButton} disabled={pending} type="submit">
+          <button className={primaryButton} disabled={locked} type="submit">
             {pending ? ADMIN_SIGN_IN_COPY.checking : ADMIN_SIGN_IN_COPY.signIn}
           </button>
         </form>

@@ -2,8 +2,9 @@
 
 Maps every test obligation of [ADR 0004](../adr/0004-authentication-with-better-auth.md) (its Consequences) and
 every S17 case of the Milestone 2 plan to a named assertion (S13, S30). Status: current as of Milestone 2 task
-T9b part B. Browser end-to-end coverage exists for the customer flows (see the L40 rows below) and the
-administrator flows (see the L43, L44, and L52 rows); the T9b part C findings are listed without a test.
+T8e. Browser end-to-end coverage exists for the customer flows (see the L40 rows below), the administrator flows
+(see the L43, L44, and L52 rows), and form submission without JavaScript (see the L55 rows); the T9b part C
+findings are listed without a test.
 
 ## How the evidence runs
 
@@ -42,6 +43,7 @@ other row existed before them.
 | DB-create | [`users/infrastructure/prisma-administrator-account.repository.db-spec.ts`](../../apps/api/src/users/infrastructure/prisma-administrator-account.repository.db-spec.ts) |
 | E2E-customer | [`e2e/customer-session.spec.ts`](../../apps/web/e2e/customer-session.spec.ts) (browser) |
 | E2E-admin | [`e2e/admin-session.spec.ts`](../../apps/web/e2e/admin-session.spec.ts) (browser) |
+| E2E-forms | [`e2e/form-submission.spec.ts`](../../apps/web/e2e/form-submission.spec.ts) (browser, JavaScript disabled) |
 | U-access | [`auth/access-control/access-control.spec.ts`](../../apps/api/src/auth/access-control/access-control.spec.ts) |
 | U-admin | [`auth/administrator-sign-in.spec.ts`](../../apps/api/src/auth/administrator-sign-in.spec.ts) |
 | U-limits | [`auth/abuse-limits.spec.ts`](../../apps/api/src/auth/abuse-limits.spec.ts) |
@@ -112,6 +114,8 @@ others wait for part C.
 | L52 | R3-rate-limit-loop-alert-assertion-stale | Fixed: each wrong attempt is checked by its `400`, and the alert once after the third, since its text does not change between attempts. |
 | L52 | R3-web-bound-ipv4-browser-uses-localhost | Fixed: the browser, Better Auth's base URL, and the API's trusted origin use `http://127.0.0.1:<port>`, the address the web binds to. |
 | L52 | Verification: a browser without a cookie, and the harness's refusal of a missing or remote URL | E2E-customer "sends a browser without a session cookie from /cuenta to /ingresar" (also `null` from `get-session`); `e2e/support/environment.test.ts`, run by `pnpm --filter @invitame/web test`. |
+| L55 | S42: no form puts a field in a URL, also without JavaScript (T8e) | E2E-forms: "/admin/ingresar never puts the email or the password in a URL", "/admin/activar never puts the password in a URL" (with a pending administrator's session), and "/ingresar never puts the email in a URL" each submit by a click and by Enter on a fresh page; no request carries a field value in its URL, the page URL has no query string, and the form shows its line asking for JavaScript. Against the forms before T8e every attempt failed, naming `/admin/ingresar?email=…&password=…`, `/admin/activar?password=…`, and `/ingresar?email=…`. With JavaScript, the submit and sign-out buttons wait for the page to be interactive (`lib/customer/interactive.test.ts`), and E2E-customer and E2E-admin keep passing. |
+| L55 | R3-sign-out-retry-not-idempotent, R4-signout-retry-cannot-recover-after-navigation | Fixed in E2E-admin (T8e): `signOutOfPanel` waits for the enabled «Cerrar sesión», clicks it once, and requires exactly one `POST /api/auth/sign-out` before the sign-in page; it no longer retries the click. |
 | L31 | A TOTP confirmation that runs while `admin:create` reissues a password must fail closed (T9, T11). | DB-admin: "fails closed when admin:create reissues the password during the first TOTP confirmation" and the T7c variants in row 10; see defect T9a-D1 (fixed). |
 
 Earlier database-suite findings also resolved by the shared harness: the order coupling, cleanup outside
