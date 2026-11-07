@@ -16,10 +16,14 @@ import {
   type CreateAdministratorEvent,
   CreateAdministratorUseCase,
 } from "../application/create-administrator.use-case";
+import {
+  type ResetSecondFactorEvent,
+  ResetSecondFactorUseCase,
+} from "../application/reset-second-factor.use-case";
 import { PrismaAdministratorAccountRepository } from "./prisma-administrator-account.repository";
 
 // The administrator creation command's transaction on real PostgreSQL (M2 T7; ADR 0004 decision 3,
-// S20): the use case with Better Auth's own hasher and the Prisma adapter, checked against Better
+// S20) and of the recovery command (T10a, S44): the use cases with Better Auth's own hasher and the Prisma adapter, checked against Better
 // Auth's real password sign-in. Runs only through `pnpm --filter @invitame/api test:db` (locally and
 // in the CI `database-tests` job) with an explicit DATABASE_URL that points at a disposable, already
 // migrated local database; not part of `pnpm test`.
@@ -259,5 +263,122 @@ describe("creating an administrator on the Prisma schema (real PostgreSQL)", () 
     const stored = await prisma.user.findUniqueOrThrow({ where: { id: customer.id } });
     assert.equal(stored.role, "CUSTOMER");
     assert.equal(await prisma.account.count({ where: { userId: customer.id } }), 0);
+  });
+
+  // M2 T10a (S44): the recovery command's transaction.
+  const resetEvents: ResetSecondFactorEvent[] = [];
+  const resetUseCase = (client: PrismaClient = prisma) =>
+    new ResetSecondFactorUseCase({
+      accounts: new PrismaAdministratorAccountRepository(client),
+      hashPassword,
+      log: (event) => resetEvents.push(event),
+    });
+
+  /** Every row a recovery could touch, to compare before and after a refusal or a failure. */
+  async function rowsOf(email: string) {
+    const user = await prisma.user.findUnique({ where: { email } });
+    // The nil UUID matches no row when the address is unknown.
+    const where = { userId: user?.id ?? "00000000-0000-0000-0000-000000000000" };
+    return {
+      user,
+      accounts: await prisma.account.findMany({ where, orderBy: { id: "asc" } }),
+      twoFactor: await prisma.twoFactor.findMany({ where }),
+      sessions: await prisma.session.findMany({ where, orderBy: { id: "asc" } }),
+    };
+  }
+
+  /** An administrator with a session and, when enrolled, a confirmed second factor. */
+  async function lockedAdministrator(label: string, enrolled = true) {
+    const email = newEmail(label);
+    const { outcome, initialPassword } = await useCase.execute(email);
+    assert.ok(initialPassword);
+    assert.equal((await signIn(email, initialPassword)).status, 200);
+    if (enrolled) {
+      await prisma.twoFactor.create({
+        data: { userId: outcome.userId, secret: "secret", backupCodes: "codes", verified: true },
+      });
+      await prisma.user.update({ where: { id: outcome.userId }, data: { twoFactorEnabled: true } });
+    }
+    return { email, userId: outcome.userId, password: initialPassword };
+  }
+
+  for (const enrolled of [false, true]) {
+    it(`resets ${enrolled ? "an enrolled" : "a pending"} administrator in one transaction`, async () => {
+      const admin = await lockedAdministrator(`reset-${enrolled}`, enrolled);
+      const [old] = await credentialOf(admin.userId);
+      const wrong = await signIn(admin.email, "not-the-password-x");
+
+      const { outcome, initialPassword } = await resetUseCase().execute(admin.email);
+
+      assert.deepEqual(outcome, { outcome: "reset", userId: admin.userId, revokedSessions: 1 });
+      assert.ok(initialPassword);
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: admin.userId } });
+      assert.deepEqual([user.role, user.status, user.twoFactorEnabled], ["ADMIN", "ACTIVE", false]);
+      assert.equal(await prisma.twoFactor.count({ where: { userId: admin.userId } }), 0);
+      assert.equal(await prisma.session.count({ where: { userId: admin.userId } }), 0);
+      const [account, ...others] = await credentialOf(admin.userId);
+      assert.equal(others.length, 0);
+      assert.notEqual(account?.id, old?.id, "a new credential account");
+      assert.ok((account?.createdAt.getTime() ?? 0) > (old?.createdAt.getTime() ?? 0));
+      assert.ok(Date.now() - (account?.createdAt.getTime() ?? 0) < 60_000, "the window restarts");
+      assert.deepEqual(resetEvents.at(-1), {
+        event: "administrator_second_factor_reset",
+        userId: admin.userId,
+      });
+      const stale = await signIn(admin.email, admin.password);
+      assert.deepEqual(
+        { status: stale.status, body: stale.body },
+        { status: wrong.status, body: wrong.body },
+      );
+    });
+  }
+
+  it("refuses an unknown address, a customer, and a DISABLED administrator and changes no row", async () => {
+    const unknown = newEmail("reset-unknown");
+    const customer = newEmail("reset-customer");
+    await prisma.user.create({ data: { email: customer, displayName: "" } });
+    const disabled = await lockedAdministrator("reset-disabled");
+    await prisma.user.update({ where: { id: disabled.userId }, data: { status: "DISABLED" } });
+
+    for (const [email, reason] of [
+      [unknown, "unknown"],
+      [customer, "customer"],
+      [disabled.email, "disabled"],
+    ] as const) {
+      const before = await rowsOf(email);
+
+      const result = await resetUseCase().execute(email);
+
+      assert.equal(result.initialPassword, undefined);
+      assert.deepEqual(result.outcome, {
+        outcome: "refused",
+        ...(before.user ? { userId: before.user.id } : {}),
+        reason,
+      });
+      assert.deepEqual(await rowsOf(email), before, reason);
+    }
+    assert.equal(await prisma.user.count({ where: { email: unknown } }), 0, "nobody is created");
+  });
+
+  it("rolls the whole recovery back when its last write fails", async () => {
+    const admin = await lockedAdministrator("reset-atomic");
+    const before = await rowsOf(admin.email);
+    const failing = prisma.$extends({
+      query: {
+        session: {
+          deleteMany: () => {
+            throw new Error("simulated session write failure");
+          },
+        },
+      },
+    }) as unknown as PrismaClient;
+
+    await assert.rejects(resetUseCase(failing).execute(admin.email), /simulated session write/);
+
+    assert.deepEqual(await rowsOf(admin.email), before);
+    assert.deepEqual(resetEvents.at(-1), {
+      event: "administrator_second_factor_reset_failed",
+      error: "Error",
+    });
   });
 });

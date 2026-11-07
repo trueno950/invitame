@@ -24,10 +24,19 @@ export type CreateAdministratorEvent =
 export type CreateAdministratorLog = (event: CreateAdministratorEvent) => void;
 
 export class InvalidAdministratorEmailError extends Error {
-  constructor() {
-    super("Provide the email address of the administrator to create.");
+  constructor(message = "Provide the email address of the administrator to create.") {
+    super(message);
     this.name = "InvalidAdministratorEmailError";
   }
+}
+
+/** Better Auth stores addresses lowercased and looks them up that way. */
+export function normalizeAdministratorEmail(rawEmail: string, invalidMessage?: string): string {
+  const email = rawEmail.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+$/.test(email)) {
+    throw new InvalidAdministratorEmailError(invalidMessage);
+  }
+  return email;
 }
 
 export interface CreateAdministratorDependencies {
@@ -48,8 +57,8 @@ export interface CreateAdministratorResult {
 /**
  * Creates an administrator, or issues a new initial password to one who has not enrolled an
  * authenticator app (ADR 0004 decision 3, S20). The password works for 24 hours from its issue unless
- * an app is enrolled first. Enrolled administrators are refused: their recovery is a separate
- * procedure (T10). A customer address is refused, never promoted.
+ * an app is enrolled first. Enrolled administrators are refused: their recovery is
+ * `ResetSecondFactorUseCase` (T10a). A customer address is refused, never promoted.
  */
 export class CreateAdministratorUseCase {
   private readonly generatePassword: () => string;
@@ -61,12 +70,7 @@ export class CreateAdministratorUseCase {
   }
 
   async execute(rawEmail: string): Promise<CreateAdministratorResult> {
-    // Better Auth stores addresses lowercased and looks them up that way.
-    const email = rawEmail.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+$/.test(email)) {
-      throw new InvalidAdministratorEmailError();
-    }
-
+    const email = normalizeAdministratorEmail(rawEmail);
     const password = this.generatePassword();
     const outcome = await this.dependencies.accounts.issueInitialPassword({
       email,

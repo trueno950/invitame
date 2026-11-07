@@ -173,13 +173,39 @@ working and existing sessions end.
 
 Run the same command again to reissue: for an administrator who has not enrolled, it replaces the password,
 restarts the 24-hour window, discards an unconfirmed enrollment, and signs the administrator out everywhere,
-in one transaction. It refuses an administrator who has already enrolled (recovery is a separate
-procedure), a `DISABLED` administrator, and any customer address, which is never promoted. Milestone 2 offers
+in one transaction. It refuses an administrator who has already enrolled (see the recovery command below), a
+`DISABLED` administrator, and any customer address, which is never promoted. Milestone 2 offers
 no password change through the API.
 
 It prints one JSON line with the user id (and, on reissue, the number of revoked sessions), never the email
 address. Exit code 0 means a password was issued, 1 means refused or a failure, and 2 means a usage error or a
 non-interactive terminal.
+
+### Recover a locked administrator
+
+An administrator who cannot finish signing in is recovered only by a server-side command, with the same
+safeguards as `admin:create` (interactive terminal only, password printed once, exit codes 0, 1, and 2):
+
+```bash
+pnpm --filter @invitame/api admin:reset-second-factor -- <email>
+```
+
+It releases every lock state of an `ACTIVE` administrator, enrolled or not: a first confirmation that failed
+or was interrupted, a second tab that signed out during activation, a lost confirmation response before the
+backup codes were seen, a lost device, and lost or used-up backup codes. In one transaction it turns the
+second factor off, deletes the authenticator secret and the backup codes, signs the administrator out
+everywhere, and replaces the password with a new initial password that opens a new 24-hour enrollment
+window. The administrator then signs in and enrolls an authenticator app again, as after `admin:create`.
+
+1. Before running it, confirm the requester's identity out of band (for example, a call to a number you
+   already know). Anyone who receives the new password can enroll their own device.
+2. Run the command and hand over the password through a secure channel.
+
+A pending administrator whose 24-hour window simply expired still uses `admin:create`. The command refuses
+an unknown address, a customer (never created or promoted), and a `DISABLED` administrator, changing
+nothing; a disabled administrator cannot be recovered, because re-enabling is out of scope. It prints one
+JSON line with the user id at most, or the error class on a failure; never the email address, the password,
+the authenticator secret, or the backup codes.
 
 ## Repository layout
 

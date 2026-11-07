@@ -11,6 +11,7 @@ import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sen
 import { SystemEmailDeliveryRuntime } from "../email/infrastructure/system-email-delivery-runtime";
 import type { IssueInitialPasswordResult } from "../users/application/administrator-account.repository";
 import { DisableUserUseCase } from "../users/application/disable-user.use-case";
+import { ResetSecondFactorUseCase } from "../users/application/reset-second-factor.use-case";
 import { PrismaAdministratorAccountRepository } from "../users/infrastructure/prisma-administrator-account.repository";
 import { PrismaUserAccessRepository } from "../users/infrastructure/prisma-user-access.repository";
 import type { AuthRequestLog } from "./auth-request-guard";
@@ -892,5 +893,74 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
       (await prisma.user.findUniqueOrThrow({ where: { id: admin.id } })).twoFactorEnabled,
       true,
     );
+  });
+
+  // T10a (S44): the recovery command, run as `admin:reset-second-factor` runs it.
+  const recovery = () =>
+    new ResetSecondFactorUseCase({
+      accounts: new PrismaAdministratorAccountRepository(prisma),
+      hashPassword,
+      log: () => {},
+    });
+
+  it("recovers an enrolled administrator, who signs in as a pending administrator and enrolls again", async () => {
+    const admin = await seedAdministrator();
+    const { rawSecret, session } = await enroll(admin);
+    const challenge = cookieFrom(await signIn(admin.email, admin.password), TWO_FACTOR_COOKIE);
+    const verify = { code: await totpCode(rawSecret) };
+    assert.equal((await call("/two-factor/verify-totp", verify, challenge)).status, 200);
+    assert.ok(
+      (await prisma.twoFactor.findUniqueOrThrow({ where: { userId: admin.id } })).backupCodes,
+    );
+    assert.equal(await prisma.session.count({ where: { userId: admin.id } }), 2);
+    const credentials = () =>
+      prisma.account.findMany({ where: { userId: admin.id, providerId: "credential" } });
+    const [old] = await credentials();
+    const wrong = await snapshot(await signIn(admin.email, "wrong-password-x"));
+
+    const { outcome, initialPassword } = await recovery().execute(admin.email);
+
+    assert.equal(outcome.outcome, "reset");
+    assert.ok(initialPassword);
+    assert.deepEqual(await storedEnrollment(admin.id), {
+      sessionRows: 0,
+      twoFactorEnabled: false,
+      twoFactorRows: 0,
+    });
+    const [credential, ...others] = await credentials();
+    assert.equal(others.length, 0);
+    assert.ok((credential?.createdAt ?? 0) > (old?.createdAt ?? 0), "a new enrollment window");
+    assert.equal(await (await call("/get-session", undefined, session)).text(), "null");
+    assert.deepEqual(await snapshot(await signIn(admin.email, admin.password)), wrong);
+    // Pending again: no challenge, a gated session, and the new password enrolls a new app.
+    const signedIn = await signIn(admin.email, initialPassword);
+    assert.equal(cookieFrom(signedIn, TWO_FACTOR_COOKIE), undefined);
+    const pending = cookieFrom(signedIn, SESSION_COOKIE);
+    assert.ok(pending);
+    assert.deepEqual(
+      await snapshot(await call("/list-sessions", undefined, pending)),
+      await snapshot(await call("/list-sessions")),
+    );
+    await enroll({ email: admin.email, password: initialPassword });
+    assert.equal((await storedEnrollment(admin.id)).twoFactorEnabled, true);
+  });
+
+  it("fails closed when admin:reset-second-factor runs during the first TOTP confirmation", async () => {
+    const race = await racingEnrollment("reset");
+    let reset: Awaited<ReturnType<ResetSecondFactorUseCase["execute"]>> | undefined;
+
+    const confirmation = await race.confirm(async () => {
+      reset = await recovery().execute(race.email);
+    });
+
+    assert.equal(reset?.outcome.outcome, "reset", "the recovery committed inside the confirmation");
+    assert.deepEqual(await refusal(confirmation), { ...SUPERSEDED, sessionCookie: false });
+    assert.deepEqual(await storedEnrollment(race.userId), {
+      sessionRows: 0,
+      twoFactorEnabled: false,
+      twoFactorRows: 0,
+    });
+    assert.ok(reset?.initialPassword);
+    await enroll({ email: race.email, password: reset.initialPassword }, race.raceAuth);
   });
 });
