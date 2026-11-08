@@ -33,7 +33,28 @@ import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 const ORIGIN = "http://localhost:3000";
 const SESSION_COOKIE = "better-auth.session_token";
 
-/** A gate a wrapped query waits on; `reached` resolves once the query is held. */
+/** How long a test waits on a held transaction before it fails with an assertion error. */
+const GATE_TIMEOUT_MS = 10_000;
+/** The reset's blocked update is polled every 20 ms, for at most 5 s. */
+const LOCK_POLL_INTERVAL_MS = 20;
+const LOCK_POLL_ATTEMPTS = 250;
+
+/** Rejects when `promise` is not settled in time, so a stuck wait fails the test instead of hanging. */
+function within<T>(promise: Promise<T>, what: string, milliseconds = GATE_TIMEOUT_MS): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`timed out after ${milliseconds} ms waiting for ${what}`)),
+      milliseconds,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * A gate a wrapped query waits on; `reached` resolves once the query is held. `backendPid` is the
+ * PostgreSQL backend of the held transaction, set when that transaction starts.
+ */
 function gate() {
   let open = () => {};
   let reachedResolve = () => {};
@@ -47,14 +68,16 @@ function gate() {
     reachedResolve();
     return opened;
   };
-  return { open, reached, hold };
+  return { open, reached, hold, backendPid: undefined as number | undefined };
 }
 
 class SiblingDeleteOutage extends Error {
   override name = "SiblingDeleteOutage";
 }
 
-function decodeBase32(input: string): string {
+// Decodes to UTF-8, which is only correct for an ASCII secret: the TOTP secret Better Auth generates
+// is an ASCII string, and its base32 form is what the otpauth URI carries.
+function decodeBase32Ascii(input: string): string {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   let bits = "";
   for (const character of input.replace(/=+$/, "").toUpperCase()) {
@@ -84,8 +107,14 @@ describe("account-state races (real PostgreSQL)", () => {
     query: {
       session: {
         async deleteMany({ args, query }) {
-          // The allow path of `settleFirstConfirmation`: every session of the user but one.
-          if (armed.failSiblingDelete && JSON.stringify(args.where).includes('"token":{"not"')) {
+          // The allow path of `settleFirstConfirmation`: every session of the user but one, which
+          // the adapter writes as a `token: { not }` clause beside the user's.
+          const clauses = [args.where, ...(Array.isArray(args.where?.AND) ? args.where.AND : [])];
+          const exceptsOneSession = clauses.some(
+            (clause) =>
+              typeof clause?.token === "object" && clause.token !== null && "not" in clause.token,
+          );
+          if (armed.failSiblingDelete && exceptsOneSession) {
             armed.failSiblingDelete = false;
             throw new SiblingDeleteOutage("simulated outage");
           }
@@ -227,25 +256,36 @@ describe("account-state races (real PostgreSQL)", () => {
         log: () => {},
       });
 
-    /** `user:disable` on a client that holds the transaction at `step` until the gate opens. */
+    /**
+     * `user:disable` whose transaction holds at `step` until the gate opens. It records the
+     * transaction's backend pid on the gate, so a test can tell which backend waits on it.
+     */
     function heldDisable(step: "findUnique" | "updateMany", held: ReturnType<typeof gate>) {
-      const client = prisma.$extends({
-        query: {
-          user: {
-            async [step]({
-              args,
-              query,
-            }: {
-              args: unknown;
-              query: (a: unknown) => Promise<unknown>;
-            }) {
-              const result = await query(args);
-              await held.hold();
-              return result;
-            },
-          },
-        },
-      }) as unknown as PrismaClient;
+      const client = {
+        $transaction: (run: (transaction: PrismaClient) => Promise<unknown>) =>
+          prisma.$transaction(async (transaction) => {
+            const [{ pid }] = await transaction.$queryRaw<[{ pid: number }]>`
+              SELECT pg_backend_pid() AS pid`;
+            held.backendPid = pid;
+            const users = new Proxy(transaction.user, {
+              get(target, property, receiver) {
+                const member: unknown = Reflect.get(target, property, receiver);
+                if (property !== step || typeof member !== "function") return member;
+                return async (...args: unknown[]) => {
+                  const result: unknown = await member.apply(target, args);
+                  await held.hold();
+                  return result;
+                };
+              },
+            });
+            return run(
+              new Proxy(transaction, {
+                get: (target, property, receiver) =>
+                  property === "user" ? users : Reflect.get(target, property, receiver),
+              }) as PrismaClient,
+            );
+          }),
+      } as unknown as PrismaClient;
       return new DisableUserUseCase(new PrismaUserAccessRepository(client), () => {});
     }
 
@@ -256,14 +296,23 @@ describe("account-state races (real PostgreSQL)", () => {
 
       // The disable has read the user but not changed it; the reset commits meanwhile.
       const disabling = heldDisable("findUnique", held).execute(admin.email);
-      await held.reached;
-      const { outcome, initialPassword } = await reset().execute(admin.email);
-      assert.equal(outcome.outcome, "reset");
-      assert.ok(initialPassword);
-      const fresh = sessionCookie(await signIn(admin.email, initialPassword));
-      assert.ok(fresh, "the fresh password opened a session before the disable committed");
-      held.open();
-      const disabled = await disabling;
+      let initialPassword: string | undefined;
+      let fresh: string | undefined;
+      try {
+        await within(held.reached, "the disable to hold its transaction");
+        const resetResult = await reset().execute(admin.email);
+        assert.equal(resetResult.outcome.outcome, "reset");
+        initialPassword = resetResult.initialPassword;
+        assert.ok(initialPassword);
+        fresh = sessionCookie(await signIn(admin.email, initialPassword));
+        assert.ok(fresh, "the fresh password opened a session before the disable committed");
+      } finally {
+        // An assertion above must not leave the disable's row lock held for the `after` hook.
+        held.open();
+        await within(Promise.allSettled([disabling]), "the disable to finish").catch(() => {});
+      }
+      assert.ok(fresh && initialPassword);
+      const disabled = await within(disabling, "the disable to finish");
 
       assert.deepEqual(disabled, { userId: admin.id, alreadyDisabled: false, revokedSessions: 1 });
       assert.deepEqual(await stored(admin.id), { status: "DISABLED", sessions: 0 });
@@ -278,28 +327,52 @@ describe("account-state races (real PostgreSQL)", () => {
       assert.ok(live);
       const credential = () =>
         prisma.account.findFirstOrThrow({ where: { userId: admin.id, providerId: "credential" } });
-      const before = await credential();
+      const credentialBefore = await credential();
       const held = gate();
 
       // The disable has updated the row and holds its lock; the reset's conditional update waits.
       const disabling = heldDisable("updateMany", held).execute(admin.email);
-      await held.reached;
-      const resetting = reset().execute(admin.email);
-      for (let waited = 0; ; waited += 1) {
-        const [{ waiting }] = await prisma.$queryRaw<[{ waiting: bigint }]>`
-          SELECT count(*) AS waiting FROM pg_stat_activity
-          WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE "public"."User"%'`;
-        if (waiting > 0n) break;
-        assert.ok(waited < 100, "the reset's update waits on the disable's row lock");
-        await new Promise((resolve) => setTimeout(resolve, 20));
+      let resetting: ReturnType<ReturnType<typeof reset>["execute"]> | undefined;
+      try {
+        await within(held.reached, "the disable to hold its transaction");
+        const disablePid = held.backendPid;
+        assert.ok(disablePid, "the disable's backend pid was recorded");
+        resetting = reset().execute(admin.email);
+        // Waiting means a backend of this database is blocked by the disable's transaction.
+        for (let waited = 0; ; waited += 1) {
+          const [{ waiting }] = await prisma.$queryRaw<[{ waiting: bigint }]>`
+            SELECT count(*) AS waiting FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock'
+              AND ${disablePid}::int = ANY(pg_blocking_pids(pid))`;
+          if (waiting > 0n) break;
+          assert.ok(
+            waited < LOCK_POLL_ATTEMPTS,
+            "the reset's update waits on the disable's row lock",
+          );
+          await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_INTERVAL_MS));
+        }
+      } finally {
+        // An assertion above must not leave the disable's row lock held for the `after` hook.
+        held.open();
+        await within(
+          Promise.allSettled(resetting ? [disabling, resetting] : [disabling]),
+          "the disable and the reset to finish",
+        ).catch(() => {});
       }
-      held.open();
-      const [disabled, { outcome, initialPassword }] = await Promise.all([disabling, resetting]);
+      assert.ok(resetting);
+      const [disabled, { outcome, initialPassword }] = await within(
+        Promise.all([disabling, resetting]),
+        "the disable and the reset to finish",
+      );
 
       assert.deepEqual(disabled, { userId: admin.id, alreadyDisabled: false, revokedSessions: 1 });
       assert.deepEqual(outcome, { outcome: "refused", userId: admin.id, reason: "disabled" });
       assert.equal(initialPassword, undefined);
-      assert.deepEqual(await credential(), before, "no fresh initial password was stored");
+      assert.deepEqual(
+        await credential(),
+        credentialBefore,
+        "no fresh initial password was stored",
+      );
       assert.deepEqual(await stored(admin.id), { status: "DISABLED", sessions: 0 });
       assert.equal(await sessionUserId(live), null);
     });
@@ -316,7 +389,7 @@ describe("account-state races (real PostgreSQL)", () => {
       "reads its user on get-session and list-sessions (200)";
 
     it("GAP A\u2032: leaves no password-only session with authority on /me or Better Auth", {
-      skip: GAP_A_PRIME,
+      todo: GAP_A_PRIME,
     }, async () => {
       const admin = await pendingAdministrator("sibling-delete");
       const tabA = sessionCookie(await signIn(admin.email, admin.password));
@@ -328,7 +401,7 @@ describe("account-state races (real PostgreSQL)", () => {
         cookie: tabA,
       });
       const { totpURI } = (await enable.json()) as { totpURI: string };
-      const rawSecret = decodeBase32(new URL(totpURI).searchParams.get("secret") ?? "");
+      const rawSecret = decodeBase32Ascii(new URL(totpURI).searchParams.get("secret") ?? "");
       const generateTOTP = (
         auth.api as unknown as Record<string, (input: unknown) => Promise<unknown>>
       ).generateTOTP;
@@ -368,7 +441,7 @@ describe("account-state races (real PostgreSQL)", () => {
       "the next request gets 401";
 
     it("GAP R4: does not store the name of a user disabled after the guard's session check", {
-      skip: GAP_PROFILE_WRITE,
+      todo: GAP_PROFILE_WRITE,
     }, async () => {
       const email = `t11-profile-race-${runId}@example.test`;
       emails.push(email);

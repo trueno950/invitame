@@ -112,10 +112,10 @@ All U-admin names below sit in its "enrollment gate (S6, S21)", "pre-enrollment 
   newline, the password, and a newline on create and on reissue".
 - The `PATCH /me` 400 body (L66): U-profile "PATCH /me › rejects <case> with the DTO's 400 body and keeps the
   stored name" for each of 14 invalid values.
-- Open, skipped until the owner decides the fix: DB-races "› GAP A′: leaves no password-only session with
-  authority on /me or Better Auth" (L62). When the sibling-session delete of an allowed first confirmation
-  throws, `verify-totp` answers 500 but `twoFactorEnabled` stays true, so both password-only sessions read `/me`
-  (200), `get-session`, and `list-sessions`. DB-races "› GAP R4: does not store the name of a user disabled
+- Open, run as `todo` tests that are expected to fail until T11b and T11c fix them: DB-races "› GAP A′: leaves
+  no password-only session with authority on /me or Better Auth" (L62). When the sibling-session delete of an
+  allowed first confirmation throws, `verify-totp` answers 500 but `twoFactorEnabled` stays true, so both
+  password-only sessions read `/me` (200), `get-session`, and `list-sessions`. DB-races "› GAP R4: does not store the name of a user disabled
   after the guard's session check" (L30): `PATCH /me` answers 200 and stores the name after `user:disable`
   committed; the next request gets 401.
 
