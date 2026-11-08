@@ -18,7 +18,7 @@ evidence and does not change a decision; [ADR 0004](../adr/0004-authentication-w
   S7 and S11 are PASS on their in-scope parts.
 - **Findings:** the verification reproduced six new findings (N1 to N6), the T10a close failure (R9), and the
   traceability and ADR fixes (F5). T11f fixed or documented all of them. F1 (`apps/api/.env.example`) was fixed by
-  the owner in `c12f6dc`; N4 (`apps/web/.env.local.example`) is still a human decision. See "Verification findings and their resolution".
+  the owner in `c12f6dc`; N4 was closed by deleting `apps/web/.env.local.example` with the owner's authorization (L82). See "Verification findings and their resolution".
 
 ## Gate runs
 
@@ -168,7 +168,7 @@ parametrised name, plus two non-test fixes made in the same pass (header and leg
 | N1 | Better Auth 1.7.16 reads `BETTER_AUTH_SECRETS` (`context/create-context.mjs`) and lets it replace the validated `BETTER_AUTH_SECRET`. With `BETTER_AUTH_SECRETS="7:short"` and a 40-character `secret`, Better Auth signed with `"short"` and only logged a low-entropy warning. | Fixed in T11f (S55). The API refuses a set value, as the S55 row states, and names the variable without echoing it. Tests: ENVL (12 tests) and WIRE "refuses to start with a BETTER_AUTH_SECRETS value (S55)". |
 | N2 | `NODE_ENV` defaulted to `development`. With it unset, `validateEnvironment` returned no `AUTH_PROXY_SECRET`, Mailpit as the email transport, and `x-forwarded-for` as the client IP header, because every production rule keys on it. `start` (`node dist/main.js`) sets nothing. | Fixed in T11f (S56). A missing `NODE_ENV` fails the startup; the values stay `development`, `test`, and `production`. Tests: ENVT "NODE_ENV (S56)" (missing, invalid, and the three valid values) and WIRE "refuses to start with a missing NODE_ENV (S56)". `dev` now sets `NODE_ENV=development`; the test environments pass it explicitly; Playwright already set it for the API and the web. `start` is unchanged: the deploy environment must set `NODE_ENV=production`. |
 | N3 | `BETTER_AUTH_SECRET` has no rotation path, and Better Auth also encrypts each administrator's TOTP secret and backup codes with it (`plugins/two-factor`). The API passes a single `secret` (`auth.factory.ts:150`). Rotating it ends every session and leaves each enrolled administrator without a usable second factor. | Documented in T11f (S57), in the README and in `overview.md`: the secret signs every session and encrypts the second factors; changing it ends every session and needs `admin:reset-second-factor` for each enrolled administrator. Rotation through the `secrets` list is a deployment-milestone task (open). |
-| N4 | `apps/web/.env.local.example:1` holds `NEXT_PUBLIC_API_URL=http://localhost:3001`. Nothing reads it, and the README says the web uses no `NEXT_PUBLIC_` settings. | Left to the owner: a `.env*` edit. |
+| N4 | `apps/web/.env.local.example:1` holds `NEXT_PUBLIC_API_URL=http://localhost:3001`. Nothing reads it, and the README says the web uses no `NEXT_PUBLIC_` settings. | **Fixed:** the file was deleted with the owner's authorization (L82). |
 | N5 | Guard events (`auth_proxy_rejected`, `client_ip_unresolved`, `auth_request_unavailable`) logged the path of a request without a valid secret, which the sender chooses and which has no length limit. | Fixed in T11f. The events log the pathname without the query, cut to 128 characters. Tests: APS "the path in guard events is bounded (N5, L79)" (a 10,000-character path is logged as 128 characters, and no query string is logged). |
 | N6 | A browser abort while the request body was read made `readBoundedBody` reject with `AbortError`, which `auth-proxy.ts` rethrew (a rejected route handler becomes a Next.js `500`, which the verification did not observe). | Fixed in T11f. When `request.signal` is aborted the proxy answers `499` with the generic body and logs nothing; any other read error still rethrows. Tests: PROXY "answers 499 without a log when the browser leaves while the body is being read (N6)" and "still rethrows a body read error when the browser has not left". |
 | R9 | T10a R4-001: a failing `store.close()` after a committed `admin:reset-second-factor` rejected `runResetSecondFactor`, which `main` does not catch, after the password was printed. | Fixed in T11f. `closeCommandStore` catches the failure and prints one line with the class (and Prisma code) only; the exit code of the work is kept. `admin:create` and `user:disable` had the same `finally` and use the helper. Tests: `reset-second-factor.command.spec.ts` (R9 block) and `command-failure.spec.ts` "closeCommandStore". |
@@ -299,8 +299,6 @@ parametrised name, plus two non-test fixes made in the same pass (header and leg
 
 ### Decisions left open
 
-- **N4, the web example environment file (owner edit).** Decide whether to delete the stale `NEXT_PUBLIC_API_URL`
-  line of `apps/web/.env.local.example`. F1 (`apps/api/.env.example:6`) is fixed in `c12f6dc`.
 - **Rotation of `BETTER_AUTH_SECRET` (N3, S57).** Adopt Better Auth's `secrets` list in the deployment milestone.
 - **Deploy checklist (R3, R5, N2).** Migrate before or with the API, and set `NODE_ENV=production`: the API now
   refuses to start without it.
