@@ -106,6 +106,9 @@ describe("parseWebServerConfig", () => {
       "http://localhost:3001/#",
       "http://probe-user@localhost:3001",
       "http://probe-user:probe-pass@localhost:3001",
+      // Empty credentials: URL normalization drops the `@`, so the raw text is checked (L59, T11e).
+      "http://@probe-api:3001",
+      "http://:@probe-api:3001/",
     ]) {
       assert.throws(
         () => parseWebServerConfig({ API_ORIGIN: origin }),

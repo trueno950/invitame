@@ -11,7 +11,11 @@ import { ApiClientError, sessionCookieHeader } from "./api-client.ts";
  */
 
 const SESSION_PATH = "/api/auth/get-session";
-/** Bounds what a slow API adds to a page. */
+/**
+ * Bounds what a slow API adds to a page, and is the real bound of `/ingresar` and the `/cuenta` pages
+ * (S54): when the API is slow, the page shows its unavailable notice after about 3 seconds instead of
+ * making the person wait. The limit stays at 3 seconds by decision.
+ */
 export const SESSION_REFRESH_TIMEOUT_MS = 3_000;
 /**
  * The request header with which `proxy.ts` tells the page's render that the refresh just found the
