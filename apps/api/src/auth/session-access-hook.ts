@@ -1,12 +1,18 @@
 import { createAuthMiddleware, setShouldSkipSessionRefresh } from "better-auth/api";
 
-import { type AccountAccess, isActive, isPendingAdministrator, USER_ROLE } from "./account-access";
+import {
+  type AccountAccess,
+  isActive,
+  isPendingAdministrator,
+  lacksRequiredSecondFactor,
+  USER_ROLE,
+} from "./account-access";
 import {
   enrollmentWindowOpen,
   PENDING_ADMINISTRATOR_ENDPOINTS,
   TOTP_ISSUER,
 } from "./administrator-enrollment";
-import { TWO_FACTOR_PATH } from "./auth-paths";
+import { SECOND_FACTOR_VERIFY_PATHS, TWO_FACTOR_PATH } from "./auth-paths";
 
 type HookContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
 
@@ -16,12 +22,6 @@ interface RequestOverrides {
   body?: Record<string, unknown>;
 }
 
-/** The second-factor verification endpoints, where Better Auth would offer to trust the device. */
-const SECOND_FACTOR_VERIFY_PATHS: ReadonlySet<string> = new Set([
-  TWO_FACTOR_PATH.VERIFY_TOTP,
-  TWO_FACTOR_PATH.VERIFY_BACKUP_CODE,
-]);
-
 /**
  * Better Auth `hooks.before`, on every Better Auth endpoint and before it runs (S9, S18, S20, S21,
  * L27, L28):
@@ -30,6 +30,10 @@ const SECOND_FACTOR_VERIFY_PATHS: ReadonlySet<string> = new Set([
  *    user's sessions: the surviving session is refused on its first use.
  * 2. A session of an administrator who has not enrolled an authenticator app is deleted the same way
  *    once the 24-hour window of the initial password has ended (S20).
+ *    A session of an enrolled administrator that did not pass the second factor is deleted the same way
+ *    (S52, L72): it is `Session.secondFactorVerified`, not the account's flag, that proves it, so the
+ *    password-only sessions a failed sibling delete leaves behind, and every administrator session
+ *    opened before the column existed, are ended on their first use.
  * 3. Inside that window, the session of such an administrator is hidden from every endpoint except
  *    `PENDING_ADMINISTRATOR_ENDPOINTS`: the session cookies are removed from this request only, so the
  *    endpoint answers exactly as without a session while the session stays usable for enrollment.
@@ -66,9 +70,11 @@ export const enforceSessionAccess = createAuthMiddleware(async (ctx) => {
 
   if (token && found) {
     const user = found.user as AccountAccess & { id: string };
+    const session = found.session as { secondFactorVerified?: unknown };
 
     if (
       !isActive(user) ||
+      lacksRequiredSecondFactor(user, session) ||
       !(await enrollmentWindowOpen(ctx.context.internalAdapter, user.id, user))
     ) {
       // A failure here throws, so the request fails closed instead of using the session.

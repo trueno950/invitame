@@ -365,6 +365,28 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
   the revert throws. `/admin/activar` ends the activation on that `401` as on an ended session, with its own
   message (S45). If the revert fails or the process stops before it, the account stays enrolled without a
   session and only `admin:reset-second-factor` releases it.
+- **Second-factor marker** (S52, T11c; closes A′): each `Session` row stores `secondFactorVerified`, false by
+  default. The session-create hook stores true only for a session of an enrolled `ADMIN` created on
+  `verify-totp` or `verify-backup-code` (a sign-in challenge, or the allowed first confirmation, which Better
+  Auth creates as a new session); every other session, including a password-only, a sign-in-code, and a pending
+  administrator session, is stored false, whatever a caller passes. The session hook then deletes, before the
+  endpoint runs, the session of any `ACTIVE` administrator whose `twoFactorEnabled` is true and whose session is
+  not marked, so the endpoint answers exactly as without a session (`401` on `/me`, `list-sessions`, and every
+  project route; `get-session` answers `null`). This holds when the confirmation's sibling-session delete
+  failed: the surviving password-only sessions (A′, L72) are ended on their next use, with no dependence on
+  that delete. Sessions that existed before the migration read false, so enrolled administrators sign in again
+  once. A pending administrator keeps the four-endpoint allow list unchanged; a customer is unaffected. The guard
+  repeats the check on its own read of the session (`lacksRequiredSecondFactor`), so an account that turns enrolled
+  between the hook's read and the guard's still gets `401`, never one `200`. The session-update hook refuses any
+  update that touches the marker.
+  - Contract: `GET /api/auth/get-session` and `GET /api/auth/list-sessions` return `session.secondFactorVerified`
+    (boolean) on each session. Clients must not read it as an authorization signal; the API decides.
+  - Deploy order: apply the migration before, or together with, the API that reads the column. New code on an
+    unmigrated database answers `500` on `get-session`; old code on a migrated database works, because the column
+    has a default.
+  - Rolling deploy: a TOTP or backup-code sign-in served by an old instance stores the session unmarked (the
+    column default), and a new instance then ends it on its next use. The effect is transient: the administrator
+    signs in again.
 
 ### Own profile (current)
 

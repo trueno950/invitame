@@ -4,11 +4,12 @@ import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 
 import { Global, type INestApplication, Module } from "@nestjs/common";
-import { PrismaClient } from "@prisma/client";
+import { type Prisma, PrismaClient } from "@prisma/client";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { hashPassword } from "better-auth/crypto";
 import { ClientAddresses, requireLocalDatabaseUrl } from "../../test/database";
+import { decodeBase32Ascii } from "../../test/totp";
 import { createApp } from "../app.setup";
 import { createConfigModule } from "../config/config.module";
 import { PrismaService } from "../database/prisma.service";
@@ -51,6 +52,47 @@ function within<T>(promise: Promise<T>, what: string, milliseconds = GATE_TIMEOU
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+/** The error a `try` body threw, recorded by its `catch` so the `finally` can tell a failed body from a passed one. */
+type BodyFailure = { error: unknown };
+
+/**
+ * Releases a held transaction and waits for the operations that were blocked on it, so an assertion
+ * failure cannot leave its row lock held for the `after` hook. A wait that times out is rethrown
+ * with its own message instead of being hidden when the body passed. When the body already failed,
+ * its error stays the primary one and the timeout is attached as its `cause` (or, for a thrown
+ * non-object, joined with it in an `AggregateError`), so the timeout cannot mask the real failure.
+ */
+async function releaseAndSettle(
+  held: { open: () => void },
+  operations: Array<Promise<unknown>>,
+  what: string,
+  bodyFailure?: BodyFailure,
+): Promise<void> {
+  held.open();
+  try {
+    await within(Promise.allSettled(operations), what);
+  } catch (timeout) {
+    if (!bodyFailure) {
+      throw timeout;
+    }
+    const original = bodyFailure.error;
+    if (typeof original !== "object" || original === null) {
+      throw new AggregateError(
+        [original, timeout],
+        "the test body failed and the release timed out",
+      );
+    }
+    if (!("cause" in original)) {
+      Object.defineProperty(original, "cause", {
+        value: timeout,
+        configurable: true,
+        writable: true,
+      });
+    }
+    throw original;
+  }
+}
+
 /**
  * A gate a wrapped query waits on; `reached` resolves once the query is held. `backendPid` is the
  * PostgreSQL backend of the held transaction, set when that transaction starts.
@@ -75,20 +117,30 @@ class SiblingDeleteOutage extends Error {
   override name = "SiblingDeleteOutage";
 }
 
-// Decodes to UTF-8, which is only correct for an ASCII secret: the TOTP secret Better Auth generates
-// is an ASCII string, and its base32 form is what the otpauth URI carries.
-function decodeBase32Ascii(input: string): string {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = "";
-  for (const character of input.replace(/=+$/, "").toUpperCase()) {
-    bits += alphabet.indexOf(character).toString(2).padStart(5, "0");
-  }
-  const bytes: number[] = [];
-  for (let offset = 0; offset + 8 <= bits.length; offset += 8) {
-    bytes.push(Number.parseInt(bits.slice(offset, offset + 8), 2));
-  }
-  return Buffer.from(bytes).toString("utf8");
+/**
+ * Whether a Prisma `session.deleteMany` filter is the allow path of `settleFirstConfirmation`: every
+ * session of a user but one. The adapter writes that as a `token: { not }` clause beside the user's,
+ * and Prisma may hold it directly in `where` or inside `where.AND`; these are the two shapes accepted.
+ */
+function exceptsOneSession(where: Prisma.SessionWhereInput | undefined): boolean {
+  const clauses = [where, ...(Array.isArray(where?.AND) ? where.AND : [])];
+  return clauses.some(
+    (clause) => typeof clause?.token === "object" && clause.token !== null && "not" in clause.token,
+  );
 }
+
+describe("sibling-delete matcher", () => {
+  it("accepts a token exclusion held directly or inside AND, and no other delete", () => {
+    const except = { token: { not: "kept" } };
+
+    assert.equal(exceptsOneSession({ userId: "u", ...except }), true);
+    assert.equal(exceptsOneSession({ AND: [{ userId: "u" }, except] }), true);
+    assert.equal(exceptsOneSession({ userId: "u" }), false, "every session of the user");
+    assert.equal(exceptsOneSession({ token: "kept" }), false, "an equality clause");
+    assert.equal(exceptsOneSession({ AND: { token: { not: "kept" } } }), false, "a bare AND");
+    assert.equal(exceptsOneSession(undefined), false);
+  });
+});
 
 describe("account-state races (real PostgreSQL)", () => {
   const databaseUrl = requireLocalDatabaseUrl();
@@ -107,14 +159,7 @@ describe("account-state races (real PostgreSQL)", () => {
     query: {
       session: {
         async deleteMany({ args, query }) {
-          // The allow path of `settleFirstConfirmation`: every session of the user but one, which
-          // the adapter writes as a `token: { not }` clause beside the user's.
-          const clauses = [args.where, ...(Array.isArray(args.where?.AND) ? args.where.AND : [])];
-          const exceptsOneSession = clauses.some(
-            (clause) =>
-              typeof clause?.token === "object" && clause.token !== null && "not" in clause.token,
-          );
-          if (armed.failSiblingDelete && exceptsOneSession) {
+          if (armed.failSiblingDelete && exceptsOneSession(args.where)) {
             armed.failSiblingDelete = false;
             throw new SiblingDeleteOutage("simulated outage");
           }
@@ -262,31 +307,39 @@ describe("account-state races (real PostgreSQL)", () => {
      * transaction's backend pid on the gate, so a test can tell which backend waits on it.
      */
     function heldDisable(step: "findUnique" | "updateMany", held: ReturnType<typeof gate>) {
-      const client = {
-        $transaction: (run: (transaction: PrismaClient) => Promise<unknown>) =>
-          prisma.$transaction(async (transaction) => {
-            const [{ pid }] = await transaction.$queryRaw<[{ pid: number }]>`
+      const holdingTransaction = (
+        run: (transaction: PrismaClient) => Promise<unknown>,
+        options?: { maxWait?: number; timeout?: number },
+      ) =>
+        prisma.$transaction(async (transaction) => {
+          const [{ pid }] = await transaction.$queryRaw<[{ pid: number }]>`
               SELECT pg_backend_pid() AS pid`;
-            held.backendPid = pid;
-            const users = new Proxy(transaction.user, {
-              get(target, property, receiver) {
-                const member: unknown = Reflect.get(target, property, receiver);
-                if (property !== step || typeof member !== "function") return member;
-                return async (...args: unknown[]) => {
-                  const result: unknown = await member.apply(target, args);
-                  await held.hold();
-                  return result;
-                };
-              },
-            });
-            return run(
-              new Proxy(transaction, {
-                get: (target, property, receiver) =>
-                  property === "user" ? users : Reflect.get(target, property, receiver),
-              }) as PrismaClient,
-            );
-          }),
-      } as unknown as PrismaClient;
+          held.backendPid = pid;
+          const users = new Proxy(transaction.user, {
+            get(target, property, receiver) {
+              const member: unknown = Reflect.get(target, property, receiver);
+              if (property !== step || typeof member !== "function") return member;
+              return async (...args: unknown[]) => {
+                const result: unknown = await member.apply(target, args);
+                await held.hold();
+                return result;
+              };
+            },
+          });
+          return run(
+            new Proxy(transaction, {
+              get: (target, property, receiver) =>
+                property === "user" ? users : Reflect.get(target, property, receiver),
+            }) as PrismaClient,
+          );
+        }, options);
+      // The real client with only `$transaction` replaced, so it keeps every other member.
+      const client = new Proxy(prisma, {
+        get: (target, property, receiver) =>
+          property === "$transaction"
+            ? holdingTransaction
+            : Reflect.get(target, property, receiver),
+      });
       return new DisableUserUseCase(new PrismaUserAccessRepository(client), () => {});
     }
 
@@ -299,6 +352,7 @@ describe("account-state races (real PostgreSQL)", () => {
       const disabling = heldDisable("findUnique", held).execute(admin.email);
       let initialPassword: string | undefined;
       let fresh: string | undefined;
+      let failure: BodyFailure | undefined;
       try {
         await within(held.reached, "the disable to hold its transaction");
         const resetResult = await reset().execute(admin.email);
@@ -307,10 +361,11 @@ describe("account-state races (real PostgreSQL)", () => {
         assert.ok(initialPassword);
         fresh = sessionCookie(await signIn(admin.email, initialPassword));
         assert.ok(fresh, "the fresh password opened a session before the disable committed");
+      } catch (error) {
+        failure = { error };
+        throw error;
       } finally {
-        // An assertion above must not leave the disable's row lock held for the `after` hook.
-        held.open();
-        await within(Promise.allSettled([disabling]), "the disable to finish").catch(() => {});
+        await releaseAndSettle(held, [disabling], "the disable to finish", failure);
       }
       assert.ok(fresh && initialPassword);
       const disabled = await within(disabling, "the disable to finish");
@@ -334,6 +389,7 @@ describe("account-state races (real PostgreSQL)", () => {
       // The disable has updated the row and holds its lock; the reset's conditional update waits.
       const disabling = heldDisable("updateMany", held).execute(admin.email);
       let resetting: ReturnType<ReturnType<typeof reset>["execute"]> | undefined;
+      let failure: BodyFailure | undefined;
       try {
         await within(held.reached, "the disable to hold its transaction");
         const disablePid = held.backendPid;
@@ -352,13 +408,16 @@ describe("account-state races (real PostgreSQL)", () => {
           );
           await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_INTERVAL_MS));
         }
+      } catch (error) {
+        failure = { error };
+        throw error;
       } finally {
-        // An assertion above must not leave the disable's row lock held for the `after` hook.
-        held.open();
-        await within(
-          Promise.allSettled(resetting ? [disabling, resetting] : [disabling]),
+        await releaseAndSettle(
+          held,
+          resetting ? [disabling, resetting] : [disabling],
           "the disable and the reset to finish",
-        ).catch(() => {});
+          failure,
+        );
       }
       assert.ok(resetting);
       const [disabled, { outcome, initialPassword }] = await within(
@@ -379,19 +438,12 @@ describe("account-state races (real PostgreSQL)", () => {
     });
   });
 
-  // A′ (L62): the allow path of `settleFirstConfirmation` deletes every other session of the
-  // administrator after Better Auth has already set `twoFactorEnabled`. The session hook hides a
-  // pending administrator's session by that flag alone, so if the delete throws, a sibling session
-  // opened with the password alone would no longer be hidden.
+  // A′ (L62, S52): the allow path of `settleFirstConfirmation` deletes every other session of the
+  // administrator after Better Auth has already set `twoFactorEnabled`. If that delete throws, the
+  // sessions opened with the password alone survive, but they carry no second-factor marker, and the
+  // session hook ends the session of an enrolled administrator that has none.
   describe("a first confirmation whose sibling-session delete fails", () => {
-    const GAP_A_PRIME =
-      "GAP A\u2032 present (L62, owner decision before a fix): verify-totp answers 500, twoFactorEnabled " +
-      "stays true, both password-only sessions survive, /me answers 200 to each, and the sibling " +
-      "reads its user on get-session and list-sessions (200)";
-
-    it("GAP A\u2032: leaves no password-only session with authority on /me or Better Auth", {
-      todo: GAP_A_PRIME,
-    }, async () => {
+    it("ends both password-only sessions on their next use, with the 401 of a missing session", async () => {
       const admin = await pendingAdministrator("sibling-delete");
       const tabA = sessionCookie(await signIn(admin.email, admin.password));
       const tabB = sessionCookie(await signIn(admin.email, admin.password));
@@ -409,26 +461,43 @@ describe("account-state races (real PostgreSQL)", () => {
       assert.ok(generateTOTP);
       const { code } = (await generateTOTP({ body: { secret: rawSecret } })) as { code: string };
 
+      // A call, so the compiler does not narrow the flag to what was just assigned.
+      const outageConsumed = () => armed.failSiblingDelete !== true;
+      let confirmed: Response;
+      let outage: boolean;
       armed.failSiblingDelete = true;
-      const confirmed = await request("/api/auth/two-factor/verify-totp", {
-        body: { code },
-        cookie: tabA,
-      });
+      try {
+        confirmed = await request("/api/auth/two-factor/verify-totp", {
+          body: { code },
+          cookie: tabA,
+        });
+        outage = outageConsumed();
+      } finally {
+        // Armed state must never leak into a later test, whatever happened above.
+        armed.failSiblingDelete = false;
+      }
 
-      assert.equal(armed.failSiblingDelete, false, "the sibling delete ran and threw");
+      assert.ok(outage, "the sibling delete ran and threw");
       const observed = {
         confirmation: confirmed.status,
+        twoFactorEnabled: (await prisma.user.findUniqueOrThrow({ where: { id: admin.id } }))
+          .twoFactorEnabled,
+        sessionsBefore: (await stored(admin.id)).sessions,
         meTabA: (await request("/me", { cookie: tabA })).status,
         meTabB: (await request("/me", { cookie: tabB })).status,
         getSessionTabB: await sessionUserId(tabB),
         listSessionsTabB: (await request("/api/auth/list-sessions", { cookie: tabB })).status,
+        sessionsAfter: (await stored(admin.id)).sessions,
       };
       assert.deepEqual(observed, {
         confirmation: 500,
+        twoFactorEnabled: true,
+        sessionsBefore: 2,
         meTabA: 401,
         meTabB: 401,
         getSessionTabB: null,
         listSessionsTabB: 401,
+        sessionsAfter: 0,
       });
     });
   });

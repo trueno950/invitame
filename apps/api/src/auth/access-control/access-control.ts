@@ -11,7 +11,13 @@ import { Reflector } from "@nestjs/core";
 import { AuthService } from "@thallesp/nestjs-better-auth";
 import { fromNodeHeaders } from "better-auth/node";
 
-import { type AccountAccess, isActive, isPendingAdministrator, USER_ROLE } from "../account-access";
+import {
+  type AccountAccess,
+  isActive,
+  isPendingAdministrator,
+  lacksRequiredSecondFactor,
+  USER_ROLE,
+} from "../account-access";
 
 const PUBLIC_ROUTE = Symbol("invitame:public-route");
 const ADMIN_ONLY = Symbol("invitame:admin-only");
@@ -113,7 +119,16 @@ export class AccessControlGuard implements CanActivate {
     });
     const user = session?.user as AccountAccess | undefined;
 
-    if (!session || !user || !isActive(user) || isPendingAdministrator(user)) {
+    // The session-access hook already ends a session that lacks the second factor. This second check
+    // covers the gap between the hook's read of the account and this one: a first confirmation that
+    // commits in between would otherwise let one unmarked session through (S52).
+    if (
+      !session ||
+      !user ||
+      !isActive(user) ||
+      isPendingAdministrator(user) ||
+      lacksRequiredSecondFactor(user, session.session as { secondFactorVerified?: unknown })
+    ) {
       throw new UnauthorizedException();
     }
 

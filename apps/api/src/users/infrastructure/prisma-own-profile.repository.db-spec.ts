@@ -79,8 +79,12 @@ describe("PrismaOwnProfileRepository.updateDisplayName on PostgreSQL (S53)", () 
     const lockHeld = new Promise<void>((resolve) => {
       locked = resolve;
     });
+    let disableBackendPid: number | undefined;
     const disabling = other.$transaction(
       async (transaction) => {
+        const [{ pid }] = await transaction.$queryRaw<[{ pid: number }]>`
+          SELECT pg_backend_pid() AS pid`;
+        disableBackendPid = pid;
         await transaction.user.update({ where: { id: user.id }, data: { status: "DISABLED" } });
         locked();
         await gate;
@@ -92,12 +96,15 @@ describe("PrismaOwnProfileRepository.updateDisplayName on PostgreSQL (S53)", () 
     try {
       await Promise.race([lockHeld, rejectAfter(WAIT_MS, "the disable to hold its row lock")]);
       writing = repository.updateDisplayName(user.id, "RaceName");
-      // The write is a statement of its own: wait until PostgreSQL shows it blocked on that lock.
+      // The write is a statement of its own: wait until PostgreSQL shows a backend blocked by this
+      // test's disable transaction. Other suites run in parallel against the same database, so a
+      // lock wait on any `displayName` statement would not prove it.
+      assert.ok(disableBackendPid, "the disable's backend pid was recorded");
       for (let waited = 0; ; waited += POLL_MS) {
         const [{ blocked }] = await other.$queryRaw<[{ blocked: bigint }]>`
           SELECT count(*) AS blocked FROM pg_stat_activity
           WHERE datname = current_database() AND wait_event_type = 'Lock'
-            AND query LIKE '%"displayName"%'`;
+            AND ${disableBackendPid}::int = ANY(pg_blocking_pids(pid))`;
         if (blocked > 0n) break;
         assert.ok(waited < WAIT_MS, "the write waits on the disable's row lock");
         await new Promise((resolve) => setTimeout(resolve, POLL_MS));

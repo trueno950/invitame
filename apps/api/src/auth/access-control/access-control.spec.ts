@@ -321,8 +321,12 @@ describe("access control through the project-owned global guard", () => {
       const user = storedUser(email);
 
       user.role = "ADMIN";
-      // An enrolled administrator: an un-enrolled one holds no authority (T7, S21).
+      // An enrolled administrator: an un-enrolled one holds no authority (T7, S21), and a session
+      // that did not pass the second factor is ended (S52), so this one is marked as having passed it.
       user.twoFactorEnabled = true;
+      for (const row of database.session?.filter((stored) => stored.userId === user.id) ?? []) {
+        row.secondFactorVerified = true;
+      }
       for (const path of adminPaths) {
         assert.equal(
           (await get(path, cookie)).status,

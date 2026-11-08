@@ -57,6 +57,25 @@ export function isPendingAdministrator(account: AccountAccess): boolean {
 }
 
 /**
+ * An enrolled administrator's session that did not pass the second factor (S52, L72). Any session of
+ * an administrator whose `twoFactorEnabled` is true must have been opened by a verified TOTP or backup
+ * code, which stores `Session.secondFactorVerified` as true. A password-only session that survives a
+ * failed sibling delete at the first confirmation, and one opened before the column existed, reads
+ * false. Only the boolean `true` counts as passed, so a missing field fails closed. A pending
+ * administrator is not enrolled and follows the pending allow list; a customer has no second factor.
+ */
+export function lacksRequiredSecondFactor(
+  account: AccountAccess,
+  session: { secondFactorVerified?: unknown },
+): boolean {
+  return (
+    account.role === USER_ROLE.ADMIN &&
+    account.twoFactorEnabled === true &&
+    session.secondFactorVerified !== true
+  );
+}
+
+/**
  * Whether an initial password issued at `issuedAt` is still inside the 24-hour enrollment window
  * (S20). Fails closed: a missing or invalid time, or one far in the future, is outside the window.
  */
