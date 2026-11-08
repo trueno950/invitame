@@ -22,6 +22,7 @@ import { OWN_PROFILE_USE_CASES } from "../users/users.module";
 import { AdminOnly } from "./access-control/access-control";
 import { AccessControlModule } from "./access-control/access-control.module";
 import { ADMINISTRATOR_ENROLLMENT_WINDOW_SECONDS } from "./account-access";
+import { PENDING_ADMINISTRATOR_ENDPOINTS } from "./administrator-enrollment";
 import { createAuth } from "./auth.factory";
 import { BackgroundTasks } from "./sign-in-code/background-tasks";
 import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
@@ -639,6 +640,18 @@ describe("administrator sign-in, enrollment gate, and second factor", () => {
 
       assert.equal((await get("/me", cookie)).status, 200);
       assert.equal((await get("/probe/admin", cookie)).status, 403);
+    });
+
+    // ADR 0004 decision 3, clarified (2026-11-07; T11, L64): the session hook hides a pending session
+    // from every path outside this set, so the set is the whole allow list. The tests around this one
+    // prove each allowed endpoint works and a sample of the others answers as without a session.
+    it("lists exactly four Better Auth endpoints in the pending-administrator allow list", () => {
+      assert.deepEqual([...PENDING_ADMINISTRATOR_ENDPOINTS].sort(), [
+        "/get-session",
+        "/sign-out",
+        "/two-factor/enable",
+        "/two-factor/verify-totp",
+      ]);
     });
 
     it("lets an un-enrolled administrator read its session", async () => {

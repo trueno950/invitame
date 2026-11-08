@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l merged as #24 (L45, L46); T9a merged as #25 (L47, L48); T7c merged as #26 (L48, L49); T7d merged as #27 (L49, L50); T9b part A merged as #28 (L50 to L52); T9b part B merged as #29 (L52 to L55); T8e merged as #30 (L55, L56); T9b part C1 merged as #31 (L56 to L59); T9b part C2 merged as #32 (L59, L60); T8f merged as #33 (L60, L61); T10a merged as #34 (L62, L63); the T10 documentation merged as #35 (L63, L64); the first T10 API readability part merged as #36 (L64, L65); the second merged as #37 (L65, L66); the T10 web and harness naming merged as #38 (L66, L67); T10 in progress (L61 to L68).
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l merged as #24 (L45, L46); T9a merged as #25 (L47, L48); T7c merged as #26 (L48, L49); T7d merged as #27 (L49, L50); T9b part A merged as #28 (L50 to L52); T9b part B merged as #29 (L52 to L55); T8e merged as #30 (L55, L56); T9b part C1 merged as #31 (L56 to L59); T9b part C2 merged as #32 (L59, L60); T8f merged as #33 (L60, L61); T10a merged as #34 (L62, L63); the T10 documentation merged as #35 (L63, L64); the first T10 API readability part merged as #36 (L64, L65); the second merged as #37 (L65, L66); the T10 web and harness naming merged as #38 (L66, L67); the T10 web behavior merged as #39 (L68, L69); T10 complete (L61 to L69); T11 in progress (L70 to L72).
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), slice 23 `feat/m2-identity-23-landing` (T8l themed landing, #24, merged), slice 24 `feat/m2-identity-24-integration-tests` (T9a database tests in CI, #25, merged), slice 25 `feat/m2-identity-25-enrollment-race` (T7c enrollment race fix, #26, merged), slice 26 `feat/m2-identity-26-enrollment-hardening` (T7d enrollment hardening, #27, merged), slice 27 `feat/m2-identity-27-browser-tests` (T9b part A browser tests, #28, merged), slice 28 `feat/m2-identity-28-admin-browser-tests` (T9b part B administrator browser tests, #29, merged), slice 29 `feat/m2-identity-29-form-submission` (T8e form submission, #30, merged), slice 30 `feat/m2-identity-30-web-api-client` (T9b part C1 web server hardening, #31, merged), slice 31 `feat/m2-identity-31-test-findings` (T9b part C2 test findings, #32, merged), slice 32 `feat/m2-identity-32-self-hosted-fonts` (T8f self-hosted theme fonts, #33, merged), slice 33 `feat/m2-identity-33-admin-recovery` (T10a administrator recovery command, #34, merged), slice 34 `feat/m2-identity-34-docs-adr` (T10 documentation and ADR, #35, merged), slice 35 `feat/m2-identity-35-api-readability` (T10 API comments and naming, part 1, #36, merged), slice 36 `feat/m2-identity-36-api-users-readability` (T10 API comments and naming, part 2, #37, merged), slice 37 `feat/m2-identity-37-web-readability` (T10 web and harness comments and naming, #38, merged), and the T10 web behavior on `feat/m2-identity-38-web-behavior` (L23 to L68). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), slice 23 `feat/m2-identity-23-landing` (T8l themed landing, #24, merged), slice 24 `feat/m2-identity-24-integration-tests` (T9a database tests in CI, #25, merged), slice 25 `feat/m2-identity-25-enrollment-race` (T7c enrollment race fix, #26, merged), slice 26 `feat/m2-identity-26-enrollment-hardening` (T7d enrollment hardening, #27, merged), slice 27 `feat/m2-identity-27-browser-tests` (T9b part A browser tests, #28, merged), slice 28 `feat/m2-identity-28-admin-browser-tests` (T9b part B administrator browser tests, #29, merged), slice 29 `feat/m2-identity-29-form-submission` (T8e form submission, #30, merged), slice 30 `feat/m2-identity-30-web-api-client` (T9b part C1 web server hardening, #31, merged), slice 31 `feat/m2-identity-31-test-findings` (T9b part C2 test findings, #32, merged), slice 32 `feat/m2-identity-32-self-hosted-fonts` (T8f self-hosted theme fonts, #33, merged), slice 33 `feat/m2-identity-33-admin-recovery` (T10a administrator recovery command, #34, merged), slice 34 `feat/m2-identity-34-docs-adr` (T10 documentation and ADR, #35, merged), slice 35 `feat/m2-identity-35-api-readability` (T10 API comments and naming, part 1, #36, merged), slice 36 `feat/m2-identity-36-api-users-readability` (T10 API comments and naming, part 2, #37, merged), slice 37 `feat/m2-identity-37-web-readability` (T10 web and harness comments and naming, #38, merged), slice 38 `feat/m2-identity-38-web-behavior` (T10 web behavior, #39, merged), slice 39 `feat/m2-identity-39-security-evidence` (T11a exact outputs and the T11 plan, #40), and slice 40 `feat/m2-identity-40-account-races` (T11a race tests and the A′ and R4 reproductions, #41) (L23 to L72). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -180,6 +180,59 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   confirmation loses a race (S39, S40, L49), whether another confirmation completed the enrollment or the enrollment
   was reverted; «Tu sesión terminó…» is today's full text «Tu sesión terminó. Ingresa de nuevo con tu correo y tu
   contraseña.».
+- **S46** (L71) Proxy secret required by default, approved as: "Exigir el secreto por defecto (recomendado)",
+  described as: "Por defecto se exige el secreto; solo las pruebas y el desarrollo local lo apagan de forma explícita.
+  Si alguien olvida la opción, la API falla cerrada." `createAuth` defaults `requireProxySecret` to `false`
+  (`apps/api/src/auth/auth.factory.ts:336`), and only production passes `true`
+  (`apps/api/src/auth/auth.registration.ts:34`). The default becomes required, so a caller that omits the option fails
+  closed, and tests and local development turn it off explicitly.
+- **S47** (L71) Previous proxy secret during rotation, approved as: "Aceptar dos secretos al rotar (recomendado)",
+  described as: "La API acepta además un secreto anterior opcional, por ejemplo AUTH_PROXY_SECRET_PREVIOUS, mientras
+  dura la rotación: se cambia primero la API, después la web, y al final se borra el anterior. No hay corte." The API
+  compares a single secret today (`apps/api/src/auth/auth-request-guard.ts:82-90` and `:141`), so a rotation rejects
+  the web with `403` until both sides change. The API also accepts an optional previous secret while a rotation lasts;
+  the example `.env` line is a human edit.
+- **S48** (L71) Bidirectional controls in display names, approved as: "Rechazar los de dirección (recomendado)",
+  described as: "La API rechaza con el mismo 400 los controles de dirección (U+202A a U+202E, U+2066 a U+2069, U+200E,
+  U+200F y U+061C). Sigue aceptando el unidor de ancho cero, que usan los emojis compuestos y algunos idiomas."
+  `FORBIDDEN_CHARACTER` (`apps/api/src/users/domain/display-name.ts:5`) refuses control characters and unpaired
+  surrogates but accepts format characters. It also refuses the listed bidirectional controls with the same `400`, and
+  still accepts the zero-width joiner (U+200D).
+- **S49** (L71) Administrator session expiry with an invalid creation time, approved as: "Fallar cerrado y registrarlo
+  (recomendado)", described as: "Una fecha inválida hace que la sesión se trate como vencida y se registre un evento
+  sin datos personales. El administrador vuelve a ingresar." `administratorSessionExpiresAt`
+  (`apps/api/src/auth/session-settings.ts:68-72`) falls back to the current time when `createdAt` is not a valid date,
+  which grants a full 12 hours. An invalid creation time makes the session expired and logs an event without personal
+  data.
+- **S50** (L71) Operational log contract, approved as: "El contrato completo (recomendado)", described as: "Todos los
+  cambios de la lista, en un slice con sus pruebas, sin datos personales en ningún campo." Slice C implements every
+  listed change with its tests; no field carries an email address, a token, or a name, only events, routes, classes,
+  and error codes.
+- **S51** (L71) Client abort on the auth proxy, approved as: "Responder 499 (recomendado)", described as: "El código
+  que muchas plataformas usan para «el cliente cerró el pedido». Las métricas de errores del servidor dejan de contar
+  las cancelaciones." The auth proxy answers `502` when the browser cancels a `/api/auth` request
+  (`apps/web/lib/server/auth-proxy.ts:248-250`). It answers `499` instead and still logs no failure.
+- **S52** (L72) Second-factor marker on sessions, approved as: "Marcar cada sesión (recomendado)", described as: "Cada
+  sesión guarda si se abrió con el segundo factor, y la API termina toda sesión de un administrador activado que no lo
+  haya pasado. Cierra la brecha aunque la base de datos falle en ese paso. Requiere una migración que agrega una
+  columna a la tabla de sesiones, sin borrar datos, en su propio slice. Las sesiones de administrador abiertas antes
+  de esa migración piden ingresar de nuevo." `isPendingAdministrator` (`apps/api/src/auth/account-access.ts:55-56`)
+  tells a pending session apart only by the account's `twoFactorEnabled`, so password-only sessions that survive a
+  failed sibling delete get administrator access (A′, L72). Each session records whether it passed the second factor,
+  through an additive migration in its own slice, and the API ends every session of an enrolled administrator that did
+  not.
+- **S53** (L72) Display-name write only while the account is active, approved as: "Guardar solo si sigue activa
+  (recomendado)", described as: "La escritura exige que la cuenta siga activa en ese mismo instante. Si no lo está, la
+  API responde 401, igual que cuando la cuenta ya no existe. Es una condición más en la escritura, y la prueba que hoy
+  está en pausa pasa a correr." `PrismaOwnProfileRepository.updateDisplayName`
+  (`apps/api/src/users/infrastructure/prisma-own-profile.repository.ts:27`) writes by id only, so a `user:disable`
+  that commits between the guard and the write still stores the name and answers `200` (R4, L72). The write also
+  requires an `ACTIVE` account and otherwise answers `401`, and the skipped R4 test becomes a required test.
+- **S54** (L72) Session refresh limit of 3 seconds, approved as: "Mantener 3 segundos (recomendado)", described as:
+  "Si la API está lenta, la página avisa en unos 3 segundos en lugar de dejar esperando a la persona. Se documenta que
+  ese es el límite real de esas páginas." `SESSION_REFRESH_TIMEOUT_MS` (`apps/web/lib/server/session-refresh.ts:15`)
+  bounds the refresh before `/ingresar` and the `/cuenta` pages at 3 seconds. The limit stays, and the documentation
+  states it as the real bound of those pages.
 
 ## Tasks
 
@@ -209,8 +262,13 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T8e | Forms never put credentials in a URL (L55, S42): the forms at `/admin/ingresar`, `/admin/activar`, and `/ingresar` never send their fields in a query string, with or without JavaScript; controls that act only through JavaScript wait until the page is interactive; a browser test with JavaScript disabled, and a single-click sign-out test that replaces the retry in the administrator tests (R3-sign-out-retry-not-idempotent, R4-signout-retry-cannot-recover-after-navigation). | S2, S42 | worker | `365a188` (#30) |
 | T8f | Self-hosted theme fonts (L57, S43): the theme's font files and their licenses in the repository, loaded with `next/font/local` instead of `next/font/google`, so `next build` needs no network for fonts; same families, weights, and look. After T9b part C2. | S43 | worker | `cd63f22` (#33) |
 | T10a | Administrator recovery command (L62, S44): an operator command in `apps/api` that resets a locked administrator's second factor, revokes every session, and issues a new initial password with a new enrollment window, with the safeguards of `admin:create`; its own slice, test first, with independent verification and native review. | S44 | worker | `da45569` (#34) |
-| T10 | Documentation and the readability findings routed here (L63): ADR wording fixes, architecture, database, and quality-gate docs, the variables each runtime needs (the example `.env*` files are a human edit), and the comment, naming, and test findings, in slices: the documentation and the ADR (slice 34), the API comments and naming, the web and harness comments and naming, and the web behavior with the L49 copy. The administrator recovery command is T10a; the security and log-contract items moved to T11 (L63). | S13, S21, S26, S27, S45 | worker | `74f8521` and `c9d7864` (#35), `86b3a7d` and `91d7a9c` (#36), `4a8ebc2` and `54884bd` (#37), `041ce73` and `c7b01af` (#38) |
-| T11 | Security evidence: independent verification of every spec, and human sign-off of secret handling, session expiry, and error mapping. | S2 | verify | — |
+| T10 | Documentation and the readability findings routed here (L63): ADR wording fixes, architecture, database, and quality-gate docs, the variables each runtime needs (the example `.env*` files are a human edit), and the comment, naming, and test findings, in slices: the documentation and the ADR (slice 34), the API comments and naming, the web and harness comments and naming, and the web behavior with the L49 copy. The administrator recovery command is T10a; the security and log-contract items moved to T11 (L63). | S13, S21, S26, S27, S45 | worker | `74f8521` and `c9d7864` (#35), `86b3a7d` and `91d7a9c` (#36), `4a8ebc2` and `54884bd` (#37), `041ce73` and `c7b01af` (#38), `91602cb` and `1f62cec` (#39) |
+| T11a | Security tests (L70, L72): exact outputs of the `PATCH /me` 400 and `admin:create`, the pre-enrollment clause table, the reset-versus-disable race, and reproductions of the A′ and R4 gaps, in slices 39 and 40 | S2 | worker | — |
+| T11b | API security fixes (L71, L72): the proxy secret required by default, a previous secret during rotation, bidirectional controls refused in display names, a fail-closed administrator expiry, and the display-name write only while active | S46, S47, S48, S49, S53 | worker | — |
+| T11c | Second-factor marker on sessions (L72): an additive migration and the session-access hook change that close A′. Its own slice, test first, with independent verification and native review | S52 | worker | — |
+| T11d | Log contract (L71): the approved operational events and fields, without personal data | S50 | worker | — |
+| T11e | Web edge (L71, L72): 499 for a client abort, the 3-second refresh documented, and the `API_ORIGIN` empty-credentials finding of L59 | S51, S54 | worker | — |
+| T11 | Security evidence: independent verification of every spec, and human sign-off of secret handling, session expiry, and error mapping. The report also lists the accepted residual risks, such as the per-email cap (L71), and the decisions left open, such as the domain (L7, L71). | S2 | verify | — |
 
 ## Log
 
@@ -1340,3 +1398,146 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   T10 row now lists S45. Slice 38 implements it together with the three remaining T10 test items:
   R3-variable-weight-range-unproved, R3-admin-script-test-exact-stderr-brittle, and
   R2-signout-note-located-by-sibling-xpath.
+- **L69** (2026-11-07) Slice 38 (`91602cb` and `1f62cec`, PR #39) holds the last T10 slice: S45 and three test items.
+  `classifyConfirmResponse` now maps `401 ENROLLMENT_SUPERSEDED` to its own failure with the owner's text, and one
+  helper decides the sign-in-again offer for it and for an ended session; the enable step and every other `401` are
+  unchanged. The test items: `fonts.test.ts` reads the weight range each self-hosted woff2 file draws and checks the
+  declared weights against it (R3-variable-weight-range-unproved), the administrator script test checks refusals
+  without comparing all of stderr (R3-admin-script-test-exact-stderr-brittle), and the sign-out note is found as the
+  page's only `noscript` element (R2-signout-note-located-by-sibling-xpath). The worker's gates passed (API 342 of
+  342, web 262 of 262, and the browser suite 19 of 19), with test-first evidence for S45. Before the worker started:
+  User, choosing an option for "Voy a lanzar el worker del slice 38. Mientras escribe, el aviso de revisión puede
+  volver a nombrar fotos parciales del trabajo, como pasó en el slice 37: ahí START congeló trabajo a medio hacer, el
+  host aceptó el consentimiento por su cuenta y quedó abierta una revisión sin uso (review-051d265d4ab8f0bf). ¿Cómo
+  manejo esas fotos parciales de aquí en adelante?": "Esperar siempre al slice completo (recomendado)", whose
+  description reads: "Mientras un worker escribe, cada foto parcial que nombre el aviso queda sin revisar por tu
+  decisión, sin lanzar START, y te la informo en el reporte. La revisión nativa corre sobre el slice completo cuando
+  el worker termina, como hasta ahora." The assessment found the slice medium and not due, but that rule promises a
+  review of each complete slice: the native review (`review-b4f12df7aa48e3a9`, medium tier, one lens) approved tree
+  `7e562e9` without correction, with one suggestion, R3-001: nothing proved that the confirmation step wires the
+  superseded failure to the sign-in-again link. A second commit adds a browser test that answers the page's
+  `verify-totp` request with the API's exact refusal, because a browser cannot lose the race itself (T7c and T7d prove
+  it on PostgreSQL), and checks the S45 text and the «Ingresar de nuevo» link; it fails when the page offers signing
+  in again only for an ended session, and the browser suite passes 20 of 20. User, choosing an option for "El slice 38
+  está listo, y con él termina T10. Son 342 líneas: 44 de código, 198 de pruebas, 8 de docs y 92 del plan (S45, L67 y
+  L68). - S45: para 401 ENROLLMENT_SUPERSEDED, /admin/activar muestra «Esta activación ya no es válida. Ingresa de
+  nuevo con tu correo y tu contraseña.» y ofrece volver a ingresar, igual que con una sesión terminada. Los demás 401
+  siguen con «Tu sesión terminó…». Es el único texto nuevo. - Los 3 ajustes de pruebas pendientes: el rango de pesos
+  de cada fuente, el stderr del script de administración y la nota de cierre de sesión. - Pasan las pruebas (API
+  342/342, web 262/262) y la suite de navegador (19/19). - La revisión nativa (riesgo medio, 1 lente) lo aprobó con
+  una sugerencia. Preparé aparte una prueba de navegador de 40 líneas para esa sugerencia: confirma que, cuando la
+  confirmación llega como superada, la página muestra el texto nuevo y el enlace «Ingresar de nuevo». Falla si el
+  enlace deja de mostrarse, y con ella la suite completa pasa 20/20. ¿Cómo sigo?": "Dos commits, PR y merge
+  (recomendado)", whose description reads: "Commit 1: el árbol revisado, tal cual. Commit 2: la prueba de navegador de
+  40 líneas. Después publico el PR #39 contra feat/m2-identity y lo mergeo con el CI en verde." PR #39 passed CI,
+  where the browser job ran 20 tests, and was merged into the tracker as `e5c5c8d`, whose tree equals the second
+  commit's; the tracker description now lists slices 1 to 38, and CI on #1 passed after #39, browser job included.
+  After the commits, the reminder named the whole branch against `master` again (about 250 paths); its one start
+  stopped in preflight with `lens_context_budget_exceeded`, so it stays unreviewed under the rule of L67. T10 is
+  complete (L61 to L69). T11 starts on `feat/m2-identity-39-security-evidence`, from `e5c5c8d` (L70).
+- **L70** (2026-11-07) T11 plan. A read-only inventory found about 30 items routed to T11 and 11 open owner decisions.
+  The review records keep no claim text for R1-001 of T6a, for R4-001 and R4-002 of slice 30 (`session-refresh.ts:72`
+  and `:96`), or for R4-001 of T10a (`reset-second-factor.command.ts:83-85`), so T11 re-examines them at those
+  locations instead of deciding them from missing text; R1-001 of T5b is the per-email cap, which lets anyone use up a
+  victim's codes for an hour. User, choosing an option for "T10 está cerrado. Según el plan, T11 pide verificar de
+  forma independiente cada spec (S1 a S45) y tu firma sobre el manejo de secretos, la expiración de sesiones y el
+  mapeo de errores; después, el PR #1 puede salir de borrador. El inventario encontró unos 30 asuntos enviados a T11 y
+  11 decisiones tuyas. Algunas son de seguridad y deben resolverse antes de escribir código: el valor por defecto y la
+  rotación del secreto del proxy, los caracteres invisibles en nombres, el tope de códigos por correo, el respaldo de
+  la expiración del administrador, el contrato de logs y la posible brecha A′. Te propongo: - Slice A, solo pruebas,
+  unas 300 líneas y sin decisiones: el cuerpo del 400 de PATCH /me, el aviso de admin:create, la carrera entre reset y
+  desactivar, una prueba que confirme o descarte la brecha A′, el cambio de nombre justo después de desactivar y la
+  trazabilidad de la cuenta antes de la activación. - Mientras corre, tú decides en rondas de hasta 4 preguntas. -
+  Después, los slices B (seguridad de la API), C (contrato de logs) y D (bordes de la web). - Al final, un informe de
+  verificación independiente de S1 a S45 para tu firma. ¿Cómo quieres organizar T11?": "Plan propuesto (recomendado)",
+  whose description reads: "Lanzo ya el slice A de solo pruebas. En paralelo te presento las decisiones en rondas de
+  hasta 4 preguntas. Después vienen los slices B, C y D, cada uno con tus decisiones registradas antes del código, y
+  al final el informe de verificación para tu firma." Slice 39 holds slice A, tests only.
+- **L71** (2026-11-07) T11 decision rounds 1 and 2: while slice A ran (L70), the owner answered eight open questions.
+  User, choosing an option for "createAuth recibe la opción requireProxySecret, que hoy vale false por defecto. Si
+  alguien arma la autenticación sin pasarla, la API acepta pedidos que no pasan por el proxy de la web. Producción ya
+  la pasa en true (auth.registration.ts:34). ¿Qué hacemos con el valor por defecto?": "Exigir el secreto por defecto
+  (recomendado)", whose description reads: "Por defecto se exige el secreto; solo las pruebas y el desarrollo local lo
+  apagan de forma explícita. Si alguien olvida la opción, la API falla cerrada." `createAuth` defaults
+  `requireProxySecret` to `false` (`apps/api/src/auth/auth.factory.ts:336`), and only production passes it, at
+  `auth.registration.ts:34`; S46 makes the secret required by default. User, choosing an option for "Hoy la web y la
+  API comparten un único secreto, así que rotarlo exige cambiar ambos a la vez; mientras tanto, la API rechaza a la
+  web con 403. ¿Cómo quieres rotarlo?": "Aceptar dos secretos al rotar (recomendado)", whose description reads: "La
+  API acepta además un secreto anterior opcional, por ejemplo AUTH_PROXY_SECRET_PREVIOUS, mientras dura la rotación:
+  se cambia primero la API, después la web, y al final se borra el anterior. No hay corte." The API accepts a single
+  proxy secret today (`apps/api/src/auth/auth-request-guard.ts:82-90` and `:141`); S47 adds an optional previous
+  secret accepted during rotation, and the example `.env` line is a human edit. User, choosing an option for "Los
+  nombres visibles rechazan hoy los caracteres de control, pero aceptan caracteres invisibles de formato, como los que
+  invierten la dirección del texto. Con ellos un nombre puede mostrarse distinto de lo que contiene. ¿Qué hacemos?":
+  "Rechazar los de dirección (recomendado)", whose description reads: "La API rechaza con el mismo 400 los controles
+  de dirección (U+202A a U+202E, U+2066 a U+2069, U+200E, U+200F y U+061C). Sigue aceptando el unidor de ancho cero,
+  que usan los emojis compuestos y algunos idiomas." S48 adds the bidirectional controls to the characters that
+  `apps/api/src/users/domain/display-name.ts:5` refuses in display names. User, choosing an option for "Cada dirección
+  recibe como máximo 5 códigos por hora (S25). Quien conozca un correo puede pedir esos 5 y dejar a su dueño sin
+  código durante una hora; la respuesta no cambia y no revela nada. ¿Qué hacemos con ese riesgo?": "Aceptarlo y
+  documentarlo (recomendado)", whose description reads: "Se mantiene el tope, que protege la casilla y el costo del
+  correo. El bloqueo dura como máximo una hora y queda registrado como riesgo residual aceptado en la firma de T11."
+  R1-001 of T5b, the per-email cap of S25, stays as it is; the T11 sign-off report lists it as an accepted residual
+  risk, and no spec records it. User, choosing an option for "La sesión de administrador vence 12 horas después de su
+  creación. Si la fecha de creación llega inválida, hoy el código usa la hora actual sin avisar
+  (session-settings.ts:68-72), así que la sesión recibe 12 horas completas. Better Auth siempre manda esa fecha, así
+  que esto solo pasaría por un error. ¿Qué hacemos?": "Fallar cerrado y registrarlo (recomendado)", whose description
+  reads: "Una fecha inválida hace que la sesión se trate como vencida y se registre un evento sin datos personales. El
+  administrador vuelve a ingresar." The fallback to the current time for an invalid `createdAt`
+  (`apps/api/src/auth/session-settings.ts:68-72`) becomes the fail-closed expiry of S49. User, choosing an option for
+  "El slice C completa los logs operativos, siempre sin datos personales (ni correos, ni tokens, ni nombres; solo
+  eventos, rutas, clases y códigos de error). Incluye: registrar las sesiones rechazadas y borradas, el rechazo
+  silencioso al actualizar una sesión, la falla al borrar sesiones hermanas y la causa al fallar la lectura de la
+  sesión de administrador en la web; registrar el revert de la activación después de intentarlo, con su resultado;
+  agregar el código de error de Prisma (por ejemplo P2002) a las fallas de los comandos; distinguir en la web el corte
+  rápido por API caída; y aprobar los campos kind y causa que agregó C1. ¿Qué apruebas?": "El contrato completo
+  (recomendado)", whose description reads: "Todos los cambios de la lista, en un slice con sus pruebas, sin datos
+  personales en ningún campo." S50 records this log contract. User, choosing an option for "Cuando el navegador
+  cancela un pedido a /api/auth, el proxy de la web ya no lo registra como falla, pero responde 502. Nadie recibe esa
+  respuesta, pero en las métricas de la plataforma parece una caída de la API. ¿Qué respondemos?": "Responder 499
+  (recomendado)", whose description reads: "El código que muchas plataformas usan para «el cliente cerró el pedido».
+  Las métricas de errores del servidor dejan de contar las cancelaciones." The `502` that the auth proxy returns after
+  a client abort (`apps/web/lib/server/auth-proxy.ts:248-250`) becomes `499`, S51. User, choosing an option for "Sigue
+  abierta la decisión de L7 sobre el dominio: .mx o .com. No bloquea M2, porque solo afecta la configuración de
+  producción (AUTH_BASE_URL y CORS_ORIGIN) cuando se despliegue. ¿Qué decides?": "Decidirlo al desplegar
+  (recomendado)", whose description reads: "Queda abierta y fuera de la firma de M2; se decide en el milestone de
+  despliegue." The domain decision of L7 stays open outside M2 and its sign-off; no spec records it.
+- **L72** (2026-11-07) Slice A results and T11 decision round 3. Slice A changed only tests and the traceability doc,
+  with no production change. It proved the reset-versus-disable race in both orders on PostgreSQL: a disabled
+  administrator never keeps a fresh initial password with a live session. It confirmed two gaps, kept as skipped tests
+  in `apps/api/src/auth/account-state-races.prisma.db-spec.ts`. A′: when the sibling-session delete of an allowed
+  first confirmation throws, `verify-totp` answers `500` but `twoFactorEnabled` stays true, so the password-only
+  sessions read `/me`, `get-session`, and `list-sessions`; the cause is that `isPendingAdministrator`
+  (`apps/api/src/auth/account-access.ts:55-56`) looks only at the flag. R4: a `user:disable` that commits between the
+  guard and the write lets `PATCH /me` answer `200` and store the name
+  (`apps/api/src/users/infrastructure/prisma-own-profile.repository.ts:27`). The gates passed: API 343 of 343, and
+  `test:db` with 70 passed and 2 skipped. User, choosing an option for "La prueba confirmó la brecha A′. Cuando el
+  administrador confirma su primer código, la API lo activa y borra sus otras sesiones abiertas solo con contraseña.
+  Si ese borrado falla (por ejemplo, porque la base de datos no responde en ese instante), esas sesiones sobreviven y
+  obtienen acceso completo de administrador hasta por 12 horas, sin haber pasado el segundo factor. La causa es que
+  hoy la API reconoce una sesión pendiente solo porque la cuenta todavía no activó el segundo factor. ¿Cómo lo
+  cerramos?": "Marcar cada sesión (recomendado)", whose description reads: "Cada sesión guarda si se abrió con el
+  segundo factor, y la API termina toda sesión de un administrador activado que no lo haya pasado. Cierra la brecha
+  aunque la base de datos falle en ese paso. Requiere una migración que agrega una columna a la tabla de sesiones, sin
+  borrar datos, en su propio slice. Las sesiones de administrador abiertas antes de esa migración piden ingresar de
+  nuevo." S52 records it; the additive migration and the session-access change go in their own slice, at high risk
+  because they touch data and security. User, choosing an option for "La prueba también confirmó R4. Si alguien
+  desactiva una cuenta justo mientras su dueño cambia su nombre visible, el nombre nuevo se guarda aunque la cuenta ya
+  quedó desactivada, y la API responde 200. Desde el pedido siguiente, la cuenta ya no puede hacer nada. ¿Qué
+  hacemos?": "Guardar solo si sigue activa (recomendado)", whose description reads: "La escritura exige que la cuenta
+  siga activa en ese mismo instante. Si no lo está, la API responde 401, igual que cuando la cuenta ya no existe. Es
+  una condición más en la escritura, y la prueba que hoy está en pausa pasa a correr." S53 records the conditional
+  write, and the skipped R4 test becomes a required test. User, choosing an option for "Antes de mostrar /ingresar y
+  las páginas de /cuenta, la web renueva la sesión con la API y espera como máximo 3 segundos. Si la API tarda más, la
+  página muestra el aviso de servicio no disponible sin intentar su propia lectura, aunque esa lectura podría esperar
+  hasta 10 segundos. Las páginas de administración no pasan por esta renovación. ¿Qué límite quieres?": "Mantener 3
+  segundos (recomendado)", whose description reads: "Si la API está lenta, la página avisa en unos 3 segundos en lugar
+  de dejar esperando a la persona. Se documenta que ese es el límite real de esas páginas." S54 records the 3-second
+  limit as the documented bound of those pages. User, choosing an option for "El slice A terminó: solo pruebas y la
+  tabla de trazabilidad, sin cambios en el código de producción. Todos los chequeos pasan: API 343 de 343, y en la
+  base de datos 70 aprobadas y 2 en pausa, que son las dos brechas. Mide unas 560 líneas, más 61 del plan, y el límite
+  es de unas 450. ¿Cómo lo entrego?": "Dividir en dos PR (recomendado)", whose description reads: "PR #40, de unas 200
+  líneas: las fijaciones (el cuerpo del 400 de PATCH /me, la salida de admin:create y los cuatro endpoints de la
+  cuenta pendiente), su parte de la tabla y el plan. PR #41, de unas 430 líneas: las pruebas de carreras y de las dos
+  brechas. Cada PR lleva su propia revisión." Slice A ships as two PRs: #40 holds the exact outputs, the clause table,
+  and the plan through L72 and S54, and #41 holds the races and the two reproductions.

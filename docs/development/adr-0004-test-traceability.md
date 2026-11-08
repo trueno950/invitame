@@ -43,6 +43,7 @@ other row existed before them.
 | DB-profile | [`users/own-profile.prisma.db-spec.ts`](../../apps/api/src/users/own-profile.prisma.db-spec.ts) |
 | DB-disable | [`users/infrastructure/prisma-user-access.repository.db-spec.ts`](../../apps/api/src/users/infrastructure/prisma-user-access.repository.db-spec.ts) |
 | DB-create | [`users/infrastructure/prisma-administrator-account.repository.db-spec.ts`](../../apps/api/src/users/infrastructure/prisma-administrator-account.repository.db-spec.ts) |
+| DB-command | [`users/create-administrator.command.db-spec.ts`](../../apps/api/src/users/create-administrator.command.db-spec.ts) (T11) |
 | E2E-customer | [`e2e/customer-session.spec.ts`](../../apps/web/e2e/customer-session.spec.ts) (browser) |
 | E2E-admin | [`e2e/admin-session.spec.ts`](../../apps/web/e2e/admin-session.spec.ts) (browser) |
 | E2E-forms | [`e2e/form-submission.spec.ts`](../../apps/web/e2e/form-submission.spec.ts) (browser, JavaScript disabled) |
@@ -85,6 +86,27 @@ other row existed before them.
 | Enumeration-safe responses | DB-code: "answers a code request identically for unknown, customer, administrator, and DISABLED addresses" (added), and the three administrator email-code refusals of obligation 11 (added); DB-admin: "answers an unknown address, a customer, and a DISABLED administrator exactly like a wrong password" (added), "refuses an expired initial password exactly like a wrong one and creates no session". | U-code: "sign-in code request (S24) › returns the same immediate 200 body for unknown, existing-customer, and administrator emails"; U-admin: "answers a customer, an unknown address, a wrong password, and a DISABLED administrator identically". |
 
 Response timing is not measured by any suite; the code request answers before delivery by design (S24).
+
+## Pre-enrollment administrator account (decision 3, clarified 2026-11-07)
+
+Maps each clause of the «Clarified (2026-11-07)» block of decision 3 (T11, L64 R3-pre-enrollment-clarification-untraced).
+All U-admin names below sit in its "enrollment gate (S6, S21)", "pre-enrollment window of 24 hours (S20)", or
+"TOTP enrollment and backup codes (decision 3)" blocks.
+
+| Clause | Real PostgreSQL | Unit |
+| --- | --- | --- |
+| Inside the window, exactly four Better Auth endpoints serve the session | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor" (`get-session`, `two-factor/enable`, and `two-factor/verify-totp` with the pending session); "reverts a first confirmation that races a sign-out, then lets the password enroll" (`sign-out` answers 200). | U-admin: "allows an un-enrolled administrator's session on exactly four Better Auth endpoints" (added in T11; fails when a fifth path is allowed), "lets an un-enrolled administrator read its session", "returns the TOTP URI with the InvitaMe issuer and 10 backup codes, whatever issuer the client sends", "confirms enrollment with the first valid code and replaces the session", "lets an un-enrolled administrator sign out". |
+| Every other Better Auth endpoint answers as without a session | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor" (`list-sessions`). | U-admin: "answers <method> <path> for an un-enrolled administrator exactly as without a session" for 11 endpoints, from `GET /list-sessions` to `POST /two-factor/verify-backup-code`. |
+| Every project route answers 401, `GET` and `PATCH /me` and administrator-only routes included | — | U-admin: "refuses every project route to an un-enrolled administrator with 401 and a generic body" (an undecorated route, an `@AdminOnly()` route, `GET /me`, `PATCH /me`), "decides enrollment from twoFactorEnabled, never from a TwoFactor row's verified default (L17)". |
+| Never receives an email sign-in code | The `pending` cases of obligation 11. | U-admin: "refuses an email-code session to a pending administrator, exactly like an invalid code", "sends a pending administrator no code, with the identical 200 response". |
+| After the window: the password is refused like a wrong one, each session is deleted on its next use, and only a new initial password helps | DB-admin: "refuses an expired initial password exactly like a wrong one and creates no session", "deletes a pre-enrollment session once the window ends and refuses enrollment"; DB-create: "reissues an un-enrolled administrator's password, restarts the window, and revokes sessions". | U-admin: "answers the initial password after the window exactly like a wrong password", "stops an existing pre-enrollment session once the window ends, and refuses enrollment", "treats a missing credential account as an expired window". |
+
+## T11 slice A tests
+
+- The `admin:create` stdout layout (L66): DB-command "admin:create stdout (real PostgreSQL) › prints the notice, a
+  newline, the password, and a newline on create and on reissue".
+- The `PATCH /me` 400 body (L66): U-profile "PATCH /me › rejects <case> with the DTO's 400 body and keeps the
+  stored name" for each of 14 invalid values.
 
 ## Findings routed to T9 (plan Log L35 to L44)
 
