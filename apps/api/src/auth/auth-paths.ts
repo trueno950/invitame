@@ -16,3 +16,17 @@ export const TWO_FACTOR_PATH = {
   VERIFY_BACKUP_CODE: "/two-factor/verify-backup-code",
   GENERATE_BACKUP_CODES: "/two-factor/generate-backup-codes",
 } as const;
+
+/**
+ * The second-factor verification endpoints. In Better Auth 1.7.16 they are the only enabled endpoints
+ * that create a session after a verified second factor: `verify-totp` and `verify-backup-code` open
+ * the session of a sign-in challenge, and `verify-totp` also opens the enrolled session of a first
+ * confirmation (`plugins/two-factor/totp/index.mjs`, `verify-two-factor.mjs`). The other
+ * session-creating two-factor code (`/two-factor/enable` with `method: "otp"` or
+ * `skipVerificationOnEnable`, and `/two-factor/disable`) is closed by the plugin options and
+ * `DISABLED_AUTH_PATHS`.
+ */
+export const SECOND_FACTOR_VERIFY_PATHS: ReadonlySet<string> = new Set([
+  TWO_FACTOR_PATH.VERIFY_TOTP,
+  TWO_FACTOR_PATH.VERIFY_BACKUP_CODE,
+]);

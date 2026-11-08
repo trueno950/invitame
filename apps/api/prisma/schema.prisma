@@ -64,6 +64,9 @@ model Session {
   userAgent String?  @db.Text
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  // Project column, declared to Better Auth as a session additional field: whether this session was
+  // opened with the second factor. Existing rows read false (S52).
+  secondFactorVerified Boolean @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

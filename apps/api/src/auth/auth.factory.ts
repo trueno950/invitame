@@ -19,6 +19,7 @@ import {
 import {
   EMAIL_CODE_SIGN_IN_PATH,
   PASSWORD_SIGN_IN_PATH,
+  SECOND_FACTOR_VERIFY_PATHS,
   SIGN_IN_CODE_REQUEST_PATH,
   TWO_FACTOR_PATH,
 } from "./auth-paths";
@@ -195,6 +196,17 @@ export function createAuth(options: CreateAuthOptions): Auth {
       // user is rejected on the next request (S18). Better Auth enables this cache by default only
       // without a database (1.7.16 `context/create-context.mjs`); pinned off so it never turns on.
       cookieCache: { enabled: false },
+      // S52 (L72): `Session.secondFactorVerified` records whether the session was opened with the
+      // second factor. Declared so the adapter reads and writes it; `input: false` keeps any caller
+      // value out, and the create hook below sets it from the endpoint path alone.
+      additionalFields: {
+        secondFactorVerified: {
+          type: "boolean",
+          required: false,
+          input: false,
+          defaultValue: false,
+        },
+      },
     },
     user: {
       // Better Auth's `name` is stored in the existing `User.displayName` column.
@@ -256,12 +268,23 @@ export function createAuth(options: CreateAuthOptions): Auth {
               throw refusal;
             }
 
+            // S52 (L72): the marker comes from the endpoint alone, never from a caller value. Only a
+            // session of an enrolled administrator created on a second-factor verification endpoint
+            // (sign-in with a TOTP or backup code, or the first TOTP confirmation, decided above)
+            // passed the second factor; every other session, whatever its role, is stored as false.
+            const secondFactorVerified =
+              user?.role === USER_ROLE.ADMIN &&
+              user.twoFactorEnabled === true &&
+              context?.path !== undefined &&
+              SECOND_FACTOR_VERIFY_PATHS.has(context.path);
+
             // S16 (L34): an administrator session, pending or enrolled, lasts 12 hours from its
             // creation. The cookie keeps the customer Max-Age; the stored expiry decides.
             if (user?.role === USER_ROLE.ADMIN) {
               return {
                 data: {
                   ...session,
+                  secondFactorVerified,
                   expiresAt: administratorSessionExpiresAt(session.createdAt, () =>
                     logSafely(options.log, {
                       event: AUTH_REQUEST_EVENT.ADMINISTRATOR_SESSION_CREATED_AT_INVALID,
@@ -270,6 +293,8 @@ export function createAuth(options: CreateAuthOptions): Auth {
                 },
               };
             }
+
+            return { data: { ...session, secondFactorVerified } };
           },
         },
         update: {

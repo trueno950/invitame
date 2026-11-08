@@ -44,6 +44,7 @@ other row existed before them.
 | DB-disable | [`users/infrastructure/prisma-user-access.repository.db-spec.ts`](../../apps/api/src/users/infrastructure/prisma-user-access.repository.db-spec.ts) |
 | DB-create | [`users/infrastructure/prisma-administrator-account.repository.db-spec.ts`](../../apps/api/src/users/infrastructure/prisma-administrator-account.repository.db-spec.ts) |
 | DB-races | [`auth/account-state-races.prisma.db-spec.ts`](../../apps/api/src/auth/account-state-races.prisma.db-spec.ts) (T11) |
+| DB-marker | [`auth/session-second-factor-marker.prisma.db-spec.ts`](../../apps/api/src/auth/session-second-factor-marker.prisma.db-spec.ts) (T11c) |
 | DB-command | [`users/create-administrator.command.db-spec.ts`](../../apps/api/src/users/create-administrator.command.db-spec.ts) (T11) |
 | E2E-customer | [`e2e/customer-session.spec.ts`](../../apps/web/e2e/customer-session.spec.ts) (browser) |
 | E2E-admin | [`e2e/admin-session.spec.ts`](../../apps/web/e2e/admin-session.spec.ts) (browser) |
@@ -112,10 +113,36 @@ All U-admin names below sit in its "enrollment gate (S6, S21)", "pre-enrollment 
   newline, the password, and a newline on create and on reissue".
 - The `PATCH /me` 400 body (L66): U-profile "PATCH /me › rejects <case> with the DTO's 400 body and keeps the
   stored name" for each of 14 invalid values.
-- Open, run as a `todo` test that is expected to fail until T11c fixes it: DB-races "› GAP A′: leaves
-  no password-only session with authority on /me or Better Auth" (L62). When the sibling-session delete of an
-  allowed first confirmation throws, `verify-totp` answers 500 but `twoFactorEnabled` stays true, so both
-  password-only sessions read `/me` (200), `get-session`, and `list-sessions`.
+- A′ (L62), closed by T11c (S52, below): DB-races "a first confirmation whose sibling-session delete fails ›
+  ends both password-only sessions on their next use, with the 401 of a missing session" is a required test.
+
+## T11 slice C tests (S52)
+
+Unit tests (U-admin, "second-factor marker on sessions (S52)") run in `pnpm --filter @invitame/api test`; the
+PostgreSQL tests run in `test:db`.
+
+- The column: DB-marker "adds a NOT NULL boolean column whose default is false" and "reads false for a session row
+  inserted without the column" (a row as it was before the migration). U-admin "declares the marker to Better Auth
+  as a server-only boolean that defaults to false" pins `input: false`.
+- Each marking path stores true: U-admin "stores true only for the session that completes the first TOTP
+  confirmation", "stores true for a session opened with the TOTP code at sign-in", and "stores true for a session
+  opened with a backup code at sign-in"; DB-marker "marks only the sessions that passed the second factor" proves
+  the Prisma adapter writes it.
+- Every other path stores false: U-admin "stores false for the password-only session of a pending administrator"
+  and "stores false for a customer session opened with a sign-in code, and keeps serving it".
+- Enforcement: U-admin "ends a password-only session of an enrolled administrator on <endpoint>, as a missing
+  session" for `/me`, `/probe/admin`, `get-session`, and `list-sessions`; "ends an enrolled administrator's session
+  that has no marker, as one opened before the migration"; DB-marker "ends an enrolled administrator's session that
+  predates the marker and keeps a customer's".
+- A′ with a failed sibling delete: DB-races "a first confirmation whose sibling-session delete fails" (above).
+- Unchanged: U-admin "lists exactly four Better Auth endpoints in the pending-administrator allow list" and
+  "keeps a pending administrator's unmarked session on the four allowed endpoints only"; "still serves customers
+  on project routes"; "gives an enrolled administrator the administrator routes and /me". U-access and U-profile
+  mark the session they promote to an enrolled administrator, because an unmarked one is now ended.
+- Harness advisories (L74, L75): DB-races "sibling-delete matcher › accepts a token exclusion held directly or
+  inside AND, and no other delete"; the held-transaction cleanup is one helper that rethrows a timeout; the
+  stand-in client forwards `$transaction` options and keeps every other member; the lock probe of
+  `prisma-own-profile.repository.db-spec.ts` is scoped to the disable transaction's backend with `pg_blocking_pids`.
 
 ## T11 slice B tests (S46 to S49, S53)
 

@@ -1001,4 +1001,136 @@ describe("administrator sign-in, enrollment gate, and second factor", () => {
       });
     }
   });
+
+  // S52 (L72, T11c): every session records whether it passed the second factor, and the API ends the
+  // session of an enrolled administrator that did not, whether or not the delete of the sibling
+  // sessions at the first confirmation worked.
+  describe("second-factor marker on sessions (S52)", () => {
+    const markers = (userId: string) => sessionsOf(userId).map((row) => row.secondFactorVerified);
+
+    /** A session with no second factor for an enrolled administrator, as a failed sibling delete leaves one. */
+    async function passwordOnlySession(userId: string) {
+      return (await createSession(userId)).cookie;
+    }
+
+    it("declares the marker to Better Auth as a server-only boolean that defaults to false", async () => {
+      const field = (await auth.$context).options.session?.additionalFields?.secondFactorVerified;
+
+      assert.deepEqual(field, {
+        type: "boolean",
+        required: false,
+        input: false,
+        defaultValue: false,
+      });
+    });
+
+    it("stores false for the password-only session of a pending administrator", async () => {
+      const { admin } = await signedInPending();
+
+      assert.deepEqual(markers(admin.id), [false]);
+    });
+
+    it("stores false for a customer session opened with a sign-in code, and keeps serving it", async () => {
+      const customer = await seedCustomer();
+      await authPost("/email-otp/send-verification-otp", {
+        email: customer.email,
+        type: "sign-in",
+      });
+      await tasks.drain();
+      const otp = CODE_PATTERN.exec(
+        emailSender.delivered.filter((sent) => sent.to === customer.email).at(-1)?.text ?? "",
+      )?.[1];
+      const response = await authPost("/sign-in/email-otp", { email: customer.email, otp });
+      const cookie = cookieFrom(response, SESSION_COOKIE);
+      assert.ok(cookie, "the code opened a session");
+
+      assert.deepEqual(markers(customer.id), [false]);
+      assert.equal((await get("/me", cookie)).status, 200);
+      assert.equal((await authGet("/list-sessions", cookie)).status, 200);
+      assert.deepEqual(markers(customer.id), [false], "the customer session is not ended");
+    });
+
+    it("stores true only for the session that completes the first TOTP confirmation", async () => {
+      const { admin, cookie } = await signedInPending();
+      const enrollment = await startEnrollment(cookie, admin.password);
+      assert.deepEqual(markers(admin.id), [false], "the pending session is unmarked");
+
+      const response = await authPost(
+        "/two-factor/verify-totp",
+        { code: await totpCode(enrollment.rawSecret) },
+        cookie,
+      );
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(
+        markers(admin.id),
+        [true],
+        "the pending session is replaced by a marked one",
+      );
+    });
+
+    it("stores true for a session opened with the TOTP code at sign-in", async () => {
+      const { admin, rawSecret } = await enrolledAdministrator();
+      const verified = await authPost(
+        "/two-factor/verify-totp",
+        { code: await totpCode(rawSecret) },
+        await passwordStep(admin.email, admin.password),
+      );
+
+      assert.equal(verified.status, 200);
+      assert.deepEqual(markers(admin.id), [true, true]);
+    });
+
+    it("stores true for a session opened with a backup code at sign-in", async () => {
+      const { admin, backupCodes } = await enrolledAdministrator();
+      const [code] = backupCodes;
+      const verified = await authPost(
+        "/two-factor/verify-backup-code",
+        { code },
+        await passwordStep(admin.email, admin.password),
+      );
+
+      assert.equal(verified.status, 200);
+      assert.deepEqual(markers(admin.id), [true, true]);
+    });
+
+    const protectedReads: Array<{ label: string; read: (cookie: string) => Promise<Response> }> = [
+      { label: "GET /me", read: (cookie) => get("/me", cookie) },
+      { label: "GET /probe/admin", read: (cookie) => get("/probe/admin", cookie) },
+      { label: "GET /api/auth/get-session", read: (cookie) => authGet("/get-session", cookie) },
+      { label: "GET /api/auth/list-sessions", read: (cookie) => authGet("/list-sessions", cookie) },
+    ];
+
+    for (const { label, read } of protectedReads) {
+      it(`ends a password-only session of an enrolled administrator on ${label}, as a missing session`, async () => {
+        const { admin, cookie: marked } = await enrolledAdministrator();
+        const anonymous = await snapshot(await read(""));
+        const sibling = await passwordOnlySession(admin.id);
+
+        assert.deepEqual(await snapshot(await read(sibling)), anonymous);
+        assert.deepEqual(markers(admin.id), [true], "only the marked session is left");
+        assert.equal((await get("/probe/admin", marked)).status, 200, "the marked session works");
+      });
+    }
+
+    it("ends an enrolled administrator's session that has no marker, as one opened before the migration", async () => {
+      const { admin } = await enrolledAdministrator();
+      const legacy = await passwordOnlySession(admin.id);
+      const row = sessionsOf(admin.id).find((stored) => stored.secondFactorVerified !== true);
+      assert.ok(row);
+      row.secondFactorVerified = undefined;
+
+      assert.equal((await get("/me", legacy)).status, 401);
+      assert.deepEqual(markers(admin.id), [true]);
+    });
+
+    it("keeps a pending administrator's unmarked session on the four allowed endpoints only", async () => {
+      const { admin, cookie } = await signedInPending();
+
+      assert.equal((await get("/me", cookie)).status, 401);
+      assert.equal((await authGet("/list-sessions", cookie)).status, 401);
+      assert.equal((await authGet("/get-session", cookie)).status, 200);
+      assert.deepEqual(markers(admin.id), [false], "the pending session is not ended");
+    });
+  });
 });

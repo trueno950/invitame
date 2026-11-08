@@ -9,7 +9,7 @@ not add tables.
 | Model | Role |
 | --- | --- |
 | `User` | Account identity and Better Auth `user` model; carries `status`, the server-side `role`, `emailVerified`, and `twoFactorEnabled` |
-| `Session` | Better Auth database session, unique by `token`, owned by a `User` |
+| `Session` | Better Auth database session, unique by `token`, owned by a `User`; `secondFactorVerified` records whether it was opened with the second factor |
 | `Account` | Better Auth credential or provider link (an administrator password hash lives here), owned by a `User` |
 | `Verification` | Better Auth short-lived verification value, such as an email one-time code, looked up by `identifier` |
 | `TwoFactor` | Better Auth two-factor plugin record: encrypted TOTP secret and backup codes, at most one per `User` |
@@ -52,6 +52,13 @@ Prisma. The database suites (`pnpm --filter @invitame/api test:db`) exercise the
 - Indexes: unique `Session.token`, `Session.userId`, `Account.userId`, unique `(Account.providerId, Account.accountId)`,
   `Verification.identifier`, unique `TwoFactor.userId`, and unique `RateLimit.key`.
 - Every column added to `User` has a default or is nullable, so existing rows stay valid.
+- `Session.secondFactorVerified` (`BOOLEAN NOT NULL DEFAULT false`, migration
+  `20261108120000_add_session_second_factor_marker`, S52) is true only for a session created by a verified
+  second-factor code: a TOTP or backup code at sign-in, or the first TOTP confirmation. The migration is additive
+  and deletes nothing, so every session row that existed before it reads false, and the API ends such a session of
+  an enrolled administrator on its next use (an administrator who signed in before the migration signs in again).
+  Better Auth declares it as a session additional field with `input: false`; the session-create hook sets it from
+  the endpoint path alone, and the session-update hook still refuses every update.
 
 ## JSONB boundary
 

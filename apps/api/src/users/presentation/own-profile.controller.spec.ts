@@ -140,8 +140,12 @@ describe("own profile: GET /me and PATCH /me", () => {
       const { user, cookie } = await signedInCustomer();
       user.displayName = "Stored Name";
       user.role = "ADMIN";
-      // An enrolled administrator: an un-enrolled one holds no authority, `/me` included (T7, S21).
+      // An enrolled administrator: an un-enrolled one holds no authority, `/me` included (T7, S21),
+      // and a session that did not pass the second factor is ended (S52): mark it as having passed.
       user.twoFactorEnabled = true;
+      for (const row of database.session?.filter((stored) => stored.userId === user.id) ?? []) {
+        row.secondFactorVerified = true;
+      }
 
       const body = (await (await getMe(cookie)).json()) as OwnProfile;
 
