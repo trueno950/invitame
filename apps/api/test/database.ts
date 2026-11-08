@@ -5,7 +5,8 @@ import { randomInt } from "node:crypto";
 // `pnpm --filter @invitame/api test:db` locally and in the CI `database-tests` job, always against a
 // disposable, already migrated PostgreSQL that the runner names in DATABASE_URL.
 
-const LOCAL_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]"]);
+/** The only hosts a database suite may write to. */
+export const LOCAL_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /**
  * The explicit DATABASE_URL of a local database. Fails closed: every suite writes and deletes rows,
@@ -27,14 +28,12 @@ export function requireLocalDatabaseUrl(): string {
  *   run in parallel processes, so two counting suites drawing from one block could pick the same
  *   address; each block belongs to exactly one suite, named here, and no other suite draws from it.
  */
-const COUNTED_BLOCKS = {
-  "auth.prisma": 0,
-  "abuse-limits.prisma": 64,
-  "auth-proxy-secret.prisma": 128,
-} as const satisfies Record<string, number>;
+const COUNTING_SUITES = ["auth.prisma", "abuse-limits.prisma", "auth-proxy-secret.prisma"] as const;
 const COUNTED_BLOCK_SIZE = 64;
+// Each block starts where the previous one ends, so the offsets are derived, never hand-written.
+assert.ok(COUNTING_SUITES.length * COUNTED_BLOCK_SIZE <= 256, "the counted blocks fit in one /16");
 
-export type CountingSuite = keyof typeof COUNTED_BLOCKS;
+export type CountingSuite = (typeof COUNTING_SUITES)[number];
 export type ClientAddressRange = "shared" | CountingSuite;
 
 function drawAddress(range: ClientAddressRange): string {
@@ -42,7 +41,7 @@ function drawAddress(range: ClientAddressRange): string {
   if (range === "shared") {
     return `198.18.${randomInt(0, 256)}.${host}`;
   }
-  const first = COUNTED_BLOCKS[range];
+  const first = COUNTING_SUITES.indexOf(range) * COUNTED_BLOCK_SIZE;
   return `198.19.${randomInt(first, first + COUNTED_BLOCK_SIZE)}.${host}`;
 }
 
@@ -52,7 +51,8 @@ function drawAddress(range: ClientAddressRange): string {
  * by `<client IP>|<path>`. A fixed or per-run /24 prefix let two suites share addresses, and with
  * them rate-limit buckets and cleanup. Each address here is drawn at random from its range (65,024
  * shared or 16,256 counted host addresses), never repeats within the suite, and is recorded, so
- * cleanup removes exactly the rows this suite created.
+ * cleanup removes exactly the rows this suite created. The `pnpm test` suites need none of this:
+ * each keeps its rate limits in its own in-memory adapter, so their fixed `10.x` prefixes never meet.
  */
 export class ClientAddresses {
   private readonly issued = new Set<string>();

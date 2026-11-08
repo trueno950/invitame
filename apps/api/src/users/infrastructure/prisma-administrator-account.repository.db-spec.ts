@@ -287,16 +287,20 @@ describe("creating an administrator on the Prisma schema (real PostgreSQL)", () 
     };
   }
 
-  /** An administrator with a session and, when enrolled, a confirmed second factor. */
+  /**
+   * An administrator with a session and a second factor: confirmed when enrolled, otherwise the
+   * unconfirmed secret that `/two-factor/enable` stores before the first code, which a reset must
+   * also delete (L63 R3-pending-unconfirmed-secret-not-seeded).
+   */
   async function lockedAdministrator(label: string, enrolled = true) {
     const email = newEmail(label);
     const { outcome, initialPassword } = await useCase.execute(email);
     assert.ok(initialPassword);
     assert.equal((await signIn(email, initialPassword)).status, 200);
+    await prisma.twoFactor.create({
+      data: { userId: outcome.userId, secret: "secret", backupCodes: "codes", verified: enrolled },
+    });
     if (enrolled) {
-      await prisma.twoFactor.create({
-        data: { userId: outcome.userId, secret: "secret", backupCodes: "codes", verified: true },
-      });
       await prisma.user.update({ where: { id: outcome.userId }, data: { twoFactorEnabled: true } });
     }
     return { email, userId: outcome.userId, password: initialPassword };

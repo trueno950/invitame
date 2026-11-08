@@ -9,6 +9,7 @@ import {
   Get,
   type INestApplication,
   Module,
+  SetMetadata,
   type Type,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
@@ -589,28 +590,47 @@ describe("access control through the project-owned global guard", () => {
       assert.equal(sessionLookups, 0);
     });
 
-    it("recognizes the marker of every access decorator the integration exports", () => {
-      const decorators = {
-        AllowAnonymous: AllowAnonymous(),
-        OptionalAuth: OptionalAuth(),
-        Roles: Roles(["ADMIN"]),
-        RequireActiveOrg: RequireActiveOrg(),
-        OrgRoles: OrgRoles(["owner"]),
-        UserHasPermission: UserHasPermission({ permission: { invitation: ["read"] } }),
-        MemberHasPermission: MemberHasPermission({ permissions: { invitation: ["read"] } }),
-      };
+    it("recognizes, alone, every metadata key that each access decorator the integration exports writes", () => {
+      // The keys each decorator writes today (`dist/index.mjs`); `OrgRoles` also applies
+      // `RequireActiveOrg`, so it writes two.
+      const decorators = [
+        ["AllowAnonymous", AllowAnonymous(), ["PUBLIC"]],
+        ["OptionalAuth", OptionalAuth(), ["OPTIONAL"]],
+        ["Roles", Roles(["ADMIN"]), ["ROLES"]],
+        ["RequireActiveOrg", RequireActiveOrg(), ["REQUIRE_ACTIVE_ORG"]],
+        ["OrgRoles", OrgRoles(["owner"]), ["ORG_ROLES", "REQUIRE_ACTIVE_ORG"]],
+        [
+          "UserHasPermission",
+          UserHasPermission({ permission: { invitation: ["read"] } }),
+          ["USER_HAS_PERMISSION"],
+        ],
+        [
+          "MemberHasPermission",
+          MemberHasPermission({ permissions: { invitation: ["read"] } }),
+          ["MEMBER_HAS_PERMISSION"],
+        ],
+      ] as const;
+      const reflector = new Reflector();
 
-      for (const [name, decorator] of Object.entries(decorators)) {
+      for (const [name, decorator, keys] of decorators) {
         class Marked {
           handle(): void {}
         }
         decorator(Marked);
+        assert.deepEqual(Reflect.getOwnMetadataKeys(Marked).sort(), [...keys].sort(), name);
 
-        assert.notEqual(
-          findUnsupportedMarker(new Reflector(), Marked.prototype.handle, Marked),
-          undefined,
-          name,
-        );
+        // Each key on a class that carries no other one, so no sibling key can stand in for it.
+        for (const key of keys) {
+          class Isolated {
+            handle(): void {}
+          }
+          SetMetadata(key, reflector.get(key, Marked))(Isolated);
+          assert.equal(
+            findUnsupportedMarker(reflector, Isolated.prototype.handle, Isolated),
+            key,
+            `${name}: ${key}`,
+          );
+        }
       }
     });
   });

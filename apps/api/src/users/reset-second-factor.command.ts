@@ -8,6 +8,7 @@ import {
   RESET_SECOND_FACTOR_EVENT,
   ResetSecondFactorUseCase,
 } from "./application/reset-second-factor.use-case";
+import { INITIAL_PASSWORD_NOTICE } from "./application/initial-password";
 import { PrismaAdministratorAccountRepository } from "./infrastructure/prisma-administrator-account.repository";
 
 const USAGE = "Usage: pnpm --filter @invitame/api admin:reset-second-factor -- <email>";
@@ -34,7 +35,8 @@ export interface RecoveryStore {
  *
  * The safeguards of `admin:create`: the password is printed once, only to an interactive terminal,
  * and never logged; the JSON-line event carries the user id at most, and a failure its error class
- * only. Prisma reads `DATABASE_URL`. Exit codes: 0 reset, 1 refused or failure, 2 usage error.
+ * only. Prisma reads `DATABASE_URL`. Exit codes: 0 reset, 1 refused or failure, 2 usage error or
+ * stdout not a terminal.
  */
 export async function runResetSecondFactor(
   args: readonly string[],
@@ -69,9 +71,7 @@ export async function runResetSecondFactor(
     if (initialPassword === undefined) {
       return 1;
     }
-    terminal.out(
-      `Initial password, shown only now; it stops working 24 hours from now unless an authenticator app is enrolled:\n${initialPassword}`,
-    );
+    terminal.out(`${INITIAL_PASSWORD_NOTICE}\n${initialPassword}`);
     return 0;
   } catch (error) {
     if (error instanceof InvalidAdministratorEmailError) {

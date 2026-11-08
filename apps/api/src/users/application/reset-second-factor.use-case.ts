@@ -3,11 +3,8 @@ import type {
   ResetRefusalReason,
   ResetSecondFactorResult,
 } from "./administrator-account.repository";
-import {
-  type CreateAdministratorDependencies,
-  normalizeAdministratorEmail,
-} from "./create-administrator.use-case";
-import { generateInitialPassword } from "./initial-password";
+import { normalizeAdministratorEmail } from "./create-administrator.use-case";
+import { generateInitialPassword, type InitialPasswordDependencies } from "./initial-password";
 
 export const RESET_SECOND_FACTOR_EVENT = {
   RESET: "administrator_second_factor_reset",
@@ -28,13 +25,10 @@ export type ResetSecondFactorEvent =
     }
   | { event: typeof RESET_SECOND_FACTOR_EVENT.FAILED; error: string };
 
-export type ResetSecondFactorDependencies = Omit<
-  CreateAdministratorDependencies,
-  "accounts" | "log"
-> & {
+export interface ResetSecondFactorDependencies extends InitialPasswordDependencies {
   accounts: AdministratorRecoveryRepository;
   log: (event: ResetSecondFactorEvent) => void;
-};
+}
 
 export interface ResetSecondFactorResultWithPassword {
   outcome: ResetSecondFactorResult;
@@ -65,15 +59,16 @@ export class ResetSecondFactorUseCase {
     const { accounts, hashPassword, log } = this.dependencies;
 
     const password = this.generatePassword();
-    let outcome: ResetSecondFactorResult;
+    let stored: ResetSecondFactorResult;
     try {
-      outcome = await accounts.resetSecondFactor({
+      stored = await accounts.resetSecondFactor({
         email,
         passwordHash: await hashPassword(password),
         issuedAt: this.now(),
       });
     } catch (error) {
-      // The class name only: a message may carry SQL or the address.
+      // The class name only: a message may carry SQL or the address. This repeats the auth module's
+      // `errorClass` (`auth/safe-logging.ts`) on purpose: importing it would cross a module boundary.
       log({
         event: RESET_SECOND_FACTOR_EVENT.FAILED,
         error: error instanceof Error ? error.name : "unknown",
@@ -81,15 +76,15 @@ export class ResetSecondFactorUseCase {
       throw error;
     }
 
-    if (outcome.outcome === "reset") {
-      log({ event: RESET_SECOND_FACTOR_EVENT.RESET, userId: outcome.userId });
-      return { outcome, initialPassword: password };
+    if (stored.outcome === "reset") {
+      log({ event: RESET_SECOND_FACTOR_EVENT.RESET, userId: stored.userId });
+      return { outcome: stored, initialPassword: password };
     }
     log({
       event: RESET_SECOND_FACTOR_EVENT.REFUSED,
-      ...("userId" in outcome ? { userId: outcome.userId } : {}),
-      reason: outcome.reason,
+      ...("userId" in stored ? { userId: stored.userId } : {}),
+      reason: stored.reason,
     });
-    return { outcome };
+    return { outcome: stored };
   }
 }

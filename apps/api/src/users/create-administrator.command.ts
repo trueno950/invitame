@@ -7,6 +7,7 @@ import {
   CreateAdministratorUseCase,
   InvalidAdministratorEmailError,
 } from "./application/create-administrator.use-case";
+import { INITIAL_PASSWORD_NOTICE } from "./application/initial-password";
 import { PrismaAdministratorAccountRepository } from "./infrastructure/prisma-administrator-account.repository";
 
 const USAGE = "Usage: pnpm --filter @invitame/api admin:create -- <email>";
@@ -20,7 +21,8 @@ const USAGE = "Usage: pnpm --filter @invitame/api admin:create -- <email>";
  * The initial password is printed once, on its own stdout line, and is never logged or written to
  * disk: the command refuses to run when stdout is not a terminal, so it cannot land in a redirected
  * file. The JSON-line events carry the user id at most. Prisma reads `DATABASE_URL` as the Prisma
- * scripts do. Exit codes: 0 password issued, 1 refused or failure, 2 usage error.
+ * scripts do. Exit codes: 0 password issued, 1 refused or failure, 2 usage error or stdout not a
+ * terminal.
  */
 async function main(args: readonly string[]): Promise<number> {
   const emails = args[0] === "--" ? args.slice(1) : args;
@@ -47,9 +49,7 @@ async function main(args: readonly string[]): Promise<number> {
     if (initialPassword === undefined) {
       return 1;
     }
-    process.stdout.write(
-      `Initial password, shown only now; it stops working 24 hours from now unless an authenticator app is enrolled:\n${initialPassword}\n`,
-    );
+    process.stdout.write(`${INITIAL_PASSWORD_NOTICE}\n${initialPassword}\n`);
     return 0;
   } catch (error) {
     if (error instanceof InvalidAdministratorEmailError) {

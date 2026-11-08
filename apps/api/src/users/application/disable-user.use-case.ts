@@ -3,6 +3,8 @@ import type { DisabledUser, UserAccessRepository } from "./user-access.repositor
 export const DISABLE_USER_EVENT = {
   DISABLED: "user_disabled",
   NOT_FOUND: "user_disable_not_found",
+  /** Written by the `user:disable` command, not the use case: an unexpected error, class name only. */
+  FAILED: "user_disable_failed",
 } as const;
 
 /** Operational events carry the user id at most, never the email address. */

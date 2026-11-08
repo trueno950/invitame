@@ -12,8 +12,10 @@ export class PrismaUserAccessRepository implements UserAccessRepository {
         return null;
       }
 
-      // Conditional update: the count tells whether this call changed the status.
-      const { count: changed } = await transaction.user.updateMany({
+      // Conditional update: the count tells whether this call changed the status. It matches only
+      // an ACTIVE user, so `alreadyDisabled` means "was not ACTIVE before this call"; with
+      // `UserStatus` holding only ACTIVE and DISABLED, that is DISABLED.
+      const { count: disabledByThisCall } = await transaction.user.updateMany({
         where: { id: user.id, status: "ACTIVE" },
         data: { status: "DISABLED" },
       });
@@ -21,7 +23,7 @@ export class PrismaUserAccessRepository implements UserAccessRepository {
         where: { userId: user.id },
       });
 
-      return { userId: user.id, alreadyDisabled: changed === 0, revokedSessions };
+      return { userId: user.id, alreadyDisabled: disabledByThisCall === 0, revokedSessions };
     });
   }
 }

@@ -30,6 +30,8 @@ const SESSION_COOKIE = "better-auth.session_token";
 const TWO_FACTOR_COOKIE = "better-auth.two_factor";
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+/** S20: an initial password works for 24 hours after its issue unless an app is enrolled. */
+const ENROLLMENT_WINDOW_MS = 24 * HOUR_MS;
 
 function decodeBase32(input: string): string {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -162,7 +164,7 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
   }
 
   it("refuses an expired initial password exactly like a wrong one and creates no session", async () => {
-    const admin = await seedAdministrator(new Date(Date.now() - 24 * HOUR_MS - 1000));
+    const admin = await seedAdministrator(new Date(Date.now() - ENROLLMENT_WINDOW_MS - 1000));
     const wrong = await snapshot(await signIn(admin.email, "wrong-password-x"));
 
     const response = await signIn(admin.email, admin.password);
@@ -294,7 +296,7 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
     assert.ok(pending);
     await prisma.account.updateMany({
       where: { userId: admin.id, providerId: "credential" },
-      data: { createdAt: new Date(Date.now() - 24 * HOUR_MS - 1000) },
+      data: { createdAt: new Date(Date.now() - ENROLLMENT_WINDOW_MS - 1000) },
     });
 
     assert.equal(await (await call("/get-session", undefined, pending)).text(), "null");
@@ -419,9 +421,11 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
   }
 
   /**
-   * `failRevert`: the compensating `updateMany` that sets `twoFactorEnabled` back to false throws.
-   * `pauseVerifiedUpdate` holds the next `verified: true` write of a `TwoFactor` row, the last step of
-   * a first confirmation, until `release` is called; `reached` resolves when that write is held.
+   * A pending administrator with a started enrollment on an auth instance whose Prisma client can be
+   * interposed. The one option, `failRevert`, makes the compensating `updateMany` that sets
+   * `twoFactorEnabled` back to false throw. The returned `pauseVerifiedUpdate()` holds the next
+   * `verified: true` write of a `TwoFactor` row, the last step of a first confirmation, until its
+   * `release` is called; its `reached` resolves when that write is held.
    */
   async function racingEnrollment(label: string, options: { failRevert?: boolean } = {}) {
     let interpose: (() => Promise<void>) | undefined;
@@ -812,7 +816,7 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
 
   // T7d (S40, L49 R3-revert-failure-locks-without-log): the account stays locked, fails closed, and
   // the failure is logged with the error class only.
-  it("refuses with 401 and logs compensation_failed when the revert itself fails", async () => {
+  it("refuses with 401 and logs administrator_enrollment_compensation_failed when the revert itself fails", async () => {
     const race = await racingEnrollment("revert-fails", { failRevert: true });
 
     const confirmation = await race.confirm(async () => {

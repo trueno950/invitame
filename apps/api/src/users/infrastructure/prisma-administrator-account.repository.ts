@@ -80,6 +80,9 @@ export class PrismaAdministratorAccountRepository
         data: { updatedAt: issuedAt },
       });
       if (eligible === 0) {
+        // The status alone tells the reason: this row was read as an ADMIN in this transaction and
+        // no code path changes a role, so an ACTIVE row that did not match has enrolled. Any other
+        // status, or a row deleted meanwhile, is reported as disabled.
         const current = await transaction.user.findUnique({
           where: { id: existing.id },
           select: { status: true },
@@ -115,6 +118,9 @@ export class PrismaAdministratorAccountRepository
         where: { id: existing.id, role: "ADMIN", status: "ACTIVE" },
         data: { twoFactorEnabled: false, updatedAt: issuedAt },
       });
+      // Zero matches means the row is no longer an ACTIVE ADMIN. Roles never change, so that is a
+      // DISABLED administrator; a row deleted meanwhile carries the same label, which leaves the
+      // refusal and its unchanged rows exactly as for a disable.
       if (eligible === 0) {
         return { outcome: "refused", userId: existing.id, reason: "disabled" };
       }

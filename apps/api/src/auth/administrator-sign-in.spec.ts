@@ -7,6 +7,7 @@ import { Controller, Get, type INestApplication, Module } from "@nestjs/common";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 
+import { MemoryOwnProfileRepository } from "../../test/memory-own-profile.repository";
 import { createApp } from "../app.setup";
 import { createConfigModule } from "../config/config.module";
 import {
@@ -14,11 +15,8 @@ import {
   EmailDeliveryService,
 } from "../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
-import {
-  OWN_PROFILE_REPOSITORY,
-  type OwnProfile,
-  type OwnProfileRepository,
-} from "../users/application/own-profile.repository";
+import { INITIAL_PASSWORD_WINDOW_HOURS } from "../users/application/initial-password";
+import { OWN_PROFILE_REPOSITORY } from "../users/application/own-profile.repository";
 import { OwnProfileController } from "../users/presentation/own-profile.controller";
 import { OWN_PROFILE_USE_CASES } from "../users/users.module";
 import { AdminOnly } from "./access-control/access-control";
@@ -56,26 +54,6 @@ class ProbeController {
   @Get("admin")
   readAdmin(): { ok: true } {
     return { ok: true };
-  }
-}
-
-class MemoryOwnProfileRepository implements OwnProfileRepository {
-  constructor(private readonly users: () => Row[]) {}
-
-  async findById(userId: string): Promise<OwnProfile | null> {
-    const row = this.users().find((user) => user.id === userId);
-    return row
-      ? {
-          id: String(row.id),
-          email: String(row.email),
-          displayName: (row.displayName as string | null) || null,
-          role: row.role as OwnProfile["role"],
-        }
-      : null;
-  }
-
-  async updateDisplayName(userId: string): Promise<OwnProfile | null> {
-    return this.findById(userId);
   }
 }
 
@@ -508,8 +486,12 @@ describe("administrator sign-in, enrollment gate, and second factor", () => {
   });
 
   describe("pre-enrollment window of 24 hours (S20)", () => {
-    it("pins the window at 24 hours", () => {
+    it("pins the window at 24 hours, as the creation and recovery commands print it", () => {
       assert.equal(ADMINISTRATOR_ENROLLMENT_WINDOW_SECONDS, 24 * 60 * 60);
+      assert.equal(
+        INITIAL_PASSWORD_WINDOW_HOURS * 60 * 60,
+        ADMINISTRATOR_ENROLLMENT_WINDOW_SECONDS,
+      );
     });
 
     it("accepts the initial password shortly before the window ends", async () => {

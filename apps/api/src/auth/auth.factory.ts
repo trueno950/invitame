@@ -23,7 +23,7 @@ import {
   TWO_FACTOR_PATH,
 } from "./auth-paths";
 import { type AuthRequestLog, guardAuthHandler } from "./auth-request-guard";
-import { enforceSessionAccess } from "./inactive-session-hook";
+import { enforceSessionAccess } from "./session-access-hook";
 import {
   administratorSessionExpiresAt,
   CUSTOMER_SESSION_EXPIRES_IN_SECONDS,

@@ -7,7 +7,7 @@ import { Global, type INestApplication, Module } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { ClientAddresses, requireLocalDatabaseUrl } from "../../test/database";
+import { ClientAddresses, LOCAL_HOSTS, requireLocalDatabaseUrl } from "../../test/database";
 import { createApp } from "../app.setup";
 import { AccessControlModule } from "../auth/access-control/access-control.module";
 import { createAuth } from "../auth/auth.factory";
@@ -135,7 +135,7 @@ describe("own profile on the Prisma schema (real PostgreSQL)", () => {
   }
 
   it("runs against the explicit local database", () => {
-    assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(new URL(databaseUrl).hostname));
+    assert.ok(LOCAL_HOSTS.has(new URL(databaseUrl).hostname));
   });
 
   describe("PATCH /me", () => {

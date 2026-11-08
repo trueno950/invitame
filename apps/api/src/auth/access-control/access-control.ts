@@ -22,10 +22,11 @@ const ADMIN_ONLY = Symbol("invitame:admin-only");
  * refused: `@AllowAnonymous()` would otherwise look public and `@Roles()` would look restricted.
  * The library writes these keys as inline strings in its decorators and exports no constant for
  * them, so they are copied here. The dependency is pinned to an exact version, and a test applies
- * each access decorator the library exports today and expects this check to find a marker on it.
- * That test does not pin each key: `OrgRoles` also writes `REQUIRE_ACTIVE_ORG`, so a renamed
- * `ORG_ROLES` would still be refused but would not fail it. A decorator added by an upgrade needs
- * a new entry in that test and in this list.
+ * each access decorator the library exports today, asserts the exact set of keys it writes (two for
+ * `OrgRoles`, which also writes `REQUIRE_ACTIVE_ORG`), and expects this check to find each of those
+ * keys on a class that carries no other one. Removing or renaming any entry here, or a key the
+ * library renames, fails that test. A decorator added by an upgrade needs a new entry in that test
+ * and in this list.
  */
 const UNSUPPORTED_INTEGRATION_KEYS = [
   "PUBLIC",

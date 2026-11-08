@@ -75,7 +75,7 @@ decision 3, and "Abuse limits" for decision 7.
 ### Sessions and cookies (current)
 
 This is the implemented API side of ADR 0004 decision 4 as amended on 2026-11-05 (S14, S16;
-`auth/session-settings.ts`, `auth/auth.factory.ts`, `auth/inactive-session-hook.ts`). The web side is
+`auth/session-settings.ts`, `auth/auth.factory.ts`, `auth/session-access-hook.ts`). The web side is
 described in "Web boundary" below.
 
 - `AUTH_BASE_URL` is the public web origin through which the web proxies `/api/auth`. Startup validation
@@ -261,7 +261,7 @@ This is the implemented state of ADR 0004 decision 6.
   marker. The guard still refuses such a route with `500` per request, as defense in depth.
 - The role and status are read from the stored user on every request. Better Auth's session cookie cache is
   pinned off, so a revoked session or a `DISABLED` user is rejected on the next request.
-- On Better Auth's own endpoints, a `hooks.before` hook (`auth/inactive-session-hook.ts`) reads the session and
+- On Better Auth's own endpoints, a `hooks.before` hook (`auth/session-access-hook.ts`) reads the session and
   its stored user from the database and deletes the session when the user is not `ACTIVE`. Every endpoint then
   answers as it does without a session: `GET /api/auth/get-session` returns `200 null`, endpoints that need a
   session return `401`, and sign-out still succeeds. The hook also runs for the guard's own session lookup.
@@ -292,7 +292,7 @@ This is the implemented state of ADR 0004 decision 6.
 ### Administrator sign-in and enrollment gate (current)
 
 This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (`auth/account-access.ts`,
-`auth/administrator-enrollment.ts`, `auth/inactive-session-hook.ts`).
+`auth/administrator-enrollment.ts`, `auth/session-access-hook.ts`).
 
 - Administrators sign in with `POST /api/auth/sign-in/email` (email and password). A customer, an unknown
   address, a wrong password, a `DISABLED` administrator, and an expired initial password all get the identical
