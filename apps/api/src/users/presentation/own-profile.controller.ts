@@ -27,7 +27,8 @@ export interface OwnProfileResponse {
 }
 
 function toResponse(profile: OwnProfile | null): OwnProfileResponse {
-  // The session's user no longer exists: the session is no longer valid.
+  // No profile: the session's user no longer exists, or a write found the account no longer ACTIVE (S53).
+  // Either way the session is no longer valid.
   if (!profile) {
     throw new UnauthorizedException();
   }

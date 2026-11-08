@@ -11,7 +11,10 @@ export interface OwnProfile {
 export interface OwnProfileRepository {
   /** Returns the stored profile, or null when no user has this id. */
   findById(userId: string): Promise<OwnProfile | null>;
-  /** Stores a validated display name (null clears it); returns null when no user has this id. */
+  /**
+   * Stores a validated display name (null clears it); returns null, storing nothing, when no user has
+   * this id or the account is not ACTIVE (S53).
+   */
   updateDisplayName(userId: string, displayName: string | null): Promise<OwnProfile | null>;
 }
 

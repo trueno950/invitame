@@ -29,6 +29,8 @@ const AUTH_BASE_URL = "http://localhost:3000";
 const AUTH_PATH = "/api/auth";
 const CLIENT_IP_HEADER = "x-invitame-client-ip";
 const REFUSED = { status: 403, body: { code: "FORBIDDEN", message: "Forbidden." } };
+const REQUIRED_MESSAGE =
+  "AUTH_PROXY_SECRET is required to serve authentication requests unless the proxy secret requirement is turned off.";
 const UNAVAILABLE = {
   status: 503,
   body: {
@@ -208,7 +210,7 @@ describe("production: every auth request carries the proxy secret (L36)", () => 
 
   it("refuses to build when production requires the secret and none is configured", () => {
     assert.throws(() => createHarness({ requireProxySecret: true }), {
-      message: "AUTH_PROXY_SECRET is required to serve authentication requests in production.",
+      message: REQUIRED_MESSAGE,
     });
   });
 });
@@ -239,7 +241,7 @@ describe("the proxy secret is required unless a caller turns it off (S46, L71)",
 
   it("refuses to build when the option is omitted and no secret is configured", () => {
     assert.throws(() => createHarness({ requireProxySecret: "omitted" }), {
-      message: "AUTH_PROXY_SECRET is required to serve authentication requests in production.",
+      message: REQUIRED_MESSAGE,
     });
   });
 
@@ -338,21 +340,61 @@ describe("a previous secret is accepted while a rotation lasts (S47, L71)", () =
     assert.ok(received.every((request) => request.headers.get(AUTH_PROXY_SECRET_HEADER) === null));
   });
 
-  it("refuses the former secret after the previous one is removed", async () => {
+  it("refuses a secret that was accepted as the previous one once it is removed from the configuration", async () => {
     const current = randomBytes(32).toString("base64url");
-    const former = randomBytes(32).toString("base64url");
-    const harness = createHarness({
+    const rotating = randomBytes(32).toString("base64url");
+    const headers = { [AUTH_PROXY_SECRET_HEADER]: rotating, [CLIENT_IP_HEADER]: "203.0.113.24" };
+    const during = createHarness({
+      proxySecret: current,
+      previousProxySecret: rotating,
+      requireProxySecret: true,
+      requireClientIp: true,
+    });
+    const after = createHarness({
       proxySecret: current,
       requireProxySecret: true,
       requireClientIp: true,
     });
 
-    const response = await harness.requestCode(newEmail("rot-removed"), {
-      [AUTH_PROXY_SECRET_HEADER]: former,
-      [CLIENT_IP_HEADER]: "203.0.113.24",
-    });
+    const accepted = await during.requestCode(newEmail("rot-during"), headers);
+    const refused = await after.requestCode(newEmail("rot-removed"), headers);
+    await during.tasks.drain();
 
-    assert.deepEqual(await outcome(response), REFUSED);
+    assert.equal(accepted.status, 200, "the value is accepted while it is the previous secret");
+    assert.deepEqual(await outcome(refused), REFUSED);
+    assert.deepEqual(after.events, [
+      {
+        event: AUTH_REQUEST_EVENT.PROXY_REJECTED,
+        path: `${AUTH_PATH}${SIGN_IN_CODE_REQUEST_PATH}`,
+      },
+    ]);
+  });
+
+  it("refuses to build with a previous secret and no current one, so no client IP is ever trusted", () => {
+    const previous = randomBytes(32).toString("base64url");
+    const message = "AUTH_PROXY_SECRET_PREVIOUS requires AUTH_PROXY_SECRET.";
+
+    // `required: false` is the case that used to build: the IP header was trusted with no valid secret.
+    assert.throws(
+      () =>
+        guardAuthHandler(async () => Response.json({ ok: true }), {
+          log: () => {},
+          proxy: {
+            secret: undefined,
+            previousSecret: previous,
+            required: false,
+            clientIpHeader: CLIENT_IP_HEADER,
+          },
+        }),
+      { message },
+    );
+    for (const requireProxySecret of [false, true, "omitted"] as const) {
+      assert.throws(
+        () => createHarness({ previousProxySecret: previous, requireProxySecret }),
+        { message },
+        `requireProxySecret: ${requireProxySecret}`,
+      );
+    }
   });
 });
 

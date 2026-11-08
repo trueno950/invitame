@@ -171,16 +171,16 @@ describe("Better Auth registration from validated configuration (L36, L37)", () 
 
   it("refuses the previous proxy secret once it is removed from the configuration (S47)", async () => {
     mock.method(Logger.prototype, "warn", () => {});
-    const { auth, origin } = registeredAuth(productionEnvironment());
+    const rotating = randomBytes(32).toString("base64url");
+    const headers = { [CLIENT_IP_HEADER]: "198.51.100.7", [AUTH_PROXY_SECRET_HEADER]: rotating };
+    const during = registeredAuth(productionEnvironment(rotating));
+    const after = registeredAuth(productionEnvironment());
 
-    const response = await auth.handler(
-      get(origin, {
-        [CLIENT_IP_HEADER]: "198.51.100.7",
-        [AUTH_PROXY_SECRET_HEADER]: randomBytes(32).toString("base64url"),
-      }),
-    );
+    const accepted = await during.auth.handler(get(during.origin, headers));
+    const refused = await after.auth.handler(get(after.origin, headers));
 
-    assert.equal(response.status, REFUSED.status);
+    assert.equal(accepted.status, 200, "the value is accepted while it is the previous secret");
+    assert.equal(refused.status, REFUSED.status);
   });
 
   it("keeps serving requests without a proxy secret outside production", async () => {

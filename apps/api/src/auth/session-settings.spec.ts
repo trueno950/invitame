@@ -348,6 +348,40 @@ describe("administrator session expiry with an invalid creation time (S49, L71)"
     const logged = JSON.stringify(harness.events);
     assert.ok(!logged.includes(admin.email) && !logged.includes(admin.id));
   });
+
+  it("deletes the expired session and clears the cookie on the next read over HTTP, and nothing extends it", async () => {
+    const harness = createHarness(LOCAL_ORIGIN);
+    const admin = await harness.seedAdministrator();
+    const context = await harness.auth.$context;
+    const session = await context.internalAdapter.createSession(
+      admin.id,
+      false,
+      { createdAt: new Date(Number.NaN) },
+      true,
+    );
+    const cookie = harness.signedCookie(LOCAL_SESSION_COOKIE, session.token);
+    const weekAhead = new Date(Date.now() + SEVEN_DAYS_MS);
+
+    // Neither the update hook nor Better Auth's disabled endpoint moves the stored expiry forward.
+    assert.equal(
+      await context.internalAdapter.updateSession(session.token, { expiresAt: weekAhead }),
+      null,
+    );
+    const endpoint = await harness.call("/update-session", {
+      body: { expiresAt: weekAhead.toISOString() },
+      cookie,
+    });
+    assert.equal(endpoint.status, 404);
+    assert.ok(time(harness.onlySessionOf(admin.id).expiresAt) <= Date.now());
+
+    const read = await harness.call("/get-session", { cookie });
+
+    assert.equal(read.status, 200);
+    assert.equal(await read.json(), null);
+    assert.equal(harness.sessionsOf(admin.id).length, 0, "the expired session is deleted");
+    const cleared = parseSetCookies(read).find((entry) => entry.name === LOCAL_SESSION_COOKIE);
+    assert.equal(cleared?.value, "", "the session cookie is cleared");
+  });
 });
 
 describe("administrator sessions: 12 hours from sign-in, never refreshed (S16, L34)", () => {

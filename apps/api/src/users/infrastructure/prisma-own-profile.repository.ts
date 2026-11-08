@@ -33,7 +33,7 @@ export class PrismaOwnProfileRepository implements OwnProfileRepository {
       });
       return toProfile(row);
     } catch (error) {
-      // P2025: no row matched, for example a user deleted or disabled after the guard read the session.
+      // P2025: no row matched, because no user has this id or the account is not ACTIVE (S53).
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
         return null;
       }

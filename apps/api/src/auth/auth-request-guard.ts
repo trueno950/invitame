@@ -43,14 +43,14 @@ type AuthHandler = (request: Request) => Promise<Response>;
 
 /** How the guard checks that a request came through the web proxy (L36). */
 export interface AuthProxyOptions {
-  /** The shared secret; undefined only outside production, where nothing is required. */
+  /** The shared secret; undefined only when a caller turns the requirement off explicitly (S46). */
   secret: string | undefined;
   /**
    * The secret before a rotation (S47): accepted next to `secret` until the owner removes it, so the
    * API, the web, and the removal can happen one after another without a cut.
    */
   previousSecret?: string | undefined;
-  /** Production: refuse every request that does not carry the secret. */
+  /** Refuse every request that does not carry a valid secret; on unless turned off explicitly (S46). */
   required: boolean;
   /** Lower-case name of the client IP header, trusted only next to a valid secret. */
   clientIpHeader: string;
@@ -149,9 +149,16 @@ export function guardAuthHandler(
 ): AuthHandler {
   const proxy = options.proxy;
 
+  // A previous secret without a current one would leave `secret` undefined, and the client IP header
+  // would be trusted with no valid secret. This mirrors the environment rule (S47).
+  if (proxy?.previousSecret !== undefined && proxy.secret === undefined) {
+    throw new Error("AUTH_PROXY_SECRET_PREVIOUS requires AUTH_PROXY_SECRET.");
+  }
+
+  // The secret is required by default in every environment (S46); only an explicit opt-out skips it.
   if (proxy?.required && proxy.secret === undefined) {
     throw new Error(
-      "AUTH_PROXY_SECRET is required to serve authentication requests in production.",
+      "AUTH_PROXY_SECRET is required to serve authentication requests unless the proxy secret requirement is turned off.",
     );
   }
 

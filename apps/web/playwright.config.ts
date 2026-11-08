@@ -44,6 +44,8 @@ const apiEnvironment = {
   BETTER_AUTH_SECRET: runSecret(),
   BETTER_AUTH_TRUSTED_ORIGINS: "",
   AUTH_PROXY_SECRET: proxySecret,
+  // Pinned empty so a developer's `apps/api/.env` cannot add a rotation secret to the e2e API.
+  AUTH_PROXY_SECRET_PREVIOUS: "",
   AUTH_CLIENT_IP_HEADER: CLIENT_IP_HEADER,
   AUTH_TRUSTED_PROXIES: "",
   // The API's existing provider for local mail: codes reach the tests only through Mailpit.

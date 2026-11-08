@@ -126,19 +126,30 @@ Unit tests run in `pnpm --filter @invitame/api test`, the database test in `test
   option is omitted, refuses to build with no secret, and still serves without one when a caller passes `false`.
   Every other `createAuth` caller in a test now passes `requireProxySecret: false` explicitly.
 - S47, the previous secret: the same file, "a previous secret is accepted while a rotation lasts (S47, L71)"
-  (either secret serves and trusts the client IP header, any other gets 403, a removed secret gets 403);
-  `config/environment.spec.ts` "AUTH_PROXY_SECRET_PREVIOUS (rotation)" (optional, at least 32 characters, differs
-  from `BETTER_AUTH_SECRET` and from `AUTH_PROXY_SECRET`, needs `AUTH_PROXY_SECRET`, never echoed);
-  U-registration "serves a production request with the previous proxy secret during a rotation (S47)".
+  (either secret serves and trusts the client IP header, any other gets 403). "refuses a secret that was accepted
+  as the previous one once it is removed" builds with the secret as the previous one (200), then without it (403).
+  "refuses to build with a previous secret and no current one" covers the guard rule (no client IP is trusted
+  without a valid secret). `auth/auth-proxy-secret-comparison.spec.ts` shows one constant-time comparison per
+  configured secret, whichever matches. `config/environment.spec.ts` "AUTH_PROXY_SECRET_PREVIOUS (rotation)"
+  (optional, at least 32 characters, differs from `BETTER_AUTH_SECRET` and from `AUTH_PROXY_SECRET`, needs
+  `AUTH_PROXY_SECRET`, never echoed). U-registration "serves a production request with the previous proxy secret
+  during a rotation (S47)" and "refuses the previous proxy secret once it is removed from the configuration
+  (S47)" (the same value, 200 then 403).
 - S48, bidirectional controls: U-profile "PATCH /me › rejects the bidirectional control U+<code point> with the DTO's
   400 body and keeps the stored name" for each of the 12 code points, and "accepts the zero-width joiner of composed
   emoji and some scripts (S48)".
+  `users/domain/display-name.spec.ts` covers the rule at its source: each of the 12 code points at the start, inside,
+  at the end, alone, and in padding, and the neighbours that stay valid.
 - S49, an invalid administrator creation time: `auth/session-settings.spec.ts` "administrator session expiry with an
   invalid creation time (S49, L71)" proves the stored session is already expired, reads as no session, and logs one
   `administrator_session_created_at_invalid` event without personal data; a valid time still gives 12 hours.
+  "deletes the expired session and clears the cookie on the next read over HTTP" shows nothing extends it.
 - S53, the display-name write needs an ACTIVE account: DB-races "PATCH /me racing user:disable › does not store the
   name of a user disabled after the guard's session check (S53)" (R4, L30) is a required test. `PATCH /me` answers
   401, the name stays empty, and the next request gets 401.
+  `users/infrastructure/prisma-own-profile.repository.db-spec.ts` proves the same statement on PostgreSQL: an ACTIVE
+  account renames and clears, a DISABLED or unknown one answers null and keeps its name, and a disable that holds
+  the row lock makes the waiting write store nothing.
 
 ## Findings routed to T9 (plan Log L35 to L44)
 
