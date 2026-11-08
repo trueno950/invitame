@@ -5,9 +5,12 @@ import { ACCOUNT_COPY, SIGN_IN_CODE_POLICY, SIGN_IN_COPY } from "./copy.ts";
 
 // Customer product copy (M2 T8c; L39): Spanish, addressed with "tú", in one reviewable module.
 
-/** Every number the copy writes before `unit`, such as the 6 of «6 dígitos». */
+/**
+ * Every number the copy writes before `unit`, such as the 6 of «6 dígitos». Any whitespace counts,
+ * a non-breaking space included. Numbers written in words, such as «un minuto», are not detected.
+ */
 function numbersBefore(unit: string): Set<number> {
-  const pattern = new RegExp(`(\\d+) ${unit}`, "g");
+  const pattern = new RegExp(`(\\d+)\\s+${unit}`, "g");
   const numbers = new Set<number>();
   for (const value of strings()) {
     for (const [, number] of value.matchAll(pattern)) {
@@ -49,8 +52,8 @@ describe("customer copy", () => {
   });
 
   it("states the code length and lifetime of SIGN_IN_CODE_POLICY wherever it names them", () => {
-    assert.deepEqual(numbersBefore("dígitos"), new Set([SIGN_IN_CODE_POLICY.digits]));
-    assert.deepEqual(numbersBefore("minutos"), new Set([SIGN_IN_CODE_POLICY.validityMinutes]));
+    assert.deepEqual(numbersBefore("dígitos?"), new Set([SIGN_IN_CODE_POLICY.digits]));
+    assert.deepEqual(numbersBefore("minutos?"), new Set([SIGN_IN_CODE_POLICY.validityMinutes]));
   });
 
   it("tells a browser without JavaScript why each button stays disabled (T8e; S42)", () => {

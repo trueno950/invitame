@@ -100,7 +100,7 @@ export function createApiClient(options: ApiClientOptions) {
   async function sendOwnProfileRequest(
     cookieHeader: string | null | undefined,
     method: "GET" | "PATCH",
-    path: string,
+    path: "/me",
     body?: unknown,
   ): Promise<SessionResult<OwnProfile>> {
     const cookie = sessionCookieHeader(cookieHeader);

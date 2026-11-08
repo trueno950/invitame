@@ -42,7 +42,10 @@ const VERIFY_BACKUP_CODE_PATH = "/api/auth/two-factor/verify-backup-code";
 const BACKUP_CODE_PATTERN = /^[A-Za-z0-9]{5}-[A-Za-z0-9]{5}$/;
 const AUTHENTICATOR_CODE_PATTERN = new RegExp(`^[0-9]{${SECOND_FACTOR_POLICY.codeDigits}}$`);
 
-/** Keeps ASCII digits only, at most 6, so a pasted "123 456" still works. */
+/**
+ * Keeps ASCII digits only, at most `SECOND_FACTOR_POLICY.codeDigits`, so a pasted "123 456" still
+ * works.
+ */
 export function normalizeAuthenticatorCode(raw: string): string {
   return raw.replace(/[^0-9]/g, "").slice(0, SECOND_FACTOR_POLICY.codeDigits);
 }
