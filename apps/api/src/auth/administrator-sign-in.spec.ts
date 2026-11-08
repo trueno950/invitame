@@ -645,7 +645,7 @@ describe("administrator sign-in, enrollment gate, and second factor", () => {
     // ADR 0004 decision 3, clarified (2026-11-07; T11, L64): the session hook hides a pending session
     // from every path outside this set, so the set is the whole allow list. The tests around this one
     // prove each allowed endpoint works and a sample of the others answers as without a session.
-    it("allows an un-enrolled administrator's session on exactly four Better Auth endpoints", () => {
+    it("lists exactly four Better Auth endpoints in the pending-administrator allow list", () => {
       assert.deepEqual([...PENDING_ADMINISTRATOR_ENDPOINTS].sort(), [
         "/get-session",
         "/sign-out",

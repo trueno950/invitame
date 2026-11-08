@@ -7,7 +7,11 @@ import { after, describe, it } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { verifyPassword } from "better-auth/crypto";
 import { requireLocalDatabaseUrl } from "../../test/database";
-import { INITIAL_PASSWORD_NOTICE } from "./application/initial-password";
+import {
+  INITIAL_PASSWORD_ALPHABET,
+  INITIAL_PASSWORD_LENGTH,
+  INITIAL_PASSWORD_NOTICE,
+} from "./application/initial-password";
 
 // The `admin:create` command (M2 T7, S20; T11, L66): its stdout layout, run as the package script
 // runs it, against real PostgreSQL. The command reads `process.stdout.isTTY` and exports nothing, so a
@@ -16,42 +20,59 @@ import { INITIAL_PASSWORD_NOTICE } from "./application/initial-password";
 
 const API_ROOT = path.resolve(__dirname, "../..");
 const COMMAND = "./src/users/create-administrator.command.ts";
+// A synchronous spawn cannot be interrupted by node:test, so a child that hangs (on a database
+// connection, say) would block the whole database suite. The bound turns a hang into a failure.
+const CHILD_TIMEOUT_MS = 60_000;
+// The alphabet holds only letters and digits, so it is safe inside a character class.
+const PASSWORD_PATTERN = new RegExp(`^[${INITIAL_PASSWORD_ALPHABET}]{${INITIAL_PASSWORD_LENGTH}}$`);
 
 describe("admin:create stdout (real PostgreSQL)", () => {
   const databaseUrl = requireLocalDatabaseUrl();
   const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
   const email = `t11-admin-create-${randomUUID()}@example.test`;
+  // Its own address, so the refusal test neither depends on the order of the tests nor can find an
+  // account that the first test created.
+  const refusedEmail = `t11-admin-create-refused-${randomUUID()}@example.test`;
 
   after(async () => {
     try {
-      await prisma.user.deleteMany({ where: { email } });
+      await prisma.user.deleteMany({ where: { email: { in: [email, refusedEmail] } } });
     } finally {
       await prisma.$disconnect();
     }
   });
 
+  /** Runs the command; the child must finish by itself within the bound, so a hang fails here. */
   function run(args: string[], terminal = true) {
     const load = [
       terminal ? "process.stdout.isTTY = true;" : "",
       `process.argv = ${JSON.stringify([process.execPath, COMMAND, ...args])};`,
       `require(${JSON.stringify(COMMAND)});`,
     ].join(" ");
-    return spawnSync(process.execPath, ["-r", "@swc-node/register", "-e", load], {
+    const result = spawnSync(process.execPath, ["-r", "@swc-node/register", "-e", load], {
       cwd: API_ROOT,
       env: { ...process.env, DATABASE_URL: databaseUrl },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      timeout: CHILD_TIMEOUT_MS,
+      killSignal: "SIGKILL",
     });
+    assert.equal(
+      result.error,
+      undefined,
+      `the command did not run to its end: ${String(result.error)}`,
+    );
+    assert.equal(result.signal, null, `the command was stopped by ${result.signal}`);
+    return result;
   }
 
   /** The stdout of a run that issued a password: one event line, the notice, the password. */
   async function assertIssued(stdout: string, event: Record<string, unknown>) {
     const userId = (await prisma.user.findUniqueOrThrow({ where: { email } })).id;
-    const [logged, notice, password = "", ...rest] = stdout.split("\n");
+    const [logged, notice, password = ""] = stdout.split("\n");
     assert.deepEqual(JSON.parse(logged ?? ""), { ...event, userId });
     assert.equal(notice, INITIAL_PASSWORD_NOTICE);
-    assert.match(password, /^[A-Za-z0-9]{24}$/);
-    assert.deepEqual(rest, [""], "the password line ends the output with one newline");
+    assert.match(password, PASSWORD_PATTERN);
     assert.equal(stdout, `${logged}\n${INITIAL_PASSWORD_NOTICE}\n${password}\n`);
     assert.equal(stdout.includes(email), false, "the address is never printed");
     const { password: hash } = await prisma.account.findFirstOrThrow({
@@ -69,6 +90,7 @@ describe("admin:create stdout (real PostgreSQL)", () => {
 
     const reissued = run(["--", email]);
     assert.equal(reissued.status, 0, reissued.stderr);
+    assert.equal(reissued.stderr, "");
     const second = await assertIssued(reissued.stdout, {
       event: "administrator_password_reissued",
       revokedSessions: 0,
@@ -76,11 +98,12 @@ describe("admin:create stdout (real PostgreSQL)", () => {
     assert.notEqual(second, first);
   });
 
-  it("exits 2 with nothing on stdout when stdout is not a terminal", () => {
-    const piped = run(["--", email], false);
+  it("exits 2 with nothing on stdout and no account when stdout is not a terminal", async () => {
+    const piped = run(["--", refusedEmail], false);
 
     assert.equal(piped.status, 2);
     assert.equal(piped.stdout, "");
     assert.match(piped.stderr, /only on an interactive terminal/);
+    assert.equal(await prisma.user.count({ where: { email: refusedEmail } }), 0);
   });
 });
