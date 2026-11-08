@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l merged as #24 (L45, L46); T9a merged as #25 (L47, L48); T7c merged as #26 (L48, L49); T7d merged as #27 (L49, L50); T9b part A merged as #28 (L50 to L52); T9b part B merged as #29 (L52 to L55); T8e merged as #30 (L55, L56); T9b part C1 merged as #31 (L56 to L59); T9b part C2 merged as #32 (L59, L60); T8f merged as #33 (L60, L61); T10a merged as #34 (L62, L63); the T10 documentation merged as #35 (L63, L64); the first T10 API readability part merged as #36 (L64, L65); the second merged as #37 (L65, L66); the T10 web and harness naming merged as #38 (L66, L67); the T10 web behavior merged as #39 (L68, L69); T10 complete (L61 to L69); T11b merged as #42 (L74, L75); T11c merged as #43 (L75, L76); T11d merged as #44 (L76, L77); T11e merged as #45 (L77, L78); T11 in progress (L70 to L79).
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l merged as #24 (L45, L46); T9a merged as #25 (L47, L48); T7c merged as #26 (L48, L49); T7d merged as #27 (L49, L50); T9b part A merged as #28 (L50 to L52); T9b part B merged as #29 (L52 to L55); T8e merged as #30 (L55, L56); T9b part C1 merged as #31 (L56 to L59); T9b part C2 merged as #32 (L59, L60); T8f merged as #33 (L60, L61); T10a merged as #34 (L62, L63); the T10 documentation merged as #35 (L63, L64); the first T10 API readability part merged as #36 (L64, L65); the second merged as #37 (L65, L66); the T10 web and harness naming merged as #38 (L66, L67); the T10 web behavior merged as #39 (L68, L69); T10 complete (L61 to L69); T11b merged as #42 (L74, L75); T11c merged as #43 (L75, L76); T11d merged as #44 (L76, L77); T11e merged as #45 (L77, L78); T11f merged as #46 (L79, L80); T11 complete with the owner's sign-off (L70 to L81).
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), slice 23 `feat/m2-identity-23-landing` (T8l themed landing, #24, merged), slice 24 `feat/m2-identity-24-integration-tests` (T9a database tests in CI, #25, merged), slice 25 `feat/m2-identity-25-enrollment-race` (T7c enrollment race fix, #26, merged), slice 26 `feat/m2-identity-26-enrollment-hardening` (T7d enrollment hardening, #27, merged), slice 27 `feat/m2-identity-27-browser-tests` (T9b part A browser tests, #28, merged), slice 28 `feat/m2-identity-28-admin-browser-tests` (T9b part B administrator browser tests, #29, merged), slice 29 `feat/m2-identity-29-form-submission` (T8e form submission, #30, merged), slice 30 `feat/m2-identity-30-web-api-client` (T9b part C1 web server hardening, #31, merged), slice 31 `feat/m2-identity-31-test-findings` (T9b part C2 test findings, #32, merged), slice 32 `feat/m2-identity-32-self-hosted-fonts` (T8f self-hosted theme fonts, #33, merged), slice 33 `feat/m2-identity-33-admin-recovery` (T10a administrator recovery command, #34, merged), slice 34 `feat/m2-identity-34-docs-adr` (T10 documentation and ADR, #35, merged), slice 35 `feat/m2-identity-35-api-readability` (T10 API comments and naming, part 1, #36, merged), slice 36 `feat/m2-identity-36-api-users-readability` (T10 API comments and naming, part 2, #37, merged), slice 37 `feat/m2-identity-37-web-readability` (T10 web and harness comments and naming, #38, merged), slice 38 `feat/m2-identity-38-web-behavior` (T10 web behavior, #39, merged), slice 39 `feat/m2-identity-39-security-evidence` (T11a exact outputs and the T11 plan, #40, merged), and slice 40 `feat/m2-identity-40-account-races` (T11a race tests and the A′ and R4 reproductions, #41, merged), slice 41 `feat/m2-identity-41-api-security` (T11b API security fixes, #42, merged), slice 42 `feat/m2-identity-42-session-marker` (T11c second-factor marker, #43, merged), slice 43 `feat/m2-identity-43-log-contract` (T11d log contract, #44, merged), slice 44 `feat/m2-identity-44-web-edge` (T11e web edge, #45, merged), and the T11 verification and sign-off on `feat/m2-identity-45-security-signoff` (L23 to L78). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), slice 23 `feat/m2-identity-23-landing` (T8l themed landing, #24, merged), slice 24 `feat/m2-identity-24-integration-tests` (T9a database tests in CI, #25, merged), slice 25 `feat/m2-identity-25-enrollment-race` (T7c enrollment race fix, #26, merged), slice 26 `feat/m2-identity-26-enrollment-hardening` (T7d enrollment hardening, #27, merged), slice 27 `feat/m2-identity-27-browser-tests` (T9b part A browser tests, #28, merged), slice 28 `feat/m2-identity-28-admin-browser-tests` (T9b part B administrator browser tests, #29, merged), slice 29 `feat/m2-identity-29-form-submission` (T8e form submission, #30, merged), slice 30 `feat/m2-identity-30-web-api-client` (T9b part C1 web server hardening, #31, merged), slice 31 `feat/m2-identity-31-test-findings` (T9b part C2 test findings, #32, merged), slice 32 `feat/m2-identity-32-self-hosted-fonts` (T8f self-hosted theme fonts, #33, merged), slice 33 `feat/m2-identity-33-admin-recovery` (T10a administrator recovery command, #34, merged), slice 34 `feat/m2-identity-34-docs-adr` (T10 documentation and ADR, #35, merged), slice 35 `feat/m2-identity-35-api-readability` (T10 API comments and naming, part 1, #36, merged), slice 36 `feat/m2-identity-36-api-users-readability` (T10 API comments and naming, part 2, #37, merged), slice 37 `feat/m2-identity-37-web-readability` (T10 web and harness comments and naming, #38, merged), slice 38 `feat/m2-identity-38-web-behavior` (T10 web behavior, #39, merged), slice 39 `feat/m2-identity-39-security-evidence` (T11a exact outputs and the T11 plan, #40, merged), and slice 40 `feat/m2-identity-40-account-races` (T11a race tests and the A′ and R4 reproductions, #41, merged), slice 41 `feat/m2-identity-41-api-security` (T11b API security fixes, #42, merged), slice 42 `feat/m2-identity-42-session-marker` (T11c second-factor marker, #43, merged), slice 43 `feat/m2-identity-43-log-contract` (T11d log contract, #44, merged), slice 44 `feat/m2-identity-44-web-edge` (T11e web edge, #45, merged), slice 45 `feat/m2-identity-45-security-signoff` (T11f verification findings and evidence report, #46, merged), and the sign-off record on `feat/m2-identity-46-signoff` (L23 to L81). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -288,8 +288,8 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T11c | Second-factor marker on sessions (L72): an additive migration and the session-access hook change that close A′. Its own slice, test first, with independent verification and native review | S52 | worker | `679d72f` and `282ed9f` (#43) |
 | T11d | Log contract (L71): the approved operational events and fields, without personal data | S50 | worker | `b9a93e6`, `a96f509`, `75798e2`, and `8b948ba` (#44) |
 | T11e | Web edge (L71, L72): 499 for a client abort, the 3-second refresh documented, and the `API_ORIGIN` empty-credentials finding of L59 | S51, S54 | worker | `07072fd` (#45) |
-| T11f | Verification findings (L79): refuse `BETTER_AUTH_SECRETS`, require an explicit `NODE_ENV`, document `BETTER_AUTH_SECRET` rotation, the reset command's failing `close()` (R9), a bounded path in guard events (N5), `499` for an abort while the body is read (N6), the traceability and ADR fixes (F5), the S2 foreign-key test, the accepted-risk tests, and the verification report in the repository | S2, S55, S56, S57 | worker | — |
-| T11 | Security evidence: independent verification of every spec, and human sign-off of secret handling, session expiry, and error mapping. The report also lists the accepted residual risks, such as the per-email cap (L71), and the decisions left open, such as the domain (L7, L71). | S2 | verify | — |
+| T11f | Verification findings (L79): refuse `BETTER_AUTH_SECRETS`, require an explicit `NODE_ENV`, document `BETTER_AUTH_SECRET` rotation, the reset command's failing `close()` (R9), a bounded path in guard events (N5), `499` for an abort while the body is read (N6), the traceability and ADR fixes (F5), the S2 foreign-key test, the accepted-risk tests, and the verification report in the repository | S2, S55, S56, S57 | worker | `6e476c9`, `81c5668`, `c12f6dc`, `f94db2f`, `95b66a4`, `13616dc`, `9668b02`, and `0642ba6` (#46) |
+| T11 | Security evidence: independent verification of every spec, and human sign-off of secret handling, session expiry, and error mapping. The report also lists the accepted residual risks, such as the per-email cap (L71), and the decisions left open, such as the domain (L7, L71). | S2 | verify | evidence in `9668b02` (#46); owner sign-off L81 |
 
 ## Log
 
@@ -1825,3 +1825,121 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   según tus respuestas, R9, N5, N6, F5, la prueba de S2, las pruebas de los riesgos aceptados y el informe. Pasa por
   pruebas primero, revisión nativa y tu aprobación. Después viene la firma." S55, S56, and S57 record the first three
   answers, and T11f holds the slice. The owner edits the two example environment files (F1, N4).
+- **L80** (2026-11-08) Slice 45 (PR #46) holds T11f. A worker built it test first (L79): startup refuses
+  `BETTER_AUTH_SECRETS` (S55) and requires `NODE_ENV` (S56); the rotation of `BETTER_AUTH_SECRET` is documented (S57);
+  guard events log at most 128 characters of the path (N5); a failing store `close()` keeps a command's exit code
+  (R9); a browser abort while the body is read answers `499` (N6); and new tests pin the S2 foreign keys, the accepted
+  display-name characters (R2), and the committed `.env.example` (F1). It came to about 1,110 lines, so the owner was
+  asked: 1. User, choosing an option for "T11f quedó listo, con pruebas primero, para N1, N2, la documentación de N3,
+  R9, N5, N6, F5, la prueba de llaves foráneas de S2, la prueba que fija R2 y el documento de evidencia. Chequeos: API
+  468 de 470 (las 2 que fallan son la prueba de `.env.example`, que pasa cuando cambies la línea 6), web 268 de 268,
+  base de datos 87 de 87; typecheck, lint, formato, documentación y diff-check pasan. Mide unas 1.110 líneas frente al
+  límite de unas 400: unas 616 de código y pruebas, y unas 495 de documentación (evidencia 301, trazabilidad, ADR,
+  arquitectura, README) y del plan (L78, L79, S55 a S57). El worker también actualizó la decisión 9 del ADR (NODE_ENV
+  obligatoria, BETTER_AUTH_SECRETS rechazada), que si no quedaba desactualizada, y usa eventos nuevos `*_close_failed`
+  para que un reinicio ya hecho no se registre como falla. ¿Cómo lo entrego?": "Un PR con dos commits revisados aparte
+  (recomendado)", whose description reads: "PR #46 con A: código y pruebas (unas 616 líneas) y B: documentación y plan
+  (unas 495). Cada uno pasa su propia revisión nativa antes de su commit, como en T11d. Hago el commit A cuando hayas
+  cambiado la línea 6 de `apps/api/.env.example`, para que el CI pase." Part A (`6e476c9`, tree `6c46c37`) passed
+  `review-6dc65b5ad5841c71` (high tier) with three advisories, and the owner was asked: 2. User, choosing an option
+  for "La parte A de T11f (código y pruebas, 616 líneas) pasó la revisión nativa: nivel alto, lentes riesgo,
+  resiliencia y confiabilidad, aprobada con 3 avisos. - R3-proxy-abort-ordering (advertencia): el 499 de N6 depende de
+  que la señal de cancelación ya esté marcada cuando falla la lectura del cuerpo. Si llega en otro orden, la respuesta
+  sería un 500. Arreglo: tratar también un AbortError de esa lectura como cancelación del navegador, porque esa
+  lectura no tiene plazo propio. Lleva una prueba. - R3-env-example-external-dependency (advertencia): la prueba de
+  `.env.example` depende de un archivo que editas tú. Se arregla cuando cambies la línea 6 a
+  `AUTH_BASE_URL=http://localhost:3000`; `NODE_ENV=development` ya está en la línea 1. - R3-dev-script-posix-env
+  (sugerencia): `NODE_ENV=development node ...` en el script `dev` solo funciona en shells POSIX (macOS y Linux), no
+  en Windows. El commit A espera tu cambio en `.env.example` para que el CI pase. ¿Cómo sigo?": "Revisar también las
+  correcciones (recomendado)", whose description reads: "Commit A con el árbol revisado (6c46c37) en cuanto cambies la
+  línea 6. Luego una corrección aparte para el orden de la cancelación, con su propia revisión nativa. El script `dev`
+  queda POSIX y se anota. Después la parte B y el PR #46." The owner edited `apps/api/.env.example` by hand
+  (`c12f6dc`). The abort-ordering fix (`81c5668`) passed `review-5bf0a49adc2b42df` together with part A, with three
+  advisories, and the owner was asked: 3. User, choosing an option for "La revisión nativa aprobó juntas la parte A y
+  la corrección del orden de cancelación (árbol f4990a2: nivel alto, lentes riesgo, resiliencia y confiabilidad). Hubo
+  3 avisos: - R1-001 (sugerencia): un `BETTER_AUTH_SECRETS` que solo tiene espacios cuenta como ausente, porque la
+  validación recorta el valor. Better Auth lee el valor crudo, así que los dos podrían no coincidir. Arreglo: rechazar
+  cualquier valor definido que no sea vacío exacto. - R3-close-wiring-untested (advertencia): solo hay pruebas para el
+  helper y para `admin:reset-second-factor`. Ninguna prueba cubre el cierre de `admin:create` ni el de `user:disable`,
+  ni sus eventos `*_close_failed`. - R3-env-example-external-dependency (advertencia): se resuelve con tu cambio en la
+  línea 6 de `apps/api/.env.example`, que sigue pendiente. ¿Cómo sigo?": "Revisar también las correcciones
+  (recomendado)", whose description reads: "Commit A (6c46c37) y commit de la corrección ya revisada (f4990a2) cuando
+  cambies la línea 6. Luego otra corrección pequeña, con su propia revisión, para R1-001 y las pruebas del cierre de
+  `admin:create` y `user:disable`. Después la parte B y el PR #46." That follow-up (`f94db2f`) refuses a
+  whitespace-only value of either library variable and pins the commands' close wiring; it passed
+  `review-1de3b669abbd9c3d` with advisories on its entry guard, and the owner was asked: 4. User, choosing an option
+  for "La segunda corrección (R1-001 y las pruebas del cierre de `admin:create` y `user:disable`) pasó la revisión
+  nativa: nivel medio, lentes riesgo y confiabilidad, aprobada con 3 avisos. Mide 427 líneas, más de lo «pequeña» que
+  te dije; 275 son las dos pruebas nuevas de comandos. API 497 de 497, web 270, base de datos 87. - R1-001 y
+  R3-entrypoint-guard-main-undefined (dos advertencias sobre lo mismo): para que una prueba de base de datos que carga
+  el comando con `node -e` siguiera pasando, `admin:create` ahora también arranca cuando `require.main` no está
+  definido. Eso puede pasar al importarlo desde ESM, un REPL o `node -e`: el comando correría con los argumentos del
+  proceso que lo importó, abriría una conexión a la base y cambiaría el código de salida. No permite crear un
+  administrador (sin terminal o sin correo válido se rechaza), pero es un efecto no buscado. Arreglo: volver al
+  `require.main === module` estricto, como `user:disable`, y que esa prueba llame a un `main()` exportado. Unas 10
+  líneas. - R3-weak-no-echo-assertion (sugerencia): la prueba de «nunca repite el valor» es débil; mejor comparar el
+  mensaje completo. Unas 5 líneas. ¿Cómo sigo?": "Revisar también las correcciones (recomendado)", whose description
+  reads: "Commit de esta corrección con su árbol revisado (228100a). Luego una tercera corrección de unas 15 líneas
+  (guarda estricta y aserción exacta) con su propia revisión. Después la parte B y el PR #46." `95b66a4` made
+  `admin:create` start only on a direct run and passed `review-10f91d599059c6e8` with one advisory, and the owner was
+  asked: 5. User, choosing an option for "La tercera corrección (guarda estricta de `admin:create` con `main()`
+  exportado, y la aserción exacta del mensaje) pasó la revisión nativa: nivel medio, lentes riesgo y confiabilidad, 34
+  líneas. Antes del cambio, la prueba de base de datos fallaba 85 de 87; con él, API 497, web 270 y base de datos 87.
+  Hubo 1 aviso: - R3-001 (advertencia): ninguna prueba demuestra que correr `admin:create` como script lo arranca, ni
+  que importarlo no hace nada. La prueba de base de datos ahora llama a `main()` directamente y no pasa por la guarda.
+  Arreglo: dos pruebas sin base de datos que lancen el comando en un proceso aparte. Sin argumentos, debe imprimir el
+  uso y salir con 2. Al importarlo con `require`, no debe imprimir nada y debe salir con 0. Unas 30 líneas. ¿Cómo
+  sigo?": "Revisar también la prueba (recomendado)", whose description reads: "Commit de esta corrección con su árbol
+  revisado (9cdf206). Luego las dos pruebas de la guarda como último commit de código, con su propia revisión. Después
+  la parte B y el PR #46." The guard tests (`13616dc`) passed `review-89a5c14a77662a94`. Part B (`9668b02`: the
+  evidence report, README, ADR 0004, overview, traceability, L78, L79, and S55 to S57) passed
+  `review-7907f684bae83700` with seven consistency advisories, and the owner was asked: 6. User, choosing an option
+  for "Terminé los commits de código de T11f: `6e476c9`, `81c5668`, tu `.env.example` en `c12f6dc`, `f94db2f`,
+  `95b66a4` y `13616dc`. Cada uno tiene su árbol revisado. API 499, web 270, base de datos 87. Al último (las pruebas
+  de la guarda) le quedó un aviso menor: compara stderr exacto, así que un aviso de Node podría romperla sin que la
+  guarda falle. La parte B (documentación y plan: informe de evidencia, trazabilidad, ADR, README, arquitectura, L78,
+  L79 y S55 a S57; 502 líneas) pasó la revisión nativa: nivel alto, lentes legibilidad y confiabilidad, aprobada con 7
+  avisos. Todos son de coherencia de los documentos: - F1 aparece todavía como pendiente, aunque tu cambio ya está en
+  `c12f6dc`. - La regla de S55 está escrita de tres formas. - U+180E está en una lista de caracteres y falta en la
+  otra. - Hay conteos del cruce de trazabilidad que no cuadran. - El README sobre `NODE_ENV` es ambiguo. - Un aviso
+  dice que el código no está en el candidato. No aplica: el código está en los commits anteriores y la revisión solo
+  veía los documentos. ¿Cómo sigo?": "Dos commits, PR y merge (recomendado)", whose description reads: "Commit B con
+  el árbol revisado (756b7c9) y un commit aparte, solo de documentación, que corrige los 6 avisos de coherencia y
+  afloja la comparación de stderr de la prueba de la guarda. Luego push, PR #46 hacia feat/m2-identity, CI y merge.
+  Después tu firma." `0642ba6` aligned the documents. PR #46 passed CI (run 42527131750) and was merged into the
+  tracker as `1f9ca0c`, whose tree equals `0642ba6`'s; the tracker's CI passed too (run 42527367522). Gates: API 499,
+  web 270, and `test:db` 87.
+- **L81** (2026-11-08) T11 sign-off. With T11a to T11f merged (#40 to #46) and
+  `docs/development/m2-security-evidence.md` reporting 53 specs PASS, S2 PARTIAL, and none FAIL, the owner was asked:
+  1. User, choosing an option for "Ya están integradas todas las partes de T11, de T11a a T11f (#40 a #46; tracker
+  `1f9ca0c`). El informe `docs/development/m2-security-evidence.md` da 53 specs como PASS, S2 como parcial (solo falta
+  tu firma) y ninguna como FAIL; S55 a S57 quedan cubiertas por T11f. Las tres áreas que firmas son: - Secretos: el
+  secreto del proxy se compara en tiempo constante y se puede rotar. La validación del arranque exige `NODE_ENV` y
+  rechaza `BETTER_AUTH_SECRETS`. Los registros no llevan secretos ni datos personales. - Expiración de sesiones:
+  cliente 7 días; administrador 12 horas sin renovación; ventana de activación de 24 horas; marca de segundo factor
+  por sesión; al deshabilitar una cuenta se borran sus sesiones. - Mapeo de errores: 401, 403 y 400 genéricos en la
+  API; respuestas que no revelan si una cuenta existe; el proxy responde 499, 502, 504 y 5xx; las páginas muestran «no
+  disponible». Riesgos aceptados: el tope por correo, los caracteres invisibles en nombres, el orden del despliegue
+  (migrar antes de la API y definir `NODE_ENV=production`) y la rotación de `BETTER_AUTH_SECRET`, que queda para el
+  milestone de despliegue. Quedan abiertos el dominio y `CORS_ORIGIN`. ¿Firmas S2?": "Firmo S2 con estos riesgos
+  aceptados (recomendado)", whose description reads: "Registro tu firma en el informe y en el plan (S2 pasa a PASS), y
+  T11 queda completo." 2. User, choosing an option for "Tres hallazgos antiguos (R8: T6a R1-001; R10: slice 30 R4-001
+  y R4-002; R14: R4-003) perdieron su texto original. El verificador revisó el código actual y no encontró ningún
+  defecto. ¿Qué hacemos con ellos?": "Darlos por cerrados (recomendado)", whose description reads: "El informe los
+  marca como cerrados por tu decisión, con la evidencia de la nueva revisión." 3. User, choosing an option for "Riesgo
+  R2: los nombres visibles aceptan caracteres invisibles. Son 10 en total (9 fijados por pruebas, y U+180E aceptado
+  sin prueba), y un nombre hecho solo de U+200B pasa. El impacto es solo visual. ¿Qué hacemos?": "Aceptarlo con su
+  alcance real (recomendado)", whose description reads: "Queda como riesgo aceptado en tu firma, con la lista
+  completa. Una regla más estricta puede venir en otro milestone." 4. User, choosing an option for "Después de
+  registrar tu firma, ¿saco el PR #1 (`feat/m2-identity` hacia `master`) de borrador? El merge a `master` lo sigues
+  decidiendo tú.": "Sí, sacarlo de borrador (recomendado)", whose description reads: "Lo marco como listo para
+  revisión con `gh pr ready 1` después del commit de la firma. No lo integro." S2 is therefore PASS, the re-examined
+  claims R8, R10, and R14 are closed, R2 is an accepted risk with its full scope, and T11 is complete. The stale
+  partial review `review-051d265d4ab8f0bf` (L67) was still open, so the owner was asked: User, choosing an option for
+  "Sigue abierta la revisión parcial `review-051d265d4ab8f0bf`, de la foto incompleta del slice 37 (19 archivos, 263
+  líneas, árbol `0f1bd319`). Ese slice se integró hace tiempo en #38, y su código ya pasó por revisiones posteriores y
+  por la verificación final de T11. El proveedor solo ofrece correr los 4 revisores sobre esa foto vieja. ¿Qué hago?":
+  "Abandonarla (recomendado)", whose description reads: "Uso la operación `abandon` del proveedor sobre esa revisión.
+  No corre ningún revisor, no toca el código y la revisión deja de aparecer como abierta. Queda anotado en el plan."
+  The provider's `abandon` needs a maintainer authorization that only the owner composes, so the owner runs it. PR #1
+  leaves draft after this record; merging it to `master` stays the owner's decision.

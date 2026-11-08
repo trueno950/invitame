@@ -9,10 +9,11 @@ evidence and does not change a decision; [ADR 0004](../adr/0004-authentication-w
 
 ## Summary
 
-- **Verdicts for S1 to S54:** 53 PASS, 1 PARTIAL, 0 FAIL. S55 to S57 were decided after the verification (L79) and
+- **Verdicts for S1 to S54:** 54 PASS, 0 PARTIAL, 0 FAIL after the owner's sign-off (L81); the verification itself
+  found 53 PASS and S2 PARTIAL. S55 to S57 were decided after the verification (L79) and
   are covered by T11f.
-- **S2 is PARTIAL, pending owner sign-off.** Its third clause, "human-approved security evidence", is the sign-off
-  this document feeds. The first two clauses hold, and T11f added the foreign-key test that was missing.
+- **S2 is PASS: the owner signed off on 2026-11-08 (L81)**, accepting the residual risks below. Its third clause,
+  "human-approved security evidence", is that sign-off. The first two clauses hold, and T11f added the foreign-key test that was missing.
 - **Rubric:** a clause the plan lists as a non-goal (Railway hosting, domain, live Resend) is noted, not scored.
   S7 and S11 are PASS on their in-scope parts.
 - **Findings:** the verification reproduced six new findings (N1 to N6), the T10a close failure (R9), and the
@@ -87,7 +88,7 @@ Browser-only evidence comes from the CI run, not from a local run.
 | S | Verdict | Implementation | Tests | Note |
 | --- | --- | --- | --- | --- |
 | S1 | PASS | `a:auth/access-control/access-control.ts:94-147`; `a:users/presentation/own-profile.controller.ts:47-72`; `w:lib/server/auth-proxy.ts` | AC:257-300; PROF:243,276,301; AS:585-720; E2E-C:52,217 | All five clauses asserted. |
-| S2 | **PARTIAL**, pending owner sign-off | FKs `a:../prisma/migrations/20261104030448_add_better_auth_identity/migration.sql:100-106`; `schema.prisma:58-121` | AC:266,270; PROF:243; OWN (T11f) | Clauses 1 and 2 hold, and OWN now pins the foreign keys, cascades, and uniqueness on PostgreSQL. Clause 3 is the owner's sign-off. |
+| S2 | **PASS**, signed off by the owner on 2026-11-08 (L81) | FKs `a:../prisma/migrations/20261104030448_add_better_auth_identity/migration.sql:100-106`; `schema.prisma:58-121` | AC:266,270; PROF:243; OWN (T11f) | Clauses 1 and 2 hold, and OWN now pins the foreign keys, cascades, and uniqueness on PostgreSQL. Clause 3 is the owner's sign-off (L81). |
 | S3 | PASS | no `socialProviders`; `auth.factory.ts:85` disables `/link-social`; no invitation model in `schema.prisma` | `auth.integration.spec.ts:139-150` (`/sign-in/social` gives 404 `PROVIDER_NOT_FOUND`); AC:428-470 | `/callback/google` gives 302 with no cookie. |
 | S4 | PASS | `apps/api/package.json` exact pins; `auth.registration.ts:47-53` | `auth.integration.spec.ts:63-200` | Fallback not needed (ADR Outcome). |
 | S5 | PASS | `auth.factory.ts:169-171,216-218`; `schema.prisma:40-121` | `auth.prisma.db-spec.ts:111,144` | |
@@ -278,19 +279,19 @@ parametrised name, plus two non-test fixes made in the same pass (header and leg
 | ID | Item | Status | Evidence |
 | --- | --- | --- | --- |
 | R1 | Per-email cap (L71) | **Open, accepted.** 5 codes per hour per address (`abuse-limits.ts:22`). The 6th request is removed unsent, so the 5th code stays valid for 300 s. After that the owner gets no new code until the hour ends. Before the cap, each extra request emails them and shadows the previous code. | SIC:456-557; `sign-in-code-sender.spec.ts:79,90` |
-| R2 | Invisible characters in display names | **Open, accepted (L75). Wider than listed.** Accepted and pinned by the spec: U+200B, U+2060, inner U+FEFF, U+2028, U+2029, U+00AD, U+034F, U+115F, U+3164. Accepted but not pinned: U+180E (Mongolian vowel separator, checked by hand against `parseDisplayName`). A name made only of U+200B passes and renders empty. The 12 bidi controls are rejected. | `display-name.ts:8`; `display-name-residual.spec.ts` (T11f) pins today's decision |
+| R2 | Invisible characters in display names | **Accepted by the owner with this full scope (L75, L81).** Accepted and pinned by the spec: U+200B, U+2060, inner U+FEFF, U+2028, U+2029, U+00AD, U+034F, U+115F, U+3164. Accepted but not pinned: U+180E (Mongolian vowel separator, checked by hand against `parseDisplayName`). A name made only of U+200B passes and renders empty. The 12 bidi controls are rejected. | `display-name.ts:8`; `display-name-residual.spec.ts` (T11f) pins today's decision |
 | R3 | Rolling-deploy skew and deploy order | **Open: manual procedure, no deploy tooling.** An old instance stores a second-factor session unmarked, and the new API ends it once (transient, administrators only). New code on a database without the column answers `500` on `GET /api/auth/get-session`, `P2022`, empty body, no project log event. Reproduced on a database migrated only to the first two migrations. `start` has no migrate step. | ADR `:100-102`; `overview.md`; `model.md:62` |
 | R4 | Pre-migration administrator sessions | **By design.** They read false and are ended once. Nothing is deployed, so nobody is affected yet. | `session-second-factor-marker.prisma.db-spec.ts:124`; AS:1116 |
 | R5 | Domain, `AUTH_BASE_URL`, `CORS_ORIGIN` | **Open** (L7, L71). Production needs an https web origin that is in `CORS_ORIGIN`. | ADR `:230-232` |
 | R6 | `.env.example` `AUTH_BASE_URL` | **Fixed in `c12f6dc`** (F1). | `env-example.spec.ts` |
 | R7 | `user:disable` for a non-active status | **Open, latent.** `alreadyDisabled` means "was not ACTIVE". With a third status the command would change nothing, report `alreadyDisabled:true`, and exit 0. Unreachable with the current enum. | `prisma-user-access.repository.ts:15-26` |
-| R8 | T6a R1-001 (`access-control.ts:86-93`) | **Re-examined, no defect.** Today's code (`:125-133`) still fails closed, with the pending and marker checks added. The claim text is unrecorded. | AC:279,289,352 |
+| R8 | T6a R1-001 (`access-control.ts:86-93`) | **Closed by the owner (L81).** Re-examined, no defect. Today's code (`:125-133`) still fails closed, with the pending and marker checks added. The claim text is unrecorded. | AC:279,289,352 |
 | R9 | T10a R4-001, a failing `close()` | **Fixed in T11f.** See the findings table. | `reset-second-factor.command.spec.ts`; `command-failure.spec.ts` |
-| R10 | Slice 30 R4-001 and R4-002 | **Re-examined, no defect reproduced.** A `403` from a secret mismatch is not flagged unavailable and leaves no web-side log (the API logs `auth_proxy_rejected`). The claim text is unrecorded. | `session-refresh.ts:76,103` |
+| R10 | Slice 30 R4-001 and R4-002 | **Closed by the owner (L81).** Re-examined, no defect reproduced. A `403` from a secret mismatch is not flagged unavailable and leaves no web-side log (the API logs `auth_proxy_rejected`). The claim text is unrecorded. | `session-refresh.ts:76,103` |
 | R11 | R4-double-submit (L50) | **Open, accepted.** Same-tab double submit is blocked (`enrollment-flow.tsx:117,125`). Two tabs: the loser ends every session, including the winner's. | ADB:742 |
 | R12 | R4-hook-doubles-session-reads | **Open, performance only.** The access hook and the endpoint each read the session. | `session-access-hook.ts:80` |
 | R13 | R4-confirm-lost-response | **Open, mitigated.** A lost or failed confirmation response leaves the administrator without having seen the backup codes. `admin:reset-second-factor` recovers. The `500` path is pinned at RACE:482. | `enrollment-flow.tsx:127` |
-| R14 | R4-003 (L28) | **Cannot verify.** The claim text and the T10 resolution are unrecorded. | none |
+| R14 | R4-003 (L28) | **Closed by the owner (L81).** Cannot verify: The claim text and the T10 resolution are unrecorded. | none |
 | R15 | R2-shadowed-after-hook | **Open, readability.** Local `const after = Date.now()` in files that import the `after` hook. | ADB:267; SICDB:212 |
 | R16 | R2-auth-base-url-literal-not-tied-to-trusted-origin | **Open, readability.** Specs use a base URL that is not their trusted origin. | `abuse-limits.spec.ts:21-22`; `sign-in-code.spec.ts:26-27` |
 | R17 | Duplicate `postJson` and `errorCode` in the web sign-in files | **Open.** | `w:lib/customer/sign-in.ts:103,54`; `w:lib/admin/sign-in.ts:93,84` |
@@ -303,8 +304,7 @@ parametrised name, plus two non-test fixes made in the same pass (header and leg
 - **Rotation of `BETTER_AUTH_SECRET` (N3, S57).** Adopt Better Auth's `secrets` list in the deployment milestone.
 - **Deploy checklist (R3, R5, N2).** Migrate before or with the API, and set `NODE_ENV=production`: the API now
   refuses to start without it.
-- **Display names (R2).** Keep the accepted risk with its real scope, or add a rule that refuses names with no
-  visible character and the format and filler characters.
-- **Re-examined claims (R8, R10, R14).** The owner can accept them as closed or restate the claims.
+- **Display names (R2).** Accepted with its real scope (L81); a stricter rule can come in a later milestone.
+- **Re-examined claims (R8, R10, R14).** Closed by the owner (L81).
 - **Advisories.** R7 and R17.
-- **S2 sign-off.** Signing it closes S2.
+- **S2 sign-off.** Signed by the owner on 2026-11-08 (L81); S2 is closed.
