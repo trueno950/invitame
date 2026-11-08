@@ -425,9 +425,10 @@ administrator sign-in.
   challenge allows. Other paths keep the defaults of Better Auth and its email OTP plugin, such as 100 requests
   per 10 seconds per client IP.
 - Each address gets at most 5 codes per fixed hour (`auth/abuse-limits.ts`): the hour starts at the first counted
-  code, later codes never move it, and the first request after it ends opens a new hour. Every `sign-in` request
-  counts, whatever
-  its delivery outcome, in the background task, so the response timing does not depend on the address. Over the
+  code, later codes never move it, and the first request after it ends opens a new hour. Every scheduled `sign-in`
+  request counts, whatever its delivery outcome, in the background task, so the response timing does not depend on
+  the address; a request refused because the background queue is full or shutting down is discarded and never
+  counted. Over the
   cap the response is the same `200 {"success":true}`, no email is sent, and the issued code is removed. The
   count is a `RateLimit` row keyed by `sign-in-code-email|` plus the SHA-256 of the lower-cased address; the
   plain address is never stored. The row's `lastRequest` holds the hour's start, and a rule that matches no path

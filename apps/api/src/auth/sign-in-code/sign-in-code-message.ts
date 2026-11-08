@@ -5,6 +5,7 @@ export const SIGN_IN_CODE_LENGTH = 6;
 export const SIGN_IN_CODE_EXPIRES_IN_SECONDS = 300;
 export const SIGN_IN_CODE_ALLOWED_ATTEMPTS = 3;
 
+// The message prints this number as is, so the lifetime must stay a whole number of minutes.
 const VALIDITY_MINUTES = SIGN_IN_CODE_EXPIRES_IN_SECONDS / 60;
 
 export interface SignInCodeMessageInput {

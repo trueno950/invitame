@@ -146,8 +146,8 @@ describe("BackgroundTasks", () => {
     assert.deepEqual(ran, ["pending"], "pending work completed, refused work never ran");
     assert.equal(tasks.pending, 0);
     assert.deepEqual(events, [
-      { event: BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN, task: "during-drain" },
-      { event: BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN, task: "after-drain" },
+      { event: BACKGROUND_TASK_EVENT.REJECTED_SHUTTING_DOWN, task: "during-drain" },
+      { event: BACKGROUND_TASK_EVENT.REJECTED_SHUTTING_DOWN, task: "after-drain" },
     ]);
   });
 

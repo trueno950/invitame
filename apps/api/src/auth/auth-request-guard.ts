@@ -1,5 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
+import { errorClass, logSafely } from "./safe-logging";
+
 /**
  * The fixed header that carries the shared web-to-API secret (L36). The web proxy and the web
  * server's API client set it; the API removes it before Better Auth or any hook sees the request.
@@ -91,7 +93,7 @@ function matchesSecret(presented: string | null, secret: string): boolean {
  * Returns the request Better Auth may see: never the secret header, and the client IP header only
  * when the secret was valid or, outside production, when no secret is configured at all.
  */
-function withoutProxyHeaders(
+function withTrustedProxyHeadersOnly(
   request: Request,
   proxy: AuthProxyOptions,
   secretValid: boolean,
@@ -104,14 +106,6 @@ function withoutProxyHeaders(
   }
 
   return new Request(request, { headers });
-}
-
-export function logSafely(log: AuthRequestLog, event: AuthRequestEvent): void {
-  try {
-    log(event);
-  } catch {
-    // A failing log sink must not change the response.
-  }
 }
 
 /**
@@ -151,7 +145,7 @@ export function guardAuthHandler(
         return forbidden();
       }
 
-      request = withoutProxyHeaders(incoming, proxy, secretValid);
+      request = withTrustedProxyHeadersOnly(incoming, proxy, secretValid);
     }
 
     if (options.resolveClientIp && options.resolveClientIp(request) === null) {
@@ -165,8 +159,7 @@ export function guardAuthHandler(
       logSafely(options.log, {
         event: AUTH_REQUEST_EVENT.UNAVAILABLE,
         path,
-        // The class name is safe to log; a message may carry SQL or an address.
-        error: error instanceof Error ? error.name : "unknown",
+        error: errorClass(error),
       });
       return serviceUnavailable();
     }

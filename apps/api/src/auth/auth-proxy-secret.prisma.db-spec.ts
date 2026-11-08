@@ -10,8 +10,9 @@ import {
   EmailDeliveryService,
 } from "../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
-import { emailCodeQuotaKey, SIGN_IN_CODE_REQUEST_PATH } from "./abuse-limits";
+import { emailCodeQuotaKey } from "./abuse-limits";
 import { createAuth } from "./auth.factory";
+import { SIGN_IN_CODE_REQUEST_PATH } from "./auth-paths";
 import { AUTH_PROXY_SECRET_HEADER } from "./auth-request-guard";
 import { BackgroundTasks } from "./sign-in-code/background-tasks";
 import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";

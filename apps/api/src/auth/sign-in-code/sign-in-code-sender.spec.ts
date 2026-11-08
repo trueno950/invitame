@@ -242,7 +242,7 @@ describe("SignInCodeSender at background capacity (L24)", () => {
       "only the pending code was delivered",
     );
     assert.deepEqual(events, [
-      { event: BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN, task: SIGN_IN_CODE_DELIVERY_TASK },
+      { event: BACKGROUND_TASK_EVENT.REJECTED_SHUTTING_DOWN, task: SIGN_IN_CODE_DELIVERY_TASK },
     ]);
     assertNoPersonalData(events);
   });

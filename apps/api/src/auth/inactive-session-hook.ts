@@ -1,12 +1,12 @@
 import { createAuthMiddleware, setShouldSkipSessionRefresh } from "better-auth/api";
 
-import { TWO_FACTOR_PATH } from "./abuse-limits";
 import { type AccountAccess, isActive, isPendingAdministrator, USER_ROLE } from "./account-access";
 import {
   enrollmentWindowOpen,
   PENDING_ADMINISTRATOR_ENDPOINTS,
   TOTP_ISSUER,
 } from "./administrator-enrollment";
+import { TWO_FACTOR_PATH } from "./auth-paths";
 
 type HookContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
 
@@ -55,7 +55,7 @@ const SECOND_FACTOR_VERIFY_PATHS: ReadonlySet<string> = new Set([
  *   the same request (`api/state/should-session-refresh.mjs`); `getSession` then neither updates the
  *   row nor sets a cookie.
  */
-export const refuseInactiveSessions = createAuthMiddleware(async (ctx) => {
+export const enforceSessionAccess = createAuthMiddleware(async (ctx) => {
   const overrides = secondFactorBodyOverrides(ctx);
 
   const token = await ctx.getSignedCookie(

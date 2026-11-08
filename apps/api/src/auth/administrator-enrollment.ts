@@ -2,7 +2,6 @@ import type { Auth, BetterAuthOptions } from "better-auth";
 import { APIError } from "better-auth/api";
 import type { twoFactor } from "better-auth/plugins";
 
-import { TWO_FACTOR_PATH } from "./abuse-limits";
 import {
   type AccountAccess,
   isActive,
@@ -10,7 +9,9 @@ import {
   isWithinEnrollmentWindow,
   USER_ROLE,
 } from "./account-access";
-import { AUTH_REQUEST_EVENT, type AuthRequestLog, logSafely } from "./auth-request-guard";
+import { TWO_FACTOR_PATH } from "./auth-paths";
+import { AUTH_REQUEST_EVENT, type AuthRequestLog } from "./auth-request-guard";
+import { errorClass, logSafely } from "./safe-logging";
 
 /** The issuer label of the TOTP URI shown at enrollment (decision 3). */
 export const TOTP_ISSUER = "InvitaMe";
@@ -81,7 +82,8 @@ interface ResolvedSession {
 }
 
 /**
- * Decides a session Better Auth is about to create on `verify-totp` (T9a-D1, S39, S40). Better Auth
+ * Decides a session Better Auth is about to create on `verify-totp` (T9a-D1, S39, S40), and ends
+ * sessions of the user as part of that decision (an allowed confirmation and case 3 below). Better Auth
  * 1.7.16 confirms a first code by setting `twoFactorEnabled`, then creating the enrolled session,
  * then setting its cookie, then deleting the pending session, and finally marking the `TwoFactor`
  * row verified, each in its own statement (`plugins/two-factor/totp/index.mjs`, `verifyTOTP`). Once
@@ -104,7 +106,7 @@ interface ResolvedSession {
  * 4. otherwise (a sign-out, or a reissue the clocks hide): revert.
  * Every query uses the raw adapter, which runs no hooks.
  */
-export async function decideFirstConfirmation(
+export async function settleFirstConfirmation(
   context: SessionCreateContext,
   user: AccountAccess & { id: string },
 ): Promise<FirstConfirmationDecision> {
@@ -142,10 +144,11 @@ export async function decideFirstConfirmation(
     return "allow";
   }
 
-  return supersededDecision(context, user, snapshot);
+  return settleSupersededConfirmation(context, user, snapshot);
 }
 
-async function supersededDecision(
+/** Cases 1 to 4 of `settleFirstConfirmation`; case 3 ends every session of the user. */
+async function settleSupersededConfirmation(
   context: SessionCreateContext,
   user: AccountAccess & { id: string },
   snapshot: ResolvedSession,
@@ -230,8 +233,7 @@ export async function refuseSupersededConfirmation(
       logSafely(log, {
         event: AUTH_REQUEST_EVENT.ENROLLMENT_COMPENSATION_FAILED,
         path,
-        // The class name is safe to log; a message may carry SQL or an address.
-        error: error instanceof Error ? error.name : "unknown",
+        error: errorClass(error),
       });
     }
   }

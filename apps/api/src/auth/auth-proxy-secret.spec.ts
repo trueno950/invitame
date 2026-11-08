@@ -9,8 +9,8 @@ import {
   EmailDeliveryService,
 } from "../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
-import { SIGN_IN_CODE_REQUEST_PATH } from "./abuse-limits";
 import { createAuth } from "./auth.factory";
+import { SIGN_IN_CODE_REQUEST_PATH } from "./auth-paths";
 import {
   AUTH_PROXY_SECRET_HEADER,
   AUTH_REQUEST_EVENT,

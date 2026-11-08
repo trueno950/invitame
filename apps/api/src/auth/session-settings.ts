@@ -1,5 +1,7 @@
 import type { BetterAuthOptions } from "better-auth";
 
+import { usesHttps } from "../config/environment";
+
 /**
  * S16 (L34): a customer session lasts 7 days and is extended to 7 days from now at most once per day
  * of use. Better Auth extends a session on a read once `expiresAt - expiresIn + updateAge <= now`
@@ -24,12 +26,7 @@ const HOST_ONLY_PREFIX = "__Host-";
 
 /** Whether the public auth origin is served over https, so its cookies must be `Secure`. */
 export function usesSecureCookies(baseURL: string): boolean {
-  return new URL(baseURL).protocol === "https:";
-}
-
-/** The exact session cookie name for the public auth origin (S16). */
-export function sessionCookieName(baseURL: string): string {
-  return `${cookieNamePrefix(baseURL)}.session_token`;
+  return usesHttps(baseURL);
 }
 
 function cookieNamePrefix(baseURL: string): string {

@@ -7,21 +7,23 @@ import { type AccountAccess, sessionRefusal, USER_ROLE, USER_STATUS } from "./ac
 import {
   CLIENT_IP_RATE_LIMIT,
   EMAIL_CODE_QUOTA,
-  EMAIL_CODE_SIGN_IN_PATH,
   PASSWORD_ATTEMPT_RATE_LIMIT,
-  PASSWORD_SIGN_IN_PATH,
   SECOND_FACTOR_RATE_LIMIT,
-  SIGN_IN_CODE_REQUEST_PATH,
-  TWO_FACTOR_PATH,
 } from "./abuse-limits";
 import {
-  decideFirstConfirmation,
   enrollmentWindowOpen,
   refuseSupersededConfirmation,
+  settleFirstConfirmation,
   TWO_FACTOR_OPTIONS,
 } from "./administrator-enrollment";
+import {
+  EMAIL_CODE_SIGN_IN_PATH,
+  PASSWORD_SIGN_IN_PATH,
+  SIGN_IN_CODE_REQUEST_PATH,
+  TWO_FACTOR_PATH,
+} from "./auth-paths";
 import { type AuthRequestLog, guardAuthHandler } from "./auth-request-guard";
-import { refuseInactiveSessions } from "./inactive-session-hook";
+import { enforceSessionAccess } from "./inactive-session-hook";
 import {
   administratorSessionExpiresAt,
   CUSTOMER_SESSION_EXPIRES_IN_SECONDS,
@@ -138,7 +140,7 @@ export function createAuth(options: CreateAuthOptions): Auth {
     // A session of a non-ACTIVE user, or of an administrator whose enrollment window has ended, is
     // deleted before any endpoint can use it; an un-enrolled administrator's session is hidden from
     // every endpoint but enrollment (S20, S21).
-    hooks: { before: refuseInactiveSessions },
+    hooks: { before: enforceSessionAccess },
     // Decision 3: password sign-in exists for administrators only. Sign-up stays closed
     // (`/sign-up/email` answers 400 EMAIL_PASSWORD_SIGN_UP_DISABLED, 1.7.16 `api/routes/sign-up.mjs`),
     // and the session hook refuses a password session to anyone but an administrator.
@@ -213,6 +215,9 @@ export function createAuth(options: CreateAuthOptions): Auth {
           // Throwing refuses the session; returning false would make the endpoint fail on a null
           // session instead (1.7.16 `db/with-hooks.mjs`).
           async before(session, context) {
+            // Better Auth passes no endpoint context when a session is created outside an endpoint
+            // (a direct `internalAdapter.createSession` call); the instance's own context then
+            // supplies the adapter. Without either, no user is found and `sessionRefusal` refuses.
             const internalAdapter =
               context?.context.internalAdapter ?? (await authContext)?.internalAdapter;
             const user = (await internalAdapter?.findUserById(session.userId)) as
@@ -225,7 +230,7 @@ export function createAuth(options: CreateAuthOptions): Auth {
             // completing. An allowed first confirmation ends every other session of the user.
             // Decided first, so a disable that won the race is reverted too.
             if (context && user) {
-              const decision = await decideFirstConfirmation(context, user);
+              const decision = await settleFirstConfirmation(context, user);
               if (decision !== "allow") {
                 throw await refuseSupersededConfirmation(context, user.id, decision, options.log);
               }
@@ -254,8 +259,10 @@ export function createAuth(options: CreateAuthOptions): Auth {
           // Better Auth moves `expiresAt` only when `getSession` refreshes a session, after it has
           // stored the session it read on the request context (1.7.16 `api/routes/session.mjs`;
           // `/update-session` is disabled). The session hook already skips that refresh for
-          // administrators; this refuses any expiry change it cannot attribute to a customer's
-          // session read. Refusing makes `getSession` answer 401 and clear the cookie: fail closed.
+          // administrators. This allows an expiry change only while the request context holds a
+          // customer's session; it cannot tell which call made the change, so it refuses every other
+          // one, including any on a request without a stored session. Refusing makes `getSession`
+          // answer 401 and clear the cookie: fail closed.
           async before(session, context) {
             if (session.expiresAt === undefined) {
               return;
@@ -292,7 +299,8 @@ export function createAuth(options: CreateAuthOptions): Auth {
         accountLockout: { ...TWO_FACTOR_OPTIONS.accountLockout },
       }),
       emailOTP({
-        // S15: 6-digit codes, valid for 300 seconds, at most 3 wrong attempts, stored as a hash.
+        // S15: code length, lifetime, and wrong-attempt limit from `sign-in-code-message.ts`;
+        // codes are stored as a hash.
         otpLength: SIGN_IN_CODE_LENGTH,
         expiresIn: SIGN_IN_CODE_EXPIRES_IN_SECONDS,
         allowedAttempts: SIGN_IN_CODE_ALLOWED_ATTEMPTS,
