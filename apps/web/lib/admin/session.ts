@@ -27,7 +27,7 @@ export type AdminView =
 
 export type AdminPage = "panel" | "sign-in" | "enrollment";
 
-/** The page each kind of visitor belongs on; `null` marks the page that renders for that kind. */
+/** The page each kind of visitor belongs on. An `unavailable` read has none: every page renders. */
 const HOME: Record<Exclude<SessionKind, "unavailable">, string> = {
   anonymous: "/admin/ingresar",
   customer: "/cuenta",

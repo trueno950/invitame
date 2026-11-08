@@ -1,7 +1,7 @@
 import { isIP } from "node:net";
 
 import type { WebServerConfig } from "./config.ts";
-import { AUTH_PROXY_SECRET_HEADER, SERVICE_UNAVAILABLE_BODY } from "./proxy-headers.ts";
+import { AUTH_PROXY_SECRET_HEADER } from "./proxy-headers.ts";
 
 /** Only Better Auth's routes cross the proxy. */
 const AUTH_PATH_PREFIX = "/api/auth/";
@@ -32,6 +32,14 @@ const HOP_BY_HOP_HEADERS = new Set([
 ]);
 /** Statuses whose response must not carry a body. */
 const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
+/**
+ * The generic JSON error for every failure the proxy reports instead of the API's own body. It
+ * lives here, its only user; `proxy-headers.ts` holds only what the web and the API share.
+ */
+const SERVICE_UNAVAILABLE_BODY = {
+  code: "SERVICE_UNAVAILABLE",
+  message: "Service temporarily unavailable. Try again later.",
+} as const;
 
 /** Sign-in, code, and second-factor bodies are a few hundred bytes. */
 export const AUTH_PROXY_MAX_BODY_BYTES = 16 * 1024;

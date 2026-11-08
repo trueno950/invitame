@@ -16,7 +16,8 @@ import {
 /**
  * The API gate's server (see `api-gate.ts`), which `api-gate-main.ts` starts as a harness process.
  * Every request is forwarded to the API as received; only the `GET /me` reads named by a hold wait.
- * One gate per process: `createApiGateServer` sets the API it forwards to.
+ * Each `createApiGateServer` call owns its API origin and its held groups, so two gates never share
+ * state (R2-gate-factory-mutates-module-origin, R3-gate-origin-module-global).
  */
 
 interface HeldRead {
@@ -33,10 +34,14 @@ interface HeldGroup {
   timer: NodeJS.Timeout;
 }
 
-const groups = new Set<HeldGroup>();
-let apiOrigin = "";
+/** One gate's state: the API it forwards to and the groups armed on it. */
+interface Gate {
+  apiOrigin: string;
+  groups: Set<HeldGroup>;
+}
 
-function forward(incoming: IncomingMessage, outgoing: ServerResponse): void {
+function forward(gate: Gate, incoming: IncomingMessage, outgoing: ServerResponse): void {
+  const { apiOrigin } = gate;
   const upstream = request(
     new URL(incoming.url ?? "/", apiOrigin),
     { method: incoming.method, headers: { ...incoming.headers, host: new URL(apiOrigin).host } },
@@ -59,13 +64,13 @@ function forward(incoming: IncomingMessage, outgoing: ServerResponse): void {
   incoming.pipe(upstream);
 }
 
-function settle(group: HeldGroup, outcome: HoldOutcome): void {
+function settle(gate: Gate, group: HeldGroup, outcome: HoldOutcome): void {
   clearTimeout(group.timer);
-  groups.delete(group);
+  gate.groups.delete(group);
   group.armer.end(outcome);
 }
 
-function arm(incoming: IncomingMessage, outgoing: ServerResponse): void {
+function arm(gate: Gate, incoming: IncomingMessage, outgoing: ServerResponse): void {
   let body = "";
   incoming.setEncoding("utf8");
   incoming.on("data", (chunk: string) => {
@@ -93,13 +98,13 @@ function arm(incoming: IncomingMessage, outgoing: ServerResponse): void {
       armer: outgoing,
       timer: setTimeout(() => {
         // Fail closed: an incomplete group never passes as concurrent reads.
-        settle(group, "timeout");
+        settle(gate, group, "timeout");
         for (const { outgoing: held } of group.arrivals.values()) {
           held.writeHead(504).end();
         }
       }, GATE_HOLD_TIMEOUT_MS),
     };
-    groups.add(group);
+    gate.groups.add(group);
     // The headers say "armed"; the body, sent when the group settles, is its outcome.
     outgoing.writeHead(200, { "content-type": "text/plain" });
     outgoing.flushHeaders();
@@ -107,10 +112,10 @@ function arm(incoming: IncomingMessage, outgoing: ServerResponse): void {
 }
 
 /** Holds a `GET /me` whose cookie names a token of an armed group; `false` when none matches. */
-function hold(incoming: IncomingMessage, outgoing: ServerResponse): boolean {
+function hold(gate: Gate, incoming: IncomingMessage, outgoing: ServerResponse): boolean {
   const cookie = incoming.headers.cookie ?? "";
 
-  for (const group of groups) {
+  for (const group of gate.groups) {
     const token = group.tokens.find(
       (value) => cookie.includes(value) && !group.arrivals.has(value),
     );
@@ -121,9 +126,9 @@ function hold(incoming: IncomingMessage, outgoing: ServerResponse): boolean {
     group.arrivals.set(token, { incoming, outgoing });
     if (group.arrivals.size === group.tokens.length) {
       // Every read is in flight: forward all of them together.
-      settle(group, "released");
+      settle(gate, group, "released");
       for (const read of group.arrivals.values()) {
-        forward(read.incoming, read.outgoing);
+        forward(gate, read.incoming, read.outgoing);
       }
     }
     return true;
@@ -132,25 +137,25 @@ function hold(incoming: IncomingMessage, outgoing: ServerResponse): boolean {
   return false;
 }
 
-function handle(incoming: IncomingMessage, outgoing: ServerResponse): void {
-  const path = new URL(incoming.url ?? "/", apiOrigin).pathname;
+function handle(gate: Gate, incoming: IncomingMessage, outgoing: ServerResponse): void {
+  const path = new URL(incoming.url ?? "/", gate.apiOrigin).pathname;
 
   if (path === GATE_READY_PATH) {
     outgoing.writeHead(204).end();
     return;
   }
   if (path === GATE_HOLD_PATH && incoming.method === "POST") {
-    arm(incoming, outgoing);
+    arm(gate, incoming, outgoing);
     return;
   }
-  if (path === "/me" && incoming.method === "GET" && hold(incoming, outgoing)) {
+  if (path === "/me" && incoming.method === "GET" && hold(gate, incoming, outgoing)) {
     return;
   }
-  forward(incoming, outgoing);
+  forward(gate, incoming, outgoing);
 }
 
 /** A gate in front of the API at `origin`; the caller decides where it listens. */
 export function createApiGateServer(origin: string): Server {
-  apiOrigin = origin;
-  return createServer(handle);
+  const gate: Gate = { apiOrigin: origin, groups: new Set() };
+  return createServer((incoming, outgoing) => handle(gate, incoming, outgoing));
 }

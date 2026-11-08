@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { ApiClientError } from "./api-client.ts";
-import { createServerLog, errorClass, logReadFailure, SERVER_LOG_EVENT } from "./server-log.ts";
+import { createServerLog, errorClass, logApiCallFailure, SERVER_LOG_EVENT } from "./server-log.ts";
 
 // The web server's structured log for unexpected failures of its API reads (M2 T8d;
 // R4-account-catch-all-unlogged, L40). One line per failure, holding the event name and the error
@@ -40,10 +40,10 @@ describe("createServerLog", () => {
   });
 });
 
-describe("logReadFailure", () => {
-  it("returns the read's value and logs nothing when it succeeds", async () => {
+describe("logApiCallFailure", () => {
+  it("returns the call's value and logs nothing when it succeeds", async () => {
     const events: unknown[] = [];
-    const value = await logReadFailure(
+    const value = await logApiCallFailure(
       SERVER_LOG_EVENT.OWN_PROFILE_READ_FAILED,
       async () => ({ signedIn: false }),
       (event) => events.push(event),
@@ -58,7 +58,7 @@ describe("logReadFailure", () => {
     const failure = new ApiClientError("unavailable", 502);
 
     await assert.rejects(
-      logReadFailure(
+      logApiCallFailure(
         SERVER_LOG_EVENT.AUTH_SESSION_READ_FAILED,
         async () => {
           throw failure;
@@ -77,7 +77,7 @@ describe("logReadFailure", () => {
     const cause = new DOMException("admin@example.test timed out", "TimeoutError");
 
     await assert.rejects(
-      logReadFailure(
+      logApiCallFailure(
         SERVER_LOG_EVENT.OWN_PROFILE_UPDATE_FAILED,
         async () => {
           throw new ApiClientError("unavailable", undefined, { cause });
@@ -97,7 +97,7 @@ describe("logReadFailure", () => {
   it("keeps the message and other details out of the event", async () => {
     const lines: string[] = [];
     await assert.rejects(
-      logReadFailure(
+      logApiCallFailure(
         SERVER_LOG_EVENT.OWN_PROFILE_READ_FAILED,
         async () => {
           throw new Error("cookie=better-auth.session_token=abc admin@example.test");

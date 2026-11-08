@@ -4,9 +4,3 @@
  * Better Auth sees the request.
  */
 export const AUTH_PROXY_SECRET_HEADER = "x-invitame-proxy-secret";
-
-/** The generic JSON error for every failure the web server reports instead of the API's own body. */
-export const SERVICE_UNAVAILABLE_BODY = {
-  code: "SERVICE_UNAVAILABLE",
-  message: "Service temporarily unavailable. Try again later.",
-} as const;

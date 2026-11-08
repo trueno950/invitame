@@ -5,6 +5,20 @@
  * address, a wrong password, a customer address, and an expired initial password (S20, S22), so the
  * page never reveals whether an address has an account or what kind.
  */
+
+/**
+ * The second-factor policy the sign-in copy states. The API sets it in `TWO_FACTOR_OPTIONS`
+ * (`apps/api/src/auth/administrator-enrollment.ts`): TOTP codes of 6 digits with a 30-second period,
+ * and a lock of 900 seconds after repeated failures. The web never imports API code, so these values
+ * mirror it by hand; `copy.test.ts` pins the copy's numbers to them, and `sign-in.ts` checks a code's
+ * length with `codeDigits`.
+ */
+export const SECOND_FACTOR_POLICY = {
+  codeDigits: 6,
+  codePeriodSeconds: 30,
+  lockoutMinutes: 15,
+} as const;
+
 export const ADMIN_SIGN_IN_COPY = {
   pageTitle: "Ingreso de administración | InvitaMe",
   eyebrow: "Administración",
