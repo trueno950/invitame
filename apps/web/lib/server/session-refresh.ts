@@ -89,14 +89,15 @@ export function pageRequestHeaders(request: Request, apiUnavailable: boolean): H
 
 /**
  * Runs the request's API call, a profile read or update, unless `proxy.ts` just found the API failing
- * for this request.
+ * for this request; then it throws at once, as the `short-circuited` kind, which the page treats as
+ * any other failure of the API.
  */
 export async function callUnlessApiUnavailable<T>(
   requestHeaders: Headers,
   call: () => Promise<T>,
 ): Promise<T> {
   if (requestHeaders.get(API_UNAVAILABLE_HEADER) === "1") {
-    throw new ApiClientError("unavailable");
+    throw new ApiClientError("short-circuited");
   }
 
   return call();

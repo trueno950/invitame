@@ -55,7 +55,8 @@ export function parseAuthSession(payload: unknown): AuthSessionUser | null | und
 /**
  * Reads the session of the page request whose headers are given. Without a Better Auth cookie it
  * answers signed out without calling the API. A `null` session or a `401` is signed out; any other
- * failure throws an `ApiClientError` that never carries the response body.
+ * failure throws an `ApiClientError` that never carries the response body; a failed proxy call is its
+ * `cause`, so the log can name the cause's class.
  */
 export async function readAuthSession(
   requestHeaders: Headers,
@@ -73,8 +74,9 @@ export async function readAuthSession(
         headers: requestHeaders,
       }),
     );
-  } catch {
-    throw new ApiClientError("unavailable");
+  } catch (error) {
+    // The cause is kept for the server log, which records its class only (S50, L71).
+    throw new ApiClientError("unavailable", undefined, { cause: error });
   }
 
   if (response.status === 401) {

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { ApiClientError } from "./api-client.ts";
 import { AUTH_SESSION_PATH, parseAuthSession, readAuthSession } from "./auth-session.ts";
+import { createServerLog, logApiCallFailure, SERVER_LOG_EVENT } from "./server-log.ts";
 
 // The server-side session read of the administrator pages (M2 T8d; S6, S21, L34). It runs
 // `GET /api/auth/get-session?disableRefresh=true` through the web's own `/api/auth` proxy, so the
@@ -108,6 +109,56 @@ describe("readAuthSession", () => {
     for (const response of [Response.json(null), Response.json({ code: "X" }, { status: 401 })]) {
       const { proxy } = fakeProxy(() => response);
       assert.deepEqual(await readAuthSession(headers(), proxy), { signedIn: false });
+    }
+  });
+
+  it("keeps the proxy's failure as the cause and logs its class only (S50, L71)", async () => {
+    const failure = new TypeError(
+      "fetch failed for admin@example.test with better-auth.session_token=abc",
+    );
+    const { proxy } = fakeProxy(() => {
+      throw failure;
+    });
+    const lines: string[] = [];
+
+    await assert.rejects(
+      logApiCallFailure(
+        SERVER_LOG_EVENT.AUTH_SESSION_READ_FAILED,
+        () => readAuthSession(headers(), proxy),
+        createServerLog((line) => lines.push(line)),
+      ),
+      (error: unknown) =>
+        error instanceof ApiClientError && error.kind === "unavailable" && error.cause === failure,
+    );
+
+    assert.equal(lines.length, 1);
+    assert.deepEqual(JSON.parse(lines[0] ?? ""), {
+      event: "auth_session_read_failed",
+      error: "ApiClientError",
+      kind: "unavailable",
+      cause: "TypeError",
+    });
+    assert.doesNotMatch(lines[0] ?? "", /admin@example|session_token|abc|fetch failed/);
+  });
+
+  it("logs no cause for a failure that is an answer, such as a 503 or a body that fits no contract", async () => {
+    for (const response of [
+      Response.json({ code: "SERVICE_UNAVAILABLE" }, { status: 503 }),
+      new Response("<html>", { status: 200 }),
+    ]) {
+      const { proxy } = fakeProxy(() => response);
+      const lines: string[] = [];
+
+      await assert.rejects(
+        logApiCallFailure(
+          SERVER_LOG_EVENT.AUTH_SESSION_READ_FAILED,
+          () => readAuthSession(headers(), proxy),
+          createServerLog((line) => lines.push(line)),
+        ),
+      );
+
+      const logged = JSON.parse(lines[0] ?? "") as Record<string, unknown>;
+      assert.deepEqual(Object.keys(logged).sort(), ["error", "event", "kind"]);
     }
   });
 
