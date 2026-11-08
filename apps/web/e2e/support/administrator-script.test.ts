@@ -40,23 +40,34 @@ function runScript(args: string[], databaseUrl?: string): Promise<Outcome> {
   });
 }
 
+/**
+ * Asserts a refusal by what it must and must not print, not by the whole of stderr, so a runtime
+ * warning on stderr cannot fail it (R3-admin-script-test-exact-stderr-brittle): the exit code, an
+ * empty stdout (where the password would go), the expected line, and no database URL or Prisma error,
+ * which would mean the check ran after Prisma loaded.
+ */
+function assertRefusal(outcome: Outcome, code: number, line: string, databaseUrl?: string) {
+  assert.equal(outcome.code, code, outcome.stderr);
+  assert.equal(outcome.stdout, "");
+  const lines = outcome.stderr.split("\n");
+  assert.ok(lines.includes(line), `stderr has the line ${JSON.stringify(line)}`);
+  assert.doesNotMatch(outcome.stderr, /prisma/i);
+  if (databaseUrl !== undefined) {
+    assert.ok(!outcome.stderr.includes(databaseUrl), "stderr never repeats the database URL");
+  }
+}
+
 describe("create-e2e-administrator.ts", { timeout: 60_000 }, () => {
   it("exits 2 with its usage line and no output without exactly one argument", async () => {
+    const url = "postgresql://postgres@127.0.0.1:1/none";
+    const usage = "Usage: create-e2e-administrator.ts <email>";
     for (const args of [[], ["a@e2e.invitame.test", "b@e2e.invitame.test"]]) {
-      assert.deepEqual(await runScript(args, "postgresql://postgres@127.0.0.1:1/none"), {
-        code: 2,
-        stdout: "",
-        stderr: "Usage: create-e2e-administrator.ts <email>\n",
-      });
+      assertRefusal(await runScript(args, url), 2, usage, url);
     }
   });
 
   it("exits 1 before Prisma loads, printing no password, without a DATABASE_URL", async () => {
-    assert.deepEqual(await runScript(["admin@e2e.invitame.test"]), {
-      code: 1,
-      stdout: "",
-      stderr: "AssertionError\n",
-    });
+    assertRefusal(await runScript(["admin@e2e.invitame.test"]), 1, "AssertionError");
   });
 
   it("exits 1 before Prisma loads, printing no password, for a database that is not local", async () => {
@@ -65,11 +76,7 @@ describe("create-e2e-administrator.ts", { timeout: 60_000 }, () => {
       "postgresql://postgres@db.invalid:5432/invitame_e2e",
       "postgresql://postgres@10.0.0.5:5432/invitame_e2e",
     ]) {
-      assert.deepEqual(await runScript(["admin@e2e.invitame.test"], url), {
-        code: 1,
-        stdout: "",
-        stderr: "AssertionError\n",
-      });
+      assertRefusal(await runScript(["admin@e2e.invitame.test"], url), 1, "AssertionError", url);
     }
   });
 });

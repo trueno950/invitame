@@ -43,6 +43,9 @@ export const ENROLLMENT_COPY = {
   invalidCode: "El código no es correcto. Revisa que sea el que muestra tu app ahora mismo.",
   alreadyEnrolled: "Tu app autenticadora ya estaba activada. Te llevamos al panel…",
   sessionEnded: "Tu sesión terminó. Ingresa de nuevo con tu correo y tu contraseña.",
+  /** A first confirmation that lost a race: another one completed it, or it was reverted (S45). */
+  enrollmentSuperseded:
+    "Esta activación ya no es válida. Ingresa de nuevo con tu correo y tu contraseña.",
   signInAgain: "Ingresar de nuevo",
   tooManyAttempts: "Hiciste demasiados intentos. Espera un minuto y vuelve a intentarlo.",
   unavailable: "No pudimos continuar. Espera un momento y vuelve a intentarlo.",

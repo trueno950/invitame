@@ -360,9 +360,9 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
   same password can then enroll.
   The hook logs one `administrator_enrollment_superseded` event with `compensation` (`reverted` or `skipped`)
   and no personal data, and one `administrator_enrollment_compensation_failed` event with the error class if
-  the revert throws. `/admin/activar` shows that `401` as an ended session. If the revert fails or the process
-  stops before it, the account stays enrolled without a session and only `admin:reset-second-factor`
-  releases it.
+  the revert throws. `/admin/activar` ends the activation on that `401` as on an ended session, with its own
+  message (S45). If the revert fails or the process stops before it, the account stays enrolled without a
+  session and only `admin:reset-second-factor` releases it.
 
 ### Own profile (current)
 
