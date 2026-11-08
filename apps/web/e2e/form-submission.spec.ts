@@ -138,11 +138,16 @@ async function post(page: Page, path: string, data: object) {
   expect(response.status(), path).toBe(200);
 }
 
-/** The sign-out button never becomes usable without JavaScript, and the line next to it says why. */
+/**
+ * The sign-out button never becomes usable without JavaScript, and the page's line for a browser
+ * without JavaScript says why. That line is the only `<noscript>` on `/cuenta` and `/admin`, so the
+ * test finds it by that fact, not by where the button's markup places it.
+ */
 async function expectSignOutNote(page: Page, label: string, text: string) {
-  const button = page.getByRole("button", { name: label });
-  await expect(button).toBeDisabled();
-  await expectNoScriptNote(page, text, button.locator("xpath=following-sibling::noscript"));
+  await expect(page.getByRole("button", { name: label })).toBeDisabled();
+  const note = page.locator("body noscript");
+  await expect(note).toHaveCount(1);
+  await expectNoScriptNote(page, text, note);
 }
 
 test.describe("controls that act only through JavaScript", () => {

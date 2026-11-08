@@ -2,7 +2,7 @@
 
 Task brief and tracking for Milestone 2 on branch `feat/m2-identity`, implementing the accepted
 [ADR 0004](../../docs/adr/0004-authentication-with-better-auth.md). Status: T1 (`ebabb0d`), T1b (`71ae169`), T2 (`cb07c29`), and T3 (`4cfdb26`) committed and published (L21); T4
-committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l merged as #24 (L45, L46); T9a merged as #25 (L47, L48); T7c merged as #26 (L48, L49); T7d merged as #27 (L49, L50); T9b part A merged as #28 (L50 to L52); T9b part B merged as #29 (L52 to L55); T8e merged as #30 (L55, L56); T9b part C1 merged as #31 (L56 to L59); T9b part C2 merged as #32 (L59, L60); T8f merged as #33 (L60, L61); T10a merged as #34 (L62, L63); the T10 documentation merged as #35 (L63, L64); the first T10 API readability part merged as #36 (L64, L65); the second merged as #37 (L65, L66); T10 in progress (L61 to L66).
+committed as slices 4 to 6 (L22); slices 1 to 6 merged into the tracker (L23); T5a merged as #8 (L24); T5b merged as #9 (L25); T5c merged as #10 (L26); T6a merged as #11 and #12 (L27, L28); T6b merged as #13 and #14 (L29, L30); T7 merged as #15 and #16 (L31, L32); T8a merged as #17 (L33 to L35); T8b merged as #18 and #19 (L36 to L38); T8c merged as #20 (L39, L40); T8t merged as #21 (L41, L42); T8d merged as #22 and #23 (L42 to L44); T8l merged as #24 (L45, L46); T9a merged as #25 (L47, L48); T7c merged as #26 (L48, L49); T7d merged as #27 (L49, L50); T9b part A merged as #28 (L50 to L52); T9b part B merged as #29 (L52 to L55); T8e merged as #30 (L55, L56); T9b part C1 merged as #31 (L56 to L59); T9b part C2 merged as #32 (L59, L60); T8f merged as #33 (L60, L61); T10a merged as #34 (L62, L63); the T10 documentation merged as #35 (L63, L64); the first T10 API readability part merged as #36 (L64, L65); the second merged as #37 (L65, L66); the T10 web and harness naming merged as #38 (L66, L67); T10 in progress (L61 to L68).
 Commits need explicit human approval (repository policy); push, pull request, and merge stay human decisions.
 
 | Field | Answer |
@@ -17,7 +17,7 @@ Commits need explicit human approval (repository policy); push, pull request, an
 | Verification | `pnpm docs:check`, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`; the database gate (`db:up`, `db:migrate`, seed twice, `db:check`); integration tests against real PostgreSQL; native review per work unit; independent verification for security units. |
 | Rollback | Each task is one work-unit commit on this branch and can be reverted alone. The T2 migration is additive; once applied to a shared database, it is undone only by a new migration, never by editing it. |
 | Human decisions | Commit approval per unit, T2 migration review, T11 security sign-off, and the domain name (not blocking). |
-| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), slice 23 `feat/m2-identity-23-landing` (T8l themed landing, #24, merged), slice 24 `feat/m2-identity-24-integration-tests` (T9a database tests in CI, #25, merged), slice 25 `feat/m2-identity-25-enrollment-race` (T7c enrollment race fix, #26, merged), slice 26 `feat/m2-identity-26-enrollment-hardening` (T7d enrollment hardening, #27, merged), slice 27 `feat/m2-identity-27-browser-tests` (T9b part A browser tests, #28, merged), slice 28 `feat/m2-identity-28-admin-browser-tests` (T9b part B administrator browser tests, #29, merged), slice 29 `feat/m2-identity-29-form-submission` (T8e form submission, #30, merged), slice 30 `feat/m2-identity-30-web-api-client` (T9b part C1 web server hardening, #31, merged), slice 31 `feat/m2-identity-31-test-findings` (T9b part C2 test findings, #32, merged), slice 32 `feat/m2-identity-32-self-hosted-fonts` (T8f self-hosted theme fonts, #33, merged), slice 33 `feat/m2-identity-33-admin-recovery` (T10a administrator recovery command, #34, merged), slice 34 `feat/m2-identity-34-docs-adr` (T10 documentation and ADR, #35, merged), slice 35 `feat/m2-identity-35-api-readability` (T10 API comments and naming, part 1, #36, merged), slice 36 `feat/m2-identity-36-api-users-readability` (T10 API comments and naming, part 2, #37, merged), and the T10 web and harness readability on `feat/m2-identity-37-web-readability` (L23 to L66). Push and pull requests need human approval. |
+| Delivery | Feature branch chain (L17). `feat/m2-identity` is the tracker and final integration branch, with a draft pull request to `master` that is not merged before T11. Slice 1 `feat/m2-identity-01-spike` (T1, T1b; 407 lines) targets the tracker; slice 2 `feat/m2-identity-02-schema` (T2; 436 lines, 106 of them generated migration SQL) targets slice 1; slice 3 `feat/m2-identity-03-config` (T3, `4cfdb26`; about 747 lines, 415 of them tests) targets slice 2 with `size:exception` (L19); each later slice branches from and targets its parent. Pull requests: tracker #1 (draft, marker commit `7d9e3b9`), slice 1 #2, slice 2 #3, slice 3 #4. T4 is split into slice 4 `feat/m2-identity-04-email-core` (`01f44f5`), slice 5 `feat/m2-identity-05-email-adapters` (`f6cc504`), and slice 6 `feat/m2-identity-06-email-wiring`, each with `size:exception` (L22). Pull requests #2 to #7 are merged into the tracker with merge commits; later slices branch from the tracker and target it: slice 7 `feat/m2-identity-07-sign-in-code` (T5a, #8, merged) and slice 8 `feat/m2-identity-08-abuse-limits` (T5b, #9, merged), slice 9 `feat/m2-identity-09-abuse-hardening` (T5c, #10, merged), slice 10 `feat/m2-identity-10-authorization` (T6a access control, #11, merged), slice 11 `feat/m2-identity-11-disable-user` (T6a disable command, #12, merged), slice 12 `feat/m2-identity-12-session-status` (T6b session hardening, #13, merged), slice 13 `feat/m2-identity-13-own-profile` (T6b own profile, #14, merged), slice 14 `feat/m2-identity-14-admin-sign-in` (T7 administrator sign-in, #15, merged), slice 15 `feat/m2-identity-15-admin-create` (T7 creation command, #16, merged), slice 16 `feat/m2-identity-16-session-settings` (T8a session settings, #17, merged), slice 17 `feat/m2-identity-17-web-proxy` (T8b API proxy secret, #18, merged), slice 18 `feat/m2-identity-18-web-proxy-client` (T8b web proxy and server-side API client, #19, merged), slice 19 `feat/m2-identity-19-customer-pages` (T8c customer pages, #20, merged), slice 20 `feat/m2-identity-20-theme` (T8t theme foundations, #21, merged), slice 21 `feat/m2-identity-21-admin-pages` (T8d administrator sign-in and panel, #22, merged), slice 22 `feat/m2-identity-22-admin-enrollment` (T8d administrator enrollment, #23, merged), slice 23 `feat/m2-identity-23-landing` (T8l themed landing, #24, merged), slice 24 `feat/m2-identity-24-integration-tests` (T9a database tests in CI, #25, merged), slice 25 `feat/m2-identity-25-enrollment-race` (T7c enrollment race fix, #26, merged), slice 26 `feat/m2-identity-26-enrollment-hardening` (T7d enrollment hardening, #27, merged), slice 27 `feat/m2-identity-27-browser-tests` (T9b part A browser tests, #28, merged), slice 28 `feat/m2-identity-28-admin-browser-tests` (T9b part B administrator browser tests, #29, merged), slice 29 `feat/m2-identity-29-form-submission` (T8e form submission, #30, merged), slice 30 `feat/m2-identity-30-web-api-client` (T9b part C1 web server hardening, #31, merged), slice 31 `feat/m2-identity-31-test-findings` (T9b part C2 test findings, #32, merged), slice 32 `feat/m2-identity-32-self-hosted-fonts` (T8f self-hosted theme fonts, #33, merged), slice 33 `feat/m2-identity-33-admin-recovery` (T10a administrator recovery command, #34, merged), slice 34 `feat/m2-identity-34-docs-adr` (T10 documentation and ADR, #35, merged), slice 35 `feat/m2-identity-35-api-readability` (T10 API comments and naming, part 1, #36, merged), slice 36 `feat/m2-identity-36-api-users-readability` (T10 API comments and naming, part 2, #37, merged), slice 37 `feat/m2-identity-37-web-readability` (T10 web and harness comments and naming, #38, merged), and the T10 web behavior on `feat/m2-identity-38-web-behavior` (L23 to L68). Push and pull requests need human approval. |
 
 ## Specs
 
@@ -173,6 +173,13 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   codes, and issues a new initial password with a new 24-hour enrollment window (S20), as an `admin:create` reissue
   does. It refuses unknown addresses, customers, and disabled administrators, never creates or promotes an account,
   logs only the user id, and fails closed, leaving the account unchanged.
+- **S45** (L68) Message for a superseded enrollment on `/admin/activar`, approved as: "Para 401 ENROLLMENT_SUPERSEDED
+  muestro «Esta activación ya no es válida. Ingresa de nuevo con tu correo y tu contraseña.». Los demás 401 siguen con
+  «Tu sesión terminó…». El texto es cierto en todos los casos que producen esa respuesta, y llevará pruebas del caso y
+  del mensaje." The API answers `verify-totp` with `401` and the code `ENROLLMENT_SUPERSEDED` when a first
+  confirmation loses a race (S39, S40, L49), whether another confirmation completed the enrollment or the enrollment
+  was reverted; «Tu sesión terminó…» is today's full text «Tu sesión terminó. Ingresa de nuevo con tu correo y tu
+  contraseña.».
 
 ## Tasks
 
@@ -202,7 +209,7 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
 | T8e | Forms never put credentials in a URL (L55, S42): the forms at `/admin/ingresar`, `/admin/activar`, and `/ingresar` never send their fields in a query string, with or without JavaScript; controls that act only through JavaScript wait until the page is interactive; a browser test with JavaScript disabled, and a single-click sign-out test that replaces the retry in the administrator tests (R3-sign-out-retry-not-idempotent, R4-signout-retry-cannot-recover-after-navigation). | S2, S42 | worker | `365a188` (#30) |
 | T8f | Self-hosted theme fonts (L57, S43): the theme's font files and their licenses in the repository, loaded with `next/font/local` instead of `next/font/google`, so `next build` needs no network for fonts; same families, weights, and look. After T9b part C2. | S43 | worker | `cd63f22` (#33) |
 | T10a | Administrator recovery command (L62, S44): an operator command in `apps/api` that resets a locked administrator's second factor, revokes every session, and issues a new initial password with a new enrollment window, with the safeguards of `admin:create`; its own slice, test first, with independent verification and native review. | S44 | worker | `da45569` (#34) |
-| T10 | Documentation and the readability findings routed here (L63): ADR wording fixes, architecture, database, and quality-gate docs, the variables each runtime needs (the example `.env*` files are a human edit), and the comment, naming, and test findings, in slices: the documentation and the ADR (slice 34), the API comments and naming, the web and harness comments and naming, and the web behavior with the L49 copy. The administrator recovery command is T10a; the security and log-contract items moved to T11 (L63). | S13, S21, S26, S27 | worker | `74f8521` and `c9d7864` (#35), `86b3a7d` and `91d7a9c` (#36), `4a8ebc2` and `54884bd` (#37) |
+| T10 | Documentation and the readability findings routed here (L63): ADR wording fixes, architecture, database, and quality-gate docs, the variables each runtime needs (the example `.env*` files are a human edit), and the comment, naming, and test findings, in slices: the documentation and the ADR (slice 34), the API comments and naming, the web and harness comments and naming, and the web behavior with the L49 copy. The administrator recovery command is T10a; the security and log-contract items moved to T11 (L63). | S13, S21, S26, S27, S45 | worker | `74f8521` and `c9d7864` (#35), `86b3a7d` and `91d7a9c` (#36), `4a8ebc2` and `54884bd` (#37), `041ce73` and `c7b01af` (#38) |
 | T11 | Security evidence: independent verification of every spec, and human sign-off of secret handling, session expiry, and error mapping. | S2 | verify | — |
 
 ## Log
@@ -1254,3 +1261,82 @@ exposed only ID, severity, and location: each reading is ours and is confirmed b
   to T11: the verification's suggested tests, a pin of the DTO 400 body of `PATCH /me` and a unit test of the
   `admin:create` notice line, which has no command spec. Slice 37 (`feat/m2-identity-37-web-readability`, from
   `3cdde74`) holds the web and harness comments and naming.
+- **L67** (2026-11-07) Slice 37 (`041ce73` and `c7b01af`, PR #38) holds the T10 web and harness comments and naming,
+  with no runtime behavior change and no change to any Spanish string. On the web server, the api-client `rejected`
+  doc now covers 3xx answers, `send` became `sendOwnProfileRequest`, `SERVICE_UNAVAILABLE_BODY` moved into
+  `auth-proxy.ts`, its only user, `MINIMUM_PROXY_SECRET_LENGTH` is named and points to the API rule, and
+  `logReadFailure` and `readUnlessApiUnavailable` became `logApiCallFailure` and `callUnlessApiUnavailable`;
+  `SIGN_IN_CODE_POLICY` and `SECOND_FACTOR_POLICY` name the numbers the copy states, the code patterns derive from
+  them, and tests pin the copy to them; one shared `browserFetch` replaces four identical copies; and each API gate of
+  the browser harness owns its origin and held groups, with a two-gate test. Resolved:
+  R2-api-client-3xx-mapped-to-rejected-contradicts-kind-doc, R2-api-client-generic-send-hardcodes-own-profile,
+  R2-proxy-headers-module-holds-error-body, R2-web-secret-min-length-duplicates-api-rule-without-link,
+  R2-read-named-helpers-wrap-profile-update, R2-copy-duplicates-api-policy-constants, R2-home-null-comment-misplaced,
+  R2-session-is-gone-inverted-doc, R2-browser-fetch-duplicated, R2-gate-factory-mutates-module-origin, and
+  R3-gate-origin-module-global; the L40 R2-001 and R2-002 findings and L44 R2-002; and, by inference, L44 R2-003,
+  whose comment in `enrollment-copy.ts` gave a delivery reason instead of the real one. R2-internal-helpers-exported
+  keeps the exports, now documented, because `enrollment.ts` imports them; R2-config-api-origin-check-misreports (L38)
+  was already resolved by the L58 normalization. The Log holds no claim text for L40 R2-003 and R2-005 or for L44
+  R2-001, R2-003, R2-004, and R2-005; an inspection found nothing stale in the files of L40 R2-003 and R2-005 and of
+  L44 R2-001 and R2-005, and L44 R2-004 points at this plan. The worker's gates passed (API 342 of 342, web 254 of
+  254, and the browser suite 19 of 19), and a scratch differential of the code helpers, the copy objects, the
+  configuration errors, and the proxy's error answers printed byte-identical output on the base and on the candidate;
+  the parent checked the auth proxy, configuration, and administrator sign-in diffs against the base, and no
+  independent verifier ran, as the assessment planned none. While the worker was still writing, the review reminder
+  named a partial snapshot; its inspect and start, run as the reminder asks, froze it as `review-051d265d4ab8f0bf` (19
+  files, 263 lines), and the Pi host granted its consent without a relay. User, choosing an option for "El aviso de
+  revisión llevó a un START que el host de Pi aceptó por su cuenta. Quedó abierta la revisión review-051d265d4ab8f0bf
+  (riesgo alto, 4 lentes) sobre una foto parcial del slice 37: 19 archivos y 263 líneas, solo los grupos A y B. El
+  worker todavía no termina; faltan la función fetch compartida y el gate de pruebas. Si la reviso ahora, son 4
+  ejecuciones de modelo sobre trabajo incompleto, y el slice completo va a necesitar otra revisión de 4 lentes. ¿Qué
+  hago con esta revisión?": "Esperar al slice completo (recomendado)", whose description reads: "No corro los 4
+  revisores sobre la foto parcial. Cuando el worker termine, consulto el STATUS de esta revisión y sigo la ruta que
+  ofrezca el proveedor para el slice completo. Si algo queda trabado, te lo informo." That review stays open with no
+  reviewer run; a later reminder for another partial snapshot was deferred under the same decision until the worker
+  finished, and the next inspect neither listed the open review nor let it block the review of the complete slice. On
+  the complete slice, the native review (`review-e0e2c331139e15e4`, high tier, four lenses) approved tree `185e181`
+  without correction, with five suggestions that an 85-line second commit answers: the doc of
+  `normalizeAuthenticatorCode` names `SECOND_FACTOR_POLICY.codeDigits` (R2-authenticator-normalize-doc-hardcodes-six),
+  a table test pins it and `isCompleteAuthenticatorCode` to the outputs of the customer helper they replaced
+  (R3-authenticator-normalize-inlined-unproved), `sendOwnProfileRequest` accepts only the path `/me`
+  (R2-own-profile-request-path-still-open), both copy suites share one `numbersBefore` shape and the administrator
+  suite names its backup-code count (R2-copy-number-pin-helper-duplicated), and the copy pins accept any whitespace
+  and singular units (R3-copy-policy-pin-narrow-pattern); its gates passed (web 255 of 255). User, choosing an option
+  for "El slice 37 está listo: comentarios y nombres de la web y del arnés de pruebas, sin cambio de comportamiento.
+  Son 396 líneas: 211 de código, 114 de pruebas, 2 de docs y 69 del plan (L66). - Ningún texto en español cambió. Las
+  cifras que el texto repetía (6 dígitos, 5 minutos, 30 segundos, 15 minutos) ahora tienen nombre, y unas pruebas
+  fijan que el texto coincida con ellas. - Las 4 copias idénticas del fetch del navegador quedaron en una sola, y el
+  gate de pruebas guarda su estado por instancia. - El diferencial contra la base dio idéntico, y pasan las pruebas
+  (API 342/342, web 254/254) y la suite de navegador (19/19). - La revisión nativa (riesgo alto, 4 lentes) lo aprobó
+  con 5 sugerencias. Preparé aparte un arreglo de 85 líneas, sin cambio de comportamiento, para esas 5 sugerencias: un
+  comentario, un tipo más estricto, una prueba nueva de la normalización del código del autenticador y patrones de
+  prueba más amplios. Sus verificaciones pasaron (web 255/255, typecheck, lint y formato). ¿Cómo sigo?": "Dos commits,
+  PR y merge (recomendado)", whose description reads: "Commit 1: el árbol revisado, tal cual. Commit 2: el arreglo de
+  85 líneas. Después publico el PR #38 contra feat/m2-identity y lo mergeo con el CI en verde." PR #38 passed CI,
+  where the browser job ran 19 tests, and was merged into the tracker as `58bf6a3`, whose tree equals the second
+  commit's; the tracker description now lists slices 1 to 37, and CI on #1 passed after #38, browser job included.
+  After the commits, the reminder named the whole branch against `master` again (about 250 paths), and its start
+  stopped in preflight with `lens_context_budget_exceeded`. User, choosing an option for "El aviso de revisión volvió
+  a nombrar toda la rama contra master, ahora el objetivo sha256:778223db… (unas 250 rutas, con los commits del slice
+  37). Corrí inspect y START, y el proveedor lo frenó otra vez en el chequeo previo con lens_context_budget_exceeded,
+  sin crear autoridad. Cada commit nuevo crea otro objetivo de rama completa que el proveedor nunca puede revisar, y
+  cada slice ya tiene su propia revisión nativa. ¿Cómo manejo estos objetivos de rama completa de ahora en adelante?":
+  "Dejarlos sin revisar, sin preguntarme (recomendado)", whose description reads: "Este objetivo y cada objetivo
+  futuro de rama completa contra master que el proveedor ya haya frenado por presupuesto quedan registrados como no
+  revisados por tu decisión. No vuelvo a lanzar START para ellos, y te informo cada caso en mi reporte. Las revisiones
+  de cada slice siguen igual." Slice 38 (`feat/m2-identity-38-web-behavior`, from `58bf6a3`) holds the web behavior:
+  S45 and three test items (L68).
+- **L68** (2026-11-07) The `/admin/activar` message for `401 ENROLLMENT_SUPERSEDED`, which L49 left to T10; L44 R2-006
+  had noted that the page reads every `401` from `verify-totp` other than `INVALID_CODE` as an ended session. User,
+  choosing an option for "Para el slice 38 (comportamiento web) necesito tu decisión pendiente de L49: qué mensaje
+  muestra /admin/activar cuando la API responde 401 ENROLLMENT_SUPERSEDED. Esa respuesta llega cuando la confirmación
+  del primer código pierde una carrera: otra ventana ya completó la activación, o la activación se reinició (por
+  ejemplo, porque un operador emitió una contraseña nueva). Hoy la página lo trata como una sesión terminada y muestra
+  «Tu sesión terminó. Ingresa de nuevo con tu correo y tu contraseña.». En todos esos casos la persona tiene que
+  volver a ingresar; lo que cambia es si el texto dice por qué. ¿Qué texto quieres?": "Texto nuevo para este caso
+  (recomendado)", whose description reads: "Para 401 ENROLLMENT_SUPERSEDED muestro «Esta activación ya no es válida.
+  Ingresa de nuevo con tu correo y tu contraseña.». Los demás 401 siguen con «Tu sesión terminó…». El texto es cierto
+  en todos los casos que producen esa respuesta, y llevará pruebas del caso y del mensaje." S45 records it, and the
+  T10 row now lists S45. Slice 38 implements it together with the three remaining T10 test items:
+  R3-variable-weight-range-unproved, R3-admin-script-test-exact-stderr-brittle, and
+  R2-signout-note-located-by-sibling-xpath.

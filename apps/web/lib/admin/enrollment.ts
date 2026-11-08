@@ -18,8 +18,10 @@ import { errorCode, postJson, readJson } from "./sign-in.ts";
  * - enable: `200 { method: "totp", totpURI, backupCodes }` (10 codes); `400 INVALID_PASSWORD`;
  *   `400 TOTP_ALREADY_ENABLED` once enrolled; `401` when the session is gone, including after the
  *   24-hour window of the initial password; `429` for the rate limit.
- * - verify-totp: `200 { token, user }` and a new session cookie; `401 INVALID_CODE`; any other `401`
- *   when the session is gone; `429` for the rate limit.
+ * - verify-totp: `200 { token, user }` and a new session cookie; `401 INVALID_CODE`;
+ *   `401 ENROLLMENT_SUPERSEDED` when the API refuses a first confirmation that lost a race to another
+ *   confirmation, an `admin:create` reissue, a `user:disable`, or a sign-out (S39, S40, S45); any
+ *   other `401` when the session is gone; `429` for the rate limit.
  */
 
 export interface Enrollment {
@@ -39,7 +41,12 @@ export type EnableOutcome =
   | { ok: true; enrollment: Enrollment }
   | { ok: false; failure: EnableFailure };
 
-export type ConfirmFailure = "invalid-code" | "session-ended" | "too-many-attempts" | "unavailable";
+export type ConfirmFailure =
+  | "invalid-code"
+  | "session-ended"
+  | "enrollment-superseded"
+  | "too-many-attempts"
+  | "unavailable";
 export type ConfirmOutcome = { ok: true } | { ok: false; failure: ConfirmFailure };
 
 const ENABLE_PATH = "/api/auth/two-factor/enable";
@@ -129,10 +136,14 @@ export async function classifyConfirmResponse(response: Response): Promise<Confi
   }
 
   if (response.status === 401) {
-    return {
-      ok: false,
-      failure: (await errorCode(response)) === "INVALID_CODE" ? "invalid-code" : "session-ended",
-    };
+    const code = await errorCode(response);
+    if (code === "INVALID_CODE") {
+      return { ok: false, failure: "invalid-code" };
+    }
+    if (code === "ENROLLMENT_SUPERSEDED") {
+      return { ok: false, failure: "enrollment-superseded" };
+    }
+    return { ok: false, failure: "session-ended" };
   }
 
   await response.body?.cancel();
@@ -178,12 +189,22 @@ export function enableFailureMessage(failure: EnableFailure): string {
   }
 }
 
+/**
+ * Whether the activation cannot go on in this page, so it offers signing in again: the session is
+ * gone, or the API refused a superseded first confirmation (S45). Only the message tells them apart.
+ */
+export function offersSignInAgain(failure: EnableFailure | ConfirmFailure): boolean {
+  return failure === "session-ended" || failure === "enrollment-superseded";
+}
+
 export function confirmFailureMessage(failure: ConfirmFailure): string {
   switch (failure) {
     case "invalid-code":
       return ENROLLMENT_COPY.invalidCode;
     case "session-ended":
       return ENROLLMENT_COPY.sessionEnded;
+    case "enrollment-superseded":
+      return ENROLLMENT_COPY.enrollmentSuperseded;
     case "too-many-attempts":
       return ENROLLMENT_COPY.tooManyAttempts;
     case "unavailable":

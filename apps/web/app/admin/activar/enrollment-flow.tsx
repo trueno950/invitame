@@ -9,6 +9,7 @@ import {
   type Enrollment,
   enableFailureMessage,
   groupSetupKey,
+  offersSignInAgain,
   startEnrollment,
 } from "../../../lib/admin/enrollment.ts";
 import { ENROLLMENT_COPY } from "../../../lib/admin/enrollment-copy.ts";
@@ -98,7 +99,7 @@ export function EnrollmentFlow() {
         goToPanel(ENROLLMENT_COPY.alreadyEnrolled);
         return;
       }
-      setSessionEnded(outcome.failure === "session-ended");
+      setSessionEnded(offersSignInAgain(outcome.failure));
       fail(enableFailureMessage(outcome.failure), passwordField.current);
       return;
     }
@@ -126,7 +127,8 @@ export function EnrollmentFlow() {
     const outcome = await confirmEnrollment(browserFetch, code);
 
     if (!outcome.ok) {
-      setSessionEnded(outcome.failure === "session-ended");
+      // A superseded confirmation ends the activation like an ended session; only the message differs.
+      setSessionEnded(offersSignInAgain(outcome.failure));
       fail(confirmFailureMessage(outcome.failure), codeField.current);
       codeField.current?.select();
       return;

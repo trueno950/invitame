@@ -10,6 +10,7 @@ import {
   type EnableFailure,
   enableFailureMessage,
   groupSetupKey,
+  offersSignInAgain,
   setupKeyFromUri,
   startEnrollment,
 } from "./enrollment.ts";
@@ -101,6 +102,8 @@ describe("classifyEnableResponse", () => {
     ],
     [() => json(400, { code: "TOTP_ALREADY_ENABLED" }), "already-enrolled"],
     [() => json(401, { code: "UNAUTHORIZED" }), "session-ended"],
+    // Only the confirmation can be superseded; the enable step keeps reading every 401 as an ended session.
+    [() => json(401, { code: "ENROLLMENT_SUPERSEDED" }), "session-ended"],
     [
       () => json(429, { message: "Too many requests. Please try again later." }),
       "too-many-attempts",
@@ -123,6 +126,12 @@ describe("classifyConfirmResponse", () => {
     [() => json(401, { code: "INVALID_CODE", message: "Invalid code" }), "invalid-code"],
     [() => json(401, { code: "INVALID_TWO_FACTOR_COOKIE" }), "session-ended"],
     [() => json(401, { code: "UNAUTHORIZED" }), "session-ended"],
+    [() => json(401, {}), "session-ended"],
+    // A first confirmation that lost a race to another one, a reissue, a disable, or a sign-out (S45).
+    [
+      () => json(401, { code: "ENROLLMENT_SUPERSEDED", message: "Enrollment superseded" }),
+      "enrollment-superseded",
+    ],
     [() => json(429, { message: "Too many" }), "too-many-attempts"],
     [() => json(400, { code: "TOTP_NOT_ENABLED" }), "unavailable"],
     [() => json(502, {}), "unavailable"],
@@ -187,11 +196,41 @@ describe("enrollment copy", () => {
     const confirm: Record<ConfirmFailure, string> = {
       "invalid-code": ENROLLMENT_COPY.invalidCode,
       "session-ended": ENROLLMENT_COPY.sessionEnded,
+      "enrollment-superseded": ENROLLMENT_COPY.enrollmentSuperseded,
       "too-many-attempts": ENROLLMENT_COPY.tooManyAttempts,
       unavailable: ENROLLMENT_COPY.unavailable,
     };
     for (const [failure, message] of Object.entries(confirm)) {
       assert.equal(confirmFailureMessage(failure as ConfirmFailure), message);
+    }
+  });
+
+  it("says why a superseded confirmation ended, and keeps the ended-session text for every other 401 (S45)", () => {
+    assert.equal(
+      confirmFailureMessage("enrollment-superseded"),
+      "Esta activación ya no es válida. Ingresa de nuevo con tu correo y tu contraseña.",
+    );
+    const sessionEnded = "Tu sesión terminó. Ingresa de nuevo con tu correo y tu contraseña.";
+    assert.equal(confirmFailureMessage("session-ended"), sessionEnded);
+    assert.equal(enableFailureMessage("session-ended"), sessionEnded);
+  });
+
+  it("offers signing in again only when the activation cannot go on (S45)", () => {
+    const ends = new Set<EnableFailure | ConfirmFailure>([
+      "session-ended",
+      "enrollment-superseded",
+    ]);
+    const failures: Array<EnableFailure | ConfirmFailure> = [
+      "invalid-password",
+      "already-enrolled",
+      "invalid-code",
+      "session-ended",
+      "enrollment-superseded",
+      "too-many-attempts",
+      "unavailable",
+    ];
+    for (const failure of failures) {
+      assert.equal(offersSignInAgain(failure), ends.has(failure), failure);
     }
   });
 
