@@ -211,14 +211,24 @@ describe("own profile: GET /me and PATCH /me", () => {
       ["a boolean", true],
     ];
 
+    // T11 (L66): the DTO's 400 body is pinned whole, not only its status.
+    const INVALID_DISPLAY_NAME = {
+      message: [
+        "displayName must be null or 1 to 120 characters after trimming, without control characters",
+      ],
+      error: "Bad Request",
+      statusCode: 400,
+    };
+
     for (const [label, displayName] of invalid) {
-      it(`rejects ${label} with 400 and keeps the stored name`, async () => {
+      it(`rejects ${label} with the DTO's 400 body and keeps the stored name`, async () => {
         const { user, cookie } = await signedInCustomer();
         await patchMe({ displayName: "Before" }, cookie);
 
         const response = await patchMe({ displayName }, cookie);
 
         assert.equal(response.status, 400);
+        assert.deepEqual(await response.json(), INVALID_DISPLAY_NAME);
         assert.equal(user.displayName, "Before");
       });
     }
