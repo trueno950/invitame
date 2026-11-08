@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
 import { describe, it } from "node:test";
 
 import type { IssueInitialPasswordResult } from "./application/administrator-account.repository";
@@ -153,6 +155,38 @@ describe("admin:create", () => {
         '{"event":"administrator_create_failed","error":"RangeError"}',
         CLOSE_FAILED_LINE,
       ]);
+    });
+  });
+
+  // The script guard (`require.main === module`): a direct run starts the command, and loading the
+  // module any other way never does. Neither child reaches the database.
+  describe("entry guard", () => {
+    const apiRoot = path.resolve(__dirname, "../..");
+    const command = "src/users/create-administrator.command.ts";
+
+    function spawn(args: string[]) {
+      return spawnSync(process.execPath, ["-r", "@swc-node/register", ...args], {
+        cwd: apiRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 60_000,
+      });
+    }
+
+    it("starts the command on a direct run: no email prints the usage and exits 2", () => {
+      const result = spawn([command]);
+
+      assert.equal(result.status, 2);
+      assert.equal(result.stdout, "");
+      assert.equal(result.stderr, "Usage: pnpm --filter @invitame/api admin:create -- <email>\n");
+    });
+
+    it("does nothing when the module is only loaded, even where require.main is undefined", () => {
+      const result = spawn(["-e", `require(${JSON.stringify(`./${command}`)});`]);
+
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout, "");
+      assert.equal(result.stderr, "");
     });
   });
 });
