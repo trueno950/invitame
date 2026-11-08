@@ -227,9 +227,11 @@ function timeOf(value: unknown): number | undefined {
  * `revert`. A revert sets `twoFactorEnabled` back to false for this user only if it is still true, and
  * changes no other column (Prisma still stamps `updatedAt`). If that update throws, one
  * `administrator_enrollment_compensation_failed` event with the error class follows and the refusal
- * stands. After the attempt, one `administrator_enrollment_revert_result` event names its result:
- * `reverted`, `unchanged` (the guarded update matched no row), or `failed` (S50, L71). Then, as when the process stops before the update, the flag stays true without a session:
+ * stands. Then, as when the process stops before the update, the flag stays true without a session:
  * the account is locked, fails closed, and only the manual recovery procedure (T10) releases it.
+ *
+ * After a revert attempt, one `administrator_enrollment_revert_result` event names its result:
+ * `reverted`, `unchanged` (the guarded update matched no row), or `failed` (S50, L71).
  */
 export async function refuseSupersededConfirmation(
   context: SessionCreateContext,

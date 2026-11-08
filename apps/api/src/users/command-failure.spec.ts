@@ -75,6 +75,15 @@ describe("commandFailureEvent", () => {
       error: "unknown",
     });
   });
+
+  it("logs a thrown object that has a name but is not an Error as unknown, never its name", () => {
+    const thrown = { name: "admin@example.test", message: "token-9f2c" };
+
+    const event = commandFailureEvent("administrator_create_failed", thrown);
+
+    assert.deepEqual(event, { event: "administrator_create_failed", error: "unknown" });
+    assert.ok(!JSON.stringify(event).includes("admin@example.test"));
+  });
 });
 
 describe("user:disable failure line", () => {
@@ -94,8 +103,12 @@ describe("user:disable failure line", () => {
       },
     );
 
+    // A timeout leaves no exit status; say so instead of reporting a status mismatch.
+    assert.notEqual(run.status, null, `the command did not exit: ${String(run.error)}`);
     assert.equal(run.status, 1);
-    assert.deepEqual(JSON.parse(run.stderr.trim()), {
+    // The failure line is the last one; a runtime warning printed before it must not break the parse.
+    const lastLine = run.stderr.trim().split("\n").at(-1) ?? "";
+    assert.deepEqual(JSON.parse(lastLine), {
       event: "user_disable_failed",
       error: "PrismaClientInitializationError",
       code: "P1001",

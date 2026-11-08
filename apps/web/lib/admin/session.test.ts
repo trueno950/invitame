@@ -53,6 +53,17 @@ describe("loadAdminView", () => {
     });
     assert.deepEqual(view, { kind: "unavailable" });
   });
+
+  it("reports a failed proxy call as unavailable and keeps its cause out of the view", async () => {
+    const cause = new TypeError(
+      "fetch failed for admin@example.test; better-auth.session_token=abc",
+    );
+    const view = await loadAdminView(async () => {
+      throw new ApiClientError("unavailable", undefined, { cause });
+    });
+    assert.deepEqual(view, { kind: "unavailable" });
+    assert.ok(!JSON.stringify(view).includes("admin@example.test"));
+  });
 });
 
 describe("routeAdminPage", () => {
