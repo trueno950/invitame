@@ -134,6 +134,15 @@ PostgreSQL tests run in `test:db`.
   session" for `/me`, `/probe/admin`, `get-session`, and `list-sessions`; "ends an enrolled administrator's session
   that has no marker, as one opened before the migration"; DB-marker "ends an enrolled administrator's session that
   predates the marker and keeps a customer's".
+- Regression tests (verifier, F1 to F4): U-admin "stores true for an enrolled administrator only on the exact
+  verification endpoints"; "stores false for a pending administrator and for a customer on the verification
+  endpoints"; "takes the marker from the endpoint alone: no sign-in body, path spelling, or server-side update sets
+  it"; "stores false when a password sign-in is dressed as a verification endpoint"; "opens no marked session
+  without a verified code: a wrong code, a replayed challenge, or disableSession"; "answers every Better Auth route
+  to a password-only session of an enrolled administrator as to no session"; "refuses PATCH /me and the project
+  routes to a password-only session of an enrolled administrator".
+- Guard second check (F1): U-admin "refuses a password-only session whose account turns enrolled between the hook's
+  read and the guard's". Update hook (F2): U-admin "refuses every session update that touches the marker".
 - A′ with a failed sibling delete: DB-races "a first confirmation whose sibling-session delete fails" (above).
 - Unchanged: U-admin "lists exactly four Better Auth endpoints in the pending-administrator allow list" and
   "keeps a pending administrator's unmarked session on the four allowed endpoints only"; "still serves customers

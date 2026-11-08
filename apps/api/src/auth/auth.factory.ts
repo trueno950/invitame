@@ -298,6 +298,11 @@ export function createAuth(options: CreateAuthOptions): Auth {
           },
         },
         update: {
+          // The marker is written once, by the create hook, from the verification endpoint alone (S52).
+          // No update may touch it, whatever its value and whoever calls: `/update-session` is
+          // disabled and `secondFactorVerified` is not an accepted input, so this is a second lock for
+          // server code that calls `updateSession`.
+          //
           // Better Auth moves `expiresAt` only when `getSession` refreshes a session, after it has
           // stored the session it read on the request context (1.7.16 `api/routes/session.mjs`;
           // `/update-session` is disabled). The session hook already skips that refresh for
@@ -306,6 +311,10 @@ export function createAuth(options: CreateAuthOptions): Auth {
           // one, including any on a request without a stored session. Refusing makes `getSession`
           // answer 401 and clear the cookie: fail closed.
           async before(session, context) {
+            if ("secondFactorVerified" in session) {
+              return false;
+            }
+
             if (session.expiresAt === undefined) {
               return;
             }

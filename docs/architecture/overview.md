@@ -375,7 +375,18 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
   project route; `get-session` answers `null`). This holds when the confirmation's sibling-session delete
   failed: the surviving password-only sessions (A′, L72) are ended on their next use, with no dependence on
   that delete. Sessions that existed before the migration read false, so enrolled administrators sign in again
-  once. A pending administrator keeps the four-endpoint allow list unchanged; a customer is unaffected.
+  once. A pending administrator keeps the four-endpoint allow list unchanged; a customer is unaffected. The guard
+  repeats the check on its own read of the session (`lacksRequiredSecondFactor`), so an account that turns enrolled
+  between the hook's read and the guard's still gets `401`, never one `200`. The session-update hook refuses any
+  update that touches the marker.
+  - Contract: `GET /api/auth/get-session` and `GET /api/auth/list-sessions` return `session.secondFactorVerified`
+    (boolean) on each session. Clients must not read it as an authorization signal; the API decides.
+  - Deploy order: apply the migration before, or together with, the API that reads the column. New code on an
+    unmigrated database answers `500` on `get-session`; old code on a migrated database works, because the column
+    has a default.
+  - Rolling deploy: a TOTP or backup-code sign-in served by an old instance stores the session unmarked (the
+    column default), and a new instance then ends it on its next use. The effect is transient: the administrator
+    signs in again.
 
 ### Own profile (current)
 

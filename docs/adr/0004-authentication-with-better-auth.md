@@ -96,7 +96,10 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    The API deletes, on its next use, every session of an `ACTIVE` administrator whose `twoFactorEnabled` is
    true and whose session is not marked, and answers as without a session. This no longer depends on the
    sibling delete succeeding. Administrator sessions opened before the migration read false, so those
-   administrators sign in again once. The pending-administrator allow list above is unchanged.
+   administrators sign in again once. The pending-administrator allow list above is unchanged. `get-session` and
+   `list-sessions` return `session.secondFactorVerified`. Apply the migration before, or together with, the API
+   that reads the column; during a rolling deploy a second-factor sign-in served by an old instance is stored
+   unmarked and ended once (details in `docs/architecture/overview.md`).
 4. **Sessions and hosting.** Sessions are stored in the database and carried by an `HttpOnly`, `SameSite=Lax` cookie
    issued by the API, `Secure` outside local development. `apps/web` forwards the cookie from trusted server code and
    never stores it. Production runs web, API, and PostgreSQL in one Railway project under one registrable domain

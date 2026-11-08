@@ -52,18 +52,45 @@ function within<T>(promise: Promise<T>, what: string, milliseconds = GATE_TIMEOU
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+/** The error a `try` body threw, recorded by its `catch` so the `finally` can tell a failed body from a passed one. */
+type BodyFailure = { error: unknown };
+
 /**
  * Releases a held transaction and waits for the operations that were blocked on it, so an assertion
  * failure cannot leave its row lock held for the `after` hook. A wait that times out is rethrown
- * with its own message instead of being hidden.
+ * with its own message instead of being hidden when the body passed. When the body already failed,
+ * its error stays the primary one and the timeout is attached as its `cause` (or, for a thrown
+ * non-object, joined with it in an `AggregateError`), so the timeout cannot mask the real failure.
  */
 async function releaseAndSettle(
   held: { open: () => void },
   operations: Array<Promise<unknown>>,
   what: string,
+  bodyFailure?: BodyFailure,
 ): Promise<void> {
   held.open();
-  await within(Promise.allSettled(operations), what);
+  try {
+    await within(Promise.allSettled(operations), what);
+  } catch (timeout) {
+    if (!bodyFailure) {
+      throw timeout;
+    }
+    const original = bodyFailure.error;
+    if (typeof original !== "object" || original === null) {
+      throw new AggregateError(
+        [original, timeout],
+        "the test body failed and the release timed out",
+      );
+    }
+    if (!("cause" in original)) {
+      Object.defineProperty(original, "cause", {
+        value: timeout,
+        configurable: true,
+        writable: true,
+      });
+    }
+    throw original;
+  }
 }
 
 /**
@@ -325,6 +352,7 @@ describe("account-state races (real PostgreSQL)", () => {
       const disabling = heldDisable("findUnique", held).execute(admin.email);
       let initialPassword: string | undefined;
       let fresh: string | undefined;
+      let failure: BodyFailure | undefined;
       try {
         await within(held.reached, "the disable to hold its transaction");
         const resetResult = await reset().execute(admin.email);
@@ -333,8 +361,11 @@ describe("account-state races (real PostgreSQL)", () => {
         assert.ok(initialPassword);
         fresh = sessionCookie(await signIn(admin.email, initialPassword));
         assert.ok(fresh, "the fresh password opened a session before the disable committed");
+      } catch (error) {
+        failure = { error };
+        throw error;
       } finally {
-        await releaseAndSettle(held, [disabling], "the disable to finish");
+        await releaseAndSettle(held, [disabling], "the disable to finish", failure);
       }
       assert.ok(fresh && initialPassword);
       const disabled = await within(disabling, "the disable to finish");
@@ -358,6 +389,7 @@ describe("account-state races (real PostgreSQL)", () => {
       // The disable has updated the row and holds its lock; the reset's conditional update waits.
       const disabling = heldDisable("updateMany", held).execute(admin.email);
       let resetting: ReturnType<ReturnType<typeof reset>["execute"]> | undefined;
+      let failure: BodyFailure | undefined;
       try {
         await within(held.reached, "the disable to hold its transaction");
         const disablePid = held.backendPid;
@@ -376,11 +408,15 @@ describe("account-state races (real PostgreSQL)", () => {
           );
           await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_INTERVAL_MS));
         }
+      } catch (error) {
+        failure = { error };
+        throw error;
       } finally {
         await releaseAndSettle(
           held,
           resetting ? [disabling, resetting] : [disabling],
           "the disable and the reset to finish",
+          failure,
         );
       }
       assert.ok(resetting);

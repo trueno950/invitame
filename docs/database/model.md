@@ -58,7 +58,9 @@ Prisma. The database suites (`pnpm --filter @invitame/api test:db`) exercise the
   and deletes nothing, so every session row that existed before it reads false, and the API ends such a session of
   an enrolled administrator on its next use (an administrator who signed in before the migration signs in again).
   Better Auth declares it as a session additional field with `input: false`; the session-create hook sets it from
-  the endpoint path alone, and the session-update hook still refuses every update.
+  the endpoint path alone, and the session-update hook refuses any update that touches this column (and, as before, an
+  expiry change outside a customer's session). Deploy order: apply the migration before, or together with, the API
+  that reads the column; see the second-factor marker in `docs/architecture/overview.md`.
 
 ## JSONB boundary
 

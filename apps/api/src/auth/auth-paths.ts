@@ -22,9 +22,9 @@ export const TWO_FACTOR_PATH = {
  * that create a session after a verified second factor: `verify-totp` and `verify-backup-code` open
  * the session of a sign-in challenge, and `verify-totp` also opens the enrolled session of a first
  * confirmation (`plugins/two-factor/totp/index.mjs`, `verify-two-factor.mjs`). The other
- * session-creating two-factor code (`/two-factor/enable` with `method: "otp"` or
- * `skipVerificationOnEnable`, and `/two-factor/disable`) is closed by the plugin options and
- * `DISABLED_AUTH_PATHS`.
+ * session-creating two-factor paths (`/two-factor/enable` with `method: "otp"` or
+ * `skipVerificationOnEnable`, `/two-factor/disable`, and `/two-factor/verify-otp`) is closed by the plugin
+ * options and `DISABLED_AUTH_PATHS`.
  */
 export const SECOND_FACTOR_VERIFY_PATHS: ReadonlySet<string> = new Set([
   TWO_FACTOR_PATH.VERIFY_TOTP,

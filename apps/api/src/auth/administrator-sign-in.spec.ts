@@ -1132,5 +1132,304 @@ describe("administrator sign-in, enrollment gate, and second factor", () => {
       assert.equal((await authGet("/get-session", cookie)).status, 200);
       assert.deepEqual(markers(admin.id), [false], "the pending session is not ended");
     });
+
+    // Independent verification of S52 (T11c): the marker comes from the endpoint alone, is true only
+    // after a verified code, and ends a session that lacks it on every route that reads sessions.
+
+    /** The marker the session-create hook stores for a new session of `who` created on `path`. */
+    async function markerStoredFor(
+      path: string | undefined,
+      who: "enrolled administrator" | "pending administrator" | "customer",
+    ): Promise<unknown> {
+      const context = await auth.$context;
+      const before = auth.options.databaseHooks?.session?.create?.before;
+      assert.ok(before, "the session-create hook is configured");
+      const subject = who === "customer" ? await seedCustomer() : await seedAdministrator();
+      if (who === "enrolled administrator") {
+        storedUser(subject.id).twoFactorEnabled = true;
+      }
+      const now = new Date();
+      const result = (await before(
+        {
+          id: "probe",
+          userId: subject.id,
+          token: "probe",
+          createdAt: now,
+          updatedAt: now,
+          expiresAt: new Date(now.getTime() + 60_000),
+        },
+        path === undefined
+          ? null
+          : ({
+              path,
+              context: {
+                internalAdapter: context.internalAdapter,
+                adapter: context.adapter,
+                session: null,
+              },
+            } as never),
+      )) as { data: { secondFactorVerified?: unknown } } | undefined;
+      return result?.data.secondFactorVerified;
+    }
+
+    it("stores true for an enrolled administrator only on the exact verification endpoints", async () => {
+      const expected: Array<[string | undefined, boolean]> = [
+        ["/two-factor/verify-totp", true],
+        ["/two-factor/verify-backup-code", true],
+        ["/two-factor/enable", false],
+        ["/two-factor/disable", false],
+        ["/two-factor/verify-otp", false],
+        ["/two-factor/generate-backup-codes", false],
+        ["/two-factor/verify-totp/", false],
+        ["/TWO-FACTOR/VERIFY-TOTP", false],
+        ["/api/auth/two-factor/verify-totp", false],
+        ["/sign-in/email", false],
+        ["/get-session", false],
+        [undefined, false],
+      ];
+
+      for (const [path, marker] of expected) {
+        assert.equal(await markerStoredFor(path, "enrolled administrator"), marker, String(path));
+      }
+    });
+
+    it("stores false for a pending administrator and for a customer on the verification endpoints", async () => {
+      for (const path of ["/two-factor/verify-totp", "/two-factor/verify-backup-code"]) {
+        assert.equal(
+          await markerStoredFor(path, "pending administrator"),
+          false,
+          `pending ${path}`,
+        );
+        assert.equal(await markerStoredFor(path, "customer"), false, `customer ${path}`);
+      }
+    });
+
+    it("takes the marker from the endpoint alone: no sign-in body, path spelling, or server-side update sets it", async () => {
+      const admin = await seedAdministrator();
+      const password = await authPost("/sign-in/email", {
+        email: admin.email,
+        password: admin.password,
+        secondFactorVerified: true,
+      });
+      assert.equal(password.status, 200);
+      assert.deepEqual(markers(admin.id), [false]);
+
+      const customer = await seedCustomer();
+      await authPost("/email-otp/send-verification-otp", {
+        email: customer.email,
+        type: "sign-in",
+      });
+      await tasks.drain();
+      const otp = CODE_PATTERN.exec(
+        emailSender.delivered.filter((sent) => sent.to === customer.email).at(-1)?.text ?? "",
+      )?.[1];
+      const signedIn = await authPost("/sign-in/email-otp", {
+        email: customer.email,
+        otp,
+        secondFactorVerified: true,
+      });
+      const cookie = cookieFrom(signedIn, SESSION_COOKIE);
+      assert.ok(cookie, "the code opened a session");
+      assert.deepEqual(markers(customer.id), [false]);
+
+      for (const path of [
+        "/update-session",
+        "/update-session/",
+        "//update-session",
+        "/UPDATE-SESSION",
+        "/update-user",
+        "/update-user/",
+      ]) {
+        const response = await authPost(path, { secondFactorVerified: true }, cookie);
+        assert.equal(response.status, 404, path);
+      }
+
+      const updateSession = api.updateSession;
+      assert.ok(updateSession, "Better Auth exposes updateSession to server code");
+      await assert.rejects(
+        updateSession({ headers: new Headers({ cookie }), body: { secondFactorVerified: true } }),
+        (error: unknown) =>
+          (error as { body?: { code?: string } }).body?.code === "FIELD_NOT_ALLOWED",
+      );
+      assert.deepEqual(markers(customer.id), [false], "no path changed the stored marker");
+    });
+
+    it("stores false when a password sign-in is dressed as a verification endpoint", async () => {
+      const decoys: Array<{ path: string; headers?: Record<string, string>; body?: Row }> = [
+        { path: "/sign-in/email?path=/two-factor/verify-totp" },
+        { path: "/two-factor/../sign-in/email" },
+        { path: "/two-factor/verify-totp/../../sign-in/email" },
+        {
+          path: "/sign-in/email",
+          headers: {
+            "x-original-url": "/api/auth/two-factor/verify-totp",
+            "x-forwarded-uri": "/api/auth/two-factor/verify-totp",
+            "x-rewrite-url": "/api/auth/two-factor/verify-totp",
+          },
+        },
+        { path: "/sign-in/email", body: { path: "/two-factor/verify-totp" } },
+      ];
+
+      for (const decoy of decoys) {
+        const admin = await seedAdministrator();
+        const response = await fetch(`${baseUrl}/api/auth${decoy.path}`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: TRUSTED_ORIGIN,
+            "x-forwarded-for": nextClientIp(),
+            ...decoy.headers,
+          },
+          body: JSON.stringify({ email: admin.email, password: admin.password, ...decoy.body }),
+        });
+
+        assert.equal(response.status, 200, decoy.path);
+        assert.deepEqual(markers(admin.id), [false], decoy.path);
+      }
+    });
+
+    it("opens no marked session without a verified code: a wrong code, a replayed challenge, or disableSession", async () => {
+      const { admin, backupCodes, rawSecret } = await enrolledAdministrator();
+      assert.deepEqual(markers(admin.id), [true]);
+
+      const challenge = await passwordStep(admin.email, admin.password);
+      const wrong = await authPost("/two-factor/verify-totp", { code: "000000" }, challenge);
+      assert.equal(wrong.status, 401);
+      assert.deepEqual(markers(admin.id), [true], "a wrong code opens nothing");
+
+      const verified = await authPost(
+        "/two-factor/verify-totp",
+        { code: await totpCode(rawSecret) },
+        challenge,
+      );
+      assert.equal(verified.status, 200);
+      assert.deepEqual(markers(admin.id), [true, true]);
+
+      const replayed = await authPost(
+        "/two-factor/verify-totp",
+        { code: await totpCode(rawSecret) },
+        challenge,
+      );
+      assert.notEqual(replayed.status, 200, "a consumed challenge is not replayable");
+      assert.deepEqual(markers(admin.id), [true, true]);
+
+      const [code] = backupCodes;
+      const withoutSession = await authPost(
+        "/two-factor/verify-backup-code",
+        { code, disableSession: true },
+        await passwordStep(admin.email, admin.password),
+      );
+      assert.equal(withoutSession.status, 200);
+      assert.deepEqual(markers(admin.id), [true, true], "disableSession creates no session");
+    });
+
+    it("answers every Better Auth route to a password-only session of an enrolled administrator as to no session", async () => {
+      const { admin, cookie: marked } = await enrolledAdministrator();
+      const endpoints = Object.values(
+        auth.api as unknown as Record<string, { path?: string; options?: { method?: unknown } }>,
+      );
+      const routes = endpoints.flatMap((endpoint) => {
+        if (typeof endpoint.path !== "string") {
+          return [];
+        }
+        const method = endpoint.options?.method;
+        const methods = (Array.isArray(method) ? method : [method ?? "GET"]).flatMap((entry) =>
+          entry === "*" ? ["GET", "POST"] : [String(entry)],
+        );
+        return methods.map((entry) => ({
+          method: entry,
+          path: endpoint.path?.replace(/:[A-Za-z]+/g, "x") ?? "",
+        }));
+      });
+      assert.ok(routes.length > 40, "the route list was read from Better Auth");
+
+      const call = (route: { method: string; path: string }, cookie?: string) =>
+        fetch(`${baseUrl}/api/auth${route.path}`, {
+          method: route.method,
+          headers: {
+            origin: TRUSTED_ORIGIN,
+            "x-forwarded-for": nextClientIp(),
+            ...(route.method === "GET" ? {} : { "content-type": "application/json" }),
+            ...(cookie ? { cookie } : {}),
+          },
+          ...(route.method === "GET" ? {} : { body: "{}" }),
+          redirect: "manual",
+        });
+      const different: string[] = [];
+      for (const route of routes) {
+        const stray = await createSession(admin.id);
+        const anonymous = await snapshot(await call(route));
+        const asStray = await snapshot(await call(route, stray.cookie));
+        if (asStray.status !== anonymous.status || asStray.body !== anonymous.body) {
+          different.push(`${route.method} ${route.path}`);
+        }
+        // A disabled route answers 404 before any hook runs, so it cannot have used the session.
+        if (asStray.status !== 404) {
+          assert.equal(
+            sessionsOf(admin.id).some((row) => row.token === stray.token),
+            false,
+            `${route.method} ${route.path} ended the session`,
+          );
+        }
+        await authGet("/get-session", stray.cookie);
+      }
+
+      assert.deepEqual(different, []);
+      assert.equal((await get("/me", marked)).status, 200, "the marked session still works");
+    });
+
+    it("refuses PATCH /me and the project routes to a password-only session of an enrolled administrator", async () => {
+      const { admin, cookie: marked } = await enrolledAdministrator();
+      const calls: Array<[string, (cookie?: string) => Promise<Response>]> = [
+        ["PATCH /me", (cookie) => patch("/me", { displayName: "Changed" }, cookie)],
+        ["GET /probe/undecorated", (cookie) => get("/probe/undecorated", cookie)],
+      ];
+
+      for (const [label, call] of calls) {
+        const stray = await createSession(admin.id);
+        const anonymous = await snapshot(await call());
+        const asStray = await snapshot(await call(stray.cookie));
+
+        assert.deepEqual(asStray, anonymous, label);
+        assert.equal(asStray.status, 401, label);
+        assert.equal(
+          sessionsOf(admin.id).some((row) => row.token === stray.token),
+          false,
+          `${label} ended the session`,
+        );
+      }
+      const stored = storedUser(admin.id);
+      assert.notEqual(stored.name ?? stored.displayName, "Changed", "PATCH /me stored nothing");
+      assert.equal((await get("/me", marked)).status, 200);
+    });
+
+    it("refuses a password-only session whose account turns enrolled between the hook's read and the guard's", async () => {
+      const { admin, cookie } = await signedInPending();
+      const adapter = (await auth.$context).internalAdapter;
+      const original = adapter.findSession;
+      let reads = 0;
+      adapter.findSession = async (token) => {
+        const found = await original(token);
+        reads += 1;
+        if (reads === 1) {
+          // Another tab's first confirmation commits after the hook's read and before the guard's.
+          storedUser(admin.id).twoFactorEnabled = true;
+        }
+        return found;
+      };
+      try {
+        assert.equal((await get("/me", cookie)).status, 401);
+      } finally {
+        adapter.findSession = original;
+      }
+    });
+
+    it("refuses every session update that touches the marker", async () => {
+      const before = auth.options.databaseHooks?.session?.update?.before;
+      assert.ok(before, "the session-update hook is configured");
+
+      assert.equal(await before({ secondFactorVerified: true }, null), false);
+      assert.equal(await before({ secondFactorVerified: false }, null), false);
+    });
   });
 });

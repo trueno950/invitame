@@ -56,17 +56,17 @@ model User {
 
 // Better Auth `session` model: database sessions carried by the API cookie.
 model Session {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  token     String   @unique @db.Text
-  expiresAt DateTime @db.Timestamptz(6)
-  ipAddress String?  @db.Text
-  userAgent String?  @db.Text
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @db.Uuid
+  token                String   @unique @db.Text
+  expiresAt            DateTime @db.Timestamptz(6)
+  ipAddress            String?  @db.Text
+  userAgent            String?  @db.Text
+  createdAt            DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(6)
   // Project column, declared to Better Auth as a session additional field: whether this session was
   // opened with the second factor. Existing rows read false (S52).
-  secondFactorVerified Boolean @default(false)
+  secondFactorVerified Boolean  @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
