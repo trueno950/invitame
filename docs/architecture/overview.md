@@ -60,9 +60,22 @@ alert. Start with "Access control" for roles and account status, "Administrator 
 decision 3, and "Abuse limits" for decision 7.
 
 - Better Auth runs inside the API through `@thallesp/nestjs-better-auth` and is mounted at `/api/auth`. It is
-  built from validated configuration (`BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`, and in production
-  `AUTH_PROXY_SECRET`) and the shared Prisma client; the API refuses to start when any of them is missing or
-  invalid.
+  built from validated configuration (`NODE_ENV`, `BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `CORS_ORIGIN`, and in
+  production `AUTH_PROXY_SECRET`) and the shared Prisma client; the API refuses to start when any of them is
+  missing or invalid.
+- `NODE_ENV` has no default (S56, L79): a missing value fails the startup, because an unset value would turn off
+  every production rule (the proxy secret, the client IP header, `https`, and Resend-only delivery). The accepted
+  values are `development`, `test`, and `production`. `pnpm --filter @invitame/api start` sets nothing, so the
+  deploy environment must set `NODE_ENV=production`.
+- Better Auth reads some variables on its own, so the API refuses them at startup and names the variable without
+  echoing its value: `BETTER_AUTH_TRUSTED_ORIGINS` (use `CORS_ORIGIN`) and `BETTER_AUTH_SECRETS` (S55, L79), which
+  would replace the validated `BETTER_AUTH_SECRET`. Each is refused for any value other than unset or exactly the
+  empty string `""`: a whitespace-only value is refused, and `""` is accepted because Better Auth treats it as
+  absent.
+- `BETTER_AUTH_SECRET` signs every session and encrypts each administrator's TOTP secret and backup codes (S57,
+  L79). Changing it ends every session, and each enrolled administrator cannot use their second factor until
+  `admin:reset-second-factor` runs for them. The API passes a single `secret`, so it has no rotation path yet:
+  rotating without that breakage, through Better Auth's `secrets` list, is a task of the deployment milestone.
 - The integration's own global guard is disabled (`disableGlobalAuthGuard: true`); the project-owned guard
   described in "Access control" replaces it.
 - `CORS_ORIGIN` is the single trusted-origins list. The project owns CORS (`credentials: true`; methods `GET`,
@@ -507,7 +520,8 @@ or a member of a closed set listed here. A message is never copied, because it c
 log is not an audit trail. A failing sink never changes a response (`auth/safe-logging.ts`, `server-log.ts`).
 
 API auth events (`auth/auth-request-guard.ts`, sink `CreateAuthOptions.log`; `path` is the Better Auth route, and
-is left out when a session is created or changed outside an endpoint):
+is left out when a session is created or changed outside an endpoint). In the three events of the request guard the
+sender chooses the path, so it is the pathname without the query, cut to 128 characters (N5, L79):
 
 | Event | Emitted by | Fields |
 | --- | --- | --- |
@@ -533,6 +547,10 @@ Server-side commands (`users/`, printed as one JSON line; `userId` is shown to t
 A failure, `administrator_create_failed`, `user_disable_failed`, or `administrator_second_factor_reset_failed`,
 has `error` (the class) and, only for a Prisma failure, `code` (`P2002`, `P1001`, and so on; the pattern
 `P` and four digits, read by `users/domain/database-error-code.ts`).
+A command that fails only while closing its database connection after the work was done
+(`administrator_create_close_failed`, `user_disable_close_failed`, or
+`administrator_second_factor_reset_close_failed`, from `closeCommandStore`) prints one line of the same shape on
+standard error and keeps the exit code of the work (T10a R4-001).
 
 Web events (`apps/web/lib/server/server-log.ts`, standard error): `own_profile_read_failed`,
 `own_profile_update_failed`, and `auth_session_read_failed` have `error` (the class), `kind` when the error is

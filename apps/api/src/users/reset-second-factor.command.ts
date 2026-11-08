@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "better-auth/crypto";
 
 import type { AdministratorRecoveryRepository } from "./application/administrator-account.repository";
+import { closeCommandStore } from "./application/command-failure";
 import { InvalidAdministratorEmailError } from "./application/create-administrator.use-case";
 import { INITIAL_PASSWORD_NOTICE } from "./application/initial-password";
 import {
@@ -12,6 +13,7 @@ import {
 import { PrismaAdministratorAccountRepository } from "./infrastructure/prisma-administrator-account.repository";
 
 const USAGE = "Usage: pnpm --filter @invitame/api admin:reset-second-factor -- <email>";
+const RESET_SECOND_FACTOR_CLOSE_FAILED = "administrator_second_factor_reset_close_failed";
 
 export interface CommandTerminal {
   isTerminal: boolean;
@@ -81,7 +83,8 @@ export async function runResetSecondFactor(
     // The use case already logged the error class.
     return 1;
   } finally {
-    await store.close();
+    // After a committed reset the password is already printed: a failing close changes no exit code.
+    await closeCommandStore(() => store.close(), RESET_SECOND_FACTOR_CLOSE_FAILED, terminal.err);
   }
 }
 

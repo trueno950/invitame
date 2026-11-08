@@ -44,6 +44,52 @@ describe("validateEnvironment", () => {
     assert.deepEqual(environment.TRUSTED_ORIGINS, ["http://localhost:3000"]);
   });
 
+  describe("NODE_ENV (S56)", () => {
+    it("is required: a missing value fails closed instead of turning every production rule off", () => {
+      for (const NODE_ENV of [undefined, "", "   "]) {
+        assertRejected(
+          { NODE_ENV },
+          "NODE_ENV must be provided as development, production, or test.",
+        );
+      }
+    });
+
+    it("rejects a value outside development, production, and test, without echoing it", () => {
+      const message = "NODE_ENV must be development, production, or test.";
+
+      for (const NODE_ENV of ["staging", "Production", "live"]) {
+        assert.throws(
+          () => validateEnvironment(environmentWith({ NODE_ENV })),
+          (error: unknown) => {
+            assert.ok(error instanceof Error);
+            assert.equal(error.message, message);
+            assert.equal(error.message.includes(NODE_ENV), false);
+            return true;
+          },
+        );
+      }
+    });
+
+    it("accepts each of the three values", () => {
+      for (const NODE_ENV of ["development", "production", "test"] as const) {
+        const environment =
+          NODE_ENV === "production"
+            ? {
+                ...environmentWith({ NODE_ENV }),
+                CORS_ORIGIN: PRODUCTION_ORIGIN,
+                AUTH_BASE_URL: PRODUCTION_ORIGIN,
+                EMAIL_FROM: "InvitaMe <no-reply@example.test>",
+                RESEND_API_KEY: "re_test_key",
+                AUTH_CLIENT_IP_HEADER: "x-forwarded-for",
+                AUTH_PROXY_SECRET: PROXY_SECRET,
+              }
+            : environmentWith({ NODE_ENV });
+
+        assert.equal(validateEnvironment(environment).NODE_ENV, NODE_ENV);
+      }
+    });
+  });
+
   describe("BETTER_AUTH_SECRET", () => {
     it("is required", () => {
       assertRejected({ BETTER_AUTH_SECRET: undefined }, "BETTER_AUTH_SECRET must be provided.");
@@ -274,15 +320,11 @@ describe("validateEnvironment", () => {
     });
 
     it("defaults to the local mail catcher in development with no email variables", () => {
-      assert.deepEqual(validateEnvironment(environmentWith({ NODE_ENV: undefined })).EMAIL, {
+      assert.deepEqual(validateEnvironment(environmentWith({ NODE_ENV: "development" })).EMAIL, {
         transport: "mailpit",
         from: "InvitaMe Local <no-reply@invitame.localhost>",
         mailpitUrl: "http://localhost:8025",
       });
-      assert.equal(
-        validateEnvironment(environmentWith({ NODE_ENV: "development" })).EMAIL.transport,
-        "mailpit",
-      );
     });
 
     it("accepts an explicit transport and a normalized MAILPIT_URL origin", () => {

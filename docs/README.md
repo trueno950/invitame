@@ -41,6 +41,7 @@ to be checked before prose, and it defines when a human decision is required.
 - [`development/quality-gates.md`](development/quality-gates.md) — current scripts and Definition of Done.
 - [`development/git-workflow.md`](development/git-workflow.md) — branch, work-unit, staged-diff, and PR procedure.
 - [`development/anti-patterns.md`](development/anti-patterns.md) — failure modes and preferred alternatives.
+- [`development/m2-security-evidence.md`](development/m2-security-evidence.md) — Milestone 2 security evidence: spec verdicts, sign-off areas, and open risks.
 - [`database/model.md`](database/model.md) — implemented migration invariants.
 - [`database/future-model.md`](database/future-model.md) — design-only future data analysis; no tables are added.
 - [`architecture/module-template.md`](architecture/module-template.md) — structure for a real future API module.

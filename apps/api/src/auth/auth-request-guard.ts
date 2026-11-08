@@ -88,6 +88,18 @@ export type AuthRequestLog = (event: AuthRequestEvent) => void;
 
 type AuthHandler = (request: Request) => Promise<Response>;
 
+/** The longest request path a guard event holds (N5, L79). */
+export const LOG_PATH_MAX_LENGTH = 128;
+
+/**
+ * The path a guard event logs. On a request without a valid secret the path is chosen by the sender
+ * and has no length limit, so the event holds the pathname only, without the query, cut to
+ * `LOG_PATH_MAX_LENGTH` characters.
+ */
+function boundedLogPath(pathname: string): string {
+  return pathname.slice(0, LOG_PATH_MAX_LENGTH);
+}
+
 /** How the guard checks that a request came through the web proxy (L36). */
 export interface AuthProxyOptions {
   /** The shared secret; undefined only when a caller turns the requirement off explicitly (S46). */
@@ -210,7 +222,7 @@ export function guardAuthHandler(
   }
 
   return async (incoming) => {
-    const path = new URL(incoming.url).pathname;
+    const path = boundedLogPath(new URL(incoming.url).pathname);
     let request = incoming;
 
     if (proxy) {

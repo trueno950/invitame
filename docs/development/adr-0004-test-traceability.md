@@ -2,10 +2,11 @@
 
 Maps every test obligation of [ADR 0004](../adr/0004-authentication-with-better-auth.md) (its Consequences) and
 every S17 case of the Milestone 2 plan to a named assertion (S13, S30). Status: current as of Milestone 2 task
-T9b part C2. Browser end-to-end coverage exists for the customer flows (see the L40 rows below), the administrator flows
-(see the L43, L44, and L52 rows), and form submission without JavaScript (see the L55 rows); T9b part C1
+T11f (L79). Browser end-to-end coverage exists for the customer flows (see the L40 rows below), the administrator
+flows (see the L43, L44, and L52 rows), and form submission without JavaScript (see the L55 rows); T9b part C1
 resolves the web server findings in the L38, L40, and L52 rows, and part C2 the test and harness findings in the
-L48, L55, L56, and L59 rows.
+L48, L55, L56, and L59 rows. The T11 sections below cover the security fixes (S46 to S53) and the verification
+findings (S55 to S57, and the small fixes of T11f).
 
 ## How the evidence runs
 
@@ -46,6 +47,7 @@ other row existed before them.
 | DB-races | [`auth/account-state-races.prisma.db-spec.ts`](../../apps/api/src/auth/account-state-races.prisma.db-spec.ts) (T11) |
 | DB-marker | [`auth/session-second-factor-marker.prisma.db-spec.ts`](../../apps/api/src/auth/session-second-factor-marker.prisma.db-spec.ts) (T11c) |
 | DB-command | [`users/create-administrator.command.db-spec.ts`](../../apps/api/src/users/create-administrator.command.db-spec.ts) (T11) |
+| DB-ownership | [`users/identity-ownership.prisma.db-spec.ts`](../../apps/api/src/users/identity-ownership.prisma.db-spec.ts) (T11f) |
 | E2E-customer | [`e2e/customer-session.spec.ts`](../../apps/web/e2e/customer-session.spec.ts) (browser) |
 | E2E-admin | [`e2e/admin-session.spec.ts`](../../apps/web/e2e/admin-session.spec.ts) (browser) |
 | E2E-forms | [`e2e/form-submission.spec.ts`](../../apps/web/e2e/form-submission.spec.ts) (browser, JavaScript disabled) |
@@ -59,7 +61,6 @@ other row existed before them.
 | U-sender | [`auth/sign-in-code/sign-in-code-sender.spec.ts`](../../apps/api/src/auth/sign-in-code/sign-in-code-sender.spec.ts) |
 | U-email | [`email/application/email-delivery.service.spec.ts`](../../apps/api/src/email/application/email-delivery.service.spec.ts) |
 | U-profile | [`users/presentation/own-profile.controller.spec.ts`](../../apps/api/src/users/presentation/own-profile.controller.spec.ts) |
-| E2E-customer | [`apps/web/e2e/customer-session.spec.ts`](../../apps/web/e2e/customer-session.spec.ts) |
 
 ## ADR 0004 obligations
 
@@ -74,7 +75,7 @@ other row existed before them.
 | 7 | Attempt limits | DB-code: "refuses the right code after 3 wrong attempts and stores no user or session" (added); DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor" (stored `failedVerificationCount`). | U-code: "rejects the 4th attempt with TOO_MANY_ATTEMPTS after 3 wrong codes, even with the right code"; U-admin: "ends a challenge after 5 wrong codes", "locks the second factor for 15 minutes after 10 consecutive failures". |
 | 8 | Rate limiting | DB-limits: "persists client IP buckets and answers the 4th request from one IP with 429", "stores the per-email count under a hashed key and sends no 6th code within the hour"; DB-proxy: "stores the client IP bucket and the code for a request with the secret"; DB-auth: "writes rate-limit rows to the database". | U-limits: "client IP rate limits (S10, S25)" block, "rate-limit store failure (S19) › rejects code requests and code sign-ins with a generic 503 before the endpoint runs"; U-admin: "answers the 4th password attempt from one client IP within a minute with 429", "answers the 6th second-factor attempt from one client IP within a minute with 429". |
 | 9 | Mandatory administrator second factor | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor". | U-admin: "requires a second factor after the password once enrolled: no session before the code", "never trusts a device: the next password sign-in still asks for the second factor", "disables two-factor removal, URI re-reading, and email two-factor codes". |
-| 10 | Enrollment gate | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor", "deletes a pre-enrollment session once the window ends and refuses enrollment", "refuses an expired initial password exactly like a wrong one and creates no session", "fails closed when admin:create reissues the password during the first TOTP confirmation" (added; required since T7c, defect T9a-D1 below), "refuses the old confirmation after the reissued password has started a new enrollment", "refuses a first TOTP confirmation that races user:disable and leaves no session", "logs one administrator_enrollment_superseded event without personal data when it reverts a confirmation", and "lets an enrolled administrator pass the sign-in challenge with a stale session cookie" (added in T7c); "refuses a stale first confirmation without reverting after the reissued password enrolled", "refuses a duplicate first confirmation without reverting when the sibling completed first", "refuses a duplicate first confirmation without reverting and ends every session while the sibling is completing", "reverts a first confirmation that races a sign-out, then lets the password enroll", "ends a second tab's session when it refuses a confirmation that races a sign-out", "refuses with 401 and logs compensation_failed when the revert itself fails", and "ends every other session of the administrator at a successful first confirmation" (added in T7d). | U-admin: "enrollment gate (S6, S21)" and "pre-enrollment window of 24 hours (S20)" blocks. |
+| 10 | Enrollment gate | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor", "deletes a pre-enrollment session once the window ends and refuses enrollment", "refuses an expired initial password exactly like a wrong one and creates no session", "fails closed when admin:create reissues the password during the first TOTP confirmation" (added; required since T7c, defect T9a-D1 below), "refuses the old confirmation after the reissued password has started a new enrollment", "refuses a first TOTP confirmation that races user:disable and leaves no session", "logs one administrator_enrollment_superseded event without personal data when it reverts a confirmation", and "lets an enrolled administrator pass the sign-in challenge with a stale session cookie" (added in T7c); "refuses a stale first confirmation without reverting after the reissued password enrolled", "refuses a duplicate first confirmation without reverting when the sibling completed first", "refuses a duplicate first confirmation without reverting and ends every session while the sibling is completing", "reverts a first confirmation that races a sign-out, then lets the password enroll", "ends a second tab's session when it refuses a confirmation that races a sign-out", "refuses with 401 and logs administrator_enrollment_compensation_failed when the revert itself fails", and "ends every other session of the administrator at a successful first confirmation" (added in T7d). | U-admin: "enrollment gate (S6, S21)" and "pre-enrollment window of 24 hours (S20)" blocks. |
 | 11 | Email OTP sign-in rejected for administrators | DB-code: "sends an administrator no code and removes the issued row", "refuses an email-code session to an administrator (<state>) exactly like an invalid code" for `pending`, `enrolled`, and `expired` (added). | U-admin: "email codes for administrators in every enrollment state (S22)" block. |
 | 12 | Email send failures | DB-code: "invalidates only a code whose delivery failed, keeping a newer code valid". | U-code: "invalidates a code whose delivery fails after the retries, without logging the code or the address"; U-sender: "logs the delivery stage for an unexpected delivery error and still invalidates the code"; U-email: "stops at the attempt limit and surfaces only the generic retryable error". |
 
@@ -97,7 +98,7 @@ All U-admin names below sit in its "enrollment gate (S6, S21)", "pre-enrollment 
 
 | Clause | Real PostgreSQL | Unit |
 | --- | --- | --- |
-| Inside the window, exactly four Better Auth endpoints serve the session | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor" (`get-session`, `two-factor/enable`, and `two-factor/verify-totp` with the pending session); "reverts a first confirmation that races a sign-out, then lets the password enroll" (`sign-out` answers 200). | U-admin: "allows an un-enrolled administrator's session on exactly four Better Auth endpoints" (added in T11; fails when a fifth path is allowed), "lets an un-enrolled administrator read its session", "returns the TOTP URI with the InvitaMe issuer and 10 backup codes, whatever issuer the client sends", "confirms enrollment with the first valid code and replaces the session", "lets an un-enrolled administrator sign out". |
+| Inside the window, exactly four Better Auth endpoints serve the session | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor" (`get-session`, `two-factor/enable`, and `two-factor/verify-totp` with the pending session); "reverts a first confirmation that races a sign-out, then lets the password enroll" (`sign-out` answers 200). | U-admin: "lists exactly four Better Auth endpoints in the pending-administrator allow list" (added in T11; fails when a fifth path is allowed), "lets an un-enrolled administrator read its session", "returns the TOTP URI with the InvitaMe issuer and 10 backup codes, whatever issuer the client sends", "confirms enrollment with the first valid code and replaces the session", "lets an un-enrolled administrator sign out". |
 | Every other Better Auth endpoint answers as without a session | DB-admin: "gates a pre-enrollment session, then enrolls, then requires the second factor" (`list-sessions`). | U-admin: "answers <method> <path> for an un-enrolled administrator exactly as without a session" for 11 endpoints, from `GET /list-sessions` to `POST /two-factor/verify-backup-code`. |
 | Every project route answers 401, `GET` and `PATCH /me` and administrator-only routes included | — | U-admin: "refuses every project route to an un-enrolled administrator with 401 and a generic body" (an undecorated route, an `@AdminOnly()` route, `GET /me`, `PATCH /me`), "decides enrollment from twoFactorEnabled, never from a TwoFactor row's verified default (L17)". |
 | Never receives an email sign-in code | The `pending` cases of obligation 11. | U-admin: "refuses an email-code session to a pending administrator, exactly like an invalid code", "sends a pending administrator no code, with the identical 200 response". |
@@ -201,6 +202,52 @@ Unit tests run in `pnpm --filter @invitame/api test`, the database test in `test
   `users/infrastructure/prisma-own-profile.repository.db-spec.ts` proves the same statement on PostgreSQL: an ACTIVE
   account renames and clears, a DISABLED or unknown one answers null and keeps its name, and a disable that holds
   the row lock makes the waiting write store nothing.
+
+## T11f tests (S55 to S57 and the verification findings, L79)
+
+Unit tests run in `pnpm --filter @invitame/api test` and `pnpm --filter @invitame/web test`, the database test in
+`test:db`.
+
+- S55, `BETTER_AUTH_SECRETS` and `BETTER_AUTH_TRUSTED_ORIGINS` refused unless unset or exactly `""` (the rule is
+  stated in the evidence document's S55 row, `m2-security-evidence.md`): `config/environment-library-variables.spec.ts`
+  "variables that Better Auth reads by itself (S55) › refuses BETTER_AUTH_SECRETS, which would replace the validated
+  BETTER_AUTH_SECRET" (the message names the variable and never echoes the value), "› refuses it in production too,
+  where a replaced secret matters most", "› still accepts the validated environment without it", "› accepts an empty
+  value, which Better Auth reads as absent (the e2e API sets both to empty)", and, for each of the two variables, "›
+  refuses <name> holding only whitespace (<value>) and never echoes it" (four whitespace values). U-wiring "AppModule startup configuration › refuses to start with a
+  BETTER_AUTH_SECRETS value (S55)" proves the startup through `AppModule`.
+- S56, an explicit `NODE_ENV`: `config/environment.spec.ts` "NODE_ENV (S56) › is required: a missing value fails
+  closed instead of turning every production rule off" (unset, empty, and blank), "› rejects a value outside
+  development, production, and test, without echoing it", and "› accepts each of the three values". U-wiring
+  "refuses to start with a missing NODE_ENV (S56)". The test environments that omitted `NODE_ENV` now pass
+  `development` (the value the old default gave them) or `test`; no assertion changed. `config/env-example.spec.ts`
+  "sets NODE_ENV explicitly, which the API requires (S56)" reads the committed `apps/api/.env.example`.
+- S57, the rotation of `BETTER_AUTH_SECRET`, is documentation only (README, "Environment variables", and
+  `overview.md`, "Better Auth in the API"); no test.
+- N5, a bounded path in guard events: `auth/auth-proxy-secret.spec.ts` "the path in guard events is bounded (N5,
+  L79) › cuts the path of auth_proxy_rejected at 128 characters and drops the query", the same for
+  `client_ip_unresolved` and `auth_request_unavailable`, and "› keeps a short path whole". A 10,000-character path
+  is logged as its first 128 characters, and no query string is logged.
+- N6, a browser that leaves while the body is read: U-proxy "bounds and failures › answers 499 without a log when
+  the browser leaves while the body is being read (N6)" answers `499` with the generic body, logs nothing, and
+  never calls the API; "› still rethrows a body read error when the browser has not left" keeps every other error.
+- R9 (T10a R4-001), a failing `close()` after the work: `users/reset-second-factor.command.spec.ts` "when closing
+  the store fails after the reset committed (T10a R4-001, R9) › still resolves with exit code 0, prints the password
+  once, and logs the class only" and "› keeps the exit code 1 of a refusal and of a store failure".
+  `users/command-failure.spec.ts` "closeCommandStore" proves the helper that `admin:create` and `user:disable` share
+  with the recovery command: a successful close reports nothing, and a failing one reports one line with the event,
+  the class, and the Prisma code, never the message.
+- S2, ownership through database constraints: DB-ownership "refuses a session, an account, and a two-factor row
+  whose user does not exist", "deletes a user's sessions, accounts, and two-factor row together with the user",
+  "allows one two-factor row per user and one account per provider and account id", and "stores only the declared
+  roles and statuses".
+- R2, the accepted invisible-character risk (T11b R1-001, L75): `users/domain/display-name-residual.spec.ts` pins
+  the characters that still pass (U+200B, U+2060, an inner U+FEFF, U+2028, U+2029, U+00AD, U+034F, U+115F, U+3164,
+  and a name made only of U+200B). U+180E is accepted too but is not pinned (the evidence document's R2 row lists
+  both sets). A later rule that refuses them changes these tests on purpose.
+- F1, `.env.example`: `config/env-example.spec.ts` "passes the startup validation once BETTER_AUTH_SECRET is
+  filled in" and "names the web origin as AUTH_BASE_URL, one of the CORS_ORIGIN entries" now pass, because the owner
+  set `AUTH_BASE_URL=http://localhost:3000` in `apps/api/.env.example` (`c12f6dc`).
 
 ## Findings routed to T9 (plan Log L35 to L44)
 

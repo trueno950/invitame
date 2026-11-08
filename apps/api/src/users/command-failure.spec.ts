@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import { commandFailureEvent } from "./application/command-failure";
+import { closeCommandStore, commandFailureEvent } from "./application/command-failure";
 import { databaseErrorCode } from "./domain/database-error-code";
 
 // The failure line of the server-side commands (M2 T11d; S50, L71): the error class and, for a Prisma
@@ -116,5 +116,40 @@ describe("user:disable failure line", () => {
     for (const secret of [email, password, "127.0.0.1", "someone"]) {
       assert.ok(!run.stderr.includes(secret) && !run.stdout.includes(secret));
     }
+  });
+});
+
+describe("closeCommandStore", () => {
+  it("closes the store and reports nothing when it succeeds", async () => {
+    const lines: string[] = [];
+    let closed = 0;
+
+    await closeCommandStore(
+      async () => {
+        closed += 1;
+      },
+      "user_disable_close_failed",
+      (line) => lines.push(line),
+    );
+
+    assert.equal(closed, 1);
+    assert.deepEqual(lines, []);
+  });
+
+  it("swallows a failing close and reports one line with the event and the class only", async () => {
+    const lines: string[] = [];
+
+    await closeCommandStore(
+      async () => {
+        throw new PrismaClientKnownRequestError("disconnect admin@example.test failed", "P1001");
+      },
+      "user_disable_close_failed",
+      (line) => lines.push(line),
+    );
+
+    assert.deepEqual(lines, [
+      '{"event":"user_disable_close_failed","error":"PrismaClientKnownRequestError","code":"P1001"}',
+    ]);
+    assert.ok(!lines.join("").includes("admin@example.test"));
   });
 });

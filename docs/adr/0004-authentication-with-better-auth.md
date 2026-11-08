@@ -15,7 +15,9 @@ window. Decision 4 was amended on 2026-11-05 to route the session cookie through
 cookie name and the session lifetimes, and to prove the web-to-API hop with a shared secret. On 2026-11-07,
 after implementation, decision 3 gained a clarification of the pre-enrollment account, decision 9 an amendment
 with the full set of validated variables, and the Consequences an outcome record; the logging rule of decision 8
-now appears once, and a pronoun in decision 3 names the account. No decision changed. The status stays Accepted.
+now appears once, and a pronoun in decision 3 names the account; no decision changed that day. On 2026-11-08,
+decision 3 was amended to mark each session with the second factor that opened it (S52, after the A′ test), and
+decision 9 to require `NODE_ENV` and to refuse `BETTER_AUTH_SECRETS` (S55, S56). The status stays Accepted.
 
 ## Context
 
@@ -171,20 +173,29 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
 9. **Configuration.** The auth secret, public base URL, and trusted origins are required environment variables
    validated at startup; the API refuses to start without them.
 
+   **Amended (2026-11-08).** The human owner chose two startup rules after the final verification (S55, S56, L79).
+   `NODE_ENV` no longer defaults to `development`: with it unset, every production rule would be off, so a missing
+   value stops the startup. `BETTER_AUTH_SECRETS` is refused, as `BETTER_AUTH_TRUSTED_ORIGINS` is. The table below
+   shows both.
+
    **Amended (2026-11-07).** The decisions above added variables; this is the full set the API validates at
    startup (`apps/api/src/config/environment.ts`). It refuses to start when a rule fails, and its error names
    the variable, never a secret value.
 
    | Variable | Rule |
    | --- | --- |
-   | `CORS_ORIGIN`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `AUTH_BASE_URL` | Required in every environment. The secret has at least 32 characters; `AUTH_BASE_URL` is one of the `CORS_ORIGIN` entries and uses `https` in production. |
+   | `NODE_ENV`, `CORS_ORIGIN`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `AUTH_BASE_URL` | Required in every environment. `NODE_ENV` is `development`, `test`, or `production`, with no default (S56). The secret has at least 32 characters; `AUTH_BASE_URL` is one of the `CORS_ORIGIN` entries and uses `https` in production. |
    | `AUTH_PROXY_SECRET` | Required in production; optional elsewhere. At least 32 characters, different from `BETTER_AUTH_SECRET` (decision 4). |
    | `AUTH_PROXY_SECRET_PREVIOUS` | Optional, only during a rotation (S47): accepted next to `AUTH_PROXY_SECRET`, which it requires. At least 32 characters, different from `BETTER_AUTH_SECRET` and from `AUTH_PROXY_SECRET`. |
    | `AUTH_CLIENT_IP_HEADER` | Required in production; elsewhere defaults to `x-forwarded-for` (decision 7). |
    | `EMAIL_FROM` | Required in production; elsewhere defaults to a local sender on the reserved `.localhost` domain. |
    | `EMAIL_TRANSPORT`, `RESEND_API_KEY` | Production accepts only `resend`, its default there. `RESEND_API_KEY` is required whenever the transport is `resend`. |
-   | `NODE_ENV`, `PORT`, `AUTH_TRUSTED_PROXIES`, `MAILPIT_URL` | Optional and validated when set. |
+   | `PORT`, `AUTH_TRUSTED_PROXIES`, `MAILPIT_URL` | Optional and validated when set. |
    | `BETTER_AUTH_TRUSTED_ORIGINS` | Refused, so `CORS_ORIGIN` stays the only list of trusted origins. |
+   | `BETTER_AUTH_SECRETS` | Refused (S55): Better Auth reads it on its own and it would replace the validated `BETTER_AUTH_SECRET`. |
+
+   Both are refused for any value other than unset or exactly the empty string `""`: a whitespace-only value is
+   refused, and `""` is accepted because Better Auth treats it as absent.
 
    The web server validates its own settings when it starts and refuses to run with an invalid one. In production
    it requires `API_ORIGIN`, `AUTH_PROXY_SECRET`, `AUTH_CLIENT_IP_HEADER`, and `AUTH_EDGE_CLIENT_IP_HEADER`

@@ -240,14 +240,34 @@ function validateDistinctSecrets(
 }
 
 /**
+ * Whether Better Auth sees a variable it reads by itself as set. It reads the raw value, so only
+ * `undefined` and the empty string are absent; unlike `readOptionalString`, this does not trim, so a
+ * whitespace-only value counts as set and the validator never disagrees with the library.
+ */
+function isSetForLibrary(value: unknown): boolean {
+  return value !== undefined && value !== "";
+}
+
+/**
  * Better Auth silently appends this variable to its trusted origins. Reject it so the CORS list stays
  * the single source of trusted origins.
  */
 function rejectUnsupportedAuthOrigins(environment: Record<string, unknown>): void {
-  if (readOptionalString(environment.BETTER_AUTH_TRUSTED_ORIGINS)) {
+  if (isSetForLibrary(environment.BETTER_AUTH_TRUSTED_ORIGINS)) {
     throw new Error(
       "BETTER_AUTH_TRUSTED_ORIGINS is not supported; list trusted origins in CORS_ORIGIN.",
     );
+  }
+}
+
+/**
+ * Better Auth 1.7.16 (`context/create-context.mjs`) reads `BETTER_AUTH_SECRETS` on its own and lets it
+ * replace the secret the API passes, which would skip the length and distinctness rules of
+ * `BETTER_AUTH_SECRET` (S55, L79). Refuse any value; the message never echoes it.
+ */
+function rejectUnsupportedAuthSecrets(environment: Record<string, unknown>): void {
+  if (isSetForLibrary(environment.BETTER_AUTH_SECRETS)) {
+    throw new Error("BETTER_AUTH_SECRETS is not supported; set BETTER_AUTH_SECRET.");
   }
 }
 
@@ -402,13 +422,20 @@ function parseClientIpEnvironment(
 }
 
 export function validateEnvironment(environment: Record<string, unknown>): RuntimeEnvironment {
-  const nodeEnvironment = readOptionalString(environment.NODE_ENV) ?? NODE_ENVIRONMENT.DEVELOPMENT;
+  // No default (S56, L79): with `NODE_ENV` unset, every production rule would be off. A missing value
+  // fails the startup, like an invalid one, and neither message echoes the value.
+  const nodeEnvironment = readOptionalString(environment.NODE_ENV);
+
+  if (nodeEnvironment === undefined) {
+    throw new Error("NODE_ENV must be provided as development, production, or test.");
+  }
 
   if (!isNodeEnvironment(nodeEnvironment)) {
     throw new Error("NODE_ENV must be development, production, or test.");
   }
 
   rejectUnsupportedAuthOrigins(environment);
+  rejectUnsupportedAuthSecrets(environment);
 
   const validated = {
     NODE_ENV: nodeEnvironment,

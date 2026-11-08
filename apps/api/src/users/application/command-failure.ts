@@ -24,3 +24,21 @@ export function commandFailureEvent<E extends string>(
     ...(code === undefined ? {} : { code }),
   };
 }
+
+/**
+ * Closes the store of a command after its work is done. A failing `close()` must not turn a
+ * committed result into an unhandled rejection or change the exit code (T10a R4-001): the failure is
+ * reported as one line, built like any command failure, so it carries the class and the Prisma code
+ * only (S50, L71).
+ */
+export async function closeCommandStore<E extends string>(
+  close: () => Promise<void>,
+  event: E,
+  report: (line: string) => void,
+): Promise<void> {
+  try {
+    await close();
+  } catch (error) {
+    report(JSON.stringify(commandFailureEvent(event, error)));
+  }
+}

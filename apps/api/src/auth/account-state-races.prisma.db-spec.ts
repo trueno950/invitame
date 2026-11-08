@@ -245,6 +245,7 @@ describe("account-state races (real PostgreSQL)", () => {
     @Module({
       imports: [
         createConfigModule({
+          NODE_ENV: "development",
           CORS_ORIGIN: ORIGIN,
           DATABASE_URL: databaseUrl,
           BETTER_AUTH_SECRET: secret,
