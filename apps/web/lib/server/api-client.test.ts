@@ -170,6 +170,21 @@ describe("getOwnProfile", () => {
     }
   });
 
+  it("maps a redirect to rejected without following it", async () => {
+    respond = (_request, response) => {
+      response.writeHead(302, { location: "/me" });
+      response.end();
+    };
+
+    await assert.rejects(client().getOwnProfile(SESSION_COOKIE), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "rejected");
+      assert.equal(error.status, 302);
+      return true;
+    });
+    assert.equal(received.length, 1);
+  });
+
   it("maps an unreachable API and a timeout to unavailable", async () => {
     await assert.rejects(
       client({ apiOrigin: "http://127.0.0.1:1" }).getOwnProfile(SESSION_COOKIE),

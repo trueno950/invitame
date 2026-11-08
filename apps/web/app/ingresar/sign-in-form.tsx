@@ -6,7 +6,7 @@ import { flushSync } from "react-dom";
 import { SIGN_IN_COPY } from "../../lib/customer/copy.ts";
 import { useInteractive } from "../../lib/customer/interactive.ts";
 import {
-  type BrowserFetch,
+  browserFetch,
   isCompleteCode,
   isPlausibleEmail,
   normalizeCode,
@@ -24,9 +24,6 @@ import {
   textButton,
   textField,
 } from "../_components/ui.ts";
-
-/** Same-origin requests to the `/api/auth` proxy, so the browser stores the session cookie itself. */
-const browserFetch: BrowserFetch = (input, init) => fetch(input, init);
 
 type Step = "email" | "code";
 type Pending = "send" | "verify" | null;

@@ -56,14 +56,17 @@ export function createServerLog(write: (line: string) => void): ServerLog {
 /** The process's log: standard error, which the platform collects. */
 export const serverLog: ServerLog = createServerLog((line) => console.error(line));
 
-/** Runs an API call; on failure logs one event with the classes and kind, and rethrows the error. */
-export async function logReadFailure<T>(
+/**
+ * Runs an API call, a read or the profile update; on failure logs one event with the classes and
+ * kind, and rethrows the error.
+ */
+export async function logApiCallFailure<T>(
   event: ServerLogEventName,
-  read: () => Promise<T>,
+  call: () => Promise<T>,
   log: ServerLog = serverLog,
 ): Promise<T> {
   try {
-    return await read();
+    return await call();
   } catch (error) {
     log({
       event,

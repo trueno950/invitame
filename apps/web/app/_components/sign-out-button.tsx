@@ -5,11 +5,8 @@ import { useState } from "react";
 import { ADMIN_PANEL_COPY } from "../../lib/admin/copy.ts";
 import { ACCOUNT_COPY } from "../../lib/customer/copy.ts";
 import { useInteractive } from "../../lib/customer/interactive.ts";
-import { type BrowserFetch, signOut } from "../../lib/customer/sign-in.ts";
+import { browserFetch, signOut } from "../../lib/customer/sign-in.ts";
 import { errorNote, fieldHint, primaryButton } from "./ui.ts";
-
-/** Same-origin request to the `/api/auth` proxy, so the browser receives the cleared cookies. */
-const browserFetch: BrowserFetch = (input, init) => fetch(input, init);
 
 type SignInPath = "/ingresar" | "/admin/ingresar";
 

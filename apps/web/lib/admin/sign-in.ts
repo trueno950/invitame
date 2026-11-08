@@ -1,5 +1,5 @@
-import { type BrowserFetch, normalizeCode } from "../customer/sign-in.ts";
-import { ADMIN_SIGN_IN_COPY } from "./copy.ts";
+import type { BrowserFetch } from "../customer/sign-in.ts";
+import { ADMIN_SIGN_IN_COPY, SECOND_FACTOR_POLICY } from "./copy.ts";
 
 /**
  * Administrator sign-in from the browser (M2 T8d; S6, S20, S22, S36). Every request goes to the
@@ -40,14 +40,18 @@ const PASSWORD_SIGN_IN_PATH = "/api/auth/sign-in/email";
 const VERIFY_TOTP_PATH = "/api/auth/two-factor/verify-totp";
 const VERIFY_BACKUP_CODE_PATH = "/api/auth/two-factor/verify-backup-code";
 const BACKUP_CODE_PATTERN = /^[A-Za-z0-9]{5}-[A-Za-z0-9]{5}$/;
+const AUTHENTICATOR_CODE_PATTERN = new RegExp(`^[0-9]{${SECOND_FACTOR_POLICY.codeDigits}}$`);
 
-/** Keeps ASCII digits only, at most 6, so a pasted "123 456" still works. */
+/**
+ * Keeps ASCII digits only, at most `SECOND_FACTOR_POLICY.codeDigits`, so a pasted "123 456" still
+ * works.
+ */
 export function normalizeAuthenticatorCode(raw: string): string {
-  return normalizeCode(raw);
+  return raw.replace(/[^0-9]/g, "").slice(0, SECOND_FACTOR_POLICY.codeDigits);
 }
 
 export function isCompleteAuthenticatorCode(code: string): boolean {
-  return /^[0-9]{6}$/.test(code);
+  return AUTHENTICATOR_CODE_PATTERN.test(code);
 }
 
 /**
@@ -63,6 +67,9 @@ export function normalizeBackupCode(raw: string): string {
 export function isPlausibleBackupCode(code: string): boolean {
   return BACKUP_CODE_PATTERN.test(code);
 }
+
+// `readJson`, `errorCode`, and `postJson` are exported for `enrollment.ts`, which sends its requests
+// to the same proxy the same way; no other module and no test imports them.
 
 /** The body of an answer, or undefined when it is not JSON. */
 export async function readJson(response: Response): Promise<unknown> {

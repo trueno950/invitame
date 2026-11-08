@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 
 import { SIGN_IN_COPY } from "./copy.ts";
 import {
+  browserFetch,
   classifyAuthResponse,
   isCompleteCode,
   isPlausibleEmail,
@@ -36,6 +37,25 @@ function fakeFetch(respond: (call: Call) => Response | Promise<Response>) {
 function json(status: number, body: unknown): Response {
   return Response.json(body, { status });
 }
+
+describe("browserFetch", () => {
+  it("passes each request to the browser's fetch as given and returns its answer", async () => {
+    const answer = new Response(null, { status: 204 });
+    const init: RequestInit = { method: "POST", credentials: "same-origin", cache: "no-store" };
+    const browser = mock.method(globalThis, "fetch", async () => answer);
+
+    try {
+      assert.equal(await browserFetch("/api/auth/sign-out", init), answer);
+      assert.deepEqual(
+        browser.mock.calls.map((call) => call.arguments),
+        [["/api/auth/sign-out", init]],
+      );
+      assert.equal(browser.mock.calls[0]?.arguments[1], init);
+    } finally {
+      browser.mock.restore();
+    }
+  });
+});
 
 describe("normalizeEmail and isPlausibleEmail", () => {
   it("trims and lower-cases the address", () => {

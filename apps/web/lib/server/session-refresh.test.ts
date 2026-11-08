@@ -10,9 +10,9 @@ import type { WebServerConfig } from "./config.ts";
 import {
   API_UNAVAILABLE_HEADER,
   appendSetCookies,
+  callUnlessApiUnavailable,
   isSessionPagePath,
   pageRequestHeaders,
-  readUnlessApiUnavailable,
   refreshSessionCookies,
   shouldRefreshSession,
 } from "./session-refresh.ts";
@@ -162,11 +162,11 @@ describe("the outage notice for the page (R4-cuenta-outage-latency-serialized)",
     };
 
     await assert.rejects(
-      readUnlessApiUnavailable(new Headers({ [API_UNAVAILABLE_HEADER]: "1" }), read),
+      callUnlessApiUnavailable(new Headers({ [API_UNAVAILABLE_HEADER]: "1" }), read),
       (error: unknown) => error instanceof ApiClientError && error.kind === "unavailable",
     );
     assert.equal(reads, 0);
-    assert.equal(await readUnlessApiUnavailable(new Headers(), read), "profile");
+    assert.equal(await callUnlessApiUnavailable(new Headers(), read), "profile");
     assert.equal(reads, 1);
   });
 });

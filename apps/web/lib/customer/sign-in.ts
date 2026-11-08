@@ -1,4 +1,4 @@
-import { SIGN_IN_COPY } from "./copy.ts";
+import { SIGN_IN_CODE_POLICY, SIGN_IN_COPY } from "./copy.ts";
 
 /**
  * Customer sign-in by email code from the browser (M2 T8c; S6, S24, L39). Every request goes to the
@@ -9,6 +9,14 @@ import { SIGN_IN_COPY } from "./copy.ts";
 
 /** The `fetch` subset these requests need; the browser's `fetch` satisfies it. */
 export type BrowserFetch = (input: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * The browser's own `fetch`, looked up when each request is sent; the one instance every client
+ * component passes to these functions and to `lib/admin`. The callers set the method, headers, and
+ * `credentials: "same-origin"`, so each request goes to the web's `/api/auth` proxy and the browser
+ * stores or clears the cookies itself.
+ */
+export const browserFetch: BrowserFetch = (input, init) => fetch(input, init);
 
 export type SignInFailure = "invalid-code" | "too-many-attempts" | "unavailable";
 export type SignInOutcome = { ok: true } | { ok: false; failure: SignInFailure };
@@ -22,7 +30,8 @@ const INVALID_CODE_ERRORS = new Set(["INVALID_OTP", "OTP_EXPIRED"]);
 /** RFC 5321 caps a forward path at 256 octets, so an address has at most 254 characters. */
 const MAX_EMAIL_LENGTH = 254;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const CODE_LENGTH = 6;
+const CODE_LENGTH = SIGN_IN_CODE_POLICY.digits;
+const COMPLETE_CODE_PATTERN = new RegExp(`^[0-9]{${CODE_LENGTH}}$`);
 
 export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
@@ -39,7 +48,7 @@ export function normalizeCode(raw: string): string {
 }
 
 export function isCompleteCode(code: string): boolean {
-  return /^[0-9]{6}$/.test(code);
+  return COMPLETE_CODE_PATTERN.test(code);
 }
 
 async function errorCode(response: Response): Promise<string | undefined> {
@@ -123,7 +132,10 @@ export function signInWithCode(
   return send(fetch, SIGN_IN_PATH, { email, otp });
 }
 
-/** Whether the browser's cookies still carry a session: `get-session` answers `200 null` without one. */
+/**
+ * Whether the browser's cookies no longer carry a session: `get-session` answers `200 null` without
+ * one. Any other answer, or no answer, counts as a session that may still be there.
+ */
 async function sessionIsGone(fetch: BrowserFetch): Promise<boolean> {
   try {
     const response = await fetch(SESSION_PATH, {

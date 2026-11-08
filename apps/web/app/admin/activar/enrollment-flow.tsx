@@ -17,7 +17,7 @@ import {
   normalizeAuthenticatorCode,
 } from "../../../lib/admin/sign-in.ts";
 import { useInteractive } from "../../../lib/customer/interactive.ts";
-import type { BrowserFetch } from "../../../lib/customer/sign-in.ts";
+import { browserFetch } from "../../../lib/customer/sign-in.ts";
 import {
   errorNote,
   fieldHint,
@@ -28,9 +28,6 @@ import {
   textField,
 } from "../../_components/ui.ts";
 import { QrCode } from "./qr-code.tsx";
-
-/** Same-origin requests to the `/api/auth` proxy, so the browser receives the new session cookie. */
-const browserFetch: BrowserFetch = (input, init) => fetch(input, init);
 
 type Step = "password" | "scan" | "backup";
 

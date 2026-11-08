@@ -60,6 +60,28 @@ describe("normalizeAuthenticatorCode and isCompleteAuthenticatorCode", () => {
       assert.equal(isCompleteAuthenticatorCode(code), false, code);
     }
   });
+
+  it("keeps the outputs of the customer normalizeCode it replaced (3cdde74)", () => {
+    // [typed or pasted input, normalized code, complete]. The baseline kept /[0-9]/ only, cut at 6,
+    // and called a code complete when it matched /^[0-9]{6}$/.
+    const cases: Array<[string, string, boolean]> = [
+      ["123456", "123456", true],
+      [" 123 456 ", "123456", true],
+      ["12\t34\u00a056", "123456", true],
+      ["123-456", "123456", true],
+      ["1234567890", "123456", true],
+      ["12 34 56 78", "123456", true],
+      ["１２３４５６", "", false],
+      ["١٢٣456", "456", false],
+      ["12345", "12345", false],
+      ["12a45b", "1245", false],
+      ["", "", false],
+    ];
+    for (const [input, normalized, complete] of cases) {
+      assert.equal(normalizeAuthenticatorCode(input), normalized, input);
+      assert.equal(isCompleteAuthenticatorCode(normalizeAuthenticatorCode(input)), complete, input);
+    }
+  });
 });
 
 describe("normalizeBackupCode and isPlausibleBackupCode", () => {

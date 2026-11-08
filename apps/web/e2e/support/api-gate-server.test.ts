@@ -63,4 +63,17 @@ describe("API gate server", () => {
     assert.equal((await fetch(`${gateOrigin}${GATE_READY_PATH}`)).status, 204);
     assert.equal(await (await fetch(`${gateOrigin}/me`)).text(), "ok");
   });
+
+  it("keeps each gate's API: a second gate does not redirect the first", async () => {
+    const other = createServer((_request, response) => response.end("other"));
+    const otherGate = createApiGateServer(await listen(other));
+
+    try {
+      const otherGateOrigin = await listen(otherGate);
+      assert.equal(await (await fetch(`${gateOrigin}/me`)).text(), "ok");
+      assert.equal(await (await fetch(`${otherGateOrigin}/me`)).text(), "other");
+    } finally {
+      await Promise.all([close(otherGate), close(other)]);
+    }
+  });
 });

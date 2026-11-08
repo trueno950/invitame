@@ -12,8 +12,8 @@ import {
 import { proxyAuthRequest } from "./auth-proxy.ts";
 import { type AuthSessionUser, readAuthSession } from "./auth-session.ts";
 import { getWebServerConfig } from "./config.ts";
-import { logReadFailure, SERVER_LOG_EVENT } from "./server-log.ts";
-import { readUnlessApiUnavailable } from "./session-refresh.ts";
+import { logApiCallFailure, SERVER_LOG_EVENT } from "./server-log.ts";
+import { callUnlessApiUnavailable } from "./session-refresh.ts";
 
 /**
  * Session reads and profile updates for server components and server actions (M2 T8b, T8d; L29,
@@ -44,8 +44,8 @@ async function requestCookieHeader(): Promise<string> {
 }
 
 export async function getOwnProfile(): Promise<SessionResult<OwnProfile>> {
-  return logReadFailure(SERVER_LOG_EVENT.OWN_PROFILE_READ_FAILED, async () =>
-    readUnlessApiUnavailable(await headers(), async () =>
+  return logApiCallFailure(SERVER_LOG_EVENT.OWN_PROFILE_READ_FAILED, async () =>
+    callUnlessApiUnavailable(await headers(), async () =>
       apiClient().getOwnProfile(await requestCookieHeader()),
     ),
   );
@@ -54,8 +54,8 @@ export async function getOwnProfile(): Promise<SessionResult<OwnProfile>> {
 export async function updateOwnProfile(
   update: OwnProfileUpdate,
 ): Promise<SessionResult<OwnProfile>> {
-  return logReadFailure(SERVER_LOG_EVENT.OWN_PROFILE_UPDATE_FAILED, async () =>
-    readUnlessApiUnavailable(await headers(), async () =>
+  return logApiCallFailure(SERVER_LOG_EVENT.OWN_PROFILE_UPDATE_FAILED, async () =>
+    callUnlessApiUnavailable(await headers(), async () =>
       apiClient().updateOwnProfile(await requestCookieHeader(), update),
     ),
   );
@@ -68,7 +68,7 @@ export async function updateOwnProfile(
  * failure is logged once, here.
  */
 export async function getAuthSession(): Promise<SessionResult<AuthSessionUser>> {
-  return logReadFailure(SERVER_LOG_EVENT.AUTH_SESSION_READ_FAILED, async () =>
+  return logApiCallFailure(SERVER_LOG_EVENT.AUTH_SESSION_READ_FAILED, async () =>
     readAuthSession(new Headers(await headers()), (request) =>
       proxyAuthRequest(request, { config: getWebServerConfig(), log: () => {} }),
     ),

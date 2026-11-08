@@ -3,6 +3,16 @@
  * neutral Mexican Spanish. Keep every customer-facing string here so the wording is reviewed in one
  * place. Sign-in copy never says whether an address has an account or what kind (S24).
  */
+
+/**
+ * The sign-in code policy the copy states. The API sets it (`SIGN_IN_CODE_LENGTH` and
+ * `SIGN_IN_CODE_EXPIRES_IN_SECONDS` in `apps/api/src/auth/sign-in-code/sign-in-code-message.ts`);
+ * the web never imports API code, so these values mirror it by hand. `copy.test.ts` pins every
+ * number of digits and minutes in the copy to them, and `sign-in.ts` checks a code's length with
+ * `digits`.
+ */
+export const SIGN_IN_CODE_POLICY = { digits: 6, validityMinutes: 5 } as const;
+
 export const SIGN_IN_COPY = {
   pageTitle: "Ingresar | InvitaMe",
   eyebrow: "Tu cuenta",

@@ -28,7 +28,12 @@ const DEFAULT_EDGE_CLIENT_IP_HEADER = "x-forwarded-for";
  * edge overwrites on every request.
  */
 const CLIENT_CONTROLLED_HEADERS = new Set(["x-forwarded-for", "forwarded"]);
-const MINIMUM_SECRET_LENGTH = 32;
+/**
+ * The API's rule for the same secret (`MINIMUM_PROXY_SECRET_LENGTH` in
+ * `apps/api/src/config/environment.ts`). The web never imports API code, so the two values are kept
+ * equal by hand; the web checks it too so that a short secret stops the web at startup.
+ */
+const MINIMUM_PROXY_SECRET_LENGTH = 32;
 // RFC 9110 field-name token characters: one header, never a list.
 const HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
 
@@ -108,8 +113,10 @@ function parseProxySecret(environment: Environment, production: boolean): string
     return undefined;
   }
 
-  if (secret.length < MINIMUM_SECRET_LENGTH) {
-    throw new Error(`AUTH_PROXY_SECRET must be at least ${MINIMUM_SECRET_LENGTH} characters long.`);
+  if (secret.length < MINIMUM_PROXY_SECRET_LENGTH) {
+    throw new Error(
+      `AUTH_PROXY_SECRET must be at least ${MINIMUM_PROXY_SECRET_LENGTH} characters long.`,
+    );
   }
 
   return secret;

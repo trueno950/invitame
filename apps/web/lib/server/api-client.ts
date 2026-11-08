@@ -24,7 +24,8 @@ export interface OwnProfileUpdate {
 export type SessionResult<T> = { signedIn: true; value: T } | { signedIn: false };
 
 /**
- * - `rejected`: the API refused the request (4xx other than 401), for example invalid input (400).
+ * - `rejected`: any other status that is not a success, 401, or 5xx: a 4xx such as invalid input
+ *   (400), or a 3xx, because the client never follows a redirect (`redirect: "manual"`).
  * - `unavailable`: the API failed (5xx), was unreachable, or did not answer in time.
  * - `invalid-response`: a success whose body does not match the contract.
  */
@@ -92,10 +93,14 @@ export interface ApiClientOptions {
 export function createApiClient(options: ApiClientOptions) {
   const { config } = options;
 
-  async function send(
+  /**
+   * Sends one own-profile request (`GET /me` or `PATCH /me`). Both answer the profile, so a success
+   * body must be an `OwnProfile`; another endpoint needs its own response check, not this function.
+   */
+  async function sendOwnProfileRequest(
     cookieHeader: string | null | undefined,
     method: "GET" | "PATCH",
-    path: string,
+    path: "/me",
     body?: unknown,
   ): Promise<SessionResult<OwnProfile>> {
     const cookie = sessionCookieHeader(cookieHeader);
@@ -165,14 +170,16 @@ export function createApiClient(options: ApiClientOptions) {
   return {
     /** `GET /me`: the signed-in user's own profile. */
     getOwnProfile(cookieHeader: string | null | undefined): Promise<SessionResult<OwnProfile>> {
-      return send(cookieHeader, "GET", "/me");
+      return sendOwnProfileRequest(cookieHeader, "GET", "/me");
     },
     /** `PATCH /me`: called by the web server, since CORS does not allow `PATCH` from a browser (L29). */
     updateOwnProfile(
       cookieHeader: string | null | undefined,
       update: OwnProfileUpdate,
     ): Promise<SessionResult<OwnProfile>> {
-      return send(cookieHeader, "PATCH", "/me", { displayName: update.displayName });
+      return sendOwnProfileRequest(cookieHeader, "PATCH", "/me", {
+        displayName: update.displayName,
+      });
     },
   };
 }

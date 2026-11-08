@@ -87,16 +87,19 @@ export function pageRequestHeaders(request: Request, apiUnavailable: boolean): H
   return headers;
 }
 
-/** Runs the render's API call unless `proxy.ts` just found the API failing for this request. */
-export async function readUnlessApiUnavailable<T>(
+/**
+ * Runs the request's API call, a profile read or update, unless `proxy.ts` just found the API failing
+ * for this request.
+ */
+export async function callUnlessApiUnavailable<T>(
   requestHeaders: Headers,
-  read: () => Promise<T>,
+  call: () => Promise<T>,
 ): Promise<T> {
   if (requestHeaders.get(API_UNAVAILABLE_HEADER) === "1") {
     throw new ApiClientError("unavailable");
   }
 
-  return read();
+  return call();
 }
 
 /** Each cookie stays its own `Set-Cookie` header, byte for byte. */

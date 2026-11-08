@@ -17,11 +17,7 @@ import {
   verifyBackupCode,
 } from "../../../lib/admin/sign-in.ts";
 import { useInteractive } from "../../../lib/customer/interactive.ts";
-import {
-  type BrowserFetch,
-  isPlausibleEmail,
-  normalizeEmail,
-} from "../../../lib/customer/sign-in.ts";
+import { browserFetch, isPlausibleEmail, normalizeEmail } from "../../../lib/customer/sign-in.ts";
 import {
   errorNote,
   fieldHint,
@@ -31,9 +27,6 @@ import {
   textButton,
   textField,
 } from "../../_components/ui.ts";
-
-/** Same-origin requests to the `/api/auth` proxy, so the browser stores the cookies itself. */
-const browserFetch: BrowserFetch = (input, init) => fetch(input, init);
 
 type Step = "password" | "code" | "backup";
 

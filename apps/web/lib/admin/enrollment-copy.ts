@@ -1,7 +1,7 @@
 /**
  * Spanish product copy of the authenticator-app enrollment at `/admin/activar` (M2 T8d; S36, L42),
- * addressed with "tú" like the rest of the product. Kept apart from `copy.ts` so the enrollment
- * page ships as its own slice.
+ * addressed with "tú" like the rest of the product. Kept apart from `copy.ts`, which holds the
+ * sign-in and panel copy, because only the enrollment page and `enrollment.ts` use it.
  */
 export const ENROLLMENT_COPY = {
   pageTitle: "Activa tu app autenticadora | InvitaMe",
