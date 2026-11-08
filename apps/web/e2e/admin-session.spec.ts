@@ -7,6 +7,7 @@ import {
   expect,
   readBackupCodes,
   setupKeyFigure,
+  startEnrollment,
   submitPassword,
   test,
 } from "./support/administrator.ts";
@@ -154,6 +155,43 @@ test.describe("administrator enrollment at /admin/activar", () => {
     await expect(setupKeyFigure(page)).toHaveCount(0);
     await page.getByRole("link", { name: ENROLLMENT_COPY.signInAgain }).click();
     await expect(page).toHaveURL("/admin/ingresar");
+  });
+
+  test("tells the administrator to sign in again when the confirmation was superseded (S45)", async ({
+    page,
+    administrator,
+  }) => {
+    const key = await startEnrollment(page, administrator);
+
+    // A browser cannot lose the race itself: the winning confirmation deletes the sibling pending
+    // sessions, and DB-admin proves the race on PostgreSQL (T7c, T7d). Only this page's confirmation is
+    // answered here, with the API's exact refusal (`ENROLLMENT_SUPERSEDED` in
+    // `apps/api/src/auth/administrator-enrollment.ts`), so any well-formed code works.
+    await page.route("**/api/auth/two-factor/verify-totp", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "ENROLLMENT_SUPERSEDED",
+          message: "The enrollment is no longer valid. Sign in again.",
+        }),
+      });
+    });
+
+    await page.getByLabel(ENROLLMENT_COPY.codeLabel).fill(totpCode(key));
+    await page.getByRole("button", { name: ENROLLMENT_COPY.confirm }).click();
+
+    await expect(alertWith(page, ENROLLMENT_COPY.enrollmentSuperseded)).toBeVisible();
+    await expect(page.getByText(ENROLLMENT_COPY.sessionEnded)).toHaveCount(0);
+    const signInAgain = page.getByRole("link", { name: ENROLLMENT_COPY.signInAgain });
+    await expect(signInAgain).toBeVisible();
+    // Not followed: only the answer was replaced, so this pending session is still valid and
+    // `/admin/ingresar` would send it back here; the API ends it in a real superseded confirmation.
+    await expect(signInAgain).toHaveAttribute("href", "/admin/ingresar");
   });
 });
 
