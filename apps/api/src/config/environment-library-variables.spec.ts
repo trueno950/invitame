@@ -51,7 +51,27 @@ describe("variables that Better Auth reads by itself (S55)", () => {
     assert.doesNotThrow(() => validateEnvironment(VALID));
   });
 
-  it("ignores a blank value, as it does for BETTER_AUTH_TRUSTED_ORIGINS", () => {
-    assert.doesNotThrow(() => validateEnvironment({ ...VALID, BETTER_AUTH_SECRETS: "  " }));
+  it("accepts an empty value, which Better Auth reads as absent (the e2e API sets both to empty)", () => {
+    assert.doesNotThrow(() =>
+      validateEnvironment({ ...VALID, BETTER_AUTH_SECRETS: "", BETTER_AUTH_TRUSTED_ORIGINS: "" }),
+    );
   });
+
+  // Better Auth reads the raw value: "  " is set for it (`BETTER_AUTH_SECRETS` is parsed, and
+  // `BETTER_AUTH_TRUSTED_ORIGINS` adds the blank entry), so a trimmed check would disagree with it.
+  for (const name of ["BETTER_AUTH_SECRETS", "BETTER_AUTH_TRUSTED_ORIGINS"] as const) {
+    for (const blank of [" ", "  ", "\t", "\n"]) {
+      it(`refuses ${name} holding only whitespace (${JSON.stringify(blank)}) and never echoes it`, () => {
+        assert.throws(
+          () => validateEnvironment({ ...VALID, [name]: blank }),
+          (error: unknown) => {
+            assert.ok(error instanceof Error);
+            assert.match(error.message, new RegExp(name));
+            assert.ok(!error.message.includes(JSON.stringify(blank)));
+            return true;
+          },
+        );
+      });
+    }
+  }
 });
