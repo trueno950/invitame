@@ -99,6 +99,25 @@ describe("ResetSecondFactorUseCase", () => {
     ]);
   });
 
+  it("adds the Prisma error code of a repository failure and still never the message (S50, L71)", async () => {
+    const failure = Object.assign(
+      new Error("Unique constraint failed on locked.admin@example.test"),
+      { name: "PrismaClientKnownRequestError", code: "P2002" },
+    );
+    const { useCase, events } = useCaseWith(failure);
+
+    await assert.rejects(useCase.execute("locked.admin@example.test"), failure);
+
+    assert.deepEqual(events, [
+      {
+        event: "administrator_second_factor_reset_failed",
+        error: "PrismaClientKnownRequestError",
+        code: "P2002",
+      },
+    ]);
+    assert.ok(!JSON.stringify(events).includes("locked.admin@example.test"));
+  });
+
   it("never logs the address, the password, or its hash", async () => {
     for (const result of [
       { outcome: "reset", userId: "u", revokedSessions: 1 },
