@@ -1,7 +1,13 @@
+import { errorClass, logSafely } from "../safe-logging";
+
 export const BACKGROUND_TASK_EVENT = {
   FAILED: "background_task_failed",
   REJECTED: "background_task_rejected",
-  REJECTED_AFTER_SHUTDOWN: "background_task_rejected_after_shutdown",
+  /**
+   * A task refused once `shutdown` has started, during the drain as well as after it. The logged value
+   * keeps its original name, so existing log queries still match.
+   */
+  REJECTED_SHUTTING_DOWN: "background_task_rejected_after_shutdown",
 } as const;
 
 /**
@@ -24,7 +30,7 @@ export type BackgroundTaskEvent =
       failedAfter?: string;
     }
   | { event: typeof BACKGROUND_TASK_EVENT.REJECTED; task: string; pending: number }
-  | { event: typeof BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN; task: string };
+  | { event: typeof BACKGROUND_TASK_EVENT.REJECTED_SHUTTING_DOWN; task: string };
 
 export type BackgroundTaskLog = (event: BackgroundTaskEvent) => void;
 
@@ -38,11 +44,6 @@ export class BackgroundTaskStageError extends Error {
     super(`Background task stage failed: ${stage}`);
     this.name = "BackgroundTaskStageError";
   }
-}
-
-function errorClass(error: unknown): string {
-  // The class name is safe to log; a message may carry an address or a provider payload.
-  return error instanceof Error ? error.name : "unknown";
 }
 
 /**
@@ -73,7 +74,7 @@ export class BackgroundTasks {
    */
   run(task: string, work: () => Promise<void>): boolean {
     if (this.shuttingDown) {
-      this.emit({ event: BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN, task });
+      this.emit({ event: BACKGROUND_TASK_EVENT.REJECTED_SHUTTING_DOWN, task });
       return false;
     }
 
@@ -133,10 +134,6 @@ export class BackgroundTasks {
   }
 
   private emit(event: BackgroundTaskEvent): void {
-    try {
-      this.log(event);
-    } catch {
-      // A failing log sink must not turn into an unhandled rejection.
-    }
+    logSafely((entry: BackgroundTaskEvent) => this.log(entry), event);
   }
 }

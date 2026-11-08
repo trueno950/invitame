@@ -24,7 +24,7 @@ class ApplicationBackgroundTasks extends BackgroundTasks implements OnModuleDest
 
 const WARNING_EVENTS: ReadonlySet<BackgroundTaskEvent["event"]> = new Set([
   BACKGROUND_TASK_EVENT.REJECTED,
-  BACKGROUND_TASK_EVENT.REJECTED_AFTER_SHUTDOWN,
+  BACKGROUND_TASK_EVENT.REJECTED_SHUTTING_DOWN,
 ]);
 
 /** Wires the sign-in code sender to `EmailDeliveryService` for the Better Auth registration. */

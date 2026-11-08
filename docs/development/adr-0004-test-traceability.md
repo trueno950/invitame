@@ -157,7 +157,7 @@ sibling was still completing reverted the sibling's enrollment; and a pending se
 still read itself after enrollment completed in the first.
 
 Current behavior (T7c, hardened in T7d, S40): the session-create hook (`auth/auth.factory.ts`,
-`decideFirstConfirmation` and `refuseSupersededConfirmation` in `auth/administrator-enrollment.ts`) decides
+`settleFirstConfirmation` and `refuseSupersededConfirmation` in `auth/administrator-enrollment.ts`) decides
 every session that `verify-totp` creates for an `ADMIN` whose flag is already true. The endpoint stores the
 session it resolved on its own context, which the hook receives; a sign-in challenge has none and is allowed.
 A first confirmation is allowed only while its pending session still exists for the same user, and the hook

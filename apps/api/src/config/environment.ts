@@ -76,6 +76,8 @@ const EMAIL_ADDRESS_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const NAMED_EMAIL_ADDRESS_PATTERN = /^([^<>\r\n]*)<([^<>]+)>$/;
 const DATABASE_PROTOCOLS = ["postgresql:", "postgres:"] as const;
 const MINIMUM_AUTH_SECRET_LENGTH = 32;
+/** L36: the shared web-to-API secret has 32 characters or more, decided apart from the auth secret. */
+const MINIMUM_PROXY_SECRET_LENGTH = 32;
 /** Better Auth's default client IP header; trusted only outside production by default. */
 const DEFAULT_CLIENT_IP_HEADER = "x-forwarded-for";
 // RFC 9110 field-name token characters: one header, never a list.
@@ -187,9 +189,9 @@ function parseProxySecret(
     return undefined;
   }
 
-  if (value.length < MINIMUM_AUTH_SECRET_LENGTH) {
+  if (value.length < MINIMUM_PROXY_SECRET_LENGTH) {
     throw new Error(
-      `AUTH_PROXY_SECRET must be at least ${MINIMUM_AUTH_SECRET_LENGTH} characters long.`,
+      `AUTH_PROXY_SECRET must be at least ${MINIMUM_PROXY_SECRET_LENGTH} characters long.`,
     );
   }
 
@@ -230,14 +232,19 @@ function validateAuthBaseUrl(
     throw new Error("AUTH_BASE_URL must be one of the trusted origins in CORS_ORIGIN.");
   }
 
-  if (
-    nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION &&
-    new URL(authBaseUrl).protocol !== "https:"
-  ) {
+  if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION && !usesHttps(authBaseUrl)) {
     throw new Error("AUTH_BASE_URL must use HTTPS in production.");
   }
 
   return authBaseUrl;
+}
+
+/**
+ * Whether a URL uses https. The one rule behind the production check on `AUTH_BASE_URL` and the
+ * auth cookie settings (`auth/session-settings.ts`): auth cookies are `Secure` only over https.
+ */
+export function usesHttps(url: string): boolean {
+  return new URL(url).protocol === "https:";
 }
 
 function validateDatabaseUrl(value: string): string {

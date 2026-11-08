@@ -11,7 +11,7 @@ import {
 } from "../../email/application/email-delivery.service";
 import type { EmailMessage, EmailSender } from "../../email/application/email-sender.port";
 import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-sender";
-import { EMAIL_CODE_QUOTA, emailCodeQuotaKey } from "../abuse-limits";
+import { EMAIL_CODE_QUOTA, EMAIL_CODE_QUOTA_KEY_PREFIX, emailCodeQuotaKey } from "../abuse-limits";
 import { createAuth } from "../auth.factory";
 import { BACKGROUND_TASK_EVENT, BackgroundTasks } from "./background-tasks";
 import {
@@ -48,7 +48,7 @@ function withQuotaCreate(
   return (options) => {
     const inner = adapter(options);
     const wrapped = ((query: Parameters<AdapterInstance["create"]>[0]) =>
-      query.model === "rateLimit" && String(query.data.key).startsWith("sign-in-code-email|")
+      query.model === "rateLimit" && String(query.data.key).startsWith(EMAIL_CODE_QUOTA_KEY_PREFIX)
         ? create(inner, query)
         : inner.create(query)) as AdapterInstance["create"];
     return { ...inner, create: wrapped };

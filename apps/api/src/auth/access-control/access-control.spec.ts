@@ -12,7 +12,17 @@ import {
   type Type,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { AllowAnonymous, AuthModule, type AuthService, Roles } from "@thallesp/nestjs-better-auth";
+import {
+  AllowAnonymous,
+  AuthModule,
+  type AuthService,
+  MemberHasPermission,
+  OptionalAuth,
+  OrgRoles,
+  RequireActiveOrg,
+  Roles,
+  UserHasPermission,
+} from "@thallesp/nestjs-better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 
 import { createApp } from "../../app.setup";
@@ -25,7 +35,7 @@ import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-
 import { createAuth } from "../auth.factory";
 import { BackgroundTasks } from "../sign-in-code/background-tasks";
 import { SignInCodeSender } from "../sign-in-code/sign-in-code-sender";
-import { AccessControlGuard, AdminOnly, Public } from "./access-control";
+import { AccessControlGuard, AdminOnly, findUnsupportedMarker, Public } from "./access-control";
 import { AccessControlModule } from "./access-control.module";
 
 // Access control (M2 T6a; S1, S2, S9, S18; L12, L17, L20) through the shared createApp boundary, the
@@ -274,7 +284,7 @@ describe("access control through the project-owned global guard", () => {
       assert.equal((await get("/probe/undecorated", cookie)).status, 401);
     });
 
-    it("deletes the session of a DISABLED user when the guard refuses it", async () => {
+    it("refuses a DISABLED user's session with 401, and the session hook deletes it", async () => {
       const { email, cookie } = await signInCustomer();
       const user = storedUser(email);
       user.status = "DISABLED";
@@ -577,6 +587,31 @@ describe("access control through the project-owned global guard", () => {
 
       await assert.rejects(guard.canActivate(context), /unsupported integration marker PUBLIC/);
       assert.equal(sessionLookups, 0);
+    });
+
+    it("recognizes the marker of every access decorator the integration exports", () => {
+      const decorators = {
+        AllowAnonymous: AllowAnonymous(),
+        OptionalAuth: OptionalAuth(),
+        Roles: Roles(["ADMIN"]),
+        RequireActiveOrg: RequireActiveOrg(),
+        OrgRoles: OrgRoles(["owner"]),
+        UserHasPermission: UserHasPermission({ permission: { invitation: ["read"] } }),
+        MemberHasPermission: MemberHasPermission({ permissions: { invitation: ["read"] } }),
+      };
+
+      for (const [name, decorator] of Object.entries(decorators)) {
+        class Marked {
+          handle(): void {}
+        }
+        decorator(Marked);
+
+        assert.notEqual(
+          findUnsupportedMarker(new Reflector(), Marked.prototype.handle, Marked),
+          undefined,
+          name,
+        );
+      }
     });
   });
 });

@@ -1,6 +1,6 @@
 import { APIError } from "better-auth/api";
 
-import { EMAIL_CODE_SIGN_IN_PATH, PASSWORD_SIGN_IN_PATH } from "./abuse-limits";
+import { EMAIL_CODE_SIGN_IN_PATH, PASSWORD_SIGN_IN_PATH } from "./auth-paths";
 
 /** Stored `User.role` values; the role is server-side only (ADR 0004 decision 6). */
 export const USER_ROLE = {
@@ -35,7 +35,11 @@ export function isActive(account: AccountAccess): boolean {
   return account.status === USER_STATUS.ACTIVE;
 }
 
-/** Sign-in codes go only to active customers: never to an administrator (decision 3) or a DISABLED user. */
+/**
+ * Sign-in codes go only to active customers: never to an administrator (decision 3) or a DISABLED user.
+ * This decides stored accounts only; an unknown address also receives a code, because its first
+ * sign-in creates an active customer (`SignInCodeSender`).
+ */
 export function mayReceiveSignInCode(account: AccountAccess): boolean {
   return isActive(account) && account.role === USER_ROLE.CUSTOMER;
 }
@@ -90,8 +94,9 @@ const SESSION_REFUSED = { code: "FAILED_TO_CREATE_SESSION", message: "Failed to 
  * Decides whether Better Auth may create a session for this stored user on this endpoint path (null
  * outside an endpoint). Returns the error to throw, or null to allow it:
  * - a missing or non-ACTIVE user gets no session on any path (S9, S18);
- * - an administrator gets no session from an email code (decision 3, S22): administrators sign in with
- *   a password and an authenticator app, so an email code would bypass both;
+ * - only an account that may receive a sign-in code (`mayReceiveSignInCode`) gets a session from one,
+ *   so never an administrator (decision 3, S22): administrators sign in with a password and an
+ *   authenticator app, so an email code would bypass both;
  * - only an administrator gets a session from a password (decision 3): customers have no password;
  * - an administrator who has not enrolled gets no session once the window of the initial password
  *   has ended (S20); `enrollmentWindowOpen` carries that check, made by the caller from stored data.
@@ -101,13 +106,16 @@ export function sessionRefusal(
   path: string | undefined,
   enrollmentWindowOpen = false,
 ) {
+  // Every `/email-otp/*` endpoint counts as an email code, not only the sign-in one: an email OTP
+  // endpoint that creates a session, re-enabled or added by a library upgrade, must not hand one to
+  // anyone who may not sign in by code. Several are disabled today (`DISABLED_AUTH_PATHS`).
   const byEmailCode = path === EMAIL_CODE_SIGN_IN_PATH || path?.startsWith("/email-otp/") === true;
   const byPassword = path === PASSWORD_SIGN_IN_PATH;
 
   if (
     account &&
     isActive(account) &&
-    !(byEmailCode && account.role !== USER_ROLE.CUSTOMER) &&
+    !(byEmailCode && !mayReceiveSignInCode(account)) &&
     !(byPassword && account.role !== USER_ROLE.ADMIN) &&
     !(isPendingAdministrator(account) && !enrollmentWindowOpen)
   ) {

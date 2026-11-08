@@ -12,15 +12,18 @@ export type SignInCodeEndpointContext = NonNullable<
   Parameters<EmailOTPOptions["sendVerificationOTP"]>[1]
 >;
 
-/**
- * Mirrors Better Auth 1.7.16's email OTP storage (`plugins/email-otp/utils.mjs`): the identifier is
- * `<type>-otp-<email>` and, with `storeOTP: "hashed"`, the value is the unpadded base64url SHA-256
- * of the code followed by `:<attempts>`. The sign-in code tests pin both shapes.
- */
+// The two helpers below mirror Better Auth 1.7.16's email OTP storage (`plugins/email-otp/utils.mjs`).
+// The sign-in code tests pin both shapes.
+
+/** The `Verification.identifier` of a code: `<type>-otp-<email>`. */
 function verificationIdentifier(request: SignInCodeRequest): string {
   return `${request.type}-otp-${request.email.toLowerCase()}`;
 }
 
+/**
+ * The start of a stored `Verification.value` with `storeOTP: "hashed"`: the unpadded base64url
+ * SHA-256 of the code, followed by `:` and the attempt count.
+ */
 function storedCodePrefix(code: string): string {
   return `${createHash("sha256").update(code).digest("base64url")}:`;
 }

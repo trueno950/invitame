@@ -52,8 +52,9 @@ export interface SignInCodeStore {
 /**
  * Handles Better Auth's `sendVerificationOTP` hook (ADR 0004 decisions 3 and 8, as amended). The
  * hook returns at once for every address, so the response never waits for, or depends on, the
- * per-email cap, the account lookup, or the delivery. In the background, in this order: the request
- * counts against the per-email cap, and over the cap the code is removed unsent; an administrator or
+ * per-email cap, the account lookup, or the delivery. In the background, in this order: the scheduled
+ * request counts against the per-email cap, and over the cap the code is removed unsent (a request
+ * refused at capacity or during shutdown is discarded inline and never counted); an administrator or
  * a DISABLED user receives no code and the code is removed; the code of an active customer, or of an
  * unknown address that signs up as one, goes through `EmailDeliveryService`.
  * Whenever a stage fails before or during delivery, the code is invalidated, so no undelivered code

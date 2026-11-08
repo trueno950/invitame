@@ -20,6 +20,10 @@ const ADMIN_ONLY = Symbol("invitame:admin-only");
  * Metadata keys of `@thallesp/nestjs-better-auth` 2.8.0 (`dist/index.mjs`, `AllowAnonymous` to
  * `MemberHasPermission`). This guard implements none of them, so a route that carries one is
  * refused: `@AllowAnonymous()` would otherwise look public and `@Roles()` would look restricted.
+ * The library writes these keys as inline strings in its decorators and exports no constant for
+ * them, so they are copied here. The dependency is pinned to an exact version, and a test applies
+ * every access decorator the library exports and expects one of these keys, so an upgrade that
+ * renames a key fails that test instead of letting a marked route through.
  */
 const UNSUPPORTED_INTEGRATION_KEYS = [
   "PUBLIC",
@@ -86,8 +90,10 @@ export class AccessControlGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const targets = [context.getHandler(), context.getClass()];
-    const marker = findUnsupportedMarker(this.reflector, context.getHandler(), context.getClass());
+    const handler = context.getHandler();
+    const controller = context.getClass();
+    const targets = [handler, controller];
+    const marker = findUnsupportedMarker(this.reflector, handler, controller);
 
     if (marker) {
       throw new Error(unsupportedMarkerMessage("Route", marker));
