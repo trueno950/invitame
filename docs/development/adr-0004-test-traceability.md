@@ -43,6 +43,7 @@ other row existed before them.
 | DB-profile | [`users/own-profile.prisma.db-spec.ts`](../../apps/api/src/users/own-profile.prisma.db-spec.ts) |
 | DB-disable | [`users/infrastructure/prisma-user-access.repository.db-spec.ts`](../../apps/api/src/users/infrastructure/prisma-user-access.repository.db-spec.ts) |
 | DB-create | [`users/infrastructure/prisma-administrator-account.repository.db-spec.ts`](../../apps/api/src/users/infrastructure/prisma-administrator-account.repository.db-spec.ts) |
+| DB-races | [`auth/account-state-races.prisma.db-spec.ts`](../../apps/api/src/auth/account-state-races.prisma.db-spec.ts) (T11) |
 | DB-command | [`users/create-administrator.command.db-spec.ts`](../../apps/api/src/users/create-administrator.command.db-spec.ts) (T11) |
 | E2E-customer | [`e2e/customer-session.spec.ts`](../../apps/web/e2e/customer-session.spec.ts) (browser) |
 | E2E-admin | [`e2e/admin-session.spec.ts`](../../apps/web/e2e/admin-session.spec.ts) (browser) |
@@ -103,10 +104,20 @@ All U-admin names below sit in its "enrollment gate (S6, S21)", "pre-enrollment 
 
 ## T11 slice A tests
 
+- R3-reset-disable-race-unproved (L63), fixed order on PostgreSQL: DB-races "admin:reset-second-factor racing
+  user:disable › lets the reset complete, then the disable revokes the session its fresh password opened" and
+  "› refuses the reset as disabled when the disable holds the row first, changing nothing". Either way the
+  administrator ends DISABLED with no session, and a fresh initial password opens none.
 - The `admin:create` stdout layout (L66): DB-command "admin:create stdout (real PostgreSQL) › prints the notice, a
   newline, the password, and a newline on create and on reissue".
 - The `PATCH /me` 400 body (L66): U-profile "PATCH /me › rejects <case> with the DTO's 400 body and keeps the
   stored name" for each of 14 invalid values.
+- Open, run as `todo` tests that are expected to fail until T11b and T11c fix them: DB-races "› GAP A′: leaves
+  no password-only session with authority on /me or Better Auth" (L62). When the sibling-session delete of an
+  allowed first confirmation throws, `verify-totp` answers 500 but `twoFactorEnabled` stays true, so both
+  password-only sessions read `/me` (200), `get-session`, and `list-sessions`. DB-races "› GAP R4: does not store the name of a user disabled
+  after the guard's session check" (L30): `PATCH /me` answers 200 and stores the name after `user:disable`
+  committed; the next request gets 401.
 
 ## Findings routed to T9 (plan Log L35 to L44)
 
