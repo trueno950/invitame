@@ -1,21 +1,115 @@
 @import "tailwindcss";
 
-:root {
-  --page-background: #fffaf4;
-  --page-foreground: #1f2937;
+/*
+ * InvitaMe theme «A · Rosa y vino», version 3 (M2 T8t; S35, L41). This block is the single source
+ * of every color: Tailwind's default palette is reset, so only these tokens produce color
+ * utilities (`bg-surface`, `text-ink`, `border-field-border`, …). `lib/theme/contrast.test.ts` reads
+ * the hex values below and checks every text pair at 4.5:1 and component borders at 3:1.
+ * Light backgrounds only. See docs/design/theme.md for the role of each token.
+ */
+@theme {
+  --color-*: initial;
+
+  /* Page and surfaces */
+  --color-background: #fff7f5;
+  --color-surface: #ffffff;
+  --color-rose-50: #fdeef2;
+  --color-rose-100: #f8d7e0;
+
+  /* Text */
+  --color-ink: #3b1424;
+  --color-muted: #6b3a4c;
+  --color-placeholder: #8a6070;
+
+  /* Actions: buttons are wine with white text */
+  --color-primary: #8c1c3a;
+  --color-primary-deep: #6e1530;
+  --color-on-primary: #ffffff;
+
+  /* Component borders that must reach 3:1 */
+  --color-field-border: #a06e7e;
+
+  /* Ornament colors: rose and gold for flowers and hairlines (gold never for small text), leaf
+     for botanicals only */
+  --color-rose: #e9a3b5;
+  --color-gold: #c29a54;
+  --color-leaf: #8faf8c;
+
+  --radius-field: 1rem;
+  --radius-panel: 1.6rem;
+  --radius-card: 2rem;
+
+  --shadow-soft:
+    0 2px 6px color-mix(in srgb, var(--color-primary-deep) 5%, transparent),
+    0 24px 60px -28px color-mix(in srgb, var(--color-primary-deep) 30%, transparent);
+  --shadow-paper:
+    0 1px 1px color-mix(in srgb, var(--color-primary-deep) 6%, transparent),
+    0 10px 24px -8px color-mix(in srgb, var(--color-primary-deep) 18%, transparent),
+    0 34px 60px -24px color-mix(in srgb, var(--color-primary-deep) 28%, transparent);
+  --shadow-button:
+    inset 0 1px 0 color-mix(in srgb, var(--color-on-primary) 22%, transparent),
+    0 14px 30px -12px color-mix(in srgb, var(--color-primary) 65%, transparent);
+
+  --ease-out-soft: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-* {
-  box-sizing: border-box;
+/*
+ * Font families. `app/layout.tsx` loads the fonts from `app/fonts/` with `next/font/local` and sets
+ * these variables on <html>; `inline` makes the utilities read them where they are used.
+ * display: Cormorant Garamond for headings; script: Great Vibes for names and accents only;
+ * sans: Jost for the interface and body text.
+ */
+@theme inline {
+  --font-display: var(--font-cormorant-garamond), "Times New Roman", serif;
+  --font-script: var(--font-great-vibes), cursive;
+  --font-sans: var(--font-jost), system-ui, sans-serif;
 }
 
-html {
-  scroll-behavior: smooth;
+/* The soft pink wash behind the customer pages and the landing hero. */
+@utility paper-wash {
+  background-color: var(--color-background);
+  background-image:
+    radial-gradient(
+      45% 40% at 50% 28%,
+      color-mix(in srgb, var(--color-surface) 90%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(180deg, var(--color-rose-50), var(--color-background) 70%);
 }
 
-body {
-  min-height: 100vh;
-  background: var(--page-background);
-  color: var(--page-foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  body {
+    min-height: 100vh;
+    background-color: var(--color-background);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: var(--color-rose-100);
+    color: var(--color-ink);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+}
+
+/*
+ * Motion is decoration: with reduced motion, transitions and animations end at once. The rule is
+ * unlayered on purpose, so it wins over Tailwind's layered utilities without `!important`.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+    scroll-behavior: auto;
+  }
 }

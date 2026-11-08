@@ -23,6 +23,7 @@ to be checked before prose, and it defines when a human decision is required.
 | --- | --- | --- |
 | Product scope, milestone, or non-goal | [`../ROADMAP.md`](../ROADMAP.md) | Current source, tests, schema, migrations, seed data, and scripts. |
 | Runtime boundary or API/web architecture | [`architecture/overview.md`](architecture/overview.md) | `apps/web`, `apps/api`, package scripts, and tests. |
+| Web page look, colors, fonts, ornaments, or shared UI classes | [`design/theme.md`](design/theme.md) | `apps/web/app/globals.css`, `apps/web/app/_components`, and `apps/web/lib/theme/contrast.test.ts`. |
 | New API capability or module placement | [`architecture/module-template.md`](architecture/module-template.md) | Existing module tree and the affected imports. |
 | Prisma, migration, seed, or persistence work | [`database/model.md`](database/model.md), [`database/future-model.md`](database/future-model.md), and [`development/quality-gates.md`](development/quality-gates.md) | `apps/api/prisma/schema.prisma`, migrations, seed, and database commands. |
 | Security, authorization, provider, public route, or trust boundary | [`../AGENTS.md`](../AGENTS.md) and [`development/anti-patterns.md`](development/anti-patterns.md) | The real API/web boundary, tests, and relevant accepted ADRs. |
@@ -36,9 +37,11 @@ to be checked before prose, and it defines when a human decision is required.
 - [`../ROADMAP.md`](../ROADMAP.md) — ten milestones with explicit current/planned status and non-goals.
 - [`architecture/ai-operating-model.md`](architecture/ai-operating-model.md) — repeatable AI development cycle and reading map.
 - [`architecture/overview.md`](architecture/overview.md) — current runtime map and planned module boundaries.
+- [`design/theme.md`](design/theme.md) — the current visual theme: tokens, fonts, ornaments, motion, and contrast rules.
 - [`development/quality-gates.md`](development/quality-gates.md) — current scripts and Definition of Done.
 - [`development/git-workflow.md`](development/git-workflow.md) — branch, work-unit, staged-diff, and PR procedure.
 - [`development/anti-patterns.md`](development/anti-patterns.md) — failure modes and preferred alternatives.
+- [`development/m2-security-evidence.md`](development/m2-security-evidence.md) — Milestone 2 security evidence: spec verdicts, sign-off areas, and open risks.
 - [`database/model.md`](database/model.md) — implemented migration invariants.
 - [`database/future-model.md`](database/future-model.md) — design-only future data analysis; no tables are added.
 - [`architecture/module-template.md`](architecture/module-template.md) — structure for a real future API module.
@@ -48,10 +51,14 @@ to be checked before prose, and it defines when a human decision is required.
 
 ### Implemented foundation
 
-- `apps/web` contains the current Next.js 16 landing page.
-- `apps/api` contains configuration, Prisma ownership, the health module, and a database-backed health check.
-- The first Prisma migration contains the minimal user identity record, catalog, and immutable template-version
-  foundations only; authentication behavior is still planned.
+- `apps/web` contains the Next.js 16 pre-launch landing page, the customer pages, the administrator pages, and the
+  `/api/auth` proxy, styled with the visual theme in [`design/theme.md`](design/theme.md).
+- `apps/api` contains configuration, Prisma ownership, the health module, Better Auth sign-in and sessions
+  ([ADR 0004](adr/0004-authentication-with-better-auth.md)), access control, the own profile, and the operator
+  commands; see [`architecture/overview.md`](architecture/overview.md).
+- The first Prisma migration contains the minimal user identity record and the catalog and immutable
+  template-version foundations; the second maps Better Auth's user onto that record and adds the session,
+  account, verification, two-factor, and rate-limit tables (see [`database/model.md`](database/model.md)).
 - Root scripts provide local documentation consistency, format, lint, typecheck, test, build, and Docker/PostgreSQL
   commands.
 - A limited GitHub Actions quality-gate CI workflow runs documentation consistency, format, lint, typecheck, test,

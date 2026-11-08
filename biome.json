@@ -7,9 +7,22 @@
       "!**/.next/**",
       "!**/dist/**",
       "!**/coverage/**",
+      "!**/test-results/**",
+      "!**/playwright-report/**",
+      "!**/.atl/**",
       "!**/.turbo/**",
       "!**/*.prisma"
     ]
+  },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
   },
   "formatter": {
     "enabled": true,

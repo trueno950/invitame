@@ -1,5 +1,6 @@
 import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 
+import { Public } from "../auth/access-control/access-control";
 import { DATABASE_STATUS, HEALTH_STATUS, type HealthResponse } from "./health.contract";
 // biome-ignore lint/style/useImportType: Nest reads this runtime class from emitted constructor metadata.
 import { HealthService } from "./health.service";
@@ -8,6 +9,8 @@ import { HealthService } from "./health.service";
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
+  // Public by design: orchestration probes call it without a session, and the guard never reads one.
+  @Public()
   @Get()
   async getHealth(): Promise<HealthResponse> {
     try {

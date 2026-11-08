@@ -1,0 +1,418 @@
+import { type Auth, type BetterAuthOptions, betterAuth } from "better-auth";
+import { getIP } from "better-auth/api";
+import { emailOTP, twoFactor } from "better-auth/plugins";
+
+import type { ClientIpEnvironment } from "../config/environment";
+import {
+  CLIENT_IP_RATE_LIMIT,
+  EMAIL_CODE_QUOTA,
+  PASSWORD_ATTEMPT_RATE_LIMIT,
+  SECOND_FACTOR_RATE_LIMIT,
+} from "./abuse-limits";
+import { type AccountAccess, decideSessionRefusal, USER_ROLE, USER_STATUS } from "./account-access";
+import {
+  enrollmentWindowOpen,
+  refuseSupersededConfirmation,
+  settleFirstConfirmation,
+  TWO_FACTOR_OPTIONS,
+} from "./administrator-enrollment";
+import {
+  EMAIL_CODE_SIGN_IN_PATH,
+  PASSWORD_SIGN_IN_PATH,
+  SECOND_FACTOR_VERIFY_PATHS,
+  SIGN_IN_CODE_REQUEST_PATH,
+  TWO_FACTOR_PATH,
+} from "./auth-paths";
+import {
+  AUTH_REQUEST_EVENT,
+  type AuthRequestLog,
+  guardAuthHandler,
+  type SessionUpdateRefusedReason,
+} from "./auth-request-guard";
+import { logSafely } from "./safe-logging";
+import { createSessionAccessHook } from "./session-access-hook";
+import {
+  administratorSessionExpiresAt,
+  CUSTOMER_SESSION_EXPIRES_IN_SECONDS,
+  CUSTOMER_SESSION_UPDATE_AGE_SECONDS,
+  cookieOptions,
+} from "./session-settings";
+import { createBetterAuthSignInCodeStore } from "./sign-in-code/better-auth-sign-in-code-store";
+import {
+  SIGN_IN_CODE_ALLOWED_ATTEMPTS,
+  SIGN_IN_CODE_EXPIRES_IN_SECONDS,
+  SIGN_IN_CODE_LENGTH,
+} from "./sign-in-code/sign-in-code-message";
+import type { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
+
+/**
+ * Better Auth's database rate limiter deletes every `RateLimit` row older than the longest window it
+ * knows of. This entry never matches a request (paths start with "/"); it only declares the hour of
+ * the per-email code count. That row's `lastRequest` is its window start, so it survives pruning
+ * until its window has ended (L25).
+ */
+const EMAIL_CODE_QUOTA_RETENTION_RULE = "email-code-quota-retention";
+
+/**
+ * Better Auth routes that change a user, an email address, an account link, a password, or a second
+ * factor. Better Auth answers them with 404 before rate limiting or routing (1.7.16 `api/index.mjs`,
+ * `onRequest`, exact path match); this covers HTTP only, not server-side `auth.api.*` calls. Clients
+ * cannot change a profile through Better Auth (L16, L28); email change and account deletion are not
+ * offered in Milestone 2. Administrators get a password from the server-side command only and
+ * Milestone 2 offers no password change or reset through the API (S20, L30); the code-based reset
+ * would also create a credential password for a customer (1.7.16 `utils/password.mjs`,
+ * `resetCredentialPassword`). `/set-password` is server-only and never routed. The second factor is
+ * mandatory for administrators: it cannot be removed, its TOTP URI is shown once at enrollment, and
+ * no email or SMS second factor is configured; recovery is a server-side procedure (T10).
+ */
+export const DISABLED_AUTH_PATHS = [
+  "/update-user",
+  "/change-email",
+  "/delete-user",
+  "/delete-user/callback",
+  "/change-password",
+  "/request-password-reset",
+  "/reset-password",
+  "/email-otp/request-password-reset",
+  "/forget-password/email-otp",
+  "/email-otp/reset-password",
+  "/email-otp/request-email-change",
+  "/email-otp/change-email",
+  "/email-otp/verify-email",
+  "/verify-email",
+  "/send-verification-email",
+  "/update-session",
+  "/link-social",
+  "/unlink-account",
+  "/two-factor/disable",
+  "/two-factor/get-totp-uri",
+  "/two-factor/send-otp",
+  "/two-factor/verify-otp",
+] as const;
+
+export interface CreateAuthOptions {
+  /** Signing secret supplied by validated configuration; never hard-coded. */
+  secret: string;
+  /**
+   * Public web origin through which the web proxies `/api/auth` (L33). Its scheme decides the cookie
+   * names and `Secure` (`session-settings.ts`); configuration requires it among the trusted origins.
+   */
+  baseURL: string;
+  /** Validated trusted origins; the same list feeds the project-owned CORS policy. */
+  trustedOrigins: readonly string[];
+  /** Persistence adapter: the Prisma adapter at runtime, the in-memory adapter in isolated tests. */
+  database: NonNullable<BetterAuthOptions["database"]>;
+  /** Delivers customer sign-in codes in the background (ADR 0004 decision 8, as amended). */
+  signInCodes: SignInCodeSender;
+  /** The validated header and trusted proxies that identify a client for rate limits. */
+  clientIp: ClientIpEnvironment;
+  /**
+   * Production: reject a request whose client IP cannot be resolved instead of letting every such
+   * client share one rate-limit bucket (L24).
+   */
+  requireClientIp: boolean;
+  /**
+   * Shared web-to-API secret (L36). When set, the client IP header is trusted only on requests that
+   * carry it in `AUTH_PROXY_SECRET_HEADER`; the header itself never reaches Better Auth.
+   */
+  proxySecret?: string | undefined;
+  /**
+   * The secret before a rotation (S47, L71): accepted next to `proxySecret` while the API, the web,
+   * and the removal happen one after another.
+   */
+  previousProxySecret?: string | undefined;
+  /**
+   * Refuse every auth request without the proxy secret, before any endpoint runs. Omitted means
+   * required, so a caller that forgets the option fails closed (S46, L71); only tests and local
+   * development pass `false`, and always explicitly.
+   */
+  requireProxySecret?: boolean | undefined;
+  /** Receives privacy-safe warnings about rejected auth requests. */
+  log: AuthRequestLog;
+}
+
+/**
+ * Builds the Better Auth instance from explicit options, so the runtime and tests share one
+ * configuration source. The caller owns secret sourcing: this module never reads the process
+ * environment or an env file. The return type is the generic `Auth`: the email OTP plugin's inferred
+ * endpoint types reference a transitive zod path that declaration output cannot name.
+ *
+ * Rate limits (ADR 0004 decision 7, S25) run in every environment and persist in the `RateLimit`
+ * table through the same database adapter, keyed by client IP and path. The handler is wrapped so a failing rate-limit store or
+ * an unresolved client IP is rejected with a generic 503 before any endpoint runs (S19), and so a
+ * request that did not come through the web proxy is refused in production (L36).
+ */
+export function createAuth(options: CreateAuthOptions): Auth {
+  // Assigned below; the session hook runs only after the instance exists.
+  let authContext: Auth["$context"] | undefined;
+
+  const authOptions: BetterAuthOptions = {
+    secret: options.secret,
+    baseURL: options.baseURL,
+    trustedOrigins: [...options.trustedOrigins],
+    database: options.database,
+    telemetry: { enabled: false },
+    disabledPaths: [...DISABLED_AUTH_PATHS],
+    // A session of a non-ACTIVE user, or of an administrator whose enrollment window has ended, is
+    // deleted before any endpoint can use it; an un-enrolled administrator's session is hidden from
+    // every endpoint but enrollment (S20, S21).
+    hooks: { before: createSessionAccessHook(options.log) },
+    // Decision 3: password sign-in exists for administrators only. Sign-up stays closed
+    // (`/sign-up/email` answers 400 EMAIL_PASSWORD_SIGN_UP_DISABLED, 1.7.16 `api/routes/sign-up.mjs`),
+    // and the session hook refuses a password session to anyone but an administrator.
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: true,
+      requireEmailVerification: false,
+      autoSignIn: false,
+    },
+    advanced: {
+      database: { generateId: "uuid" },
+      // S14, S16 (L33): host-only cookies on the web host; `__Host-` names over https.
+      ...cookieOptions(options.baseURL),
+      // Better Auth skips origin checks by default when NODE_ENV=test or TEST is set. Pin them on
+      // so a misconfigured environment can never disable them.
+      disableOriginCheck: false,
+      ipAddress: {
+        ipAddressHeaders: [options.clientIp.header],
+        trustedProxies: [...options.clientIp.trustedProxies],
+      },
+    },
+    rateLimit: {
+      enabled: true,
+      storage: "database",
+      customRules: {
+        [SIGN_IN_CODE_REQUEST_PATH]: { ...CLIENT_IP_RATE_LIMIT },
+        [EMAIL_CODE_SIGN_IN_PATH]: { ...CLIENT_IP_RATE_LIMIT },
+        [EMAIL_CODE_QUOTA_RETENTION_RULE]: { ...EMAIL_CODE_QUOTA },
+        [PASSWORD_SIGN_IN_PATH]: { ...PASSWORD_ATTEMPT_RATE_LIMIT },
+        [TWO_FACTOR_PATH.ENABLE]: { ...PASSWORD_ATTEMPT_RATE_LIMIT },
+        [TWO_FACTOR_PATH.GENERATE_BACKUP_CODES]: { ...PASSWORD_ATTEMPT_RATE_LIMIT },
+        [TWO_FACTOR_PATH.VERIFY_TOTP]: { ...SECOND_FACTOR_RATE_LIMIT },
+        [TWO_FACTOR_PATH.VERIFY_BACKUP_CODE]: { ...SECOND_FACTOR_RATE_LIMIT },
+      },
+    },
+    session: {
+      // S16 (L34): the customer lifetime, pinned instead of Better Auth's defaults. Administrator
+      // sessions are shortened and never extended by the session hooks below.
+      expiresIn: CUSTOMER_SESSION_EXPIRES_IN_SECONDS,
+      updateAge: CUSTOMER_SESSION_UPDATE_AGE_SECONDS,
+      // Every session check reads the stored session and user, so a revoked session or a DISABLED
+      // user is rejected on the next request (S18). Better Auth enables this cache by default only
+      // without a database (1.7.16 `context/create-context.mjs`); pinned off so it never turns on.
+      cookieCache: { enabled: false },
+      // S52 (L72): `Session.secondFactorVerified` records whether the session was opened with the
+      // second factor. Declared so the adapter reads and writes it; `input: false` keeps any caller
+      // value out, and the create hook below sets it from the endpoint path alone.
+      additionalFields: {
+        secondFactorVerified: {
+          type: "boolean",
+          required: false,
+          input: false,
+          defaultValue: false,
+        },
+      },
+    },
+    user: {
+      // Better Auth's `name` is stored in the existing `User.displayName` column.
+      fields: { name: "displayName" },
+      // `input: false`: a client value is replaced by the default on create and rejected with
+      // `400 FIELD_NOT_ALLOWED` on update (1.7.16 `db/schema.mjs`, `parseInputData`).
+      additionalFields: {
+        role: {
+          type: [USER_ROLE.CUSTOMER, USER_ROLE.ADMIN],
+          required: false,
+          input: false,
+          defaultValue: USER_ROLE.CUSTOMER,
+        },
+        status: {
+          type: [USER_STATUS.ACTIVE, USER_STATUS.DISABLED],
+          required: false,
+          input: false,
+          defaultValue: USER_STATUS.ACTIVE,
+        },
+      },
+    },
+    databaseHooks: {
+      session: {
+        create: {
+          // Every sign-in path ends in `internalAdapter.createSession`, which runs this hook first,
+          // including the password step of an enrolled administrator, whose session the two-factor
+          // plugin deletes again in the same request before it answers `twoFactorRedirect`.
+          // Throwing refuses the session; returning false would make the endpoint fail on a null
+          // session instead (1.7.16 `db/with-hooks.mjs`).
+          async before(session, context) {
+            // Better Auth passes no endpoint context when a session is created outside an endpoint
+            // (a direct `internalAdapter.createSession` call); the instance's own context then
+            // supplies the adapter. Without either, no user is found and `sessionRefusal` refuses.
+            const internalAdapter =
+              context?.context.internalAdapter ?? (await authContext)?.internalAdapter;
+            const user = (await internalAdapter?.findUserById(session.userId)) as
+              | (AccountAccess & { id: string })
+              | null
+              | undefined;
+
+            // S39, S40 (T9a-D1): a first TOTP confirmation whose pending session is gone gets no
+            // session; it reverts the enrollment flag unless another confirmation completed or is
+            // completing. An allowed first confirmation ends every other session of the user.
+            // Decided first, so a disable that won the race is reverted too.
+            if (context && user) {
+              const decision = await settleFirstConfirmation(context, user, options.log);
+              if (decision !== "allow") {
+                throw await refuseSupersededConfirmation(context, user.id, decision, options.log);
+              }
+            }
+
+            const windowOpen =
+              user && internalAdapter
+                ? await enrollmentWindowOpen(internalAdapter, user.id, user)
+                : false;
+            const refusal = decideSessionRefusal(user ?? null, context?.path, windowOpen);
+
+            if (refusal) {
+              // S50 (L71): a closed reason and the path; never the user, address, or credentials.
+              logSafely(options.log, {
+                event: AUTH_REQUEST_EVENT.SESSION_REFUSED,
+                reason: refusal.reason,
+                ...(context?.path === undefined ? {} : { path: context.path }),
+              });
+              throw refusal.error;
+            }
+
+            // S52 (L72): the marker comes from the endpoint alone, never from a caller value. Only a
+            // session of an enrolled administrator created on a second-factor verification endpoint
+            // (sign-in with a TOTP or backup code, or the first TOTP confirmation, decided above)
+            // passed the second factor; every other session, whatever its role, is stored as false.
+            const secondFactorVerified =
+              user?.role === USER_ROLE.ADMIN &&
+              user.twoFactorEnabled === true &&
+              context?.path !== undefined &&
+              SECOND_FACTOR_VERIFY_PATHS.has(context.path);
+
+            // S16 (L34): an administrator session, pending or enrolled, lasts 12 hours from its
+            // creation. The cookie keeps the customer Max-Age; the stored expiry decides.
+            if (user?.role === USER_ROLE.ADMIN) {
+              return {
+                data: {
+                  ...session,
+                  secondFactorVerified,
+                  expiresAt: administratorSessionExpiresAt(session.createdAt, () =>
+                    logSafely(options.log, {
+                      event: AUTH_REQUEST_EVENT.ADMINISTRATOR_SESSION_CREATED_AT_INVALID,
+                    }),
+                  ),
+                },
+              };
+            }
+
+            return { data: { ...session, secondFactorVerified } };
+          },
+        },
+        update: {
+          // The marker is written once, by the create hook, from the verification endpoint alone (S52).
+          // No update may touch it, whatever its value and whoever calls: `/update-session` is
+          // disabled and `secondFactorVerified` is not an accepted input, so this is a second lock for
+          // server code that calls `updateSession`.
+          //
+          // Better Auth moves `expiresAt` only when `getSession` refreshes a session, after it has
+          // stored the session it read on the request context (1.7.16 `api/routes/session.mjs`;
+          // `/update-session` is disabled). The session hook already skips that refresh for
+          // administrators. This allows an expiry change only while the request context holds a
+          // customer's session; it cannot tell which call made the change, so it refuses every other
+          // one, including any on a request without a stored session. Refusing makes `getSession`
+          // answer 401 and clear the cookie: fail closed.
+          async before(session, context) {
+            // S50 (L71): a refusal is logged with a closed reason and the path only.
+            const refuse = (reason: SessionUpdateRefusedReason) => {
+              logSafely(options.log, {
+                event: AUTH_REQUEST_EVENT.SESSION_UPDATE_REFUSED,
+                reason,
+                ...(context?.path === undefined ? {} : { path: context.path }),
+              });
+              return false;
+            };
+
+            if ("secondFactorVerified" in session) {
+              return refuse("second_factor_marker");
+            }
+
+            if (session.expiresAt === undefined) {
+              return;
+            }
+
+            const current = context?.context.session as { user?: AccountAccess } | null | undefined;
+            if (!current?.user || current.user.role !== USER_ROLE.CUSTOMER) {
+              return refuse("expiry_change_not_allowed");
+            }
+          },
+        },
+      },
+      user: {
+        create: {
+          // The code sign-in endpoint accepts `name` and `image` from an unauthenticated client
+          // without bounds (L16). Ignore both there: the profile is edited later through validated,
+          // authenticated endpoints, and media is not accepted before its own bounds exist.
+          async before(user, context) {
+            if (context?.path !== EMAIL_CODE_SIGN_IN_PATH) {
+              return;
+            }
+
+            return { data: { ...user, name: "", image: undefined } };
+          },
+        },
+      },
+    },
+    plugins: [
+      // Decision 3: administrators confirm an authenticator app (TOTP) and keep backup codes.
+      twoFactor({
+        ...TWO_FACTOR_OPTIONS,
+        totpOptions: { ...TWO_FACTOR_OPTIONS.totpOptions },
+        backupCodeOptions: { ...TWO_FACTOR_OPTIONS.backupCodeOptions },
+        accountLockout: { ...TWO_FACTOR_OPTIONS.accountLockout },
+      }),
+      emailOTP({
+        // S15: code length, lifetime, and wrong-attempt limit from `sign-in-code-message.ts`;
+        // codes are stored as a hash.
+        otpLength: SIGN_IN_CODE_LENGTH,
+        expiresIn: SIGN_IN_CODE_EXPIRES_IN_SECONDS,
+        allowedAttempts: SIGN_IN_CODE_ALLOWED_ATTEMPTS,
+        storeOTP: "hashed",
+        // Kept false: true makes an unknown address return early, a timing difference (S24).
+        disableSignUp: false,
+        // Returns at once for every address; delivery and the role check run in the background.
+        sendVerificationOTP: ({ email, otp, type }, context) =>
+          options.signInCodes.handle(
+            { email, code: otp, type },
+            context ? createBetterAuthSignInCodeStore(context) : undefined,
+          ),
+      }),
+    ],
+  };
+
+  const auth = betterAuth(authOptions);
+  authContext = auth.$context;
+  const resolveClientIp = (request: Request) => getIP(request, authOptions);
+
+  if (options.requireClientIp && resolveClientIp(new Request(options.baseURL)) !== null) {
+    // Better Auth resolves unknown clients to 127.0.0.1 when its own environment reads as
+    // development or test; in production that would put every such client in one bucket.
+    throw new Error(
+      "Better Auth would treat unresolved clients as 127.0.0.1; run production with NODE_ENV=production and without TEST.",
+    );
+  }
+
+  const handler = guardAuthHandler(auth.handler, {
+    resolveClientIp: options.requireClientIp ? resolveClientIp : undefined,
+    proxy: {
+      secret: options.proxySecret,
+      previousSecret: options.previousProxySecret,
+      required: options.requireProxySecret ?? true,
+      clientIpHeader: options.clientIp.header,
+    },
+    log: options.log,
+  });
+
+  return { ...auth, handler, fetch: handler };
+}
+
+export type AppAuth = ReturnType<typeof createAuth>;

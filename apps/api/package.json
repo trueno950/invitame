@@ -3,16 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "admin:create": "node -r @swc-node/register src/users/create-administrator.command.ts",
+    "admin:reset-second-factor": "node -r @swc-node/register src/users/reset-second-factor.command.ts",
     "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx watch src/main.ts",
+    "dev": "NODE_ENV=development node --watch -r @swc-node/register src/main.ts",
     "lint": "biome lint .",
     "prisma:check": "tsx prisma/check-connection.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "prisma:seed": "prisma db seed --schema prisma/schema.prisma",
     "start": "node dist/main.js",
-    "test": "node --import tsx --test src/health/health.controller.spec.ts",
-    "typecheck": "tsc --noEmit"
+    "test": "node -r @swc-node/register --test \"src/**/*.spec.ts\"",
+    "test:db": "node -e \"process.env.DATABASE_URL || (console.error('test:db requires an explicit DATABASE_URL'), process.exit(1))\" && node -r @swc-node/register --test \"src/**/*.db-spec.ts\"",
+    "typecheck": "tsc --noEmit",
+    "user:disable": "node -r @swc-node/register src/users/disable-user.command.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -23,6 +27,8 @@
     "@nestjs/core": "12.0.1",
     "@nestjs/platform-express": "12.0.1",
     "@prisma/client": "6.19.3",
+    "@thallesp/nestjs-better-auth": "2.8.0",
+    "better-auth": "1.7.16",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
     "helmet": "8.3.0",
@@ -30,6 +36,8 @@
     "rxjs": "7.8.2"
   },
   "devDependencies": {
+    "@swc-node/register": "1.12.1",
+    "@swc/core": "1.16.21",
     "@types/node": "22.20.2",
     "prisma": "6.19.3",
     "tsx": "4.23.13",
