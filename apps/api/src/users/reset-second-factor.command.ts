@@ -4,11 +4,11 @@ import { hashPassword } from "better-auth/crypto";
 
 import type { AdministratorRecoveryRepository } from "./application/administrator-account.repository";
 import { InvalidAdministratorEmailError } from "./application/create-administrator.use-case";
+import { INITIAL_PASSWORD_NOTICE } from "./application/initial-password";
 import {
   RESET_SECOND_FACTOR_EVENT,
   ResetSecondFactorUseCase,
 } from "./application/reset-second-factor.use-case";
-import { INITIAL_PASSWORD_NOTICE } from "./application/initial-password";
 import { PrismaAdministratorAccountRepository } from "./infrastructure/prisma-administrator-account.repository";
 
 const USAGE = "Usage: pnpm --filter @invitame/api admin:reset-second-factor -- <email>";

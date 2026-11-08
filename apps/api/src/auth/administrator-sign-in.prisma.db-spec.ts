@@ -14,8 +14,9 @@ import { DisableUserUseCase } from "../users/application/disable-user.use-case";
 import { ResetSecondFactorUseCase } from "../users/application/reset-second-factor.use-case";
 import { PrismaAdministratorAccountRepository } from "../users/infrastructure/prisma-administrator-account.repository";
 import { PrismaUserAccessRepository } from "../users/infrastructure/prisma-user-access.repository";
-import type { AuthRequestLog } from "./auth-request-guard";
+import { ADMINISTRATOR_ENROLLMENT_WINDOW_SECONDS } from "./account-access";
 import { createAuth } from "./auth.factory";
+import type { AuthRequestLog } from "./auth-request-guard";
 import { BackgroundTasks } from "./sign-in-code/background-tasks";
 import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 
@@ -30,8 +31,8 @@ const SESSION_COOKIE = "better-auth.session_token";
 const TWO_FACTOR_COOKIE = "better-auth.two_factor";
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-/** S20: an initial password works for 24 hours after its issue unless an app is enrolled. */
-const ENROLLMENT_WINDOW_MS = 24 * HOUR_MS;
+/** S20: the enforced window in which an initial password works unless an app is enrolled. */
+const ENROLLMENT_WINDOW_MS = ADMINISTRATOR_ENROLLMENT_WINDOW_SECONDS * 1000;
 
 function decodeBase32(input: string): string {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
