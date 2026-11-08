@@ -76,7 +76,7 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
 
    **Clarified (2026-11-07).** What a pre-enrollment administrator account can and cannot do, as implemented
    (`apps/api/src/auth/administrator-enrollment.ts`, `PENDING_ADMINISTRATOR_ENDPOINTS`;
-   `apps/api/src/auth/inactive-session-hook.ts`; `apps/api/src/auth/access-control/access-control.ts`):
+   `apps/api/src/auth/session-access-hook.ts`; `apps/api/src/auth/access-control/access-control.ts`):
 
    - Inside the 24-hour window, its session can call exactly four Better Auth endpoints:
      `GET /api/auth/get-session`, `POST /api/auth/two-factor/enable` (with the password),

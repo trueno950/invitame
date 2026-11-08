@@ -1,9 +1,11 @@
-import { parseDisplayName } from "../domain/display-name";
+import { DISPLAY_NAME_MAX_LENGTH, parseDisplayName } from "../domain/display-name";
 import type { OwnProfile, OwnProfileRepository } from "./own-profile.repository";
 
 export class InvalidDisplayNameError extends Error {
   constructor() {
-    super("displayName must be 1 to 120 characters after trimming, without control characters.");
+    super(
+      `displayName must be 1 to ${DISPLAY_NAME_MAX_LENGTH} characters after trimming, without control characters.`,
+    );
     this.name = "InvalidDisplayNameError";
   }
 }

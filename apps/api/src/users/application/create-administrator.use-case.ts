@@ -3,7 +3,7 @@ import type {
   IssueInitialPasswordResult,
   IssueRefusalReason,
 } from "./administrator-account.repository";
-import { generateInitialPassword } from "./initial-password";
+import { generateInitialPassword, type InitialPasswordDependencies } from "./initial-password";
 
 export const CREATE_ADMINISTRATOR_EVENT = {
   CREATED: "administrator_created",
@@ -39,13 +39,9 @@ export function normalizeAdministratorEmail(rawEmail: string, invalidMessage?: s
   return email;
 }
 
-export interface CreateAdministratorDependencies {
+export interface CreateAdministratorDependencies extends InitialPasswordDependencies {
   accounts: AdministratorAccountRepository;
-  /** Better Auth's own password hasher, so its password sign-in verifies the result. */
-  hashPassword: (password: string) => Promise<string>;
   log: CreateAdministratorLog;
-  generatePassword?: () => string;
-  now?: () => Date;
 }
 
 export interface CreateAdministratorResult {
@@ -72,33 +68,33 @@ export class CreateAdministratorUseCase {
   async execute(rawEmail: string): Promise<CreateAdministratorResult> {
     const email = normalizeAdministratorEmail(rawEmail);
     const password = this.generatePassword();
-    const outcome = await this.dependencies.accounts.issueInitialPassword({
+    const stored = await this.dependencies.accounts.issueInitialPassword({
       email,
       passwordHash: await this.dependencies.hashPassword(password),
       issuedAt: this.now(),
     });
 
-    switch (outcome.outcome) {
+    switch (stored.outcome) {
       case "created":
         this.dependencies.log({
           event: CREATE_ADMINISTRATOR_EVENT.CREATED,
-          userId: outcome.userId,
+          userId: stored.userId,
         });
-        return { outcome, initialPassword: password };
+        return { outcome: stored, initialPassword: password };
       case "reissued":
         this.dependencies.log({
           event: CREATE_ADMINISTRATOR_EVENT.REISSUED,
-          userId: outcome.userId,
-          revokedSessions: outcome.revokedSessions,
+          userId: stored.userId,
+          revokedSessions: stored.revokedSessions,
         });
-        return { outcome, initialPassword: password };
+        return { outcome: stored, initialPassword: password };
       case "refused":
         this.dependencies.log({
           event: CREATE_ADMINISTRATOR_EVENT.REFUSED,
-          userId: outcome.userId,
-          reason: outcome.reason,
+          userId: stored.userId,
+          reason: stored.reason,
         });
-        return { outcome };
+        return { outcome: stored };
     }
   }
 }

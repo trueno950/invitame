@@ -7,6 +7,7 @@ import { type INestApplication, Module } from "@nestjs/common";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 
+import { MemoryOwnProfileRepository } from "../../../test/memory-own-profile.repository";
 import { createApp } from "../../app.setup";
 import { AccessControlModule } from "../../auth/access-control/access-control.module";
 import { createAuth } from "../../auth/auth.factory";
@@ -16,11 +17,7 @@ import { createConfigModule } from "../../config/config.module";
 import { EmailDeliveryService } from "../../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../../email/infrastructure/system-email-delivery-runtime";
-import {
-  OWN_PROFILE_REPOSITORY,
-  type OwnProfile,
-  type OwnProfileRepository,
-} from "../application/own-profile.repository";
+import { OWN_PROFILE_REPOSITORY, type OwnProfile } from "../application/own-profile.repository";
 import { OWN_PROFILE_USE_CASES } from "../users.module";
 import { OwnProfileController } from "./own-profile.controller";
 
@@ -34,34 +31,6 @@ const AUTH_BASE_URL = "http://localhost:3000";
 const SESSION_COOKIE = "better-auth.session_token";
 
 type Row = Record<string, unknown>;
-
-/** The port on Better Auth's in-memory rows; `name` is stored as `displayName` (`user.fields`). */
-class MemoryOwnProfileRepository implements OwnProfileRepository {
-  constructor(private readonly users: () => Row[]) {}
-
-  async findById(userId: string): Promise<OwnProfile | null> {
-    const row = this.users().find((user) => user.id === userId);
-    return row ? toProfile(row) : null;
-  }
-
-  async updateDisplayName(userId: string, displayName: string | null): Promise<OwnProfile | null> {
-    const row = this.users().find((user) => user.id === userId);
-    if (!row) {
-      return null;
-    }
-    row.displayName = displayName;
-    return toProfile(row);
-  }
-}
-
-function toProfile(row: Row): OwnProfile {
-  return {
-    id: String(row.id),
-    email: String(row.email),
-    displayName: (row.displayName as string | null) || null,
-    role: row.role as OwnProfile["role"],
-  };
-}
 
 describe("own profile: GET /me and PATCH /me", () => {
   const database: Record<string, Row[]> = {

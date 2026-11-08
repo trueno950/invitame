@@ -75,7 +75,11 @@ describe("admin:reset-second-factor", () => {
     assert.equal(exitCode, 0);
     assert.deepEqual(err, []);
     assert.equal(out[0], '{"event":"administrator_second_factor_reset","userId":"user-1"}');
-    const password = out[1]?.split("\n").at(-1) ?? "";
+    const [notice, password = ""] = out[1]?.split("\n") ?? [];
+    assert.equal(
+      notice,
+      "Initial password, shown only now; it stops working 24 hours from now unless an authenticator app is enrolled:",
+    );
     assert.match(password, /^[A-Za-z0-9]{24}$/);
     assert.equal(out.join("\n").split(password).length, 2, "printed once");
     assert.equal(out.join("\n").includes("Admin@"), false);

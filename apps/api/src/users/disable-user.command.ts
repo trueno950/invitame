@@ -1,6 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 
-import { DisableUserUseCase, InvalidEmailError } from "./application/disable-user.use-case";
+import {
+  DISABLE_USER_EVENT,
+  DisableUserUseCase,
+  InvalidEmailError,
+} from "./application/disable-user.use-case";
 import { PrismaUserAccessRepository } from "./infrastructure/prisma-user-access.repository";
 
 /**
@@ -29,7 +33,9 @@ async function main(args: readonly string[]): Promise<number> {
       return 2;
     }
     // The class name only: a message may carry SQL or the address.
-    console.error(JSON.stringify({ event: "user_disable_failed", error: (error as Error)?.name }));
+    console.error(
+      JSON.stringify({ event: DISABLE_USER_EVENT.FAILED, error: (error as Error)?.name }),
+    );
     return 1;
   } finally {
     await prisma.$disconnect();

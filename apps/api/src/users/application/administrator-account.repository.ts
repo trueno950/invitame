@@ -30,10 +30,11 @@ export interface AdministratorAccountRepository {
 /** Why a recovery was refused: nobody is created, promoted, or re-enabled (S44). */
 export type ResetRefusalReason = "unknown" | "customer" | "disabled";
 
+/** An unknown address has no user id to report; every other refusal carries one. */
 export type ResetSecondFactorResult =
   | { outcome: "reset"; userId: string; revokedSessions: number }
-  | { outcome: "refused"; reason: "unknown" }
-  | { outcome: "refused"; userId: string; reason: "customer" | "disabled" };
+  | { outcome: "refused"; reason: Extract<ResetRefusalReason, "unknown"> }
+  | { outcome: "refused"; userId: string; reason: Exclude<ResetRefusalReason, "unknown"> };
 
 /** Persistence port for the administrator recovery command (S44); the adapter owns the transaction. */
 export interface AdministratorRecoveryRepository {
