@@ -53,6 +53,7 @@ describe("own profile: GET /me and PATCH /me", () => {
     ),
     clientIp: { header: "x-forwarded-for", trustedProxies: [] },
     requireClientIp: false,
+    requireProxySecret: false,
     log: () => {},
   });
   let app: INestApplication;
@@ -194,7 +195,30 @@ describe("own profile: GET /me and PATCH /me", () => {
       }
     });
 
+    // S48 (L71): the bidirectional controls that make a name display differently from its content.
+    const BIDIRECTIONAL_CONTROLS = [
+      ...Array.from({ length: 5 }, (_, index) => 0x202a + index),
+      ...Array.from({ length: 4 }, (_, index) => 0x2066 + index),
+      0x200e,
+      0x200f,
+      0x061c,
+    ];
+
+    it("accepts the zero-width joiner of composed emoji and some scripts (S48)", async () => {
+      const { user, cookie } = await signedInCustomer();
+
+      for (const name of ["👨\u200d👩\u200d👧", "क\u200dष"]) {
+        const response = await patchMe({ displayName: name }, cookie);
+        assert.equal(response.status, 200);
+        assert.equal(user.displayName, name);
+      }
+    });
+
     const invalid: Array<[string, unknown]> = [
+      ...BIDIRECTIONAL_CONTROLS.map((codePoint): [string, unknown] => [
+        `the bidirectional control U+${codePoint.toString(16).toUpperCase().padStart(4, "0")}`,
+        `Ana${String.fromCodePoint(codePoint)}María`,
+      ]),
       ["an empty string", ""],
       ["only whitespace", " \t\n "],
       ["121 characters", "a".repeat(121)],

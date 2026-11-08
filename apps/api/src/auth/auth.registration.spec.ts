@@ -27,7 +27,7 @@ const CLIENT_IP_HEADER = "x-real-ip";
 const PROXY_SECRET = randomBytes(32).toString("base64url");
 const REFUSED = { status: 403, body: { code: "FORBIDDEN", message: "Forbidden." } };
 
-function productionEnvironment(): RuntimeEnvironment {
+function productionEnvironment(previousSecret?: string): RuntimeEnvironment {
   return validateEnvironment({
     NODE_ENV: "production",
     PORT: "3001",
@@ -40,6 +40,7 @@ function productionEnvironment(): RuntimeEnvironment {
     RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
     AUTH_CLIENT_IP_HEADER: CLIENT_IP_HEADER,
     AUTH_PROXY_SECRET: PROXY_SECRET,
+    AUTH_PROXY_SECRET_PREVIOUS: previousSecret,
   });
 }
 
@@ -144,6 +145,42 @@ describe("Better Auth registration from validated configuration (L36, L37)", () 
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { ok: true });
+  });
+
+  it("serves a production request with the previous proxy secret during a rotation (S47)", async () => {
+    const previous = randomBytes(32).toString("base64url");
+    const { auth, origin } = registeredAuth(productionEnvironment(previous));
+
+    const withPrevious = await auth.handler(
+      get(origin, { [CLIENT_IP_HEADER]: "198.51.100.7", [AUTH_PROXY_SECRET_HEADER]: previous }),
+    );
+    const withCurrent = await auth.handler(
+      get(origin, { [CLIENT_IP_HEADER]: "198.51.100.7", [AUTH_PROXY_SECRET_HEADER]: PROXY_SECRET }),
+    );
+    const withOther = await auth.handler(
+      get(origin, {
+        [CLIENT_IP_HEADER]: "198.51.100.7",
+        [AUTH_PROXY_SECRET_HEADER]: randomBytes(32).toString("base64url"),
+      }),
+    );
+
+    assert.equal(withPrevious.status, 200);
+    assert.equal(withCurrent.status, 200);
+    assert.equal(withOther.status, REFUSED.status);
+  });
+
+  it("refuses the previous proxy secret once it is removed from the configuration (S47)", async () => {
+    mock.method(Logger.prototype, "warn", () => {});
+    const { auth, origin } = registeredAuth(productionEnvironment());
+
+    const response = await auth.handler(
+      get(origin, {
+        [CLIENT_IP_HEADER]: "198.51.100.7",
+        [AUTH_PROXY_SECRET_HEADER]: randomBytes(32).toString("base64url"),
+      }),
+    );
+
+    assert.equal(response.status, REFUSED.status);
   });
 
   it("keeps serving requests without a proxy secret outside production", async () => {

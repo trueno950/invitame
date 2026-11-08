@@ -64,9 +64,19 @@ export function cookieOptions(baseURL: string): CookieOptions {
   };
 }
 
-/** The stored expiry of an administrator session that starts at `createdAt`. */
-export function administratorSessionExpiresAt(createdAt: unknown): Date {
-  const start =
-    createdAt instanceof Date && Number.isFinite(createdAt.getTime()) ? createdAt : new Date();
-  return new Date(start.getTime() + ADMINISTRATOR_SESSION_LIFETIME_SECONDS * 1000);
+/**
+ * The stored expiry of an administrator session that starts at `createdAt`. A creation time that is
+ * not a valid date fails closed (S49, L71): the session is stored already expired, so Better Auth
+ * reads it as no session and the administrator signs in again, and `onInvalidCreatedAt` reports it.
+ */
+export function administratorSessionExpiresAt(
+  createdAt: unknown,
+  onInvalidCreatedAt: () => void,
+): Date {
+  if (!(createdAt instanceof Date) || !Number.isFinite(createdAt.getTime())) {
+    onInvalidCreatedAt();
+    return new Date(0);
+  }
+
+  return new Date(createdAt.getTime() + ADMINISTRATOR_SESSION_LIFETIME_SECONDS * 1000);
 }

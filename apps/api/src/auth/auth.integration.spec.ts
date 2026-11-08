@@ -79,6 +79,7 @@ describe("Better Auth through @thallesp/nestjs-better-auth integration", () => {
       ),
       clientIp: { header: "x-forwarded-for", trustedProxies: [] },
       requireClientIp: false,
+      requireProxySecret: false,
       log: () => {},
     });
 

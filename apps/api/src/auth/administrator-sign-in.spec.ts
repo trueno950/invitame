@@ -111,6 +111,7 @@ describe("administrator sign-in, enrollment gate, and second factor", () => {
     signInCodes: new SignInCodeSender(new EmailDeliveryService(emailSender, runtime), tasks),
     clientIp: { header: "x-forwarded-for", trustedProxies: [] },
     requireClientIp: false,
+    requireProxySecret: false,
     log: () => {},
   });
   // `createAuth` returns the generic `Auth`; plugin endpoints are reached through this view.

@@ -41,11 +41,13 @@ type MemoryDatabase = Record<string, Record<string, unknown>[]>;
 
 interface HarnessOptions {
   proxySecret?: string;
-  requireProxySecret?: boolean;
+  previousProxySecret?: string;
+  /** Always explicit: `"omitted"` leaves the option out, to prove the default (S46). */
+  requireProxySecret: boolean | "omitted";
   requireClientIp?: boolean;
 }
 
-function createHarness(options: HarnessOptions = {}) {
+function createHarness(options: HarnessOptions) {
   const database: MemoryDatabase = {
     user: [],
     session: [],
@@ -71,7 +73,10 @@ function createHarness(options: HarnessOptions = {}) {
     clientIp: { header: CLIENT_IP_HEADER, trustedProxies: [] },
     requireClientIp: options.requireClientIp ?? false,
     proxySecret: options.proxySecret,
-    requireProxySecret: options.requireProxySecret ?? false,
+    previousProxySecret: options.previousProxySecret,
+    ...(options.requireProxySecret === "omitted"
+      ? {}
+      : { requireProxySecret: options.requireProxySecret }),
     log: (event) => events.push(event),
   });
 
@@ -208,11 +213,154 @@ describe("production: every auth request carries the proxy secret (L36)", () => 
   });
 });
 
+describe("the proxy secret is required unless a caller turns it off (S46, L71)", () => {
+  it("refuses a request without the secret when the option is omitted, and serves one with it", async () => {
+    const secret = randomBytes(32).toString("base64url");
+    const harness = createHarness({ proxySecret: secret, requireProxySecret: "omitted" });
+    const path = `${AUTH_PATH}${SIGN_IN_CODE_REQUEST_PATH}`;
+
+    const refused = await harness.requestCode(newEmail("omitted"), {});
+    const wrong = await harness.requestCode(newEmail("omitted-wrong"), {
+      [AUTH_PROXY_SECRET_HEADER]: randomBytes(32).toString("base64url"),
+    });
+    const served = await harness.requestCode(newEmail("omitted-ok"), {
+      [AUTH_PROXY_SECRET_HEADER]: secret,
+    });
+    await harness.tasks.drain();
+
+    assert.deepEqual(await outcome(refused), REFUSED);
+    assert.deepEqual(await outcome(wrong), REFUSED);
+    assert.equal(served.status, 200);
+    assert.deepEqual(harness.events, [
+      { event: AUTH_REQUEST_EVENT.PROXY_REJECTED, path },
+      { event: AUTH_REQUEST_EVENT.PROXY_REJECTED, path },
+    ]);
+  });
+
+  it("refuses to build when the option is omitted and no secret is configured", () => {
+    assert.throws(() => createHarness({ requireProxySecret: "omitted" }), {
+      message: "AUTH_PROXY_SECRET is required to serve authentication requests in production.",
+    });
+  });
+
+  it("still builds and serves without a secret when a caller turns the requirement off explicitly", async () => {
+    const harness = createHarness({ requireProxySecret: false });
+
+    const response = await harness.requestCode(newEmail("explicit-off"), {});
+    await harness.tasks.drain();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(harness.events, []);
+  });
+});
+
+describe("a previous secret is accepted while a rotation lasts (S47, L71)", () => {
+  it("serves a request with either secret and refuses any other, in production", async () => {
+    const current = randomBytes(32).toString("base64url");
+    const previous = randomBytes(32).toString("base64url");
+    const harness = createHarness({
+      proxySecret: current,
+      previousProxySecret: previous,
+      requireProxySecret: true,
+      requireClientIp: true,
+    });
+
+    const withCurrent = await harness.requestCode(newEmail("rot-current"), {
+      [AUTH_PROXY_SECRET_HEADER]: current,
+      [CLIENT_IP_HEADER]: "203.0.113.21",
+    });
+    const withPrevious = await harness.requestCode(newEmail("rot-previous"), {
+      [AUTH_PROXY_SECRET_HEADER]: previous,
+      [CLIENT_IP_HEADER]: "203.0.113.22",
+    });
+    const attempts: Record<string, string>[] = [
+      {},
+      { [AUTH_PROXY_SECRET_HEADER]: randomBytes(32).toString("base64url") },
+      { [AUTH_PROXY_SECRET_HEADER]: previous.slice(0, -1) },
+      { [AUTH_PROXY_SECRET_HEADER]: `${current}${previous}` },
+    ];
+    const refused = [];
+    for (const headers of attempts) {
+      refused.push(
+        await outcome(
+          await harness.requestCode(newEmail("rot-refused"), {
+            ...headers,
+            [CLIENT_IP_HEADER]: "203.0.113.23",
+          }),
+        ),
+      );
+    }
+    await harness.tasks.drain();
+
+    assert.equal(withCurrent.status, 200);
+    assert.equal(withPrevious.status, 200);
+    assert.deepEqual(
+      refused,
+      attempts.map(() => REFUSED),
+    );
+    const keys = harness.rateLimitKeys();
+    assert.ok(keys.includes(`203.0.113.21|${SIGN_IN_CODE_REQUEST_PATH}`));
+    assert.ok(keys.includes(`203.0.113.22|${SIGN_IN_CODE_REQUEST_PATH}`));
+    assert.ok(!keys.some((key) => key.startsWith("203.0.113.23|")));
+    assert.ok(!JSON.stringify(harness.events).includes(previous), "no secret is logged");
+  });
+
+  it("trusts the client IP header next to the previous secret only, and never forwards the secret header", async () => {
+    const current = randomBytes(32).toString("base64url");
+    const previous = randomBytes(32).toString("base64url");
+    const { received, handler } = recordingHandler();
+    const guarded = guardAuthHandler(handler, {
+      log: () => {},
+      proxy: {
+        secret: current,
+        previousSecret: previous,
+        required: false,
+        clientIpHeader: CLIENT_IP_HEADER,
+      },
+    });
+
+    for (const [ip, header] of [
+      ["198.51.100.80", previous],
+      ["198.51.100.81", current],
+      ["198.51.100.82", "wrong"],
+    ] as const) {
+      await guarded(
+        new Request(`${AUTH_BASE_URL}${AUTH_PATH}/ok`, {
+          headers: { [CLIENT_IP_HEADER]: ip, [AUTH_PROXY_SECRET_HEADER]: header },
+        }),
+      );
+    }
+
+    assert.deepEqual(
+      received.map((request) => request.headers.get(CLIENT_IP_HEADER)),
+      ["198.51.100.80", "198.51.100.81", null],
+    );
+    assert.ok(received.every((request) => request.headers.get(AUTH_PROXY_SECRET_HEADER) === null));
+  });
+
+  it("refuses the former secret after the previous one is removed", async () => {
+    const current = randomBytes(32).toString("base64url");
+    const former = randomBytes(32).toString("base64url");
+    const harness = createHarness({
+      proxySecret: current,
+      requireProxySecret: true,
+      requireClientIp: true,
+    });
+
+    const response = await harness.requestCode(newEmail("rot-removed"), {
+      [AUTH_PROXY_SECRET_HEADER]: former,
+      [CLIENT_IP_HEADER]: "203.0.113.24",
+    });
+
+    assert.deepEqual(await outcome(response), REFUSED);
+  });
+});
+
 describe("the client IP header is trusted only next to a valid secret (L36)", () => {
   it("ignores a client IP header sent without the secret, so a direct caller cannot pick its bucket", async () => {
     const secret = randomBytes(32).toString("base64url");
     // A configured secret that is not required: local development with the web proxy in front.
-    const harness = createHarness({ proxySecret: secret });
+    const harness = createHarness({ proxySecret: secret, requireProxySecret: false });
 
     const forged = await harness.requestCode(newEmail("forged"), {
       [CLIENT_IP_HEADER]: "198.51.100.66",
@@ -314,7 +462,7 @@ describe("the secret header never reaches Better Auth (L36)", () => {
 
 describe("local development without a proxy secret (L36)", () => {
   it("keeps serving requests and trusting the client IP header as before", async () => {
-    const harness = createHarness();
+    const harness = createHarness({ requireProxySecret: false });
 
     const response = await harness.requestCode(newEmail("dev"), {
       [CLIENT_IP_HEADER]: "203.0.113.14",

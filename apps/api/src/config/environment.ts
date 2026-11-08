@@ -60,6 +60,11 @@ export interface RuntimeEnvironment {
    * Required in production, optional elsewhere; never logged or echoed in error messages.
    */
   AUTH_PROXY_SECRET: string | undefined;
+  /**
+   * The proxy secret before a rotation (S47, L71), accepted next to `AUTH_PROXY_SECRET` until it is
+   * removed. Optional everywhere; it needs the current secret and follows its rules.
+   */
+  AUTH_PROXY_SECRET_PREVIOUS: string | undefined;
 }
 
 const DEFAULT_PORT = 3001;
@@ -189,19 +194,48 @@ function parseProxySecret(
     return undefined;
   }
 
+  return validateProxySecretLength("AUTH_PROXY_SECRET", value);
+}
+
+/** The previous proxy secret of a rotation (S47): optional, and as long as the current one. */
+function parsePreviousProxySecret(environment: Record<string, unknown>): string | undefined {
+  const value = readOptionalString(environment.AUTH_PROXY_SECRET_PREVIOUS);
+
+  return value ? validateProxySecretLength("AUTH_PROXY_SECRET_PREVIOUS", value) : undefined;
+}
+
+function validateProxySecretLength(name: string, value: string): string {
   if (value.length < MINIMUM_PROXY_SECRET_LENGTH) {
-    throw new Error(
-      `AUTH_PROXY_SECRET must be at least ${MINIMUM_PROXY_SECRET_LENGTH} characters long.`,
-    );
+    throw new Error(`${name} must be at least ${MINIMUM_PROXY_SECRET_LENGTH} characters long.`);
   }
 
   return value;
 }
 
 /** A leaked proxy secret must not also sign sessions, and the reverse. */
-function validateDistinctSecrets(proxySecret: string | undefined, authSecret: string): void {
+function validateDistinctSecrets(
+  proxySecret: string | undefined,
+  previousProxySecret: string | undefined,
+  authSecret: string,
+): void {
   if (proxySecret === authSecret) {
     throw new Error("AUTH_PROXY_SECRET must differ from BETTER_AUTH_SECRET.");
+  }
+
+  if (previousProxySecret === undefined) {
+    return;
+  }
+
+  if (previousProxySecret === authSecret) {
+    throw new Error("AUTH_PROXY_SECRET_PREVIOUS must differ from BETTER_AUTH_SECRET.");
+  }
+
+  if (proxySecret === undefined) {
+    throw new Error("AUTH_PROXY_SECRET_PREVIOUS requires AUTH_PROXY_SECRET.");
+  }
+
+  if (previousProxySecret === proxySecret) {
+    throw new Error("AUTH_PROXY_SECRET_PREVIOUS must differ from AUTH_PROXY_SECRET.");
   }
 }
 
@@ -389,11 +423,16 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     EMAIL: parseEmailEnvironment(environment, nodeEnvironment),
     AUTH_CLIENT_IP: parseClientIpEnvironment(environment, nodeEnvironment),
     AUTH_PROXY_SECRET: parseProxySecret(environment, nodeEnvironment),
+    AUTH_PROXY_SECRET_PREVIOUS: parsePreviousProxySecret(environment),
   };
 
   // Cross-field rules run last, so every single-variable error keeps its precedence.
   validateAuthBaseUrl(validated.AUTH_BASE_URL, validated.TRUSTED_ORIGINS, nodeEnvironment);
-  validateDistinctSecrets(validated.AUTH_PROXY_SECRET, validated.BETTER_AUTH_SECRET);
+  validateDistinctSecrets(
+    validated.AUTH_PROXY_SECRET,
+    validated.AUTH_PROXY_SECRET_PREVIOUS,
+    validated.BETTER_AUTH_SECRET,
+  );
 
   return validated;
 }

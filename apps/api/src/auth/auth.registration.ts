@@ -31,6 +31,7 @@ export function createAuthModuleOptions(
       clientIp: config.get("AUTH_CLIENT_IP", { infer: true }),
       requireClientIp: production,
       proxySecret: config.get("AUTH_PROXY_SECRET", { infer: true }),
+      previousProxySecret: config.get("AUTH_PROXY_SECRET_PREVIOUS", { infer: true }),
       requireProxySecret: production,
       log: (event) => logger.warn(event),
     }),

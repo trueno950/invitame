@@ -16,6 +16,8 @@ export const AUTH_REQUEST_EVENT = {
   ENROLLMENT_SUPERSEDED: "administrator_enrollment_superseded",
   /** The revert of a superseded first confirmation failed; the account stays locked (S40). */
   ENROLLMENT_COMPENSATION_FAILED: "administrator_enrollment_compensation_failed",
+  /** An administrator session arrived with an unusable creation time and was stored as expired (S49). */
+  ADMINISTRATOR_SESSION_CREATED_AT_INVALID: "administrator_session_created_at_invalid",
 } as const;
 
 /** Structured warning without personal data: the request path and, for a failure, the error class. */
@@ -32,7 +34,8 @@ export type AuthRequestEvent =
       event: typeof AUTH_REQUEST_EVENT.ENROLLMENT_COMPENSATION_FAILED;
       path: string;
       error: string;
-    };
+    }
+  | { event: typeof AUTH_REQUEST_EVENT.ADMINISTRATOR_SESSION_CREATED_AT_INVALID };
 
 export type AuthRequestLog = (event: AuthRequestEvent) => void;
 
@@ -42,6 +45,11 @@ type AuthHandler = (request: Request) => Promise<Response>;
 export interface AuthProxyOptions {
   /** The shared secret; undefined only outside production, where nothing is required. */
   secret: string | undefined;
+  /**
+   * The secret before a rotation (S47): accepted next to `secret` until the owner removes it, so the
+   * API, the web, and the removal can happen one after another without a cut.
+   */
+  previousSecret?: string | undefined;
   /** Production: refuse every request that does not carry the secret. */
   required: boolean;
   /** Lower-case name of the client IP header, trusted only next to a valid secret. */
@@ -87,6 +95,22 @@ function matchesSecret(presented: string | null, secret: string): boolean {
   const expected = createHash("sha256").update(secret).digest();
   const actual = createHash("sha256").update(presented).digest();
   return timingSafeEqual(expected, actual);
+}
+
+/**
+ * Whether the presented value is any configured secret. Every secret is compared, with no early
+ * exit, so the response time does not tell which of the two matched.
+ */
+function matchesAnySecret(presented: string | null, secrets: readonly (string | undefined)[]) {
+  let valid = false;
+
+  for (const secret of secrets) {
+    if (secret !== undefined && matchesSecret(presented, secret)) {
+      valid = true;
+    }
+  }
+
+  return valid;
 }
 
 /**
@@ -136,9 +160,10 @@ export function guardAuthHandler(
     let request = incoming;
 
     if (proxy) {
-      const secretValid =
-        proxy.secret !== undefined &&
-        matchesSecret(incoming.headers.get(AUTH_PROXY_SECRET_HEADER), proxy.secret);
+      const secretValid = matchesAnySecret(incoming.headers.get(AUTH_PROXY_SECRET_HEADER), [
+        proxy.secret,
+        proxy.previousSecret,
+      ]);
 
       if (proxy.required && !secretValid) {
         logSafely(options.log, { event: AUTH_REQUEST_EVENT.PROXY_REJECTED, path });

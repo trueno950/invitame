@@ -8,6 +8,11 @@ import { EmailDeliveryService } from "../email/application/email-delivery.servic
 import { InMemoryEmailSender } from "../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../email/infrastructure/system-email-delivery-runtime";
 import { createAuth } from "./auth.factory";
+import { AUTH_REQUEST_EVENT, type AuthRequestEvent } from "./auth-request-guard";
+import {
+  ADMINISTRATOR_SESSION_LIFETIME_SECONDS,
+  administratorSessionExpiresAt,
+} from "./session-settings";
 import { BackgroundTasks } from "./sign-in-code/background-tasks";
 import { SignInCodeSender } from "./sign-in-code/sign-in-code-sender";
 
@@ -72,6 +77,7 @@ function createHarness(origin: string) {
     twoFactor: [],
   };
   const secret = randomBytes(32).toString("base64url");
+  const events: AuthRequestEvent[] = [];
   const auth = createAuth({
     secret,
     baseURL: origin,
@@ -84,7 +90,9 @@ function createHarness(origin: string) {
     ),
     clientIp: { header: "x-forwarded-for", trustedProxies: [] },
     requireClientIp: false,
-    log: () => {},
+    // This harness calls Better Auth directly, not through the web proxy.
+    requireProxySecret: false,
+    log: (event) => events.push(event),
   });
   const api = auth.api as unknown as Record<string, (input: unknown) => Promise<unknown>>;
   let clientCounter = 0;
@@ -202,6 +210,7 @@ function createHarness(origin: string) {
   return {
     auth,
     database,
+    events,
     call,
     sessionsOf,
     onlySessionOf,
@@ -286,6 +295,61 @@ describe("customer sessions: 7 days, refreshed at most once per day of use (S16,
   });
 });
 
+describe("administrator session expiry with an invalid creation time (S49, L71)", () => {
+  it("gives a valid creation time exactly 12 hours and logs nothing", () => {
+    const createdAt = new Date("2026-11-08T10:00:00.000Z");
+
+    const expiresAt = administratorSessionExpiresAt(createdAt, () => assert.fail("no event"));
+
+    assert.equal(ADMINISTRATOR_SESSION_LIFETIME_SECONDS, 12 * 60 * 60);
+    assert.equal(expiresAt.toISOString(), "2026-11-08T22:00:00.000Z");
+  });
+
+  it("treats a missing, invalid, or non-date creation time as expired and reports it once", () => {
+    for (const createdAt of [
+      new Date(Number.NaN),
+      undefined,
+      null,
+      "2026-11-08",
+      1_790_000_000_000,
+    ]) {
+      let reports = 0;
+
+      const expiresAt = administratorSessionExpiresAt(createdAt, () => {
+        reports += 1;
+      });
+
+      assert.ok(expiresAt.getTime() <= Date.now(), `expired for ${String(createdAt)}`);
+      assert.equal(reports, 1);
+    }
+  });
+
+  it("ends a stored administrator session whose creation time is invalid and logs one event without personal data", async () => {
+    const harness = createHarness(LOCAL_ORIGIN);
+    const admin = await harness.seedAdministrator();
+    const context = await harness.auth.$context;
+
+    const session = await context.internalAdapter.createSession(
+      admin.id,
+      false,
+      { createdAt: new Date(Number.NaN) },
+      true,
+    );
+
+    const stored = harness.onlySessionOf(admin.id);
+    assert.ok(time(stored.expiresAt) <= Date.now(), "the stored expiry is already past");
+    const read = await harness.auth.api.getSession({
+      headers: new Headers({ cookie: harness.signedCookie(LOCAL_SESSION_COOKIE, session.token) }),
+    });
+    assert.equal(read, null, "the session reads as expired");
+    assert.deepEqual(harness.events, [
+      { event: AUTH_REQUEST_EVENT.ADMINISTRATOR_SESSION_CREATED_AT_INVALID },
+    ]);
+    const logged = JSON.stringify(harness.events);
+    assert.ok(!logged.includes(admin.email) && !logged.includes(admin.id));
+  });
+});
+
 describe("administrator sessions: 12 hours from sign-in, never refreshed (S16, L34)", () => {
   const harness = createHarness(LOCAL_ORIGIN);
 
@@ -301,6 +365,7 @@ describe("administrator sessions: 12 hours from sign-in, never refreshed (S16, L
       "expiry",
     );
     assert.equal(time(stored.expiresAt) - time(stored.createdAt), TWELVE_HOURS_MS);
+    assert.deepEqual(harness.events, [], "a valid creation time logs nothing");
   });
 
   it("stores an enrolled administrator's session for 12 hours from the second factor", async () => {

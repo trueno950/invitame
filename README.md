@@ -53,6 +53,7 @@ API (`apps/api/.env`):
 | `BETTER_AUTH_SECRET` | Always | At least 32 characters. Generate one with `openssl rand -base64 32` and never commit it. |
 | `AUTH_BASE_URL` | Always | The public web origin through which the web proxies `/api/auth`. It must be one of the `CORS_ORIGIN` entries and use `https` in production. |
 | `AUTH_PROXY_SECRET` | Production | The shared web-to-API secret: at least 32 characters, different from `BETTER_AUTH_SECRET`, and the same value in the web. |
+| `AUTH_PROXY_SECRET_PREVIOUS` | No | The secret from before a rotation, accepted next to `AUTH_PROXY_SECRET` while the rotation lasts. Needs `AUTH_PROXY_SECRET`, has the same rules, and must differ from it. |
 | `AUTH_CLIENT_IP_HEADER` | Production | The header that carries the client IP for rate limits; `x-forwarded-for` outside production. |
 | `AUTH_TRUSTED_PROXIES` | No | Comma-separated IP addresses or CIDR ranges of proxies that append to that header. |
 | `EMAIL_TRANSPORT` | No | `mailpit` in development, `memory` in test, and `resend` in production, which accepts no other value. |
@@ -69,6 +70,10 @@ header holding a single address is accepted. The web sends `AUTH_PROXY_SECRET` i
 header. In production the API refuses every `/api/auth` request without it with a generic `403`, and trusts the
 client IP header only next to a valid secret. Outside production without a secret, the API serves direct
 requests and trusts the client IP header.
+
+To rotate `AUTH_PROXY_SECRET` without a cut, change the API first: set `AUTH_PROXY_SECRET_PREVIOUS` to the old value
+and `AUTH_PROXY_SECRET` to the new one. Then change the web to the new value. At the end, remove
+`AUTH_PROXY_SECRET_PREVIOUS` from the API.
 
 Web (`apps/web/.env.local`, optional locally):
 

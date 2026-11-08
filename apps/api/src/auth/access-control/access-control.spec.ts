@@ -125,6 +125,7 @@ describe("access control through the project-owned global guard", () => {
     signInCodes: new SignInCodeSender(new EmailDeliveryService(emailSender, runtime), tasks),
     clientIp: { header: "x-forwarded-for", trustedProxies: [] },
     requireClientIp: false,
+    requireProxySecret: false,
     log: () => {},
   });
   let app: INestApplication;

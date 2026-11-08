@@ -112,12 +112,33 @@ All U-admin names below sit in its "enrollment gate (S6, S21)", "pre-enrollment 
   newline, the password, and a newline on create and on reissue".
 - The `PATCH /me` 400 body (L66): U-profile "PATCH /me › rejects <case> with the DTO's 400 body and keeps the
   stored name" for each of 14 invalid values.
-- Open, run as `todo` tests that are expected to fail until T11b and T11c fix them: DB-races "› GAP A′: leaves
+- Open, run as a `todo` test that is expected to fail until T11c fixes it: DB-races "› GAP A′: leaves
   no password-only session with authority on /me or Better Auth" (L62). When the sibling-session delete of an
   allowed first confirmation throws, `verify-totp` answers 500 but `twoFactorEnabled` stays true, so both
-  password-only sessions read `/me` (200), `get-session`, and `list-sessions`. DB-races "› GAP R4: does not store the name of a user disabled
-  after the guard's session check" (L30): `PATCH /me` answers 200 and stores the name after `user:disable`
-  committed; the next request gets 401.
+  password-only sessions read `/me` (200), `get-session`, and `list-sessions`.
+
+## T11 slice B tests (S46 to S49, S53)
+
+Unit tests run in `pnpm --filter @invitame/api test`, the database test in `test:db`.
+
+- S46, the proxy secret is required by default: `auth/auth-proxy-secret.spec.ts` "the proxy secret is required
+  unless a caller turns it off (S46, L71)" refuses a request without the secret or with a wrong one (403) when the
+  option is omitted, refuses to build with no secret, and still serves without one when a caller passes `false`.
+  Every other `createAuth` caller in a test now passes `requireProxySecret: false` explicitly.
+- S47, the previous secret: the same file, "a previous secret is accepted while a rotation lasts (S47, L71)"
+  (either secret serves and trusts the client IP header, any other gets 403, a removed secret gets 403);
+  `config/environment.spec.ts` "AUTH_PROXY_SECRET_PREVIOUS (rotation)" (optional, at least 32 characters, differs
+  from `BETTER_AUTH_SECRET` and from `AUTH_PROXY_SECRET`, needs `AUTH_PROXY_SECRET`, never echoed);
+  U-registration "serves a production request with the previous proxy secret during a rotation (S47)".
+- S48, bidirectional controls: U-profile "PATCH /me › rejects the bidirectional control U+<code point> with the DTO's
+  400 body and keeps the stored name" for each of the 12 code points, and "accepts the zero-width joiner of composed
+  emoji and some scripts (S48)".
+- S49, an invalid administrator creation time: `auth/session-settings.spec.ts` "administrator session expiry with an
+  invalid creation time (S49, L71)" proves the stored session is already expired, reads as no session, and logs one
+  `administrator_session_created_at_invalid` event without personal data; a valid time still gives 12 hours.
+- S53, the display-name write needs an ACTIVE account: DB-races "PATCH /me racing user:disable › does not store the
+  name of a user disabled after the guard's session check (S53)" (R4, L30) is a required test. `PATCH /me` answers
+  401, the name stays empty, and the next request gets 401.
 
 ## Findings routed to T9 (plan Log L35 to L44)
 

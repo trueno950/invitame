@@ -85,6 +85,7 @@ describe("sign-in codes through createAuth on the Prisma schema (real PostgreSQL
     signInCodes: new SignInCodeSender(new EmailDeliveryService(sender, runtime), tasks),
     clientIp: { header: "x-forwarded-for", trustedProxies: [] },
     requireClientIp: false,
+    requireProxySecret: false,
     log: () => {},
   });
   const runId = randomUUID();
