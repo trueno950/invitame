@@ -176,6 +176,10 @@ function responseHeaders(upstream: Response): Headers {
   return headers;
 }
 
+function isAbortError(error: unknown): boolean {
+  return (error instanceof DOMException || error instanceof Error) && error.name === "AbortError";
+}
+
 function isTimeout(error: unknown): boolean {
   return error instanceof DOMException && error.name === "TimeoutError";
 }
@@ -223,9 +227,11 @@ export async function proxyAuthRequest(
         return jsonError(413, { code: "PAYLOAD_TOO_LARGE", message: "Request body too large." });
       }
 
-      if (request.signal.aborted) {
+      if (request.signal.aborted || isAbortError(error)) {
         // The browser left while its body was arriving (N6, L79): the same cancellation as during
-        // the API call, so it answers 499 and logs nothing. Any other read failure still rethrows.
+        // the API call, so it answers 499 and logs nothing. The body stream may fail before the
+        // request signal reports the abort, and the body read has no timeout of its own, so an
+        // AbortError from it can only mean the browser left. Any other read failure still rethrows.
         return jsonError(CLIENT_CLOSED_REQUEST_STATUS, SERVICE_UNAVAILABLE_BODY);
       }
 

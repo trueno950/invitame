@@ -494,6 +494,51 @@ describe("bounds and failures", () => {
     assert.deepEqual(received, [], "no call reaches the API");
   });
 
+  // In production the body stream can fail before the request signal reports the abort, so the
+  // signal is never aborted here: the AbortError alone has to identify the browser leaving.
+  it("answers 499 without a log when the body fails with an AbortError before the signal aborts", {
+    timeout: 2_000,
+  }, async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new DOMException("The operation was aborted.", "AbortError"));
+      },
+    });
+    const request = new Request(`${WEB_ORIGIN}/api/auth/sign-in/email-otp`, {
+      method: "POST",
+      body: stream,
+      duplex: "half",
+    } as RequestInit);
+    const events: AuthProxyEvent[] = [];
+
+    assert.equal(request.signal.aborted, false);
+    const response = await proxy(request, { events });
+
+    assert.equal(response.status, 499);
+    assert.deepEqual(await response.json(), GENERIC_ERROR);
+    assert.deepEqual(events, []);
+    assert.deepEqual(received, [], "no call reaches the API");
+  });
+
+  it("still rethrows a non-abort body read error when the browser has not left", {
+    timeout: 2_000,
+  }, async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error("boom"));
+      },
+    });
+    const request = new Request(`${WEB_ORIGIN}/api/auth/sign-in/email-otp`, {
+      method: "POST",
+      body: stream,
+      duplex: "half",
+    } as RequestInit);
+    const events: AuthProxyEvent[] = [];
+
+    await assert.rejects(proxy(request, { events }), { name: "Error", message: "boom" });
+    assert.deepEqual(events, []);
+  });
+
   it("still rethrows a body read error when the browser has not left", {
     timeout: 2_000,
   }, async () => {
