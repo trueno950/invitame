@@ -562,6 +562,72 @@ describe("validateEnvironment", () => {
       }
     });
 
+    // S47 (L71): during a rotation the API also accepts the previous secret.
+    describe("AUTH_PROXY_SECRET_PREVIOUS (rotation)", () => {
+      const PREVIOUS = randomBytes(32).toString("base64url");
+
+      it("is optional in every environment, and a blank value counts as absent", () => {
+        for (const environment of [
+          environmentWith(),
+          environmentWith({ AUTH_PROXY_SECRET_PREVIOUS: "  " }),
+          productionEnvironment(),
+          productionEnvironment({ AUTH_PROXY_SECRET_PREVIOUS: "" }),
+        ]) {
+          assert.equal(validateEnvironment(environment).AUTH_PROXY_SECRET_PREVIOUS, undefined);
+        }
+      });
+
+      it("exposes a valid previous secret next to the current one", () => {
+        for (const environment of [
+          environmentWith({
+            AUTH_PROXY_SECRET: PROXY_SECRET,
+            AUTH_PROXY_SECRET_PREVIOUS: PREVIOUS,
+          }),
+          productionEnvironment({ AUTH_PROXY_SECRET_PREVIOUS: PREVIOUS }),
+        ]) {
+          const validated = validateEnvironment(environment);
+          assert.equal(validated.AUTH_PROXY_SECRET, PROXY_SECRET);
+          assert.equal(validated.AUTH_PROXY_SECRET_PREVIOUS, PREVIOUS);
+        }
+      });
+
+      it("rejects a secret shorter than 32 characters without echoing it", () => {
+        const shortSecret = "q".repeat(31);
+
+        assertRejectedWithoutEcho(
+          productionEnvironment({ AUTH_PROXY_SECRET_PREVIOUS: shortSecret }),
+          "AUTH_PROXY_SECRET_PREVIOUS must be at least 32 characters long.",
+          shortSecret,
+        );
+        assert.equal(
+          validateEnvironment(productionEnvironment({ AUTH_PROXY_SECRET_PREVIOUS: "q".repeat(32) }))
+            .AUTH_PROXY_SECRET_PREVIOUS,
+          "q".repeat(32),
+        );
+      });
+
+      it("must differ from BETTER_AUTH_SECRET and from AUTH_PROXY_SECRET, without echoing either", () => {
+        assertRejectedWithoutEcho(
+          productionEnvironment({ AUTH_PROXY_SECRET_PREVIOUS: SECRET }),
+          "AUTH_PROXY_SECRET_PREVIOUS must differ from BETTER_AUTH_SECRET.",
+          SECRET,
+        );
+        assertRejectedWithoutEcho(
+          productionEnvironment({ AUTH_PROXY_SECRET_PREVIOUS: PROXY_SECRET }),
+          "AUTH_PROXY_SECRET_PREVIOUS must differ from AUTH_PROXY_SECRET.",
+          PROXY_SECRET,
+        );
+      });
+
+      it("needs the current secret, so a rotation never leaves the previous one alone", () => {
+        assertRejectedWithoutEcho(
+          environmentWith({ AUTH_PROXY_SECRET_PREVIOUS: PREVIOUS }),
+          "AUTH_PROXY_SECRET_PREVIOUS requires AUTH_PROXY_SECRET.",
+          PREVIOUS,
+        );
+      });
+    });
+
     it("keeps the production client IP header rule ahead of the proxy secret rule", () => {
       assert.throws(
         () =>

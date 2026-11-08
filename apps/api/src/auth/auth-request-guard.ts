@@ -16,6 +16,8 @@ export const AUTH_REQUEST_EVENT = {
   ENROLLMENT_SUPERSEDED: "administrator_enrollment_superseded",
   /** The revert of a superseded first confirmation failed; the account stays locked (S40). */
   ENROLLMENT_COMPENSATION_FAILED: "administrator_enrollment_compensation_failed",
+  /** An administrator session arrived with an unusable creation time and was stored as expired (S49). */
+  ADMINISTRATOR_SESSION_CREATED_AT_INVALID: "administrator_session_created_at_invalid",
 } as const;
 
 /** Structured warning without personal data: the request path and, for a failure, the error class. */
@@ -32,7 +34,8 @@ export type AuthRequestEvent =
       event: typeof AUTH_REQUEST_EVENT.ENROLLMENT_COMPENSATION_FAILED;
       path: string;
       error: string;
-    };
+    }
+  | { event: typeof AUTH_REQUEST_EVENT.ADMINISTRATOR_SESSION_CREATED_AT_INVALID };
 
 export type AuthRequestLog = (event: AuthRequestEvent) => void;
 
@@ -40,9 +43,14 @@ type AuthHandler = (request: Request) => Promise<Response>;
 
 /** How the guard checks that a request came through the web proxy (L36). */
 export interface AuthProxyOptions {
-  /** The shared secret; undefined only outside production, where nothing is required. */
+  /** The shared secret; undefined only when a caller turns the requirement off explicitly (S46). */
   secret: string | undefined;
-  /** Production: refuse every request that does not carry the secret. */
+  /**
+   * The secret before a rotation (S47): accepted next to `secret` until the owner removes it, so the
+   * API, the web, and the removal can happen one after another without a cut.
+   */
+  previousSecret?: string | undefined;
+  /** Refuse every request that does not carry a valid secret; on unless turned off explicitly (S46). */
   required: boolean;
   /** Lower-case name of the client IP header, trusted only next to a valid secret. */
   clientIpHeader: string;
@@ -90,6 +98,22 @@ function matchesSecret(presented: string | null, secret: string): boolean {
 }
 
 /**
+ * Whether the presented value is any configured secret. Every secret is compared, with no early
+ * exit, so the response time does not tell which of the two matched.
+ */
+function matchesAnySecret(presented: string | null, secrets: readonly (string | undefined)[]) {
+  let valid = false;
+
+  for (const secret of secrets) {
+    if (secret !== undefined && matchesSecret(presented, secret)) {
+      valid = true;
+    }
+  }
+
+  return valid;
+}
+
+/**
  * Returns the request Better Auth may see: never the secret header, and the client IP header only
  * when the secret was valid or, outside production, when no secret is configured at all.
  */
@@ -125,9 +149,16 @@ export function guardAuthHandler(
 ): AuthHandler {
   const proxy = options.proxy;
 
+  // A previous secret without a current one would leave `secret` undefined, and the client IP header
+  // would be trusted with no valid secret. This mirrors the environment rule (S47).
+  if (proxy?.previousSecret !== undefined && proxy.secret === undefined) {
+    throw new Error("AUTH_PROXY_SECRET_PREVIOUS requires AUTH_PROXY_SECRET.");
+  }
+
+  // The secret is required by default in every environment (S46); only an explicit opt-out skips it.
   if (proxy?.required && proxy.secret === undefined) {
     throw new Error(
-      "AUTH_PROXY_SECRET is required to serve authentication requests in production.",
+      "AUTH_PROXY_SECRET is required to serve authentication requests unless the proxy secret requirement is turned off.",
     );
   }
 
@@ -136,9 +167,10 @@ export function guardAuthHandler(
     let request = incoming;
 
     if (proxy) {
-      const secretValid =
-        proxy.secret !== undefined &&
-        matchesSecret(incoming.headers.get(AUTH_PROXY_SECRET_HEADER), proxy.secret);
+      const secretValid = matchesAnySecret(incoming.headers.get(AUTH_PROXY_SECRET_HEADER), [
+        proxy.secret,
+        proxy.previousSecret,
+      ]);
 
       if (proxy.required && !secretValid) {
         logSafely(options.log, { event: AUTH_REQUEST_EVENT.PROXY_REJECTED, path });

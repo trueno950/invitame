@@ -71,6 +71,7 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
       ),
       clientIp: { header: "x-forwarded-for", trustedProxies: [] },
       requireClientIp: false,
+      requireProxySecret: false,
       log,
     });
   }

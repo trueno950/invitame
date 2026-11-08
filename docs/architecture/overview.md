@@ -91,7 +91,9 @@ described in "Web boundary" below.
   pending administrator, or the second factor of an enrolled one. It is never extended: the session hook
   skips Better Auth's refresh for administrators, and a session update hook refuses any expiry change that is
   not a customer's session refresh. The cookie keeps the 7-day `Max-Age`; the stored expiry decides, and
-  every request reads it.
+  every request reads it. A session whose creation time is not a valid date is stored as already expired
+  instead of getting an unbounded expiry, and one `administrator_session_created_at_invalid` event is logged
+  (S49).
 
 ### Web boundary (current)
 
@@ -372,7 +374,8 @@ The signed-in user's own profile is the first owned resource (`users/`, in the m
   `displayName` is `null` when no name is set.
 - `PATCH /me` takes exactly `{"displayName": string | null}` and returns the updated profile. The name is
   trimmed and must then have 1 to 120 characters (Unicode code points, as `VarChar(120)` counts them) with no
-  control character or unpaired surrogate; `null` clears it. Invalid values get `400` and change nothing.
+  control character, unpaired surrogate, or bidirectional control (U+061C, U+200E, U+200F, U+202A to U+202E,
+  U+2066 to U+2069; S48); `null` clears it. Invalid values get `400` and change nothing.
 - The user id comes only from the session (`@SessionUserId()`), never from the path, query, or body. Any
   other body field, including `id`, `email`, `role`, and `status`, gets `400`: the global `ValidationPipe`
   runs with `whitelist` and `forbidNonWhitelisted` (`app.setup.ts`).

@@ -22,7 +22,8 @@ import {
   SIGN_IN_CODE_REQUEST_PATH,
   TWO_FACTOR_PATH,
 } from "./auth-paths";
-import { type AuthRequestLog, guardAuthHandler } from "./auth-request-guard";
+import { AUTH_REQUEST_EVENT, type AuthRequestLog, guardAuthHandler } from "./auth-request-guard";
+import { logSafely } from "./safe-logging";
 import { enforceSessionAccess } from "./session-access-hook";
 import {
   administratorSessionExpiresAt,
@@ -109,7 +110,16 @@ export interface CreateAuthOptions {
    * carry it in `AUTH_PROXY_SECRET_HEADER`; the header itself never reaches Better Auth.
    */
   proxySecret?: string | undefined;
-  /** Production: refuse every auth request without the proxy secret, before any endpoint runs. */
+  /**
+   * The secret before a rotation (S47, L71): accepted next to `proxySecret` while the API, the web,
+   * and the removal happen one after another.
+   */
+  previousProxySecret?: string | undefined;
+  /**
+   * Refuse every auth request without the proxy secret, before any endpoint runs. Omitted means
+   * required, so a caller that forgets the option fails closed (S46, L71); only tests and local
+   * development pass `false`, and always explicitly.
+   */
   requireProxySecret?: boolean | undefined;
   /** Receives privacy-safe warnings about rejected auth requests. */
   log: AuthRequestLog;
@@ -250,7 +260,14 @@ export function createAuth(options: CreateAuthOptions): Auth {
             // creation. The cookie keeps the customer Max-Age; the stored expiry decides.
             if (user?.role === USER_ROLE.ADMIN) {
               return {
-                data: { ...session, expiresAt: administratorSessionExpiresAt(session.createdAt) },
+                data: {
+                  ...session,
+                  expiresAt: administratorSessionExpiresAt(session.createdAt, () =>
+                    logSafely(options.log, {
+                      event: AUTH_REQUEST_EVENT.ADMINISTRATOR_SESSION_CREATED_AT_INVALID,
+                    }),
+                  ),
+                },
               };
             }
           },
@@ -333,7 +350,8 @@ export function createAuth(options: CreateAuthOptions): Auth {
     resolveClientIp: options.requireClientIp ? resolveClientIp : undefined,
     proxy: {
       secret: options.proxySecret,
-      required: options.requireProxySecret ?? false,
+      previousSecret: options.previousProxySecret,
+      required: options.requireProxySecret ?? true,
       clientIpHeader: options.clientIp.header,
     },
     log: options.log,

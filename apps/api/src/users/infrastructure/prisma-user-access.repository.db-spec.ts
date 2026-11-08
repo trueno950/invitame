@@ -42,6 +42,7 @@ describe("disabling a user on the Prisma schema (real PostgreSQL)", () => {
     ),
     clientIp: { header: "x-forwarded-for", trustedProxies: [] },
     requireClientIp: false,
+    requireProxySecret: false,
     log: () => {},
   });
   const events: unknown[] = [];

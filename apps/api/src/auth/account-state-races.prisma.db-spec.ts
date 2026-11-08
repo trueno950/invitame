@@ -146,6 +146,7 @@ describe("account-state races (real PostgreSQL)", () => {
     ),
     clientIp: { header: "x-forwarded-for", trustedProxies: [] },
     requireClientIp: false,
+    requireProxySecret: false,
     log: () => {},
   });
   let app: INestApplication;
@@ -435,14 +436,7 @@ describe("account-state races (real PostgreSQL)", () => {
   // R4-profile-write-not-conditioned-on-active-status (L30): `user:disable` commits after the guard
   // has read an ACTIVE user and before `PATCH /me` writes the name.
   describe("PATCH /me racing user:disable", () => {
-    const GAP_PROFILE_WRITE =
-      "GAP present (L30 R4-profile-write-not-conditioned-on-active-status, owner decision before a " +
-      "fix): PATCH /me answers 200 and stores the name; the user is DISABLED, has no session, and " +
-      "the next request gets 401";
-
-    it("GAP R4: does not store the name of a user disabled after the guard's session check", {
-      todo: GAP_PROFILE_WRITE,
-    }, async () => {
+    it("does not store the name of a user disabled after the guard's session check (S53)", async () => {
       const email = `t11-profile-race-${runId}@example.test`;
       emails.push(email);
       const context = await auth.$context;

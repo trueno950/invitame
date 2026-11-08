@@ -116,6 +116,7 @@ function createHarness(
     signInCodes,
     clientIp: { header: CLIENT_IP_HEADER, trustedProxies: [] },
     requireClientIp: false,
+    requireProxySecret: false,
     log: () => {},
   });
 

@@ -83,6 +83,7 @@ function createHarness(options: HarnessOptions = {}) {
     signInCodes: new SignInCodeSender(new EmailDeliveryService(sender, runtime), tasks),
     clientIp: { header: CLIENT_IP_HEADER, trustedProxies: options.trustedProxies ?? [] },
     requireClientIp: options.requireClientIp ?? false,
+    requireProxySecret: false,
     log: (event) => events.push(event),
   });
 

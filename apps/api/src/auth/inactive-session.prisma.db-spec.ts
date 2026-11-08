@@ -35,6 +35,7 @@ describe("sessions of non-ACTIVE users on Better Auth's endpoints (real PostgreS
     ),
     clientIp: { header: "x-forwarded-for", trustedProxies: [] },
     requireClientIp: false,
+    requireProxySecret: false,
     log: () => {},
   });
   const runId = randomUUID();

@@ -42,6 +42,7 @@ describe("abuse limits on the PostgreSQL RateLimit table", () => {
     signInCodes: new SignInCodeSender(new EmailDeliveryService(sender, runtime), tasks),
     clientIp: { header: CLIENT_IP_HEADER, trustedProxies: [] },
     requireClientIp: false,
+    requireProxySecret: false,
     log: () => {},
   });
   const runId = randomUUID();

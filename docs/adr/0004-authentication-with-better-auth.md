@@ -166,6 +166,7 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    | --- | --- |
    | `CORS_ORIGIN`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `AUTH_BASE_URL` | Required in every environment. The secret has at least 32 characters; `AUTH_BASE_URL` is one of the `CORS_ORIGIN` entries and uses `https` in production. |
    | `AUTH_PROXY_SECRET` | Required in production; optional elsewhere. At least 32 characters, different from `BETTER_AUTH_SECRET` (decision 4). |
+   | `AUTH_PROXY_SECRET_PREVIOUS` | Optional, only during a rotation (S47): accepted next to `AUTH_PROXY_SECRET`, which it requires. At least 32 characters, different from `BETTER_AUTH_SECRET` and from `AUTH_PROXY_SECRET`. |
    | `AUTH_CLIENT_IP_HEADER` | Required in production; elsewhere defaults to `x-forwarded-for` (decision 7). |
    | `EMAIL_FROM` | Required in production; elsewhere defaults to a local sender on the reserved `.localhost` domain. |
    | `EMAIL_TRANSPORT`, `RESEND_API_KEY` | Production accepts only `resend`, its default there. `RESEND_API_KEY` is required whenever the transport is `resend`. |

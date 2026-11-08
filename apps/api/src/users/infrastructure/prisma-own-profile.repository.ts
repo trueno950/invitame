@@ -25,13 +25,15 @@ export class PrismaOwnProfileRepository implements OwnProfileRepository {
   async updateDisplayName(userId: string, displayName: string | null): Promise<OwnProfile | null> {
     try {
       const row = await this.prisma.user.update({
-        where: { id: userId },
+        // One statement: the write needs the account to be ACTIVE at that instant (S53, L72), so a
+        // `user:disable` that commits after the guard's read cannot be followed by a stored name.
+        where: { id: userId, status: "ACTIVE" },
         data: { displayName },
         select: PROFILE_FIELDS,
       });
       return toProfile(row);
     } catch (error) {
-      // P2025: no row matched, for example a user deleted after the guard read the session.
+      // P2025: no row matched, because no user has this id or the account is not ACTIVE (S53).
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
         return null;
       }
