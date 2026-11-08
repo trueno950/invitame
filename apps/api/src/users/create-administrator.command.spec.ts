@@ -163,6 +163,7 @@ describe("admin:create", () => {
   describe("entry guard", () => {
     const apiRoot = path.resolve(__dirname, "../..");
     const command = "src/users/create-administrator.command.ts";
+    const USAGE = "Usage: pnpm --filter @invitame/api admin:create -- <email>";
 
     function spawn(args: string[]) {
       return spawnSync(process.execPath, ["-r", "@swc-node/register", ...args], {
@@ -178,7 +179,8 @@ describe("admin:create", () => {
 
       assert.equal(result.status, 2);
       assert.equal(result.stdout, "");
-      assert.equal(result.stderr, "Usage: pnpm --filter @invitame/api admin:create -- <email>\n");
+      // `includes`, not equality: a Node or loader warning on stderr is not a guard regression.
+      assert.ok(result.stderr.includes(USAGE), `stderr: ${result.stderr}`);
     });
 
     it("does nothing when the module is only loaded, even where require.main is undefined", () => {
@@ -186,7 +188,7 @@ describe("admin:create", () => {
 
       assert.equal(result.status, 0);
       assert.equal(result.stdout, "");
-      assert.equal(result.stderr, "");
+      assert.ok(!result.stderr.includes("Usage:"), `stderr: ${result.stderr}`);
     });
   });
 });

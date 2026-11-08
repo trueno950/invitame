@@ -16,8 +16,8 @@ evidence and does not change a decision; [ADR 0004](../adr/0004-authentication-w
 - **Rubric:** a clause the plan lists as a non-goal (Railway hosting, domain, live Resend) is noted, not scored.
   S7 and S11 are PASS on their in-scope parts.
 - **Findings:** the verification reproduced six new findings (N1 to N6), the T10a close failure (R9), and the
-  traceability and ADR fixes (F5). T11f fixed or documented all of them; the two example environment files (F1, N4)
-  are a human edit. See "Verification findings and their resolution".
+  traceability and ADR fixes (F5). T11f fixed or documented all of them. F1 (`apps/api/.env.example`) was fixed by
+  the owner in `c12f6dc`; N4 (`apps/web/.env.local.example`) is still a human decision. See "Verification findings and their resolution".
 
 ## Gate runs
 
@@ -37,7 +37,9 @@ Verification on `e8c092a`, each command wrapped in `perl -e 'alarm shift; exec @
 The verification did not run Playwright (CI only; the plan counts 20 browser tests), `pnpm build`, or
 `git diff --check`. CI runs both in its quality-gates job.
 
-T11f after the owner's `.env.example` edit (F1) and the review follow-ups, on a disposable `postgres:17-alpine`:
+T11f after the owner's `.env.example` edit (F1, `c12f6dc`) and the review follow-ups, on a disposable
+`postgres:17-alpine`. The 499, 270, and 87 counts below were taken after that edit, so `config/env-example.spec.ts`
+passes:
 
 | Gate | Result |
 | --- | --- |
@@ -51,8 +53,8 @@ The native reviews of T11f added four follow-ups, each reviewed on its own:
 
 - a body read that fails with an `AbortError` before the request signal reports the abort also answers
   `499` (N6);
-- `BETTER_AUTH_SECRETS` and `BETTER_AUTH_TRUSTED_ORIGINS` are refused for any value other than unset or
-  exactly `""`, because Better Auth reads the raw value (S55);
+- `BETTER_AUTH_SECRETS` and `BETTER_AUTH_TRUSTED_ORIGINS` are refused unless unset or exactly `""`, because Better
+  Auth reads the raw value (the rule is stated in the S55 row);
 - `admin:create` and `user:disable` expose run functions whose tests pin the close-failure wiring (R9);
 - `admin:create` starts only on a direct run (`require.main === module`), pinned by two spawned tests.
 
@@ -95,7 +97,7 @@ Browser-only evidence comes from the CI run, not from a local run.
 | S9 | PASS | `access-control.ts:94-147`; `auth.factory.ts:222-233` | AC:257-426; AS:344,363; SIC:727-765 | |
 | S10 | PASS | `a:auth/abuse-limits.ts`; `auth.factory.ts:181-194` | ABU:122-255; `abuse-limits.prisma.db-spec.ts:85,105`; SIC:207,387-447 | |
 | S11 | PASS | `a:email/application/email-delivery.service.ts:16-26`; `resend-email-sender.ts:56`; `docker-compose.yml:23` | EDS:88-273; HES:119-316; `email.module.spec.ts:47-61`; SIC:332 | Live Resend not exercised (non-goal). |
-| S12 | PASS | `a:config/environment.ts` | ENVT:38-654; WIRE:89-151; `env-example.spec.ts` (T11f) | `.env.example` contradicts it (F1); `env-example.spec.ts` fails until the owner edits it. |
+| S12 | PASS | `a:config/environment.ts` | ENVT:38-654; WIRE:89-151; `env-example.spec.ts` (T11f) | `.env.example` contradicted it (F1); fixed in `c12f6dc`, and `env-example.spec.ts` now passes. |
 | S13 | PASS | ADR `:194-228` | `auth.integration.spec.ts`; the `test:db` suites | Migration review recorded in L15, L17. |
 | S14 | PASS | `session-settings.ts:56-65`; `w:lib/server/auth-proxy.ts` | SS:481-598; E2E-C:52 | |
 | S15 | PASS | `sign-in-code-message.ts:4-6`; `auth.factory.ts:373-388` | SIC:387-447; SICDB:144,208,234 | |
@@ -138,15 +140,16 @@ Browser-only evidence comes from the CI run, not from a local run.
 | S52 | PASS (supersedes flag-only check) | `auth.factory.ts:204-214,286-308`; `account-access.ts:68-77`; `session-access-hook.ts:114-123`; `access-control.ts:125-133`; migration `20261108120000_…:2` | AS:1008-1435; `session-second-factor-marker.prisma.db-spec.ts:107-184`; RACE:482-558 | A′ closed. |
 | S53 | PASS | `prisma-own-profile.repository.ts:25-41`; `own-profile.controller.ts:29-34` | `prisma-own-profile.repository.db-spec.ts:47-100`; RACE:560-603 | |
 | S54 | PASS (doc) | `w:lib/server/session-refresh.ts:14-19`; `docs/architecture/overview.md` | none pins 3000 | Advisory: no test fixes the value. |
-| S55 | PASS (T11f) | `a:config/environment.ts`, `rejectUnsupportedAuthSecrets` | ENVL (4 tests); WIRE "refuses to start with a BETTER_AUTH_SECRETS value (S55)" | The message names the variable and never echoes the value. |
+| S55 | PASS (T11f) | `a:config/environment.ts`, `rejectUnsupportedAuthSecrets` | ENVL (12 tests); WIRE "refuses to start with a BETTER_AUTH_SECRETS value (S55)" | **The rule, stated once:** `BETTER_AUTH_SECRETS` and `BETTER_AUTH_TRUSTED_ORIGINS` are refused for any value other than unset or exactly the empty string `""` (`isSetForLibrary`). A whitespace-only value is refused, because Better Auth reads the raw value and treats it as set. The empty string is accepted, because Better Auth treats it as absent. The message names the variable and never echoes the value. |
 | S56 | PASS (T11f) | `a:config/environment.ts`, `validateEnvironment`; `apps/api/package.json` `dev`; `w:playwright.config.ts` | ENVT "NODE_ENV (S56)" (3 tests); WIRE "refuses to start with a missing NODE_ENV (S56)"; `env-example.spec.ts` | `start` sets nothing: the deploy environment must set `NODE_ENV=production`. |
 | S57 | PASS (T11f, doc) | README "Environment variables"; `docs/architecture/overview.md` "Authentication boundary" | none (documentation only) | Rotation through Better Auth's `secrets` list is a deployment-milestone task. |
 
 ### Traceability cross-check
 
 176 quoted fragments of the traceability document were matched against the 68 test files. Matching handles
-`<state>` placeholders and the `›` separator; the fragment total includes some prose quotes. Ten fragments did not
-match verbatim: four were real name issues or abbreviations and the rest were prose or parametrised names.
+`<state>` placeholders and the `›` separator; the fragment total includes some prose quotes. Some fragments did not
+match verbatim. The list gives the cases: two real name issues (one stale name, one abbreviation) and one
+parametrised name, plus two non-test fixes made in the same pass (header and legend).
 
 - **Stale name (F5), fixed in T11f:** the clause table cited "allows an un-enrolled administrator's session on
   exactly four Better Auth endpoints"; the test is "lists exactly four Better Auth endpoints in the
@@ -161,14 +164,14 @@ match verbatim: four were real name issues or abbreviations and the rest were pr
 
 | ID | Finding | Resolution |
 | --- | --- | --- |
-| N1 | Better Auth 1.7.16 reads `BETTER_AUTH_SECRETS` (`context/create-context.mjs`) and lets it replace the validated `BETTER_AUTH_SECRET`. With `BETTER_AUTH_SECRETS="7:short"` and a 40-character `secret`, Better Auth signed with `"short"` and only logged a low-entropy warning. | Fixed in T11f (S55). The API refuses any value and names the variable without echoing it. Tests: ENVL (4 tests) and WIRE "refuses to start with a BETTER_AUTH_SECRETS value (S55)". |
+| N1 | Better Auth 1.7.16 reads `BETTER_AUTH_SECRETS` (`context/create-context.mjs`) and lets it replace the validated `BETTER_AUTH_SECRET`. With `BETTER_AUTH_SECRETS="7:short"` and a 40-character `secret`, Better Auth signed with `"short"` and only logged a low-entropy warning. | Fixed in T11f (S55). The API refuses a set value, as the S55 row states, and names the variable without echoing it. Tests: ENVL (12 tests) and WIRE "refuses to start with a BETTER_AUTH_SECRETS value (S55)". |
 | N2 | `NODE_ENV` defaulted to `development`. With it unset, `validateEnvironment` returned no `AUTH_PROXY_SECRET`, Mailpit as the email transport, and `x-forwarded-for` as the client IP header, because every production rule keys on it. `start` (`node dist/main.js`) sets nothing. | Fixed in T11f (S56). A missing `NODE_ENV` fails the startup; the values stay `development`, `test`, and `production`. Tests: ENVT "NODE_ENV (S56)" (missing, invalid, and the three valid values) and WIRE "refuses to start with a missing NODE_ENV (S56)". `dev` now sets `NODE_ENV=development`; the test environments pass it explicitly; Playwright already set it for the API and the web. `start` is unchanged: the deploy environment must set `NODE_ENV=production`. |
 | N3 | `BETTER_AUTH_SECRET` has no rotation path, and Better Auth also encrypts each administrator's TOTP secret and backup codes with it (`plugins/two-factor`). The API passes a single `secret` (`auth.factory.ts:150`). Rotating it ends every session and leaves each enrolled administrator without a usable second factor. | Documented in T11f (S57), in the README and in `overview.md`: the secret signs every session and encrypts the second factors; changing it ends every session and needs `admin:reset-second-factor` for each enrolled administrator. Rotation through the `secrets` list is a deployment-milestone task (open). |
 | N4 | `apps/web/.env.local.example:1` holds `NEXT_PUBLIC_API_URL=http://localhost:3001`. Nothing reads it, and the README says the web uses no `NEXT_PUBLIC_` settings. | Left to the owner: a `.env*` edit. |
 | N5 | Guard events (`auth_proxy_rejected`, `client_ip_unresolved`, `auth_request_unavailable`) logged the path of a request without a valid secret, which the sender chooses and which has no length limit. | Fixed in T11f. The events log the pathname without the query, cut to 128 characters. Tests: APS "the path in guard events is bounded (N5, L79)" (a 10,000-character path is logged as 128 characters, and no query string is logged). |
 | N6 | A browser abort while the request body was read made `readBoundedBody` reject with `AbortError`, which `auth-proxy.ts` rethrew (a rejected route handler becomes a Next.js `500`, which the verification did not observe). | Fixed in T11f. When `request.signal` is aborted the proxy answers `499` with the generic body and logs nothing; any other read error still rethrows. Tests: PROXY "answers 499 without a log when the browser leaves while the body is being read (N6)" and "still rethrows a body read error when the browser has not left". |
 | R9 | T10a R4-001: a failing `store.close()` after a committed `admin:reset-second-factor` rejected `runResetSecondFactor`, which `main` does not catch, after the password was printed. | Fixed in T11f. `closeCommandStore` catches the failure and prints one line with the class (and Prisma code) only; the exit code of the work is kept. `admin:create` and `user:disable` had the same `finally` and use the helper. Tests: `reset-second-factor.command.spec.ts` (R9 block) and `command-failure.spec.ts` "closeCommandStore". |
-| F1 | `apps/api/.env.example:6` has `AUTH_BASE_URL=http://localhost:3001` while `CORS_ORIGIN` is `http://localhost:3000`, so the API refuses the file once its secret is filled in. | Left to the owner: set `AUTH_BASE_URL=http://localhost:3000`. `env-example.spec.ts` fails until then and passes after. |
+| F1 | `apps/api/.env.example:6` has `AUTH_BASE_URL=http://localhost:3001` while `CORS_ORIGIN` is `http://localhost:3000`, so the API refuses the file once its secret is filled in. | Fixed by the owner in `c12f6dc`: `AUTH_BASE_URL=http://localhost:3000`. `env-example.spec.ts` now passes. |
 | F5 | The traceability document had a dead test name, an abbreviated name, a stale header status, and a duplicate legend row. ADR 0004's Status stopped at 2026-11-07 and said "No decision changed". | Fixed in T11f (documentation). The ADR Status now records the 2026-11-08 amendment of decision 3 (S52), and decision 9 (S55, S56). |
 
 ## Sign-off areas
@@ -196,8 +199,8 @@ match verbatim: four were real name issues or abbreviations and the rest were pr
 - **Environment validation:**
   - `NODE_ENV` is required and has no default (S56); `BETTER_AUTH_SECRET` is at least 32 characters.
   - `AUTH_PROXY_SECRET` is required in production.
-  - `BETTER_AUTH_TRUSTED_ORIGINS` and `BETTER_AUTH_SECRETS` (S55) are refused; the message names the variable and
-    never echoes the value.
+  - `BETTER_AUTH_TRUSTED_ORIGINS` and `BETTER_AUTH_SECRETS` (S55) are refused under the rule in the S55 row; the
+    message names the variable and never echoes the value.
   - The web validates at startup, logs `web_config_invalid` naming the variable, and exits with code 1
     (`w:lib/server/config.ts`, `startup.ts`).
 - **Logs:**
@@ -275,11 +278,11 @@ match verbatim: four were real name issues or abbreviations and the rest were pr
 | ID | Item | Status | Evidence |
 | --- | --- | --- | --- |
 | R1 | Per-email cap (L71) | **Open, accepted.** 5 codes per hour per address (`abuse-limits.ts:22`). The 6th request is removed unsent, so the 5th code stays valid for 300 s. After that the owner gets no new code until the hour ends. Before the cap, each extra request emails them and shadows the previous code. | SIC:456-557; `sign-in-code-sender.spec.ts:79,90` |
-| R2 | Invisible characters in display names | **Open, accepted (L75). Wider than listed.** Accepted: U+200B, U+2060, inner U+FEFF, U+2028, U+2029, U+00AD, U+034F, U+115F, U+3164, U+180E. A name made only of U+200B passes and renders empty. The 12 bidi controls are rejected. | `display-name.ts:8`; `display-name-residual.spec.ts` (T11f) pins today's decision |
+| R2 | Invisible characters in display names | **Open, accepted (L75). Wider than listed.** Accepted and pinned by the spec: U+200B, U+2060, inner U+FEFF, U+2028, U+2029, U+00AD, U+034F, U+115F, U+3164. Accepted but not pinned: U+180E (Mongolian vowel separator, checked by hand against `parseDisplayName`). A name made only of U+200B passes and renders empty. The 12 bidi controls are rejected. | `display-name.ts:8`; `display-name-residual.spec.ts` (T11f) pins today's decision |
 | R3 | Rolling-deploy skew and deploy order | **Open: manual procedure, no deploy tooling.** An old instance stores a second-factor session unmarked, and the new API ends it once (transient, administrators only). New code on a database without the column answers `500` on `GET /api/auth/get-session`, `P2022`, empty body, no project log event. Reproduced on a database migrated only to the first two migrations. `start` has no migrate step. | ADR `:100-102`; `overview.md`; `model.md:62` |
 | R4 | Pre-migration administrator sessions | **By design.** They read false and are ended once. Nothing is deployed, so nobody is affected yet. | `session-second-factor-marker.prisma.db-spec.ts:124`; AS:1116 |
 | R5 | Domain, `AUTH_BASE_URL`, `CORS_ORIGIN` | **Open** (L7, L71). Production needs an https web origin that is in `CORS_ORIGIN`. | ADR `:230-232` |
-| R6 | `.env.example` `AUTH_BASE_URL` | **Open: owner edit** (F1). | `env-example.spec.ts` |
+| R6 | `.env.example` `AUTH_BASE_URL` | **Fixed in `c12f6dc`** (F1). | `env-example.spec.ts` |
 | R7 | `user:disable` for a non-active status | **Open, latent.** `alreadyDisabled` means "was not ACTIVE". With a third status the command would change nothing, report `alreadyDisabled:true`, and exit 0. Unreachable with the current enum. | `prisma-user-access.repository.ts:15-26` |
 | R8 | T6a R1-001 (`access-control.ts:86-93`) | **Re-examined, no defect.** Today's code (`:125-133`) still fails closed, with the pending and marker checks added. The claim text is unrecorded. | AC:279,289,352 |
 | R9 | T10a R4-001, a failing `close()` | **Fixed in T11f.** See the findings table. | `reset-second-factor.command.spec.ts`; `command-failure.spec.ts` |
@@ -295,9 +298,8 @@ match verbatim: four were real name issues or abbreviations and the rest were pr
 
 ### Decisions left open
 
-- **F1 and N4, the example environment files (owner edit).** Set `apps/api/.env.example:6` to
-  `AUTH_BASE_URL=http://localhost:3000`, and decide whether to delete the stale `NEXT_PUBLIC_API_URL` line of
-  `apps/web/.env.local.example`.
+- **N4, the web example environment file (owner edit).** Decide whether to delete the stale `NEXT_PUBLIC_API_URL`
+  line of `apps/web/.env.local.example`. F1 (`apps/api/.env.example:6`) is fixed in `c12f6dc`.
 - **Rotation of `BETTER_AUTH_SECRET` (N3, S57).** Adopt Better Auth's `secrets` list in the deployment milestone.
 - **Deploy checklist (R3, R5, N2).** Migrate before or with the API, and set `NODE_ENV=production`: the API now
   refuses to start without it.

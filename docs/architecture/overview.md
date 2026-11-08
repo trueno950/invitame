@@ -69,7 +69,9 @@ decision 3, and "Abuse limits" for decision 7.
   deploy environment must set `NODE_ENV=production`.
 - Better Auth reads some variables on its own, so the API refuses them at startup and names the variable without
   echoing its value: `BETTER_AUTH_TRUSTED_ORIGINS` (use `CORS_ORIGIN`) and `BETTER_AUTH_SECRETS` (S55, L79), which
-  would replace the validated `BETTER_AUTH_SECRET`.
+  would replace the validated `BETTER_AUTH_SECRET`. Each is refused for any value other than unset or exactly the
+  empty string `""`: a whitespace-only value is refused, and `""` is accepted because Better Auth treats it as
+  absent.
 - `BETTER_AUTH_SECRET` signs every session and encrypts each administrator's TOTP secret and backup codes (S57,
   L79). Changing it ends every session, and each enrolled administrator cannot use their second factor until
   `admin:reset-second-factor` runs for them. The API passes a single `secret`, so it has no rotation path yet:

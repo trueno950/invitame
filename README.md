@@ -46,7 +46,7 @@ API (`apps/api/.env`):
 
 | Variable | Required | Default and rules |
 | --- | --- | --- |
-| `NODE_ENV` | Always | `development`, `test`, or `production`, with no default: the API does not start without it, because an unset value would turn every production rule off. Set it in `apps/api/.env`, as `pnpm dev` does, or in the deploy environment. |
+| `NODE_ENV` | Always | `development`, `test`, or `production`, with no default: the API does not start without it, because an unset value would turn every production rule off. `pnpm dev` sets `NODE_ENV=development` in its script. `pnpm start` sets nothing, so `pnpm start` and any deploy must set `NODE_ENV` in the environment (`production` for a deploy). |
 | `PORT` | No | `3001`; an integer from 1 to 65535. |
 | `CORS_ORIGIN` | Always | Comma-separated trusted web origins, for example `http://localhost:3000`: no path, empty entry, or wildcard. The same list feeds credentialed CORS and Better Auth's origin checks. |
 | `DATABASE_URL` | Always | A `postgresql:` or `postgres:` URL. `pnpm db:up` serves `postgresql://invitame:invitame_local_only@localhost:5442/invitame?schema=public`. |
@@ -63,7 +63,9 @@ API (`apps/api/.env`):
 
 The API also refuses `BETTER_AUTH_TRUSTED_ORIGINS`, so `CORS_ORIGIN` stays the only list of trusted origins, and
 `BETTER_AUTH_SECRETS`, which Better Auth reads on its own and which would replace the validated
-`BETTER_AUTH_SECRET`. Both messages name the variable and never echo its value.
+`BETTER_AUTH_SECRET`. Each is refused for any value other than unset or exactly the empty string `""`: a
+whitespace-only value is refused, and `""` is accepted because Better Auth treats it as absent. Both messages name
+the variable and never echo its value.
 
 `BETTER_AUTH_SECRET` signs every session and encrypts each administrator's TOTP secret and backup codes. Changing
 it ends every session, and each enrolled administrator cannot use their second factor until

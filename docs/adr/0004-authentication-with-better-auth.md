@@ -194,6 +194,9 @@ Facts verified on 2026-11-03 against the npm registry and official documentation
    | `BETTER_AUTH_TRUSTED_ORIGINS` | Refused, so `CORS_ORIGIN` stays the only list of trusted origins. |
    | `BETTER_AUTH_SECRETS` | Refused (S55): Better Auth reads it on its own and it would replace the validated `BETTER_AUTH_SECRET`. |
 
+   Both are refused for any value other than unset or exactly the empty string `""`: a whitespace-only value is
+   refused, and `""` is accepted because Better Auth treats it as absent.
+
    The web server validates its own settings when it starts and refuses to run with an invalid one. In production
    it requires `API_ORIGIN`, `AUTH_PROXY_SECRET`, `AUTH_CLIENT_IP_HEADER`, and `AUTH_EDGE_CLIENT_IP_HEADER`
    (`apps/web/lib/server/config.ts`). [Environment variables](../../README.md#environment-variables) in the

@@ -208,11 +208,13 @@ Unit tests run in `pnpm --filter @invitame/api test`, the database test in `test
 Unit tests run in `pnpm --filter @invitame/api test` and `pnpm --filter @invitame/web test`, the database test in
 `test:db`.
 
-- S55, `BETTER_AUTH_SECRETS` refused: `config/environment-library-variables.spec.ts` "variables that Better Auth
-  reads by itself (S55) › refuses BETTER_AUTH_SECRETS, which would replace the validated BETTER_AUTH_SECRET" (the
-  message names the variable and never echoes the value), "› refuses it in production too, where a replaced secret
-  matters most", "› still accepts the validated environment without it", and "› ignores a blank value, as it does
-  for BETTER_AUTH_TRUSTED_ORIGINS". U-wiring "AppModule startup configuration › refuses to start with a
+- S55, `BETTER_AUTH_SECRETS` and `BETTER_AUTH_TRUSTED_ORIGINS` refused unless unset or exactly `""` (the rule is
+  stated in the evidence document's S55 row, `m2-security-evidence.md`): `config/environment-library-variables.spec.ts`
+  "variables that Better Auth reads by itself (S55) › refuses BETTER_AUTH_SECRETS, which would replace the validated
+  BETTER_AUTH_SECRET" (the message names the variable and never echoes the value), "› refuses it in production too,
+  where a replaced secret matters most", "› still accepts the validated environment without it", "› accepts an empty
+  value, which Better Auth reads as absent (the e2e API sets both to empty)", and, for each of the two variables, "›
+  refuses <name> holding only whitespace (<value>) and never echoes it" (four whitespace values). U-wiring "AppModule startup configuration › refuses to start with a
   BETTER_AUTH_SECRETS value (S55)" proves the startup through `AppModule`.
 - S56, an explicit `NODE_ENV`: `config/environment.spec.ts` "NODE_ENV (S56) › is required: a missing value fails
   closed instead of turning every production rule off" (unset, empty, and blank), "› rejects a value outside
@@ -241,10 +243,11 @@ Unit tests run in `pnpm --filter @invitame/api test` and `pnpm --filter @invitam
   roles and statuses".
 - R2, the accepted invisible-character risk (T11b R1-001, L75): `users/domain/display-name-residual.spec.ts` pins
   the characters that still pass (U+200B, U+2060, an inner U+FEFF, U+2028, U+2029, U+00AD, U+034F, U+115F, U+3164,
-  and a name made only of U+200B). A later rule that refuses them changes these tests on purpose.
+  and a name made only of U+200B). U+180E is accepted too but is not pinned (the evidence document's R2 row lists
+  both sets). A later rule that refuses them changes these tests on purpose.
 - F1, `.env.example`: `config/env-example.spec.ts` "passes the startup validation once BETTER_AUTH_SECRET is
-  filled in" and "names the web origin as AUTH_BASE_URL, one of the CORS_ORIGIN entries" fail until the owner sets
-  `AUTH_BASE_URL=http://localhost:3000` in `apps/api/.env.example`, a human edit.
+  filled in" and "names the web origin as AUTH_BASE_URL, one of the CORS_ORIGIN entries" now pass, because the owner
+  set `AUTH_BASE_URL=http://localhost:3000` in `apps/api/.env.example` (`c12f6dc`).
 
 ## Findings routed to T9 (plan Log L35 to L44)
 
