@@ -47,7 +47,9 @@ describe("admin:create stdout (real PostgreSQL)", () => {
     const load = [
       terminal ? "process.stdout.isTTY = true;" : "",
       `process.argv = ${JSON.stringify([process.execPath, COMMAND, ...args])};`,
-      `require(${JSON.stringify(COMMAND)});`,
+      // `node -e` leaves `require.main` undefined, so the module's script guard does not fire: the
+      // load calls its exported `main()`, the same entry the script runs.
+      `require(${JSON.stringify(COMMAND)}).main();`,
     ].join(" ");
     const result = spawnSync(process.execPath, ["-r", "@swc-node/register", "-e", load], {
       cwd: API_ROOT,

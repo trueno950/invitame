@@ -78,10 +78,8 @@ export async function runCreateAdministrator(
   }
 }
 
-// Runs as a script (`require.main === module`) or when loaded with `node -e "require(...)"`, where
-// `require.main` is undefined (`create-administrator.command.db-spec.ts`); a spec that imports
-// `runCreateAdministrator` has its own `require.main`, so importing never runs the command.
-if (require.main === module || require.main === undefined) {
+/** The script entry: runs the command with this process's arguments, terminal, and database. */
+export function main(): void {
   void runCreateAdministrator(
     process.argv.slice(2),
     {
@@ -99,4 +97,10 @@ if (require.main === module || require.main === undefined) {
   ).then((code) => {
     process.exitCode = code;
   });
+}
+
+// Only a direct run starts the command; importing the module, from any loader, never does. A harness
+// that loads it another way calls `main()` itself (`create-administrator.command.db-spec.ts`).
+if (require.main === module) {
+  main();
 }

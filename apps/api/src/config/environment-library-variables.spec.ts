@@ -59,18 +59,18 @@ describe("variables that Better Auth reads by itself (S55)", () => {
 
   // Better Auth reads the raw value: "  " is set for it (`BETTER_AUTH_SECRETS` is parsed, and
   // `BETTER_AUTH_TRUSTED_ORIGINS` adds the blank entry), so a trimmed check would disagree with it.
+  // The whole message is fixed, so no form of the value, raw or escaped, can appear in it.
+  const REFUSAL = {
+    BETTER_AUTH_SECRETS: "BETTER_AUTH_SECRETS is not supported; set BETTER_AUTH_SECRET.",
+    BETTER_AUTH_TRUSTED_ORIGINS:
+      "BETTER_AUTH_TRUSTED_ORIGINS is not supported; list trusted origins in CORS_ORIGIN.",
+  } as const;
   for (const name of ["BETTER_AUTH_SECRETS", "BETTER_AUTH_TRUSTED_ORIGINS"] as const) {
     for (const blank of [" ", "  ", "\t", "\n"]) {
       it(`refuses ${name} holding only whitespace (${JSON.stringify(blank)}) and never echoes it`, () => {
-        assert.throws(
-          () => validateEnvironment({ ...VALID, [name]: blank }),
-          (error: unknown) => {
-            assert.ok(error instanceof Error);
-            assert.match(error.message, new RegExp(name));
-            assert.ok(!error.message.includes(JSON.stringify(blank)));
-            return true;
-          },
-        );
+        assert.throws(() => validateEnvironment({ ...VALID, [name]: blank }), {
+          message: REFUSAL[name],
+        });
       });
     }
   }
