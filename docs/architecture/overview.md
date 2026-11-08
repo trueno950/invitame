@@ -120,7 +120,8 @@ apps/web server components and actions ──► apps/api /me
   hop-by-hop headers, and with `Cache-Control: no-store`. An unreachable API gets `502`, a timeout `504`, and an
   API `5xx` keeps its status; all three return the generic `SERVICE_UNAVAILABLE` body and log an
   `auth_proxy_upstream_failed` warning with the path, reason, and status only. When the browser goes away, the
-  proxy ends its API call too and logs nothing, since the API did not fail (T9b part C1).
+  proxy ends its API call too, answers `499` (the client-closed-request status, so server error metrics do not
+  count a cancellation), and logs nothing, since the API did not fail (T9b part C1; S51).
 - The API refuses every `/api/auth` request without the secret in production (`403 {"code":"FORBIDDEN"}` and an
   `auth_proxy_rejected` warning with the path only) before any endpoint, hook, or rate-limit step runs. It
   always removes the secret header, and removes the client IP header unless the secret was valid. Outside
@@ -196,7 +197,9 @@ This is M2 T8c (S1, S6; L34, L39): `apps/web/app/ingresar`, `apps/web/app/cuenta
   Next.js proxy, formerly middleware) runs `GET /api/auth/get-session` through the web's `/api/auth` proxy
   before every page whose render reads the session (`/ingresar`, `/cuenta`, and the paths under `/cuenta`),
   and returns every `Set-Cookie` with the page. It runs for a page `GET` and for a server action's `POST`
-  that carry a Better Auth cookie, waits at most 3 seconds, and never blocks the page. When the refresh fails or
+  that carry a Better Auth cookie, waits at most 3 seconds, and never blocks the page. That limit
+  (`SESSION_REFRESH_TIMEOUT_MS`) is the real bound of `/ingresar` and the `/cuenta` pages: when the API is slow,
+  the page shows its unavailable notice after about 3 seconds instead of waiting on it (S54). When the refresh fails or
   the API answers it with a `5xx`, `proxy.ts` passes the render the request header `x-invitame-api-unavailable`,
   and the page's `GET /me` or `PATCH /me` answers unavailable at once instead of waiting up to 10 more seconds
   (R4-cuenta-outage-latency-serialized); `proxy.ts` removes any copy of that header the browser sent. Otherwise

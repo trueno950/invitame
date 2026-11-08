@@ -70,9 +70,15 @@ const API_ORIGIN_ERROR =
  * Any spelling of a bare http(s) origin, stored in its normalized form, which the proxy compares
  * against (R3-api-origin-rejects-equivalent-origins): `http://API:3001` is `http://api:3001`, and a
  * default port or a lone trailing `/` is dropped. Only then is the serialized URL its origin plus `/`,
- * so a path, a query or fragment (even an empty one), and credentials are refused.
+ * so a path, a query or fragment (even an empty one), and credentials are refused. Normalization also
+ * drops empty credentials (`http://@api:3001`, `http://:@api:3001/`), so the raw text is checked first:
+ * a valid origin never contains `@`, and any `@` fails the startup like real credentials (L59, T11e).
  */
 function parseApiOrigin(value: string): string {
+  if (value.includes("@")) {
+    throw new Error(API_ORIGIN_ERROR);
+  }
+
   let url: URL;
 
   try {

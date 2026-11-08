@@ -44,6 +44,8 @@ const SERVICE_UNAVAILABLE_BODY = {
 /** Sign-in, code, and second-factor bodies are a few hundred bytes. */
 export const AUTH_PROXY_MAX_BODY_BYTES = 16 * 1024;
 export const AUTH_PROXY_TIMEOUT_MS = 10_000;
+/** The de facto status for "the client closed the request"; a cancellation is not a server error. */
+const CLIENT_CLOSED_REQUEST_STATUS = 499;
 
 /** A structured warning without cookies, bodies, query strings, tokens, or the secret. */
 export type AuthProxyEvent =
@@ -247,7 +249,8 @@ export async function proxyAuthRequest(
   } catch (error) {
     if (request.signal.aborted) {
       // The browser left (R4-proxy-ignores-client-abort): no one reads this, and the API did not fail.
-      return jsonError(502, SERVICE_UNAVAILABLE_BODY);
+      // 499 is the client-closed-request status, so server error metrics do not count it (S51).
+      return jsonError(CLIENT_CLOSED_REQUEST_STATUS, SERVICE_UNAVAILABLE_BODY);
     }
 
     const timedOut = isTimeout(error);

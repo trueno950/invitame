@@ -447,9 +447,12 @@ describe("bounds and failures", () => {
     }
     browser.abort();
     await closed;
-    await answer;
+    const response = await answer;
 
     assert.ok(Date.now() - startedAt < 2_000, "the API call ends with the browser's request");
+    // 499 is the client-closed-request status: server error metrics do not count a cancellation (S51).
+    assert.equal(response.status, 499);
+    assert.deepEqual(await response.json(), GENERIC_ERROR);
     assert.deepEqual(events, []);
   });
 
