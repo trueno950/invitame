@@ -46,7 +46,7 @@ API (`apps/api/.env`):
 
 | Variable | Required | Default and rules |
 | --- | --- | --- |
-| `NODE_ENV` | No | `development`; also `test` or `production`. |
+| `NODE_ENV` | Always | `development`, `test`, or `production`, with no default: the API does not start without it, because an unset value would turn every production rule off. Set it in `apps/api/.env`, as `pnpm dev` does, or in the deploy environment. |
 | `PORT` | No | `3001`; an integer from 1 to 65535. |
 | `CORS_ORIGIN` | Always | Comma-separated trusted web origins, for example `http://localhost:3000`: no path, empty entry, or wildcard. The same list feeds credentialed CORS and Better Auth's origin checks. |
 | `DATABASE_URL` | Always | A `postgresql:` or `postgres:` URL. `pnpm db:up` serves `postgresql://invitame:invitame_local_only@localhost:5442/invitame?schema=public`. |
@@ -61,7 +61,14 @@ API (`apps/api/.env`):
 | `MAILPIT_URL` | No | `http://localhost:8025`; an `http` or `https` origin. |
 | `RESEND_API_KEY` | With `resend` | Required whenever `EMAIL_TRANSPORT` is `resend`, so always in production. Never commit it. |
 
-The API also refuses `BETTER_AUTH_TRUSTED_ORIGINS`, so `CORS_ORIGIN` stays the only list of trusted origins.
+The API also refuses `BETTER_AUTH_TRUSTED_ORIGINS`, so `CORS_ORIGIN` stays the only list of trusted origins, and
+`BETTER_AUTH_SECRETS`, which Better Auth reads on its own and which would replace the validated
+`BETTER_AUTH_SECRET`. Both messages name the variable and never echo its value.
+
+`BETTER_AUTH_SECRET` signs every session and encrypts each administrator's TOTP secret and backup codes. Changing
+it ends every session, and each enrolled administrator cannot use their second factor until
+`pnpm --filter @invitame/api admin:reset-second-factor -- <email>` runs for them. Rotating it without that breakage,
+through Better Auth's `secrets` list, is a task of the deployment milestone.
 
 Over `https` the session cookie is `__Host-better-auth.session_token` (`Secure`, no `Domain`); over local
 `http` it is `better-auth.session_token` without `Secure`. Rate limits run in every environment and are stored in
