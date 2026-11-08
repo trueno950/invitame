@@ -98,6 +98,16 @@ describe("AppModule startup configuration", () => {
       { BETTER_AUTH_SECRET: "x".repeat(31) },
       "BETTER_AUTH_SECRET must be at least 32 characters long.",
     ],
+    [
+      "a missing NODE_ENV (S56)",
+      { NODE_ENV: undefined },
+      "NODE_ENV must be provided as development, production, or test.",
+    ],
+    [
+      "a BETTER_AUTH_SECRETS value (S55)",
+      { BETTER_AUTH_SECRETS: "1:short" },
+      "BETTER_AUTH_SECRETS is not supported; set BETTER_AUTH_SECRET.",
+    ],
     ["a missing AUTH_BASE_URL", { AUTH_BASE_URL: undefined }, "AUTH_BASE_URL must be provided."],
     [
       "an AUTH_BASE_URL with a path",

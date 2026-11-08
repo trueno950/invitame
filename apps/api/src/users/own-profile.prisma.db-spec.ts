@@ -64,6 +64,7 @@ describe("own profile on the Prisma schema (real PostgreSQL)", () => {
     @Module({
       imports: [
         createConfigModule({
+          NODE_ENV: "development",
           CORS_ORIGIN: TRUSTED_ORIGIN,
           DATABASE_URL: databaseUrl,
           BETTER_AUTH_SECRET: secret,

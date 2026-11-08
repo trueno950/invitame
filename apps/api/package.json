@@ -6,7 +6,7 @@
     "admin:create": "node -r @swc-node/register src/users/create-administrator.command.ts",
     "admin:reset-second-factor": "node -r @swc-node/register src/users/reset-second-factor.command.ts",
     "build": "tsc -p tsconfig.build.json",
-    "dev": "node --watch -r @swc-node/register src/main.ts",
+    "dev": "NODE_ENV=development node --watch -r @swc-node/register src/main.ts",
     "lint": "biome lint .",
     "prisma:check": "tsx prisma/check-connection.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",

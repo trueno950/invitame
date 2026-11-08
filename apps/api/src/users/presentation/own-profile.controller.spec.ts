@@ -64,6 +64,7 @@ describe("own profile: GET /me and PATCH /me", () => {
     @Module({
       imports: [
         createConfigModule({
+          NODE_ENV: "development",
           CORS_ORIGIN: TRUSTED_ORIGIN,
           DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
           BETTER_AUTH_SECRET: secret,

@@ -125,6 +125,7 @@ describe("administrator sign-in, enrollment gate, and second factor", () => {
     @Module({
       imports: [
         createConfigModule({
+          NODE_ENV: "development",
           CORS_ORIGIN: TRUSTED_ORIGIN,
           DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
           BETTER_AUTH_SECRET: secret,

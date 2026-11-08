@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-import { commandFailureEvent } from "./application/command-failure";
+import { closeCommandStore, commandFailureEvent } from "./application/command-failure";
 import {
   DISABLE_USER_EVENT,
   DisableUserUseCase,
@@ -37,7 +37,8 @@ async function main(args: readonly string[]): Promise<number> {
     console.error(JSON.stringify(commandFailureEvent(DISABLE_USER_EVENT.FAILED, error)));
     return 1;
   } finally {
-    await prisma.$disconnect();
+    // The user is already disabled: a failing disconnect changes no exit code.
+    await closeCommandStore(() => prisma.$disconnect(), "user_disable_close_failed", console.error);
   }
 }
 

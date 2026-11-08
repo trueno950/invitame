@@ -516,3 +516,72 @@ describe("local development without a proxy secret (L36)", () => {
     assert.deepEqual(harness.events, []);
   });
 });
+
+describe("the path in guard events is bounded (N5, L79)", () => {
+  const LONG_PATH = `${AUTH_PATH}/${"a".repeat(10_000)}`;
+  const QUERY = "token=secret-value&email=a@example.test";
+
+  function longRequest(headers: Record<string, string> = {}): Request {
+    return new Request(`${AUTH_BASE_URL}${LONG_PATH}?${QUERY}`, { headers });
+  }
+
+  function assertBounded(events: readonly AuthRequestEvent[], event: string): void {
+    assert.equal(events.length, 1);
+    const [logged] = events;
+    assert.equal(logged?.event, event);
+    const { path } = logged as { path: string };
+    assert.equal(path.length, 128);
+    assert.equal(path, LONG_PATH.slice(0, 128));
+    assert.ok(!JSON.stringify(logged).includes("token="), "no query string is logged");
+    assert.ok(!JSON.stringify(logged).includes("secret-value"));
+  }
+
+  it("cuts the path of auth_proxy_rejected at 128 characters and drops the query", async () => {
+    const events: AuthRequestEvent[] = [];
+    const guarded = guardAuthHandler(async () => Response.json({ ok: true }), {
+      log: (event) => events.push(event),
+      proxy: { secret: "s".repeat(32), required: true, clientIpHeader: CLIENT_IP_HEADER },
+    });
+
+    assert.equal((await guarded(longRequest())).status, 403);
+    assertBounded(events, AUTH_REQUEST_EVENT.PROXY_REJECTED);
+  });
+
+  it("cuts the path of client_ip_unresolved at 128 characters and drops the query", async () => {
+    const events: AuthRequestEvent[] = [];
+    const guarded = guardAuthHandler(async () => Response.json({ ok: true }), {
+      log: (event) => events.push(event),
+      resolveClientIp: () => null,
+    });
+
+    assert.equal((await guarded(longRequest())).status, 503);
+    assertBounded(events, AUTH_REQUEST_EVENT.CLIENT_IP_UNRESOLVED);
+  });
+
+  it("cuts the path of auth_request_unavailable at 128 characters and drops the query", async () => {
+    const events: AuthRequestEvent[] = [];
+    const guarded = guardAuthHandler(
+      async () => {
+        throw new Error("store down for a@example.test");
+      },
+      { log: (event) => events.push(event) },
+    );
+
+    assert.equal((await guarded(longRequest())).status, 503);
+    assertBounded(events, AUTH_REQUEST_EVENT.UNAVAILABLE);
+  });
+
+  it("keeps a short path whole", async () => {
+    const events: AuthRequestEvent[] = [];
+    const guarded = guardAuthHandler(async () => Response.json({ ok: true }), {
+      log: (event) => events.push(event),
+      proxy: { secret: "s".repeat(32), required: true, clientIpHeader: CLIENT_IP_HEADER },
+    });
+
+    await guarded(new Request(`${AUTH_BASE_URL}${AUTH_PATH}/ok?x=1`));
+
+    assert.deepEqual(events, [
+      { event: AUTH_REQUEST_EVENT.PROXY_REJECTED, path: `${AUTH_PATH}/ok` },
+    ]);
+  });
+});

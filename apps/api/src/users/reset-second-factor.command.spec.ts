@@ -117,6 +117,55 @@ describe("admin:reset-second-factor", () => {
     assert.deepEqual(store, { opened: 1, closed: 1 });
   });
 
+  describe("when closing the store fails after the reset committed (T10a R4-001, R9)", () => {
+    function runWithFailingClose(result: ResetSecondFactorResult | Error) {
+      const out: string[] = [];
+      const err: string[] = [];
+      const exitCode = runResetSecondFactor(
+        ["admin@example.test"],
+        { isTerminal: true, out: (line) => out.push(line), err: (line) => err.push(line) },
+        () => ({
+          accounts: {
+            resetSecondFactor: async () => {
+              if (result instanceof Error) {
+                throw result;
+              }
+              return result;
+            },
+          },
+          close: async () => {
+            throw new TypeError("disconnect from admin@example.test failed");
+          },
+        }),
+        async (password) => `hash-of-${password.length}`,
+      );
+      return exitCode.then((code) => ({ exitCode: code, out, err }));
+    }
+
+    it("still resolves with exit code 0, prints the password once, and logs the class only", async () => {
+      const { exitCode, out, err } = await runWithFailingClose(RESET);
+
+      assert.equal(exitCode, 0);
+      assert.equal(out.filter((line) => line.includes("Initial password")).length, 1);
+      assert.deepEqual(err, [
+        '{"event":"administrator_second_factor_reset_close_failed","error":"TypeError"}',
+      ]);
+      assert.equal(err.join("\n").includes("admin@example.test"), false);
+    });
+
+    it("keeps the exit code 1 of a refusal and of a store failure", async () => {
+      const refused = await runWithFailingClose({ outcome: "refused", reason: "unknown" });
+      assert.equal(refused.exitCode, 1);
+      assert.deepEqual(refused.err, [
+        '{"event":"administrator_second_factor_reset_close_failed","error":"TypeError"}',
+      ]);
+
+      const failed = await runWithFailingClose(new RangeError("boom"));
+      assert.equal(failed.exitCode, 1);
+      assert.equal(failed.err.length, 2, "the reset failure and the close failure, one line each");
+    });
+  });
+
   it("refuses to run as a script when stdout is piped", () => {
     const apiRoot = path.resolve(__dirname, "../..");
     const result = spawnSync(

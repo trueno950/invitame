@@ -88,6 +88,7 @@ describe("Better Auth through @thallesp/nestjs-better-auth integration", () => {
     @Module({
       imports: [
         createConfigModule({
+          NODE_ENV: "development",
           CORS_ORIGIN: TEST_ORIGIN,
           DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
           BETTER_AUTH_SECRET: secret,

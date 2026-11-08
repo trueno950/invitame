@@ -456,6 +456,66 @@ describe("bounds and failures", () => {
     assert.deepEqual(events, []);
   });
 
+  // A body that never completes and fails the way a streamed request body does when the browser leaves.
+  function streamingPost(signal: AbortSignal, failure: () => Error): Request {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        signal.addEventListener("abort", () => controller.error(failure()), { once: true });
+      },
+    });
+    return new Request(`${WEB_ORIGIN}/api/auth/sign-in/email-otp`, {
+      method: "POST",
+      body,
+      signal,
+      duplex: "half",
+    } as RequestInit);
+  }
+
+  it("answers 499 without a log when the browser leaves while the body is being read (N6)", {
+    timeout: 2_000,
+  }, async () => {
+    const browser = new AbortController();
+    const events: AuthProxyEvent[] = [];
+    const answer = proxy(
+      streamingPost(
+        browser.signal,
+        () => new DOMException("The operation was aborted.", "AbortError"),
+      ),
+      { events },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    browser.abort();
+    const response = await answer;
+
+    assert.equal(response.status, 499);
+    assert.deepEqual(await response.json(), GENERIC_ERROR);
+    assert.deepEqual(events, []);
+    assert.deepEqual(received, [], "no call reaches the API");
+  });
+
+  it("still rethrows a body read error when the browser has not left", {
+    timeout: 2_000,
+  }, async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new TypeError("body stream broke"));
+      },
+    });
+    const request = new Request(`${WEB_ORIGIN}/api/auth/sign-in/email-otp`, {
+      method: "POST",
+      body: stream,
+      duplex: "half",
+    } as RequestInit);
+    const events: AuthProxyEvent[] = [];
+
+    await assert.rejects(proxy(request, { events }), {
+      name: "TypeError",
+      message: "body stream broke",
+    });
+    assert.deepEqual(events, []);
+  });
+
   it("never logs cookies, bodies, query strings, or the secret", async () => {
     respond = (_request, response) => {
       response.writeHead(503, { "content-type": "application/json" });

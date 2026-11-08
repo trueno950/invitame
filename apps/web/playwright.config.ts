@@ -43,6 +43,7 @@ const apiEnvironment = {
   DATABASE_URL: databaseUrl,
   BETTER_AUTH_SECRET: runSecret(),
   BETTER_AUTH_TRUSTED_ORIGINS: "",
+  BETTER_AUTH_SECRETS: "",
   AUTH_PROXY_SECRET: proxySecret,
   // Pinned empty so a developer's `apps/api/.env` cannot add a rotation secret to the e2e API.
   AUTH_PROXY_SECRET_PREVIOUS: "",

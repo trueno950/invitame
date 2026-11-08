@@ -223,6 +223,12 @@ export async function proxyAuthRequest(
         return jsonError(413, { code: "PAYLOAD_TOO_LARGE", message: "Request body too large." });
       }
 
+      if (request.signal.aborted) {
+        // The browser left while its body was arriving (N6, L79): the same cancellation as during
+        // the API call, so it answers 499 and logs nothing. Any other read failure still rethrows.
+        return jsonError(CLIENT_CLOSED_REQUEST_STATUS, SERVICE_UNAVAILABLE_BODY);
+      }
+
       throw error;
     }
   }
