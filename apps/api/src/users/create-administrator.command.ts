@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client";
 // Better Auth's own hasher, the default of its password sign-in (1.7.16 `crypto/password.mjs`,
 // `hashPassword`; selected in `context/create-context.mjs`), so sign-in verifies what we store.
 import { hashPassword } from "better-auth/crypto";
-
+import { commandFailureEvent } from "./application/command-failure";
 import {
   CreateAdministratorUseCase,
   InvalidAdministratorEmailError,
@@ -56,10 +56,8 @@ async function main(args: readonly string[]): Promise<number> {
       console.error(error.message);
       return 2;
     }
-    // The class name only: a message may carry SQL or the address.
-    console.error(
-      JSON.stringify({ event: "administrator_create_failed", error: (error as Error)?.name }),
-    );
+    // The class name and the Prisma code only: a message may carry SQL or the address.
+    console.error(JSON.stringify(commandFailureEvent("administrator_create_failed", error)));
     return 1;
   } finally {
     await prisma.$disconnect();

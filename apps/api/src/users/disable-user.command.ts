@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
+import { commandFailureEvent } from "./application/command-failure";
 import {
   DISABLE_USER_EVENT,
   DisableUserUseCase,
@@ -32,10 +33,8 @@ async function main(args: readonly string[]): Promise<number> {
       console.error(error.message);
       return 2;
     }
-    // The class name only: a message may carry SQL or the address.
-    console.error(
-      JSON.stringify({ event: DISABLE_USER_EVENT.FAILED, error: (error as Error)?.name }),
-    );
+    // The class name and the Prisma code only: a message may carry SQL or the address.
+    console.error(JSON.stringify(commandFailureEvent(DISABLE_USER_EVENT.FAILED, error)));
     return 1;
   } finally {
     await prisma.$disconnect();

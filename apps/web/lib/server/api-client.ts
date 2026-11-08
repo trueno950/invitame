@@ -28,8 +28,15 @@ export type SessionResult<T> = { signedIn: true; value: T } | { signedIn: false 
  *   (400), or a 3xx, because the client never follows a redirect (`redirect: "manual"`).
  * - `unavailable`: the API failed (5xx), was unreachable, or did not answer in time.
  * - `invalid-response`: a success whose body does not match the contract.
+ * - `short-circuited`: the call was never made, because `proxy.ts` had just found the API failing for
+ *   this request (`callUnlessApiUnavailable`); the log tells it apart from a call that reached a
+ *   failing API (S50, L71).
  */
-export type ApiClientErrorKind = "rejected" | "unavailable" | "invalid-response";
+export type ApiClientErrorKind =
+  | "rejected"
+  | "unavailable"
+  | "invalid-response"
+  | "short-circuited";
 
 /**
  * A typed failure that never carries the API's response body. An `unavailable` failure keeps the

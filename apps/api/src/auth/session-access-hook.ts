@@ -13,6 +13,12 @@ import {
   TOTP_ISSUER,
 } from "./administrator-enrollment";
 import { SECOND_FACTOR_VERIFY_PATHS, TWO_FACTOR_PATH } from "./auth-paths";
+import {
+  AUTH_REQUEST_EVENT,
+  type AuthRequestLog,
+  type SessionEndedReason,
+} from "./auth-request-guard";
+import { logSafely } from "./safe-logging";
 
 type HookContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
 
@@ -24,7 +30,8 @@ interface RequestOverrides {
 
 /**
  * Better Auth `hooks.before`, on every Better Auth endpoint and before it runs (S9, S18, S20, S21,
- * L27, L28):
+ * L27, L28). Each deleted session is logged once as `session_ended` with a closed reason and the
+ * request path, never the user, the address, or the token (S50, L71):
  * 1. A session whose stored user is not ACTIVE is deleted, so the endpoint answers exactly as it does
  *    without a session. Covers the race in which a sign-in commits after `user:disable` has deleted the
  *    user's sessions: the surviving session is refused on its first use.
@@ -59,7 +66,11 @@ interface RequestOverrides {
  *   the same request (`api/state/should-session-refresh.mjs`); `getSession` then neither updates the
  *   row nor sets a cookie.
  */
-export const enforceSessionAccess = createAuthMiddleware(async (ctx) => {
+export function createSessionAccessHook(log: AuthRequestLog) {
+  return createAuthMiddleware(async (ctx) => enforceSessionAccess(ctx, log));
+}
+
+async function enforceSessionAccess(ctx: HookContext, log: AuthRequestLog) {
   const overrides = secondFactorBodyOverrides(ctx);
 
   const token = await ctx.getSignedCookie(
@@ -72,13 +83,15 @@ export const enforceSessionAccess = createAuthMiddleware(async (ctx) => {
     const user = found.user as AccountAccess & { id: string };
     const session = found.session as { secondFactorVerified?: unknown };
 
-    if (
-      !isActive(user) ||
-      lacksRequiredSecondFactor(user, session) ||
-      !(await enrollmentWindowOpen(ctx.context.internalAdapter, user.id, user))
-    ) {
+    const ended = await endedReason(ctx, user, session);
+    if (ended) {
       // A failure here throws, so the request fails closed instead of using the session.
       await ctx.context.internalAdapter.deleteSession(token);
+      logSafely(log, {
+        event: AUTH_REQUEST_EVENT.SESSION_ENDED,
+        reason: ended,
+        ...(ctx.path === undefined ? {} : { path: ctx.path }),
+      });
     } else {
       if (user.role === USER_ROLE.ADMIN) {
         await setShouldSkipSessionRefresh(true);
@@ -90,7 +103,25 @@ export const enforceSessionAccess = createAuthMiddleware(async (ctx) => {
   }
 
   return overrides.headers || overrides.body ? { context: overrides } : undefined;
-});
+}
+
+/** The first rule that ends this stored session, in the order of the hook's list; null keeps it. */
+async function endedReason(
+  ctx: HookContext,
+  user: AccountAccess & { id: string },
+  session: { secondFactorVerified?: unknown },
+): Promise<SessionEndedReason | null> {
+  if (!isActive(user)) {
+    return "account_not_active";
+  }
+  if (lacksRequiredSecondFactor(user, session)) {
+    return "second_factor_missing";
+  }
+  if (!(await enrollmentWindowOpen(ctx.context.internalAdapter, user.id, user))) {
+    return "enrollment_window_closed";
+  }
+  return null;
+}
 
 /** Whether this active user's session must not be visible to the endpoint at `path`. */
 function sessionHiddenOn(path: string | undefined, user: AccountAccess): boolean {

@@ -10,7 +10,11 @@ import {
   USER_ROLE,
 } from "./account-access";
 import { TWO_FACTOR_PATH } from "./auth-paths";
-import { AUTH_REQUEST_EVENT, type AuthRequestLog } from "./auth-request-guard";
+import {
+  AUTH_REQUEST_EVENT,
+  type AuthRequestLog,
+  type EnrollmentRevertResult,
+} from "./auth-request-guard";
 import { errorClass, logSafely } from "./safe-logging";
 
 /** The issuer label of the TOTP URI shown at enrollment (decision 3). */
@@ -109,6 +113,7 @@ interface ResolvedSession {
 export async function settleFirstConfirmation(
   context: SessionCreateContext,
   user: AccountAccess & { id: string },
+  log: AuthRequestLog,
 ): Promise<FirstConfirmationDecision> {
   if (
     context.path !== TWO_FACTOR_PATH.VERIFY_TOTP ||
@@ -134,17 +139,35 @@ export async function settleFirstConfirmation(
           where: [{ field: "token", value: token }],
         });
   if (pending?.userId === user.id) {
-    await adapter.deleteMany({
-      model: "session",
-      where: [
-        { field: "userId", value: user.id },
-        { field: "token", operator: "ne", value: token },
-      ],
-    });
+    await deleteSiblingSessions(context, log, [
+      { field: "userId", value: user.id },
+      { field: "token", operator: "ne", value: token },
+    ]);
     return "allow";
   }
 
-  return settleSupersededConfirmation(context, user, snapshot);
+  return settleSupersededConfirmation(context, user, snapshot, log);
+}
+
+/**
+ * Ends sessions of a user with the raw adapter. A failure is logged once, as the path and the error
+ * class (S50, L71), and rethrown, so the hook still fails closed.
+ */
+async function deleteSiblingSessions(
+  context: SessionCreateContext,
+  log: AuthRequestLog,
+  where: Parameters<SessionCreateContext["context"]["adapter"]["deleteMany"]>[0]["where"],
+): Promise<void> {
+  try {
+    await context.context.adapter.deleteMany({ model: "session", where });
+  } catch (error) {
+    logSafely(log, {
+      event: AUTH_REQUEST_EVENT.SIBLING_SESSIONS_DELETE_FAILED,
+      path: context.path,
+      error: errorClass(error),
+    });
+    throw error;
+  }
 }
 
 /** Cases 1 to 4 of `settleFirstConfirmation`; case 3 ends every session of the user. */
@@ -152,6 +175,7 @@ async function settleSupersededConfirmation(
   context: SessionCreateContext,
   user: AccountAccess & { id: string },
   snapshot: ResolvedSession,
+  log: AuthRequestLog,
 ): Promise<"refuse" | "revert"> {
   const { adapter, internalAdapter } = context.context;
   const enrollment = await adapter.findOne<{ verified?: unknown }>({
@@ -183,7 +207,7 @@ async function settleSupersededConfirmation(
   }
   // A newer session may be a sibling confirmation or a second tab signed in with the password alone;
   // they cannot be told apart, so every session of the user ends before the refusal.
-  await adapter.deleteMany({ model: "session", where: [{ field: "userId", value: user.id }] });
+  await deleteSiblingSessions(context, log, [{ field: "userId", value: user.id }]);
   return "refuse";
 }
 
@@ -205,6 +229,9 @@ function timeOf(value: unknown): number | undefined {
  * `administrator_enrollment_compensation_failed` event with the error class follows and the refusal
  * stands. Then, as when the process stops before the update, the flag stays true without a session:
  * the account is locked, fails closed, and only the manual recovery procedure (T10) releases it.
+ *
+ * After a revert attempt, one `administrator_enrollment_revert_result` event names its result:
+ * `reverted`, `unchanged` (the guarded update matched no row), or `failed` (S50, L71).
  */
 export async function refuseSupersededConfirmation(
   context: SessionCreateContext,
@@ -220,8 +247,9 @@ export async function refuseSupersededConfirmation(
   });
 
   if (decision === "revert") {
+    let result: EnrollmentRevertResult = "failed";
     try {
-      await context.context.adapter.updateMany({
+      const changed = await context.context.adapter.updateMany({
         model: "user",
         where: [
           { field: "id", value: userId },
@@ -229,6 +257,7 @@ export async function refuseSupersededConfirmation(
         ],
         update: { twoFactorEnabled: false },
       });
+      result = changed > 0 ? "reverted" : "unchanged";
     } catch (error) {
       logSafely(log, {
         event: AUTH_REQUEST_EVENT.ENROLLMENT_COMPENSATION_FAILED,
@@ -236,6 +265,8 @@ export async function refuseSupersededConfirmation(
         error: errorClass(error),
       });
     }
+    // Logged after the attempt, with what it did (S50, L71).
+    logSafely(log, { event: AUTH_REQUEST_EVENT.ENROLLMENT_REVERT_RESULT, path, result });
   }
 
   return APIError.from("UNAUTHORIZED", ENROLLMENT_SUPERSEDED);

@@ -23,7 +23,7 @@ export interface ServerLogEvent {
   event: ServerLogEventName;
   /** The class name of the error, such as `ApiClientError`; `unknown` for a non-Error value. */
   error: string;
-  /** For an `ApiClientError`: `rejected`, `unavailable`, or `invalid-response`. */
+  /** For an `ApiClientError`: `rejected`, `unavailable`, `invalid-response`, or `short-circuited`. */
   kind?: ApiClientErrorKind;
   /** The class name of the error's cause, such as `TimeoutError` or `TypeError` (unreachable). */
   cause?: string;

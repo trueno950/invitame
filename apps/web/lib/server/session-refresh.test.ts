@@ -7,6 +7,7 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { ApiClientError } from "./api-client.ts";
 import { proxyAuthRequest } from "./auth-proxy.ts";
 import type { WebServerConfig } from "./config.ts";
+import { logApiCallFailure, SERVER_LOG_EVENT } from "./server-log.ts";
 import {
   API_UNAVAILABLE_HEADER,
   appendSetCookies,
@@ -154,6 +155,34 @@ describe("the outage notice for the page (R4-cuenta-outage-latency-serialized)",
     );
   });
 
+  it("logs the short circuit as its own kind, apart from a call that reached a failing API (S50, L71)", async () => {
+    const events: unknown[] = [];
+    const short = new Headers({ [API_UNAVAILABLE_HEADER]: "1" });
+
+    await assert.rejects(
+      logApiCallFailure(
+        SERVER_LOG_EVENT.OWN_PROFILE_READ_FAILED,
+        () => callUnlessApiUnavailable(short, async () => "profile"),
+        (event) => events.push(event),
+      ),
+    );
+    await assert.rejects(
+      logApiCallFailure(
+        SERVER_LOG_EVENT.OWN_PROFILE_READ_FAILED,
+        () =>
+          callUnlessApiUnavailable(new Headers(), async () => {
+            throw new ApiClientError("unavailable", 503);
+          }),
+        (event) => events.push(event),
+      ),
+    );
+
+    assert.deepEqual(events, [
+      { event: "own_profile_read_failed", error: "ApiClientError", kind: "short-circuited" },
+      { event: "own_profile_read_failed", error: "ApiClientError", kind: "unavailable" },
+    ]);
+  });
+
   it("answers unavailable at once, without the API read, after a failed refresh", async () => {
     let reads = 0;
     const read = async () => {
@@ -163,7 +192,7 @@ describe("the outage notice for the page (R4-cuenta-outage-latency-serialized)",
 
     await assert.rejects(
       callUnlessApiUnavailable(new Headers({ [API_UNAVAILABLE_HEADER]: "1" }), read),
-      (error: unknown) => error instanceof ApiClientError && error.kind === "unavailable",
+      (error: unknown) => error instanceof ApiClientError && error.kind === "short-circuited",
     );
     assert.equal(reads, 0);
     assert.equal(await callUnlessApiUnavailable(new Headers(), read), "profile");

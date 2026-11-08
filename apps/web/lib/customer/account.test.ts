@@ -42,6 +42,7 @@ describe("loadAccountView", () => {
     const failures = [
       new ApiClientError("unavailable", 503),
       new ApiClientError("unavailable"),
+      new ApiClientError("short-circuited"),
       new ApiClientError("rejected", 403),
       new ApiClientError("invalid-response", 200),
       new Error("unexpected"),

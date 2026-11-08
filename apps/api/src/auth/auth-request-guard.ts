@@ -18,7 +18,37 @@ export const AUTH_REQUEST_EVENT = {
   ENROLLMENT_COMPENSATION_FAILED: "administrator_enrollment_compensation_failed",
   /** An administrator session arrived with an unusable creation time and was stored as expired (S49). */
   ADMINISTRATOR_SESSION_CREATED_AT_INVALID: "administrator_session_created_at_invalid",
+  /** The create hook refused to open a session (L71, S50). */
+  SESSION_REFUSED: "session_refused",
+  /** The access hook deleted a stored session on its first use after it stopped qualifying (L71, S50). */
+  SESSION_ENDED: "session_ended",
+  /** The update hook refused a change to a stored session (L71, S50). */
+  SESSION_UPDATE_REFUSED: "session_update_refused",
+  /** Deleting the other sessions of an administrator at a first confirmation failed (L71, S50). */
+  SIBLING_SESSIONS_DELETE_FAILED: "administrator_sibling_sessions_delete_failed",
+  /** The revert of a superseded first confirmation was attempted; logged after it, with its result. */
+  ENROLLMENT_REVERT_RESULT: "administrator_enrollment_revert_result",
 } as const;
+
+/** Why the create hook refused a session; a closed set, never a value taken from a request. */
+export type SessionRefusalReason =
+  | "account_missing"
+  | "account_not_active"
+  | "email_code_not_allowed"
+  | "password_not_allowed"
+  | "enrollment_window_closed";
+
+/** Why the access hook deleted a stored session; a closed set. */
+export type SessionEndedReason =
+  | "account_not_active"
+  | "second_factor_missing"
+  | "enrollment_window_closed";
+
+/** Why the update hook refused a change to a stored session; a closed set. */
+export type SessionUpdateRefusedReason = "second_factor_marker" | "expiry_change_not_allowed";
+
+/** What the guarded revert did: changed the flag, found it already false, or threw. */
+export type EnrollmentRevertResult = "reverted" | "unchanged" | "failed";
 
 /** Structured warning without personal data: the request path and, for a failure, the error class. */
 export type AuthRequestEvent =
@@ -35,7 +65,24 @@ export type AuthRequestEvent =
       path: string;
       error: string;
     }
-  | { event: typeof AUTH_REQUEST_EVENT.ADMINISTRATOR_SESSION_CREATED_AT_INVALID };
+  | { event: typeof AUTH_REQUEST_EVENT.ADMINISTRATOR_SESSION_CREATED_AT_INVALID }
+  | {
+      event: typeof AUTH_REQUEST_EVENT.SESSION_REFUSED;
+      reason: SessionRefusalReason;
+      path?: string;
+    }
+  | { event: typeof AUTH_REQUEST_EVENT.SESSION_ENDED; reason: SessionEndedReason; path?: string }
+  | {
+      event: typeof AUTH_REQUEST_EVENT.SESSION_UPDATE_REFUSED;
+      reason: SessionUpdateRefusedReason;
+      path?: string;
+    }
+  | { event: typeof AUTH_REQUEST_EVENT.SIBLING_SESSIONS_DELETE_FAILED; path: string; error: string }
+  | {
+      event: typeof AUTH_REQUEST_EVENT.ENROLLMENT_REVERT_RESULT;
+      path: string;
+      result: EnrollmentRevertResult;
+    };
 
 export type AuthRequestLog = (event: AuthRequestEvent) => void;
 

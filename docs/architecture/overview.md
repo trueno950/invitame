@@ -206,7 +206,9 @@ This is M2 T8c (S1, S6; L34, L39): `apps/web/app/ingresar`, `apps/web/app/cuenta
   `{"event":"own_profile_read_failed","error":"<class>","kind":"<kind>","cause":"<class>"}` (or
   `own_profile_update_failed`; `lib/server/server-log.ts`): the event name, the error class, the API client's
   fixed failure kind, and the class of the error's cause (such as `TimeoutError` or `TypeError`) when present,
-  never a message, an address, a cookie, a token, or a response body.
+  never a message, an address, a cookie, a token, or a response body. A call that `proxy.ts` skipped because
+  its refresh just found the API failing has the kind `short-circuited`, so it is not mistaken for a call
+  that reached a failing API (S50).
 
 ### Administrator pages (current)
 
@@ -362,7 +364,8 @@ This is the implemented state of ADR 0004 decision 3 and S6, S20, S21, and S22 (
   same password can then enroll.
   The hook logs one `administrator_enrollment_superseded` event with `compensation` (`reverted` or `skipped`)
   and no personal data, and one `administrator_enrollment_compensation_failed` event with the error class if
-  the revert throws. `/admin/activar` ends the activation on that `401` as on an ended session, with its own
+  the revert throws. After a revert attempt it also logs `administrator_enrollment_revert_result` (see
+  "Operational log contract"). `/admin/activar` ends the activation on that `401` as on an ended session, with its own
   message (S45). If the revert fails or the process stops before it, the account stays enrolled without a
   session and only `admin:reset-second-factor` releases it.
 - **Second-factor marker** (S52, T11c; closes A′): each `Session` row stores `secondFactorVerified`, false by
@@ -490,6 +493,53 @@ This is the implemented state; customer sign-in codes are its only caller (ADR 0
   `email_delivery_failed` warning records attempts, reason, and the transient flag, never the recipient, subject,
   body, code, or key. Five failed deliveries within five minutes emit one error-level `email_delivery_degraded`
   event, the hook for an operational alert; it re-arms after a failure-free window. The counter is per process.
+
+### Operational log contract (current)
+
+Decided in L71 and recorded as S50 (T11d). Every operational event is one structured JSON object. **No field of
+any event carries personal data:** no email address, token, cookie, password, secret, name, user id (except where
+a table row names `userId`, which a server-side command prints to its operator's terminal), or raw IP. A field
+holds only an event name, a route, an error class (`error.name`), a Prisma error code such as `P2002`, a count,
+or a member of a closed set listed here. A message is never copied, because it can echo a value. An operational
+log is not an audit trail. A failing sink never changes a response (`auth/safe-logging.ts`, `server-log.ts`).
+
+API auth events (`auth/auth-request-guard.ts`, sink `CreateAuthOptions.log`; `path` is the Better Auth route, and
+is left out when a session is created or changed outside an endpoint):
+
+| Event | Emitted by | Fields |
+| --- | --- | --- |
+| `auth_proxy_rejected` | the request guard, no valid proxy secret | `path` |
+| `client_ip_unresolved` | the request guard, production only | `path` |
+| `auth_request_unavailable` | the request guard, a handler or rate-limit store failure | `path`, `error` |
+| `session_refused` | the session-create hook (`auth.factory.ts`, `decideSessionRefusal`): never opened | `reason` (`account_missing`, `account_not_active`, `email_code_not_allowed`, `password_not_allowed`, `enrollment_window_closed`), `path`? |
+| `session_ended` | the session-access hook (`session-access-hook.ts`): deleted on its first use | `reason` (`account_not_active`, `second_factor_missing`, `enrollment_window_closed`), `path`? |
+| `session_update_refused` | the session-update hook (`auth.factory.ts`) | `reason` (`second_factor_marker`, `expiry_change_not_allowed`), `path`? |
+| `administrator_sibling_sessions_delete_failed` | `settleFirstConfirmation`, ending the other sessions at a first confirmation; the error is rethrown | `path`, `error` |
+| `administrator_enrollment_superseded` | `refuseSupersededConfirmation`, before the revert | `path`, `compensation` (`reverted`, `skipped`) |
+| `administrator_enrollment_compensation_failed` | the same, when the revert throws | `path`, `error` |
+| `administrator_enrollment_revert_result` | the same, after every revert attempt | `path`, `result` (`reverted`, `unchanged` when the guarded update matched no row, `failed`) |
+| `administrator_session_created_at_invalid` | the session-create hook (S49) | none |
+
+When several reasons apply to one stored session, `session_ended` names the first in the order above. A
+refusal that is also a superseded confirmation is logged by its superseded event, not by `session_refused`.
+
+Server-side commands (`users/`, printed as one JSON line; `userId` is shown to the operator at a terminal):
+`administrator_created`, `administrator_password_reissued` (`userId`, `revokedSessions`),
+`administrator_create_refused`, `user_disabled`, `user_disable_not_found`,
+`administrator_second_factor_reset`, and `administrator_second_factor_reset_refused` keep their earlier shapes.
+A failure, `administrator_create_failed`, `user_disable_failed`, or `administrator_second_factor_reset_failed`,
+has `error` (the class) and, only for a Prisma failure, `code` (`P2002`, `P1001`, and so on; the pattern
+`P` and four digits, read by `users/domain/database-error-code.ts`).
+
+Web events (`apps/web/lib/server/server-log.ts`, standard error): `own_profile_read_failed`,
+`own_profile_update_failed`, and `auth_session_read_failed` have `error` (the class), `kind` when the error is
+an `ApiClientError` (`rejected`, `unavailable`, `invalid-response`, or `short-circuited`), and `cause` (the
+class of the error's cause) when it has one. A failed proxy call of the administrator session read keeps its
+cause, so that line names it. `auth_proxy_upstream_failed` (`path`, `reason`, `status`?) and
+`web_config_invalid` (the variable name) are unchanged. The email and background-task events
+(`email_delivery_failed`, `email_delivery_degraded`, `background_task_failed`, `background_task_rejected`,
+and `background_task_rejected_after_shutdown`) are described in their own sections and also carry no address
+or code.
 
 Do not add empty feature layers to this foundation. A real capability earns a feature module when it has business
 behavior, persistence, or an external boundary.

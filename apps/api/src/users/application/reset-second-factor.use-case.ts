@@ -3,6 +3,7 @@ import type {
   ResetRefusalReason,
   ResetSecondFactorResult,
 } from "./administrator-account.repository";
+import { commandFailureEvent } from "./command-failure";
 import { normalizeAdministratorEmail } from "./create-administrator.use-case";
 import { generateInitialPassword, type InitialPasswordDependencies } from "./initial-password";
 
@@ -14,7 +15,8 @@ export const RESET_SECOND_FACTOR_EVENT = {
 
 /**
  * One event per run, carrying the user id at most: never the address, the password, its hash, the
- * TOTP secret, or backup codes. A failure carries the error class only.
+ * TOTP secret, or backup codes. A failure carries the error class and,
+ * for a Prisma failure, its error code (S50, L71).
  */
 export type ResetSecondFactorEvent =
   | { event: typeof RESET_SECOND_FACTOR_EVENT.RESET; userId: string }
@@ -23,7 +25,7 @@ export type ResetSecondFactorEvent =
       userId?: string;
       reason: ResetRefusalReason;
     }
-  | { event: typeof RESET_SECOND_FACTOR_EVENT.FAILED; error: string };
+  | { event: typeof RESET_SECOND_FACTOR_EVENT.FAILED; error: string; code?: string };
 
 export interface ResetSecondFactorDependencies extends InitialPasswordDependencies {
   accounts: AdministratorRecoveryRepository;
@@ -67,12 +69,8 @@ export class ResetSecondFactorUseCase {
         issuedAt: this.now(),
       });
     } catch (error) {
-      // The class name only: a message may carry SQL or the address. This repeats the auth module's
-      // `errorClass` (`auth/safe-logging.ts`) on purpose: importing it would cross a module boundary.
-      log({
-        event: RESET_SECOND_FACTOR_EVENT.FAILED,
-        error: error instanceof Error ? error.name : "unknown",
-      });
+      // The class name and the Prisma code only: a message may carry SQL or the address.
+      log(commandFailureEvent(RESET_SECOND_FACTOR_EVENT.FAILED, error));
       throw error;
     }
 

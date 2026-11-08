@@ -67,10 +67,11 @@ async function releaseAndSettle(
   operations: Array<Promise<unknown>>,
   what: string,
   bodyFailure?: BodyFailure,
+  milliseconds = GATE_TIMEOUT_MS,
 ): Promise<void> {
   held.open();
   try {
-    await within(Promise.allSettled(operations), what);
+    await within(Promise.allSettled(operations), what, milliseconds);
   } catch (timeout) {
     if (!bodyFailure) {
       throw timeout;
@@ -83,11 +84,20 @@ async function releaseAndSettle(
       );
     }
     if (!("cause" in original)) {
-      Object.defineProperty(original, "cause", {
-        value: timeout,
-        configurable: true,
-        writable: true,
-      });
+      try {
+        Object.defineProperty(original, "cause", {
+          value: timeout,
+          configurable: true,
+          writable: true,
+        });
+      } catch {
+        // A frozen or non-extensible error refuses the property with a TypeError, which would hide
+        // the original failure (T11c review R3-001, T11d); report both instead.
+        throw new AggregateError(
+          [original, timeout],
+          "the test body failed and the release timed out",
+        );
+      }
     }
     throw original;
   }
@@ -128,6 +138,31 @@ function exceptsOneSession(where: Prisma.SessionWhereInput | undefined): boolean
     (clause) => typeof clause?.token === "object" && clause.token !== null && "not" in clause.token,
   );
 }
+
+describe("releaseAndSettle when the test body already failed", () => {
+  const never = () => [new Promise<never>(() => {})];
+
+  it("rethrows the original failure with the timeout as its cause", async () => {
+    const original = new Error("assertion failed");
+
+    await assert.rejects(
+      releaseAndSettle({ open: () => {} }, never(), "a stuck wait", { error: original }, 20),
+      (error: unknown) => error === original && (error as Error).cause instanceof Error,
+    );
+  });
+
+  it("reports a frozen failure and the timeout together instead of throwing a TypeError", async () => {
+    const original = Object.freeze(new Error("assertion failed"));
+
+    await assert.rejects(
+      releaseAndSettle({ open: () => {} }, never(), "a stuck wait", { error: original }, 20),
+      (error: unknown) =>
+        error instanceof AggregateError &&
+        error.errors[0] === original &&
+        /timed out after 20 ms waiting for a stuck wait/.test(String(error.errors[1])),
+    );
+  });
+});
 
 describe("sibling-delete matcher", () => {
   it("accepts a token exclusion held directly or inside AND, and no other delete", () => {
@@ -179,6 +214,8 @@ describe("account-state races (real PostgreSQL)", () => {
     },
   }) as unknown as PrismaClient;
 
+  /** Every structured event the auth module logged; a test that reads it clears it first. */
+  const logged: unknown[] = [];
   const auth = createAuth({
     secret,
     baseURL: ORIGIN,
@@ -192,7 +229,7 @@ describe("account-state races (real PostgreSQL)", () => {
     clientIp: { header: "x-forwarded-for", trustedProxies: [] },
     requireClientIp: false,
     requireProxySecret: false,
-    log: () => {},
+    log: (event) => logged.push(event),
   });
   let app: INestApplication;
   let baseUrl: string;
@@ -445,6 +482,7 @@ describe("account-state races (real PostgreSQL)", () => {
   describe("a first confirmation whose sibling-session delete fails", () => {
     it("ends both password-only sessions on their next use, with the 401 of a missing session", async () => {
       const admin = await pendingAdministrator("sibling-delete");
+      logged.length = 0;
       const tabA = sessionCookie(await signIn(admin.email, admin.password));
       const tabB = sessionCookie(await signIn(admin.email, admin.password));
       assert.ok(tabA && tabB);
@@ -499,6 +537,21 @@ describe("account-state races (real PostgreSQL)", () => {
         listSessionsTabB: 401,
         sessionsAfter: 0,
       });
+      // S50 (L71): the failed delete is logged with its class, and each surviving session is logged
+      // once as ended on its first use; no event holds the address, a user id, or a token.
+      assert.deepEqual(logged, [
+        {
+          event: "administrator_sibling_sessions_delete_failed",
+          path: "/two-factor/verify-totp",
+          error: "SiblingDeleteOutage",
+        },
+        { event: "session_ended", reason: "second_factor_missing", path: "/get-session" },
+        { event: "session_ended", reason: "second_factor_missing", path: "/get-session" },
+      ]);
+      const text = JSON.stringify(logged);
+      for (const personal of [admin.email, admin.id, tabA, tabB]) {
+        assert.equal(text.includes(personal), false);
+      }
     });
   });
 
