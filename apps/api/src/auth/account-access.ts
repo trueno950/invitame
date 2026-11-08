@@ -1,6 +1,7 @@
 import { APIError } from "better-auth/api";
 
 import { EMAIL_CODE_SIGN_IN_PATH, PASSWORD_SIGN_IN_PATH } from "./auth-paths";
+import type { SessionRefusalReason } from "./auth-request-guard";
 
 /** Stored `User.role` values; the role is server-side only (ADR 0004 decision 6). */
 export const USER_ROLE = {
@@ -109,9 +110,15 @@ const INVALID_EMAIL_OR_PASSWORD = {
 } as const;
 const SESSION_REFUSED = { code: "FAILED_TO_CREATE_SESSION", message: "Failed to create session" };
 
+/** A refused session: the error to throw and the closed reason the create hook logs (S50, L71). */
+export interface SessionRefusalDecision {
+  error: APIError;
+  reason: SessionRefusalReason;
+}
+
 /**
  * Decides whether Better Auth may create a session for this stored user on this endpoint path (null
- * outside an endpoint). Returns the error to throw, or null to allow it:
+ * outside an endpoint). Returns the refusal to throw, or null to allow it:
  * - a missing or non-ACTIVE user gets no session on any path (S9, S18);
  * - only an account that may receive a sign-in code (`mayReceiveSignInCode`) gets a session from one,
  *   so never an administrator (decision 3, S22): administrators sign in with a password and an
@@ -119,32 +126,64 @@ const SESSION_REFUSED = { code: "FAILED_TO_CREATE_SESSION", message: "Failed to 
  * - only an administrator gets a session from a password (decision 3): customers have no password;
  * - an administrator who has not enrolled gets no session once the window of the initial password
  *   has ended (S20); `enrollmentWindowOpen` carries that check, made by the caller from stored data.
+ * The reason is the first rule that failed, in the order above.
  */
-export function sessionRefusal(
+export function decideSessionRefusal(
   account: AccountAccess | null,
   path: string | undefined,
   enrollmentWindowOpen = false,
-) {
+): SessionRefusalDecision | null {
   // Every `/email-otp/*` endpoint counts as an email code, not only the sign-in one: an email OTP
   // endpoint that creates a session, re-enabled or added by a library upgrade, must not hand one to
   // anyone who may not sign in by code. Several are disabled today (`DISABLED_AUTH_PATHS`).
   const byEmailCode = path === EMAIL_CODE_SIGN_IN_PATH || path?.startsWith("/email-otp/") === true;
   const byPassword = path === PASSWORD_SIGN_IN_PATH;
 
-  if (
-    account &&
-    isActive(account) &&
-    !(byEmailCode && !mayReceiveSignInCode(account)) &&
-    !(byPassword && account.role !== USER_ROLE.ADMIN) &&
-    !(isPendingAdministrator(account) && !enrollmentWindowOpen)
-  ) {
+  const reason = refusalReason(account, byEmailCode, byPassword, enrollmentWindowOpen);
+  if (reason === null) {
     return null;
   }
 
   if (byEmailCode) {
-    return APIError.from("BAD_REQUEST", INVALID_CODE);
+    return { reason, error: APIError.from("BAD_REQUEST", INVALID_CODE) };
   }
-  return byPassword
-    ? APIError.from("UNAUTHORIZED", INVALID_EMAIL_OR_PASSWORD)
-    : APIError.from("UNAUTHORIZED", SESSION_REFUSED);
+  return {
+    reason,
+    error: byPassword
+      ? APIError.from("UNAUTHORIZED", INVALID_EMAIL_OR_PASSWORD)
+      : APIError.from("UNAUTHORIZED", SESSION_REFUSED),
+  };
+}
+
+function refusalReason(
+  account: AccountAccess | null,
+  byEmailCode: boolean,
+  byPassword: boolean,
+  enrollmentWindowOpen: boolean,
+): SessionRefusalReason | null {
+  if (!account) {
+    return "account_missing";
+  }
+  if (!isActive(account)) {
+    return "account_not_active";
+  }
+  if (byEmailCode && !mayReceiveSignInCode(account)) {
+    return "email_code_not_allowed";
+  }
+  if (byPassword && account.role !== USER_ROLE.ADMIN) {
+    return "password_not_allowed";
+  }
+  if (isPendingAdministrator(account) && !enrollmentWindowOpen) {
+    return "enrollment_window_closed";
+  }
+  return null;
+}
+
+/** The error to throw for a refused session, or null to allow it; see `decideSessionRefusal`. */
+export function sessionRefusal(
+  account: AccountAccess | null,
+  path: string | undefined,
+  enrollmentWindowOpen = false,
+) {
+  return decideSessionRefusal(account, path, enrollmentWindowOpen)?.error ?? null;
 }

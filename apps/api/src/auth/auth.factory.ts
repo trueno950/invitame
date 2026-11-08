@@ -3,13 +3,13 @@ import { getIP } from "better-auth/api";
 import { emailOTP, twoFactor } from "better-auth/plugins";
 
 import type { ClientIpEnvironment } from "../config/environment";
-import { type AccountAccess, sessionRefusal, USER_ROLE, USER_STATUS } from "./account-access";
 import {
   CLIENT_IP_RATE_LIMIT,
   EMAIL_CODE_QUOTA,
   PASSWORD_ATTEMPT_RATE_LIMIT,
   SECOND_FACTOR_RATE_LIMIT,
 } from "./abuse-limits";
+import { type AccountAccess, decideSessionRefusal, USER_ROLE, USER_STATUS } from "./account-access";
 import {
   enrollmentWindowOpen,
   refuseSupersededConfirmation,
@@ -23,9 +23,14 @@ import {
   SIGN_IN_CODE_REQUEST_PATH,
   TWO_FACTOR_PATH,
 } from "./auth-paths";
-import { AUTH_REQUEST_EVENT, type AuthRequestLog, guardAuthHandler } from "./auth-request-guard";
+import {
+  AUTH_REQUEST_EVENT,
+  type AuthRequestLog,
+  guardAuthHandler,
+  type SessionUpdateRefusedReason,
+} from "./auth-request-guard";
 import { logSafely } from "./safe-logging";
-import { enforceSessionAccess } from "./session-access-hook";
+import { createSessionAccessHook } from "./session-access-hook";
 import {
   administratorSessionExpiresAt,
   CUSTOMER_SESSION_EXPIRES_IN_SECONDS,
@@ -151,7 +156,7 @@ export function createAuth(options: CreateAuthOptions): Auth {
     // A session of a non-ACTIVE user, or of an administrator whose enrollment window has ended, is
     // deleted before any endpoint can use it; an un-enrolled administrator's session is hidden from
     // every endpoint but enrollment (S20, S21).
-    hooks: { before: enforceSessionAccess },
+    hooks: { before: createSessionAccessHook(options.log) },
     // Decision 3: password sign-in exists for administrators only. Sign-up stays closed
     // (`/sign-up/email` answers 400 EMAIL_PASSWORD_SIGN_UP_DISABLED, 1.7.16 `api/routes/sign-up.mjs`),
     // and the session hook refuses a password session to anyone but an administrator.
@@ -252,7 +257,7 @@ export function createAuth(options: CreateAuthOptions): Auth {
             // completing. An allowed first confirmation ends every other session of the user.
             // Decided first, so a disable that won the race is reverted too.
             if (context && user) {
-              const decision = await settleFirstConfirmation(context, user);
+              const decision = await settleFirstConfirmation(context, user, options.log);
               if (decision !== "allow") {
                 throw await refuseSupersededConfirmation(context, user.id, decision, options.log);
               }
@@ -262,10 +267,16 @@ export function createAuth(options: CreateAuthOptions): Auth {
               user && internalAdapter
                 ? await enrollmentWindowOpen(internalAdapter, user.id, user)
                 : false;
-            const refusal = sessionRefusal(user ?? null, context?.path, windowOpen);
+            const refusal = decideSessionRefusal(user ?? null, context?.path, windowOpen);
 
             if (refusal) {
-              throw refusal;
+              // S50 (L71): a closed reason and the path; never the user, address, or credentials.
+              logSafely(options.log, {
+                event: AUTH_REQUEST_EVENT.SESSION_REFUSED,
+                reason: refusal.reason,
+                ...(context?.path === undefined ? {} : { path: context.path }),
+              });
+              throw refusal.error;
             }
 
             // S52 (L72): the marker comes from the endpoint alone, never from a caller value. Only a
@@ -311,8 +322,18 @@ export function createAuth(options: CreateAuthOptions): Auth {
           // one, including any on a request without a stored session. Refusing makes `getSession`
           // answer 401 and clear the cookie: fail closed.
           async before(session, context) {
-            if ("secondFactorVerified" in session) {
+            // S50 (L71): a refusal is logged with a closed reason and the path only.
+            const refuse = (reason: SessionUpdateRefusedReason) => {
+              logSafely(options.log, {
+                event: AUTH_REQUEST_EVENT.SESSION_UPDATE_REFUSED,
+                reason,
+                ...(context?.path === undefined ? {} : { path: context.path }),
+              });
               return false;
+            };
+
+            if ("secondFactorVerified" in session) {
+              return refuse("second_factor_marker");
             }
 
             if (session.expiresAt === undefined) {
@@ -321,7 +342,7 @@ export function createAuth(options: CreateAuthOptions): Auth {
 
             const current = context?.context.session as { user?: AccountAccess } | null | undefined;
             if (!current?.user || current.user.role !== USER_ROLE.CUSTOMER) {
-              return false;
+              return refuse("expiry_change_not_allowed");
             }
           },
         },

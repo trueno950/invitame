@@ -416,6 +416,11 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
     event: "administrator_enrollment_superseded",
     path: "/two-factor/verify-totp",
   } as const;
+  /** Logged after every revert attempt, with what it did (S50, L71). */
+  const REVERT_RESULT_EVENT = {
+    event: "administrator_enrollment_revert_result",
+    path: "/two-factor/verify-totp",
+  } as const;
 
   /** The simulated failure of the compensating update (T7d, S40). */
   class RevertOutage extends Error {
@@ -586,7 +591,10 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
       await race.issue(randomBytes(18).toString("base64url"));
     });
 
-    assert.deepEqual(race.events, [{ ...SUPERSEDED_EVENT, compensation: "reverted" }]);
+    assert.deepEqual(race.events, [
+      { ...SUPERSEDED_EVENT, compensation: "reverted" },
+      { ...REVERT_RESULT_EVENT, result: "reverted" },
+    ]);
     const logged = JSON.stringify(race.events);
     for (const personal of [race.email, race.userId, race.oldPassword]) {
       assert.equal(logged.includes(personal), false);
@@ -637,7 +645,11 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
     assert.equal(confirmed.status, 200);
     assert.ok(cookieFrom(confirmed, SESSION_COOKIE));
     assert.equal((await storedEnrollment(race.userId)).twoFactorEnabled, true);
-    assert.equal(race.events.length, 1);
+    // Only the first, refused confirmation logged: its supersession and its revert result.
+    assert.deepEqual(race.events, [
+      { ...SUPERSEDED_EVENT, compensation: "reverted" },
+      { ...REVERT_RESULT_EVENT, result: "reverted" },
+    ]);
   });
 
   it("refuses a first TOTP confirmation that races user:disable and leaves no session", async () => {
@@ -782,7 +794,10 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
       { sessionRows: stored.sessionRows, twoFactorEnabled: stored.twoFactorEnabled },
       { sessionRows: 0, twoFactorEnabled: false },
     );
-    assert.deepEqual(race.events, [{ ...SUPERSEDED_EVENT, compensation: "reverted" }]);
+    assert.deepEqual(race.events, [
+      { ...SUPERSEDED_EVENT, compensation: "reverted" },
+      { ...REVERT_RESULT_EVENT, result: "reverted" },
+    ]);
     await enroll({ email: race.email, password: race.oldPassword }, race.raceAuth);
     assert.equal((await storedEnrollment(race.userId)).twoFactorEnabled, true);
   });
@@ -833,6 +848,7 @@ describe("administrator sign-in and enrollment (real PostgreSQL)", () => {
         path: "/two-factor/verify-totp",
         error: "RevertOutage",
       },
+      { ...REVERT_RESULT_EVENT, result: "failed" },
     ]);
     assert.deepEqual(await storedEnrollment(race.userId), {
       sessionRows: 0,
