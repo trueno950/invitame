@@ -124,7 +124,7 @@ const PACKAGE_SEEDS = [
 
 const BIRTHDAY_ADVENTURE_COMPONENT_KEY = "birthday-adventure-01";
 
-const BIRTHDAY_ADVENTURE_SCHEMA = {
+export const BIRTHDAY_ADVENTURE_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
@@ -178,7 +178,7 @@ const BIRTHDAY_ADVENTURE_SCHEMA = {
   },
 } satisfies Prisma.InputJsonObject;
 
-const BIRTHDAY_ADVENTURE_CONFIGURATION = {
+export const BIRTHDAY_ADVENTURE_CONFIGURATION = {
   componentKey: BIRTHDAY_ADVENTURE_COMPONENT_KEY,
   layout: "adventure",
   palette: "sunset",
