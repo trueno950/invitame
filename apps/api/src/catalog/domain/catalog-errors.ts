@@ -29,3 +29,27 @@ export class CatalogConcurrentUpdateError extends Error {
     this.name = "CatalogConcurrentUpdateError";
   }
 }
+
+/** A template names a category that does not exist; nothing was stored. */
+export class CatalogCategoryNotFoundError extends Error {
+  constructor() {
+    super("The category does not exist.");
+    this.name = "CatalogCategoryNotFoundError";
+  }
+}
+
+/** A template may be PUBLISHED only while it has a PUBLISHED version (L4); nothing was changed. */
+export class CatalogTemplateNotPublishableError extends Error {
+  constructor() {
+    super("A template is PUBLISHED only while it has a PUBLISHED version.");
+    this.name = "CatalogTemplateNotPublishableError";
+  }
+}
+
+/** A version's componentKey, schema, or configuration does not satisfy its renderer contract. */
+export class CatalogRendererContractInvalidError extends Error {
+  constructor(readonly issues: readonly string[]) {
+    super("The version does not satisfy its renderer contract.");
+    this.name = "CatalogRendererContractInvalidError";
+  }
+}
