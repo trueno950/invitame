@@ -202,5 +202,8 @@ model TemplateVersion {
 
   template Template @relation(fields: [templateId], references: [id], onDelete: Restrict)
 
+  // Migration 20261109120000 adds what Prisma cannot express: the partial unique index
+  // "TemplateVersion_templateId_published_key" (one PUBLISHED version per template) and the
+  // "TemplateVersion_status_transition" trigger (only DRAFT -> PUBLISHED and PUBLISHED -> RETIRED).
   @@unique([templateId, version])
 }
