@@ -2,12 +2,20 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  boundContractIssues,
   isCatalogId,
   MAX_AMOUNT_MINOR,
+  MAX_CONTRACT_ISSUE_LENGTH,
+  MAX_CONTRACT_ISSUES,
   parseCatalogEntries,
   parseCatalogEntry,
   parseCatalogPackage,
   parseCatalogPackages,
+  parseCatalogRenderers,
+  parseCatalogTemplate,
+  parseCatalogTemplates,
+  parseCatalogTemplateVersion,
+  parseCatalogTemplateVersions,
   parsePriceHistory,
 } from "./admin-catalog-validators.ts";
 
@@ -198,5 +206,182 @@ describe("parsePriceHistory", () => {
       assert.equal(parsePriceHistory([{ ...PRICE, ...bad }]), undefined, JSON.stringify(bad));
     }
     assert.equal(parsePriceHistory(PRICE), undefined);
+  });
+});
+
+const TEMPLATE = {
+  id: ID,
+  key: "adventure",
+  name: "Aventura",
+  description: null,
+  status: "PUBLISHED",
+  category: { id: ID, key: "birthday", name: "Cumpleaños" },
+  createdAt: AT,
+  updatedAt: AT,
+  publishedVersion: { id: ID, version: 2 },
+  versionCount: 3,
+};
+
+const VERSION = {
+  id: ID,
+  version: 2,
+  status: "PUBLISHED",
+  componentKey: "birthday-adventure-01",
+  schema: { fields: [] },
+  configuration: { palette: "ocean" },
+  createdAt: AT,
+};
+
+describe("parseCatalogTemplate", () => {
+  it("accepts the API's template and keeps only the fields the pages use", () => {
+    assert.deepEqual(parseCatalogTemplate({ ...TEMPLATE, extra: "ignored" }), TEMPLATE);
+    assert.deepEqual(parseCatalogTemplate({ ...TEMPLATE, publishedVersion: null }), {
+      ...TEMPLATE,
+      publishedVersion: null,
+    });
+    assert.deepEqual(parseCatalogTemplate({ ...TEMPLATE, description: "Texto", versionCount: 0 }), {
+      ...TEMPLATE,
+      description: "Texto",
+      versionCount: 0,
+    });
+  });
+
+  it("answers undefined for anything off the contract", () => {
+    const bad: unknown[] = [
+      null,
+      "x",
+      [],
+      without(TEMPLATE, "id"),
+      without(TEMPLATE, "category"),
+      without(TEMPLATE, "publishedVersion"),
+      without(TEMPLATE, "versionCount"),
+      { ...TEMPLATE, id: "1" },
+      { ...TEMPLATE, key: "" },
+      { ...TEMPLATE, status: "RETIRED" },
+      { ...TEMPLATE, status: "published" },
+      { ...TEMPLATE, description: 5 },
+      { ...TEMPLATE, createdAt: "yesterday" },
+      { ...TEMPLATE, versionCount: -1 },
+      { ...TEMPLATE, versionCount: 1.5 },
+      { ...TEMPLATE, versionCount: "3" },
+      { ...TEMPLATE, category: null },
+      { ...TEMPLATE, category: { id: ID, key: "birthday" } },
+      { ...TEMPLATE, category: { id: "x", key: "birthday", name: "N" } },
+      { ...TEMPLATE, publishedVersion: { id: ID } },
+      { ...TEMPLATE, publishedVersion: { id: ID, version: 0 } },
+      { ...TEMPLATE, publishedVersion: { id: "x", version: 1 } },
+      { ...TEMPLATE, publishedVersion: undefined },
+    ];
+    for (const value of bad) {
+      assert.equal(parseCatalogTemplate(value), undefined, JSON.stringify(value));
+    }
+  });
+
+  it("parses a list only when every row is valid", () => {
+    assert.deepEqual(parseCatalogTemplates([TEMPLATE]), [TEMPLATE]);
+    assert.deepEqual(parseCatalogTemplates([]), []);
+    assert.equal(parseCatalogTemplates([TEMPLATE, { ...TEMPLATE, status: "X" }]), undefined);
+    assert.equal(parseCatalogTemplates(TEMPLATE), undefined);
+  });
+});
+
+describe("parseCatalogTemplateVersion", () => {
+  it("accepts a version, keeping the JSON snapshot as it came", () => {
+    assert.deepEqual(parseCatalogTemplateVersion({ ...VERSION, extra: 1 }), VERSION);
+    for (const status of ["DRAFT", "PUBLISHED", "RETIRED"]) {
+      assert.equal(parseCatalogTemplateVersion({ ...VERSION, status })?.status, status);
+    }
+    assert.deepEqual(
+      parseCatalogTemplateVersion({ ...VERSION, schema: null, configuration: [1] }),
+      {
+        ...VERSION,
+        schema: null,
+        configuration: [1],
+      },
+    );
+  });
+
+  it("answers undefined for anything off the contract", () => {
+    const bad: unknown[] = [
+      null,
+      [],
+      without(VERSION, "schema"),
+      without(VERSION, "configuration"),
+      without(VERSION, "componentKey"),
+      { ...VERSION, id: "1" },
+      { ...VERSION, version: 0 },
+      { ...VERSION, version: "2" },
+      { ...VERSION, status: "ARCHIVED" },
+      { ...VERSION, componentKey: "" },
+      { ...VERSION, componentKey: 7 },
+      { ...VERSION, createdAt: 5 },
+    ];
+    for (const value of bad) {
+      assert.equal(parseCatalogTemplateVersion(value), undefined, JSON.stringify(value));
+    }
+  });
+
+  it("parses a list only when every row is valid", () => {
+    assert.deepEqual(parseCatalogTemplateVersions([VERSION]), [VERSION]);
+    assert.equal(parseCatalogTemplateVersions([VERSION, { ...VERSION, version: 0 }]), undefined);
+    assert.equal(parseCatalogTemplateVersions("[]"), undefined);
+  });
+});
+
+describe("parseCatalogRenderers", () => {
+  it("accepts the allow-list and keeps only the keys", () => {
+    assert.deepEqual(parseCatalogRenderers([{ componentKey: "birthday-adventure-01", x: 1 }]), [
+      { componentKey: "birthday-adventure-01" },
+    ]);
+    assert.deepEqual(parseCatalogRenderers([]), []);
+  });
+
+  it("answers undefined for anything off the contract", () => {
+    for (const value of [null, {}, [{}], [{ componentKey: "" }], [{ componentKey: 1 }], ["a"]]) {
+      assert.equal(parseCatalogRenderers(value), undefined, JSON.stringify(value));
+    }
+  });
+});
+
+describe("boundContractIssues", () => {
+  it("keeps the issue strings of the API as they are", () => {
+    assert.deepEqual(boundContractIssues(["a", "configuration.palette must be one of: sunset"]), [
+      "a",
+      "configuration.palette must be one of: sunset",
+    ]);
+  });
+
+  it("keeps at most MAX_CONTRACT_ISSUES issues", () => {
+    const issues = Array.from({ length: MAX_CONTRACT_ISSUES + 30 }, (_, index) => `issue ${index}`);
+    const bounded = boundContractIssues(issues);
+    assert.equal(bounded.length, MAX_CONTRACT_ISSUES);
+    assert.equal(bounded[0], "issue 0");
+  });
+
+  it("cuts a long issue to MAX_CONTRACT_ISSUE_LENGTH characters, ending in an ellipsis", () => {
+    const [issue] = boundContractIssues(["x".repeat(MAX_CONTRACT_ISSUE_LENGTH * 10)]);
+    assert.equal(issue?.length, MAX_CONTRACT_ISSUE_LENGTH);
+    assert.ok(issue?.endsWith("…"));
+    assert.deepEqual(boundContractIssues(["y".repeat(MAX_CONTRACT_ISSUE_LENGTH)]), [
+      "y".repeat(MAX_CONTRACT_ISSUE_LENGTH),
+    ]);
+  });
+
+  it("drops what is not text, blank lines, and control characters", () => {
+    assert.deepEqual(
+      boundContractIssues([1, null, {}, ["x"], "", "   ", "\u0007\n", "a\u0000b\nc\u001b[31m"]),
+      ["a b c [31m"],
+    );
+  });
+
+  it("counts only the kept issues against the limit", () => {
+    const mixed = [...Array.from({ length: 50 }, () => 7), "kept"];
+    assert.deepEqual(boundContractIssues(mixed), ["kept"]);
+  });
+
+  it("answers an empty list for a body without a list of issues", () => {
+    for (const value of [undefined, null, "issue", { 0: "issue" }, 5]) {
+      assert.deepEqual(boundContractIssues(value), []);
+    }
   });
 });

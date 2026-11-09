@@ -2,13 +2,19 @@
  * Response validators of the administrator catalog API (M3 T8a; S1, S9). The web never trusts a shape:
  * each validator returns a fresh object holding only the fields the pages use, or `undefined` when the
  * value does not match the contract, and the client then fails closed with `invalid-response`. The
- * contracts mirror `apps/api/src/catalog/presentation/**` (`catalog-entry.response.ts` and
- * `package.response.ts`); the web never imports API code, so they are kept equal by hand. Unknown
+ * contracts mirror `apps/api/src/catalog/presentation/**` (`catalog-entry.response.ts`,
+ * `package.response.ts`, and `templates/template.response.ts`); the web never imports API code, so they are kept equal by hand. Unknown
  * extra fields are ignored so the API may add fields without breaking the pages.
  */
 
 export const PACKAGE_STATUSES = ["DRAFT", "ACTIVE", "ARCHIVED"] as const;
 export type PackageStatus = (typeof PACKAGE_STATUSES)[number];
+
+export const TEMPLATE_STATUSES = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
+export type TemplateStatus = (typeof TEMPLATE_STATUSES)[number];
+
+export const TEMPLATE_VERSION_STATUSES = ["DRAFT", "PUBLISHED", "RETIRED"] as const;
+export type TemplateVersionStatus = (typeof TEMPLATE_VERSION_STATUSES)[number];
 
 /** The largest `amountMinor` the API accepts (PostgreSQL `INTEGER`, `MAX_PRICE_AMOUNT_MINOR`). */
 export const MAX_AMOUNT_MINOR = 2_147_483_647;
@@ -57,6 +63,36 @@ export interface CatalogPriceHistoryEntry {
   retiredAt: string | null;
 }
 
+/** One row of `GET /admin/catalog/templates`: the template, its category, and its version summary. */
+export interface CatalogTemplate {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  status: TemplateStatus;
+  category: { id: string; key: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+  publishedVersion: { id: string; version: number } | null;
+  versionCount: number;
+}
+
+/** One immutable snapshot; `schema` and `configuration` are JSON the registry contract validated. */
+export interface CatalogTemplateVersion {
+  id: string;
+  version: number;
+  status: TemplateVersionStatus;
+  componentKey: string;
+  schema: unknown;
+  configuration: unknown;
+  createdAt: string;
+}
+
+/** One entry of `GET /admin/catalog/renderers`. */
+export interface CatalogRenderer {
+  componentKey: string;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CURRENCY = /^[A-Z]{3}$/;
 
@@ -91,6 +127,18 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isPackageStatus(value: unknown): value is PackageStatus {
   return PACKAGE_STATUSES.some((status) => status === value);
+}
+
+function isTemplateStatus(value: unknown): value is TemplateStatus {
+  return TEMPLATE_STATUSES.some((status) => status === value);
+}
+
+function isTemplateVersionStatus(value: unknown): value is TemplateVersionStatus {
+  return TEMPLATE_VERSION_STATUSES.some((status) => status === value);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }
 
 function mapAll<T>(items: unknown, parse: (item: unknown) => T | undefined): T[] | undefined {
@@ -236,4 +284,154 @@ function parsePriceHistoryEntry(value: unknown): CatalogPriceHistoryEntry | unde
 
 export function parsePriceHistory(value: unknown): CatalogPriceHistoryEntry[] | undefined {
   return mapAll(value, parsePriceHistoryEntry);
+}
+
+function parseTemplateCategory(value: unknown): CatalogTemplate["category"] | undefined {
+  const category = record(value);
+
+  if (
+    category === undefined ||
+    !isCatalogId(category.id) ||
+    !isNonEmptyString(category.key) ||
+    !isNonEmptyString(category.name)
+  ) {
+    return undefined;
+  }
+
+  return { id: category.id, key: category.key, name: category.name };
+}
+
+function parsePublishedVersion(value: unknown): CatalogTemplate["publishedVersion"] | undefined {
+  if (value === null) {
+    return null;
+  }
+
+  const published = record(value);
+  return published !== undefined &&
+    isCatalogId(published.id) &&
+    isPositiveInteger(published.version)
+    ? { id: published.id, version: published.version }
+    : undefined;
+}
+
+export function parseCatalogTemplate(value: unknown): CatalogTemplate | undefined {
+  const stored = record(value);
+
+  if (
+    stored === undefined ||
+    !isCatalogId(stored.id) ||
+    !isNonEmptyString(stored.key) ||
+    !isNonEmptyString(stored.name) ||
+    !(typeof stored.description === "string" || stored.description === null) ||
+    !isTemplateStatus(stored.status) ||
+    !isTimestamp(stored.createdAt) ||
+    !isTimestamp(stored.updatedAt) ||
+    typeof stored.versionCount !== "number" ||
+    !Number.isSafeInteger(stored.versionCount) ||
+    stored.versionCount < 0
+  ) {
+    return undefined;
+  }
+
+  const category = parseTemplateCategory(stored.category);
+  const publishedVersion = parsePublishedVersion(stored.publishedVersion);
+
+  if (category === undefined || publishedVersion === undefined) {
+    return undefined;
+  }
+
+  return {
+    id: stored.id,
+    key: stored.key,
+    name: stored.name,
+    description: stored.description,
+    status: stored.status,
+    category,
+    createdAt: stored.createdAt,
+    updatedAt: stored.updatedAt,
+    publishedVersion,
+    versionCount: stored.versionCount,
+  };
+}
+
+export function parseCatalogTemplates(value: unknown): CatalogTemplate[] | undefined {
+  return mapAll(value, parseCatalogTemplate);
+}
+
+export function parseCatalogTemplateVersion(value: unknown): CatalogTemplateVersion | undefined {
+  const stored = record(value);
+
+  if (
+    stored === undefined ||
+    !isCatalogId(stored.id) ||
+    !isPositiveInteger(stored.version) ||
+    !isTemplateVersionStatus(stored.status) ||
+    !isNonEmptyString(stored.componentKey) ||
+    // JSON has no `undefined`: a missing snapshot part is a contract violation, `null` is a value.
+    !Object.hasOwn(stored, "schema") ||
+    !Object.hasOwn(stored, "configuration") ||
+    !isTimestamp(stored.createdAt)
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: stored.id,
+    version: stored.version,
+    status: stored.status,
+    componentKey: stored.componentKey,
+    schema: stored.schema,
+    configuration: stored.configuration,
+    createdAt: stored.createdAt,
+  };
+}
+
+export function parseCatalogTemplateVersions(value: unknown): CatalogTemplateVersion[] | undefined {
+  return mapAll(value, parseCatalogTemplateVersion);
+}
+
+export function parseCatalogRenderers(value: unknown): CatalogRenderer[] | undefined {
+  return mapAll(value, (item) => {
+    const renderer = record(item);
+    return renderer !== undefined && isNonEmptyString(renderer.componentKey)
+      ? { componentKey: renderer.componentKey }
+      : undefined;
+  });
+}
+
+/** At most this many contract issues, each at most this many characters, ever reach a page. */
+export const MAX_CONTRACT_ISSUES = 20;
+export const MAX_CONTRACT_ISSUE_LENGTH = 300;
+
+/**
+ * The `issues` of a `CATALOG_RENDERER_CONTRACT_INVALID` body, bounded for display: only strings
+ * count, control characters become spaces, each issue is cut to `MAX_CONTRACT_ISSUE_LENGTH`
+ * characters, and no more than `MAX_CONTRACT_ISSUES` are kept. The API's text is technical English
+ * and may echo what the administrator typed, so a page shows it only as text, in a bounded list.
+ */
+export function boundContractIssues(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const issues: string[] = [];
+  for (const item of value) {
+    if (issues.length === MAX_CONTRACT_ISSUES) {
+      break;
+    }
+    if (typeof item !== "string") {
+      continue;
+    }
+
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is removed.
+    const clean = item.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+    if (clean !== "") {
+      issues.push(
+        clean.length > MAX_CONTRACT_ISSUE_LENGTH
+          ? `${clean.slice(0, MAX_CONTRACT_ISSUE_LENGTH - 1)}…`
+          : clean,
+      );
+    }
+  }
+  return issues;
 }

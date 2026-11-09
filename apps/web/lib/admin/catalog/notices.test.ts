@@ -16,6 +16,10 @@ const FAILURES: Record<CatalogFailure, string> = {
   "feature-not-found": "Alguna de las funciones elegidas ya no existe",
   "key-taken": "Ya existe un registro con esa clave. Escribe otra.",
   "concurrent-update": "Otra persona cambió esto al mismo tiempo. Vuelve a intentarlo.",
+  "category-not-found": "La categoría elegida ya no existe",
+  "template-not-publishable": "No se pudo hacer: una plantilla solo está publicada",
+  "transition-not-allowed": "Esa versión ya no está en un estado que permita esta acción",
+  "contract-invalid": "El renderizador ya no acepta el contenido de esta versión",
 };
 
 describe("errorMessage", () => {

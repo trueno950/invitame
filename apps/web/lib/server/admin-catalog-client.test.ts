@@ -44,6 +44,29 @@ const PACKAGE = {
   currentPrices: [],
 };
 
+const VERSION_ID = "4b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e14";
+const TEMPLATE = {
+  id: ID,
+  key: "adventure",
+  name: "Aventura",
+  description: null,
+  status: "DRAFT",
+  category: { id: FEATURE, key: "birthday", name: "Cumpleaños" },
+  createdAt: AT,
+  updatedAt: AT,
+  publishedVersion: null,
+  versionCount: 0,
+};
+const TEMPLATE_VERSION = {
+  id: VERSION_ID,
+  version: 1,
+  status: "DRAFT",
+  componentKey: "birthday-adventure-01",
+  schema: { a: 1 },
+  configuration: { palette: "ocean" },
+  createdAt: AT,
+};
+
 interface Received {
   method: string;
   url: string;
@@ -167,6 +190,74 @@ describe("requests", () => {
       ],
     ];
 
+    calls.push(
+      [() => api.templates.list(), "GET", "/admin/catalog/templates", undefined, [TEMPLATE]],
+      [
+        () =>
+          api.templates.create({
+            key: "adventure",
+            name: "Aventura",
+            description: null,
+            categoryId: FEATURE,
+          }),
+        "POST",
+        "/admin/catalog/templates",
+        { key: "adventure", name: "Aventura", description: null, categoryId: FEATURE },
+        TEMPLATE,
+      ],
+      [
+        () => api.templates.update(ID, { status: "ARCHIVED", categoryId: FEATURE }),
+        "PATCH",
+        `/admin/catalog/templates/${ID}`,
+        { status: "ARCHIVED", categoryId: FEATURE },
+        TEMPLATE,
+      ],
+      [
+        () => api.templates.versions(ID),
+        "GET",
+        `/admin/catalog/templates/${ID}/versions`,
+        undefined,
+        [TEMPLATE_VERSION],
+      ],
+      [
+        () =>
+          api.templates.createVersion(ID, {
+            componentKey: "birthday-adventure-01",
+            schema: { a: 1 },
+            configuration: { palette: "ocean" },
+          }),
+        "POST",
+        `/admin/catalog/templates/${ID}/versions`,
+        {
+          componentKey: "birthday-adventure-01",
+          schema: { a: 1 },
+          configuration: { palette: "ocean" },
+        },
+        TEMPLATE_VERSION,
+      ],
+      [
+        () => api.templates.publishVersion(ID, VERSION_ID),
+        "POST",
+        `/admin/catalog/templates/${ID}/versions/${VERSION_ID}/publish`,
+        undefined,
+        { ...TEMPLATE_VERSION, status: "PUBLISHED" },
+      ],
+      [
+        () => api.templates.retireVersion(ID, VERSION_ID),
+        "POST",
+        `/admin/catalog/templates/${ID}/versions/${VERSION_ID}/retire`,
+        undefined,
+        { ...TEMPLATE_VERSION, status: "RETIRED" },
+      ],
+      [
+        () => api.renderers.list(),
+        "GET",
+        "/admin/catalog/renderers",
+        undefined,
+        [{ componentKey: "birthday-adventure-01" }],
+      ],
+    );
+
     for (const [call, method, path, body, response] of calls) {
       received = [];
       answer(200, response);
@@ -214,6 +305,13 @@ describe("requests", () => {
         () => api.packages.setFeatures(id, []),
         () => api.packages.setPrice(id, 1),
         () => api.packages.priceHistory(id),
+        () => api.templates.update(id, { name: "A" }),
+        () => api.templates.versions(id),
+        () => api.templates.createVersion(id, { componentKey: "a", schema: {}, configuration: {} }),
+        () => api.templates.publishVersion(id, VERSION_ID),
+        () => api.templates.retireVersion(id, VERSION_ID),
+        () => api.templates.publishVersion(ID, id),
+        () => api.templates.retireVersion(ID, id),
       ]) {
         assert.deepEqual(await call(), { ok: false, failure: "not-found" }, id);
       }
@@ -263,6 +361,142 @@ describe("outcomes the pages handle", () => {
         { ok: false, failure },
         code,
       );
+    }
+  });
+});
+
+describe("template outcomes", () => {
+  it("maps the template error codes to typed failures", async () => {
+    const cases: Array<[number, string, string]> = [
+      [400, "CATALOG_CATEGORY_NOT_FOUND", "category-not-found"],
+      [409, "CATALOG_TEMPLATE_NOT_PUBLISHABLE", "template-not-publishable"],
+      [409, "CATALOG_VERSION_TRANSITION_NOT_ALLOWED", "transition-not-allowed"],
+      [409, "CATALOG_CONCURRENT_UPDATE", "concurrent-update"],
+      [409, "CATALOG_KEY_TAKEN", "key-taken"],
+    ];
+    for (const [status, code, failure] of cases) {
+      answer(status, { code });
+      assert.deepEqual(
+        await client().templates.update(ID, { status: "PUBLISHED" }),
+        { ok: false, failure },
+        code,
+      );
+    }
+  });
+
+  it("carries the issues of a contract violation, on a 400 of create and a 409 of publish", async () => {
+    const issues = ["configuration.palette must be one of: sunset, ocean, forest"];
+    const input = { componentKey: "x", schema: {}, configuration: {} };
+
+    answer(400, { code: "CATALOG_RENDERER_CONTRACT_INVALID", issues });
+    assert.deepEqual(await client().templates.createVersion(ID, input), {
+      ok: false,
+      failure: "contract-invalid",
+      issues,
+    });
+
+    answer(409, { code: "CATALOG_RENDERER_CONTRACT_INVALID", issues });
+    assert.deepEqual(await client().templates.publishVersion(ID, VERSION_ID), {
+      ok: false,
+      failure: "contract-invalid",
+      issues,
+    });
+  });
+
+  it("bounds the issues: at most 20, each at most 300 characters, text only", async () => {
+    const issues = [
+      ...Array.from({ length: 40 }, (_, index) => `${index} ${"x".repeat(1000)}`),
+      42,
+      null,
+    ];
+    answer(400, { code: "CATALOG_RENDERER_CONTRACT_INVALID", issues, message: "ignored" });
+    const result = await client().templates.createVersion(ID, {
+      componentKey: "x",
+      schema: {},
+      configuration: {},
+    });
+
+    assert.ok(!result.ok && result.failure === "contract-invalid");
+    assert.equal(result.issues?.length, 20);
+    for (const issue of result.issues ?? []) {
+      assert.ok(issue.length <= 300);
+    }
+  });
+
+  it("answers an empty list of issues when the body has none, and adds none to other failures", async () => {
+    answer(400, { code: "CATALOG_RENDERER_CONTRACT_INVALID" });
+    assert.deepEqual(
+      await client().templates.createVersion(ID, {
+        componentKey: "x",
+        schema: {},
+        configuration: {},
+      }),
+      { ok: false, failure: "contract-invalid", issues: [] },
+    );
+
+    answer(409, { code: "CATALOG_VERSION_TRANSITION_NOT_ALLOWED", issues: ["leaked"] });
+    assert.deepEqual(await client().templates.publishVersion(ID, VERSION_ID), {
+      ok: false,
+      failure: "transition-not-allowed",
+    });
+  });
+
+  it("maps a 400 without a code, such as an oversized snapshot, to validation", async () => {
+    answer(400, { message: ["schema must be JSON of at most 64 KiB"], statusCode: 400 });
+    assert.deepEqual(
+      await client().templates.createVersion(ID, {
+        componentKey: "x",
+        schema: {},
+        configuration: {},
+      }),
+      { ok: false, failure: "validation" },
+    );
+  });
+
+  it("maps 401, 403, and 404 for the template routes", async () => {
+    for (const [status, failure] of [
+      [401, "signed-out"],
+      [403, "forbidden"],
+      [404, "not-found"],
+    ] as const) {
+      answer(status, {});
+      assert.deepEqual(await client().templates.versions(ID), { ok: false, failure });
+      assert.deepEqual(await client().renderers.list(), { ok: false, failure });
+      assert.deepEqual(await client().templates.retireVersion(ID, VERSION_ID), {
+        ok: false,
+        failure,
+      });
+    }
+  });
+
+  it("fails closed on a template body that fails its validator or an unknown 409", async () => {
+    const cases: Array<[() => Promise<unknown>, number, unknown, string]> = [
+      [
+        () => client().templates.list(),
+        200,
+        [{ ...TEMPLATE, status: "WEIRD" }],
+        "invalid-response",
+      ],
+      [
+        () => client().templates.versions(ID),
+        200,
+        [{ ...TEMPLATE_VERSION, version: 0 }],
+        "invalid-response",
+      ],
+      [() => client().renderers.list(), 200, [{}], "invalid-response"],
+      [() => client().templates.publishVersion(ID, VERSION_ID), 200, TEMPLATE, "invalid-response"],
+      [() => client().templates.publishVersion(ID, VERSION_ID), 409, { code: "OTHER" }, "rejected"],
+      [() => client().templates.list(), 500, "boom", "unavailable"],
+    ];
+    for (const [call, status, body, kind] of cases) {
+      answer(status, body);
+      try {
+        await call();
+        assert.fail("expected an ApiClientError");
+      } catch (error) {
+        assert.ok(error instanceof ApiClientError, String(error));
+        assert.equal(error.kind, kind, JSON.stringify(body));
+      }
     }
   });
 });
