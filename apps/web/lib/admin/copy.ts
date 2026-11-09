@@ -70,6 +70,7 @@ export const ADMIN_PANEL_COPY = {
   intro: "Ingresaste con tu contraseña y tu app autenticadora.",
   emailLabel: "Correo electrónico",
   sessionNote: "Por seguridad, tu sesión termina 12 horas después de ingresar.",
+  catalog: "Administrar el catálogo",
   signOut: "Cerrar sesión",
   signingOut: "Cerrando sesión…",
   noScript: "Para cerrar sesión, activa JavaScript en tu navegador.",

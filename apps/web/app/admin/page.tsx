@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
@@ -47,6 +48,11 @@ export default async function AdminPanelPage() {
               <dd className="mt-1 text-lg font-medium break-all text-ink">{view.email}</dd>
             </div>
           </dl>
+          <div className="flex justify-center">
+            <Link className={quietButton} href="/admin/catalogo">
+              {ADMIN_PANEL_COPY.catalog}
+            </Link>
+          </div>
           <p className="text-sm leading-6 text-muted">{ADMIN_PANEL_COPY.sessionNote}</p>
           <div className="border-t border-gold/40 pt-8">
             <SignOutButton
