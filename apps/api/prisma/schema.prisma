@@ -159,6 +159,28 @@ model Package {
   createdAt       DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime         @updatedAt @db.Timestamptz(6)
   packageFeatures PackageFeature[]
+  prices          PackagePrice[]
+}
+
+// A price of a package in one currency, as an integer amount in minor units (centavos for MXN). A price
+// never changes: setting a new one retires the current row (`retiredAt`) and inserts another in one
+// transaction, so the history stays. The currency allow-list (MXN today) lives in the API domain.
+model PackagePrice {
+  id          String    @id @default(uuid()) @db.Uuid
+  packageId   String    @db.Uuid
+  currency    String    @db.Char(3)
+  amountMinor Int
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  retiredAt   DateTime? @db.Timestamptz(6)
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  // Migration 20261109130000 adds what Prisma cannot express: the CHECK constraints
+  // "PackagePrice_currency_format" (currency ~ '^[A-Z]{3}$') and "PackagePrice_amountMinor_non_negative"
+  // (amountMinor >= 0), the partial unique index "PackagePrice_current_key" (one current price, retiredAt
+  // IS NULL, per package and currency), and the "PackagePrice_immutable" trigger (packageId, currency,
+  // amountMinor, and createdAt never change; retiredAt may be set once and never cleared or changed).
+  @@index([packageId])
 }
 
 model PackageFeature {

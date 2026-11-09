@@ -2,6 +2,7 @@ import { type DynamicModule, Module, type Type } from "@nestjs/common";
 
 import { AccessControlModule } from "./auth/access-control/access-control.module";
 import { registerAuthModule } from "./auth/auth.registration";
+import { CatalogModule } from "./catalog/catalog.module";
 import { createConfigModule } from "./config/config.module";
 import { PrismaModule } from "./database/prisma.module";
 import { EmailModule } from "./email/email.module";
@@ -35,6 +36,7 @@ export class AppModule {
         EmailModule,
         HealthModule,
         UsersModule,
+        CatalogModule,
       ],
     };
   }
