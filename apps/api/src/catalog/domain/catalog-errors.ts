@@ -13,3 +13,19 @@ export class InvalidCatalogEntryError extends Error {
     this.name = "InvalidCatalogEntryError";
   }
 }
+
+/** A package's feature list names a feature that does not exist; nothing was stored. */
+export class CatalogFeatureNotFoundError extends Error {
+  constructor() {
+    super("A listed feature does not exist.");
+    this.name = "CatalogFeatureNotFoundError";
+  }
+}
+
+/** Another request changed the same rows first (for example two price sets at once); retry. */
+export class CatalogConcurrentUpdateError extends Error {
+  constructor() {
+    super("The catalog changed concurrently; retry the request.");
+    this.name = "CatalogConcurrentUpdateError";
+  }
+}
