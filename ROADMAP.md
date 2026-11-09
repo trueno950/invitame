@@ -6,7 +6,8 @@ package scripts remain the source of truth for the current repository.
 
 ## Product direction
 
-**Status:** Planned direction; not implemented beyond the Milestone 1 catalog foundation.
+**Status:** Planned direction; not implemented beyond the Milestone 1 catalog foundation and the Milestone 2
+identity work.
 
 InvitaMe is planned as a self-service invitation service with no manual operator step between an order and its
 publication: a customer chooses a catalog design, completes the invitation, pays, and the backend publishes it after
@@ -52,7 +53,9 @@ deployment is added to the foundation.
 
 ## Milestone 2 — Identity, ownership, and authorization
 
-**Status:** Planned.
+**Status:** Implemented. The owner signed off the security evidence in
+[`docs/development/m2-security-evidence.md`](docs/development/m2-security-evidence.md); its open risks, such as the
+production domain, remain listed there.
 
 ### Outcome
 
