@@ -1,7 +1,7 @@
 # Milestone 3 — Catalog and renderer contracts
 
 Task brief and tracking for Milestone 3 on branch `feat/m3-catalog`. The four product rules S4 to S7 are the owner's
-answers of L2. Status: tracking created; no M3 task committed yet.
+answers of L2. Status: T0, T1, T2, T3, and T5 committed; T4 and T6a in progress.
 
 ## Specs
 
@@ -42,12 +42,12 @@ additive (no drop, no rewrite of stored rows). High-risk tasks (T3, T4, T6a) eac
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| T0 | ROADMAP: mark Milestone 2 implemented | S1 | inline | |
-| T1 | Database tests of the existing catalog schema: unique keys, `Restrict` foreign keys, and the `TemplateVersion` snapshot trigger (snapshot fields refused, `status` allowed) | S2, S8 | worker | |
-| T2 | Seed creates only what is missing: no deletes, no reactivation, no overwrite of admin edits; seed logic importable and covered by a database test that runs it twice | S7 | worker | |
-| T3 | Version lifecycle: pure domain transition rules and an additive migration with a partial unique index (one `PUBLISHED` version per template) and a trigger refusing illegal status changes; database tests | S5, S8 | worker | |
+| T0 | ROADMAP: mark Milestone 2 implemented | S1 | inline | `4831180` |
+| T1 | Database tests of the existing catalog schema: unique keys, `Restrict` foreign keys, and the `TemplateVersion` snapshot trigger (snapshot fields refused, `status` allowed) | S2, S8 | worker | `1557006` |
+| T2 | Seed creates only what is missing: no deletes, no reactivation, no overwrite of admin edits; seed logic importable and covered by a database test that runs it twice | S7 | worker | `dc6adf9` |
+| T3 | Version lifecycle: pure domain transition rules and an additive migration with a partial unique index (one `PUBLISHED` version per template) and a trigger refusing illegal status changes; database tests | S5, S8 | worker | `e0aec9f` |
 | T4 | `PackagePrice`: additive migration and model (L4 shape), MXN allow-list in the domain, database tests | S4 | worker | |
-| T5 | API renderer registry: explicit allow-list of `componentKey` with a per-renderer contract that validates a version's `schema` and `configuration`; unit tests; `birthday-adventure-01` is the first entry | S2, S3, S6 | worker | |
+| T5 | API renderer registry: explicit allow-list of `componentKey` with a per-renderer contract that validates a version's `schema` and `configuration`; unit tests; `birthday-adventure-01` is the first entry | S2, S3, S6 | worker | `773d95c` |
 | T6a | Admin catalog API, categories and features: `src/catalog` module, `@AdminOnly()` controllers, list/create/update (no delete), DTO validation, 401/403 tests | S1, S2, S9 | worker | |
 | T6b | Admin catalog API, packages: list/create/update status, set included features, set the current price | S1, S4, S9 | worker | |
 | T6c | Admin catalog API, templates and versions: list/create/update templates, create a draft version validated by the registry, publish (retires the previous published version in one transaction), retire | S1, S5, S6, S9 | worker | |
@@ -79,3 +79,9 @@ additive (no drop, no rewrite of stored rows). High-risk tasks (T3, T4, T6a) eac
   - No delete endpoints; deactivation uses `isActive` or the status enums. Public (non-admin) catalog reads are not
     in this milestone.
   - The seed creates no prices: amounts are the owner's product decision and are set through the admin API.
+- **L5** GitHub access (2026-11-09): the owner ran `gh auth login --insecure-storage`; the session uses
+  `GH_CONFIG_DIR=/Users/joelmay/.config/gh` and `gh auth git-credential` without reading the token. L3 is resolved.
+- **L6** Delivery strategy: the first slice (`4831180` to `773d95c`, about 2,300 lines, mostly tests) goes as one pull
+  request after the independent verification required by the T3 migration; later tasks go as one pull request per
+  task or pair of small tasks, each merged into `master` after CI passes. The seed keeps version 1 only for a template
+  it creates (parent fix in `dc6adf9`).
