@@ -5,10 +5,11 @@ current `health`, bootstrap, database, and seed foundation stays simpler; empty 
 
 ## Minimum structure
 
-For a real capability such as the planned Invitations module:
+A module lives directly under `apps/api/src/<module>/`; there is no `modules/` folder. The current `users` and
+`catalog` modules follow this shape. For a real capability such as the planned Invitations module:
 
 ```text
-apps/api/src/modules/invitations/
+apps/api/src/invitations/
   invitations.module.ts
   domain/
     invitation.ts

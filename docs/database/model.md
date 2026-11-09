@@ -2,7 +2,8 @@
 
 The first migration (`20260913000000_initial_catalog`) creates the catalog and template-version foundation. The
 second (`20261104030448_add_better_auth_identity`) adds the identity persistence that Better Auth needs
-([ADR 0004](../adr/0004-authentication-with-better-auth.md), decision 2). Future invitation, payment, media, guest,
+([ADR 0004](../adr/0004-authentication-with-better-auth.md), decision 2). Milestone 3 adds two additive catalog
+migrations: `20261109120000_add_template_version_publication_rules` and `20261109130000_add_package_prices`. Future invitation, payment, media, guest,
 RSVP, and analytics design is documented separately in [`future-model.md`](future-model.md); that document does
 not add tables.
 
@@ -18,6 +19,7 @@ not add tables.
 | `Feature` | Extensible catalog capability with a database-enforced unique string `key` |
 | `Package` | Sellable catalog metadata, independent of behavior branches |
 | `PackageFeature` | Normalized package-to-feature relation |
+| `PackagePrice` | Append-only price history of a package: integer `amountMinor` in the smallest currency unit plus an ISO `currency`; the row with no `retiredAt` is the current price |
 | `Template` | Mutable template master metadata and category relation |
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
 
@@ -29,6 +31,19 @@ not add tables.
   PostgreSQL), `schema`, `configuration`, template reference, version number, and creation timestamp are
   protected against updates by the initial migration trigger.
 - A version status can evolve through its stable lifecycle, but its snapshot contract cannot be rewritten.
+- Version lifecycle: the only legal status changes are `DRAFT → PUBLISHED` and `PUBLISHED → RETIRED`, enforced by
+  the `TemplateVersion_status_transition` trigger. The partial unique index `TemplateVersion_templateId_published_key`
+  allows at most one `PUBLISHED` version per template. The API creates a version as `DRAFT` with `version = max + 1`,
+  and publishing retires the previous `PUBLISHED` version in the same transaction. A `RETIRED` version stays
+  readable, so an existing invitation keeps its pinned version.
+- The API lets a `Template` be `PUBLISHED` only while it has a `PUBLISHED` version; this rule lives in the API, not
+  in a database constraint.
+- `PackagePrice`: `amountMinor` is an `INT` checked `>= 0`, `currency` is `CHAR(3)` checked against `^[A-Z]{3}$`, and
+  the partial unique index on `(packageId, currency) WHERE retiredAt IS NULL` keeps one current price per currency.
+  A trigger refuses updates to `packageId`, `currency`, `amountMinor`, and `createdAt`, and refuses clearing
+  `retiredAt`. Changing a price retires the current row and inserts a new one in one transaction. The domain allows
+  only `MXN` today. The database does not forbid deleting a price row; no API route deletes one, and deleting a
+  `Package` is restricted while rows reference it.
 - Future `Invitation` records must reference `TemplateVersion`, never mutable `Template` fields.
 
 ## Identity tables
