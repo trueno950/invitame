@@ -89,6 +89,13 @@ describe("routeAdminPage", () => {
       administrator: "/admin",
       unavailable: null,
     },
+    catalog: {
+      anonymous: "/admin/ingresar",
+      customer: "/cuenta",
+      "pending-administrator": "/admin/activar",
+      administrator: null,
+      unavailable: null,
+    },
   };
 
   for (const [page, byKind] of Object.entries(expected)) {

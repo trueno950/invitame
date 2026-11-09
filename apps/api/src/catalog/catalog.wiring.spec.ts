@@ -9,8 +9,8 @@ import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
 import { PrismaService } from "../database/prisma.service";
 
-// CatalogModule wiring in AppModule (M3 T6a; S1, S9): the admin category, feature, and package routes
-// exist and sit behind the global guard. A Prisma stub stands in for the database, so the suite never connects
+// CatalogModule wiring in AppModule (M3 T6a to T6c; S1, S9): the admin category, feature, package, template,
+// version, and renderer routes exist and sit behind the global guard. A Prisma stub stands in for the database, so the suite never connects
 // to one. The authorized behavior is proved in `taxonomy.controllers.spec.ts`.
 
 @Global()
@@ -48,7 +48,7 @@ describe("AppModule catalog wiring", () => {
     await app?.close();
   });
 
-  it("serves the admin category, feature, and package routes only behind the guard", async () => {
+  it("serves the admin category, feature, package, template, and renderer routes only behind the guard", async () => {
     const id = "00000000-0000-4000-8000-000000000000";
     const routes: Array<[string, string, unknown?]> = [
       ["GET", "/admin/catalog/categories"],
@@ -63,6 +63,18 @@ describe("AppModule catalog wiring", () => {
       ["PUT", `/admin/catalog/packages/${id}/features`, { featureIds: [] }],
       ["PUT", `/admin/catalog/packages/${id}/price`, { currency: "MXN", amountMinor: 100 }],
       ["GET", `/admin/catalog/packages/${id}/prices`],
+      ["GET", "/admin/catalog/templates"],
+      ["POST", "/admin/catalog/templates", { key: "adventure", name: "Aventura", categoryId: id }],
+      ["PATCH", `/admin/catalog/templates/${id}`, { status: "ARCHIVED" }],
+      ["GET", `/admin/catalog/templates/${id}/versions`],
+      [
+        "POST",
+        `/admin/catalog/templates/${id}/versions`,
+        { componentKey: "birthday-adventure-01", schema: {}, configuration: {} },
+      ],
+      ["POST", `/admin/catalog/templates/${id}/versions/${id}/publish`],
+      ["POST", `/admin/catalog/templates/${id}/versions/${id}/retire`],
+      ["GET", "/admin/catalog/renderers"],
     ];
 
     for (const [method, path, body] of routes) {

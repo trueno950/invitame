@@ -91,6 +91,66 @@ export interface ApiClientOptions {
   timeoutMs?: number;
 }
 
+export interface ApiRequest {
+  /** The already filtered session cookies (`sessionCookieHeader`). */
+  cookie: string;
+  method: "GET" | "POST" | "PATCH" | "PUT";
+  path: string;
+  body?: unknown;
+}
+
+/** The status, and the body text only when the caller asked to read it for that status. */
+export interface ApiResponse {
+  status: number;
+  text: string | undefined;
+}
+
+/**
+ * Sends one request to the API with the session cookies and the shared secret, never following a
+ * redirect and never caching. The body is read only when `readsBody(status)` is true; otherwise it is
+ * cancelled unread, so a failure body never reaches the web server's memory or logs. A network error,
+ * a timeout, and a body that stalls or breaks off throw `unavailable` with the failure as the `cause`.
+ */
+export async function sendApiRequest(
+  options: ApiClientOptions,
+  request: ApiRequest,
+  readsBody: (status: number) => boolean,
+): Promise<ApiResponse> {
+  const { config } = options;
+  const headers = new Headers({ accept: "application/json", cookie: request.cookie });
+
+  if (config.proxySecret !== undefined) {
+    headers.set(AUTH_PROXY_SECRET_HEADER, config.proxySecret);
+  }
+
+  if (request.body !== undefined) {
+    headers.set("content-type", "application/json");
+  }
+
+  try {
+    const response = await (options.fetch ?? fetch)(new URL(request.path, config.apiOrigin), {
+      method: request.method,
+      headers,
+      ...(request.body === undefined ? {} : { body: JSON.stringify(request.body) }),
+      redirect: "manual",
+      cache: "no-store",
+      signal: AbortSignal.timeout(options.timeoutMs ?? API_CLIENT_TIMEOUT_MS),
+    });
+
+    if (!readsBody(response.status)) {
+      await response.body?.cancel();
+      return { status: response.status, text: undefined };
+    }
+
+    // A body that stalls past the deadline or breaks off is an outage, not a contract mismatch.
+    return { status: response.status, text: await response.text() };
+  } catch (error) {
+    throw new ApiClientError("unavailable", undefined, { cause: error });
+  }
+}
+
+const isSuccess = (status: number): boolean => status >= 200 && status < 300;
+
 /**
  * Calls the API from the web server with the browser's session cookie (M2 T8b; L29, L33). It forwards
  * only Better Auth's cookies and the shared secret, and stores nothing. A session read here refreshes
@@ -98,8 +158,6 @@ export interface ApiClientOptions {
  * by `GET /api/auth/get-session` through the proxy (L34).
  */
 export function createApiClient(options: ApiClientOptions) {
-  const { config } = options;
-
   /**
    * Sends one own-profile request (`GET /me` or `PATCH /me`). Both answer the profile, so a success
    * body must be an `OwnProfile`; another endpoint needs its own response check, not this function.
@@ -116,55 +174,28 @@ export function createApiClient(options: ApiClientOptions) {
       return { signedIn: false };
     }
 
-    const headers = new Headers({ accept: "application/json", cookie });
+    const response = await sendApiRequest(
+      options,
+      { cookie, method, path, ...(body === undefined ? {} : { body }) },
+      isSuccess,
+    );
 
-    if (config.proxySecret !== undefined) {
-      headers.set(AUTH_PROXY_SECRET_HEADER, config.proxySecret);
+    if (response.status === 401) {
+      return { signedIn: false };
     }
 
-    if (body !== undefined) {
-      headers.set("content-type", "application/json");
+    if (!isSuccess(response.status)) {
+      throw new ApiClientError(
+        response.status >= 500 ? "unavailable" : "rejected",
+        response.status,
+      );
     }
 
-    let response: Response;
     let payload: unknown;
-
     try {
-      response = await (options.fetch ?? fetch)(new URL(path, config.apiOrigin), {
-        method,
-        headers,
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        redirect: "manual",
-        cache: "no-store",
-        signal: AbortSignal.timeout(options.timeoutMs ?? API_CLIENT_TIMEOUT_MS),
-      });
-
-      if (response.status === 401) {
-        await response.body?.cancel();
-        return { signedIn: false };
-      }
-
-      if (response.status < 200 || response.status >= 300) {
-        await response.body?.cancel();
-        throw new ApiClientError(
-          response.status >= 500 ? "unavailable" : "rejected",
-          response.status,
-        );
-      }
-
-      // A body that stalls past the deadline or breaks off is an outage, not a contract mismatch.
-      const text = await response.text();
-      try {
-        payload = JSON.parse(text);
-      } catch {
-        payload = undefined;
-      }
-    } catch (error) {
-      if (error instanceof ApiClientError) {
-        throw error;
-      }
-
-      throw new ApiClientError("unavailable", undefined, { cause: error });
+      payload = JSON.parse(response.text ?? "");
+    } catch {
+      payload = undefined;
     }
 
     if (!isOwnProfile(payload)) {

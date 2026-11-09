@@ -10,7 +10,7 @@ import type { AuthSessionUser } from "../server/auth-session.ts";
  * - anonymous: the sign-in page;
  * - customer: `/cuenta`, the customer's own page;
  * - pending administrator (role ADMIN, `twoFactorEnabled` not true): the enrollment page;
- * - administrator (enrolled): the panel;
+ * - administrator (enrolled): the panel and the catalog pages under `/admin/catalogo` (M3 T8a; S1);
  * - unavailable (the read failed): the page renders a retry notice, or the sign-in form.
  */
 
@@ -25,7 +25,7 @@ export type AdminView =
   | { kind: "anonymous" | "customer" | "pending-administrator" | "unavailable" }
   | { kind: "administrator"; email: string };
 
-export type AdminPage = "panel" | "sign-in" | "enrollment";
+export type AdminPage = "panel" | "sign-in" | "enrollment" | "catalog";
 
 /** The page each kind of visitor belongs on. An `unavailable` read has none: every page renders. */
 const HOME: Record<Exclude<SessionKind, "unavailable">, string> = {
@@ -35,10 +35,15 @@ const HOME: Record<Exclude<SessionKind, "unavailable">, string> = {
   administrator: "/admin",
 };
 
-const PAGE_PATH: Record<AdminPage, string> = {
-  panel: "/admin",
-  "sign-in": "/admin/ingresar",
-  enrollment: "/admin/activar",
+/**
+ * The one kind of visitor each page renders for. `catalog` stands for every page under
+ * `/admin/catalogo`: they all require an enrolled administrator, like the panel.
+ */
+const AUDIENCE: Record<AdminPage, Exclude<SessionKind, "unavailable">> = {
+  panel: "administrator",
+  "sign-in": "anonymous",
+  enrollment: "pending-administrator",
+  catalog: "administrator",
 };
 
 export async function loadAdminView(
@@ -68,6 +73,5 @@ export function routeAdminPage(page: AdminPage, kind: SessionKind): string | nul
   if (kind === "unavailable") {
     return null;
   }
-  const home = HOME[kind];
-  return home === PAGE_PATH[page] ? null : home;
+  return kind === AUDIENCE[page] ? null : HOME[kind];
 }
