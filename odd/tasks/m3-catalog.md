@@ -1,7 +1,7 @@
 # Milestone 3 — Catalog and renderer contracts
 
 Task brief and tracking for Milestone 3 on branch `feat/m3-catalog`. The four product rules S4 to S7 are the owner's
-answers of L2. Status: T0, T1, T2, T3, and T5 committed; T4 and T6a in progress.
+answers of L2. Status: T0 to T5 merged as #49 (`671c770`); T4 and T6a merged as #50 (`b779e38`); T6b and T7 committed; T6c and T8 in progress.
 
 ## Specs
 
@@ -46,12 +46,12 @@ additive (no drop, no rewrite of stored rows). High-risk tasks (T3, T4, T6a) eac
 | T1 | Database tests of the existing catalog schema: unique keys, `Restrict` foreign keys, and the `TemplateVersion` snapshot trigger (snapshot fields refused, `status` allowed) | S2, S8 | worker | `1557006` |
 | T2 | Seed creates only what is missing: no deletes, no reactivation, no overwrite of admin edits; seed logic importable and covered by a database test that runs it twice | S7 | worker | `dc6adf9` |
 | T3 | Version lifecycle: pure domain transition rules and an additive migration with a partial unique index (one `PUBLISHED` version per template) and a trigger refusing illegal status changes; database tests | S5, S8 | worker | `e0aec9f` |
-| T4 | `PackagePrice`: additive migration and model (L4 shape), MXN allow-list in the domain, database tests | S4 | worker | |
+| T4 | `PackagePrice`: additive migration and model (L4 shape), MXN allow-list in the domain, database tests | S4 | worker || `018fcde` |
 | T5 | API renderer registry: explicit allow-list of `componentKey` with a per-renderer contract that validates a version's `schema` and `configuration`; unit tests; `birthday-adventure-01` is the first entry | S2, S3, S6 | worker | `773d95c` |
-| T6a | Admin catalog API, categories and features: `src/catalog` module, `@AdminOnly()` controllers, list/create/update (no delete), DTO validation, 401/403 tests | S1, S2, S9 | worker | |
-| T6b | Admin catalog API, packages: list/create/update status, set included features, set the current price | S1, S4, S9 | worker | |
+| T6a | Admin catalog API, categories and features: `src/catalog` module, `@AdminOnly()` controllers, list/create/update (no delete), DTO validation, 401/403 tests | S1, S2, S9 | worker || `04a2d88` |
+| T6b | Admin catalog API, packages: list/create/update status, set included features, set the current price | S1, S4, S9 | worker || `ea564f7` |
 | T6c | Admin catalog API, templates and versions: list/create/update templates, create a draft version validated by the registry, publish (retires the previous published version in one transaction), retire | S1, S5, S6, S9 | worker | |
-| T7 | Web renderer map (`componentKey` → component), the `birthday-adventure-01` component, and the test that the web and API key lists match | S2, S3, S6 | worker | |
+| T7 | Web renderer map (`componentKey` → component), the `birthday-adventure-01` component, and the test that the web and API key lists match | S2, S3, S6 | worker || `3d4fb3a` |
 | T8 | Web admin catalog UI under `/admin/catalogo`: view and manage categories, features, packages with prices, templates and versions (publish, retire) | S1 | worker | |
 | T9 | Documentation: `module-template.md` path, `docs/database/model.md`, `CONTEXT.md` (catalog price and publication), the renderer-registry overlap between Milestones 3 and 5, and the ROADMAP status | S1 | inline | |
 
@@ -85,3 +85,9 @@ additive (no drop, no rewrite of stored rows). High-risk tasks (T3, T4, T6a) eac
   request after the independent verification required by the T3 migration; later tasks go as one pull request per
   task or pair of small tasks, each merged into `master` after CI passes. The seed keeps version 1 only for a template
   it creates (parent fix in `dc6adf9`).
+- **L7** PR #49 (T0 to T5 and `e4ac12b`, the seed-contract test) merged into `master` as `671c770` after CI passed.
+  Delivery runs from the clean worktree `.worktrees/m3-delivery` (locally excluded), because the delivery preflight
+  refuses a worktree with uncommitted worker output.
+- **L8** Independent verification of T4 and T6a: no blocking findings. Accepted follow-ups: a `PackagePrice` row can be
+  deleted at the database level (no API route deletes one, and `Package` deletion is `Restrict`); CORS lists no `PATCH`,
+  so the web admin (T8) calls the API from the server. PR #50 holds T4 and T6a.
