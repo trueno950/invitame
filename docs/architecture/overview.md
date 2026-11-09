@@ -13,7 +13,8 @@ explicitly planned unless marked current.
 | Web | `apps/web` is a Next.js 16 App Router app with an honest pre-launch landing page at `/` (see Landing page below), a proxy for `/api/auth`, a server-side API client, and the customer pages `/ingresar` (sign-in by emailed code) and `/cuenta` (own profile and sign-out), and the administrator pages `/admin/ingresar` (password and second factor), `/admin/activar` (authenticator-app enrollment), and `/admin` (a minimal panel with sign-out); the pages use the visual theme «A · Rosa y vino» ([`docs/design/theme.md`](../design/theme.md): Tailwind tokens, fonts committed in the repository and loaded with `next/font/local` so the build needs no network for them, fine-line SVG ornaments, and a contrast test). | Dashboard, authoring flows, and public invitation routes. **Planned.** |
 | API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling, administrator creation, and administrator recovery by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
 | Database | PostgreSQL and Prisma own `User` and the identity tables Better Auth reads and writes (sessions, credential accounts, verification codes, two-factor records, and rate-limit counters) plus the catalog, packages, features, templates, and immutable template versions; see [`model.md`](../database/model.md). | Invitation, guest, RSVP, payment, media, and analytics models. **Planned.** |
-| Renderer | `TemplateVersion.componentKey` is persisted and protected as snapshot data. | An application-owned allow-listed renderer registry. **Planned.** |
+| Catalog | The API `catalog` module (`apps/api/src/catalog`) serves administrator-only endpoints under `/admin/catalog` for categories, features, packages with their features and MXN prices, templates, and template versions (create, publish, retire); the web pages under `/admin/catalogo` call them from the server. See Catalog administration below. | Public catalog reads for creators. **Planned** (Milestone 4). |
+| Renderer | An allow-listed renderer registry: the API validates each version's `schema` and `configuration` against the renderer contract at creation and publication, and the web maps `componentKey` to a reviewed component; a test keeps both key lists equal. The first renderer is `birthday-adventure-01`. | Public invitation rendering through the registry. **Planned** (Milestone 5). |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
 
 ## Context and runtime map
@@ -262,6 +263,27 @@ sees: the API authorizes every action.
   sesión», which ends on `/admin/ingresar` even when the session is already gone.
 - The forms of `/admin/ingresar` and `/admin/activar` and the sign-out button follow the customer pages' rule:
   they send only through JavaScript and stay disabled until the page is interactive (T8e; S42).
+
+### Catalog administration (current)
+
+This is Milestone 3 (`odd/tasks/m3-catalog.md`). Every route is administrator-only through a class-level
+`@AdminOnly()`; input is validated by DTOs and the global validation pipe, and errors carry stable codes such as
+`CATALOG_KEY_TAKEN`, `CATALOG_CONCURRENT_UPDATE`, `CATALOG_TEMPLATE_NOT_PUBLISHABLE`, and
+`CATALOG_RENDERER_CONTRACT_INVALID`. There are no delete routes: deactivation uses `isActive` or a status.
+
+- Categories and features: list, create, update. Keys are fixed at creation.
+- Packages: list, create, update; replace the included features in one transaction; set the current MXN price,
+  which retires the current price row and inserts a new one in one transaction (the same amount is a no-op); read
+  the price history. A lost concurrent change answers `409 CATALOG_CONCURRENT_UPDATE`.
+- Templates and versions: list, create, update templates; create a `DRAFT` version validated by the renderer
+  registry (`schema` and `configuration` each at most 64 KiB and 32 nesting levels); publish, which re-validates
+  the stored snapshot and retires the previous `PUBLISHED` version in the same transaction; retire. A template may
+  be `PUBLISHED` only while it has a `PUBLISHED` version. A version is never edited: a change is a new version.
+- Web: `/admin/catalogo` with Categorías, Funciones, Paquetes, and Plantillas. Every write is a server action and
+  the browser never calls the API (CORS allows no `PATCH`). A server-only client forwards only Better Auth cookies
+  and the proxy secret and validates every response fail-closed. Prices are typed in pesos and converted to
+  centavos with string arithmetic. Contract issues of a refused version come back to the form as bounded state,
+  never in a URL. Pages are gated by `routeAdminPage("catalog")` like `/admin`.
 
 ### Access control (current)
 
@@ -660,6 +682,11 @@ application owns a registry similar in concept to:
 "birthday-adventure-01" → BirthdayAdventureRenderer
 "wedding-editorial-01" → WeddingEditorialRenderer
 ```
+
+Current: the API registry (`apps/api/src/catalog/domain/renderers/`) owns the allow-list and each renderer's
+contract, and validates a version when it is created and when it is published. The web map
+(`apps/web/lib/renderers/registry.ts`) resolves an allow-listed key to a reviewed component with no dynamic import,
+and `registry-sync.test.ts` fails when the two key lists differ. There is no shared package between the runtimes.
 
 The registry is an explicit allow-list compiled into the application. The database stores the selected key plus
 validated schema/configuration data. A missing or unknown key is an operational error, not permission to evaluate

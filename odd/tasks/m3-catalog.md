@@ -1,7 +1,8 @@
 # Milestone 3 — Catalog and renderer contracts
 
 Task brief and tracking for Milestone 3 on branch `feat/m3-catalog`. The four product rules S4 to S7 are the owner's
-answers of L2. Status: T0 to T5 merged as #49 (`671c770`); T4 and T6a merged as #50 (`b779e38`); T6b and T7 committed; T6c and T8 in progress.
+answers of L2. Status: T0 to T5 merged as #49 (`671c770`); T4 and T6a as #50 (`b779e38`); T6b and T7 as #51 (`195c723`); T6c and
+T8a in #52; T8b and T9 in the last pull request.
 
 ## Specs
 
@@ -50,10 +51,10 @@ additive (no drop, no rewrite of stored rows). High-risk tasks (T3, T4, T6a) eac
 | T5 | API renderer registry: explicit allow-list of `componentKey` with a per-renderer contract that validates a version's `schema` and `configuration`; unit tests; `birthday-adventure-01` is the first entry | S2, S3, S6 | worker | `773d95c` |
 | T6a | Admin catalog API, categories and features: `src/catalog` module, `@AdminOnly()` controllers, list/create/update (no delete), DTO validation, 401/403 tests | S1, S2, S9 | worker || `04a2d88` |
 | T6b | Admin catalog API, packages: list/create/update status, set included features, set the current price | S1, S4, S9 | worker || `ea564f7` |
-| T6c | Admin catalog API, templates and versions: list/create/update templates, create a draft version validated by the registry, publish (retires the previous published version in one transaction), retire | S1, S5, S6, S9 | worker | |
+| T6c | Admin catalog API, templates and versions: list/create/update templates, create a draft version validated by the registry, publish (retires the previous published version in one transaction), retire | S1, S5, S6, S9 | worker | `2833f1e` |
 | T7 | Web renderer map (`componentKey` → component), the `birthday-adventure-01` component, and the test that the web and API key lists match | S2, S3, S6 | worker || `3d4fb3a` |
-| T8 | Web admin catalog UI under `/admin/catalogo`: view and manage categories, features, packages with prices, templates and versions (publish, retire) | S1 | worker | |
-| T9 | Documentation: `module-template.md` path, `docs/database/model.md`, `CONTEXT.md` (catalog price and publication), the renderer-registry overlap between Milestones 3 and 5, and the ROADMAP status | S1 | inline | |
+| T8 | Web admin catalog UI under `/admin/catalogo`: view and manage categories, features, packages with prices, templates and versions (publish, retire) | S1 | worker | `a8ba45a` (T8a), `b8c1234` (T8b) |
+| T9 | Documentation: `module-template.md` path, `docs/database/model.md`, `CONTEXT.md` (catalog price and publication), the renderer-registry overlap between Milestones 3 and 5, and the ROADMAP status | S1 | inline | this commit |
 
 ## Log
 
@@ -91,3 +92,15 @@ additive (no drop, no rewrite of stored rows). High-risk tasks (T3, T4, T6a) eac
 - **L8** Independent verification of T4 and T6a: no blocking findings. Accepted follow-ups: a `PackagePrice` row can be
   deleted at the database level (no API route deletes one, and `Package` deletion is `Restrict`); CORS lists no `PATCH`,
   so the web admin (T8) calls the API from the server. PR #50 holds T4 and T6a.
+- **L9** Independent verification of T6b, T7, T6c, and T8a: no blocking findings. PR #51 (T6b, T7) merged as
+  `195c723`; PR #52 holds T6c and T8a. Accepted follow-ups, not in this milestone:
+  - API: concurrent version creates mostly lose with `409` instead of queueing; a Prisma serialization error (P2034)
+    is not mapped and would answer `500`; two 64 KiB JSON fields can exceed the body parser limit (`413`); the
+    version list is not paginated; a version of an `ARCHIVED` template can be published while the template stays
+    `ARCHIVED`; price errors echo the rejected value; replacing package features keeps an existing link's `included`
+    flag.
+  - Web: a refused create or edit form comes back empty; edit pages read the whole list (no read-by-id route); a
+    refused publish shows a fixed message instead of the contract issues; there is no version preview; the renderer
+    accepts an image URL with credentials; no Playwright journey covers the catalog pages.
+- **L10** Slice boundaries: PR #51 ends at `5b8de11`; PR #52 at `a8ba45a`; the last pull request holds `b8c1234`
+  and the T9 documentation commit.

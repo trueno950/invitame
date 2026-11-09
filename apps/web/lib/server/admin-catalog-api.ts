@@ -7,7 +7,7 @@ import { logAdminCatalogFailure } from "./admin-catalog-log.ts";
 import { getWebServerConfig } from "./config.ts";
 
 /**
- * The administrator catalog API for server components and server actions (M3 T8a; S1, S9, L8). One
+ * The administrator catalog API for server components and server actions (M3 T8a and T8b; S1, S9, L8). One
  * stateless client per server process, created on first use; each call reads the current request's
  * cookies and keeps nothing. `server-only` makes a client-component import fail the build, so the
  * cookie and the proxy secret never reach a browser bundle. An unexpected failure (a thrown
@@ -34,6 +34,9 @@ async function logged<T>(call: (client: AdminCatalogClient) => Promise<T>): Prom
 type Params<K extends keyof AdminCatalogClient["packages"]> = Parameters<
   AdminCatalogClient["packages"][K]
 >;
+type TemplateParams<K extends keyof AdminCatalogClient["templates"]> = Parameters<
+  AdminCatalogClient["templates"][K]
+>;
 type EntryParams<K extends keyof AdminCatalogClient["categories"]> = Parameters<
   AdminCatalogClient["categories"][K]
 >;
@@ -57,5 +60,21 @@ export const adminCatalog = {
     setPrice: (...args: Params<"setPrice">) => logged((api) => api.packages.setPrice(...args)),
     priceHistory: (...args: Params<"priceHistory">) =>
       logged((api) => api.packages.priceHistory(...args)),
+  },
+  templates: {
+    list: () => logged((api) => api.templates.list()),
+    create: (...args: TemplateParams<"create">) => logged((api) => api.templates.create(...args)),
+    update: (...args: TemplateParams<"update">) => logged((api) => api.templates.update(...args)),
+    versions: (...args: TemplateParams<"versions">) =>
+      logged((api) => api.templates.versions(...args)),
+    createVersion: (...args: TemplateParams<"createVersion">) =>
+      logged((api) => api.templates.createVersion(...args)),
+    publishVersion: (...args: TemplateParams<"publishVersion">) =>
+      logged((api) => api.templates.publishVersion(...args)),
+    retireVersion: (...args: TemplateParams<"retireVersion">) =>
+      logged((api) => api.templates.retireVersion(...args)),
+  },
+  renderers: {
+    list: () => logged((api) => api.renderers.list()),
   },
 };

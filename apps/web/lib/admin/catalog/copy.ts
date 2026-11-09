@@ -1,5 +1,5 @@
 /**
- * Spanish product copy of the administrator catalog pages (M3 T8a; S1). Administrators are addressed
+ * Spanish product copy of the administrator catalog pages (M3 T8a and T8b; S1). Administrators are addressed
  * with "tú" in neutral Mexican Spanish, like the rest of the administration (`../copy.ts`). Keep every
  * catalog string here so the wording is reviewed in one place. "Funciones" is the label of what the
  * code calls features.
@@ -11,6 +11,7 @@ export const CATALOG_PATHS = {
   categories: "/admin/catalogo/categorias",
   features: "/admin/catalogo/funciones",
   packages: "/admin/catalogo/paquetes",
+  templates: "/admin/catalogo/plantillas",
 } as const;
 
 /** The two kinds that share one shape (`CatalogEntry`): a category and a feature. */
@@ -20,7 +21,7 @@ export const CATALOG_INDEX_COPY = {
   pageTitle: "Catálogo | InvitaMe",
   eyebrow: "Administración",
   heading: "Catálogo",
-  intro: "Administra las categorías, las funciones y los paquetes de InvitaMe.",
+  intro: "Administra las categorías, las funciones, los paquetes y las plantillas de InvitaMe.",
   backToPanel: "Volver al panel",
   sections: [
     {
@@ -37,6 +38,11 @@ export const CATALOG_INDEX_COPY = {
       path: CATALOG_PATHS.packages,
       title: "Paquetes",
       description: "Lo que se ofrece a la venta, con sus funciones y su precio.",
+    },
+    {
+      path: CATALOG_PATHS.templates,
+      title: "Plantillas",
+      description: "Los diseños de invitación y sus versiones: crea, publica y retira versiones.",
     },
   ],
 } as const;
@@ -176,6 +182,92 @@ export const PACKAGE_COPY = {
   historyCurrent: "Vigente",
 } as const;
 
+export const TEMPLATE_STATUS_LABELS = {
+  DRAFT: "Borrador",
+  PUBLISHED: "Publicada",
+  ARCHIVED: "Archivada",
+} as const;
+
+export const VERSION_STATUS_LABELS = {
+  DRAFT: "Borrador",
+  PUBLISHED: "Publicada",
+  RETIRED: "Retirada",
+} as const;
+
+export const TEMPLATE_COPY = {
+  pageTitle: "Plantillas | InvitaMe",
+  heading: "Plantillas",
+  intro:
+    "Las plantillas son los diseños de invitación. No se borran: puedes archivarlas. Su contenido vive en versiones que no se editan.",
+  empty: "Todavía no hay plantillas.",
+  newLink: "Nueva plantilla",
+  noPublishedVersion: "Sin versión publicada",
+  publishedVersion: "Versión publicada",
+  versionCount: "Versiones",
+  createPageTitle: "Nueva plantilla | InvitaMe",
+  createHeading: "Nueva plantilla",
+  createIntro:
+    "Elige una clave con cuidado: no se puede cambiar después. La plantilla nace como borrador y sin versiones.",
+  keyHint: "Minúsculas, números y guiones, por ejemplo aventura-cumple. Hasta 100 caracteres.",
+  keyPlaceholder: "aventura-cumple",
+  createSubmit: "Crear plantilla",
+  categoryLabel: "Categoría",
+  categoryHint: "La categoría agrupa la plantilla. Una categoría inactiva se marca como tal.",
+  categoryInactive: "inactiva",
+  noCategories: "Todavía no hay categorías. Créalas primero en Categorías.",
+  editPageTitle: "Editar plantilla | InvitaMe",
+  editHeading: "Editar plantilla",
+  editIntro:
+    "Cambia los datos de la plantilla y administra sus versiones. Cada formulario se guarda por separado.",
+  detailsHeading: "Datos de la plantilla",
+  statusLabel: "Estado",
+  statusHint:
+    "Solo puede estar publicada mientras tenga una versión publicada. Archivarla la saca del catálogo, pero se conserva.",
+  backToList: "Volver a plantillas",
+  notFoundHeading: "No encontramos la plantilla",
+  notFoundBody: "Puede que ya no exista. Vuelve a la lista para elegir otra.",
+} as const;
+
+export const VERSION_COPY = {
+  heading: "Versiones",
+  intro:
+    "Una versión es una copia fija del renderizador, el esquema y la configuración. Nunca se edita: para cambiar algo, crea una versión nueva. Solo una versión puede estar publicada; al publicar otra, la anterior se retira, y las invitaciones que ya la usan la conservan.",
+  empty: "Esta plantilla todavía no tiene versiones.",
+  versionLabel: "Versión",
+  rendererLabel: "Renderizador",
+  createdLabel: "Creada",
+  publish: "Publicar",
+  retire: "Retirar",
+  retireBlocked:
+    "Para retirar la versión publicada, primero cambia la plantilla a borrador o archivada.",
+  formHeading: "Nueva versión",
+  formIntro:
+    "Se crea siempre como borrador y se revisa contra el renderizador antes de guardarse. Después la puedes publicar desde la lista.",
+  prefilled: (version: number, status: string): string =>
+    `Los campos parten de una copia de la versión ${version} (${status.toLowerCase()}). Edítala: la versión original no cambia.`,
+  notPrefilled: "Esta plantilla todavía no tiene versiones: escribe el esquema y la configuración.",
+  rendererHint: "Solo aparecen los renderizadores aprobados en la aplicación.",
+  noRenderers: "No hay renderizadores disponibles, así que no se puede crear una versión.",
+  schemaLabel: "Esquema (JSON)",
+  configurationLabel: "Configuración (JSON)",
+  jsonHint: "Un JSON válido de hasta 64 KiB.",
+  submit: "Crear versión como borrador",
+  submitting: "Creando versión…",
+  contractInvalid:
+    "El renderizador no aceptó el esquema o la configuración. No se guardó nada: corrige lo que indican los detalles técnicos y vuelve a intentarlo.",
+  validation:
+    "El esquema y la configuración deben ser JSON de hasta 64 KiB y 32 niveles de anidación, sin caracteres no permitidos.",
+  technicalDetails: "Detalles técnicos",
+  technicalDetailsNote: "Texto técnico de la API, en inglés. Se muestran como máximo 20.",
+  schemaName: "El esquema",
+  configurationName: "La configuración",
+  jsonEmpty: (subject: string): string =>
+    `${subject} no puede estar en blanco. Escribe un JSON válido.`,
+  jsonSyntax: (subject: string): string =>
+    `${subject} no es un JSON válido. Revisa las comas, las comillas y las llaves.`,
+  jsonTooLarge: (subject: string): string => `${subject} es demasiado grande: el máximo es 64 KiB.`,
+} as const;
+
 /** The notice of a catalog page whose data could not be loaded. */
 export const CATALOG_UNAVAILABLE_COPY = {
   heading: "No pudimos cargar el catálogo",
@@ -188,6 +280,9 @@ export const CATALOG_NOTICE_COPY = {
   saved: "Guardamos los cambios.",
   "features-saved": "Guardamos las funciones del paquete.",
   "price-saved": "Guardamos el precio nuevo. El anterior quedó en el historial.",
+  "version-created": "Creamos la versión como borrador. Ya la puedes publicar.",
+  "version-published": "Publicamos la versión. La anterior quedó retirada.",
+  "version-retired": "Retiramos la versión.",
 } as const;
 
 export const CATALOG_ERROR_COPY = {
@@ -197,6 +292,13 @@ export const CATALOG_ERROR_COPY = {
   "concurrent-update": "Otra persona cambió esto al mismo tiempo. Vuelve a intentarlo.",
   "feature-not-found":
     "Alguna de las funciones elegidas ya no existe. Recarga la página y vuelve a elegir.",
+  "category-not-found": "La categoría elegida ya no existe. Recarga la página y vuelve a elegir.",
+  "template-not-publishable":
+    "No se pudo hacer: una plantilla solo está publicada mientras tenga una versión publicada. Publica una versión primero, o cambia la plantilla a borrador o archivada antes de retirarla.",
+  "transition-not-allowed":
+    "Esa versión ya no está en un estado que permita esta acción. Recarga la página para ver su estado actual.",
+  "contract-invalid":
+    "El renderizador ya no acepta el contenido de esta versión, así que no se publicó. Crea una versión nueva con el contenido corregido para ver el detalle.",
   forbidden: "Tu cuenta no tiene permiso para hacer esto.",
   "not-found": "No encontramos ese registro. Puede que ya no exista.",
   unavailable: "No pudimos completar la acción. Espera un momento y vuelve a intentarlo.",

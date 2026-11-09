@@ -82,7 +82,9 @@ No OAuth, social login, custom domains, multi-organization billing, or invitatio
 
 ## Milestone 3 — Catalog and renderer contracts
 
-**Status:** Planned extension of the implemented catalog foundation.
+**Status:** Implemented (`odd/tasks/m3-catalog.md`): administrator catalog API and pages, MXN package prices,
+version publication rules, and the allow-listed renderer registry with `birthday-adventure-01`. Public catalog
+reads for creators belong to Milestone 4.
 
 ### Outcome
 
@@ -145,7 +147,8 @@ Publish a completed invitation through a predictable public URL and render it sa
 
 - backend publication transition with ownership/completeness checks;
 - public route resolution by unique slug;
-- renderer registry lookup by allow-listed `componentKey`;
+- public rendering through the renderer registry that Milestone 3 implemented (lookup by allow-listed
+  `componentKey`);
 - missing, unpublished, expired, and unknown-renderer behavior;
 - query-efficient public reads and cache/revalidation decisions; and
 - browser/API tests for the public journey.

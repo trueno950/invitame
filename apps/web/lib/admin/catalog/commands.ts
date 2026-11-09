@@ -3,18 +3,27 @@ import {
   isCatalogId,
   PACKAGE_STATUSES,
   type PackageStatus,
+  TEMPLATE_STATUSES,
+  type TemplateStatus,
 } from "../../server/admin-catalog-validators.ts";
 import {
   CATALOG_PATHS,
   type CatalogErrorCode,
   type CatalogNoticeCode,
   type EntrySection,
+  VERSION_COPY,
 } from "./copy.ts";
-import { errorTarget, noticeTarget } from "./notices.ts";
+import { errorMessage, errorTarget, noticeTarget } from "./notices.ts";
 import { parsePesos } from "./price.ts";
+import {
+  parseSnapshotJson,
+  type SnapshotJsonFailure,
+  type VersionFormState,
+  type VersionFormValues,
+} from "./versions.ts";
 
 /**
- * The logic of the catalog server actions (M3 T8a; S1, S4, S9). Each command reads the submitted
+ * The logic of the catalog server actions (M3 T8a and T8b; S1, S4, S5, S8, S9). Each command reads the submitted
  * form, calls the API client at most once, and answers the path to redirect to, always a 303 after
  * POST, with the outcome as a code in the query (`notices.ts`). The API validates every field and
  * authorizes the call; the only checks made here are those needed to build a request at all: a text
@@ -25,13 +34,14 @@ import { parsePesos } from "./price.ts";
 
 export const SIGN_IN_PATH = "/admin/ingresar";
 
-const NEW_SEGMENT: Record<EntrySection | "packages", string> = {
+const NEW_SEGMENT: Record<EntrySection | "packages" | "templates", string> = {
   categories: "nueva",
   features: "nueva",
   packages: "nuevo",
+  templates: "nueva",
 };
 
-type Section = EntrySection | "packages";
+type Section = EntrySection | "packages" | "templates";
 
 const listPath = (section: Section): string => CATALOG_PATHS[section];
 const newPath = (section: Section): string => `${CATALOG_PATHS[section]}/${NEW_SEGMENT[section]}`;
@@ -57,13 +67,13 @@ function description(form: FormData): string | null | undefined {
  * missing record to the list, and every other refusal back to `formPath` with its code. A thrown error
  * (an unreachable or unexpected API) is already logged by the server wrapper and shown as unavailable.
  */
-async function finish(
-  send: () => Promise<CatalogResult<unknown>>,
-  success: string,
+async function finish<T>(
+  send: () => Promise<CatalogResult<T>>,
+  success: string | ((value: T) => string),
   section: Section,
   formPath: string,
 ): Promise<string> {
-  let result: CatalogResult<unknown>;
+  let result: CatalogResult<T>;
 
   try {
     result = await send();
@@ -72,7 +82,7 @@ async function finish(
   }
 
   if (result.ok) {
-    return success;
+    return typeof success === "string" ? success : success(result.value);
   }
   if (result.failure === "signed-out") {
     return SIGN_IN_PATH;
@@ -244,4 +254,184 @@ export async function setPackagePrice(api: AdminCatalogClient, form: FormData): 
     "packages",
     path,
   );
+}
+
+function templateStatus(value: string | undefined): TemplateStatus | undefined {
+  return TEMPLATE_STATUSES.find((status) => status === value);
+}
+
+/**
+ * Creates a template from `key`, `name`, `description`, and the chosen `categoryId`, then opens its edit
+ * page, where its versions are created.
+ */
+export async function createTemplate(api: AdminCatalogClient, form: FormData): Promise<string> {
+  const key = text(form, "key")?.trim();
+  const name = text(form, "name")?.trim();
+  const note = description(form);
+  const categoryId = text(form, "categoryId");
+
+  if (
+    key === undefined ||
+    name === undefined ||
+    note === undefined ||
+    categoryId === undefined ||
+    !isCatalogId(categoryId)
+  ) {
+    return invalid(newPath("templates"));
+  }
+
+  return finish(
+    () => api.templates.create({ key, name, description: note, categoryId }),
+    (stored) => saved(editPath("templates", stored.id), "created"),
+    "templates",
+    newPath("templates"),
+  );
+}
+
+/** Saves a template's `name`, `description`, `categoryId`, and `status`. */
+export async function updateTemplate(api: AdminCatalogClient, form: FormData): Promise<string> {
+  const id = text(form, "id");
+  const name = text(form, "name")?.trim();
+  const note = description(form);
+  const categoryId = text(form, "categoryId");
+  const status = templateStatus(text(form, "status"));
+
+  if (id === undefined || !isCatalogId(id)) {
+    return invalid(listPath("templates"), "not-found");
+  }
+
+  const path = editPath("templates", id);
+  if (
+    name === undefined ||
+    note === undefined ||
+    categoryId === undefined ||
+    !isCatalogId(categoryId) ||
+    status === undefined
+  ) {
+    return invalid(path);
+  }
+
+  return finish(
+    () => api.templates.update(id, { name, description: note, categoryId, status }),
+    saved(path),
+    "templates",
+    path,
+  );
+}
+
+/** The two version transitions, which take the same two ids and differ in the call and the notice. */
+async function moveVersion(
+  api: AdminCatalogClient,
+  form: FormData,
+  transition: "publishVersion" | "retireVersion",
+  notice: CatalogNoticeCode,
+): Promise<string> {
+  const id = text(form, "id");
+  const versionId = text(form, "versionId");
+
+  if (id === undefined || !isCatalogId(id)) {
+    return invalid(listPath("templates"), "not-found");
+  }
+
+  const path = editPath("templates", id);
+  if (versionId === undefined || !isCatalogId(versionId)) {
+    return invalid(path);
+  }
+
+  return finish(
+    () => api.templates[transition](id, versionId),
+    saved(path, notice),
+    "templates",
+    path,
+  );
+}
+
+/** Publishes the DRAFT version `versionId`; the API retires the one published before (S5). */
+export function publishTemplateVersion(api: AdminCatalogClient, form: FormData): Promise<string> {
+  return moveVersion(api, form, "publishVersion", "version-published");
+}
+
+/** Retires the PUBLISHED version `versionId` of a template that is not itself published. */
+export function retireTemplateVersion(api: AdminCatalogClient, form: FormData): Promise<string> {
+  return moveVersion(api, form, "retireVersion", "version-retired");
+}
+
+export type CreateVersionOutcome =
+  | { kind: "redirect"; target: string }
+  | { kind: "state"; state: VersionFormState & { status: "error" } };
+
+const JSON_MESSAGE: Record<SnapshotJsonFailure, (subject: string) => string> = {
+  empty: VERSION_COPY.jsonEmpty,
+  syntax: VERSION_COPY.jsonSyntax,
+  "too-large": VERSION_COPY.jsonTooLarge,
+};
+
+/**
+ * Appends a DRAFT version from `componentKey` and the `schema` and `configuration` typed as JSON (S8:
+ * a version is never edited in place). Text that is not valid JSON, or is over the size bound, is
+ * refused here without calling the API. A refusal stays on the form as state and not as a redirect:
+ * the API's `issues` (bounded by the client) and the typed JSON must not travel in a URL. Success
+ * redirects to the template page (303 after POST).
+ */
+export async function createTemplateVersion(
+  api: AdminCatalogClient,
+  form: FormData,
+): Promise<CreateVersionOutcome> {
+  const id = text(form, "id");
+
+  if (id === undefined || !isCatalogId(id)) {
+    return { kind: "redirect", target: invalid(listPath("templates"), "not-found") };
+  }
+
+  const path = editPath("templates", id);
+  const componentKey = text(form, "componentKey");
+  const schema = text(form, "schema");
+  const configuration = text(form, "configuration");
+
+  if (componentKey === undefined || schema === undefined || configuration === undefined) {
+    return { kind: "redirect", target: invalid(path) };
+  }
+
+  const values: VersionFormValues = { componentKey, schema, configuration };
+  const refused = (message: string, issues: readonly string[] = []): CreateVersionOutcome => ({
+    kind: "state",
+    state: { status: "error", message, issues, values },
+  });
+
+  const schemaJson = parseSnapshotJson(schema);
+  if (!schemaJson.ok) {
+    return refused(JSON_MESSAGE[schemaJson.reason](VERSION_COPY.schemaName));
+  }
+  const configurationJson = parseSnapshotJson(configuration);
+  if (!configurationJson.ok) {
+    return refused(JSON_MESSAGE[configurationJson.reason](VERSION_COPY.configurationName));
+  }
+
+  let result: CatalogResult<unknown>;
+  try {
+    result = await api.templates.createVersion(id, {
+      componentKey,
+      schema: schemaJson.value,
+      configuration: configurationJson.value,
+    });
+  } catch {
+    return refused(errorMessage("unavailable"));
+  }
+
+  if (result.ok) {
+    return { kind: "redirect", target: saved(path, "version-created") };
+  }
+
+  switch (result.failure) {
+    case "signed-out":
+      return { kind: "redirect", target: SIGN_IN_PATH };
+    case "not-found":
+      return { kind: "redirect", target: invalid(listPath("templates"), "not-found") };
+    case "contract-invalid":
+      return refused(VERSION_COPY.contractInvalid, result.issues ?? []);
+    case "validation":
+      return refused(VERSION_COPY.validation);
+    default:
+      return refused(errorMessage(result.failure));
+  }
 }

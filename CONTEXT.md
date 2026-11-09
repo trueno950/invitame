@@ -13,10 +13,13 @@ preserve the executable behavior and surface the vocabulary conflict for a human
 | XV años | A quinceañera, the fifteenth-birthday celebration, offered as its own category. Code and keys use the English term `quinceanera`. | A generic birthday. |
 | Feature | A named catalog capability that can be included in a package. A feature key is data, not an executable behavior switch. | A code module or an authorization grant. |
 | Package | A catalog selection of included features and metadata for a future offering. | A payment record or proof that a customer has paid. |
+| Package price | The amount a package costs, held as an integer in the smallest currency unit (centavos) with an ISO currency code; only MXN today. A changed price becomes a new row, so the history is kept. | A payment, a discount, or an amount stored as a decimal. |
 | Template | Mutable catalog metadata describing a design offering. | The immutable render contract used by an existing invitation. |
 | TemplateVersion | A versioned snapshot of the renderer identity, form schema, and presentation configuration for one template. | Mutable template metadata or arbitrary code stored in the database. |
 | Invitation | A future customer-specific invitation instance that references a chosen `TemplateVersion`. | A catalog template or a template version. |
+| Version publication | The catalog change that makes one `TemplateVersion` the template's single `PUBLISHED` version and retires the previous one (`DRAFT → PUBLISHED → RETIRED`). New invitations choose the published version; existing ones keep theirs. | Invitation publication. |
 | Renderer | Reviewed application behavior that turns a `TemplateVersion` contract and allowed data into a presentation. | A module path, code expression, or code blob supplied by the database. |
+| Renderer registry | The allow-list of renderer keys compiled into the application: the API validates a version against the renderer's contract, and the web maps the key to its component. | A database table or a dynamic import. |
 | Publication | A future backend-controlled transition that makes an invitation available through its public experience. | A hidden button, a client-side flag, or a catalog status change. |
 | Customer | A self-service buyer with an account. Customers sign in with a code sent to their email and have no password. | An administrator, who signs in with a password and an authenticator app. |
 | Current | Behavior or repository state evidenced by executable source, tests, schema, migrations, seed data, scripts, or reproducible commands. | A target architecture or a roadmap statement. |
