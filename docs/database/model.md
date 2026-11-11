@@ -3,9 +3,10 @@
 The first migration (`20260913000000_initial_catalog`) creates the catalog and template-version foundation. The
 second (`20261104030448_add_better_auth_identity`) adds the identity persistence that Better Auth needs
 ([ADR 0004](../adr/0004-authentication-with-better-auth.md), decision 2). Milestone 3 adds two additive catalog
-migrations: `20261109120000_add_template_version_publication_rules` and `20261109130000_add_package_prices`. Future invitation, payment, media, guest,
-RSVP, and analytics design is documented separately in [`future-model.md`](future-model.md); that document does
-not add tables.
+migrations: `20261109120000_add_template_version_publication_rules` and `20261109130000_add_package_prices`.
+Milestone 4 adds the additive `20261111214752_add_invitations` migration, which creates the `Invitation` table.
+Future payment, media, guest, RSVP, and analytics design is documented separately in
+[`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
 | --- | --- |
@@ -22,6 +23,7 @@ not add tables.
 | `PackagePrice` | Append-only price history of a package: integer `amountMinor` in the smallest currency unit plus an ISO `currency`; the row with no `retiredAt` is the current price |
 | `Template` | Mutable template master metadata and category relation |
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
+| `Invitation` | Creator-owned invitation draft pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` and JSONB `content` |
 
 ## Invariants
 
@@ -44,7 +46,21 @@ not add tables.
   `retiredAt`. Changing a price retires the current row and inserts a new one in one transaction. The domain allows
   only `MXN` today. The database does not forbid deleting a price row; no API route deletes one, and deleting a
   `Package` is restricted while rows reference it.
-- Future `Invitation` records must reference `TemplateVersion`, never mutable `Template` fields.
+- Current status: the `Invitation` table exists and a draft references a `TemplateVersion`, never mutable `Template`
+  fields. Creating and editing a draft through the API belongs to the following Milestone 4 tasks.
+- `Invitation` is pinned at creation: `ownerId`, `templateVersionId`, `packageId`, and `slug` are protected against
+  updates by the `Invitation_pinned_fields_immutable` trigger, so an invitation keeps rendering its pinned version
+  after the template catalog publishes a newer one. The three references are `ON DELETE RESTRICT`, so a referenced
+  `TemplateVersion`, `User`, or `Package` cannot be deleted while an invitation uses it.
+- `Invitation.slug` is unique through the `Invitation_slug_key` index, so uniqueness is PostgreSQL's, not a preflight
+  query. `Invitation_slug_format` requires `^[a-z0-9]+(-[a-z0-9]+)*$`, and `Invitation_slug_length` requires three to
+  sixty characters (`VARCHAR(60)` caps the column as well).
+- `Invitation.content` is JSONB checked to be a JSON object by `Invitation_content_object`. Ownership, the pinned
+  version, the package, the slug, the status, and the archive marker stay normalized columns (S10).
+- Invitation statuses written today are `DRAFT` and `ARCHIVED` (A3). `Invitation_archivedAt_matches_status` makes
+  `archivedAt` non-null exactly when the status is `ARCHIVED`. The `Invitation_pinned_fields_immutable` trigger refuses
+  changing `ownerId`, `templateVersionId`, `packageId`, and `slug`; the application updates only `status`, `content`,
+  `archivedAt`, and `updatedAt`.
 
 ## Identity tables
 
@@ -79,10 +95,12 @@ Prisma. The database suites (`pnpm --filter @invitame/api test:db`) exercise the
 
 ## JSONB boundary
 
-Prisma `Json` maps only `TemplateVersion.schema` and `TemplateVersion.configuration` to PostgreSQL JSONB. The
-schema is a validated form contract and configuration is a validated presentation contract. Renderer identity,
-relationships, catalog keys, lifecycle statuses, and fields used for querying remain normalized columns.
+Prisma `Json` maps `TemplateVersion.schema`, `TemplateVersion.configuration`, and `Invitation.content` to PostgreSQL
+JSONB. The template schema is a validated form contract and configuration is a validated presentation contract; an
+invitation's content is the bounded form data validated against its pinned version. Renderer identity, relationships,
+catalog keys, lifecycle statuses, and fields used for querying remain normalized columns.
 
 ## Deliberately absent
 
-There are no invitation, payment, RSVP, guest, analytics, or media tables in the current schema.
+There are no payment, RSVP, guest, analytics, or media tables in the current schema. The `Invitation` table holds
+drafts only: publication, guests, and payments are later milestones.
