@@ -1,6 +1,11 @@
 /** A renderer's rules for one `TemplateVersion`: each method returns issue messages, empty when valid. */
 export interface RendererContract {
   readonly componentKey: string;
+  /**
+   * The feature keys a package must include for this renderer's version to fit it (S6, A1). Keys are
+   * catalog data compared by equality; `[]` means the renderer needs no catalog feature.
+   */
+  readonly requiredFeatureKeys: readonly string[];
   validateSchema(schema: unknown): string[];
   validateConfiguration(configuration: unknown, componentKey: string): string[];
 }

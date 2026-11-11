@@ -121,6 +121,25 @@ describe("renderer registry", () => {
   });
 });
 
+describe("renderer feature requirements (S6, A1)", () => {
+  it("declares requiredFeatureKeys for every registered renderer", () => {
+    for (const key of listRendererKeys()) {
+      const requiredFeatureKeys = findRenderer(key)?.requiredFeatureKeys;
+
+      assert.ok(Array.isArray(requiredFeatureKeys), `${key} must declare requiredFeatureKeys`);
+      assert.equal(new Set(requiredFeatureKeys).size, requiredFeatureKeys.length, key);
+      for (const featureKey of requiredFeatureKeys) {
+        assert.equal(typeof featureKey, "string", key);
+        assert.ok(featureKey.length > 0, key);
+      }
+    }
+  });
+
+  it("requires no feature key for birthday-adventure-01", () => {
+    assert.deepEqual(findRenderer(KEY)?.requiredFeatureKeys, []);
+  });
+});
+
 describe("validateTemplateVersionContract", () => {
   it("accepts the seeded schema and configuration", () => {
     assert.deepEqual(validate({}), { ok: true });

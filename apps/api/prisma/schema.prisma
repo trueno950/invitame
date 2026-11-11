@@ -35,6 +35,12 @@ enum TemplateVersionStatus {
   RETIRED
 }
 
+// The only statuses Milestone 4 writes (A3); publication adds its own additively.
+enum InvitationStatus {
+  DRAFT
+  ARCHIVED
+}
+
 // Better Auth `user` model. Better Auth's `name` field is mapped onto `displayName`.
 // `role` is server-side only and never accepted as client input.
 model User {
@@ -49,9 +55,10 @@ model User {
   createdAt        DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime   @updatedAt @db.Timestamptz(6)
 
-  sessions  Session[]
-  accounts  Account[]
-  twoFactor TwoFactor?
+  sessions    Session[]
+  accounts    Account[]
+  twoFactor   TwoFactor?
+  invitations Invitation[]
 }
 
 // Better Auth `session` model: database sessions carried by the API cookie.
@@ -160,6 +167,7 @@ model Package {
   updatedAt       DateTime         @updatedAt @db.Timestamptz(6)
   packageFeatures PackageFeature[]
   prices          PackagePrice[]
+  invitations     Invitation[]
 }
 
 // A price of a package in one currency, as an integer amount in minor units (centavos for MXN). A price
@@ -228,4 +236,31 @@ model TemplateVersion {
   // "TemplateVersion_templateId_published_key" (one PUBLISHED version per template) and the
   // "TemplateVersion_status_transition" trigger (only DRAFT -> PUBLISHED and PUBLISHED -> RETIRED).
   @@unique([templateId, version])
+
+  invitations Invitation[]
+}
+
+// A creator's invitation draft (M4 T1; S2, S3, S5, S10, A3). It is pinned at creation to the published
+// template version it renders, the package its entitlements are checked against, and its public slug;
+// none of those four ever changes. `content` is the bounded form data, always a JSON object.
+// Migration 20261111214752_add_invitations adds what Prisma cannot express: the CHECK constraints
+// "Invitation_slug_format", "Invitation_slug_length", "Invitation_content_object", and
+// "Invitation_archivedAt_matches_status", and the "Invitation_pinned_fields_immutable" trigger.
+model Invitation {
+  id                String           @id @default(uuid()) @db.Uuid
+  ownerId           String           @db.Uuid
+  templateVersionId String           @db.Uuid
+  packageId         String           @db.Uuid
+  slug              String           @unique @db.VarChar(60)
+  status            InvitationStatus @default(DRAFT)
+  content           Json             @db.JsonB @default("{}")
+  archivedAt        DateTime?        @db.Timestamptz(6)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
+
+  owner           User            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  templateVersion TemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  package         Package         @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId])
 }
