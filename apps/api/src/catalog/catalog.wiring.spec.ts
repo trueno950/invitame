@@ -9,9 +9,10 @@ import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
 import { PrismaService } from "../database/prisma.service";
 
-// CatalogModule wiring in AppModule (M3 T6a to T6c; S1, S9): the admin category, feature, package, template,
-// version, and renderer routes exist and sit behind the global guard. A Prisma stub stands in for the database, so the suite never connects
-// to one. The authorized behavior is proved in `taxonomy.controllers.spec.ts`.
+// CatalogModule wiring in AppModule (M3 T6a to T6c and M4 T4; S1, S8, S9, A5): the admin category, feature,
+// package, template, version, and renderer routes, and the creator catalog reads, all exist and sit behind the
+// global guard. A Prisma stub stands in for the database, so the suite never connects to one. The authorized
+// behavior is proved in `taxonomy.controllers.spec.ts` and `creator/creator-catalog.controller.spec.ts`.
 
 @Global()
 @Module({
@@ -48,7 +49,7 @@ describe("AppModule catalog wiring", () => {
     await app?.close();
   });
 
-  it("serves the admin category, feature, package, template, and renderer routes only behind the guard", async () => {
+  it("serves the admin catalog routes and the creator catalog reads only behind the guard", async () => {
     const id = "00000000-0000-4000-8000-000000000000";
     const routes: Array<[string, string, unknown?]> = [
       ["GET", "/admin/catalog/categories"],
@@ -75,6 +76,9 @@ describe("AppModule catalog wiring", () => {
       ["POST", `/admin/catalog/templates/${id}/versions/${id}/publish`],
       ["POST", `/admin/catalog/templates/${id}/versions/${id}/retire`],
       ["GET", "/admin/catalog/renderers"],
+      // The creator catalog reads are signed-in, not public: the guard refuses them first (M4 T4, A5).
+      ["GET", "/catalog/templates"],
+      ["GET", "/catalog/packages"],
     ];
 
     for (const [method, path, body] of routes) {

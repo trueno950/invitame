@@ -20,6 +20,7 @@ import {
 import { INVITATION_CATALOG, type InvitationCatalog } from "./application/invitation-catalog";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
+import { InvitationsController } from "./presentation/invitations.controller";
 
 /** A use case that needs both the invitation port and the catalog contract. */
 function useCase(
@@ -55,14 +56,16 @@ export const INVITATION_USE_CASES: Provider[] = [
 ];
 
 /**
- * Invitations: creating, listing, reading, editing, and archiving a customer's own drafts (M4 T3). This module
- * is the wiring boundary only: it binds the Prisma adapter to `INVITATION_REPOSITORY` and the catalog's exported
+ * Invitations: creating, listing, reading, editing, and archiving a customer's own drafts (M4 T3 and T4), at
+ * `/invitations`. This module binds the Prisma adapter to `INVITATION_REPOSITORY` and the catalog's exported
  * `CATALOG_PUBLIC_READER` to `INVITATION_CATALOG` through `CatalogInvitationReader`, so the invitations module
- * never imports a catalog repository or queries a catalog table. It has no controller and is not registered in
- * `AppModule` yet: the `/invitations` routes and that registration belong to M4 T4.
+ * never imports a catalog repository or queries a catalog table. The controller authenticates through the global
+ * guard and reads the owner only from the session (S9); ownership itself is enforced by the repository queries
+ * (A4).
  */
 @Module({
   imports: [CatalogModule],
+  controllers: [InvitationsController],
   providers: [
     ...INVITATION_USE_CASES,
     {

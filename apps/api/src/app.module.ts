@@ -7,6 +7,7 @@ import { createConfigModule } from "./config/config.module";
 import { PrismaModule } from "./database/prisma.module";
 import { EmailModule } from "./email/email.module";
 import { HealthModule } from "./health/health.module";
+import { InvitationsModule } from "./invitations/invitations.module";
 import { UsersModule } from "./users/users.module";
 
 export interface AppModuleOptions {
@@ -37,6 +38,7 @@ export class AppModule {
         HealthModule,
         UsersModule,
         CatalogModule,
+        InvitationsModule,
       ],
     };
   }
