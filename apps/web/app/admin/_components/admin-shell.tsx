@@ -16,7 +16,7 @@ import { CATALOG_INDEX_COPY, CATALOG_PATHS } from "../../../lib/admin/catalog/co
 import { ADMIN_PANEL_COPY, ADMIN_SHELL_COPY } from "../../../lib/admin/copy.ts";
 import { SignOutButton } from "../../_components/sign-out-button.tsx";
 import { AdminBrandMark } from "./admin-brand-mark.tsx";
-import { adminButtonOutline, adminButtonSmall, adminFocus } from "./admin-ui.ts";
+import { adminButtonVariant, adminFocus } from "./admin-ui.ts";
 
 /** The sidebar entry of the page, highlighted and marked as the current page. */
 export type AdminSection =
@@ -174,7 +174,7 @@ export function AdminShell({
         </nav>
         <div className="lg:border-t lg:border-admin-border lg:pt-4">
           <SignOutButton
-            className={`${adminButtonOutline} ${adminButtonSmall} w-full`}
+            className={`${adminButtonVariant("outline", "small")} w-full`}
             failedMessage={ADMIN_PANEL_COPY.signOutFailed}
             icon={<LogOut aria-hidden="true" className="size-3.5" />}
             label={ADMIN_PANEL_COPY.signOut}

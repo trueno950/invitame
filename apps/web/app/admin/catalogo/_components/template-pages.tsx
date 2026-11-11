@@ -27,9 +27,7 @@ import { AdminCard, AdminCardEmpty } from "../../_components/admin-card.tsx";
 import { AdminDetailLayout } from "../../_components/admin-detail-layout.tsx";
 import { AdminShell, type Breadcrumb } from "../../_components/admin-shell.tsx";
 import {
-  adminButton,
-  adminButtonOutline,
-  adminButtonSmall,
+  adminButtonVariant,
   adminCard,
   adminTableCell,
   adminTableRow,
@@ -230,7 +228,7 @@ function VersionRow({
           <input name="id" type="hidden" value={template.id} />
           <input name="versionId" type="hidden" value={version.id} />
           <button
-            className={`${action === "publish" ? adminButton : adminButtonOutline} ${adminButtonSmall}`}
+            className={adminButtonVariant(action === "publish" ? "solid" : "outline", "small")}
             disabled={retireBlocked}
             type="submit"
           >
