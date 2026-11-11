@@ -7,14 +7,9 @@ import type {
   VersionFormState,
   VersionFormValues,
 } from "../../../../lib/admin/catalog/versions.ts";
-import {
-  errorNote,
-  fieldHint,
-  fieldLabel,
-  primaryButton,
-  textField,
-} from "../../../_components/ui.ts";
+import { adminErrorNote } from "../../_components/admin-ui.ts";
 import { createTemplateVersionAction } from "../actions.ts";
+import { SelectField, SubmitFooter, TextAreaField } from "./fields.tsx";
 
 const INITIAL_STATE: VersionFormState = { status: "idle" };
 const ERROR_ID = "version-error";
@@ -40,104 +35,77 @@ export function VersionForm({ templateId, rendererKeys, prefill }: VersionFormPr
   const [schema, setSchema] = useState(initial.schema);
   const [configuration, setConfiguration] = useState(initial.configuration);
   const failed = state.status === "error";
-  const describedBy = (hintId: string) => (failed ? `${hintId} ${ERROR_ID}` : hintId);
 
   return (
-    <form action={formAction} className="flex flex-col gap-5">
-      <input name="id" type="hidden" value={templateId} />
-      <div>
-        <label className={fieldLabel} htmlFor="version-renderer">
-          {VERSION_COPY.rendererLabel}
-        </label>
-        <select
-          aria-describedby="version-renderer-hint"
-          className={textField}
+    <form action={formAction}>
+      <div className="flex flex-col gap-5 px-5 py-5">
+        <input name="id" type="hidden" value={templateId} />
+        <SelectField
+          hint={VERSION_COPY.rendererHint}
           id="version-renderer"
+          label={VERSION_COPY.rendererLabel}
           name="componentKey"
           onChange={(event) => setComponentKey(event.target.value)}
+          options={rendererKeys.map((key) => ({ value: key, label: key }))}
           value={componentKey}
-        >
-          {rendererKeys.map((key) => (
-            <option key={key} value={key}>
-              {key}
-            </option>
-          ))}
-        </select>
-        <p className={fieldHint} id="version-renderer-hint">
-          {VERSION_COPY.rendererHint}
-        </p>
-      </div>
-      <div>
-        <label className={fieldLabel} htmlFor="version-schema">
-          {VERSION_COPY.schemaLabel}
-        </label>
-        <textarea
-          aria-describedby={describedBy("version-schema-hint")}
-          aria-invalid={failed ? true : undefined}
-          autoCapitalize="off"
-          autoComplete="off"
-          className={`${textField} min-h-48 font-mono text-sm`}
-          id="version-schema"
-          name="schema"
-          onChange={(event) => setSchema(event.target.value)}
-          required
-          rows={10}
-          spellCheck={false}
-          value={schema}
         />
-        <p className={fieldHint} id="version-schema-hint">
-          {VERSION_COPY.jsonHint}
-        </p>
-      </div>
-      <div>
-        <label className={fieldLabel} htmlFor="version-configuration">
-          {VERSION_COPY.configurationLabel}
-        </label>
-        <textarea
-          aria-describedby={describedBy("version-configuration-hint")}
-          aria-invalid={failed ? true : undefined}
-          autoCapitalize="off"
-          autoComplete="off"
-          className={`${textField} min-h-48 font-mono text-sm`}
-          id="version-configuration"
-          name="configuration"
-          onChange={(event) => setConfiguration(event.target.value)}
-          required
-          rows={10}
-          spellCheck={false}
-          value={configuration}
-        />
-        <p className={fieldHint} id="version-configuration-hint">
-          {VERSION_COPY.jsonHint}
-        </p>
-      </div>
+        <div className="grid gap-5 xl:grid-cols-2">
+          <TextAreaField
+            code
+            errorId={ERROR_ID}
+            hint={VERSION_COPY.jsonHint}
+            id="version-schema"
+            invalid={failed}
+            label={VERSION_COPY.schemaLabel}
+            name="schema"
+            onChange={(event) => setSchema(event.target.value)}
+            required
+            rows={10}
+            value={schema}
+          />
+          <TextAreaField
+            code
+            errorId={ERROR_ID}
+            hint={VERSION_COPY.jsonHint}
+            id="version-configuration"
+            invalid={failed}
+            label={VERSION_COPY.configurationLabel}
+            name="configuration"
+            onChange={(event) => setConfiguration(event.target.value)}
+            required
+            rows={10}
+            value={configuration}
+          />
+        </div>
 
-      <div aria-live="assertive" id={ERROR_ID} role="alert">
-        {state.status === "error" ? (
-          <div className={errorNote}>
-            <p>{state.message}</p>
-            {state.issues.length === 0 ? null : (
-              <details className="mt-2">
-                <summary className="cursor-pointer font-medium">
-                  {VERSION_COPY.technicalDetails}
-                </summary>
-                <p className="mt-2 text-muted">{VERSION_COPY.technicalDetailsNote}</p>
-                <ul className="mt-2 list-disc space-y-1 pl-5 font-mono text-xs break-words">
-                  {state.issues.map((issue, index) => (
-                    // The API's lines have no id and may repeat; their position is their identity.
-                    // biome-ignore lint/suspicious/noArrayIndexKey: a static, bounded list.
-                    <li key={`${index}-${issue}`}>{issue}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </div>
-        ) : null}
+        <div aria-live="assertive" id={ERROR_ID} role="alert">
+          {state.status === "error" ? (
+            <div className={adminErrorNote}>
+              <p>{state.message}</p>
+              {state.issues.length === 0 ? null : (
+                <details className="mt-2">
+                  <summary className="cursor-pointer font-medium">
+                    {VERSION_COPY.technicalDetails}
+                  </summary>
+                  <p className="mt-2 text-admin-muted">{VERSION_COPY.technicalDetailsNote}</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 font-mono text-xs break-words">
+                    {state.issues.map((issue, index) => (
+                      // The API's lines have no id and may repeat; their position is their identity.
+                      // biome-ignore lint/suspicious/noArrayIndexKey: a static, bounded list.
+                      <li key={`${index}-${issue}`}>{issue}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
-
-      <button className={primaryButton} disabled={pending} type="submit">
-        {pending ? VERSION_COPY.submitting : VERSION_COPY.submit}
-      </button>
+      <SubmitFooter
+        label={VERSION_COPY.submit}
+        pending={pending}
+        pendingLabel={VERSION_COPY.submitting}
+      />
     </form>
   );
 }

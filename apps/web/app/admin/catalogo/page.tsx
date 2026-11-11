@@ -4,10 +4,11 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { CATALOG_INDEX_COPY, CATALOG_PATHS } from "../../../lib/admin/catalog/copy.ts";
+import { ADMIN_SHELL_COPY } from "../../../lib/admin/copy.ts";
 import { loadAdminView, routeAdminPage } from "../../../lib/admin/session.ts";
 import { getAuthSession } from "../../../lib/server/session-api.ts";
-import { CustomerShell } from "../../_components/customer-shell.tsx";
-import { focusRing, quietButton } from "../../_components/ui.ts";
+import { AdminShell } from "../_components/admin-shell.tsx";
+import { adminCard, adminFocus } from "../_components/admin-ui.ts";
 import { CatalogUnavailable } from "./_components/unavailable.tsx";
 
 export const metadata: Metadata = { title: CATALOG_INDEX_COPY.pageTitle };
@@ -31,37 +32,32 @@ export default async function CatalogIndexPage() {
   }
 
   return (
-    <CustomerShell
-      eyebrow={CATALOG_INDEX_COPY.eyebrow}
+    <AdminShell
+      breadcrumbs={[
+        { label: ADMIN_SHELL_COPY.panel, href: CATALOG_PATHS.panel },
+        { label: CATALOG_INDEX_COPY.heading },
+      ]}
+      current="catalog"
+      description={CATALOG_INDEX_COPY.intro}
       heading={CATALOG_INDEX_COPY.heading}
-      intro={CATALOG_INDEX_COPY.intro}
     >
-      <div className="flex flex-col gap-6">
-        <nav aria-label={CATALOG_INDEX_COPY.heading}>
-          <ul className="flex flex-col gap-3">
-            {CATALOG_INDEX_COPY.sections.map((section) => (
-              <li key={section.path}>
-                <Link
-                  className={`block rounded-field border-[1.5px] border-field-border px-4.5 py-3.5 transition-colors hover:border-primary ${focusRing}`}
-                  href={section.path}
-                >
-                  <span className="block font-display text-lg font-semibold text-ink">
-                    {section.title}
-                  </span>
-                  <span className="mt-0.5 block text-sm leading-6 text-muted">
-                    {section.description}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="flex justify-center">
-          <Link className={quietButton} href={CATALOG_PATHS.panel}>
-            {CATALOG_INDEX_COPY.backToPanel}
-          </Link>
-        </div>
-      </div>
-    </CustomerShell>
+      <nav aria-label={CATALOG_INDEX_COPY.heading}>
+        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {CATALOG_INDEX_COPY.sections.map((section) => (
+            <li key={section.path}>
+              <Link
+                className={`${adminCard} block h-full px-5 py-4 transition-colors hover:bg-admin-subtle ${adminFocus}`}
+                href={section.path}
+              >
+                <span className="block text-sm font-semibold text-admin-ink">{section.title}</span>
+                <span className="mt-1 block text-xs leading-5 text-admin-muted">
+                  {section.description}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </AdminShell>
   );
 }

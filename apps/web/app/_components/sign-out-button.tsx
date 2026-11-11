@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { ADMIN_PANEL_COPY } from "../../lib/admin/copy.ts";
 import { ACCOUNT_COPY } from "../../lib/customer/copy.ts";
@@ -22,6 +22,10 @@ interface SignOutButtonProperties {
   label: string;
   pendingLabel: string;
   failedMessage: string;
+  /** The button's classes; the themed `primaryButton` unless the page has its own look. */
+  className?: string;
+  /** A decorative icon shown before the label, such as the admin sidebar's sign-out icon. */
+  icon?: ReactNode;
 }
 
 /**
@@ -37,6 +41,8 @@ export function SignOutButton({
   label,
   pendingLabel,
   failedMessage,
+  className = primaryButton,
+  icon,
 }: SignOutButtonProperties) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -63,11 +69,12 @@ export function SignOutButton({
     <div className="flex flex-col gap-4">
       <div>
         <button
-          className={primaryButton}
+          className={className}
           disabled={pending || !interactive}
           onClick={handleSignOut}
           type="button"
         >
+          {icon}
           {pending ? pendingLabel : label}
         </button>
         <noscript>

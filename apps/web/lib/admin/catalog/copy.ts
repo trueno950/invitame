@@ -268,6 +268,20 @@ export const VERSION_COPY = {
   jsonTooLarge: (subject: string): string => `${subject} es demasiado grande: el máximo es 64 KiB.`,
 } as const;
 
+/** Column headers and row actions of the catalog tables. */
+export const CATALOG_TABLE_COPY = {
+  name: "Nombre",
+  key: "Clave",
+  status: "Estado",
+  category: "Categoría",
+  price: "Precio",
+  publishedVersion: "Versión publicada",
+  actions: "Acciones",
+  edit: "Editar",
+  cancel: "Cancelar",
+  count: (total: number): string => (total === 1 ? "1 registro" : `${total} registros`),
+} as const;
+
 /** The notice of a catalog page whose data could not be loaded. */
 export const CATALOG_UNAVAILABLE_COPY = {
   heading: "No pudimos cargar el catálogo",

@@ -5,8 +5,8 @@ import { connection } from "next/server";
 import { ENROLLMENT_COPY } from "../../../lib/admin/enrollment-copy.ts";
 import { loadAdminView, routeAdminPage } from "../../../lib/admin/session.ts";
 import { getAuthSession } from "../../../lib/server/session-api.ts";
-import { CustomerShell } from "../../_components/customer-shell.tsx";
-import { quietButton } from "../../_components/ui.ts";
+import { AdminCenteredShell } from "../_components/admin-centered-shell.tsx";
+import { adminButtonOutline } from "../_components/admin-ui.ts";
 import { EnrollmentFlow } from "./enrollment-flow.tsx";
 
 export const metadata: Metadata = {
@@ -31,20 +31,19 @@ export default async function EnrollmentPage() {
   const unavailable = view.kind === "unavailable";
 
   return (
-    <CustomerShell
-      eyebrow={ENROLLMENT_COPY.eyebrow}
+    <AdminCenteredShell
       heading={unavailable ? ENROLLMENT_COPY.unavailableHeading : ENROLLMENT_COPY.heading}
       intro={unavailable ? ENROLLMENT_COPY.unavailableBody : ENROLLMENT_COPY.intro}
     >
       {unavailable ? (
         <div className="flex justify-center">
-          <a className={quietButton} href="/admin/activar">
+          <a className={adminButtonOutline} href="/admin/activar">
             {ENROLLMENT_COPY.retry}
           </a>
         </div>
       ) : (
         <EnrollmentFlow />
       )}
-    </CustomerShell>
+    </AdminCenteredShell>
   );
 }

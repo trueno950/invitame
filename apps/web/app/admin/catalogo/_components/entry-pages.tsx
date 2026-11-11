@@ -1,17 +1,16 @@
-import Link from "next/link";
-
 import {
-  CATALOG_FIELD_COPY,
+  CATALOG_INDEX_COPY,
   CATALOG_PATHS,
+  CATALOG_TABLE_COPY,
   ENTRY_COPY,
   type EntrySection,
 } from "../../../../lib/admin/catalog/copy.ts";
 import { pageNotices } from "../../../../lib/admin/catalog/notices.ts";
-import { ADMIN_PANEL_COPY } from "../../../../lib/admin/copy.ts";
 import { adminCatalog } from "../../../../lib/server/admin-catalog-api.ts";
 import { isCatalogId } from "../../../../lib/server/admin-catalog-validators.ts";
-import { CustomerShell } from "../../../_components/customer-shell.tsx";
-import { quietButton, textButton } from "../../../_components/ui.ts";
+import { AdminShell, type Breadcrumb } from "../../_components/admin-shell.tsx";
+import { adminBadge, adminTableCell, adminTableRow } from "../../_components/admin-ui.ts";
+import { NewRecordLink } from "../../_components/new-record-link.tsx";
 import { attempt, requireCatalogAdministrator, resolveRead } from "../_lib/load.ts";
 import {
   createCategoryAction,
@@ -19,6 +18,7 @@ import {
   updateCategoryAction,
   updateFeatureAction,
 } from "../actions.ts";
+import { CatalogTable, EditCell, NameCell } from "./catalog-table.tsx";
 import { EntryForm } from "./entry-form.tsx";
 import { Notices } from "./notices.tsx";
 import { CatalogUnavailable } from "./unavailable.tsx";
@@ -27,6 +27,16 @@ type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
 
 const CREATE_ACTION = { categories: createCategoryAction, features: createFeatureAction } as const;
 const UPDATE_ACTION = { categories: updateCategoryAction, features: updateFeatureAction } as const;
+
+/** Catálogo / <section> [/ <page>]: the trail above every page of a section. */
+function trail(section: EntrySection, page?: string): Breadcrumb[] {
+  const list = { label: ENTRY_COPY[section].heading, href: CATALOG_PATHS[section] };
+  return [
+    { label: CATALOG_INDEX_COPY.heading, href: CATALOG_PATHS.index },
+    page === undefined ? { label: list.label } : list,
+    ...(page === undefined ? [] : [{ label: page }]),
+  ];
+}
 
 /** `/admin/catalogo/categorias` and `/funciones`: every record with a link to its edit page. */
 export async function EntryListPage({
@@ -50,45 +60,37 @@ export async function EntryListPage({
   const { notice, error } = pageNotices(await searchParams);
 
   return (
-    <CustomerShell eyebrow={ADMIN_PANEL_COPY.eyebrow} heading={copy.heading} intro={copy.intro}>
-      <div className="flex flex-col gap-6">
-        <Notices error={error?.message} notice={notice} />
-        <div className="flex justify-center">
-          <Link className={quietButton} href={`${path}/nueva`}>
-            {copy.newLink}
-          </Link>
-        </div>
-        {loaded.value.length === 0 ? (
-          <p className="text-center leading-7 text-muted">{copy.empty}</p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {loaded.value.map((entry) => (
-              <li key={entry.id}>
-                <Link
-                  className="flex items-center justify-between gap-4 rounded-field border-[1.5px] border-field-border px-4.5 py-3 transition-colors hover:border-primary"
-                  href={`${path}/${entry.id}`}
-                >
-                  <span className="min-w-0">
-                    <span className="block break-words font-medium text-ink">{entry.name}</span>
-                    <span className="block break-all font-mono text-xs text-muted">
-                      {entry.key}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-xs font-medium uppercase tracking-[0.12em] text-primary">
-                    {entry.isActive ? copy.activeBadge : copy.inactiveBadge}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="flex justify-center">
-          <Link className={textButton} href={CATALOG_PATHS.index}>
-            {CATALOG_FIELD_COPY.backToCatalog}
-          </Link>
-        </div>
-      </div>
-    </CustomerShell>
+    <AdminShell
+      actions={<NewRecordLink href={`${path}/nueva`} label={copy.newLink} />}
+      breadcrumbs={trail(section)}
+      current={section}
+      description={copy.intro}
+      heading={copy.heading}
+    >
+      <Notices error={error?.message} notice={notice} />
+      <CatalogTable
+        caption={copy.heading}
+        columns={[
+          { label: CATALOG_TABLE_COPY.name },
+          { label: CATALOG_TABLE_COPY.status },
+          { label: CATALOG_TABLE_COPY.actions, align: "right", hidden: true },
+        ]}
+        empty={copy.empty}
+        total={loaded.value.length}
+      >
+        {loaded.value.map((entry) => (
+          <tr className={adminTableRow} key={entry.id}>
+            <NameCell href={`${path}/${entry.id}`} name={entry.name} recordKey={entry.key} />
+            <td className={adminTableCell}>
+              <span className={adminBadge(entry.isActive ? "success" : "neutral")}>
+                {entry.isActive ? copy.activeBadge : copy.inactiveBadge}
+              </span>
+            </td>
+            <EditCell href={`${path}/${entry.id}`} name={entry.name} />
+          </tr>
+        ))}
+      </CatalogTable>
+    </AdminShell>
   );
 }
 
@@ -110,21 +112,21 @@ export async function EntryCreatePage({
   const { error } = pageNotices(await searchParams);
 
   return (
-    <CustomerShell
-      eyebrow={ADMIN_PANEL_COPY.eyebrow}
+    <AdminShell
+      breadcrumbs={trail(section, copy.createHeading)}
+      current={section}
+      description={copy.createIntro}
       heading={copy.createHeading}
-      intro={copy.createIntro}
+      width="form"
     >
-      <div className="flex flex-col gap-6">
-        <Notices error={error?.message} notice={undefined} />
-        <EntryForm action={CREATE_ACTION[section]} errorCode={error?.code} section={section} />
-        <div className="flex justify-center">
-          <Link className={textButton} href={CATALOG_PATHS[section]}>
-            {copy.backToList}
-          </Link>
-        </div>
-      </div>
-    </CustomerShell>
+      <Notices error={error?.message} notice={undefined} />
+      <EntryForm
+        action={CREATE_ACTION[section]}
+        cancelHref={CATALOG_PATHS[section]}
+        errorCode={error?.code}
+        section={section}
+      />
+    </AdminShell>
   );
 }
 
@@ -176,25 +178,21 @@ export async function EntryEditPage({
   const { notice, error } = pageNotices(await searchParams);
 
   return (
-    <CustomerShell
-      eyebrow={ADMIN_PANEL_COPY.eyebrow}
+    <AdminShell
+      breadcrumbs={trail(section, entry.name)}
+      current={section}
+      description={copy.editIntro}
       heading={copy.editHeading}
-      intro={copy.editIntro}
+      width="form"
     >
-      <div className="flex flex-col gap-6">
-        <Notices error={error?.message} notice={notice} />
-        <EntryForm
-          action={UPDATE_ACTION[section]}
-          entry={entry}
-          errorCode={error?.code}
-          section={section}
-        />
-        <div className="flex justify-center">
-          <Link className={textButton} href={path}>
-            {copy.backToList}
-          </Link>
-        </div>
-      </div>
-    </CustomerShell>
+      <Notices error={error?.message} notice={notice} />
+      <EntryForm
+        action={UPDATE_ACTION[section]}
+        cancelHref={path}
+        entry={entry}
+        errorCode={error?.code}
+        section={section}
+      />
+    </AdminShell>
   );
 }

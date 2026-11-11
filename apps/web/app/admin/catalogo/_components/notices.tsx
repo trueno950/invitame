@@ -1,4 +1,4 @@
-import { errorNote, statusNote } from "../../../_components/ui.ts";
+import { adminErrorNote, adminStatusNote } from "../../_components/admin-ui.ts";
 
 export const ERROR_ID = "catalog-error";
 
@@ -16,12 +16,12 @@ export function Notices({ notice, error }: NoticesProperties) {
   return (
     <>
       {notice === undefined ? null : (
-        <p className={statusNote} role="status">
+        <p className={adminStatusNote} role="status">
           {notice}
         </p>
       )}
       {error === undefined ? null : (
-        <p className={errorNote} id={ERROR_ID} role="alert">
+        <p className={adminErrorNote} id={ERROR_ID} role="alert">
           {error}
         </p>
       )}

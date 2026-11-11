@@ -79,3 +79,15 @@ export const ADMIN_PANEL_COPY = {
   unavailableBody: "Inténtalo de nuevo en unos minutos.",
   retry: "Volver a intentar",
 } as const;
+
+/** The frame of every administration page: the sidebar and its navigation. */
+export const ADMIN_SHELL_COPY = {
+  brand: "InvitaMe",
+  area: "Administración",
+  navigationLabel: "Navegación de administración",
+  breadcrumbLabel: "Ruta de navegación",
+  generalGroup: "General",
+  catalogGroup: "Catálogo",
+  panel: "Panel",
+  catalogOverview: "Resumen del catálogo",
+} as const;

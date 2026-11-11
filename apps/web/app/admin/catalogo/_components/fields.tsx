@@ -1,5 +1,71 @@
-import { fieldHint, fieldLabel, textField } from "../../../_components/ui.ts";
+import Link from "next/link";
+import type { ChangeEvent, ReactNode } from "react";
+
+import { CATALOG_FIELD_COPY, CATALOG_TABLE_COPY } from "../../../../lib/admin/catalog/copy.ts";
+import { AdminSelect } from "../../_components/admin-select.tsx";
+import {
+  adminButton,
+  adminButtonOutline,
+  adminHint,
+  adminInput,
+  adminLabel,
+  adminTextarea,
+} from "../../_components/admin-ui.ts";
 import { ERROR_ID } from "./notices.tsx";
+
+/** The padded two-column grid that holds a form card's fields; a field spans both with `sm:col-span-2`. */
+export function FormBody({ children }: { children: ReactNode }) {
+  return <div className="grid gap-5 px-5 py-5 sm:grid-cols-2">{children}</div>;
+}
+
+/** The row of buttons at the bottom of a form card. */
+export function FormFooter({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex justify-end gap-2 border-t border-admin-border px-5 py-3">{children}</div>
+  );
+}
+
+/**
+ * The usual footer of a form card: «Cancelar» back to `cancelHref` when there is one, then the submit
+ * button. A pending submit shows `pendingLabel` and is disabled.
+ */
+export function SubmitFooter({
+  label,
+  cancelHref,
+  pending = false,
+  pendingLabel,
+}: {
+  label: string;
+  cancelHref?: string | undefined;
+  pending?: boolean | undefined;
+  pendingLabel?: string | undefined;
+}) {
+  return (
+    <FormFooter>
+      {cancelHref === undefined ? null : (
+        <Link className={adminButtonOutline} href={cancelHref}>
+          {CATALOG_TABLE_COPY.cancel}
+        </Link>
+      )}
+      <button className={adminButton} disabled={pending} type="submit">
+        {pending && pendingLabel !== undefined ? pendingLabel : label}
+      </button>
+    </FormFooter>
+  );
+}
+
+/** The key of an existing record, shown read-only because the API does not allow changing it. */
+export function ReadOnlyKey({ value }: { value: string }) {
+  return (
+    <div>
+      <p className={adminLabel}>{CATALOG_FIELD_COPY.keyLabel}</p>
+      <p className="mt-1.5 flex min-h-9 items-center rounded-md border border-admin-border bg-admin-subtle px-3 py-1.5 font-mono text-sm break-all text-admin-ink">
+        {value}
+      </p>
+      <p className={adminHint}>{CATALOG_FIELD_COPY.keyReadOnlyHint}</p>
+    </div>
+  );
+}
 
 interface FieldProperties {
   /** Unique within the page: the label, the hint, and the error all point at it. */
@@ -11,14 +77,48 @@ interface FieldProperties {
   required?: boolean | undefined;
   /** Marks the field invalid and points it at the page's error message. */
   invalid?: boolean | undefined;
+  /** The id of that error message: the page's `Notices` unless the form has its own. */
+  errorId?: string | undefined;
   placeholder?: string | undefined;
   inputMode?: "decimal" | "text" | undefined;
 }
 
-function describedBy(id: string, hint: string | undefined, invalid: boolean | undefined) {
-  const ids = [hint === undefined ? undefined : `${id}-hint`, invalid ? ERROR_ID : undefined];
+function describedBy(
+  id: string,
+  hint: string | undefined,
+  invalid: boolean | undefined,
+  errorId = ERROR_ID,
+) {
+  const ids = [hint === undefined ? undefined : `${id}-hint`, invalid ? errorId : undefined];
   const joined = ids.filter((value) => value !== undefined).join(" ");
   return joined === "" ? undefined : joined;
+}
+
+/** The label above a field and its hint below; every field of the catalog forms is laid out by it. */
+function FieldFrame({
+  id,
+  label,
+  hint,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <label className={adminLabel} htmlFor={id}>
+        {label}
+      </label>
+      {children}
+      {hint === undefined ? null : (
+        <p className={adminHint} id={`${id}-hint`}>
+          {hint}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** A single-line text field with a visible label and its hint, also usable without JavaScript. */
@@ -30,20 +130,18 @@ export function TextField({
   defaultValue,
   required,
   invalid,
+  errorId,
   placeholder,
   inputMode,
 }: FieldProperties) {
   return (
-    <div>
-      <label className={fieldLabel} htmlFor={id}>
-        {label}
-      </label>
+    <FieldFrame hint={hint} id={id} label={label}>
       <input
-        aria-describedby={describedBy(id, hint, invalid)}
+        aria-describedby={describedBy(id, hint, invalid, errorId)}
         aria-invalid={invalid ? true : undefined}
         autoCapitalize="off"
         autoComplete="off"
-        className={textField}
+        className={adminInput}
         defaultValue={defaultValue}
         id={id}
         inputMode={inputMode}
@@ -53,13 +151,17 @@ export function TextField({
         spellCheck={false}
         type="text"
       />
-      {hint === undefined ? null : (
-        <p className={fieldHint} id={`${id}-hint`}>
-          {hint}
-        </p>
-      )}
-    </div>
+    </FieldFrame>
   );
+}
+
+interface TextAreaProperties extends Omit<FieldProperties, "placeholder" | "inputMode"> {
+  /** A controlled value, with `onChange`, for client forms; server forms use `defaultValue`. */
+  value?: string | undefined;
+  onChange?: ((event: ChangeEvent<HTMLTextAreaElement>) => void) | undefined;
+  rows?: number | undefined;
+  /** For code such as JSON: a monospace font, a taller box, and no spelling or capitalization help. */
+  code?: boolean | undefined;
 }
 
 export function TextAreaField({
@@ -68,28 +170,32 @@ export function TextAreaField({
   label,
   hint,
   defaultValue,
+  required,
   invalid,
-}: Omit<FieldProperties, "required" | "placeholder" | "inputMode">) {
+  errorId,
+  value,
+  onChange,
+  rows = 3,
+  code = false,
+}: TextAreaProperties) {
   return (
-    <div>
-      <label className={fieldLabel} htmlFor={id}>
-        {label}
-      </label>
+    <FieldFrame hint={hint} id={id} label={label}>
       <textarea
-        aria-describedby={describedBy(id, hint, invalid)}
+        aria-describedby={describedBy(id, hint, invalid, errorId)}
         aria-invalid={invalid ? true : undefined}
-        className={`${textField} min-h-28`}
+        autoCapitalize={code ? "off" : undefined}
+        autoComplete={code ? "off" : undefined}
+        className={code ? `${adminTextarea} min-h-64 font-mono text-xs` : adminTextarea}
         defaultValue={defaultValue}
         id={id}
         name={name}
-        rows={3}
+        onChange={onChange}
+        required={required}
+        rows={rows}
+        spellCheck={code ? false : undefined}
+        value={value}
       />
-      {hint === undefined ? null : (
-        <p className={fieldHint} id={`${id}-hint`}>
-          {hint}
-        </p>
-      )}
-    </div>
+    </FieldFrame>
   );
 }
 
@@ -113,10 +219,10 @@ export function CheckboxField({
 }: CheckboxProperties) {
   return (
     <div>
-      <label className="flex min-h-11 items-center gap-3 text-sm font-medium text-ink" htmlFor={id}>
+      <label className="flex min-h-8 items-center gap-2.5 text-sm text-admin-ink" htmlFor={id}>
         <input
           aria-describedby={hint === undefined ? undefined : `${id}-hint`}
-          className="size-5 accent-primary"
+          className="size-4 shrink-0 accent-admin-primary"
           defaultChecked={defaultChecked}
           id={id}
           name={name}
@@ -126,7 +232,7 @@ export function CheckboxField({
         {label}
       </label>
       {hint === undefined ? null : (
-        <p className={fieldHint} id={`${id}-hint`}>
+        <p className={adminHint} id={`${id}-hint`}>
           {hint}
         </p>
       )}
@@ -139,34 +245,39 @@ interface SelectProperties {
   name: string;
   label: string;
   hint?: string | undefined;
-  defaultValue: string;
+  /** The starting option of a server form; a client form passes `value` and `onChange` instead. */
+  defaultValue?: string | undefined;
+  value?: string | undefined;
+  onChange?: ((event: ChangeEvent<HTMLSelectElement>) => void) | undefined;
   options: ReadonlyArray<{ value: string; label: string }>;
 }
 
-export function SelectField({ id, name, label, hint, defaultValue, options }: SelectProperties) {
+export function SelectField({
+  id,
+  name,
+  label,
+  hint,
+  defaultValue,
+  value,
+  onChange,
+  options,
+}: SelectProperties) {
   return (
-    <div>
-      <label className={fieldLabel} htmlFor={id}>
-        {label}
-      </label>
-      <select
+    <FieldFrame hint={hint} id={id} label={label}>
+      <AdminSelect
         aria-describedby={hint === undefined ? undefined : `${id}-hint`}
-        className={textField}
         defaultValue={defaultValue}
         id={id}
         name={name}
+        onChange={onChange}
+        value={value}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
         ))}
-      </select>
-      {hint === undefined ? null : (
-        <p className={fieldHint} id={`${id}-hint`}>
-          {hint}
-        </p>
-      )}
-    </div>
+      </AdminSelect>
+    </FieldFrame>
   );
 }

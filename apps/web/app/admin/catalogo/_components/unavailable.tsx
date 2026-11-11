@@ -1,7 +1,6 @@
 import { CATALOG_UNAVAILABLE_COPY } from "../../../../lib/admin/catalog/copy.ts";
-import { ADMIN_PANEL_COPY } from "../../../../lib/admin/copy.ts";
-import { CustomerShell } from "../../../_components/customer-shell.tsx";
-import { quietButton } from "../../../_components/ui.ts";
+import { AdminCenteredShell } from "../../_components/admin-centered-shell.tsx";
+import { adminButtonOutline } from "../../_components/admin-ui.ts";
 
 interface CatalogUnavailableProperties {
   /** The page to try again, a plain link so it works without JavaScript. */
@@ -19,12 +18,12 @@ export function CatalogUnavailable({
   linkLabel = CATALOG_UNAVAILABLE_COPY.retry,
 }: CatalogUnavailableProperties) {
   return (
-    <CustomerShell eyebrow={ADMIN_PANEL_COPY.eyebrow} heading={heading} intro={body}>
-      <div className="flex justify-center">
-        <a className={quietButton} href={retryPath}>
+    <AdminCenteredShell heading={heading} intro={body}>
+      <div className="flex">
+        <a className={adminButtonOutline} href={retryPath}>
           {linkLabel}
         </a>
       </div>
-    </CustomerShell>
+    </AdminCenteredShell>
   );
 }
