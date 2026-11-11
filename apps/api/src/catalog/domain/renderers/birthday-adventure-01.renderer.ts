@@ -103,6 +103,8 @@ function validateConfiguration(configuration: unknown, componentKey: string): st
 
 export const birthdayAdventureRenderer: RendererContract = {
   componentKey: BIRTHDAY_ADVENTURE_COMPONENT_KEY,
+  // A birthday adventure uses no catalog feature: every ACTIVE package fits it (S6, A1).
+  requiredFeatureKeys: [],
   validateSchema: (schema) => validateRendererSchema(schema, FIELDS),
   validateConfiguration,
 };
