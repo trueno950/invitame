@@ -39,7 +39,7 @@ catalog read requires a signed-in customer (not `@Public()`).
 | --- | --- | --- | --- | --- |
 | T1 | Additive migration: `InvitationStatus` enum and `Invitation` table (owner, pinned version, package, unique lower-case slug with CHECK, status, JSONB `content`, timestamps, `Restrict` FKs, owner index); database tests | S2, S3, S5, S10 | worker (high risk: own commit) | `2582059` |
 | T2 | Domain: slug generator and reserved words, lifecycle (DRAFT → ARCHIVED, edits only in DRAFT), partial content validation against the pinned version schema, renderer `requiredFeatureKeys` and the package-fit rule; unit tests | S2, S5, S6, S7 | worker | `45b3f9d` |
-| T3 | Application and Prisma adapter: create draft (published version only, package fit, slug retry on unique violation), list own, get own, update content, archive; database tests | S1, S3, S6, S7, S9 | worker | |
+| T3 | Application and Prisma adapter: create draft (published version only, package fit, slug retry on unique violation), list own, get own, update content, archive; database tests | S1, S3, S6, S7, S9 | worker | `95bc89f` |
 | T4 | API presentation: `/invitations` routes with `@SessionUserId()`, DTOs, 400/401/404 tests; creator catalog read (published templates with their published version, active packages with price and feature keys) | S3, S8, S9 | worker | |
 | T5 | Web: «Mis invitaciones» under `/cuenta`, create (template + package), edit the draft from the pinned schema, archive; server actions | S1, S6, S7 | worker | |
 | T6 | Docs: `docs/database/model.md`, `CONTEXT.md`, `docs/architecture/overview.md`, ROADMAP status | S1–S10 | inline | |
@@ -56,3 +56,14 @@ catalog read requires a signed-in customer (not `@Public()`).
   now tested, and `docs/database/model.md` no longer claims `id`/`createdAt` are blocked by the database.
 - L5 (2026-11-11): delivery strategy — one PR per slice, like Milestone 3. Slice 1 = T1 + T2 (`45b3f9d`,
   `2582059`); slice 2 = T3 + T4 (API); slice 3 = T5 + T6 (web and docs). Push and PRs stay the owner's decision.
+- L6 (2026-11-11): slice 1 PR #56 — CI passed (quality gates, database tests, browser tests). Native review
+  `review-025692d79831605d` (risk + reliability) ended `correction_required`: a candidate-caused severe finding was
+  confirmed by the refuter, but the finding text was not yet shown because the review's untracked-selection step
+  failed (`candidate_context_unavailable`, not retry-safe) while T3 files were uncommitted in the same worktree.
+  Owner: "si haz el merge igual". Merged as `fb5dde7`. Open follow-up: read the finding once T3 is committed and
+  fix it in slice 2; a fix to the migration must be a new additive migration, never an edit of `20261111214752`.
+- L7 (2026-11-11): after the T3 commit the owner ran the provider-offered `gentle-ai review recover`
+  (`scope_changed`, successor `review-1baa8d786280eb88`, base `547cbef`, committed only: slice 1 + T3). Its risk and
+  reliability reviewers ran on the frozen trees and the review closed `approved` with no blocking or advisory
+  findings; the approval was acknowledged. The text of the earlier finding was never shown, and the new review did
+  not reproduce it.
