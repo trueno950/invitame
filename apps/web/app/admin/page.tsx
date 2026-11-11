@@ -3,22 +3,24 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
+import { CATALOG_INDEX_COPY } from "../../lib/admin/catalog/copy.ts";
 import { ADMIN_PANEL_COPY } from "../../lib/admin/copy.ts";
 import { loadAdminView, routeAdminPage } from "../../lib/admin/session.ts";
 import { getAuthSession } from "../../lib/server/session-api.ts";
-import { CustomerShell } from "../_components/customer-shell.tsx";
-import { SignOutButton } from "../_components/sign-out-button.tsx";
-import { quietButton } from "../_components/ui.ts";
+import { AdminCard } from "./_components/admin-card.tsx";
+import { AdminCenteredShell } from "./_components/admin-centered-shell.tsx";
+import { AdminShell } from "./_components/admin-shell.tsx";
+import { adminButtonOutline, adminCardBody, adminFocus } from "./_components/admin-ui.ts";
 
 export const metadata: Metadata = {
   title: ADMIN_PANEL_COPY.pageTitle,
 };
 
 /**
- * `/admin`: the minimal administrator panel (M2 T8d; S6, S21, S36), with the account's address and
- * sign-out. The session comes from `get-session` on the web server: anonymous visitors go to
- * `/admin/ingresar`, pending administrators to `/admin/activar`, and customers to `/cuenta`. The
- * API authorizes every administrative action; this page is never the guard.
+ * `/admin`: the administrator panel (M2 T8d; S6, S21, S36), with the account's address and a shortcut
+ * to each catalog area; sign-out lives in the sidebar. The session comes from `get-session` on the web
+ * server: anonymous visitors go to `/admin/ingresar`, pending administrators to `/admin/activar`, and
+ * customers to `/cuenta`. The API authorizes every administrative action; this page is never the guard.
  */
 export default async function AdminPanelPage() {
   // Render per request: the session read below swallows errors, including Next.js's prerender bailout.
@@ -30,46 +32,61 @@ export default async function AdminPanelPage() {
     redirect(target);
   }
 
-  const unavailable = view.kind !== "administrator";
+  if (view.kind !== "administrator") {
+    return (
+      <AdminCenteredShell
+        heading={ADMIN_PANEL_COPY.unavailableHeading}
+        intro={ADMIN_PANEL_COPY.unavailableBody}
+      >
+        <a className={adminButtonOutline} href="/admin">
+          {ADMIN_PANEL_COPY.retry}
+        </a>
+      </AdminCenteredShell>
+    );
+  }
 
   return (
-    <CustomerShell
-      eyebrow={ADMIN_PANEL_COPY.eyebrow}
-      heading={unavailable ? ADMIN_PANEL_COPY.unavailableHeading : ADMIN_PANEL_COPY.heading}
-      intro={unavailable ? ADMIN_PANEL_COPY.unavailableBody : ADMIN_PANEL_COPY.intro}
+    <AdminShell
+      current="panel"
+      description={ADMIN_PANEL_COPY.intro}
+      heading={ADMIN_PANEL_COPY.heading}
     >
-      {view.kind === "administrator" ? (
-        <div className="flex flex-col gap-8">
-          <dl className="grid gap-5">
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
-                {ADMIN_PANEL_COPY.emailLabel}
-              </dt>
-              <dd className="mt-1 text-lg font-medium break-all text-ink">{view.email}</dd>
-            </div>
-          </dl>
-          <div className="flex justify-center">
-            <Link className={quietButton} href="/admin/catalogo">
-              {ADMIN_PANEL_COPY.catalog}
-            </Link>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <AdminCard id="panel-account" title={ADMIN_PANEL_COPY.emailLabel}>
+          <div className={adminCardBody}>
+            <dl>
+              <dt className="sr-only">{ADMIN_PANEL_COPY.emailLabel}</dt>
+              <dd className="text-sm font-medium break-all text-admin-ink">{view.email}</dd>
+            </dl>
+            <p className="mt-3 text-xs leading-5 text-admin-muted">
+              {ADMIN_PANEL_COPY.sessionNote}
+            </p>
           </div>
-          <p className="text-sm leading-6 text-muted">{ADMIN_PANEL_COPY.sessionNote}</p>
-          <div className="border-t border-gold/40 pt-8">
-            <SignOutButton
-              failedMessage={ADMIN_PANEL_COPY.signOutFailed}
-              label={ADMIN_PANEL_COPY.signOut}
-              pendingLabel={ADMIN_PANEL_COPY.signingOut}
-              signInPath="/admin/ingresar"
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="flex justify-center">
-          <a className={quietButton} href="/admin">
-            {ADMIN_PANEL_COPY.retry}
-          </a>
-        </div>
-      )}
-    </CustomerShell>
+        </AdminCard>
+
+        <AdminCard
+          className="lg:col-span-2"
+          description={CATALOG_INDEX_COPY.intro}
+          id="panel-catalog"
+          title={CATALOG_INDEX_COPY.heading}
+        >
+          <ul className="grid gap-px overflow-hidden rounded-b-xl bg-admin-border sm:grid-cols-2">
+            {CATALOG_INDEX_COPY.sections.map((section) => (
+              <li className="bg-admin-surface" key={section.path}>
+                <Link
+                  className={`block h-full px-5 py-4 transition-colors hover:bg-admin-subtle ${adminFocus}`}
+                  href={section.path}
+                >
+                  <span className="block text-sm font-medium text-admin-ink">{section.title}</span>
+                  <span className="mt-0.5 block text-xs leading-5 text-admin-muted">
+                    {section.description}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </AdminCard>
+      </div>
+    </AdminShell>
   );
 }
