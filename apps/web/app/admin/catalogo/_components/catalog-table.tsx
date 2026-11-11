@@ -3,8 +3,7 @@ import type { ReactNode } from "react";
 
 import { CATALOG_TABLE_COPY } from "../../../../lib/admin/catalog/copy.ts";
 import {
-  adminButtonGhost,
-  adminButtonSmall,
+  adminButtonVariant,
   adminCard,
   adminTable,
   adminTableCell,
@@ -86,7 +85,7 @@ export function NameCell({
 export function EditCell({ href, name }: { href: string; name: string }) {
   return (
     <td className={`${adminTableCell} text-right`}>
-      <Link className={`${adminButtonGhost} ${adminButtonSmall}`} href={href}>
+      <Link className={adminButtonVariant("ghost", "small")} href={href}>
         {CATALOG_TABLE_COPY.edit}
         <span className="sr-only"> {name}</span>
       </Link>

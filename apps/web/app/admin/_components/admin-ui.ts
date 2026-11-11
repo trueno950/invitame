@@ -6,7 +6,8 @@
  * 3:1.
  *
  * - Buttons: `adminButton` (solid, the main action of a form), `adminButtonOutline` (secondary),
- *   `adminButtonGhost` (quiet links), and `adminButtonSmall` to shrink any of them.
+ *   and `adminButtonGhost` (quiet links); `adminButtonVariant(variant, "small")` gives the compact
+ *   size used inside tables and side cards.
  * - Fields: `adminLabel`, `adminInput`, `adminTextarea`, `adminSelect` (only through
  *   `AdminSelect`), and `adminHint`; an `aria-invalid` field turns red.
  * - Surfaces: `adminCard` with its header, title, description, and body; the `adminTable*` classes.
@@ -15,16 +16,36 @@
 export const adminFocus =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-admin-ink";
 
-const buttonBase = `inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${adminFocus}`;
+const buttonBase = `inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${adminFocus}`;
 
-export const adminButton = `${buttonBase} bg-admin-primary text-admin-on-primary shadow-xs hover:bg-admin-primary-deep`;
+const BUTTON_VARIANTS = {
+  solid: "bg-admin-primary text-admin-on-primary shadow-xs hover:bg-admin-primary-deep",
+  outline:
+    "border border-admin-border bg-admin-surface text-admin-ink shadow-xs hover:bg-admin-subtle",
+  ghost: "text-admin-ink hover:bg-admin-subtle",
+} as const;
 
-export const adminButtonOutline = `${buttonBase} border border-admin-border bg-admin-surface text-admin-ink shadow-xs hover:bg-admin-subtle`;
+/**
+ * Exactly one size per button: Tailwind orders conflicting utilities by its own stylesheet, not by
+ * their position in `class`, so a size must never be appended on top of another.
+ */
+const BUTTON_SIZES = {
+  default: "h-9 px-4 text-sm",
+  small: "h-8 px-3 text-xs",
+} as const;
 
-export const adminButtonGhost = `${buttonBase} text-admin-ink hover:bg-admin-subtle`;
+export function adminButtonVariant(
+  variant: keyof typeof BUTTON_VARIANTS,
+  size: keyof typeof BUTTON_SIZES = "default",
+): string {
+  return `${buttonBase} ${BUTTON_SIZES[size]} ${BUTTON_VARIANTS[variant]}`;
+}
 
-/** Appended to a button class for the compact size used inside tables and side cards. */
-export const adminButtonSmall = "h-8 px-3 text-xs";
+export const adminButton = adminButtonVariant("solid");
+
+export const adminButtonOutline = adminButtonVariant("outline");
+
+export const adminButtonGhost = adminButtonVariant("ghost");
 
 export const adminLabel = "block text-sm font-medium text-admin-ink";
 
