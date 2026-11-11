@@ -3,8 +3,8 @@
 Status: **current** (M2 T8t, T8l, T8f; S35, S37, S43). The owner approved version 3 of the concept «A · Rosa y vino» on
 2026-11-05 (L41 of `odd/tasks/m2-identity.md`). The tokens, fonts, ornaments, shared components, `/ingresar`,
 `/cuenta`, and the full concept landing page at `/` (T8l: every section and the draw-on bouquet, with the honest
-pre-launch copy the owner approved in L45) are implemented. The administrator pages (T8d: `/admin/ingresar`,
-`/admin/activar`, `/admin`) use the same frame and components as the customer pages.
+pre-launch copy the owner approved in L45) are implemented. The administrator pages under `/admin` do not use this
+theme: they have their own neutral administration theme, described in [Administration theme](#administration-theme).
 
 ## Principles
 
@@ -125,11 +125,11 @@ first screen lazily. Keep each file under 40 KB.
 - `app/_components/wordmark.tsx`: "Invita" in the display serif, "Me" in the wine script, and the rose; read by
   assistive technology as "InvitaMe".
 - `app/_components/ornament.tsx`: the decorative images above.
-- `app/_components/customer-shell.tsx`: the frame of `/ingresar`, `/cuenta`, and the administrator pages (the
+- `app/_components/customer-shell.tsx`: the frame of `/ingresar` and `/cuenta` (the
   paper wash, corner flowers, the header with the wordmark, and one centered card with the eyebrow, flourish,
   heading, and intro).
 - `app/_components/sign-out-button.tsx`: the wine «Cerrar sesión» button shared by customers and administrators,
-  with its failure note.
+  with its failure note; the administration sidebar passes its own `className`.
 - `app/_components/landing/`: the landing sections (`hero.tsx`, `sections.tsx`, `closing.tsx`), the sample
   stationery (`stationery.tsx`), the drawings (`art.tsx`), and the three action shapes (`actions.tsx`):
   `SignInLink` (the wine button to `/ingresar`), `AnchorLink` (a button-shaped link that only scrolls), and
@@ -171,6 +171,47 @@ drawn.
 - Focus is a 2 px wine outline: on `focus-visible` for buttons and links, on every focus for text fields.
 - Gold is never used for text that must be read; `ring-gold/*` hairlines are decoration, not component borders.
 
+## Administration theme
+
+Status: **current**. The owner asked for an administration look apart from the customer theme, a denser dashboard
+in the spirit of shadcn/ui, with less scrolling. It is built with Tailwind and no component library; its only
+added dependency is the `lucide-react` icon set, and the pages stay server components whose forms work without
+JavaScript.
+
+- Tokens: the `@theme static` block of `app/globals.css` declares the `admin-*` colors, a zinc palette
+  (`admin-background`, `admin-surface`, `admin-subtle`, `admin-border`, `admin-input`, `admin-ink`,
+  `admin-muted`, `admin-placeholder`, `admin-primary`, `admin-primary-deep`, `admin-on-primary`, and the
+  `danger`, `success`, and `warning` pairs of the badges and notes). `lib/theme/contrast.test.ts` checks their text
+  pairs at 4.5:1 and the field border at 3:1, like the customer tokens.
+- Scope: `app/admin/layout.tsx` wraps every administrator page in the `admin-theme` utility. It points the
+  customer tokens (`primary`, `ink`, `muted`, `field-border`, the radii, and the fonts) at the administration
+  palette and the system sans-serif font, so the sign-in form, the enrollment flow, and the sign-out button,
+  which are shared components, render neutral inside `/admin` without a second copy.
+- Classes: `app/admin/_components/admin-ui.ts` holds the administration's buttons, fields, cards, tables, notes,
+  and badges. A badge always names the state in text, so color is never the only signal.
+- Frames: `app/admin/_components/admin-shell.tsx` is the panel and catalog frame, with a sidebar (a scrollable top
+  bar on small screens) holding the navigation and «Cerrar sesión», a breadcrumb bar, and a compact header with
+  the page's actions. Every sidebar entry carries a `lucide-react` icon; the group titles (General, Catálogo), shown from
+  the `lg` breakpoint up, are small uppercase labels with no hover or pointer, so they never read as links.
+  `app/admin/_components/admin-centered-shell.tsx` is the centered card of sign-in, enrollment, and the
+  unavailable notices, which show no navigation.
+- Selects: every administration `<select>` goes through `app/admin/_components/admin-select.tsx`, which hides the
+  native arrow and draws a chevron inset from the right border like the field's text.
+- Icons: `lucide-react` is the only icon set. Icons are decorative (`aria-hidden`) next to a visible label, at
+  `size-4` in the sidebar and buttons and `size-3.5` in the breadcrumb and small buttons.
+- Layout: catalog lists are tables (`app/admin/catalogo/_components/catalog-table.tsx`); single-form pages
+  (create pages and the category and feature edit pages) pass `width="form"` to `AdminShell`, which centers the
+  header and the form card in one reading-width column; forms are cards with two-column fields; the package and
+  template edit pages put the main forms in two thirds of the
+  width and the price, its history, or the versions in the remaining third.
+- Components: repeated administration markup lives in one component, not inline. In
+  `app/admin/_components/`: `AdminCard` and `AdminCardEmpty` (`admin-card.tsx`), `StatusBadge`
+  (`status-badge.tsx`), `NewRecordLink` (`new-record-link.tsx`), `AdminBrandMark` (`admin-brand-mark.tsx`),
+  `AdminDetailLayout` (`admin-detail-layout.tsx`), and `AdminSelect` (`admin-select.tsx`). In
+  `app/admin/catalogo/_components/`: `FormBody`, `SubmitFooter`, and the fields (`fields.tsx`), and
+  `RecordBasicsFields` (`record-basics.tsx`). New administration markup that repeats goes into one of them
+  instead of being written inline.
+
 ## Where each piece lives
 
 | Piece | Path |
@@ -181,6 +222,7 @@ drawn.
 | Shared classes and components | `apps/web/app/_components/` |
 | Ornament files | `apps/web/public/ornaments/` |
 | Contrast helper and test, font loading test | `apps/web/lib/theme/` |
-| Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/admin/`, `apps/web/app/page.tsx` |
+| Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/page.tsx` |
+| Administration classes and frames | `apps/web/app/admin/_components/` |
 | Landing sections, styles, and drawings | `apps/web/app/_components/landing/` |
 | Landing copy and its honesty test (S37) | `apps/web/lib/landing/` |

@@ -1,23 +1,32 @@
-import Link from "next/link";
-
 import {
   CATALOG_FIELD_COPY,
+  CATALOG_INDEX_COPY,
   CATALOG_PATHS,
+  CATALOG_TABLE_COPY,
   PACKAGE_COPY,
   PACKAGE_STATUS_LABELS,
 } from "../../../../lib/admin/catalog/copy.ts";
 import { formatInstant } from "../../../../lib/admin/catalog/format.ts";
 import { pageNotices } from "../../../../lib/admin/catalog/notices.ts";
 import { formatMxn, formatPesosField } from "../../../../lib/admin/catalog/price.ts";
-import { ADMIN_PANEL_COPY } from "../../../../lib/admin/copy.ts";
 import { adminCatalog } from "../../../../lib/server/admin-catalog-api.ts";
 import {
   type CatalogPackage,
   isCatalogId,
   PACKAGE_STATUSES,
 } from "../../../../lib/server/admin-catalog-validators.ts";
-import { CustomerShell } from "../../../_components/customer-shell.tsx";
-import { fieldLabel, primaryButton, quietButton, textButton } from "../../../_components/ui.ts";
+import { AdminCard, AdminCardEmpty } from "../../_components/admin-card.tsx";
+import { AdminDetailLayout } from "../../_components/admin-detail-layout.tsx";
+import { AdminShell, type Breadcrumb } from "../../_components/admin-shell.tsx";
+import {
+  adminBadge,
+  adminCard,
+  adminCardBody,
+  adminTableCell,
+  adminTableRow,
+} from "../../_components/admin-ui.ts";
+import { NewRecordLink } from "../../_components/new-record-link.tsx";
+import { StatusBadge } from "../../_components/status-badge.tsx";
 import { attempt, requireCatalogAdministrator, resolveRead } from "../_lib/load.ts";
 import {
   createPackageAction,
@@ -25,8 +34,10 @@ import {
   setPackagePriceAction,
   updatePackageAction,
 } from "../actions.ts";
-import { CheckboxField, SelectField, TextAreaField, TextField } from "./fields.tsx";
+import { CatalogTable, EditCell, NameCell } from "./catalog-table.tsx";
+import { CheckboxField, FormBody, SelectField, SubmitFooter, TextField } from "./fields.tsx";
 import { Notices } from "./notices.tsx";
+import { RecordBasicsFields } from "./record-basics.tsx";
 import { CatalogUnavailable } from "./unavailable.tsx";
 
 type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
@@ -41,7 +52,16 @@ function currentMxn(stored: CatalogPackage) {
   return stored.currentPrices.find((price) => price.currency === "MXN");
 }
 
-const sectionHeading = "font-display text-xl font-semibold text-ink";
+/** Catálogo / Paquetes [/ <page>]: the trail above every package page. */
+function trail(page?: string): Breadcrumb[] {
+  return [
+    { label: CATALOG_INDEX_COPY.heading, href: CATALOG_PATHS.index },
+    page === undefined
+      ? { label: PACKAGE_COPY.heading }
+      : { label: PACKAGE_COPY.heading, href: CATALOG_PATHS.packages },
+    ...(page === undefined ? [] : [{ label: page }]),
+  ];
+}
 
 /** `/admin/catalogo/paquetes`: every package with its status and current price. */
 export async function PackageListPage({ searchParams }: { searchParams: SearchParameters }) {
@@ -57,59 +77,49 @@ export async function PackageListPage({ searchParams }: { searchParams: SearchPa
   const { notice, error } = pageNotices(await searchParams);
 
   return (
-    <CustomerShell
-      eyebrow={ADMIN_PANEL_COPY.eyebrow}
+    <AdminShell
+      actions={
+        <NewRecordLink href={`${CATALOG_PATHS.packages}/nuevo`} label={PACKAGE_COPY.newLink} />
+      }
+      breadcrumbs={trail()}
+      current="packages"
+      description={PACKAGE_COPY.intro}
       heading={PACKAGE_COPY.heading}
-      intro={PACKAGE_COPY.intro}
     >
-      <div className="flex flex-col gap-6">
-        <Notices error={error?.message} notice={notice} />
-        <div className="flex justify-center">
-          <Link className={quietButton} href={`${CATALOG_PATHS.packages}/nuevo`}>
-            {PACKAGE_COPY.newLink}
-          </Link>
-        </div>
-        {loaded.value.length === 0 ? (
-          <p className="text-center leading-7 text-muted">{PACKAGE_COPY.empty}</p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {loaded.value.map((stored) => {
-              const price = currentMxn(stored);
-              return (
-                <li key={stored.id}>
-                  <Link
-                    className="flex items-center justify-between gap-4 rounded-field border-[1.5px] border-field-border px-4.5 py-3 transition-colors hover:border-primary"
-                    href={`${CATALOG_PATHS.packages}/${stored.id}`}
-                  >
-                    <span className="min-w-0">
-                      <span className="block break-words font-medium text-ink">{stored.name}</span>
-                      <span className="block break-all font-mono text-xs text-muted">
-                        {stored.key}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-right text-sm">
-                      <span className="block font-medium text-ink">
-                        {price === undefined
-                          ? PACKAGE_COPY.noPrice
-                          : formatMxn(price.amountMinor, price.currency)}
-                      </span>
-                      <span className="block text-xs font-medium uppercase tracking-[0.12em] text-primary">
-                        {PACKAGE_STATUS_LABELS[stored.status]}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <div className="flex justify-center">
-          <Link className={textButton} href={CATALOG_PATHS.index}>
-            {CATALOG_FIELD_COPY.backToCatalog}
-          </Link>
-        </div>
-      </div>
-    </CustomerShell>
+      <Notices error={error?.message} notice={notice} />
+      <CatalogTable
+        caption={PACKAGE_COPY.heading}
+        columns={[
+          { label: CATALOG_TABLE_COPY.name },
+          { label: CATALOG_TABLE_COPY.status },
+          { label: CATALOG_TABLE_COPY.price, align: "right" },
+          { label: CATALOG_TABLE_COPY.actions, align: "right", hidden: true },
+        ]}
+        empty={PACKAGE_COPY.empty}
+        total={loaded.value.length}
+      >
+        {loaded.value.map((stored) => {
+          const price = currentMxn(stored);
+          const href = `${CATALOG_PATHS.packages}/${stored.id}`;
+          return (
+            <tr className={adminTableRow} key={stored.id}>
+              <NameCell href={href} name={stored.name} recordKey={stored.key} />
+              <td className={adminTableCell}>
+                <StatusBadge label={PACKAGE_STATUS_LABELS[stored.status]} status={stored.status} />
+              </td>
+              <td className={`${adminTableCell} text-right whitespace-nowrap tabular-nums`}>
+                {price === undefined ? (
+                  <span className="text-admin-muted">{PACKAGE_COPY.noPrice}</span>
+                ) : (
+                  formatMxn(price.amountMinor, price.currency)
+                )}
+              </td>
+              <EditCell href={href} name={stored.name} />
+            </tr>
+          );
+        })}
+      </CatalogTable>
+    </AdminShell>
   );
 }
 
@@ -123,51 +133,29 @@ export async function PackageCreatePage({ searchParams }: { searchParams: Search
 
   const { error } = pageNotices(await searchParams);
   const invalidKey = error?.code === "key-taken" || error?.code === "validation";
+  const invalidText = error?.code === "validation";
 
   return (
-    <CustomerShell
-      eyebrow={ADMIN_PANEL_COPY.eyebrow}
+    <AdminShell
+      breadcrumbs={trail(PACKAGE_COPY.createHeading)}
+      current="packages"
+      description={PACKAGE_COPY.createIntro}
       heading={PACKAGE_COPY.createHeading}
-      intro={PACKAGE_COPY.createIntro}
+      width="form"
     >
-      <div className="flex flex-col gap-6">
-        <Notices error={error?.message} notice={undefined} />
-        <form action={createPackageAction} className="flex flex-col gap-5">
-          <TextField
-            hint={PACKAGE_COPY.keyHint}
-            id="catalog-key"
-            invalid={invalidKey}
-            label={CATALOG_FIELD_COPY.keyLabel}
-            name="key"
-            placeholder={PACKAGE_COPY.keyPlaceholder}
-            required
+      <Notices error={error?.message} notice={undefined} />
+      <form action={createPackageAction} className={adminCard}>
+        <FormBody>
+          <RecordBasicsFields
+            invalidKey={invalidKey}
+            invalidText={invalidText}
+            keyHint={PACKAGE_COPY.keyHint}
+            keyPlaceholder={PACKAGE_COPY.keyPlaceholder}
           />
-          <TextField
-            hint={CATALOG_FIELD_COPY.nameHint}
-            id="catalog-name"
-            invalid={error?.code === "validation"}
-            label={CATALOG_FIELD_COPY.nameLabel}
-            name="name"
-            required
-          />
-          <TextAreaField
-            hint={CATALOG_FIELD_COPY.descriptionHint}
-            id="catalog-description"
-            invalid={error?.code === "validation"}
-            label={CATALOG_FIELD_COPY.descriptionLabel}
-            name="description"
-          />
-          <button className={primaryButton} type="submit">
-            {PACKAGE_COPY.createSubmit}
-          </button>
-        </form>
-        <div className="flex justify-center">
-          <Link className={textButton} href={CATALOG_PATHS.packages}>
-            {PACKAGE_COPY.backToList}
-          </Link>
-        </div>
-      </div>
-    </CustomerShell>
+        </FormBody>
+        <SubmitFooter cancelHref={CATALOG_PATHS.packages} label={PACKAGE_COPY.createSubmit} />
+      </form>
+    </AdminShell>
   );
 }
 
@@ -238,164 +226,141 @@ export async function PackageEditPage({
   const textInvalid = error?.code === "validation";
 
   return (
-    <CustomerShell
-      eyebrow={ADMIN_PANEL_COPY.eyebrow}
+    <AdminShell
+      actions={<StatusBadge label={PACKAGE_STATUS_LABELS[stored.status]} status={stored.status} />}
+      breadcrumbs={trail(stored.name)}
+      current="packages"
+      description={PACKAGE_COPY.editIntro}
       heading={PACKAGE_COPY.editHeading}
-      intro={PACKAGE_COPY.editIntro}
     >
-      <div className="flex flex-col gap-8">
-        <Notices error={error?.message} notice={notice} />
+      <Notices error={error?.message} notice={notice} />
 
-        <section aria-labelledby="package-details" className="flex flex-col gap-5">
-          <h2 className={sectionHeading} id="package-details">
-            {PACKAGE_COPY.detailsHeading}
-          </h2>
-          <form action={updatePackageAction} className="flex flex-col gap-5">
-            <input name="id" type="hidden" value={stored.id} />
-            <div>
-              <p className={fieldLabel}>{CATALOG_FIELD_COPY.keyLabel}</p>
-              <p className="mt-1 break-all font-mono text-sm text-ink">{stored.key}</p>
-              <p className="mt-1 text-sm text-muted">{CATALOG_FIELD_COPY.keyReadOnlyHint}</p>
-            </div>
-            <TextField
-              defaultValue={stored.name}
-              hint={CATALOG_FIELD_COPY.nameHint}
-              id="catalog-name"
-              invalid={textInvalid}
-              label={CATALOG_FIELD_COPY.nameLabel}
-              name="name"
-              required
-            />
-            <TextAreaField
-              defaultValue={stored.description ?? ""}
-              hint={CATALOG_FIELD_COPY.descriptionHint}
-              id="catalog-description"
-              invalid={textInvalid}
-              label={CATALOG_FIELD_COPY.descriptionLabel}
-              name="description"
-            />
-            <SelectField
-              defaultValue={stored.status}
-              hint={PACKAGE_COPY.statusHint}
-              id="catalog-status"
-              label={PACKAGE_COPY.statusLabel}
-              name="status"
-              options={STATUS_OPTIONS}
-            />
-            <button className={primaryButton} type="submit">
-              {CATALOG_FIELD_COPY.save}
-            </button>
-          </form>
-        </section>
-
-        <section
-          aria-labelledby="package-features"
-          className="flex flex-col gap-5 border-t border-gold/40 pt-8"
-        >
-          <h2 className={sectionHeading} id="package-features">
-            {PACKAGE_COPY.featuresHeading}
-          </h2>
-          <form action={setPackageFeaturesAction} className="flex flex-col gap-3">
-            <input name="id" type="hidden" value={stored.id} />
-            <fieldset className="flex flex-col gap-1">
-              <legend className="text-sm leading-6 text-muted">{PACKAGE_COPY.featuresHint}</legend>
-              {features.value.length === 0 ? (
-                <p className="py-2 text-sm text-muted">{PACKAGE_COPY.featuresEmpty}</p>
-              ) : (
-                features.value.map((feature) => (
-                  <CheckboxField
-                    defaultChecked={included.has(feature.id)}
-                    id={`feature-${feature.id}`}
-                    key={feature.id}
-                    label={
-                      feature.isActive
-                        ? feature.name
-                        : `${feature.name} (${PACKAGE_COPY.featureInactive})`
-                    }
-                    name="featureId"
-                    value={feature.id}
+      <AdminDetailLayout
+        aside={
+          <>
+            <AdminCard id="package-price" title={PACKAGE_COPY.priceHeading}>
+              <div className={adminCardBody}>
+                <p className="text-xs text-admin-muted">{PACKAGE_COPY.priceCurrent}</p>
+                <p className="mt-0.5 text-2xl font-semibold tracking-tight text-admin-ink tabular-nums">
+                  {price === undefined
+                    ? PACKAGE_COPY.noPrice
+                    : formatMxn(price.amountMinor, price.currency)}
+                </p>
+              </div>
+              <form action={setPackagePriceAction} className="border-t border-admin-border">
+                <input name="id" type="hidden" value={stored.id} />
+                <div className="px-5 py-4">
+                  <TextField
+                    defaultValue={price === undefined ? "" : formatPesosField(price.amountMinor)}
+                    hint={`${PACKAGE_COPY.priceHint} ${PACKAGE_COPY.priceNote}`}
+                    id="catalog-price"
+                    inputMode="decimal"
+                    invalid={priceInvalid}
+                    label={PACKAGE_COPY.priceLabel}
+                    name="price"
+                    required
                   />
-                ))
+                </div>
+                <SubmitFooter label={PACKAGE_COPY.priceSave} />
+              </form>
+            </AdminCard>
+
+            <AdminCard id="package-history" title={PACKAGE_COPY.historyHeading}>
+              {history.value.length === 0 ? (
+                <AdminCardEmpty>{PACKAGE_COPY.historyEmpty}</AdminCardEmpty>
+              ) : (
+                <ol className="max-h-80 divide-y divide-admin-border overflow-y-auto">
+                  {history.value.map((row) => (
+                    <li
+                      className="flex items-start justify-between gap-3 px-5 py-2.5 text-sm"
+                      key={`${row.createdAt}-${row.currency}-${row.amountMinor}`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-medium text-admin-ink tabular-nums">
+                          {formatMxn(row.amountMinor, row.currency)}
+                        </span>
+                        <span className="block text-xs text-admin-muted">
+                          {PACKAGE_COPY.historySince}{" "}
+                          <time dateTime={row.createdAt}>{formatInstant(row.createdAt)}</time>
+                          {row.retiredAt === null ? null : (
+                            <>
+                              {" · "}
+                              {PACKAGE_COPY.historyUntil}{" "}
+                              <time dateTime={row.retiredAt}>{formatInstant(row.retiredAt)}</time>
+                            </>
+                          )}
+                        </span>
+                      </span>
+                      {row.retiredAt === null ? (
+                        <span className={adminBadge("success")}>{PACKAGE_COPY.historyCurrent}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
               )}
-            </fieldset>
-            <button className={primaryButton} type="submit">
-              {PACKAGE_COPY.featuresSave}
-            </button>
-          </form>
-        </section>
+            </AdminCard>
+          </>
+        }
+        main={
+          <>
+            <AdminCard id="package-details" title={PACKAGE_COPY.detailsHeading}>
+              <form action={updatePackageAction}>
+                <FormBody>
+                  <RecordBasicsFields
+                    invalidText={textInvalid}
+                    keyHint={PACKAGE_COPY.keyHint}
+                    keyPlaceholder={PACKAGE_COPY.keyPlaceholder}
+                    record={stored}
+                  />
+                  <SelectField
+                    defaultValue={stored.status}
+                    hint={PACKAGE_COPY.statusHint}
+                    id="catalog-status"
+                    label={PACKAGE_COPY.statusLabel}
+                    name="status"
+                    options={STATUS_OPTIONS}
+                  />
+                </FormBody>
+                <SubmitFooter label={CATALOG_FIELD_COPY.save} />
+              </form>
+            </AdminCard>
 
-        <section
-          aria-labelledby="package-price"
-          className="flex flex-col gap-5 border-t border-gold/40 pt-8"
-        >
-          <h2 className={sectionHeading} id="package-price">
-            {PACKAGE_COPY.priceHeading}
-          </h2>
-          <p className="text-sm text-muted">
-            {PACKAGE_COPY.priceCurrent}:{" "}
-            <strong className="text-base font-semibold text-ink">
-              {price === undefined
-                ? PACKAGE_COPY.noPrice
-                : formatMxn(price.amountMinor, price.currency)}
-            </strong>
-          </p>
-          <form action={setPackagePriceAction} className="flex flex-col gap-5">
-            <input name="id" type="hidden" value={stored.id} />
-            <TextField
-              defaultValue={price === undefined ? "" : formatPesosField(price.amountMinor)}
-              hint={`${PACKAGE_COPY.priceHint} ${PACKAGE_COPY.priceNote}`}
-              id="catalog-price"
-              inputMode="decimal"
-              invalid={priceInvalid}
-              label={PACKAGE_COPY.priceLabel}
-              name="price"
-              required
-            />
-            <button className={primaryButton} type="submit">
-              {PACKAGE_COPY.priceSave}
-            </button>
-          </form>
-
-          <h3 className="text-sm font-medium uppercase tracking-[0.18em] text-primary">
-            {PACKAGE_COPY.historyHeading}
-          </h3>
-          {history.value.length === 0 ? (
-            <p className="text-sm text-muted">{PACKAGE_COPY.historyEmpty}</p>
-          ) : (
-            <ol className="flex flex-col gap-3">
-              {history.value.map((row) => (
-                <li
-                  className="rounded-field border border-field-border px-4 py-3 text-sm"
-                  key={`${row.createdAt}-${row.currency}-${row.amountMinor}`}
-                >
-                  <span className="block text-base font-medium text-ink">
-                    {formatMxn(row.amountMinor, row.currency)}
-                  </span>
-                  <span className="block text-muted">
-                    {PACKAGE_COPY.historySince}{" "}
-                    <time dateTime={row.createdAt}>{formatInstant(row.createdAt)}</time>
-                    {" · "}
-                    {row.retiredAt === null ? (
-                      PACKAGE_COPY.historyCurrent
-                    ) : (
-                      <>
-                        {PACKAGE_COPY.historyUntil}{" "}
-                        <time dateTime={row.retiredAt}>{formatInstant(row.retiredAt)}</time>
-                      </>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-
-        <div className="flex justify-center">
-          <Link className={textButton} href={CATALOG_PATHS.packages}>
-            {PACKAGE_COPY.backToList}
-          </Link>
-        </div>
-      </div>
-    </CustomerShell>
+            <AdminCard
+              description={PACKAGE_COPY.featuresHint}
+              id="package-features"
+              title={PACKAGE_COPY.featuresHeading}
+            >
+              <form action={setPackageFeaturesAction}>
+                <input name="id" type="hidden" value={stored.id} />
+                <fieldset className="px-5 py-4">
+                  <legend className="sr-only">{PACKAGE_COPY.featuresHint}</legend>
+                  {features.value.length === 0 ? (
+                    <p className="text-sm text-admin-muted">{PACKAGE_COPY.featuresEmpty}</p>
+                  ) : (
+                    <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                      {features.value.map((feature) => (
+                        <CheckboxField
+                          defaultChecked={included.has(feature.id)}
+                          id={`feature-${feature.id}`}
+                          key={feature.id}
+                          label={
+                            feature.isActive
+                              ? feature.name
+                              : `${feature.name} (${PACKAGE_COPY.featureInactive})`
+                          }
+                          name="featureId"
+                          value={feature.id}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </fieldset>
+                <SubmitFooter label={PACKAGE_COPY.featuresSave} />
+              </form>
+            </AdminCard>
+          </>
+        }
+      />
+    </AdminShell>
   );
 }
