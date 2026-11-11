@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
 import { errorNote, statusNote } from "../../app/_components/ui.ts";
+import { adminErrorNote, adminStatusNote } from "../../app/admin/_components/admin-ui.ts";
 import { contrastRatio, themeColor, themeColors } from "./contrast.ts";
 
 /**
@@ -149,6 +150,53 @@ describe("text contrast is at least 4.5:1 (WCAG AA)", () => {
         ratio >= TEXT_MINIMUM,
         `${label} (${text} on ${background}): ${ratio.toFixed(2)}:1`,
       );
+    });
+  }
+});
+
+describe("administration tokens: text contrast is at least 4.5:1 (WCAG AA)", () => {
+  const pairs: [label: string, foreground: string, background: string][] = [
+    ["text on background", "admin-ink", "admin-background"],
+    ["text on surface", "admin-ink", "admin-surface"],
+    ["text on a subtle row", "admin-ink", "admin-subtle"],
+    ["muted text on background", "admin-muted", "admin-background"],
+    ["muted text on surface", "admin-muted", "admin-surface"],
+    ["muted text on a subtle row", "admin-muted", "admin-subtle"],
+    ["placeholder on a field", "admin-placeholder", "admin-surface"],
+    ["placeholder on an invalid field", "admin-placeholder", "admin-danger-subtle"],
+    ["button text on primary", "admin-on-primary", "admin-primary"],
+    ["button text on pressed primary", "admin-on-primary", "admin-primary-deep"],
+    ["danger badge", "admin-danger", "admin-danger-subtle"],
+    ["danger text on surface", "admin-danger", "admin-surface"],
+    ["success badge", "admin-success", "admin-success-subtle"],
+    ["warning badge", "admin-warning", "admin-warning-subtle"],
+  ];
+
+  for (const [label, foreground, background] of pairs) {
+    test(label, () => {
+      const ratio = contrastRatio(color(foreground), color(background));
+      assert.ok(ratio >= TEXT_MINIMUM, `${label}: ${ratio.toFixed(2)}:1`);
+    });
+  }
+
+  for (const [label, classes] of [
+    ["status note", adminStatusNote],
+    ["error note", adminErrorNote],
+  ] as const) {
+    test(`${label} text on its background`, () => {
+      const { text, background } = noteColors(classes);
+      const ratio = contrastRatio(color(text), color(background));
+      assert.ok(
+        ratio >= TEXT_MINIMUM,
+        `${label} (${text} on ${background}): ${ratio.toFixed(2)}:1`,
+      );
+    });
+  }
+
+  for (const background of ["admin-surface", "admin-background"]) {
+    test(`field border on ${background} reaches 3:1`, () => {
+      const ratio = contrastRatio(color("admin-input"), color(background));
+      assert.ok(ratio >= BORDER_MINIMUM, `field border on ${background}: ${ratio.toFixed(2)}:1`);
     });
   }
 });

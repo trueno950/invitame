@@ -54,6 +54,33 @@
 }
 
 /*
+ * Administration theme: a neutral zinc palette for the `/admin` pages, a dense dashboard look in the
+ * spirit of shadcn/ui, independent of the customer theme above. Only the administration pages use
+ * these tokens (`app/admin/_components/admin-ui.ts`); `lib/theme/contrast.test.ts` checks them like
+ * the customer tokens. `static` keeps every token emitted, because the `.admin-theme` scope below
+ * reads them through `var()`. See docs/design/theme.md.
+ */
+@theme static {
+  --color-admin-background: #fafafa;
+  --color-admin-surface: #ffffff;
+  --color-admin-subtle: #f4f4f5;
+  --color-admin-border: #e4e4e7;
+  --color-admin-input: #8a8a93;
+  --color-admin-ink: #18181b;
+  --color-admin-muted: #52525b;
+  --color-admin-placeholder: #6b6b73;
+  --color-admin-primary: #18181b;
+  --color-admin-primary-deep: #3f3f46;
+  --color-admin-on-primary: #fafafa;
+  --color-admin-danger: #b91c1c;
+  --color-admin-danger-subtle: #fef2f2;
+  --color-admin-success: #166534;
+  --color-admin-success-subtle: #f0fdf4;
+  --color-admin-warning: #92400e;
+  --color-admin-warning-subtle: #fffbeb;
+}
+
+/*
  * Font families. `app/layout.tsx` loads the fonts from `app/fonts/` with `next/font/local` and sets
  * these variables on <html>; `inline` makes the utilities read them where they are used.
  * display: Cormorant Garamond for headings; script: Great Vibes for names and accents only;
@@ -63,6 +90,37 @@
   --font-display: var(--font-cormorant-garamond), "Times New Roman", serif;
   --font-script: var(--font-great-vibes), cursive;
   --font-sans: var(--font-jost), system-ui, sans-serif;
+}
+
+/*
+ * The administration pages' scope (`app/admin/layout.tsx`). It points the customer tokens at the
+ * administration palette and the system font, so the shared sign-in, enrollment, and sign-out
+ * components render neutral inside `/admin` without a second copy of them.
+ */
+@utility admin-theme {
+  --color-background: var(--color-admin-background);
+  --color-surface: var(--color-admin-surface);
+  --color-rose-50: var(--color-admin-subtle);
+  --color-rose-100: var(--color-admin-border);
+  --color-ink: var(--color-admin-ink);
+  --color-muted: var(--color-admin-muted);
+  --color-placeholder: var(--color-admin-placeholder);
+  --color-primary: var(--color-admin-primary);
+  --color-primary-deep: var(--color-admin-primary-deep);
+  --color-on-primary: var(--color-admin-on-primary);
+  --color-field-border: var(--color-admin-input);
+  --color-rose: var(--color-admin-border);
+  --color-gold: var(--color-admin-border);
+  --radius-field: 0.5rem;
+  --radius-panel: 0.75rem;
+  --radius-card: 0.75rem;
+  --font-jost: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-cormorant-garamond: var(--font-jost);
+  min-height: 100vh;
+  background-color: var(--color-admin-background);
+  color: var(--color-admin-ink);
+  font-family: var(--font-jost);
+  line-height: 1.5;
 }
 
 /* The soft pink wash behind the customer pages and the landing hero. */

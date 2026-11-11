@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ADMIN_PANEL_COPY, ADMIN_SIGN_IN_COPY, SECOND_FACTOR_POLICY } from "./copy.ts";
+import {
+  ADMIN_PANEL_COPY,
+  ADMIN_SHELL_COPY,
+  ADMIN_SIGN_IN_COPY,
+  SECOND_FACTOR_POLICY,
+} from "./copy.ts";
 import { ENROLLMENT_COPY } from "./enrollment-copy.ts";
 
 // Administrator product copy (M2 T8d; S20, S22, S36, L42): Spanish, addressed with "tú" like the
@@ -27,7 +32,7 @@ function numbersBefore(unit: string): Set<number> {
 
 function strings(): string[] {
   const values: string[] = [];
-  for (const copy of [ADMIN_SIGN_IN_COPY, ADMIN_PANEL_COPY, ENROLLMENT_COPY]) {
+  for (const copy of [ADMIN_SIGN_IN_COPY, ADMIN_PANEL_COPY, ADMIN_SHELL_COPY, ENROLLMENT_COPY]) {
     for (const value of Object.values(copy)) {
       values.push(typeof value === "function" ? value(BACKUP_CODE_COUNT) : value);
     }

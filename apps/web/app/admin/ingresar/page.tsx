@@ -5,7 +5,7 @@ import { connection } from "next/server";
 import { ADMIN_SIGN_IN_COPY } from "../../../lib/admin/copy.ts";
 import { loadAdminView, routeAdminPage } from "../../../lib/admin/session.ts";
 import { getAuthSession } from "../../../lib/server/session-api.ts";
-import { CustomerShell } from "../../_components/customer-shell.tsx";
+import { AdminCenteredShell } from "../_components/admin-centered-shell.tsx";
 import { AdminSignInForm } from "./admin-sign-in-form.tsx";
 
 export const metadata: Metadata = {
@@ -28,12 +28,8 @@ export default async function AdminSignInPage() {
   }
 
   return (
-    <CustomerShell
-      eyebrow={ADMIN_SIGN_IN_COPY.eyebrow}
-      heading={ADMIN_SIGN_IN_COPY.heading}
-      intro={ADMIN_SIGN_IN_COPY.intro}
-    >
+    <AdminCenteredShell heading={ADMIN_SIGN_IN_COPY.heading} intro={ADMIN_SIGN_IN_COPY.intro}>
       <AdminSignInForm />
-    </CustomerShell>
+    </AdminCenteredShell>
   );
 }
