@@ -37,8 +37,8 @@ catalog read requires a signed-in customer (not `@Public()`).
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | Additive migration: `InvitationStatus` enum and `Invitation` table (owner, pinned version, package, unique lower-case slug with CHECK, status, JSONB `content`, timestamps, `Restrict` FKs, owner index); database tests | S2, S3, S5, S10 | worker (high risk: own commit) | |
-| T2 | Domain: slug generator and reserved words, lifecycle (DRAFT → ARCHIVED, edits only in DRAFT), partial content validation against the pinned version schema, renderer `requiredFeatureKeys` and the package-fit rule; unit tests | S2, S5, S6, S7 | worker | |
+| T1 | Additive migration: `InvitationStatus` enum and `Invitation` table (owner, pinned version, package, unique lower-case slug with CHECK, status, JSONB `content`, timestamps, `Restrict` FKs, owner index); database tests | S2, S3, S5, S10 | worker (high risk: own commit) | `2582059` |
+| T2 | Domain: slug generator and reserved words, lifecycle (DRAFT → ARCHIVED, edits only in DRAFT), partial content validation against the pinned version schema, renderer `requiredFeatureKeys` and the package-fit rule; unit tests | S2, S5, S6, S7 | worker | `45b3f9d` |
 | T3 | Application and Prisma adapter: create draft (published version only, package fit, slug retry on unique violation), list own, get own, update content, archive; database tests | S1, S3, S6, S7, S9 | worker | |
 | T4 | API presentation: `/invitations` routes with `@SessionUserId()`, DTOs, 400/401/404 tests; creator catalog read (published templates with their published version, active packages with price and feature keys) | S3, S8, S9 | worker | |
 | T5 | Web: «Mis invitaciones» under `/cuenta`, create (template + package), edit the draft from the pinned schema, archive; server actions | S1, S6, S7 | worker | |
@@ -50,3 +50,9 @@ catalog read requires a signed-in customer (not `@Public()`).
 - L2 (2026-11-11, owner answers): slug — "Generada, no editable en M4 (Recomendado)"; who creates — "Cualquier
   cliente activo, gratis (Recomendado)"; draft — "Parcial y archivable (Recomendado)".
 - L3 (2026-11-11): assumptions A1–A5 adopted from the planning map defaults; open for the owner to overturn.
+- L4 (2026-11-11): T1 independently verified (verify task `mwcnm58d-3-sm9t`): additive (`prisma migrate diff` shows
+  only the new enum, table, indexes, and FKs), every CHECK and the trigger probed, down path proven (drop trigger,
+  function, table, enum). Advisories applied: the 60/61-character slug boundary and the content-update check are
+  now tested, and `docs/database/model.md` no longer claims `id`/`createdAt` are blocked by the database.
+- L5 (2026-11-11): delivery strategy — one PR per slice, like Milestone 3. Slice 1 = T1 + T2 (`45b3f9d`,
+  `2582059`); slice 2 = T3 + T4 (API); slice 3 = T5 + T6 (web and docs). Push and PRs stay the owner's decision.
