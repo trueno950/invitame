@@ -73,3 +73,9 @@ metadata (title from `celebrantName`, description from `message`), no generated 
   locally (the journey needs the disposable e2e database, Mailpit, and a seeded published template). T6 docs: overview
   public flow is now `/i/<slug>` and current, `CONTEXT.md` Invitation and Publication, `docs/database/model.md`,
   ROADMAP marks Milestone 5 implemented. Slice 2 = T4 + T5 + T6.
+- L7 (2026-11-12): PR #60 CI failed twice in `e2e/customer-session.spec.ts:247` (the replayed old session cookie
+  disappeared) and once in the M3 `prisma-template.repository.db-spec.ts:399` concurrency test (passed on rerun; it
+  had failed on master before, run 43105624103). Root cause of the browser failure: the customer header's links to
+  `/cuenta` and `/cuenta/invitaciones` (M4) are prefetched in production from `/ingresar`, and the prefetch's
+  session read through `proxy.ts` clears a dead cookie; it had also failed on master after PR #58 (run 43151477952).
+  Fixed by `prefetch={false}` on both links. The catalog concurrency test stays a follow-up.
