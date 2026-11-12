@@ -1,5 +1,4 @@
 import { Module, type Provider } from "@nestjs/common";
-
 import { PrismaService } from "../database/prisma.service";
 import {
   PACKAGE_REPOSITORY,
@@ -13,6 +12,7 @@ import {
   SetPackagePriceUseCase,
   UpdatePackageUseCase,
 } from "./application/packages/package.use-cases";
+import { CATALOG_PUBLIC_READER } from "./application/public/catalog-public-reader";
 import {
   CATEGORY_REPOSITORY,
   type CatalogEntryRepository,
@@ -40,12 +40,14 @@ import {
   RetireTemplateVersionUseCase,
   UpdateTemplateUseCase,
 } from "./application/templates/template.use-cases";
+import { PrismaCatalogPublicReader } from "./infrastructure/prisma-catalog-public-reader";
 import { PrismaPackageRepository } from "./infrastructure/prisma-package.repository";
 import {
   PrismaCategoryRepository,
   PrismaFeatureRepository,
 } from "./infrastructure/prisma-taxonomy.repository";
 import { PrismaTemplateRepository } from "./infrastructure/prisma-template.repository";
+import { CreatorCatalogController } from "./presentation/creator/creator-catalog.controller";
 import { PackagesController } from "./presentation/packages/packages.controller";
 import { CategoriesController } from "./presentation/taxonomy/categories.controller";
 import { FeaturesController } from "./presentation/taxonomy/features.controller";
@@ -108,7 +110,10 @@ export const CATALOG_TEMPLATE_USE_CASES: Provider[] = [
 
 /**
  * Catalog administration: categories, features, packages, templates with their versions, and the renderer
- * list at `/admin/catalog/*`, all `@AdminOnly()`.
+ * list at `/admin/catalog/*`, all `@AdminOnly()`, plus the creator catalog at `/catalog/templates` and
+ * `/catalog/packages`, readable by any signed-in customer (M4 T4; S8, A5). It also exports
+ * `CATALOG_PUBLIC_READER`, the read-only contract other modules consume (M4 T3): the catalog keeps every query,
+ * and a consuming module never imports a catalog repository or queries a catalog table.
  */
 @Module({
   controllers: [
@@ -117,7 +122,9 @@ export const CATALOG_TEMPLATE_USE_CASES: Provider[] = [
     PackagesController,
     TemplatesController,
     RenderersController,
+    CreatorCatalogController,
   ],
+  exports: [CATALOG_PUBLIC_READER],
   providers: [
     ...CATALOG_TAXONOMY_USE_CASES,
     ...CATALOG_PACKAGE_USE_CASES,
@@ -140,6 +147,11 @@ export const CATALOG_TEMPLATE_USE_CASES: Provider[] = [
     {
       provide: FEATURE_REPOSITORY,
       useFactory: (prisma: PrismaService) => new PrismaFeatureRepository(prisma),
+      inject: [PrismaService],
+    },
+    {
+      provide: CATALOG_PUBLIC_READER,
+      useFactory: (prisma: PrismaService) => new PrismaCatalogPublicReader(prisma),
       inject: [PrismaService],
     },
   ],
