@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -9,28 +11,38 @@ import {
   InvalidInvitationContentError,
   InvitationPackageDoesNotFitError,
   InvitationPackageNotFoundError,
+  InvitationPaymentRequiredError,
   InvitationSlugUnavailableError,
   InvitationTemplateVersionNotPublishedError,
 } from "../application/invitation.application.errors";
+import type { PublicInvitation } from "../application/invitation-public";
 import type { InvitationSummary, OwnedInvitation } from "../application/invitation.use-cases";
 import type { JsonObject } from "../domain/invitation-content";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import {
   InvitationAlreadyArchivedError,
+  InvitationAlreadyPublishedError,
   InvitationNotEditableError,
+  InvitationNotPublishableError,
+  InvitationNotPublishedError,
 } from "../domain/invitation.errors";
 
-// The stable REST shapes of an invitation (M4 T4; S1, S7, S9). `ownerId` is deliberately absent: it comes from
-// the session and never belongs in a response (S9). An id that names nothing, or names another customer's
-// invitation, answers the same 404 (A4), so a response never confirms that a foreign row exists.
+// The stable REST shapes of an invitation (M4 T4 and M5 T4; S1, S3, S7, S9, A3, A4, A7). `ownerId` is
+// deliberately absent: it comes from the session and never belongs in a response (S9). An id that names nothing,
+// or names another customer's invitation, answers the same 404 (A4), so a response never confirms that a foreign
+// row exists. `expiresAt` is absent too: Milestone 5 never writes an expiry and no client may rely on one (S8).
 
-/** The stable REST shape of one row of "Mis invitaciones". */
+/**
+ * The stable REST shape of one row of "Mis invitaciones". `publishedAt` is the publication instant, null while
+ * the invitation is a draft; it is what the owner sees instead of the database's unused `expiresAt` (S7, S8).
+ */
 export interface InvitationSummaryResponse {
   id: string;
   templateVersionId: string;
   packageId: string;
   slug: string;
   status: InvitationStatus;
+  publishedAt: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -42,6 +54,19 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
   missingRequiredFields: string[];
 }
 
+/**
+ * What a guest's page renders (M5 T4; S2, S3, A7): the renderer identity, its configuration, the content keys
+ * the pinned schema declares, the slug, and the publication instant. Nothing else is here, so no owner, package,
+ * price, status, or internal id can leak by accident. T5 builds the public page from this shape alone.
+ */
+export interface PublicInvitationResponse {
+  slug: string;
+  componentKey: string;
+  configuration: unknown;
+  content: JsonObject;
+  publishedAt: string | null;
+}
+
 export function toInvitationSummaryResponse(stored: InvitationSummary): InvitationSummaryResponse {
   return {
     id: stored.id,
@@ -49,6 +74,7 @@ export function toInvitationSummaryResponse(stored: InvitationSummary): Invitati
     packageId: stored.packageId,
     slug: stored.slug,
     status: stored.status,
+    publishedAt: stored.publishedAt?.toISOString() ?? null,
     archivedAt: stored.archivedAt?.toISOString() ?? null,
     createdAt: stored.createdAt.toISOString(),
     updatedAt: stored.updatedAt.toISOString(),
@@ -61,6 +87,26 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
     content: stored.content,
     missingRequiredFields: [...stored.missingRequiredFields],
   };
+}
+
+/** The guest's page of a published invitation, mapped from the application projection (A7). */
+export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvitationResponse {
+  return {
+    slug: stored.slug,
+    componentKey: stored.componentKey,
+    configuration: stored.configuration,
+    content: stored.content,
+    publishedAt: stored.publishedAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * The guest-facing 404 (A3): one answer for a slug that is malformed, unknown, a draft, archived, expired, or
+ * published with a renderer this deployment cannot render. Nothing distinguishes those cases to a guest, so a
+ * 404 never confirms that an invitation exists but is not visible.
+ */
+export function publicInvitationNotFound(): never {
+  throw new NotFoundException({ code: "PUBLIC_INVITATION_NOT_FOUND" });
 }
 
 /**
@@ -91,6 +137,14 @@ export function orInvitationSummaryNotFound(
  * - content the pinned schema refuses is 400 with its issues (S3, S7);
  * - an archived invitation is 409 with `INVITATION_NOT_EDITABLE`, or `INVITATION_ALREADY_ARCHIVED` for a
  *   repeated archive (A3, S7);
+ * - a publication the lifecycle refuses is 409 with `INVITATION_ALREADY_PUBLISHED` or `INVITATION_NOT_PUBLISHED`,
+ *   so each wrong status has its own stable code and a repeated publish never looks like a change (S7, A2);
+ * - an invitation that is not ready to publish is 409 `INVITATION_NOT_PUBLISHABLE` with the readiness issues:
+ *   publishing a row whose content, package, or pinned version is not ready is a state conflict, not a
+ *   malformed request, and this API uses no 422 (A1);
+ * - a publication the payment gate refuses is 402 `INVITATION_PAYMENT_REQUIRED` with the gate's `reason`: the
+ *   invitation is ready and only a payment is missing, which is what 402 Payment Required states. The `reason`
+ *   is the machine-readable code the gate answered, never a provider payload (S6);
  * - no storable slug is 503 `INVITATION_SLUG_UNAVAILABLE`: the request is right, the server could not draw one.
  */
 export function mapInvitationError(error: unknown): never {
@@ -114,6 +168,24 @@ export function mapInvitationError(error: unknown): never {
   }
   if (error instanceof InvitationAlreadyArchivedError) {
     throw new ConflictException({ code: "INVITATION_ALREADY_ARCHIVED" });
+  }
+  if (error instanceof InvitationAlreadyPublishedError) {
+    throw new ConflictException({ code: "INVITATION_ALREADY_PUBLISHED" });
+  }
+  if (error instanceof InvitationNotPublishedError) {
+    throw new ConflictException({ code: "INVITATION_NOT_PUBLISHED" });
+  }
+  if (error instanceof InvitationNotPublishableError) {
+    throw new ConflictException({
+      code: "INVITATION_NOT_PUBLISHABLE",
+      issues: [...error.issues],
+    });
+  }
+  if (error instanceof InvitationPaymentRequiredError) {
+    throw new HttpException(
+      { code: "INVITATION_PAYMENT_REQUIRED", reason: error.reason },
+      HttpStatus.PAYMENT_REQUIRED,
+    );
   }
   if (error instanceof InvitationSlugUnavailableError) {
     throw new ServiceUnavailableException({ code: "INVITATION_SLUG_UNAVAILABLE" });

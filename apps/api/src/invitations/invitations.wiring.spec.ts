@@ -30,6 +30,7 @@ import { NoPaymentRequiredGate } from "./infrastructure/no-payment-required";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { InvitationsModule } from "./invitations.module";
 import { InvitationsController } from "./presentation/invitations.controller";
+import { PublicInvitationsController } from "./presentation/public-invitations.controller";
 
 // InvitationsModule composition (M4 T3 and T4 and M5 T3; S1, S2, S3, S6, S7, S9): every use case is provided
 // and bound to the Prisma repository, to the catalog's exported public reader, and to the payment gate, the
@@ -96,10 +97,10 @@ describe("InvitationsModule wiring", () => {
     }
   });
 
-  it("registers the invitations controller", () => {
+  it("registers the owner and the public invitation controllers", () => {
     const controllers: unknown = Reflect.getMetadata("controllers", InvitationsModule) ?? [];
 
-    assert.deepEqual(controllers, [InvitationsController]);
+    assert.deepEqual(controllers, [InvitationsController, PublicInvitationsController]);
   });
 });
 
@@ -138,6 +139,8 @@ describe("AppModule invitation wiring", () => {
       ["GET", `/invitations/${id}`],
       ["PUT", `/invitations/${id}/content`, { content: {} }],
       ["POST", `/invitations/${id}/archive`],
+      ["POST", `/invitations/${id}/publish`],
+      ["POST", `/invitations/${id}/unpublish`],
     ];
 
     for (const [method, path, body] of routes) {
@@ -153,5 +156,16 @@ describe("AppModule invitation wiring", () => {
 
     // A route nobody registered still answers 404, so the assertions above are not a catch-all.
     assert.equal((await fetch(`${baseUrl}/invitations-unknown`)).status, 404);
+  });
+
+  it("lets an anonymous request reach the public invitation route", async () => {
+    // The guard never reads a session here: a request without one is not refused. The StubDatabaseModule
+    // cannot answer the read, so the status is whatever the wired adapter reports; what this asserts is that
+    // the route exists and is public, not what a real database would answer.
+    const response = await fetch(`${baseUrl}/public/invitations/invitacion-abcdef`);
+
+    assert.notEqual(response.status, 401, "the public route is not behind the session guard");
+    assert.notEqual(response.status, 403);
+    assert.notEqual(response.status, 404, "the route is registered");
   });
 });
