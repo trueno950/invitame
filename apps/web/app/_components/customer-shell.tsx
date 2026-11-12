@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { ACCOUNT_COPY } from "../../lib/customer/copy.ts";
 import { Ornament } from "./ornament.tsx";
-import { focusRing } from "./ui.ts";
+import { focusRing, textButton } from "./ui.ts";
 import { Wordmark } from "./wordmark.tsx";
 
 interface CustomerShellProperties {
@@ -19,7 +20,8 @@ interface CustomerShellProperties {
  * The frame of the customer pages (M2 T8c, restyled in T8t; S35): the pink paper wash with
  * fine-line flowers in two corners, a header with the wordmark, and one framed white card with the
  * eyebrow, a gold flourish, the heading, and the intro above the page's panel. Centered on every
- * screen size, as in the approved sign-in concept.
+ * screen size, as in the approved sign-in concept. The header also names the two pages a signed-in
+ * customer owns (M4 T5), so `/cuenta` reaches "Mis invitaciones" without a hidden entry.
  */
 export function CustomerShell({
   eyebrow,
@@ -42,11 +44,19 @@ export function CustomerShell({
       <header className="mx-auto max-w-6xl">
         <nav
           aria-label="Principal"
-          className="flex items-center rounded-full bg-surface/80 px-6 py-2.5 shadow-soft ring-1 ring-gold/35 backdrop-blur-md sm:px-7"
+          className="flex items-center gap-4 rounded-full bg-surface/80 px-6 py-2.5 shadow-soft ring-1 ring-gold/35 backdrop-blur-md sm:px-7"
         >
           <Link className={`rounded-lg ${focusRing}`} href="/">
             <Wordmark />
           </Link>
+          <div className="ml-auto flex items-center gap-4">
+            <Link className={textButton} href="/cuenta">
+              {ACCOUNT_COPY.accountLink}
+            </Link>
+            <Link className={textButton} href="/cuenta/invitaciones">
+              {ACCOUNT_COPY.invitationsLink}
+            </Link>
+          </div>
         </nav>
       </header>
 
