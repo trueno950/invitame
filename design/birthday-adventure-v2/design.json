@@ -3,8 +3,26 @@
   "brief": "Improve the children's birthday guest invitation (birthday-adventure-01) for phones. Same eight content fields and the same five-color palettes (sunset, ocean, forest), so it can ship as a new renderer without changing the schema. Original artwork only.",
   "feature": "odd/tasks/catalog-designs.md",
   "artboards": [
-    { "file": "01-mapa-aventura.html", "title": "Mapa de aventura", "tradeoff": "Keeps the adventure name and gives the details a playful route; more ornaments to build and maintain", "width": 390, "height": 1640 },
-    { "file": "02-cartel-fiesta.html", "title": "Cartel de fiesta", "tradeoff": "Strongest first impression and a ticket that groups the details; the large accent band is loud and heavier to render", "width": 390, "height": 1260 },
-    { "file": "03-cuento-ilustrado.html", "title": "Cuento ilustrado", "tradeoff": "Calm, readable storybook that also suits parents; less party energy and a longer scroll", "width": 390, "height": 1340 }
+    {
+      "file": "01-mapa-aventura.html",
+      "title": "Mapa de aventura",
+      "tradeoff": "Keeps the adventure name and gives the details a playful route; more ornaments to build and maintain",
+      "width": 390,
+      "height": 1640
+    },
+    {
+      "file": "02-cartel-fiesta.html",
+      "title": "Cartel de fiesta",
+      "tradeoff": "Strongest first impression and a ticket that groups the details; the large accent band is loud and heavier to render",
+      "width": 390,
+      "height": 1260
+    },
+    {
+      "file": "03-cuento-ilustrado.html",
+      "title": "Cuento ilustrado",
+      "tradeoff": "Calm, readable storybook that also suits parents; less party energy and a longer scroll",
+      "width": 390,
+      "height": 1340
+    }
   ]
 }
