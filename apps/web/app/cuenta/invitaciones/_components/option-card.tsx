@@ -26,9 +26,9 @@ export function OptionCard({
   defaultChecked,
 }: OptionCardProperties) {
   return (
-    <label className="flex cursor-pointer flex-col gap-1.5 rounded-panel bg-surface p-4 text-left ring-[1.5px] ring-field-border transition-colors duration-150 ease-out-soft hover:bg-rose-50 focus-within:outline-2 focus-within:outline-offset-3 focus-within:outline-primary has-[:checked]:bg-rose-50 has-[:checked]:ring-2 has-[:checked]:ring-primary">
+    <label className="group flex cursor-pointer flex-col gap-1.5 rounded-panel bg-surface p-4 text-left ring-[1.5px] ring-field-border transition-colors duration-150 ease-out-soft hover:bg-rose-50 focus-within:outline-2 focus-within:outline-offset-3 focus-within:outline-primary has-[:checked]:bg-rose-50 has-[:checked]:ring-2 has-[:checked]:ring-primary">
       <input
-        className="peer sr-only"
+        className="sr-only"
         defaultChecked={defaultChecked}
         name={name}
         type="radio"
@@ -36,7 +36,7 @@ export function OptionCard({
       />
       <span className="flex items-start justify-between gap-2">
         <span className="font-medium text-ink">{title}</span>
-        <span className="hidden shrink-0 rounded-full bg-surface px-2.5 py-0.5 text-xs font-medium uppercase tracking-[0.1em] text-primary ring-1 ring-primary/40 peer-checked:inline">
+        <span className="hidden shrink-0 rounded-full bg-surface px-2.5 py-0.5 text-xs font-medium uppercase tracking-[0.1em] text-primary ring-1 ring-primary/40 group-has-[:checked]:inline">
           {INVITATION_COPY.chosen}
         </span>
       </span>
