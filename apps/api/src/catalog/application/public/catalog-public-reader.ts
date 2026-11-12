@@ -66,6 +66,12 @@ export interface CreatorTemplateSummary {
     version: number;
     componentKey: string;
     schema: unknown;
+    /**
+     * The version's stored configuration snapshot, as published: the chooser previews the template with it
+     * (S9), and the web reads a theme from here rather than from a catalog name. The catalog answers it as
+     * stored; naming an unknown theme or key stays the web renderer's own refusal, never this read's.
+     */
+    configuration: unknown;
   };
 }
 

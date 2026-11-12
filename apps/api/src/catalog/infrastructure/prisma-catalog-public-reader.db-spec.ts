@@ -187,11 +187,13 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
           {
             status: "PUBLISHED",
             version: 2,
+            componentKey: "birthday-map-01",
             schema: {
               type: "object",
               required: ["title"],
               properties: { title: { type: "string" } },
             },
+            configuration: { componentKey: "birthday-map-01", theme: "dinosaurs" },
           },
         ],
       });
@@ -229,12 +231,14 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
         publishedVersion: {
           id: published.versions[1]?.id,
           version: 2,
-          componentKey: "birthday-adventure-01",
+          componentKey: "birthday-map-01",
           schema: {
             type: "object",
             required: ["title"],
             properties: { title: { type: "string" } },
           },
+          // The stored snapshot, as the chooser previews it (S9).
+          configuration: { componentKey: "birthday-map-01", theme: "dinosaurs" },
         },
       });
       assert.equal(listed[1]?.id, second.template.id);

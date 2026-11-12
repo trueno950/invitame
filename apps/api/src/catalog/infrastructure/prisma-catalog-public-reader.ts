@@ -43,7 +43,8 @@ const PACKAGE_ENTITLEMENTS_SELECT = {
   },
 } satisfies Prisma.PackageSelect;
 
-// The creator chooser (S8): the taxonomy name and the version a draft can be pinned to, and nothing else.
+// The creator chooser (S8): the taxonomy name and the version a draft can be pinned to, and nothing else. The
+// version's own configuration travels with it so the chooser can preview the template as published (S9).
 const CREATOR_TEMPLATE_SELECT = {
   id: true,
   key: true,
@@ -54,7 +55,7 @@ const CREATOR_TEMPLATE_SELECT = {
     where: { status: "PUBLISHED" },
     orderBy: { version: "desc" },
     take: 1,
-    select: { id: true, version: true, componentKey: true, schema: true },
+    select: { id: true, version: true, componentKey: true, schema: true, configuration: true },
   },
 } satisfies Prisma.TemplateSelect;
 
@@ -130,6 +131,7 @@ function toCreatorTemplate(row: CreatorTemplateRow): CreatorTemplateSummary | nu
       version: published.version,
       componentKey: published.componentKey,
       schema: published.schema,
+      configuration: published.configuration,
     },
   };
 }

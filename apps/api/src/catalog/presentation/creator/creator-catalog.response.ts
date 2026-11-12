@@ -19,6 +19,8 @@ export interface CreatorTemplateResponse {
     version: number;
     componentKey: string;
     schema: unknown;
+    /** The stored configuration snapshot, so the chooser previews the template as published (S9). */
+    configuration: unknown;
   };
 }
 
@@ -44,6 +46,7 @@ export function toCreatorTemplateResponse(stored: CreatorTemplateSummary): Creat
       version: stored.publishedVersion.version,
       componentKey: stored.publishedVersion.componentKey,
       schema: stored.publishedVersion.schema,
+      configuration: stored.publishedVersion.configuration,
     },
   };
 }
