@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import { after, before, describe, it } from "node:test";
+import { after, before, describe, it, mock } from "node:test";
 
-import { type INestApplication, Module } from "@nestjs/common";
+import { type INestApplication, Logger, Module } from "@nestjs/common";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 
@@ -31,24 +31,31 @@ import {
   type InvitationRepository,
   type NewInvitation,
 } from "../application/invitation.repository";
-import { INVITATION_PAYMENT_GATE } from "../application/invitation-payment-gate";
+import {
+  INVITATION_PAYMENT_GATE,
+  type InvitationPaymentDecision,
+  type InvitationPaymentGate,
+} from "../application/invitation-payment-gate";
 import type { JsonObject } from "../domain/invitation-content";
+import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import {
   InvitationAlreadyArchivedError,
   InvitationAlreadyPublishedError,
   InvitationNotEditableError,
   InvitationNotPublishedError,
 } from "../domain/invitation.errors";
-import { NoPaymentRequiredGate } from "../infrastructure/no-payment-required";
 import { INVITATION_USE_CASES } from "../invitations.module";
 import { InvitationsController } from "./invitations.controller";
+import { PublicInvitationsController } from "./public-invitations.controller";
 
-// `/invitations` (M4 T4; S1, S3, S7, S9, A3, A4) through the shared createApp boundary, the project-owned guard,
-// and Better Auth on the in-memory adapter. The invitation port and the catalog contract are in-memory fakes, so
-// the suite needs no network and no database; their Prisma adapters are proved in the `*.db-spec.ts` suites, and
-// the use cases themselves in `invitation.use-cases.spec.ts`. What this suite owns is the HTTP contract: the
-// session is the only source of the owner (S9), no response carries `ownerId`, an id that is not a UUID is refused
-// before it reaches a port, and every application or domain error maps to its documented status and body.
+// `/invitations` (M4 T4 and M5 T4; S1, S2, S3, S7, S9, A3, A4, A7) and the `@Public()` public read of a
+// published slug, through the shared createApp boundary, the project-owned guard, and Better Auth on the in-memory
+// adapter. The invitation port and the catalog contract are in-memory fakes, so the suite needs no network and no
+// database; their Prisma adapters are proved in the `*.db-spec.ts` suites, and the use cases themselves in
+// `invitation.use-cases.spec.ts`. What this suite owns is the HTTP contract: the session is the only source of the
+// owner (S9), no response carries `ownerId`, an id that is not a UUID is refused before it reaches a port, every
+// application or domain error maps to its documented status and body, and the public page carries only the
+// allow-listed projection with one identical 404 for every slug a guest must not render (A3, A7).
 
 const TRUSTED_ORIGIN = "http://localhost:3000";
 const AUTH_BASE_URL = "http://localhost:3000";
@@ -59,6 +66,10 @@ const PUBLISHED_VERSION_ID = "11111111-1111-4111-8111-111111111111";
 const ACTIVE_PACKAGE_ID = "22222222-2222-4222-8222-222222222222";
 const DRAFT_PACKAGE_ID = "33333333-3333-4333-8333-333333333333";
 const DRAFT_VERSION_ID = "44444444-4444-4444-8444-444444444444";
+/** PUBLISHED, but its `componentKey` is outside the API's renderer allow-list (A3). */
+const UNRENDERABLE_VERSION_ID = "55555555-5555-4555-8555-555555555555";
+const RENDERER = "birthday-adventure-01";
+const UNREGISTERED_RENDERER = "unregistered-renderer-99";
 const SCHEMA = {
   type: "object",
   required: ["title"],
@@ -191,17 +202,30 @@ class MemoryInvitationRepository implements InvitationRepository {
 /**
  * The catalog contract in memory: one PUBLISHED version, one DRAFT version, and one ACTIVE and one DRAFT
  * package. An unpublished version answers `findPublishedVersion` with null and `findVersionSchema` with its
- * schema, exactly as the catalog contract states (S3).
+ * schema, exactly as the catalog contract states (S3). One extra version is PUBLISHED but names a renderer the
+ * API's allow-list does not know, so the public read can be shown refusing it (A3).
  */
 class MemoryInvitationCatalog implements InvitationCatalog {
-  readonly versions = new Map<string, { published: boolean; schema: unknown }>([
+  readonly versions = new Map<
+    string,
+    { published: boolean; schema: unknown; componentKey?: string }
+  >([
     [PUBLISHED_VERSION_ID, { published: true, schema: SCHEMA }],
     [DRAFT_VERSION_ID, { published: false, schema: SCHEMA }],
+    [
+      UNRENDERABLE_VERSION_ID,
+      { published: true, schema: SCHEMA, componentKey: UNREGISTERED_RENDERER },
+    ],
   ]);
   readonly packages = new Map<string, CatalogPackageEntitlements>([
     [ACTIVE_PACKAGE_ID, { status: "ACTIVE", includedFeatureKeys: [] }],
     [DRAFT_PACKAGE_ID, { status: "DRAFT", includedFeatureKeys: [] }],
   ]);
+
+  /** Every version renders with the allow-listed component unless it says otherwise. */
+  private componentKeyOf(versionId: string): string {
+    return this.versions.get(versionId)?.componentKey ?? RENDERER;
+  }
 
   async findPublishedVersion(versionId: string): Promise<CatalogTemplateVersionSnapshot | null> {
     const stored = this.versions.get(versionId);
@@ -212,7 +236,7 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     return {
       id: versionId,
       templateId: randomUUID(),
-      componentKey: "birthday-adventure-01",
+      componentKey: this.componentKeyOf(versionId),
       schema: stored.schema,
       requiredFeatureKeys: [],
     };
@@ -229,17 +253,36 @@ class MemoryInvitationCatalog implements InvitationCatalog {
 
   async findVersionRenderData(versionId: string): Promise<CatalogVersionRenderData | null> {
     const stored = this.versions.get(versionId);
-    return stored
-      ? {
-          componentKey: "birthday-adventure-01",
-          configuration: { componentKey: "birthday-adventure-01" },
-          schema: stored.schema,
-        }
-      : null;
+    if (!stored) {
+      return null;
+    }
+    const componentKey = this.componentKeyOf(versionId);
+
+    return {
+      componentKey,
+      configuration: { componentKey },
+      schema: stored.schema,
+    };
   }
 
   isRendererRegistered(componentKey: string): boolean {
-    return componentKey === "birthday-adventure-01";
+    return componentKey === RENDERER;
+  }
+}
+
+/**
+ * The publication payment gate in memory (S6): it answers "no payment required" until a test asks it to
+ * refuse, so the 402 outcome can be observed even though Milestone 5 binds the always-free adapter.
+ */
+class MemoryPaymentGate implements InvitationPaymentGate {
+  refusalReason: string | null = null;
+  asked = 0;
+
+  async publicationPaymentRequired(): Promise<InvitationPaymentDecision> {
+    this.asked += 1;
+    return this.refusalReason === null
+      ? { required: false }
+      : { required: true, reason: this.refusalReason };
   }
 }
 
@@ -269,6 +312,7 @@ describe("invitations routes: /invitations", () => {
   });
   const repository = new MemoryInvitationRepository();
   const catalog = new MemoryInvitationCatalog();
+  const paymentGate = new MemoryPaymentGate();
   let app: INestApplication;
   let baseUrl: string;
   let userCounter = 0;
@@ -286,13 +330,13 @@ describe("invitations routes: /invitations", () => {
         AuthModule.forRoot({ auth, disableTrustedOriginsCors: true, disableGlobalAuthGuard: true }),
         AccessControlModule,
       ],
-      controllers: [InvitationsController],
+      controllers: [InvitationsController, PublicInvitationsController],
       providers: [
         ...INVITATION_USE_CASES,
         { provide: INVITATION_REPOSITORY, useValue: repository },
         { provide: INVITATION_CATALOG, useValue: catalog },
         // Publication is free in Milestone 5; the publish use case asks this gate (S6).
-        { provide: INVITATION_PAYMENT_GATE, useValue: new NoPaymentRequiredGate() },
+        { provide: INVITATION_PAYMENT_GATE, useValue: paymentGate },
       ],
     })
     class InvitationsTestModule {}
@@ -348,6 +392,7 @@ describe("invitations routes: /invitations", () => {
     "createdAt",
     "id",
     "packageId",
+    "publishedAt",
     "slug",
     "status",
     "templateVersionId",
@@ -362,6 +407,8 @@ describe("invitations routes: /invitations", () => {
       ["read", "GET", `${PATH}/${UNKNOWN_ID}`],
       ["replace content", "PUT", `${PATH}/${UNKNOWN_ID}/content`, { content: "not-an-object" }],
       ["archive", "POST", `${PATH}/${UNKNOWN_ID}/archive`],
+      ["publish", "POST", `${PATH}/${UNKNOWN_ID}/publish`],
+      ["unpublish", "POST", `${PATH}/${UNKNOWN_ID}/unpublish`],
     ];
 
     it("answers 401 without a valid session, before validating the body, and stores nothing", async () => {
@@ -589,6 +636,8 @@ describe("invitations routes: /invitations", () => {
         ["GET", `${PATH}/1`],
         ["PUT", `${PATH}/1/content`, { content: {} }],
         ["POST", `${PATH}/1/archive`],
+        ["POST", `${PATH}/1/publish`],
+        ["POST", `${PATH}/1/unpublish`],
       ];
 
       for (const [method, path, body] of probes) {
@@ -719,6 +768,393 @@ describe("invitations routes: /invitations", () => {
       assert.equal(response.status, 404);
       assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
       assert.equal(repository.rows.find((row) => row.id === draft.id)?.status, "DRAFT");
+    });
+  });
+
+  describe("POST /invitations/:id/publish", () => {
+    /** A draft that satisfies the pinned schema, so readiness passes and only the transition is observed. */
+    async function publishableDraft(cookie: string) {
+      const draft = await createDraft(cookie);
+      const filled = await send("PUT", `${PATH}/${draft.id}/content`, cookie, {
+        content: { title: "Cumpleaños de Ana" },
+      });
+      assert.equal(filled.status, 200);
+      return draft;
+    }
+
+    it("publishes a ready DRAFT and answers 200 with the owned invitation and its publishedAt", async () => {
+      const { userId, cookie } = await signedInCustomer();
+      const draft = await publishableDraft(cookie);
+      const asked = paymentGate.asked;
+
+      const response = await send("POST", `${PATH}/${draft.id}/publish`, cookie);
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), OWNED_KEYS);
+      assert.equal(body.ownerId, undefined);
+      assert.equal(body.expiresAt, undefined, "Milestone 5 never exposes an expiry (S8)");
+      assert.equal(body.status, "PUBLISHED");
+      assert.equal(new Date(String(body.publishedAt)).toISOString(), body.publishedAt);
+      assert.deepEqual(body.missingRequiredFields, []);
+      assert.equal(paymentGate.asked, asked + 1, "the payment gate is asked once (S6)");
+
+      const stored = repository.rows.find((row) => row.id === draft.id);
+      assert.ok(stored);
+      assert.equal(stored.ownerId, userId);
+      assert.equal(stored.status, "PUBLISHED");
+      assert.equal(stored.publishedAt?.toISOString(), body.publishedAt);
+    });
+
+    it("answers 409 INVITATION_NOT_PUBLISHABLE with its issues for an incomplete draft, and stores nothing", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const response = await send("POST", `${PATH}/${draft.id}/publish`, cookie);
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), {
+        code: "INVITATION_NOT_PUBLISHABLE",
+        issues: ["content.title is required to publish"],
+      });
+      const stored = repository.rows.find((row) => row.id === draft.id);
+      assert.equal(stored?.status, "DRAFT");
+      assert.equal(stored?.publishedAt, null);
+    });
+
+    it("answers 409 INVITATION_ALREADY_PUBLISHED for a repeated publish", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await publishableDraft(cookie);
+      const first = await send("POST", `${PATH}/${draft.id}/publish`, cookie);
+      assert.equal(first.status, 200);
+      const publishedAt = ((await first.json()) as Row).publishedAt;
+
+      const response = await send("POST", `${PATH}/${draft.id}/publish`, cookie);
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_ALREADY_PUBLISHED" });
+      assert.equal(
+        repository.rows.find((row) => row.id === draft.id)?.publishedAt?.toISOString(),
+        publishedAt,
+        "the first publishedAt is kept",
+      );
+    });
+
+    it("answers 409 INVITATION_ALREADY_ARCHIVED for an archived invitation, and keeps it archived", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await publishableDraft(cookie);
+      assert.equal((await send("POST", `${PATH}/${draft.id}/archive`, cookie)).status, 200);
+
+      const response = await send("POST", `${PATH}/${draft.id}/publish`, cookie);
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_ALREADY_ARCHIVED" });
+      const stored = repository.rows.find((row) => row.id === draft.id);
+      assert.equal(stored?.status, "ARCHIVED");
+      assert.equal(stored?.publishedAt, null);
+    });
+
+    it("answers 402 INVITATION_PAYMENT_REQUIRED with the gate's reason and stores nothing", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await publishableDraft(cookie);
+      paymentGate.refusalReason = "SUBSCRIPTION_REQUIRED";
+
+      try {
+        const response = await send("POST", `${PATH}/${draft.id}/publish`, cookie);
+
+        assert.equal(response.status, 402);
+        assert.deepEqual(await response.json(), {
+          code: "INVITATION_PAYMENT_REQUIRED",
+          reason: "SUBSCRIPTION_REQUIRED",
+        });
+        const stored = repository.rows.find((row) => row.id === draft.id);
+        assert.equal(stored?.status, "DRAFT");
+        assert.equal(stored?.publishedAt, null);
+      } finally {
+        paymentGate.refusalReason = null;
+      }
+    });
+
+    it("answers 404 INVITATION_NOT_FOUND for another customer's invitation and for an unknown id", async () => {
+      const owner = await signedInCustomer();
+      const other = await signedInCustomer();
+      const draft = await publishableDraft(owner.cookie);
+
+      for (const id of [draft.id, UNKNOWN_ID]) {
+        const response = await send("POST", `${PATH}/${id}/publish`, other.cookie);
+
+        assert.equal(response.status, 404, id);
+        assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+      }
+      const stored = repository.rows.find((row) => row.id === draft.id);
+      assert.equal(stored?.status, "DRAFT");
+      assert.equal(stored?.publishedAt, null);
+    });
+  });
+
+  describe("POST /invitations/:id/unpublish", () => {
+    /** Publishes through the API, so the unpublish test starts from a row the transitions really produced. */
+    async function publishedDraft(cookie: string) {
+      const draft = await createDraft(cookie);
+      await send("PUT", `${PATH}/${draft.id}/content`, cookie, { content: { title: "Ana" } });
+      assert.equal((await send("POST", `${PATH}/${draft.id}/publish`, cookie)).status, 200);
+      return draft;
+    }
+
+    it("returns a PUBLISHED invitation to DRAFT and answers 200 with the summary", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await publishedDraft(cookie);
+
+      const response = await send("POST", `${PATH}/${draft.id}/unpublish`, cookie);
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), SUMMARY_KEYS);
+      assert.equal(body.id, draft.id);
+      assert.equal(body.status, "DRAFT");
+      assert.equal(body.publishedAt, null);
+      assert.equal(body.archivedAt, null);
+      assert.equal(body.ownerId, undefined);
+      assert.equal(body.expiresAt, undefined);
+      const stored = repository.rows.find((row) => row.id === draft.id);
+      assert.equal(stored?.status, "DRAFT");
+      assert.equal(stored?.publishedAt, null);
+    });
+
+    it("answers 409 INVITATION_NOT_PUBLISHED for a draft that was never published, and changes nothing", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const response = await send("POST", `${PATH}/${draft.id}/unpublish`, cookie);
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_NOT_PUBLISHED" });
+      assert.equal(repository.rows.find((row) => row.id === draft.id)?.status, "DRAFT");
+    });
+
+    it("answers 409 INVITATION_ALREADY_ARCHIVED for an archived invitation, and keeps it archived", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await publishedDraft(cookie);
+      assert.equal((await send("POST", `${PATH}/${draft.id}/archive`, cookie)).status, 200);
+
+      const response = await send("POST", `${PATH}/${draft.id}/unpublish`, cookie);
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_ALREADY_ARCHIVED" });
+      const stored = repository.rows.find((row) => row.id === draft.id);
+      assert.equal(stored?.status, "ARCHIVED");
+      assert.equal(stored?.publishedAt, null);
+    });
+
+    it("answers 404 INVITATION_NOT_FOUND for another customer's invitation and for an unknown id", async () => {
+      const owner = await signedInCustomer();
+      const other = await signedInCustomer();
+      const draft = await publishedDraft(owner.cookie);
+      const publishedAt = repository.rows.find((row) => row.id === draft.id)?.publishedAt;
+
+      for (const id of [draft.id, UNKNOWN_ID]) {
+        const response = await send("POST", `${PATH}/${id}/unpublish`, other.cookie);
+
+        assert.equal(response.status, 404, id);
+        assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+      }
+      const stored = repository.rows.find((row) => row.id === draft.id);
+      assert.equal(stored?.status, "PUBLISHED");
+      assert.equal(stored?.publishedAt, publishedAt);
+    });
+  });
+
+  describe("GET /public/invitations/:slug", () => {
+    const PUBLIC_PATH = "/public/invitations";
+    /** Every key a guest receives (A7): nothing else may appear. */
+    const PUBLIC_KEYS = ["componentKey", "configuration", "content", "publishedAt", "slug"];
+    /** Everything a public body must never carry: owner, package, price, status, ids, and the expiry (A7, S8). */
+    const PRIVATE_KEYS = [
+      "archivedAt",
+      "createdAt",
+      "expiresAt",
+      "id",
+      "missingRequiredFields",
+      "ownerId",
+      "packageId",
+      "status",
+      "templateVersionId",
+      "updatedAt",
+    ];
+
+    /**
+     * A stored row inserted directly, because the public read is the only thing under test here: the owner
+     * routes already write these states. `content` keeps one undeclared key (`subtitle`), so the projection
+     * that drops it is observed (A7).
+     */
+    function seed(overrides: {
+      slug: string;
+      status: InvitationStatus;
+      templateVersionId?: string;
+      expiresAt?: Date | null;
+    }): InvitationRecord {
+      const at = new Date(Date.UTC(2026, 9, 12, 9, 0, 0));
+      const row: InvitationRecord = {
+        id: randomUUID(),
+        ownerId: randomUUID(),
+        templateVersionId: overrides.templateVersionId ?? PUBLISHED_VERSION_ID,
+        packageId: ACTIVE_PACKAGE_ID,
+        slug: overrides.slug,
+        status: overrides.status,
+        content: { title: "Cumpleaños de Ana", subtitle: "una nota que el esquema no declara" },
+        archivedAt: overrides.status === "ARCHIVED" ? at : null,
+        publishedAt: overrides.status === "PUBLISHED" ? at : null,
+        expiresAt: overrides.expiresAt ?? null,
+        createdAt: at,
+        updatedAt: at,
+      };
+      repository.rows.push(row);
+      return row;
+    }
+
+    it("answers exactly the public projection, without any session", async () => {
+      const row = seed({ slug: "invitacion-k7m2qx", status: "PUBLISHED" });
+
+      const response = await send("GET", `${PUBLIC_PATH}/${row.slug}`);
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), PUBLIC_KEYS);
+      assert.equal(body.slug, row.slug);
+      assert.equal(body.componentKey, RENDERER);
+      assert.deepEqual(body.configuration, { componentKey: RENDERER });
+      // Only the keys the pinned schema declares; the stored `subtitle` never reaches a guest (A7).
+      assert.deepEqual(body.content, { title: "Cumpleaños de Ana" });
+      assert.equal(new Date(String(body.publishedAt)).toISOString(), body.publishedAt);
+      for (const key of PRIVATE_KEYS) {
+        assert.equal(body[key], undefined, key);
+      }
+      assert.equal(
+        JSON.stringify(body).includes(row.ownerId),
+        false,
+        "the owner id never reaches a guest",
+      );
+      assert.equal(response.headers.get("cache-control"), "no-store");
+    });
+
+    it("serves the same page with a valid session and with a forged cookie, never reading one", async () => {
+      const { cookie } = await signedInCustomer();
+      const row = seed({ slug: "invitacion-cookie", status: "PUBLISHED" });
+
+      for (const header of [
+        undefined,
+        `${SESSION_COOKIE}=forged.value`,
+        `${cookie.slice(0, -4)}AAAA`,
+        cookie,
+      ]) {
+        const response = await send("GET", `${PUBLIC_PATH}/${row.slug}`, header);
+
+        assert.equal(response.status, 200, String(header));
+        assert.deepEqual(Object.keys((await response.json()) as Row).sort(), PUBLIC_KEYS);
+      }
+    });
+
+    it("answers one identical uncacheable 404 for a malformed, unknown, draft, archived, expired, or unrenderable slug (A3)", async () => {
+      const cases: Array<[string, string]> = [
+        ["malformed", "Invitacion-K7M2QX"],
+        ["unknown", "invitacion-never0"],
+        ["draft", seed({ slug: "invitacion-draft0", status: "DRAFT" }).slug],
+        ["archived", seed({ slug: "invitacion-archiv", status: "ARCHIVED" }).slug],
+        [
+          "expired",
+          seed({
+            slug: "invitacion-expird",
+            status: "PUBLISHED",
+            expiresAt: new Date(Date.now() - 1_000),
+          }).slug,
+        ],
+        [
+          "unregistered renderer",
+          seed({
+            slug: "invitacion-norend",
+            status: "PUBLISHED",
+            templateVersionId: UNRENDERABLE_VERSION_ID,
+          }).slug,
+        ],
+        [
+          "pinned version missing",
+          seed({ slug: "invitacion-novers", status: "PUBLISHED", templateVersionId: UNKNOWN_ID })
+            .slug,
+        ],
+      ];
+      const answers = new Map<string, Row>();
+
+      for (const [label, slug] of cases) {
+        const response = await send("GET", `${PUBLIC_PATH}/${slug}`);
+        answers.set(label, {
+          status: response.status,
+          body: await response.json(),
+          cacheControl: response.headers.get("cache-control"),
+        });
+      }
+
+      const [expected] = [...answers.values()];
+      assert.deepEqual(expected, {
+        status: 404,
+        body: { code: "PUBLIC_INVITATION_NOT_FOUND" },
+        cacheControl: "no-store",
+      });
+      for (const [label, answer] of answers) {
+        assert.deepEqual(answer, expected, label);
+      }
+    });
+
+    it("logs one structured line for a renderer the API does not know, with no content and no owner", async () => {
+      const row = seed({
+        slug: "invitacion-norend2",
+        status: "PUBLISHED",
+        templateVersionId: UNRENDERABLE_VERSION_ID,
+      });
+      const recorded: unknown[][] = [];
+      const spy = mock.method(Logger.prototype, "warn", (...args: unknown[]) => {
+        recorded.push(args);
+      });
+
+      try {
+        const response = await send("GET", `${PUBLIC_PATH}/${row.slug}`);
+
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), { code: "PUBLIC_INVITATION_NOT_FOUND" });
+      } finally {
+        spy.mock.restore();
+      }
+
+      const lines = recorded.filter(
+        ([first]) =>
+          (first as { event?: string } | undefined)?.event === "public-invitation-not-renderable",
+      );
+      assert.equal(lines.length, 1, "the fault is reported once");
+      const event = lines[0]?.[0] as Row;
+      assert.deepEqual(Object.keys(event).sort(), ["componentKey", "event", "slug"]);
+      assert.equal(event.componentKey, UNREGISTERED_RENDERER);
+      assert.equal(event.slug, row.slug);
+      const text = JSON.stringify(event);
+      assert.equal(text.includes(row.ownerId), false, "the owner is never logged");
+      assert.equal(text.includes("Cumpleaños"), false, "the content is never logged");
+    });
+
+    it("stops resolving the slug after unpublishing and resolves it again after republishing (S7)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      await send("PUT", `${PATH}/${draft.id}/content`, cookie, { content: { title: "Ana" } });
+
+      assert.equal((await send("POST", `${PATH}/${draft.id}/publish`, cookie)).status, 200);
+      const published = await send("GET", `${PUBLIC_PATH}/${draft.slug}`);
+      assert.equal(published.status, 200);
+      assert.equal(((await published.json()) as Row).slug, draft.slug);
+
+      assert.equal((await send("POST", `${PATH}/${draft.id}/unpublish`, cookie)).status, 200);
+      const unpublished = await send("GET", `${PUBLIC_PATH}/${draft.slug}`);
+      assert.equal(unpublished.status, 404);
+      assert.deepEqual(await unpublished.json(), { code: "PUBLIC_INVITATION_NOT_FOUND" });
+
+      assert.equal((await send("POST", `${PATH}/${draft.id}/publish`, cookie)).status, 200);
+      assert.equal((await send("GET", `${PUBLIC_PATH}/${draft.slug}`)).status, 200);
     });
   });
 });

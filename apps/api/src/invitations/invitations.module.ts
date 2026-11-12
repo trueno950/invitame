@@ -29,6 +29,7 @@ import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-rea
 import { NoPaymentRequiredGate } from "./infrastructure/no-payment-required";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { InvitationsController } from "./presentation/invitations.controller";
+import { PublicInvitationsController } from "./presentation/public-invitations.controller";
 
 /** A use case that needs both the invitation port and the catalog contract. */
 function useCase(
@@ -81,17 +82,18 @@ export const INVITATION_USE_CASES: Provider[] = [
 
 /**
  * Invitations: creating, listing, reading, editing, archiving, publishing, and unpublishing a customer's own
- * invitations, and the ownerless public read of a published slug (M4 T3, T4, M5 T3), at `/invitations`. This
- * module binds the Prisma adapter to `INVITATION_REPOSITORY`, the catalog's exported `CATALOG_PUBLIC_READER` to
- * `INVITATION_CATALOG` through `CatalogInvitationReader`, and the always-free payment gate to
- * `INVITATION_PAYMENT_GATE`, so the invitations module never imports a catalog repository or queries a catalog
- * table. The controller authenticates through the global guard and reads the owner only from the session (S9);
- * ownership itself is enforced by the repository queries (A4). Milestone 7 replaces only the payment provider
- * (S6).
+ * invitations, and the ownerless public read of a published slug (M4 T3, T4, M5 T3, T4). The owner routes live
+ * at `/invitations` behind the global guard; the public read is `/public/invitations/:slug` and carries
+ * `@Public()`, so the guard never reads a session for a guest. This module binds the Prisma adapter to
+ * `INVITATION_REPOSITORY`, the catalog's exported `CATALOG_PUBLIC_READER` to `INVITATION_CATALOG` through
+ * `CatalogInvitationReader`, and the always-free payment gate to `INVITATION_PAYMENT_GATE`, so the invitations
+ * module never imports a catalog repository or queries a catalog table. The owner routes read the owner only from
+ * the session (S9); ownership itself is enforced by the repository queries (A4). Milestone 7 replaces only the
+ * payment provider (S6).
  */
 @Module({
   imports: [CatalogModule],
-  controllers: [InvitationsController],
+  controllers: [InvitationsController, PublicInvitationsController],
   providers: [
     ...INVITATION_USE_CASES,
     {

@@ -1,4 +1,5 @@
 import { formatMxn } from "../admin/catalog/price.ts";
+import { publicInvitationPath } from "../public/invitation-page.ts";
 import type {
   CreatorPackage,
   CreatorTemplate,
@@ -15,6 +16,7 @@ import {
   INVITATION_FIELD_LABELS,
   INVITATION_NOTICE_COPY,
   INVITATION_STATUS_LABELS,
+  PUBLISH_ISSUE_COPY,
   type InvitationErrorCode,
   type InvitationNoticeCode,
 } from "./copy.ts";
@@ -446,12 +448,17 @@ export function missingFieldsMessage(names: readonly string[]): string | null {
   return names.length === 0 ? null : INVITATION_COPY.missingLabel(names.map(fieldLabel).join(", "));
 }
 
-/** One row of "Mis invitaciones": what the list shows about a draft, and where it links. */
+/**
+ * One row of "Mis invitaciones": what the list shows about an invitation, and where it links. A published
+ * one also links to its public page, which is the only page a guest sees (S7).
+ */
 export interface InvitationRow {
   id: string;
   href: string;
   slug: string;
   statusLabel: string;
+  /** `/i/<slug>` while the invitation is published; null while it is a draft or archived. */
+  publicHref: string | null;
   createdOn: string;
 }
 
@@ -461,6 +468,7 @@ export function invitationRows(items: readonly InvitationSummary[]): InvitationR
     href: INVITATION_PATHS.detail(item.id),
     slug: item.slug,
     statusLabel: statusLabel(item.status),
+    publicHref: item.status === "PUBLISHED" ? publicInvitationPath(item.slug) : null,
     createdOn: formatDate(item.createdAt),
   }));
 }
@@ -517,27 +525,38 @@ function lookup<T extends string>(
 export interface InvitationPageNotices {
   notice?: string;
   error?: string;
+  /** The Spanish sentences of a refused publication, when the query names known issue codes (S7). */
+  issues?: string[];
 }
 
 /** The messages a page shows for its query; an unknown or repeated value shows nothing (as in M3). */
 export function invitationPageNotices(parameters: SearchParameters): InvitationPageNotices {
   const { notice, error } = parameters;
+  const issues = error === "not-publishable" ? publishIssueMessages(parameters.issues) : [];
+
   return {
     ...(lookup(INVITATION_NOTICE_COPY, notice) ? { notice: INVITATION_NOTICE_COPY[notice] } : {}),
     ...(lookup(INVITATION_ERROR_COPY, error) ? { error: INVITATION_ERROR_COPY[error] } : {}),
+    ...(issues.length === 0 ? {} : { issues }),
   };
 }
 
 /** A failed call the client classified, or any failure it could not classify. */
 type Outcome<T> =
   | { ok: true; value: T }
-  | { ok: false; failure: InvitationFailure | "unavailable" };
+  | { ok: false; failure: InvitationFailure | "unavailable"; issues?: string[] };
 
 /** Runs one call, turning a thrown failure (already logged by the server wrapper) into `unavailable`. */
 async function send<T>(call: () => Promise<InvitationResult<T>>): Promise<Outcome<T>> {
   try {
     const result = await call();
-    return result.ok ? { ok: true, value: result.value } : { ok: false, failure: result.failure };
+    return result.ok
+      ? { ok: true, value: result.value }
+      : {
+          ok: false,
+          failure: result.failure,
+          ...(result.issues === undefined ? {} : { issues: result.issues }),
+        };
   } catch {
     return { ok: false, failure: "unavailable" };
   }
@@ -628,4 +647,145 @@ export async function archiveInvitation(api: InvitationsClient, form: FormData):
   return archived.ok
     ? invitationNoticeTarget(path, "archived")
     : failureTarget(path, archived.failure);
+}
+
+/**
+ * The readiness issues the API answers for a publish it refused (M5 T5; S7, A1). The API's rule
+ * (`apps/api/src/invitations/domain/publication-readiness.ts`) writes deterministic English sentences;
+ * the web mirrors the three patterns it can act on and maps every other issue to one generic code, so no
+ * English text ever reaches the customer and nothing is guessed about an issue it does not know.
+ */
+const REQUIRED_FIELD_ISSUE = /^content\.([A-Za-z0-9_]+) is required to publish$/;
+const PACKAGE_FIT_ISSUE = "package does not include the template's required features";
+const VERSION_RETIRED_ISSUE = "template version is no longer published";
+
+/** The most issue codes one redirect carries, and the most sentences the page shows. */
+export const MAX_PUBLISH_ISSUE_CODES = 8;
+export const MAX_PUBLISH_ISSUES_SHOWN = 10;
+
+/** `field:<property>`, or one of the three issues that are not about a field. */
+const ISSUE_CODE = /^(?:field:[A-Za-z0-9_]{1,60}|package|version|other)$/;
+
+const FIELD_CODE_PREFIX = "field:";
+
+/**
+ * Each raw issue as a small code the page can put in its query: `field:date` for a missing required field,
+ * `package`, `version`, or `other` for anything this module does not recognize, deduplicated and bounded.
+ */
+export function publishIssueCodes(issues: readonly string[]): string[] {
+  const codes: string[] = [];
+
+  for (const issue of issues) {
+    const name = REQUIRED_FIELD_ISSUE.exec(issue)?.[1];
+    const code =
+      name === undefined
+        ? issue === PACKAGE_FIT_ISSUE
+          ? "package"
+          : issue === VERSION_RETIRED_ISSUE
+            ? "version"
+            : "other"
+        : `${FIELD_CODE_PREFIX}${name}`;
+
+    if (!codes.includes(code)) {
+      codes.push(code);
+    }
+    if (codes.length === MAX_PUBLISH_ISSUE_CODES) {
+      break;
+    }
+  }
+
+  return codes.length === 0 ? ["other"] : codes;
+}
+
+/** The target a refused publication comes back to: its error code and the issue codes it named. */
+export function invitationIssuesTarget(path: string, codes: readonly string[]): string {
+  return `${path}?error=not-publishable&issues=${codes.join(",")}`;
+}
+
+/** The Spanish sentence of one issue code; nothing at all for a code this page does not know. */
+function issueMessage(code: string): string | undefined {
+  if (code.startsWith(FIELD_CODE_PREFIX)) {
+    return INVITATION_COPY.missingOneLabel(fieldLabel(code.slice(FIELD_CODE_PREFIX.length)));
+  }
+  switch (code) {
+    case "package":
+      return PUBLISH_ISSUE_COPY.package;
+    case "version":
+      return PUBLISH_ISSUE_COPY.version;
+    case "other":
+      return PUBLISH_ISSUE_COPY.other;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The Spanish sentences of an `issues` query value. Only a comma-separated list of known codes is read, so
+ * a hand-edited or invented value shows nothing (or one generic sentence) instead of echoing text; a
+ * parameter that is not a list of strings is refused whole.
+ */
+export function publishIssueMessages(value: string | string[] | undefined): string[] {
+  const entries = typeof value === "string" ? value.split(",") : value;
+
+  if (!Array.isArray(entries) || entries.some((entry) => typeof entry !== "string")) {
+    return [];
+  }
+
+  const messages: string[] = [];
+  for (const entry of entries) {
+    if (messages.length === MAX_PUBLISH_ISSUES_SHOWN) {
+      break;
+    }
+    if (!ISSUE_CODE.test(entry)) {
+      continue;
+    }
+    const message = issueMessage(entry);
+    if (message !== undefined && !messages.includes(message)) {
+      messages.push(message);
+    }
+  }
+  return messages;
+}
+
+/**
+ * Publishes a draft through `POST /invitations/:id/publish` (S7, S9). The API is the authority on
+ * completeness, package fit, and the pinned version; when it refuses, its issues travel back as codes the
+ * page turns into Spanish, and nothing is stored.
+ */
+export async function publishInvitation(api: InvitationsClient, form: FormData): Promise<string> {
+  const id = text(form, "id");
+
+  if (id === undefined || !isInvitationId(id)) {
+    return invitationErrorTarget(INVITATION_PATHS.list, "not-found");
+  }
+
+  const path = INVITATION_PATHS.detail(id);
+  const published = await send(() => api.publish(id));
+
+  if (published.ok) {
+    return invitationNoticeTarget(path, "published");
+  }
+  if (published.failure === "not-publishable") {
+    return invitationIssuesTarget(path, publishIssueCodes(published.issues ?? []));
+  }
+  return failureTarget(path, published.failure);
+}
+
+/**
+ * Returns a published invitation to draft through `POST /invitations/:id/unpublish`, so its public URL
+ * stops answering (S7). Publishing it again later is the same publish command.
+ */
+export async function unpublishInvitation(api: InvitationsClient, form: FormData): Promise<string> {
+  const id = text(form, "id");
+
+  if (id === undefined || !isInvitationId(id)) {
+    return invitationErrorTarget(INVITATION_PATHS.list, "not-found");
+  }
+
+  const path = INVITATION_PATHS.detail(id);
+  const unpublished = await send(() => api.unpublish(id));
+
+  return unpublished.ok
+    ? invitationNoticeTarget(path, "unpublished")
+    : failureTarget(path, unpublished.failure);
 }

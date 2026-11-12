@@ -22,7 +22,7 @@ import {
  * is `server-only`.
  */
 
-export const INVITATION_STATUSES = ["DRAFT", "ARCHIVED"] as const;
+export const INVITATION_STATUSES = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
 export type InvitationStatus = (typeof INVITATION_STATUSES)[number];
 
 /** The stable REST shape of one row of "Mis invitaciones". */
@@ -32,6 +32,8 @@ export interface InvitationSummary {
   packageId: string;
   slug: string;
   status: InvitationStatus;
+  /** Set exactly while the invitation is `PUBLISHED` (M5 T1; S7, A2). */
+  publishedAt: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -74,7 +76,15 @@ export interface CreatorPackage {
  * - `content-invalid`: 400 `INVALID_INVITATION_CONTENT`, the pinned schema refused a value (S7);
  * - `validation`: 400 without a known code, the API refused a field of the request;
  * - `not-editable`: 409 `INVITATION_NOT_EDITABLE`, the draft is archived (A3, S7);
- * - `already-archived`: 409 `INVITATION_ALREADY_ARCHIVED`.
+ * - `already-archived`: 409 `INVITATION_ALREADY_ARCHIVED`;
+ * - `not-publishable`: 409 `INVITATION_NOT_PUBLISHABLE`, the readiness rule named the issues (S7, A1);
+ * - `already-published`: 409 `INVITATION_ALREADY_PUBLISHED`, a repeated publish (A2, S7);
+ * - `not-published`: 409 `INVITATION_NOT_PUBLISHED`, an unpublish of a draft (A2, S7);
+ * - `payment-required`: 402 `INVITATION_PAYMENT_REQUIRED`, the publication gate asked for a payment
+ *   that this milestone never requires (S6).
+ *
+ * Any other status, including the 503 `INVITATION_SLUG_UNAVAILABLE` the API answers when it cannot draw a
+ * storable slug, fails closed: a 5xx (or a timeout) is `unavailable`, and any other status is `rejected`.
  */
 export type InvitationFailure =
   | "signed-out"
@@ -85,11 +95,19 @@ export type InvitationFailure =
   | "content-invalid"
   | "validation"
   | "not-editable"
-  | "already-archived";
+  | "already-archived"
+  | "not-publishable"
+  | "already-published"
+  | "not-published"
+  | "payment-required";
 
+/**
+ * A refused call, plus the readiness `issues` the API returned for a publish it refused: English
+ * sentences the page maps to Spanish and never shows raw (S7).
+ */
 export type InvitationResult<T> =
   | { ok: true; value: T }
-  | { ok: false; failure: InvitationFailure };
+  | { ok: false; failure: InvitationFailure; issues?: string[] };
 
 /** A draft to create: the published version to pin and the package whose features are checked (S6). */
 export interface InvitationInput {
@@ -126,7 +144,12 @@ function isInvitationStatus(value: unknown): value is InvitationStatus {
   return INVITATION_STATUSES.some((status) => status === value);
 }
 
-function isSlug(value: unknown): value is string {
+/**
+ * Whether the text is a canonical invitation slug (S5): lower-case letters, digits, and single hyphens,
+ * at most 60 characters. It is the shape the API generates, and the only text the public page puts in a
+ * path.
+ */
+export function isInvitationSlug(value: unknown): value is string {
   return typeof value === "string" && value.length <= MAX_SLUG_LENGTH && SLUG.test(value);
 }
 
@@ -158,8 +181,9 @@ export function parseInvitationSummary(value: unknown): InvitationSummary | unde
     !isInvitationId(summary.id) ||
     !isInvitationId(summary.templateVersionId) ||
     !isInvitationId(summary.packageId) ||
-    !isSlug(summary.slug) ||
+    !isInvitationSlug(summary.slug) ||
     !isInvitationStatus(summary.status) ||
+    !(summary.publishedAt === null || isTimestamp(summary.publishedAt)) ||
     !(summary.archivedAt === null || isTimestamp(summary.archivedAt)) ||
     !isTimestamp(summary.createdAt) ||
     !isTimestamp(summary.updatedAt)
@@ -173,6 +197,7 @@ export function parseInvitationSummary(value: unknown): InvitationSummary | unde
     packageId: summary.packageId,
     slug: summary.slug,
     status: summary.status,
+    publishedAt: summary.publishedAt,
     archivedAt: summary.archivedAt,
     createdAt: summary.createdAt,
     updatedAt: summary.updatedAt,
@@ -323,26 +348,70 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVALID_INVITATION_CONTENT: "content-invalid",
   INVITATION_NOT_EDITABLE: "not-editable",
   INVITATION_ALREADY_ARCHIVED: "already-archived",
+  INVITATION_NOT_PUBLISHABLE: "not-publishable",
+  INVITATION_ALREADY_PUBLISHED: "already-published",
+  INVITATION_NOT_PUBLISHED: "not-published",
+  INVITATION_PAYMENT_REQUIRED: "payment-required",
 };
 
 const SIGNED_OUT: InvitationResult<never> = { ok: false, failure: "signed-out" };
 const NOT_FOUND: InvitationResult<never> = { ok: false, failure: "not-found" };
 
-/** The failure of a refusal body: only a `code` from the fixed set is read, never the message. */
-function failureOf(text: string | undefined): InvitationFailure | undefined {
+/** The most readiness issues one refusal is read with, so a hostile body cannot grow the list. */
+const MAX_ISSUES = 20;
+/** The most characters one readiness issue is read with. */
+const MAX_ISSUE_LENGTH = 200;
+
+/** The readiness issue strings of a refusal body, or nothing when the list is not a list of strings. */
+function issuesOf(body: unknown): string[] | undefined {
+  const issues = record(body)?.issues;
+
+  if (!Array.isArray(issues) || issues.length > MAX_ISSUES) {
+    return undefined;
+  }
+
+  const texts: string[] = [];
+  for (const issue of issues) {
+    if (typeof issue !== "string" || issue.length === 0 || issue.length > MAX_ISSUE_LENGTH) {
+      return undefined;
+    }
+    texts.push(issue);
+  }
+  return texts;
+}
+
+/**
+ * The refusal of a failure body: only a `code` from the fixed set is read, never the message. The body
+ * of a 409 `INVITATION_NOT_PUBLISHABLE` also carries the readiness `issues` the page maps to Spanish.
+ */
+function refusalOf(text: string | undefined): InvitationResult<never> | undefined {
+  let body: unknown;
   try {
-    const body = JSON.parse(text ?? "") as { code?: unknown } | null;
-    const code = body?.code;
-    return typeof code === "string" && Object.hasOwn(CODE_FAILURES, code)
-      ? CODE_FAILURES[code]
-      : undefined;
+    body = JSON.parse(text ?? "");
   } catch {
     return undefined;
   }
+
+  const code = record(body)?.code;
+  const failure =
+    typeof code === "string" && Object.hasOwn(CODE_FAILURES, code)
+      ? CODE_FAILURES[code]
+      : undefined;
+
+  if (failure === undefined) {
+    return undefined;
+  }
+
+  const issues = failure === "not-publishable" ? issuesOf(body) : undefined;
+  return { ok: false, failure, ...(issues === undefined ? {} : { issues }) };
 }
 
 const readsBody = (status: number): boolean =>
-  (status >= 200 && status < 300) || status === 400 || status === 404 || status === 409;
+  (status >= 200 && status <= 299) ||
+  status === 400 ||
+  status === 402 ||
+  status === 404 ||
+  status === 409;
 
 const INVITATIONS = "/invitations";
 
@@ -391,10 +460,13 @@ export function createInvitationsClient(
       return SIGNED_OUT;
     }
 
-    const failure = failureOf(text);
+    const failure = refusalOf(text);
 
-    if (failure !== undefined && (status === 400 || status === 404 || status === 409)) {
-      return { ok: false, failure };
+    if (
+      failure !== undefined &&
+      (status === 400 || status === 402 || status === 404 || status === 409)
+    ) {
+      return failure;
     }
     if (status === 404) {
       return NOT_FOUND;
@@ -444,6 +516,12 @@ export function createInvitationsClient(
     /** `POST /invitations/:id/archive`: the draft becomes read-only and stays stored (S7, A3). */
     archive: (id: string): Promise<InvitationResult<InvitationSummary>> =>
       onDraft(id, "/archive", (path) => call("POST", path, undefined, parseInvitationSummary)),
+    /** `POST /invitations/:id/publish`: the draft becomes visible at `/i/:slug` (M5 T4; S7, S9). */
+    publish: (id: string): Promise<InvitationResult<OwnedInvitation>> =>
+      onDraft(id, "/publish", (path) => call("POST", path, undefined, parseOwnedInvitation)),
+    /** `POST /invitations/:id/unpublish`: back to draft, and the public URL stops answering (S7). */
+    unpublish: (id: string): Promise<InvitationResult<InvitationSummary>> =>
+      onDraft(id, "/unpublish", (path) => call("POST", path, undefined, parseInvitationSummary)),
     /** `GET /catalog/templates`: the PUBLISHED templates with their published version (S8). */
     templates: (): Promise<InvitationResult<CreatorTemplate[]>> =>
       call("GET", "/catalog/templates", undefined, parseCreatorTemplates),

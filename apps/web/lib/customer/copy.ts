@@ -81,11 +81,12 @@ export const ACCOUNT_COPY = {
 } as const;
 
 /**
- * The two statuses a Milestone 4 draft can have (A3); M5 adds publication. The label is always shown
- * with the badge, so color is never the only signal.
+ * The three statuses of an invitation (M5 T1; A2): M5 adds publication. The label is always shown with
+ * the badge, so color is never the only signal.
  */
 export const INVITATION_STATUS_LABELS = {
   DRAFT: "Borrador",
+  PUBLISHED: "Publicada",
   ARCHIVED: "Archivada",
 } as const;
 
@@ -111,7 +112,7 @@ export const INVITATION_COPY = {
   listEyebrow: "Tus invitaciones",
   listHeading: "Mis invitaciones",
   listIntro:
-    "Aquí están los borradores que has creado. Puedes editarlos cuando quieras antes de publicarlos.",
+    "Aquí están las invitaciones que has creado. Puedes editarlas cuando quieras; las publicadas ya se ven en su enlace público.",
   listEmpty: "Aún no tienes invitaciones. Crea una cuando quieras: es gratis.",
   newLink: "Nueva invitación",
   editLink: "Editar",
@@ -134,6 +135,8 @@ export const INVITATION_COPY = {
   slugLabel: "Dirección pública",
   slugHint: "Podrás compartirla cuando publiques tu invitación.",
   missingLabel: (names: string) => `Faltan: ${names}.`,
+  /** One missing field, as the publish panel names it once the API refused the publication (S7). */
+  missingOneLabel: (name: string) => `Falta: ${name}.`,
   save: "Guardar cambios",
   archive: "Archivar",
   /** The block of the side column that archives the draft, and what archiving does (S7). */
@@ -146,6 +149,26 @@ export const INVITATION_COPY = {
   detailEyebrow: "Tu invitación",
   detailHeading: "Edita tu invitación",
   archivedHeading: "Tu invitación archivada",
+  /** The publish block of a draft, and what publishing does (S7). */
+  publishHeading: "Publicar",
+  publishHint:
+    "Cuando la invitación esté completa, publícala para compartirla con tus invitados. Publicar no tiene costo.",
+  publish: "Publicar",
+  /** Why a refused publication is listed field by field instead of as one sentence (S7). */
+  publishIssuesHeading: "Falta esto para publicar",
+  /** The unpublish block of a published invitation (S7). */
+  unpublishHeading: "Despublicar",
+  unpublishHint:
+    "La invitación vuelve a borrador y su enlace deja de funcionar. Puedes publicarla de nuevo cuando quieras.",
+  unpublish: "Despublicar",
+  /** Editing stays available while published, so the page says the change is already live (S7). */
+  publishedNote:
+    "Esta invitación está publicada: los cambios que guardes se ven al instante en la invitación publicada.",
+  publicLinkLabel: "Enlace de la invitación",
+  publicLinkHint: "Compártelo con tus invitados. Se abre en una pestaña nueva.",
+  openPublic: "Abrir la invitación publicada",
+  /** The same way to the public page, from a card of the list (S7). */
+  viewPublic: "Ver invitación",
   valueEmpty: "Sin definir",
   detailIntro:
     "Completa los datos cuando quieras. Puedes guardar el borrador aunque falte información.",
@@ -169,7 +192,13 @@ export const INVITATION_COPY = {
   backToAccount: "Volver a mi cuenta",
 } as const;
 
-export const INVITATION_NOTICE_CODES = ["created", "saved", "archived"] as const;
+export const INVITATION_NOTICE_CODES = [
+  "created",
+  "saved",
+  "archived",
+  "published",
+  "unpublished",
+] as const;
 export type InvitationNoticeCode = (typeof INVITATION_NOTICE_CODES)[number];
 
 /** What a finished action confirms; the code travels in the page's query, the text lives here. */
@@ -177,6 +206,8 @@ export const INVITATION_NOTICE_COPY: Record<InvitationNoticeCode, string> = {
   created: "Listo, creamos tu borrador.",
   saved: "Listo, guardamos los cambios.",
   archived: "Listo, archivamos tu invitación.",
+  published: "Listo, publicamos tu invitación.",
+  unpublished: "Listo, tu invitación volvió a borrador.",
 };
 
 /**
@@ -202,8 +233,45 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "not-found": "No encontramos esa invitación.",
   "not-editable": "Esta invitación está archivada y ya no se puede editar.",
   "already-archived": "Esta invitación ya está archivada.",
+  "already-published": "Esta invitación ya está publicada.",
+  "not-published": "Esta invitación no está publicada, así que no podemos despublicarla.",
+  "not-publishable":
+    "Todavía no podemos publicar la invitación. Revisa lo que falta y vuelve a intentarlo.",
+  "payment-required":
+    "Publicar requiere un pago que todavía no podemos procesar. Inténtalo de nuevo más tarde.",
   "content-invalid": "Revisa los datos: hay un campo que no cumple el formato de la plantilla.",
   "content-unavailable":
     "No pudimos comprobar la plantilla de esta invitación. Inténtalo de nuevo en unos minutos.",
   unavailable: "No pudimos completar la acción. Inténtalo de nuevo en unos minutos.",
 };
+
+/**
+ * Why the API refused to publish an invitation, in Spanish (M5 T5; S7). The API answers English readiness
+ * issues such as `content.date is required to publish`; the page maps each one to a code in its own query
+ * and back to one of these sentences, so raw English never reaches the customer. A field issue names the
+ * field with the same label the editor uses; an issue this module does not recognize is `other`.
+ */
+export const PUBLISH_ISSUE_COPY = {
+  package:
+    "El paquete que elegiste ya no incluye lo que necesita esta plantilla. Elige otro paquete.",
+  version: "La versión de la plantilla de esta invitación ya no está publicada.",
+  other: "Hay un dato que no cumple lo que pide la plantilla. Revísalo y vuelve a intentarlo.",
+} as const;
+
+/**
+ * The guest's page of a published invitation (M5 T5; S1, S5, A3, A5). A guest is not a customer here: the
+ * page shows the invitation and nothing about the owner's account, and it asks search engines to stay away.
+ */
+export const PUBLIC_INVITATION_COPY = {
+  /** The title when the content has no celebrant name to show (A8). */
+  titleFallback: "Invitación",
+  title: (celebrantName: string) => `Invitación de ${celebrantName}`,
+  notFoundTitle: "Esta invitación no está disponible",
+  notFoundBody:
+    "Puede que el enlace no sea correcto, que la invitación ya no esté publicada o que la dirección haya cambiado.",
+  unavailableTitle: "No pudimos cargar la invitación",
+  unavailableBody: "Inténtalo de nuevo en unos minutos.",
+  home: "Ir al inicio",
+  /** The discreet footer credit that links back to the site (S1). */
+  madeWith: "Hecha con InvitaMe",
+} as const;

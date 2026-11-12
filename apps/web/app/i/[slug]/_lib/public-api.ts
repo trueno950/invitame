@@ -1,0 +1,80 @@
+import "server-only";
+
+import { ApiClientError } from "../../../../lib/server/api-client.ts";
+import { getWebServerConfig } from "../../../../lib/server/config.ts";
+import {
+  createPublicInvitationsClient,
+  type PublicInvitationsClient,
+} from "../../../../lib/server/public-invitations-api.ts";
+import { errorClass } from "../../../../lib/server/server-log.ts";
+
+/**
+ * The public invitation API for the guest's page under `/i` (M5 T5; S1, S5, A3, A6). One stateless client
+ * per server process, created on first use. It never reads a cookie: a guest has no session, and the page
+ * must not forward one even when a signed-in owner opens their own invitation. `server-only` keeps the
+ * proxy secret out of every browser bundle; the client itself has no marker so `node --test` can prove it.
+ */
+let client: PublicInvitationsClient | undefined;
+
+function publicInvitationsClient(): PublicInvitationsClient {
+  client ??= createPublicInvitationsClient({ config: getWebServerConfig() });
+  return client;
+}
+
+/** The operational events of a public page: a failed read, or a snapshot this deployment cannot render. */
+export const PUBLIC_INVITATION_LOG_EVENT = {
+  READ_FAILED: "public_invitation_read_failed",
+  RENDERER_UNKNOWN: "public_invitation_renderer_unknown",
+  RENDERER_PROPS_REFUSED: "public_invitation_renderer_props_refused",
+} as const;
+
+export type PublicInvitationLogEvent =
+  (typeof PUBLIC_INVITATION_LOG_EVENT)[keyof typeof PUBLIC_INVITATION_LOG_EVENT];
+
+/**
+ * One JSON line: the event, the error class and the client's fixed failure kind, and the class of the
+ * cause. Never a message, a slug, a cookie, or a response body, because any of them could carry personal
+ * data; a renderer key is allow-listed catalog data and is the one value worth naming. This is an
+ * operational log, not an audit trail.
+ */
+export function publicInvitationLogLine(
+  event: PublicInvitationLogEvent,
+  details: { error?: unknown; componentKey?: string } = {},
+): string {
+  const { error, componentKey } = details;
+
+  return JSON.stringify({
+    event,
+    ...(error === undefined ? {} : { error: errorClass(error) }),
+    ...(error instanceof ApiClientError ? { kind: error.kind } : {}),
+    ...(error instanceof Error && error.cause !== undefined
+      ? { cause: errorClass(error.cause) }
+      : {}),
+    ...(componentKey === undefined ? {} : { componentKey }),
+  });
+}
+
+/** Writes the line to standard error and never throws, so logging cannot change a guest's page. */
+export function logPublicInvitation(
+  event: PublicInvitationLogEvent,
+  details: { error?: unknown; componentKey?: string } = {},
+  write: (line: string) => void = (line) => console.error(line),
+): void {
+  try {
+    write(publicInvitationLogLine(event, details));
+  } catch {
+    // A failing sink must not change the response.
+  }
+}
+
+/** The public read, logged once when it fails; the caller decides what the guest then sees. */
+export async function readPublicInvitation(
+  slug: string,
+): Promise<Awaited<ReturnType<PublicInvitationsClient["getBySlug"]>>> {
+  try {
+    return await publicInvitationsClient().getBySlug(slug);
+  } catch (error) {
+    logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.READ_FAILED, { error });
+    throw error;
+  }
+}

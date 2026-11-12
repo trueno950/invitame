@@ -49,9 +49,9 @@ metadata (title from `celebrantName`, description from `message`), no generated 
 | T1 | Additive migration: `PUBLISHED` in `InvitationStatus`, nullable `publishedAt` and `expiresAt`, rewrite the archive CHECK for three statuses, `publishedAt` set exactly while `PUBLISHED`; database tests | S2, S7, S8 | worker (high risk: own commit) | `3f2dc2e` |
 | T2 | Domain: lifecycle (publish, unpublish, archive from DRAFT or PUBLISHED, edit while DRAFT or PUBLISHED), completeness rule, payment port contract with a "no payment required" adapter; unit tests | S2, S3, S6, S7 | worker | `32ca239` |
 | T3 | Application and Prisma: publish and unpublish use cases (owner-scoped), public read by slug with the allow-listed projection, catalog public contract for the pinned version's render data; database tests | S1, S2, S3, S7 | worker | `9b1b21c` |
-| T4 | API: `POST /invitations/:id/publish`, `POST /invitations/:id/unpublish`, `@Public()` `GET /public/invitations/:slug`; controller tests (401, 404, 409, public 404 cases) | S2, S3, S9 | worker | |
-| T5 | Web: `/i/[slug]` public page (renderer, friendly 404, noindex, metadata), publish/unpublish controls and the public link in `/cuenta/invitaciones/[id]`; unit tests and a Playwright public-journey spec | S1, S5, S7, S9 | worker | |
-| T6 | Docs: overview public flow (`/i/<slug>`), `CONTEXT.md` Publication, `docs/database/model.md`, ROADMAP status | S1–S10 | inline | |
+| T4 | API: `POST /invitations/:id/publish`, `POST /invitations/:id/unpublish`, `@Public()` `GET /public/invitations/:slug`; controller tests (401, 404, 409, public 404 cases) | S2, S3, S9 | worker | `b4bd2b4` |
+| T5 | Web: `/i/[slug]` public page (renderer, friendly 404, noindex, metadata), publish/unpublish controls and the public link in `/cuenta/invitaciones/[id]`; unit tests and a Playwright public-journey spec | S1, S5, S7, S9 | worker | `68be4a8` |
+| T6 | Docs: overview public flow (`/i/<slug>`), `CONTEXT.md` Publication, `docs/database/model.md`, ROADMAP status | S1–S10 | inline | this commit |
 
 ## Log
 
@@ -62,3 +62,25 @@ metadata (title from `celebrantName`, description from `message`), no generated 
 - L4 (2026-11-12): T1 migration `3f2dc2e` (`20261112040547_add_invitation_publication`). One M4 database assertion
   (`prisma-invitation.repository.db-spec.ts`, "stores a DRAFT pinned to …") fails until T3 adds `publishedAt` and
   `expiresAt` to `InvitationRecord`; slice 1 of M5 is therefore T1 + T2 + T3 so no pushed commit range fails.
+- L5 (2026-11-12): owner merged slice 1 (PR #59) as `fb271b6`. T4 routes (`b4bd2b4`): `POST /invitations/:id/publish` →
+  200 with `publishedAt`, 404, 409 `INVITATION_ALREADY_PUBLISHED` / `INVITATION_ALREADY_ARCHIVED` /
+  `INVITATION_NOT_PUBLISHABLE` (+ `issues`), 402 `INVITATION_PAYMENT_REQUIRED` (+ `reason`, unreachable until M7);
+  `POST /invitations/:id/unpublish` → 200, 404, 409 `INVITATION_NOT_PUBLISHED`; `@Public()`
+  `GET /public/invitations/:slug` → 200 `{ slug, componentKey, configuration, content, publishedAt }` or 404
+  `PUBLIC_INVITATION_NOT_FOUND`, both `Cache-Control: no-store`.
+- L6 (2026-11-12): T5 web (`68be4a8`): `/i/[slug]` guest page and the owner publish/unpublish controls. The public 404
+  page was proven against the local servers; the 200 guest render and `e2e/public-invitation.spec.ts` were not run
+  locally (the journey needs the disposable e2e database, Mailpit, and a seeded published template). T6 docs: overview
+  public flow is now `/i/<slug>` and current, `CONTEXT.md` Invitation and Publication, `docs/database/model.md`,
+  ROADMAP marks Milestone 5 implemented. Slice 2 = T4 + T5 + T6.
+- L7 (2026-11-12): PR #60 CI failed twice in `e2e/customer-session.spec.ts:247` (the replayed old session cookie
+  disappeared) and once in the M3 `prisma-template.repository.db-spec.ts:399` concurrency test (passed on rerun; it
+  had failed on master before, run 43105624103). Root cause of the browser failure: the customer header's links to
+  `/cuenta` and `/cuenta/invitaciones` (M4) are prefetched in production from `/ingresar`, and the prefetch's
+  session read through `proxy.ts` clears a dead cookie; it had also failed on master after PR #58 (run 43151477952).
+  Fixed by `prefetch={false}` on both links. The catalog concurrency test stays a follow-up.
+- L8 (2026-11-12): the catalog concurrency test failed 2 of 3 PR #60 runs. Cause: after both transactions leave
+  `verify`, one can commit before the other writes; under READ COMMITTED the second then retires the first and
+  publishes its own (a valid sequential publish), while the test demanded a rejection. The test now asserts the real
+  invariant (exactly one PUBLISHED, previous one retired, any loser is `CatalogConcurrentUpdateError`) with exact
+  statuses for both interleavings; 8/8 local runs pass.

@@ -4,7 +4,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { after, before, beforeEach, describe, it } from "node:test";
 
-import { ApiClientError, createApiClient, sessionCookieHeader } from "./api-client.ts";
+import {
+  ApiClientError,
+  createApiClient,
+  sendApiRequest,
+  sessionCookieHeader,
+} from "./api-client.ts";
 import type { WebServerConfig } from "./config.ts";
 
 // The web server's API client (M2 T8b; S1, S7, S14, L29, L33): it calls the API with only Better
@@ -300,5 +305,34 @@ describe("updateOwnProfile", () => {
       kind: "rejected",
       status: 400,
     });
+  });
+});
+
+describe("sendApiRequest without a cookie", () => {
+  it("sends no cookie header at all, and keeps the proxy secret (M5 T5; S5, A3)", async () => {
+    respond = (_request, response) => {
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end('{"code":"PUBLIC_INVITATION_NOT_FOUND"}');
+    };
+
+    const response = await sendApiRequest(
+      {
+        config: {
+          apiOrigin,
+          proxySecret: PROXY_SECRET,
+          clientIpHeader: "x-invitame-client-ip",
+          edgeClientIpHeader: "x-real-ip",
+        },
+      },
+      { method: "GET", path: "/public/invitations/invitacion-k7m2qx" },
+      (status) => status === 404,
+    );
+
+    assert.deepEqual(response, {
+      status: 404,
+      text: '{"code":"PUBLIC_INVITATION_NOT_FOUND"}',
+    });
+    assert.equal(received[0]?.headers.cookie, undefined);
+    assert.equal(received[0]?.headers["x-invitame-proxy-secret"], PROXY_SECRET);
   });
 });

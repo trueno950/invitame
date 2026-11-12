@@ -25,10 +25,11 @@ export const metadata: Metadata = {
 type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
 
 /**
- * `/cuenta/invitaciones` (M4 T5, T8; S1, S7, S11): the signed-in customer's own drafts, newest first, as
- * a grid of cards in the wide workspace so a few invitations fit on one screen. Each card names the
- * status in words as well as in the badge, the public slug, when it was created, and the way to edit it.
- * The list endpoint carries no missing-field data, so "incomplete" is shown on the draft's own page only.
+ * `/cuenta/invitaciones` (M4 T5, T8; M5 T5; S1, S7, S11): the signed-in customer's own invitations, newest
+ * first, as a grid of cards in the wide workspace so a few invitations fit on one screen. Each card names
+ * the status in words as well as in the badge, the public slug, when it was created, and the way to edit it;
+ * a published invitation also links to its public page, which is where a guest reads it (S7). The list
+ * endpoint carries no missing-field data, so "incomplete" is shown on the invitation's own page only.
  * A customer without a session is sent to `/ingresar`; a failed read shows the retry notice.
  */
 export default async function InvitationsPage({
@@ -79,9 +80,21 @@ export default async function InvitationsPage({
                   <StatusBadge label={row.statusLabel} />
                 </div>
                 <p className="text-sm text-muted">{INVITATION_COPY.createdOn(row.createdOn)}</p>
-                <Link className={`${textButton} mt-auto self-start`} href={row.href}>
-                  {INVITATION_COPY.editLink}
-                </Link>
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
+                  <Link className={textButton} href={row.href}>
+                    {INVITATION_COPY.editLink}
+                  </Link>
+                  {row.publicHref === null ? null : (
+                    <Link
+                      className={textButton}
+                      href={row.publicHref}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {INVITATION_COPY.viewPublic}
+                    </Link>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

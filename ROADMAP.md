@@ -6,8 +6,8 @@ package scripts remain the source of truth for the current repository.
 
 ## Product direction
 
-**Status:** Planned direction; implemented through Milestone 4 (foundation, identity, catalog, and invitation
-drafts).
+**Status:** Planned direction; implemented through Milestone 5 (foundation, identity, catalog, invitation drafts,
+and publication).
 
 InvitaMe is planned as a self-service invitation service with no manual operator step between an order and its
 publication: a customer chooses a catalog design, completes the invitation, pays, and the backend publishes it after
@@ -139,7 +139,10 @@ No public publication, payment confirmation, guest management, media uploads, or
 
 ## Milestone 5 — Publication and public invitation runtime
 
-**Status:** Planned.
+**Status:** Implemented (`odd/tasks/m5-publication.md`): publish and unpublish with ownership, completeness,
+package-fit, and pinned-version checks behind a payment gate that requires no payment until Milestone 7; the public,
+uncacheable read by slug; and the `/i/<slug>` guest page rendered through the renderer registry, noindex, with a
+friendly 404. Expiration is carried in the database but has no rule yet.
 
 ### Outcome
 
