@@ -1,6 +1,11 @@
 import Link from "next/link";
 
-import type { ComingSoonAction, PageAnchor, SignInAction } from "../../../lib/landing/copy.ts";
+import type {
+  AccountAction,
+  ComingSoonAction,
+  PageAnchor,
+  SignInAction,
+} from "../../../lib/landing/copy.ts";
 import { Ornament } from "../ornament.tsx";
 import { focusRing } from "../ui.ts";
 import styles from "./landing.module.css";
@@ -40,7 +45,8 @@ function DownIcon() {
 }
 
 interface SignInLinkProperties {
-  action: SignInAction;
+  /** «Ingresar», or «Mi cuenta» when the visitor already has a session. */
+  action: SignInAction | AccountAction;
   small?: boolean;
 }
 

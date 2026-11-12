@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import { LANDING_COPY } from "../../../lib/landing/copy.ts";
+import { accountAction, LANDING_COPY } from "../../../lib/landing/copy.ts";
 import { Ornament } from "../ornament.tsx";
 import { focusRing } from "../ui.ts";
 import { Wordmark } from "../wordmark.tsx";
@@ -11,8 +11,8 @@ import { HeroStationery } from "./stationery.tsx";
 
 const { skipLink, nav, hero } = LANDING_COPY;
 
-/** The sticky pill header: the wordmark, the in-page anchors, and «Ingresar». */
-export function LandingHeader() {
+/** The sticky pill header: the wordmark, the in-page anchors, and «Ingresar» (or «Mi cuenta» with a session). */
+export function LandingHeader({ signedIn }: { signedIn: boolean }) {
   return (
     <>
       <a className={`${styles.skip} ${focusRing}`} href={skipLink.href}>
@@ -28,7 +28,7 @@ export function LandingHeader() {
               </a>
             ))}
           </div>
-          <SignInLink action={nav.signIn} small />
+          <SignInLink action={signedIn ? accountAction(true) : nav.signIn} small />
         </nav>
       </header>
     </>

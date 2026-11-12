@@ -19,6 +19,13 @@ export interface SignInAction {
   readonly href: "/ingresar";
 }
 
+/** What a signed-in customer sees instead of «Ingresar»: the way back to their account. */
+export interface AccountAction {
+  readonly kind: "account";
+  readonly label: "Mi cuenta";
+  readonly href: "/cuenta";
+}
+
 /** A product action that does not exist yet: shown, never a link or a button. */
 export interface ComingSoonAction {
   readonly kind: "coming-soon";
@@ -51,6 +58,15 @@ export function headingText({ before, accent, after = "" }: Heading): string {
 
 const SIGN_IN: SignInAction = { kind: "sign-in", label: "Ingresar", href: "/ingresar" };
 const COMING_SOON: ComingSoonAction = { kind: "coming-soon", label: "Próximamente" };
+const ACCOUNT: AccountAction = { kind: "account", label: "Mi cuenta", href: "/cuenta" };
+
+/**
+ * The landing's account button: «Ingresar» without a session, «Mi cuenta» with one. It only picks a link;
+ * `/cuenta` still checks the session on the server and sends an expired one back to `/ingresar`.
+ */
+export function accountAction(signedIn: boolean): SignInAction | AccountAction {
+  return signedIn ? ACCOUNT : SIGN_IN;
+}
 
 const TO_DESIGNS: PageAnchor = { kind: "anchor", label: "Diseños de muestra", href: "#disenos" };
 const TO_STEPS: PageAnchor = { kind: "anchor", label: "Así funcionará", href: "#como-funcionara" };

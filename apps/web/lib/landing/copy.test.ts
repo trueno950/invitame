@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import { headingText, LANDING_COPY, LANDING_SECTION_IDS } from "./copy.ts";
+import { accountAction, headingText, LANDING_COPY, LANDING_SECTION_IDS } from "./copy.ts";
 
 /*
  * The landing is an honest pre-launch page (M2 T8l; S37, L45): no copy claims a feature that does not
@@ -149,6 +149,20 @@ describe("landing copy", () => {
     for (const perk of experience.perks) {
       assert.match(perk.body, FUTURE_TENSE, perk.body);
     }
+  });
+});
+
+describe("landing account action", () => {
+  it("offers «Ingresar» to /ingresar to a visitor without a session", () => {
+    assert.deepEqual(accountAction(false), {
+      kind: "sign-in",
+      label: "Ingresar",
+      href: "/ingresar",
+    });
+  });
+
+  it("offers «Mi cuenta» to /cuenta to a signed-in customer instead of «Ingresar»", () => {
+    assert.deepEqual(accountAction(true), { kind: "account", label: "Mi cuenta", href: "/cuenta" });
   });
 });
 

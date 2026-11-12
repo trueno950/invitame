@@ -163,10 +163,13 @@ apps/web server components and actions ──► apps/api /me
 This is M2 T8l (S35, S37; L41, L45): `apps/web/app/page.tsx`, `apps/web/app/_components/landing/`, and
 `apps/web/lib/landing/copy.ts`. The page rebuilds the approved concept «A · Rosa y vino» version 3 (hero with
 invitations fanned out of an envelope, the occasions band, the sample gallery, the steps, the guest experience on a
-phone, the closing band, and the footer) as a static server component with no client JavaScript.
+phone, the closing band, and the footer) as a server component with no client JavaScript. It is rendered per
+request because it reads the request's cookies: a visitor who carries a Better Auth session cookie sees «Mi
+cuenta» (to `/cuenta`) instead of «Ingresar» in the header, the closing band, and the footer. The cookie only
+chooses the link and no API call is made; `/cuenta` checks the session and sends an expired one to `/ingresar`.
 
-- It is an honest pre-launch page (S37): only customer sign-in, the own account, and the administrator pages
-  exist, so «Ingresar» (to `/ingresar`) is the only active product action. Every other product action is a
+- It is an honest pre-launch page (S37): the customer pages and the administrator pages are the only product
+  surfaces, so «Ingresar» (to `/ingresar`), or «Mi cuenta» with a session, is the only active product action. Every other product action is a
   «Próximamente» label that is neither a link nor a button; in-page anchors only scroll to `#disenos` or
   `#como-funcionara`. The gallery is «Diseños de muestra», the steps are «Así funcionará» in the future tense,
   and the guest phone is labeled «Ejemplo de invitación». No public page links to `/admin`.
