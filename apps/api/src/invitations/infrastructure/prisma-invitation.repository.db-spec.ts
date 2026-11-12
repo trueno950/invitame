@@ -14,18 +14,22 @@ import { PrismaCatalogPublicReader } from "../../catalog/infrastructure/prisma-c
 import { InvitationSlugTakenError } from "../application/invitation.application.errors";
 import {
   InvitationAlreadyArchivedError,
+  InvitationAlreadyPublishedError,
   InvitationNotEditableError,
+  InvitationNotPublishedError,
 } from "../domain/invitation.errors";
 import { CatalogInvitationReader } from "./catalog-invitation-reader";
 import { PrismaInvitationRepository } from "./prisma-invitation.repository";
 
-// The Prisma adapters on PostgreSQL (M4 T3; S1, S3, S5, S6, S7, S9, A1, A3, A4): every invitation read and write
-// is scoped by the owner in its own query, a unique-slug violation is reported as a collision signal, an
-// archived invitation refuses content changes with the row unchanged, archiving sets the status and the marker
-// together, and the catalog public reader answers a version only while it and its template are PUBLISHED. Runs
-// only through `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that points at a disposable,
-// already migrated local database; not part of `pnpm test`. The database is shared with parallel suites: every
-// row here carries a key made from this run's id, and only those rows are removed.
+// The Prisma adapters on PostgreSQL (M4 T3 and M5 T3; S1, S2, S3, S5, S6, S7, S8, S9, A1, A2, A3, A4): every
+// invitation read and write is scoped by the owner in its own query, a unique-slug violation is reported as a
+// collision signal, an archived invitation refuses content changes with the row unchanged, archiving sets the
+// status and the marker together, publishing and unpublishing keep `publishedAt` exactly while PUBLISHED, the
+// public slug read answers only a live published row in one query, and the catalog public reader answers a
+// version only while it and its template are PUBLISHED. Runs only through `pnpm --filter @invitame/api test:db`
+// with an explicit DATABASE_URL that points at a disposable, already migrated local database; not part of
+// `pnpm test`. The database is shared with parallel suites: every row here carries a key made from this run's
+// id, and only those rows are removed.
 
 const UNKNOWN_ID = "00000000-0000-4000-8000-000000000000";
 
@@ -72,6 +76,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
     versionStatus?: TemplateVersionStatus;
     componentKey?: string;
     schema?: Prisma.InputJsonObject;
+    configuration?: Prisma.InputJsonObject;
   }
 
   /** A template with one version in the given status, and a package: the catalog state an invitation pins. */
@@ -97,7 +102,9 @@ describe("Prisma invitation repository on PostgreSQL", () => {
         status: options.versionStatus ?? "PUBLISHED",
         componentKey: options.componentKey ?? "birthday-adventure-01",
         schema: options.schema ?? { type: "object", required: [], properties: {} },
-        configuration: { componentKey: options.componentKey ?? "birthday-adventure-01" },
+        configuration: options.configuration ?? {
+          componentKey: options.componentKey ?? "birthday-adventure-01",
+        },
       },
     });
     const createdPackage = await prisma.package.create({
@@ -135,6 +142,20 @@ describe("Prisma invitation repository on PostgreSQL", () => {
 
   const stored = (id: string) => prisma.invitation.findUniqueOrThrow({ where: { id } });
 
+  /** The instant every publication fixture writes, so `publishedAt` is compared exactly (S7). */
+  const PUBLISHED_AT = new Date("2026-11-12T09:30:00.000Z");
+
+  async function newPublishedDraft(
+    ownerId: string,
+    slug = newSlug(),
+    content: Record<string, unknown> = {},
+  ) {
+    const created = await newDraft(ownerId, slug, content);
+    const published = await repository.publish(ownerId, created.id, PUBLISHED_AT);
+    assert.ok(published, "the fixture draft must publish");
+    return published;
+  }
+
   describe("create", () => {
     it("stores a DRAFT pinned to the owner, the version, the package, and the slug", async () => {
       const ownerId = await newOwner();
@@ -156,6 +177,9 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       assert.equal(created.slug, slug);
       assert.equal(created.status, "DRAFT");
       assert.equal(created.archivedAt, null);
+      // The publication markers M5 adds: a draft is unpublished and never expires (S7, S8).
+      assert.equal(created.publishedAt, null);
+      assert.equal(created.expiresAt, null);
       assert.deepEqual(created.content, { celebrantName: "Ana" });
       assert.ok(created.createdAt instanceof Date);
       assert.deepEqual(await stored(created.id), { ...created });
@@ -248,6 +272,23 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       assert.deepEqual((await stored(created.id)).content, {});
     });
 
+    it("replaces the content of a PUBLISHED invitation and keeps it published (S7)", async () => {
+      const ownerId = await newOwner();
+      const published = await newPublishedDraft(ownerId, newSlug(), { celebrantName: "Ana" });
+
+      const updated = await repository.updateContent(ownerId, published.id, {
+        celebrantName: "Beatriz",
+      });
+
+      assert.deepEqual(updated?.content, { celebrantName: "Beatriz" });
+      assert.equal(updated?.status, "PUBLISHED");
+      assert.deepEqual(updated?.publishedAt, PUBLISHED_AT);
+      const row = await stored(published.id);
+      assert.deepEqual(row.content, { celebrantName: "Beatriz" });
+      assert.equal(row.status, "PUBLISHED");
+      assert.deepEqual(row.publishedAt, PUBLISHED_AT);
+    });
+
     it("answers null for another owner's id and changes nothing (A4)", async () => {
       const ownerId = await newOwner();
       const created = await newDraft(ownerId);
@@ -293,6 +334,23 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       await assert.rejects(repository.archive(ownerId, created.id), InvitationAlreadyArchivedError);
 
       assert.deepEqual(await stored(created.id), before);
+    });
+
+    it("archives a PUBLISHED invitation and clears publishedAt (A2)", async () => {
+      const ownerId = await newOwner();
+      const published = await newPublishedDraft(ownerId, newSlug(), { celebrantName: "Ana" });
+
+      const archived = await repository.archive(ownerId, published.id);
+
+      assert.equal(archived?.status, "ARCHIVED");
+      assert.ok(archived?.archivedAt instanceof Date);
+      assert.equal(archived?.publishedAt, null);
+      const row = await stored(published.id);
+      assert.equal(row.status, "ARCHIVED");
+      assert.ok(row.archivedAt instanceof Date);
+      // The CHECK constraint requires the marker to be cleared with the status (S7, A2).
+      assert.equal(row.publishedAt, null);
+      assert.deepEqual(row.content, { celebrantName: "Ana" });
     });
 
     it("answers null for another owner's id and leaves the draft unchanged (A4)", async () => {
@@ -350,6 +408,144 @@ describe("Prisma invitation repository on PostgreSQL", () => {
 
       assert.equal(updated?.templateVersionId, catalog.templateVersionId);
       assert.equal((await stored(created.id)).templateVersionId, catalog.templateVersionId);
+    });
+  });
+
+  describe("publish and unpublish (S7, A2)", () => {
+    it("publishes a DRAFT with the given instant and keeps its content", async () => {
+      const ownerId = await newOwner();
+      const created = await newDraft(ownerId, newSlug(), { celebrantName: "Ana" });
+
+      const published = await repository.publish(ownerId, created.id, PUBLISHED_AT);
+
+      assert.equal(published?.status, "PUBLISHED");
+      assert.deepEqual(published?.publishedAt, PUBLISHED_AT);
+      assert.equal(published?.archivedAt, null);
+      assert.deepEqual(published?.content, { celebrantName: "Ana" });
+      // The record and the stored row agree, including both publication columns.
+      assert.deepEqual(await stored(created.id), { ...published });
+    });
+
+    it("returns a PUBLISHED invitation to DRAFT and clears publishedAt (S7)", async () => {
+      const ownerId = await newOwner();
+      const published = await newPublishedDraft(ownerId);
+
+      const draft = await repository.unpublish(ownerId, published.id);
+
+      assert.equal(draft?.status, "DRAFT");
+      assert.equal(draft?.publishedAt, null);
+      assert.deepEqual(await stored(published.id), { ...draft });
+    });
+
+    it("refuses to publish twice and leaves the row unchanged", async () => {
+      const ownerId = await newOwner();
+      const published = await newPublishedDraft(ownerId);
+      const before = await stored(published.id);
+
+      await assert.rejects(
+        repository.publish(ownerId, published.id, new Date()),
+        InvitationAlreadyPublishedError,
+      );
+
+      assert.deepEqual(await stored(published.id), before);
+    });
+
+    it("refuses to publish an ARCHIVED invitation and leaves the row unchanged (A2)", async () => {
+      const ownerId = await newOwner();
+      const created = await newDraft(ownerId);
+      await repository.archive(ownerId, created.id);
+      const before = await stored(created.id);
+
+      await assert.rejects(
+        repository.publish(ownerId, created.id, PUBLISHED_AT),
+        InvitationAlreadyArchivedError,
+      );
+
+      assert.deepEqual(await stored(created.id), before);
+    });
+
+    it("refuses to unpublish a DRAFT and an ARCHIVED invitation (S7, A2)", async () => {
+      const ownerId = await newOwner();
+      const draft = await newDraft(ownerId);
+      const draftBefore = await stored(draft.id);
+
+      await assert.rejects(repository.unpublish(ownerId, draft.id), InvitationNotPublishedError);
+      assert.deepEqual(await stored(draft.id), draftBefore);
+
+      const archived = await newDraft(ownerId);
+      await repository.archive(ownerId, archived.id);
+      const archivedBefore = await stored(archived.id);
+
+      await assert.rejects(
+        repository.unpublish(ownerId, archived.id),
+        InvitationAlreadyArchivedError,
+      );
+      assert.deepEqual(await stored(archived.id), archivedBefore);
+    });
+
+    it("answers null for another owner's id and changes nothing (A4)", async () => {
+      const ownerId = await newOwner();
+      const published = await newPublishedDraft(ownerId);
+      const draft = await newDraft(ownerId);
+      const foreigner = await newOwner();
+
+      assert.equal(await repository.publish(foreigner, draft.id, PUBLISHED_AT), null);
+      assert.equal(await repository.unpublish(foreigner, published.id), null);
+
+      assert.equal((await stored(draft.id)).status, "DRAFT");
+      assert.equal((await stored(draft.id)).publishedAt, null);
+      assert.equal((await stored(published.id)).status, "PUBLISHED");
+      assert.deepEqual((await stored(published.id)).publishedAt, PUBLISHED_AT);
+    });
+
+    it("answers null for an id that names nothing", async () => {
+      const ownerId = await newOwner();
+
+      assert.equal(await repository.publish(ownerId, UNKNOWN_ID, PUBLISHED_AT), null);
+      assert.equal(await repository.unpublish(ownerId, UNKNOWN_ID), null);
+    });
+  });
+
+  describe("findPublishedBySlug (S2, S8, A3)", () => {
+    it("answers the published row by slug in one query", async () => {
+      const ownerId = await newOwner();
+      const slug = newSlug();
+      const published = await newPublishedDraft(ownerId, slug, { celebrantName: "Ana" });
+
+      const found = await repository.findPublishedBySlug(slug);
+
+      assert.deepEqual(found, published);
+    });
+
+    it("answers null for a DRAFT, an ARCHIVED, and an unknown slug", async () => {
+      const ownerId = await newOwner();
+      const draft = await newDraft(ownerId);
+      const archived = await newPublishedDraft(ownerId);
+      await repository.archive(ownerId, archived.id);
+
+      assert.equal(await repository.findPublishedBySlug(draft.slug), null);
+      assert.equal(await repository.findPublishedBySlug(archived.slug), null);
+      assert.equal(await repository.findPublishedBySlug(newSlug()), null);
+    });
+
+    it("answers null for an expired row and still answers one that expires later (S8)", async () => {
+      const ownerId = await newOwner();
+      const expired = await newPublishedDraft(ownerId, newSlug());
+      const future = await newPublishedDraft(ownerId, newSlug());
+      await prisma.invitation.update({
+        where: { id: expired.id },
+        data: { expiresAt: new Date("2020-01-01T00:00:00.000Z") },
+      });
+      const later = new Date();
+      later.setUTCFullYear(later.getUTCFullYear() + 1);
+      await prisma.invitation.update({
+        where: { id: future.id },
+        data: { expiresAt: later },
+      });
+      const futureBefore = await stored(future.id);
+
+      assert.equal(await repository.findPublishedBySlug(expired.slug), null);
+      assert.deepEqual(await repository.findPublishedBySlug(future.slug), futureBefore);
     });
   });
 
@@ -448,6 +644,30 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       });
       assert.equal(await catalogReader.findPublishedVersion(retired.templateVersionId), null);
       assert.equal(await catalogReader.findVersionSchema(UNKNOWN_ID), null);
+    });
+
+    it("answers the render data of a RETIRED version, so a published invitation keeps rendering it (A1)", async () => {
+      const schema = {
+        type: "object",
+        required: ["celebrantName"],
+        properties: { celebrantName: { type: "string", maxLength: 80 } },
+      };
+      const configuration = { componentKey: "birthday-adventure-01", theme: "festive" };
+      const retired = await newCatalog({
+        templateStatus: "ARCHIVED",
+        versionStatus: "RETIRED",
+        schema,
+        configuration,
+      });
+
+      assert.deepEqual(await catalogReader.findVersionRenderData(retired.templateVersionId), {
+        componentKey: "birthday-adventure-01",
+        configuration,
+        schema,
+      });
+      assert.equal(await catalogReader.findVersionRenderData(UNKNOWN_ID), null);
+      assert.equal(catalogReader.isRendererRegistered("birthday-adventure-01"), true);
+      assert.equal(catalogReader.isRendererRegistered("retired-renderer-99"), false);
     });
 
     it("answers package entitlements with only the included feature keys (S6, A1)", async () => {

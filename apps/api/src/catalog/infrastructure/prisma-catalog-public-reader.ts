@@ -2,11 +2,12 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import type {
   CatalogPackageEntitlements,
-  CatalogPublicReader,
+  CatalogPublicContract,
   CreatorPackageSummary,
   CreatorTemplateSummary,
   PublishedTemplateVersion,
   StoredVersionSchema,
+  VersionRenderData,
 } from "../application/public/catalog-public-reader";
 import { findRenderer } from "../domain/renderers/renderer-registry";
 
@@ -20,6 +21,14 @@ const PUBLISHED_VERSION_SELECT = {
 const VERSION_SCHEMA_SELECT = {
   id: true,
   templateId: true,
+  schema: true,
+} satisfies Prisma.TemplateVersionSelect;
+
+// The public rendering read (M5 T3; A1): the renderer identity, its configuration, and its schema, in any
+// status. No status, template id, or version number is selected, because a public page needs none of them.
+const VERSION_RENDER_SELECT = {
+  componentKey: true,
+  configuration: true,
   schema: true,
 } satisfies Prisma.TemplateVersionSelect;
 
@@ -146,9 +155,12 @@ function toCreatorPackage(row: CreatorPackageRow): CreatorPackageSummary {
  * against an unusable snapshot. `requiredFeatureKeys` comes from the in-code renderer registry (A1), never from
  * the database: a PUBLISHED version whose `componentKey` is no longer in the allow-list answers null, because
  * the API can no longer render it. The stored schema is answered in any status, so a caller already pinned to a
- * version keeps validating against that snapshot after the catalog publishes a newer one (S3).
+ * version keeps validating against that snapshot after the catalog publishes a newer one (S3). The render data
+ * of a pinned version is answered in any status too, so an already published invitation keeps rendering the
+ * version it pinned after the catalog retires it (M5 T3; A1), while `isRendererRegistered` answers the in-code
+ * allow-list without a query.
  */
-export class PrismaCatalogPublicReader implements CatalogPublicReader {
+export class PrismaCatalogPublicReader implements CatalogPublicContract {
   constructor(private readonly prisma: PrismaClient) {}
 
   async findPublishedVersion(versionId: string): Promise<PublishedTemplateVersion | null> {
@@ -179,6 +191,22 @@ export class PrismaCatalogPublicReader implements CatalogPublicReader {
       select: PACKAGE_ENTITLEMENTS_SELECT,
     });
     return row === null ? null : toEntitlements(row);
+  }
+
+  async findVersionRenderData(versionId: string): Promise<VersionRenderData | null> {
+    const row = await this.prisma.templateVersion.findUnique({
+      where: { id: versionId },
+      select: VERSION_RENDER_SELECT,
+    });
+    if (row === null) {
+      return null;
+    }
+
+    return { componentKey: row.componentKey, configuration: row.configuration, schema: row.schema };
+  }
+
+  isRendererRegistered(componentKey: string): boolean {
+    return findRenderer(componentKey) !== undefined;
   }
 
   /**

@@ -20,6 +20,18 @@ export interface CatalogVersionSchema {
   schema: unknown;
 }
 
+/**
+ * What the public page needs to render a pinned version (M5 T3; S2, A1, A3): the allow-listed renderer
+ * identity, its configuration, and the schema whose declared properties allow-list the public content. It is
+ * answered in any status, because an already published invitation keeps rendering the version it pinned even
+ * after the catalog retires it.
+ */
+export interface CatalogVersionRenderData {
+  componentKey: string;
+  configuration: unknown;
+  schema: unknown;
+}
+
 /** The status and included feature keys of one package, as the package-fit rule reads them (S6, A1). */
 export interface CatalogPackageEntitlements {
   /** The stored package status; the domain accepts only `ACTIVE` and fails closed on anything else. */
@@ -47,6 +59,20 @@ export interface InvitationCatalog {
 
   /** The status and included feature keys of a package; null when no package has this id. */
   findPackageEntitlements(packageId: string): Promise<CatalogPackageEntitlements | null>;
+
+  /**
+   * The render data of the version an invitation is pinned to, in any status (S3, A1): the public page of an
+   * already published invitation keeps rendering its pinned version after the catalog retires it. Null when no
+   * version has this id.
+   */
+  findVersionRenderData(versionId: string): Promise<CatalogVersionRenderData | null>;
+
+  /**
+   * Whether the API's in-code renderer allow-list still knows this `componentKey` (A3). It reads the catalog's
+   * own registry, not the database, so a version that names a renderer nobody implements is refused as an
+   * operational fault instead of being handed to a guest. Synchronous: it performs no query.
+   */
+  isRendererRegistered(componentKey: string): boolean;
 }
 
 export const INVITATION_CATALOG = Symbol("InvitationCatalog");

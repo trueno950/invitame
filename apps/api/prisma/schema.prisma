@@ -35,10 +35,13 @@ enum TemplateVersionStatus {
   RETIRED
 }
 
-// The only statuses Milestone 4 writes (A3); publication adds its own additively.
+// The invitation lifecycle (M5 A2): DRAFT, PUBLISHED, and terminal ARCHIVED. Milestone 4 wrote DRAFT and
+// ARCHIVED; migration 2026111*_add_invitation_publication appends PUBLISHED, so PostgreSQL's physical
+// order is DRAFT, ARCHIVED, PUBLISHED. No code compares invitation statuses ordinally.
 enum InvitationStatus {
   DRAFT
   ARCHIVED
+  PUBLISHED
 }
 
 // Better Auth `user` model. Better Auth's `name` field is mapped onto `displayName`.
@@ -246,6 +249,8 @@ model TemplateVersion {
 // Migration 20261111214752_add_invitations adds what Prisma cannot express: the CHECK constraints
 // "Invitation_slug_format", "Invitation_slug_length", "Invitation_content_object", and
 // "Invitation_archivedAt_matches_status", and the "Invitation_pinned_fields_immutable" trigger.
+// Migration 2026111*_add_invitation_publication adds "Invitation_publishedAt_matches_status" and keeps the
+// archive check, which stays correct for three statuses.
 model Invitation {
   id                String           @id @default(uuid()) @db.Uuid
   ownerId           String           @db.Uuid
@@ -255,6 +260,10 @@ model Invitation {
   status            InvitationStatus @default(DRAFT)
   content           Json             @db.JsonB @default("{}")
   archivedAt        DateTime?        @db.Timestamptz(6)
+  // Set exactly while the status is PUBLISHED: unpublishing and archiving clear it (S7, A2).
+  publishedAt       DateTime?        @db.Timestamptz(6)
+  // Expiry the database carries but Milestone 5 never sets; the rule arrives in a later milestone (S8).
+  expiresAt         DateTime?        @db.Timestamptz(6)
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
 

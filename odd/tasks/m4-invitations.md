@@ -89,3 +89,5 @@ catalog read requires a signed-in customer (not `@Public()`).
   HH:MM pattern, and `mainPhoto` format uri, but T2 deferred those rules to publication, so a negative age was
   stored; S7 says each field is validated against the pinned version, so T7 enforces them on save. T7 and T8 are
   added to slice 3 (PR #58) before its merge.
+- L11 (2026-11-12): owner tried the pages again ("me gusta") and asked to replace «Ingresar» on the landing for a
+  signed-in visitor (`4df4a05`). PR #58 merged as `6937cc3`. Milestone 4 is complete.

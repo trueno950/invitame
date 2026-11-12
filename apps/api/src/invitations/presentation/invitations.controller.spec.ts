@@ -20,6 +20,7 @@ import { InvitationSlugTakenError } from "../application/invitation.application.
 import {
   type CatalogPackageEntitlements,
   type CatalogTemplateVersionSnapshot,
+  type CatalogVersionRenderData,
   type CatalogVersionSchema,
   INVITATION_CATALOG,
   type InvitationCatalog,
@@ -30,11 +31,15 @@ import {
   type InvitationRepository,
   type NewInvitation,
 } from "../application/invitation.repository";
+import { INVITATION_PAYMENT_GATE } from "../application/invitation-payment-gate";
 import type { JsonObject } from "../domain/invitation-content";
 import {
   InvitationAlreadyArchivedError,
+  InvitationAlreadyPublishedError,
   InvitationNotEditableError,
+  InvitationNotPublishedError,
 } from "../domain/invitation.errors";
+import { NoPaymentRequiredGate } from "../infrastructure/no-payment-required";
 import { INVITATION_USE_CASES } from "../invitations.module";
 import { InvitationsController } from "./invitations.controller";
 
@@ -62,7 +67,7 @@ const SCHEMA = {
 
 type Row = Record<string, unknown>;
 
-/** The invitation port in memory: owner scoping, a unique slug, and DRAFT-only writes, as the adapter runs them. */
+/** The invitation port in memory: owner scoping, a unique slug, and the lifecycle writes the adapter runs. */
 class MemoryInvitationRepository implements InvitationRepository {
   readonly rows: InvitationRecord[] = [];
   /** How many upcoming creates collide on the slug; the create use case retries and then answers 503. */
@@ -85,6 +90,8 @@ class MemoryInvitationRepository implements InvitationRepository {
       content: structuredClone(input.content),
       status: "DRAFT",
       archivedAt: null,
+      publishedAt: null,
+      expiresAt: null,
       createdAt: at,
       updatedAt: at,
     };
@@ -113,7 +120,8 @@ class MemoryInvitationRepository implements InvitationRepository {
     if (!row) {
       return null;
     }
-    if (row.status !== "DRAFT") {
+    // A DRAFT or a PUBLISHED invitation changes; a published one changes live (S7).
+    if (row.status === "ARCHIVED") {
       throw new InvitationNotEditableError(row.status);
     }
     row.content = structuredClone(content);
@@ -125,12 +133,58 @@ class MemoryInvitationRepository implements InvitationRepository {
     if (!row) {
       return null;
     }
-    if (row.status !== "DRAFT") {
+    // Archiving is allowed from DRAFT or from PUBLISHED, and clears the publication marker (A2).
+    if (row.status === "ARCHIVED") {
       throw new InvitationAlreadyArchivedError();
     }
     row.status = "ARCHIVED";
     row.archivedAt = new Date();
+    row.publishedAt = null;
     return structuredClone(row);
+  }
+
+  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecord | null> {
+    const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
+    if (!row) {
+      return null;
+    }
+    if (row.status === "PUBLISHED") {
+      throw new InvitationAlreadyPublishedError();
+    }
+    if (row.status === "ARCHIVED") {
+      throw new InvitationAlreadyArchivedError();
+    }
+    row.status = "PUBLISHED";
+    row.publishedAt = at;
+    row.updatedAt = at;
+    return structuredClone(row);
+  }
+
+  async unpublish(ownerId: string, id: string): Promise<InvitationRecord | null> {
+    const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
+    if (!row) {
+      return null;
+    }
+    if (row.status === "DRAFT") {
+      throw new InvitationNotPublishedError();
+    }
+    if (row.status === "ARCHIVED") {
+      throw new InvitationAlreadyArchivedError();
+    }
+    row.status = "DRAFT";
+    row.publishedAt = null;
+    return structuredClone(row);
+  }
+
+  async findPublishedBySlug(slug: string): Promise<InvitationRecord | null> {
+    const now = Date.now();
+    const row = this.rows.find(
+      (stored) =>
+        stored.slug === slug &&
+        stored.status === "PUBLISHED" &&
+        (stored.expiresAt === null || stored.expiresAt.getTime() > now),
+    );
+    return row ? structuredClone(row) : null;
   }
 }
 
@@ -171,6 +225,21 @@ class MemoryInvitationCatalog implements InvitationCatalog {
 
   async findPackageEntitlements(packageId: string): Promise<CatalogPackageEntitlements | null> {
     return this.packages.get(packageId) ?? null;
+  }
+
+  async findVersionRenderData(versionId: string): Promise<CatalogVersionRenderData | null> {
+    const stored = this.versions.get(versionId);
+    return stored
+      ? {
+          componentKey: "birthday-adventure-01",
+          configuration: { componentKey: "birthday-adventure-01" },
+          schema: stored.schema,
+        }
+      : null;
+  }
+
+  isRendererRegistered(componentKey: string): boolean {
+    return componentKey === "birthday-adventure-01";
   }
 }
 
@@ -222,6 +291,8 @@ describe("invitations routes: /invitations", () => {
         ...INVITATION_USE_CASES,
         { provide: INVITATION_REPOSITORY, useValue: repository },
         { provide: INVITATION_CATALOG, useValue: catalog },
+        // Publication is free in Milestone 5; the publish use case asks this gate (S6).
+        { provide: INVITATION_PAYMENT_GATE, useValue: new NoPaymentRequiredGate() },
       ],
     })
     class InvitationsTestModule {}

@@ -30,6 +30,18 @@ export interface StoredVersionSchema {
   schema: unknown;
 }
 
+/**
+ * What a public page needs to render one pinned version (M5 T3; S2, A1, A3): the renderer identity, its
+ * configuration, and the schema whose declared `properties` allow-list the public content. It is answered in any
+ * status, because an already published invitation keeps rendering the version it pinned even after the catalog
+ * retires it.
+ */
+export interface VersionRenderData {
+  componentKey: string;
+  configuration: unknown;
+  schema: unknown;
+}
+
 /** What a package grants right now: its status and the feature keys it includes (S6, A1). */
 export interface CatalogPackageEntitlements {
   packageId: string;
@@ -108,3 +120,20 @@ export interface CatalogPublicReader {
 }
 
 export const CATALOG_PUBLIC_READER = Symbol("CatalogPublicReader");
+
+/**
+ * The public rendering reads of the catalog (M5 T3; S2, A1, A3), a second facet of the same read-only adapter
+ * that `CATALOG_PUBLIC_READER` binds. A module that renders a pinned version consumes this instead of importing
+ * the renderer registry: the catalog owns the registry, and `isRendererRegistered` is the allow-list answer a
+ * caller needs to refuse a `componentKey` nobody implements.
+ */
+export interface CatalogPublicRenderReader {
+  /** The render data of a version in any status; null when no version has this id. Carries no status or ids. */
+  findVersionRenderData(versionId: string): Promise<VersionRenderData | null>;
+
+  /** Whether the API's in-code registry still knows this `componentKey`; synchronous, it performs no query. */
+  isRendererRegistered(componentKey: string): boolean;
+}
+
+/** Everything the catalog's public reader answers: the data reads and the rendering reads. */
+export type CatalogPublicContract = CatalogPublicReader & CatalogPublicRenderReader;
