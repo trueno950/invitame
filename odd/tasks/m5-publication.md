@@ -46,8 +46,8 @@ metadata (title from `celebrantName`, description from `message`), no generated 
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | Additive migration: `PUBLISHED` in `InvitationStatus`, nullable `publishedAt` and `expiresAt`, rewrite the archive CHECK for three statuses, `publishedAt` set exactly while `PUBLISHED`; database tests | S2, S7, S8 | worker (high risk: own commit) | |
-| T2 | Domain: lifecycle (publish, unpublish, archive from DRAFT or PUBLISHED, edit while DRAFT or PUBLISHED), completeness rule, payment port contract with a "no payment required" adapter; unit tests | S2, S3, S6, S7 | worker | |
+| T1 | Additive migration: `PUBLISHED` in `InvitationStatus`, nullable `publishedAt` and `expiresAt`, rewrite the archive CHECK for three statuses, `publishedAt` set exactly while `PUBLISHED`; database tests | S2, S7, S8 | worker (high risk: own commit) | `3f2dc2e` |
+| T2 | Domain: lifecycle (publish, unpublish, archive from DRAFT or PUBLISHED, edit while DRAFT or PUBLISHED), completeness rule, payment port contract with a "no payment required" adapter; unit tests | S2, S3, S6, S7 | worker | `32ca239` |
 | T3 | Application and Prisma: publish and unpublish use cases (owner-scoped), public read by slug with the allow-listed projection, catalog public contract for the pinned version's render data; database tests | S1, S2, S3, S7 | worker | |
 | T4 | API: `POST /invitations/:id/publish`, `POST /invitations/:id/unpublish`, `@Public()` `GET /public/invitations/:slug`; controller tests (401, 404, 409, public 404 cases) | S2, S3, S9 | worker | |
 | T5 | Web: `/i/[slug]` public page (renderer, friendly 404, noindex, metadata), publish/unpublish controls and the public link in `/cuenta/invitaciones/[id]`; unit tests and a Playwright public-journey spec | S1, S5, S7, S9 | worker | |
@@ -59,3 +59,6 @@ metadata (title from `celebrantName`, description from `message`), no generated 
 - L2 (2026-11-12, owner answers): URL — "/i/<slug> (Recomendado)"; payment — "Gratis por ahora (Recomendado)"; after
   publication — "Editable en vivo y despublicable (Recomendado)"; expiration — "No caduca en el M5 (Recomendado)".
 - L3 (2026-11-12): assumptions A1–A8 adopted from the planning map's recommended defaults (D3, D6–D11).
+- L4 (2026-11-12): T1 migration `3f2dc2e` (`20261112040547_add_invitation_publication`). One M4 database assertion
+  (`prisma-invitation.repository.db-spec.ts`, "stores a DRAFT pinned to …") fails until T3 adds `publishedAt` and
+  `expiresAt` to `InvitationRecord`; slice 1 of M5 is therefore T1 + T2 + T3 so no pushed commit range fails.
