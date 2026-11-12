@@ -48,7 +48,7 @@ metadata (title from `celebrantName`, description from `message`), no generated 
 | --- | --- | --- | --- | --- |
 | T1 | Additive migration: `PUBLISHED` in `InvitationStatus`, nullable `publishedAt` and `expiresAt`, rewrite the archive CHECK for three statuses, `publishedAt` set exactly while `PUBLISHED`; database tests | S2, S7, S8 | worker (high risk: own commit) | `3f2dc2e` |
 | T2 | Domain: lifecycle (publish, unpublish, archive from DRAFT or PUBLISHED, edit while DRAFT or PUBLISHED), completeness rule, payment port contract with a "no payment required" adapter; unit tests | S2, S3, S6, S7 | worker | `32ca239` |
-| T3 | Application and Prisma: publish and unpublish use cases (owner-scoped), public read by slug with the allow-listed projection, catalog public contract for the pinned version's render data; database tests | S1, S2, S3, S7 | worker | |
+| T3 | Application and Prisma: publish and unpublish use cases (owner-scoped), public read by slug with the allow-listed projection, catalog public contract for the pinned version's render data; database tests | S1, S2, S3, S7 | worker | `9b1b21c` |
 | T4 | API: `POST /invitations/:id/publish`, `POST /invitations/:id/unpublish`, `@Public()` `GET /public/invitations/:slug`; controller tests (401, 404, 409, public 404 cases) | S2, S3, S9 | worker | |
 | T5 | Web: `/i/[slug]` public page (renderer, friendly 404, noindex, metadata), publish/unpublish controls and the public link in `/cuenta/invitaciones/[id]`; unit tests and a Playwright public-journey spec | S1, S5, S7, S9 | worker | |
 | T6 | Docs: overview public flow (`/i/<slug>`), `CONTEXT.md` Publication, `docs/database/model.md`, ROADMAP status | S1–S10 | inline | |
