@@ -214,6 +214,9 @@ describe("ListRenderersUseCase", () => {
   it("lists the registry keys", () => {
     assert.deepEqual(new ListRenderersUseCase().execute(), [
       { componentKey: "birthday-adventure-01" },
+      { componentKey: "birthday-map-01" },
+      { componentKey: "birthday-poster-01" },
+      { componentKey: "birthday-story-01" },
     ]);
   });
 });
@@ -293,6 +296,39 @@ describe("CreateTemplateVersionUseCase", () => {
       CatalogRendererContractInvalidError,
     );
     assert.equal(repository.versions.length, 0);
+  });
+
+  it("accepts a layout version whose configuration names an allowed theme", async () => {
+    const { repository, template } = await seeded();
+    const useCase = new CreateTemplateVersionUseCase(repository);
+
+    const created = await useCase.execute(template.id, {
+      componentKey: "birthday-map-01",
+      schema: birthdayAdventureVersionInput().schema,
+      configuration: { componentKey: "birthday-map-01", theme: "ice-kingdom" },
+    });
+
+    assert.equal(created?.componentKey, "birthday-map-01");
+    assert.deepEqual(created?.configuration, {
+      componentKey: "birthday-map-01",
+      theme: "ice-kingdom",
+    });
+
+    await assert.rejects(
+      useCase.execute(template.id, {
+        componentKey: "birthday-map-01",
+        schema: birthdayAdventureVersionInput().schema,
+        configuration: { componentKey: "birthday-map-01", theme: "neon" },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof CatalogRendererContractInvalidError);
+        assert.deepEqual(error.issues, [
+          "configuration.theme must be one of: ice-kingdom, rescue-team, spider-hero, classic-mouse, dinosaurs, under-the-sea, fairytale-princess, blocks-and-pixels",
+        ]);
+        return true;
+      },
+    );
+    assert.equal(repository.versions.length, 1);
   });
 
   it("refuses a schema or configuration over 64 KiB, or one holding NUL, and stores nothing", async () => {

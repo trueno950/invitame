@@ -15,7 +15,7 @@ explicitly planned unless marked current.
 | Database | PostgreSQL and Prisma own `User` and the identity tables Better Auth reads and writes (sessions, credential accounts, verification codes, two-factor records, and rate-limit counters) plus the catalog, packages, features, templates, immutable template versions, and `Invitation` drafts pinned to a version; see [`model.md`](../database/model.md). | Guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Catalog | The API `catalog` module (`apps/api/src/catalog`) serves administrator-only endpoints under `/admin/catalog` for categories, features, packages with their features and MXN prices, templates, and template versions (create, publish, retire); the web pages under `/admin/catalogo` call them from the server. See Catalog administration below. Signed-in creators read the published templates and active packages through `GET /catalog/templates` and `GET /catalog/packages`, served from the catalog's public application contract (`CatalogPublicReader`). | Anonymous catalog browsing. **Planned.** |
 | Invitations | The API `invitations` module (`apps/api/src/invitations`) lets a signed-in customer create, list, read, edit the content of, and archive their own drafts under `/invitations`, and publish (`POST /invitations/:id/publish`) or unpublish them; publication requires every required field, content that still validates, a package that still fits, and a pinned version that is still published, and it asks a payment gate that answers "no payment required" until Milestone 7. A published invitation stays editable live. Guests read it through the public, uncacheable `GET /public/invitations/:slug`, which returns only the slug, `componentKey`, configuration, the pinned schema's content, and `publishedAt`. A draft pins a published `TemplateVersion` and an active package that includes the renderer's required feature keys, gets a generated unique slug, and stores partial content validated against the pinned schema; the owner comes only from the session and another owner's draft answers 404. See `odd/tasks/m4-invitations.md`. | Payment, guests, media, expiration rules, and slug regeneration. **Planned.** |
-| Renderer | An allow-listed renderer registry: the API validates each version's `schema` and `configuration` against the renderer contract at creation and publication, and the web maps `componentKey` to a reviewed component; a test keeps both key lists equal. The first renderer is `birthday-adventure-01`. | Additional renderers. **Planned.** |
+| Renderer | An allow-listed renderer registry: the API validates each version's `schema` and `configuration` against the renderer contract at creation and publication, and the web maps `componentKey` to a reviewed component; a test keeps both key lists equal. The registered renderers are `birthday-adventure-01` (its own layout, palette, typography, and section order) and the three themed birthday layouts `birthday-map-01`, `birthday-poster-01`, and `birthday-story-01`, each taking exactly `{ componentKey, theme }` with a theme from the shared eight-theme allow-list. | Layouts and themes for baby showers, themed baptisms, XV años, weddings, and formal baptisms. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
 
 ## Context and runtime map
@@ -692,11 +692,18 @@ application owns a registry similar in concept to:
 
 ```text
 "birthday-adventure-01" → BirthdayAdventureRenderer
-"wedding-editorial-01" → WeddingEditorialRenderer
+"birthday-map-01" → BirthdayMapRenderer
+"birthday-poster-01" → BirthdayPosterRenderer
+"birthday-story-01" → BirthdayStoryRenderer
 ```
 
 Current: the API registry (`apps/api/src/catalog/domain/renderers/`) owns the allow-list and each renderer's
-contract, and validates a version when it is created and when it is published. The web map
+contract, and validates a version when it is created and when it is published. These four keys are the whole
+current list: `birthday-adventure-01` keeps its own `layout`, `palette`, `typography`, and `sectionOrder`
+configuration, and the three layouts the owner chose for children's birthdays (`birthday-map-01`,
+`birthday-poster-01`, `birthday-story-01`) each take exactly `{ componentKey, theme }`, where `theme` comes from
+the shared allow-list in `birthday-themes.ts` and the content schema is the eight `birthday-adventure-01` fields.
+Layouts and themes for the other occasions are planned, not current. The web map
 (`apps/web/lib/renderers/registry.ts`) resolves an allow-listed key to a reviewed component with no dynamic import,
 and `registry-sync.test.ts` fails when the two key lists differ. There is no shared package between the runtimes.
 

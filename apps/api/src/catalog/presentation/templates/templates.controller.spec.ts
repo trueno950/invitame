@@ -241,7 +241,12 @@ describe("admin catalog templates and versions", () => {
       const response = await send("GET", RENDERERS_PATH, cookie);
 
       assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), [{ componentKey: "birthday-adventure-01" }]);
+      assert.deepEqual(await response.json(), [
+        { componentKey: "birthday-adventure-01" },
+        { componentKey: "birthday-map-01" },
+        { componentKey: "birthday-poster-01" },
+        { componentKey: "birthday-story-01" },
+      ]);
     });
   });
 

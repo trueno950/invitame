@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import { PackageStatus, PrismaClient } from "@prisma/client";
-import { seedCatalog } from "../../../prisma/catalog-seed";
+import { BIRTHDAY_LAYOUT_TEMPLATE_SEEDS, seedCatalog } from "../../../prisma/catalog-seed";
 import { requireLocalDatabaseUrl } from "../../../test/database";
 
 // The catalog seed (M3 T2; S7, L4) on real PostgreSQL: it only creates what is missing and never
@@ -137,6 +137,32 @@ describe("catalog seed (real PostgreSQL)", () => {
     assert.ok(versionOne);
     assert.equal(versionOne.componentKey, "birthday-adventure-01");
     assert.equal(versionOne.status, "PUBLISHED");
+  });
+
+  it("seeds one birthday layout template per layout and theme with a published version 1", async () => {
+    await seedCatalog(prisma);
+
+    const templates = await prisma.template.findMany({
+      where: { key: { in: BIRTHDAY_LAYOUT_TEMPLATE_SEEDS.map((seed) => seed.key) } },
+      include: { category: true, versions: true },
+    });
+
+    assert.equal(templates.length, BIRTHDAY_LAYOUT_TEMPLATE_SEEDS.length);
+
+    for (const seed of BIRTHDAY_LAYOUT_TEMPLATE_SEEDS) {
+      const template = templates.find((row) => row.key === seed.key);
+      assert.ok(template, seed.key);
+      assert.equal(template.category.key, "birthday", seed.key);
+      assert.equal(template.name, seed.name, seed.key);
+      assert.equal(template.description, seed.description, seed.key);
+      assert.equal(template.status, "PUBLISHED", seed.key);
+
+      const versionOne = template.versions.find((version) => version.version === 1);
+      assert.ok(versionOne, seed.key);
+      assert.equal(versionOne.componentKey, seed.componentKey, seed.key);
+      assert.equal(versionOne.status, "PUBLISHED", seed.key);
+      assert.deepEqual(versionOne.configuration, seed.configuration, seed.key);
+    }
   });
 
   it("links each seeded package to its features when it creates the package", async () => {

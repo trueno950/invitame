@@ -101,9 +101,16 @@ function issuesOf(result: ReturnType<typeof validate>): string[] {
 }
 
 describe("renderer registry", () => {
-  it("lists birthday-adventure-01 as the only renderer", () => {
-    assert.deepEqual(listRendererKeys(), [KEY]);
-    assert.equal(findRenderer(KEY)?.componentKey, KEY);
+  it("lists the seeded renderer and the three birthday layouts", () => {
+    assert.deepEqual(listRendererKeys(), [
+      KEY,
+      "birthday-map-01",
+      "birthday-poster-01",
+      "birthday-story-01",
+    ]);
+    for (const key of listRendererKeys()) {
+      assert.equal(findRenderer(key)?.componentKey, key);
+    }
   });
 
   it("treats prototype keys and unknown keys as not registered", () => {
@@ -135,8 +142,10 @@ describe("renderer feature requirements (S6, A1)", () => {
     }
   });
 
-  it("requires no feature key for birthday-adventure-01", () => {
-    assert.deepEqual(findRenderer(KEY)?.requiredFeatureKeys, []);
+  it("requires no feature key for any seeded renderer", () => {
+    for (const key of listRendererKeys()) {
+      assert.deepEqual(findRenderer(key)?.requiredFeatureKeys, [], key);
+    }
   });
 });
 

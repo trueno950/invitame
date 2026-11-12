@@ -1,9 +1,15 @@
-import { PackageStatus, TemplateStatus, TemplateVersionStatus } from "@prisma/client";
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { PackageStatus, TemplateStatus, TemplateVersionStatus } from "@prisma/client";
+import {
+  BIRTHDAY_THEMES,
+  type BirthdayTheme,
+} from "../src/catalog/domain/renderers/birthday-themes";
 
 // Seeds the base catalog (M3 T2; S7). It only creates what is missing: a row whose key (or composite
 // key) already exists is never updated, reactivated, or deleted, because an administrator may have
 // changed it on purpose. Prices are not seeded: amounts are set through the admin API (L4).
+// The birthday layouts and themes come from the renderer allow-lists (S2, S8): one template per layout and
+// theme, each with a PUBLISHED version 1 only when this run creates the template.
 
 const CATEGORY_SEEDS = [
   {
@@ -186,6 +192,83 @@ export const BIRTHDAY_ADVENTURE_CONFIGURATION = {
   sectionOrder: ["hero", "details", "message"],
 } satisfies Prisma.InputJsonObject;
 
+/** One seeded template and the version 1 it receives when this run creates the template. */
+export interface CatalogTemplateSeed {
+  readonly key: string;
+  readonly name: string;
+  readonly description: string;
+  readonly componentKey: string;
+  readonly schema: Prisma.InputJsonObject;
+  readonly configuration: Prisma.InputJsonObject;
+}
+
+/** A birthday layout template: one layout key plus the theme it applies (S2, S8). */
+export interface BirthdayLayoutTemplateSeed extends CatalogTemplateSeed {
+  readonly theme: BirthdayTheme;
+}
+
+const BIRTHDAY_ADVENTURE_TEMPLATE: CatalogTemplateSeed = {
+  key: "birthday-adventure",
+  name: "Birthday Adventure",
+  description: "Una aventura colorida para celebrar un cumpleaños.",
+  componentKey: BIRTHDAY_ADVENTURE_COMPONENT_KEY,
+  schema: BIRTHDAY_ADVENTURE_SCHEMA,
+  configuration: BIRTHDAY_ADVENTURE_CONFIGURATION,
+};
+
+const BIRTHDAY_LAYOUT_SEEDS = [
+  {
+    slug: "map",
+    componentKey: "birthday-map-01",
+    label: "Mapa",
+    description:
+      "Un mapa con los detalles de la fiesta para invitaciones de cumpleaños infantiles.",
+  },
+  {
+    slug: "poster",
+    componentKey: "birthday-poster-01",
+    label: "Cartel",
+    description: "Un cartel festivo que pone los datos del cumpleaños en primer plano.",
+  },
+  {
+    slug: "story",
+    componentKey: "birthday-story-01",
+    label: "Cuento",
+    description: "Un cuento ilustrado que narra la fiesta de cumpleaños paso a paso.",
+  },
+] as const;
+
+/** The Spanish display name of each theme; the keys and their order come from the renderer allow-list. */
+const BIRTHDAY_THEME_NAMES: Readonly<Record<BirthdayTheme, string>> = {
+  "ice-kingdom": "Reino de hielo",
+  "rescue-team": "Equipo de rescate",
+  "spider-hero": "Héroe arácnido",
+  "classic-mouse": "Ratón clásico",
+  dinosaurs: "Dinosaurios",
+  "under-the-sea": "Bajo el mar",
+  "fairytale-princess": "Princesa de cuento",
+  "blocks-and-pixels": "Bloques y píxeles",
+};
+
+/**
+ * One published birthday layout template per layout and theme (3 layouts x 8 themes), in the theme order
+ * the owner chose (S8). Every template shares the `birthday-adventure-01` content schema and takes exactly
+ * `{ componentKey, theme }` as configuration. Catalog names stay generic: a theme name never names a
+ * character or a brand (S5).
+ */
+export const BIRTHDAY_LAYOUT_TEMPLATE_SEEDS: readonly BirthdayLayoutTemplateSeed[] =
+  BIRTHDAY_LAYOUT_SEEDS.flatMap((layout) =>
+    BIRTHDAY_THEMES.map((theme) => ({
+      key: `birthday-${layout.slug}-${theme}`,
+      name: `${layout.label} · ${BIRTHDAY_THEME_NAMES[theme]}`,
+      description: layout.description,
+      componentKey: layout.componentKey,
+      schema: BIRTHDAY_ADVENTURE_SCHEMA,
+      configuration: { componentKey: layout.componentKey, theme },
+      theme,
+    })),
+  );
+
 /** How many rows one run created; all zero when the catalog was already seeded. */
 export interface CatalogSeedSummary {
   categories: number;
@@ -277,7 +360,64 @@ async function seedPackages(
   return { packages, packageFeatures };
 }
 
-async function seedBirthdayAdventure(
+/**
+ * Creates each missing template and, only for a template this run created, its PUBLISHED version 1. Like a
+ * package's feature links, version 1 belongs to a template this run created: an existing template's
+ * versions are the administrator's, and it may already have another published version.
+ */
+async function seedTemplates(
+  transaction: Transaction,
+  categoryId: string,
+  seeds: readonly CatalogTemplateSeed[],
+): Promise<{ templates: number; templateVersions: number }> {
+  let templates = 0;
+  let templateVersions = 0;
+
+  for (const seed of seeds) {
+    const { count } = await transaction.template.createMany({
+      data: [
+        {
+          categoryId,
+          key: seed.key,
+          name: seed.name,
+          description: seed.description,
+          status: TemplateStatus.PUBLISHED,
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    if (count === 0) {
+      continue;
+    }
+
+    const template = await transaction.template.findUniqueOrThrow({
+      where: { key: seed.key },
+      select: { id: true },
+    });
+    const versions = await transaction.templateVersion.createMany({
+      data: [
+        {
+          templateId: template.id,
+          version: 1,
+          status: TemplateVersionStatus.PUBLISHED,
+          componentKey: seed.componentKey,
+          schema: seed.schema,
+          configuration: seed.configuration,
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    templates += count;
+    templateVersions += versions.count;
+  }
+
+  return { templates, templateVersions };
+}
+
+/** Creates `birthday-adventure` and the 24 birthday layout-and-theme templates (S8). */
+async function seedBirthdayTemplates(
   transaction: Transaction,
 ): Promise<{ templates: number; templateVersions: number }> {
   const category = await transaction.category.findUnique({
@@ -289,44 +429,10 @@ async function seedBirthdayAdventure(
     throw new Error("Missing seeded record for key: birthday.");
   }
 
-  const templates = await transaction.template.createMany({
-    data: [
-      {
-        categoryId: category.id,
-        key: "birthday-adventure",
-        name: "Birthday Adventure",
-        description: "Una aventura colorida para celebrar un cumpleaños.",
-        status: TemplateStatus.PUBLISHED,
-      },
-    ],
-    skipDuplicates: true,
-  });
-
-  // Like a package's feature links, version 1 belongs to a template this run created: an existing
-  // template's versions are the administrator's, and it may already have another published version.
-  if (templates.count === 0) {
-    return { templates: 0, templateVersions: 0 };
-  }
-
-  const template = await transaction.template.findUniqueOrThrow({
-    where: { key: "birthday-adventure" },
-    select: { id: true },
-  });
-  const templateVersions = await transaction.templateVersion.createMany({
-    data: [
-      {
-        templateId: template.id,
-        version: 1,
-        status: TemplateVersionStatus.PUBLISHED,
-        componentKey: BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-        schema: BIRTHDAY_ADVENTURE_SCHEMA,
-        configuration: BIRTHDAY_ADVENTURE_CONFIGURATION,
-      },
-    ],
-    skipDuplicates: true,
-  });
-
-  return { templates: templates.count, templateVersions: templateVersions.count };
+  return seedTemplates(transaction, category.id, [
+    BIRTHDAY_ADVENTURE_TEMPLATE,
+    ...BIRTHDAY_LAYOUT_TEMPLATE_SEEDS,
+  ]);
 }
 
 /** Inserts the base catalog records that do not exist yet, in one transaction. */
@@ -335,7 +441,7 @@ export async function seedCatalog(prisma: PrismaClient): Promise<CatalogSeedSumm
     const categories = await seedCategories(transaction);
     const features = await seedFeatures(transaction);
     const { packages, packageFeatures } = await seedPackages(transaction);
-    const { templates, templateVersions } = await seedBirthdayAdventure(transaction);
+    const { templates, templateVersions } = await seedBirthdayTemplates(transaction);
 
     return { categories, features, packages, packageFeatures, templates, templateVersions };
   });
