@@ -37,8 +37,8 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | --- | --- | --- | --- | --- |
 | T1 | Add the catalog design track to `ROADMAP.md` | S1-S5 | inline | `db6c5f1` |
 | T2 | Visual directions for the children's birthday layouts under `design/birthday-adventure-v2/` | S1-S5 | inline | `db6c5f1` |
-| T3 | Rewrite the track and guardrail for layouts plus themes, more occasions, and palette-inspired themes (L5) | S1-S6 | inline | this commit |
-| T4 | Children's theme board: palette-inspired themes with contrast-checked palettes and font suggestions | S2, S5, S6 | inline | this commit |
+| T3 | Rewrite the track and guardrail for layouts plus themes, more occasions, and palette-inspired themes (L5) | S1-S6 | inline | `fee7417` |
+| T4 | Children's theme board: palette-inspired themes with contrast-checked palettes and font suggestions | S2, S5, S6 | inline | `fee7417` |
 | T5 | Owner picks the birthday layouts (01-03) and the first themes; confirm new `componentKey` per layout | S3 | owner | |
 | T6 | Implement the chosen birthday layouts with the theme contract: renderer, contract, themes, seed, tests | S2, S3, S5 | pending T5 | |
 | T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
@@ -73,3 +73,9 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   layouts rather than competing options. The guardrail now allows palette inspiration and commercially licensed or
   similar fonts, and still forbids character artwork, logos, and protected names in templates, catalog names, and
   marketing. Theme names stay generic in the repository.
+- L6 — T3-T4 in `fee7417`: ROADMAP rewritten for layouts plus themes, five occasions, and the theme guardrail;
+  `design/kids-themes/01-tablero-temas.html` shows eight themes (Reino de hielo, Equipo de rescate, Héroe arácnido,
+  Ratón clásico, Dinosaurios, Bajo el mar, Princesa de cuento, Bloques y píxeles) on the Cartel layout. Every
+  palette's ink and accent reach at least 4.61:1 on background, surface, and soft, and white on accent at least 6.03:1
+  (computed with the WCAG formula). Font licenses named on the board are to be confirmed when each font is added.
+  Slice 1 ends here (about 810 lines, mostly design artboards); T6 starts slice 2.
