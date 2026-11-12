@@ -89,7 +89,7 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T6a | API: three renderer contracts, shared theme allow-list, registry, seed for 24 templates, tests, `docs/architecture/overview.md` | S2, S3, S5, S7, S8 | worker | `00cb26a` |
 | T6b | Web: theme tokens and fonts, three layout renderers, parsers, registries, tests, `docs/design/theme.md` | S2, S3, S5, S7, S8 | worker | `2e9c69d`, `71e4830` |
 | T6c | Integration check: key and theme lists in sync, full unit suites, typecheck, lint, 390 px screenshots | S3, S8 | inline | `71e4830` |
-| T9 | Template chooser with live previews grouped by layout, theme switch, and a full sample preview page | S9 | worker | |
+| T9 | Template chooser with live previews grouped by layout, theme switch, and a full sample preview page | S9 | worker | `e3c0284`, `ba3debb` |
 | T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
 | T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
 
@@ -155,3 +155,10 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   errors on all eight themes. Slice 2 ends here; T7 starts slice 3.
 - L11 — Owner tested the 24 templates on the local app ("funciona") and asked for a preview when choosing; chose the
   grouped layout cards with theme switches (S9). Added T9 ahead of T7.
+- L12 — T9 done in `e3c0284` (API: creator catalog answers the published version's `configuration`) and `ba3debb`
+  (web chooser). Worker `mwe6d2mp-8-6ois`: web 668/668, API 1097/1097 unit and 292/292 db-specs on `invitame_test`,
+  both typechecks, docs check, and Biome on the changed files pass. In the browser at 390 and 1280 px: 4 cards, 25
+  radios, a theme switch changes the miniature, the «Ver completa» link, and the submitted version id; drafts are
+  created from a chosen theme; the preview page requires sign-in and shows «No encontramos esa plantilla» for
+  unknown ids. Not run: the Playwright e2e specs. The chooser server-renders all 25 miniatures (about 515 KB of HTML),
+  which needs a reviewed strategy if the catalog grows much.
