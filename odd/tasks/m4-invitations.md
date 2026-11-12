@@ -47,8 +47,8 @@ catalog read requires a signed-in customer (not `@Public()`).
 | T4 | API presentation: `/invitations` routes with `@SessionUserId()`, DTOs, 400/401/404 tests; creator catalog read (published templates with their published version, active packages with price and feature keys) | S3, S8, S9 | worker | `6f579f9` |
 | T5 | Web: «Mis invitaciones» under `/cuenta`, create (template + package), edit the draft from the pinned schema, archive; server actions | S1, S6, S7 | worker | `5f05be3` |
 | T6 | Docs: `docs/database/model.md`, `CONTEXT.md`, `docs/architecture/overview.md`, ROADMAP status | S1–S10 | inline | this commit |
-| T7 | API: when a draft field is provided, enforce the pinned schema's own field rules (`minimum`/`maximum`, `pattern`, `format: date`, `format: uri`, `minLength`) while `required` stays unenforced | S7, S11 | worker | |
-| T8 | Web: a wider «Mis invitaciones» workspace with less scroll, grouped fields, and native inputs from the schema (date, time, bounded number, URL, multi-line message, length limits) | S11, S12 | worker | |
+| T7 | API: when a draft field is provided, enforce the pinned schema's own field rules (`minimum`/`maximum`, `pattern`, `format: date`, `format: uri`, `minLength`) while `required` stays unenforced | S7, S11 | worker | `5014dee` |
+| T8 | Web: a wider «Mis invitaciones» workspace with less scroll, grouped fields, and native inputs from the schema (date, time, bounded number, URL, multi-line message, length limits) | S11, S12 | worker | `e867e98` |
 
 ## Log
 
