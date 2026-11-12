@@ -239,11 +239,23 @@ and `TemplateVersion`.
 - Colors reach the markup as CSS variables on the invitation root: `--inv-background`, `--inv-surface`, `--inv-soft`,
   `--inv-ink`, `--inv-accent`, `--inv-decoration-one`, `--inv-decoration-two`, plus `--inv-display` for the font. The
   root also carries `data-theme` and `data-component-key`. No color is a literal in a component or a stylesheet.
+- `--inv-on-accent` is the theme's contrast partner rather than one of the seven board colors: white, the color of
+  text and decoration on the `accent` surface. It exists because `globals.css` resets `--color-*`, so a
+  Tailwind default-palette utility such as `text-white` compiles to **nothing** and the element silently inherits
+  the ink color (about 2.2:1 on an accent band). `birthday-themed-renderers.test.ts` fails if any themed renderer
+  source uses a default-palette color utility again.
 - Contrast: `ink` and `accent` reach 4.5:1 on `background`, `surface`, and `soft`, and white reaches 4.5:1 on
   `accent`, for all eight themes; `lib/renderers/birthday-themes.test.ts` pins the palettes to the board and checks
   every pair with `lib/theme/contrast.ts`. Decoration colors never carry text.
+- Background: the theme `background` paints the page, not only the centred column. Each renderer opens with a
+  `fixed inset-0 -z-10` layer filled with `--inv-background`; the guest `<main>` is `isolate`, so the layer stays
+  behind the invitation's content and above the site's paper wash, and it covers the whole viewport on a long page.
 - Rendering: server components with no client script, mobile-first at 390 px, a real `<img>` for `mainPhoto` with its
-  alt text, headings tied to their sections, and every motif a decorative `aria-hidden` SVG.
+  alt text, and headings tied to their sections.
+- Motifs: the theme motif is decoration, so it never sits under text. Each layout puts it in its own fixed-height
+  strip at an edge — above the map hero, in the poster band's empty bottom area, and at the foot of the story's page
+  sheet — with `preserveAspectRatio="xMidYMid meet"`, so the shapes keep their proportions in any box instead of
+  stretching to it. Every motif is one `aria-hidden` SVG, and its element groups carry unique React keys.
 
 ## Customer workspace
 
