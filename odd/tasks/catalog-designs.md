@@ -30,6 +30,41 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   invitaciones de ninos, baby shower que son tematicas la mayoria de las veces ya para mas formales esos si son
   elegantes como 15 anos o bodas, lo mismo aplica para bautizos a veces es formal otras de tematicas"; "b porque
   estamos usando la paleta de colores nada mas no la marca en si y sus fontstyles si hay disponibles sino parecidos".
+- S7 — Owner choice for the first birthday templates (L7), answering "¿Qué estructuras programamos primero: Mapa,
+  Cartel, Cuento o las tres?", "¿Con qué temas arrancamos?", and "¿Confirmas que cada estructura nueva sea un diseño
+  aparte y que el actual (`birthday-adventure-01`) quede intacto?": "1.- los 3, 2. los 8 3.- si". So: the three
+  layouts in `design/birthday-adventure-v2/` (01 Mapa, 02 Cartel, 03 Cuento), the eight themes in
+  `design/kids-themes/01-tablero-temas.html`, each layout a new allow-listed `componentKey`, and
+  `birthday-adventure-01` unchanged.
+- S8 — Implementation contract for T6, decided by the parent within S2, S5, and S7 (L8); workers treat it as spec:
+  - **Keys.** Layouts: `birthday-map-01` (Mapa, `01-mapa-aventura.html`), `birthday-poster-01` (Cartel,
+    `02-cartel-fiesta.html`), `birthday-story-01` (Cuento, `03-cuento-ilustrado.html`). Themes, in this order:
+    `ice-kingdom` (Reino de hielo), `rescue-team` (Equipo de rescate), `spider-hero` (Héroe arácnido), `classic-mouse`
+    (Ratón clásico), `dinosaurs` (Dinosaurios), `under-the-sea` (Bajo el mar), `fairytale-princess` (Princesa de
+    cuento), `blocks-and-pixels` (Bloques y píxeles). `birthday-adventure-01` and its files, tests, seed row, and
+    behavior stay unchanged.
+  - **Content.** Each new layout uses exactly the eight `birthday-adventure-01` fields with the same types, limits, and
+    required list (`celebrantName`, `age`, `date`, `time`, `location`, `address`, `mainPhoto`, `message`), so the
+    creator form needs no change.
+  - **Configuration.** Exactly `{ "componentKey": <layout key>, "theme": <theme key> }`; both required, unknown keys,
+    other types, and unknown themes rejected, on the API and in the web parsers. Section order is fixed by each layout.
+  - **Theme tokens** (web), seven colors in the order background, surface, soft, ink, accent, decoration 1,
+    decoration 2, exactly as in `design/kids-themes/01-tablero-temas.html`, plus a display font and a motif.
+    `ink` and `accent` reach 4.5:1 on background, surface, and soft, and white on `accent` reaches 4.5:1; a test pins
+    it. Decoration colors never carry text.
+  - **Fonts.** Display fonts per theme: Cinzel Decorative, Luckiest Guy, Bangers, Chewy, Lilita One, Pacifico, Great
+    Vibes (already loaded), Press Start 2P (titles only). Each new family is a self-hosted latin `woff2` under
+    `apps/web/app/fonts/<family>/` with its license file copied byte-for-byte from google/fonts (`OFL.txt`, or
+    `LICENSE.txt` for Apache 2.0 families), loaded with `next/font/local` and `preload: false`. Body text stays Jost
+    400/500; Great Vibes and Press Start 2P are used for names and titles only.
+  - **Rendering.** Server components without client script, following each artboard's structure, with the theme
+    applied through CSS variables, original decorative SVG motifs (`aria-hidden`), a real `<img>` for `mainPhoto`
+    with alt text, mobile-first at 390 px, and the same failure behavior as `birthday-adventure-01` (props checked by
+    `PROPS_CHECKS`; invalid props never render).
+  - **Seed.** 24 templates in category `birthday`, key `birthday-<map|poster|story>-<theme key>`, Spanish name
+    `<Mapa|Cartel|Cuento> · <theme display name>`, a short neutral Spanish description, each with a PUBLISHED version
+    1 created only when that template is created by the run; re-running the seed creates nothing. No catalog name or
+    description uses a protected name (S5).
 
 ## Tasks
 
@@ -39,8 +74,10 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T2 | Visual directions for the children's birthday layouts under `design/birthday-adventure-v2/` | S1-S5 | inline | `db6c5f1` |
 | T3 | Rewrite the track and guardrail for layouts plus themes, more occasions, and palette-inspired themes (L5) | S1-S6 | inline | `fee7417` |
 | T4 | Children's theme board: palette-inspired themes with contrast-checked palettes and font suggestions | S2, S5, S6 | inline | `fee7417` |
-| T5 | Owner picks the birthday layouts (01-03) and the first themes; confirm new `componentKey` per layout | S3 | owner | |
-| T6 | Implement the chosen birthday layouts with the theme contract: renderer, contract, themes, seed, tests | S2, S3, S5 | pending T5 | |
+| T5 | Owner picks the birthday layouts (01-03) and the first themes; confirm new `componentKey` per layout | S3, S7 | owner | L7 |
+| T6a | API: three renderer contracts, shared theme allow-list, registry, seed for 24 templates, tests, `docs/architecture/overview.md` | S2, S3, S5, S7, S8 | worker | |
+| T6b | Web: theme tokens and fonts, three layout renderers, parsers, registries, tests, `docs/design/theme.md` | S2, S3, S5, S7, S8 | worker | |
+| T6c | Integration check: key and theme lists in sync, full unit suites, typecheck, lint, 390 px screenshots | S3, S8 | inline | |
 | T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
 | T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
 
@@ -79,3 +116,11 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   palette's ink and accent reach at least 4.61:1 on background, surface, and soft, and white on accent at least 6.03:1
   (computed with the WCAG formula). Font licenses named on the board are to be confirmed when each font is added.
   Slice 1 ends here (about 810 lines, mostly design artboards); T6 starts slice 2.
+- L7 — Owner (2026-11-12), verbatim: "1.- los 3, 2. los 8 3.- si". T5 closed; T6 starts slice 2. Implementation map
+  requested from explore task `mwe1zdea-2-xfjf`.
+- L8 — Implementation map from explore `mwe1zdea-2-xfjf`: renderer keys live in the API registry map and five API tests,
+  and in the web registry, `PROPS_CHECKS`, and their tests; `registry-sync.test.ts` reads the API registry source as
+  text; the creator form is schema-driven; there is no template-package link; `apps/web/lib/theme/fonts.test.ts`
+  pins the exact font folder set and OFL licenses; tests run with `node --test` (API through `@swc-node/register`),
+  and the seed db-spec needs a local Postgres. The parent fixed the S8 contract and split T6 into an API worker and a
+  web worker with disjoint edit surfaces.
