@@ -15,8 +15,8 @@ verifying the payment (Milestones 4, 5, and 7). The owner curates the catalog an
 over time; each change is a new `TemplateVersion`, so existing invitations keep the version they pinned. Customer
 support, refunds, and moderation of customer-uploaded content remain operational work (Milestone 9).
 
-The first designs target XV años (quinceañera), weddings, and children's birthdays. Every catalog design follows the
-original-design guardrail at the end of this roadmap.
+The first designs target XV años (quinceañera), weddings, and children's birthdays. The catalog design track below
+plans that first set. Every catalog design follows the original-design guardrail at the end of this roadmap.
 
 ## Milestone 1 — Foundation and operating model
 
@@ -167,6 +167,38 @@ Publish a completed invitation through a predictable public URL and render it sa
 ### Deliberate non-goals
 
 No custom domains, arbitrary page builders, search indexing program, or multi-region rendering architecture.
+
+## Catalog design track
+
+**Status:** Planned. It runs in parallel with Milestones 6 to 9 and must be complete before the first release
+(Milestone 10). The catalog currently holds one design, `birthday-adventure-01`.
+
+### Outcome
+
+Grow the catalog from one design to a curated first set that covers every launch occasion, with each design chosen
+visually by the owner before it is implemented.
+
+### Key scope
+
+- an improved children's birthday design based on `birthday-adventure-01`;
+- one original XV años design;
+- one original wedding design;
+- for each design: visual directions under `design/<slug>/`, the owner's choice, then an allow-listed renderer, its
+  validated schema/configuration contract, catalog seed data, and tests; and
+- mobile-first, accessible guest rendering, because invitations are mostly opened from shared links on phones.
+
+### Exit criteria
+
+- XV años, weddings, and children's birthdays each have at least one published design.
+- Every design was chosen by the owner from visual directions before code was written.
+- Invitations pinned to an earlier version render unchanged after a design is improved; whether an improvement
+  ships as a new `componentKey` or as a versioned renderer is decided in its slice.
+- Every design follows the original-design guardrail and passes contrast and mobile layout checks.
+
+### Deliberate non-goals
+
+No customer-side visual editor, per-customer custom designs, licensed themes, or design that depends on media uploads
+before Milestone 8.
 
 ## Milestone 6 — Guests and RSVP
 

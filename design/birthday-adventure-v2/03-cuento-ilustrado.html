@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cumpleaños de Mateo — Cuento ilustrado</title>
+<style>
+  [data-palette="sunset"] { --bg: #fff4e5; --surface: #ffffff; --soft: #ffe0bd; --ink: #3d1f0f; --accent: #a8380c; }
+  [data-palette="ocean"]  { --bg: #e8f6fa; --surface: #ffffff; --soft: #c4e8f1; --ink: #0b2f3d; --accent: #075c75; }
+  [data-palette="forest"] { --bg: #eef6e9; --surface: #ffffff; --soft: #d3e9c8; --ink: #17301a; --accent: #2a622a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif; line-height: 1.6; }
+  .preview { display: flex; gap: 6px; padding: 10px 16px; background: #18181b; color: #fafafa; font: 13px system-ui, sans-serif; align-items: center; }
+  .preview span { margin-right: auto; }
+  .preview button { font: inherit; color: #fafafa; background: transparent; border: 1px solid #52525b; border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+  .preview button[aria-pressed="true"] { background: #fafafa; color: #18181b; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .preview :focus-visible { outline-color: #fafafa; }
+
+  .serif { font-family: "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+  article { max-width: 480px; margin: 0 auto; padding: 22px 18px 18px; }
+
+  /* A single book page: a white sheet with a scalloped top edge. */
+  .page { background: var(--surface); border-radius: 6px 6px 28px 28px; padding: 40px 24px 30px; position: relative;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 8%, transparent), 0 24px 44px -26px color-mix(in srgb, var(--ink) 45%, transparent); }
+  .page::before { content: ""; position: absolute; left: 0; right: 0; top: -12px; height: 14px;
+    background: radial-gradient(circle at 12px 14px, var(--surface) 12px, transparent 12.5px) 0 0 / 24px 14px repeat-x; }
+
+  .hero { text-align: center; }
+  .arch { width: 210px; height: 260px; margin: 0 auto; border-radius: 105px 105px 14px 14px; overflow: hidden; border: 6px solid var(--soft); }
+  .arch svg { width: 100%; height: 100%; display: block; }
+  .once { font-size: 21px; font-style: italic; margin: 22px 0 0; }
+  h1 { font-size: 60px; line-height: 1; margin: 2px 0 6px; font-weight: 600; color: var(--accent); }
+  .lead { font-size: 18px; margin: 0 auto; max-width: 30ch; }
+  .lead b { color: var(--accent); }
+  .divider { display: block; width: 120px; margin: 26px auto; }
+
+  .chapter { margin-top: 6px; }
+  .chapter + .chapter { margin-top: 28px; }
+  .chapter h2 { font-size: 15px; font-weight: 500; text-transform: uppercase; letter-spacing: .16em; margin: 0; color: var(--accent); }
+  .chapter h3 { font-size: 30px; line-height: 1.15; margin: 2px 0 6px; font-weight: 600; }
+  .chapter p { margin: 0; font-size: 17px; }
+  .when { display: flex; gap: 14px; align-items: stretch; margin-top: 10px; }
+  .when div { flex: 1; background: var(--soft); border-radius: 16px; padding: 12px 14px; }
+  .when small { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: .12em; }
+  .when b { font-size: 19px; line-height: 1.3; }
+  .quote { font-size: 22px; line-height: 1.5; font-style: italic; margin: 10px 0 0; padding-left: 16px; border-left: 3px solid var(--accent); }
+  .end { text-align: center; font-size: 22px; font-style: italic; margin: 30px 0 0; }
+  footer { text-align: center; padding: 22px 0 8px; font-size: 14px; }
+  footer a { color: var(--ink); }
+</style>
+</head>
+<body data-palette="sunset">
+<div class="preview" role="group" aria-label="Paleta de vista previa">
+  <span>Paleta de vista previa</span>
+  <button type="button" data-set="sunset" aria-pressed="true">Atardecer</button>
+  <button type="button" data-set="ocean" aria-pressed="false">Océano</button>
+  <button type="button" data-set="forest" aria-pressed="false">Bosque</button>
+</div>
+<main>
+  <article aria-label="Invitación de cumpleaños de Mateo">
+    <div class="page">
+      <section class="hero" aria-labelledby="name">
+        <div class="arch">
+          <svg viewBox="0 0 200 250" role="img" aria-label="Foto de Mateo" preserveAspectRatio="xMidYMid slice">
+            <rect width="200" height="250" fill="var(--soft)" />
+            <circle cx="100" cy="110" r="40" fill="color-mix(in srgb, var(--accent) 35%, var(--soft))" />
+            <path d="M34 250c6-50 34-76 66-76s60 26 66 76z" fill="color-mix(in srgb, var(--accent) 35%, var(--soft))" />
+          </svg>
+        </div>
+        <p class="once serif">Había una vez alguien muy especial llamado</p>
+        <h1 id="name" class="serif">Mateo</h1>
+        <p class="lead">y en este capítulo de su historia cumple <b>7 años</b>. ¡Queremos que seas parte del cuento!</p>
+      </section>
+
+      <svg class="divider" viewBox="0 0 120 16" aria-hidden="true">
+        <path d="M2 8h44M74 8h44" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" />
+        <path d="M60 1l3 5 6 1-4.5 4 1 6-5.5-3-5.5 3 1-6L51 7l6-1z" fill="var(--accent)" />
+      </svg>
+
+      <section class="chapter" aria-labelledby="details">
+        <h2 id="details">Capítulo 1 · Detalles</h2>
+        <h3 class="serif">El gran día</h3>
+        <div class="when">
+          <div><small>Fecha</small><b>Sábado 5 de diciembre de 2026</b></div>
+          <div style="flex:0 0 112px"><small>Hora</small><b>16:30 h</b></div>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="place">
+        <h2 id="place">Capítulo 2 · Lugar</h2>
+        <h3 class="serif">Jardín Los Arcos</h3>
+        <p>Av. de las Flores 214, Col. Del Valle, Ciudad de México</p>
+      </section>
+
+      <section class="chapter" aria-labelledby="message">
+        <h2 id="message">Capítulo 3 · Mensaje</h2>
+        <p class="quote serif">¡Ven a celebrar conmigo! Habrá juegos, pastel y muchas sorpresas. Trae ropa cómoda para correr y saltar.</p>
+      </section>
+
+      <p class="end serif">…y la fiesta continúa contigo.</p>
+    </div>
+  </article>
+  <footer><a href="#">Hecha con InvitaMe</a></footer>
+</main>
+<script>
+  for (const b of document.querySelectorAll("[data-set]")) b.addEventListener("click", () => {
+    document.body.dataset.palette = b.dataset.set;
+    for (const o of document.querySelectorAll("[data-set]")) o.setAttribute("aria-pressed", String(o === b));
+  });
+</script>
+</body>
+</html>
