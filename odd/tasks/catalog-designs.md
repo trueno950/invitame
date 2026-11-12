@@ -26,8 +26,8 @@ before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | Add the catalog design track to `ROADMAP.md` | S1-S5 | inline | this commit |
-| T2 | Visual directions for the improved children's birthday design under `design/` | S1-S5 | inline | this commit |
+| T1 | Add the catalog design track to `ROADMAP.md` | S1-S5 | inline | `db6c5f1` |
+| T2 | Visual directions for the improved children's birthday design under `design/` | S1-S5 | inline | `db6c5f1` |
 | T3 | Owner chooses a birthday direction; decide new `componentKey` vs. versioned renderer | S3 | owner | |
 | T4 | Implement the chosen birthday design: renderer, contract, seed, tests | S2, S3 | pending T3 | |
 | T5 | Visual directions for the XV años design | S1-S5 | pending | |
@@ -52,3 +52,5 @@ before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   `birthday-adventure-02` plus a new template version. The directions use Jost weights 700/800, which
   `apps/web/app/layout.tsx` does not load (400/500 only); direction 03 also uses Cormorant Garamond, already loaded.
   Checked at 390 px in headless Chromium: no horizontal overflow.
+- L4 — Slice 1 closes with T1-T2 (`db6c5f1`, `b53800b`, about 670 lines, almost all self-contained design artboards
+  under `design/`). T4 (the birthday renderer) starts slice 2 after the owner's choice in T3.
