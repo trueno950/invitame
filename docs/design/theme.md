@@ -3,7 +3,9 @@
 Status: **current** (M2 T8t, T8l, T8f; S35, S37, S43). The owner approved version 3 of the concept «A · Rosa y vino» on
 2026-11-05 (L41 of `odd/tasks/m2-identity.md`). The tokens, fonts, ornaments, shared components, `/ingresar`,
 `/cuenta`, and the full concept landing page at `/` (T8l: every section and the draw-on bouquet, with the honest
-pre-launch copy the owner approved in L45) are implemented. The administrator pages under `/admin` do not use this
+pre-launch copy the owner approved in L45) are implemented. The invitation pages reuse the theme in a wide
+workspace instead of the centered card (M4 T8; S11, S12), described in [Customer workspace](#customer-workspace).
+The administrator pages under `/admin` do not use this
 theme: they have their own neutral administration theme, described in [Administration theme](#administration-theme).
 
 ## Principles
@@ -127,7 +129,11 @@ first screen lazily. Keep each file under 40 KB.
 - `app/_components/ornament.tsx`: the decorative images above.
 - `app/_components/customer-shell.tsx`: the frame of `/ingresar` and `/cuenta` (the
   paper wash, corner flowers, the header with the wordmark, and one centered card with the eyebrow, flourish,
-  heading, and intro).
+  heading, and intro). `CustomerPageFrame` is the paper and header both customer frames share.
+- `app/_components/customer-workspace-shell.tsx`: the wide frame of the invitation pages (see
+  [Customer workspace](#customer-workspace)), with the same paper, corner flowers, and header, and a compact
+  page header (eyebrow, heading, intro, and optional actions on the right) instead of the centered card. The
+  `pageActionButton` class is a page header's one main action at its own width.
 - `app/_components/sign-out-button.tsx`: the wine «Cerrar sesión» button shared by customers and administrators,
   with its failure note; the administration sidebar passes its own `className`.
 - `app/_components/landing/`: the landing sections (`hero.tsx`, `sections.tsx`, `closing.tsx`), the sample
@@ -170,6 +176,42 @@ drawn.
   3:1 for `field-border` on `surface` and `background`. A missing token fails the test.
 - Focus is a 2 px wine outline: on `focus-visible` for buttons and links, on every focus for text fields.
 - Gold is never used for text that must be read; `ring-gold/*` hairlines are decoration, not component borders.
+
+## Customer workspace
+
+Status: **current** (M4 T8; S11, S12). The owner tried the invitation pages and found the same problem as in the
+administration pages: a 30 rem card in the middle of the screen, too much scrolling, and inputs that were all
+plain text. The customer «Rosa y vino» theme stays; the invitation pages simply use the width.
+
+- Where it applies: `/cuenta/invitaciones`, `/cuenta/invitaciones/nueva`, and `/cuenta/invitaciones/[id]` render
+  inside `customer-workspace-shell.tsx`, a server component that keeps the paper wash, the corner flowers, the
+  header with the wordmark, and the eyebrow with its bud, and replaces the card with a compact page header and up
+  to `max-w-6xl` of content. `/cuenta` and `/ingresar` keep the centered `CustomerShell`.
+- List: the drafts are a card grid (`sm:grid-cols-2 xl:grid-cols-3`) with the status badge, the public slug, the
+  creation date, and «Editar»; «Nueva invitación» is the header action, and an empty account sees the empty state
+  in one small panel.
+- Create: the template and the package are two radio groups of cards (`fieldset`/`legend` per group, a native radio
+  inside each label), so the whole choice is visible without a select popup, works from the keyboard, and needs no
+  JavaScript. The package card shows its price in force.
+- Detail: two columns from `lg` up. The form takes two thirds and its fields are grouped into the short sections
+  `contentSections` derives from the property names: «Festejado» (`celebrantName`, `age`), «Cuándo» (`date`,
+  `time`), «Dónde» (`location`, `address`), «Contenido» (`mainPhoto`, `message`), and one last «Otros datos» group
+  for any property those do not name, keeping the schema order. Each section is a fieldset with two columns of
+  fields from `sm` up; a multi-line field spans both. The side third holds the status badge, the slug as text, what
+  is still missing («Faltan: …»), and the archive form, and stays in view (`lg:sticky`). An archived draft and a
+  retired version keep the same layout, with the stored content in place of the form.
+- Inputs: `contentFields` derives each control from that property of the pinned schema and never from the template
+  name. `format: "date"` is an `input type="date"`; `format: "time"`, or a `pattern` that accepts every 24-hour
+  time and refuses anything else, is `input type="time"`; `format: "uri"` is `input type="url"` with
+  `inputMode="url"`; an `integer` or `number` is `input type="number"` with the schema's `minimum`/`maximum` as
+  `min`/`max` and `step="1"` for an integer, so a browser refuses a negative age; a string whose `maxLength` is
+  above 200 becomes a `<textarea>` with that `maxLength` and a rows hint, and every other string a text input with
+  its `maxLength`.
+- Partial drafts: the schema's `required` is never the HTML `required` attribute, because a draft may stay
+  incomplete until publication (S7); those fields are marked «Necesario para publicar» in their label, next to one
+  line saying that the draft can be saved with empty fields. `format`, `pattern`, `minimum`, `maximum`, and
+  `maxLength` are also checked on the server by `parseContentForm`, which refuses instead of clamping and answers
+  the existing `invalid-form` message.
 
 ## Administration theme
 
@@ -223,6 +265,7 @@ JavaScript.
 | Ornament files | `apps/web/public/ornaments/` |
 | Contrast helper and test, font loading test | `apps/web/lib/theme/` |
 | Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/page.tsx` |
+| Customer workspace (invitation pages) | `apps/web/app/cuenta/invitaciones/`, `apps/web/app/_components/customer-workspace-shell.tsx` |
 | Administration classes and frames | `apps/web/app/admin/_components/` |
 | Landing sections, styles, and drawings | `apps/web/app/_components/landing/` |
 | Landing copy and its honesty test (S37) | `apps/web/lib/landing/` |

@@ -29,22 +29,41 @@ test.describe("customer invitations", () => {
     await page.getByRole("link", { name: INVITATION_COPY.newLink }).click();
     await expect(page).toHaveURL("/cuenta/invitaciones/nueva");
 
-    const templates = page.getByLabel(INVITATION_COPY.templateLabel);
+    // Each choice is a radio group of cards, so the whole choice is visible without a select popup.
+    const templateRadios = page
+      .getByRole("group", { name: INVITATION_COPY.templateLabel })
+      .getByRole("radio");
     test.skip(
-      (await templates.getByRole("option").count()) === 0,
+      (await templateRadios.count()) === 0,
       "the e2e database has no published template; seed the catalog with `pnpm db:seed`",
     );
 
-    await templates.selectOption({ index: 0 });
-    await page.getByLabel(INVITATION_COPY.packageLabel).selectOption({ index: 0 });
+    await templateRadios.first().check();
+    await page
+      .getByRole("group", { name: INVITATION_COPY.packageLabel })
+      .getByRole("radio")
+      .first()
+      .check();
     await page.getByRole("button", { name: INVITATION_COPY.createSubmit }).click();
 
     await expect(page).toHaveURL(DRAFT_URL);
     await expect(page).toHaveURL(/\?notice=created$/);
     await expect(page.getByRole("status").filter({ hasText: "creamos tu borrador" })).toBeVisible();
 
+    // Each property of the pinned schema gets the native input its own definition asks for (S11).
+    const age = page.getByLabel("Edad");
+    await expect(age).toHaveAttribute("type", "number");
+    await expect(age).toHaveAttribute("min", "1");
+    await expect(age).toHaveAttribute("max", "120");
+    expect(await age.getAttribute("required")).toBeNull();
+    await expect(page.getByLabel("Fecha")).toHaveAttribute("type", "date");
+    await expect(page.getByLabel("Hora")).toHaveAttribute("type", "time");
+    await expect(page.getByLabel("Foto principal (URL)")).toHaveAttribute("type", "url");
+    await expect(page.getByLabel("Mensaje")).toHaveJSProperty("tagName", "TEXTAREA");
+
     // The form has one labelled input per property of the pinned version's schema.
     await page.getByLabel("Nombre del festejado").fill("Ana");
+    await page.getByLabel("Edad").fill("7");
     await page.getByRole("button", { name: INVITATION_COPY.save }).click();
 
     await expect(page).toHaveURL(/\?notice=saved$/);
@@ -52,10 +71,11 @@ test.describe("customer invitations", () => {
       page.getByRole("status").filter({ hasText: "guardamos los cambios" }),
     ).toBeVisible();
     await expect(page.getByLabel("Nombre del festejado")).toHaveValue("Ana");
+    await expect(page.getByLabel("Edad")).toHaveValue("7");
 
     // A partial draft is allowed, and the page names the required fields it still lacks (S7).
     await expect(
-      page.getByText("Faltan: Edad, Fecha, Hora, Lugar, Dirección, Foto principal (URL), Mensaje."),
+      page.getByText("Faltan: Fecha, Hora, Lugar, Dirección, Foto principal (URL), Mensaje."),
     ).toBeVisible();
 
     await page.getByRole("button", { name: INVITATION_COPY.archive }).click();

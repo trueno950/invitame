@@ -39,12 +39,42 @@ export const CUSTOMER_SIGN_IN_PATH = "/ingresar";
 const FIELD_TYPES = ["string", "integer", "number", "boolean"] as const;
 export type ContentFieldType = (typeof FIELD_TYPES)[number];
 
-/** One editable property of the pinned version's schema, with its Spanish label. */
+/**
+ * The control a field is edited with (M4 T8; S11), derived only from its own property of the pinned
+ * schema: the JSON Schema `format`, `pattern`, `minimum`, `maximum`, and `maxLength`, never the
+ * template's name or key. `min`/`max` become the input's own bounds, so a browser refuses a negative
+ * age before anything is sent, and `parseContentForm` refuses it again on the server.
+ */
+export type FieldInput =
+  | { kind: "checkbox" }
+  | { kind: "date" }
+  | { kind: "time" }
+  | { kind: "url"; maxLength?: number }
+  | { kind: "number"; min?: number; max?: number; step: "1" | "any" }
+  | { kind: "text"; maxLength?: number }
+  | { kind: "textarea"; maxLength?: number; rows: number };
+
+/** One editable property of the pinned version's schema, with its Spanish label and its control. */
 export interface ContentField {
   name: string;
   type: ContentFieldType;
   label: string;
+  /**
+   * Whether the schema requires the field. It is never the HTML `required` attribute, because a draft
+   * may stay partial (S7); the editor marks it «Necesario para publicar» instead.
+   */
+  required: boolean;
+  input: FieldInput;
 }
+
+/** A string longer than this is edited in a multi-line field, not a single-line input. */
+export const TEXTAREA_THRESHOLD = 200;
+
+/** A full date as `input type="date"` submits it and as JSON Schema's `format: "date"` declares it. */
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** A 24-hour time as `input type="time"` submits it, down to the minute. */
+const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -54,6 +84,88 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function isFieldType(value: unknown): value is ContentFieldType {
   return FIELD_TYPES.some((type) => type === value);
+}
+
+function own(definition: Record<string, unknown>, key: string): unknown {
+  return Object.hasOwn(definition, key) ? definition[key] : undefined;
+}
+
+/** A numeric keyword the schema declares, or nothing; a non-finite value is not a usable bound. */
+function declaredNumber(definition: Record<string, unknown>, key: string): number | undefined {
+  const value = own(definition, key);
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function declaredText(definition: Record<string, unknown>, key: string): string | undefined {
+  const value = own(definition, key);
+  return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * Whether a declared regex accepts every 24-hour time and refuses anything else, so a pattern such as
+ * `^([01]\d|2[0-3]):[0-5]\d$` is recognized as a time and an unrelated pattern stays a text field.
+ * A pattern that no engine compiles is not one this form can honor, so it stays text.
+ */
+export function isTimeOfDayPattern(pattern: string): boolean {
+  let expression: RegExp;
+  try {
+    expression = new RegExp(pattern);
+  } catch {
+    return false;
+  }
+
+  const accepted = ["00:00", "09:05", "23:59"];
+  const refused = ["24:00", "12:60", "1:00", "12:00:00", "ab:cd", ""];
+  return (
+    accepted.every((time) => expression.test(time)) &&
+    refused.every((time) => !expression.test(time))
+  );
+}
+
+/** The rows a multi-line field shows for its declared length: a hint, never a cap on the text. */
+function textareaRows(maxLength: number): number {
+  return Math.min(6, Math.max(3, Math.ceil(maxLength / 120)));
+}
+
+/** The control of one property, from that property's own keywords (S11). */
+function fieldInput(definition: Record<string, unknown>, type: ContentFieldType): FieldInput {
+  if (type === "boolean") {
+    return { kind: "checkbox" };
+  }
+  if (type === "integer" || type === "number") {
+    const min = declaredNumber(definition, "minimum");
+    const max = declaredNumber(definition, "maximum");
+
+    return {
+      kind: "number",
+      ...(min === undefined ? {} : { min }),
+      ...(max === undefined ? {} : { max }),
+      step: type === "integer" ? "1" : "any",
+    };
+  }
+
+  const declared = declaredNumber(definition, "maxLength");
+  const maxLength =
+    declared !== undefined && Number.isSafeInteger(declared) && declared >= 0
+      ? declared
+      : undefined;
+  const bounded = maxLength === undefined ? {} : { maxLength };
+  const format = declaredText(definition, "format");
+  const pattern = declaredText(definition, "pattern");
+
+  if (format === "date") {
+    return { kind: "date" };
+  }
+  if (format === "time" || (pattern !== undefined && isTimeOfDayPattern(pattern))) {
+    return { kind: "time" };
+  }
+  if (format === "uri") {
+    return { kind: "url", ...bounded };
+  }
+  if (maxLength !== undefined && maxLength > TEXTAREA_THRESHOLD) {
+    return { kind: "textarea", maxLength, rows: textareaRows(maxLength) };
+  }
+  return { kind: "text", ...bounded };
 }
 
 /** The label of a data property: the copy map first, then the property name itself. */
@@ -92,11 +204,85 @@ export function contentFields(schema: unknown): ContentField[] {
     const definition = record(properties[name]);
     const type = definition?.type;
 
-    if (isFieldType(type)) {
-      fields.push({ name, type, label: fieldLabel(name) });
+    if (isFieldType(type) && definition !== undefined) {
+      fields.push({
+        name,
+        type,
+        label: fieldLabel(name),
+        required: required.includes(name),
+        input: fieldInput(definition, type),
+      });
     }
   }
   return fields;
+}
+
+/** The short groups of the draft's form, in the order the editor shows them. */
+const SECTION_KEYS = ["celebrant", "when", "where", "content", "other"] as const;
+type SectionKey = (typeof SECTION_KEYS)[number];
+
+/**
+ * Which group a property belongs to. Keyed by the property name, because the group is about what the
+ * data is, not about which template declares it: another renderer's own property falls into `other`.
+ */
+const FIELD_SECTIONS: Readonly<Record<string, SectionKey>> = {
+  celebrantName: "celebrant",
+  age: "celebrant",
+  date: "when",
+  time: "when",
+  location: "where",
+  address: "where",
+  mainPhoto: "content",
+  message: "content",
+};
+
+const SECTION_TITLES: Readonly<Record<SectionKey, string>> = {
+  celebrant: INVITATION_COPY.sectionCelebrant,
+  when: INVITATION_COPY.sectionWhen,
+  where: INVITATION_COPY.sectionWhere,
+  content: INVITATION_COPY.sectionContent,
+  other: INVITATION_COPY.sectionOther,
+};
+
+/** One group of the draft's form: a fieldset with its legend and its fields in schema order. */
+export interface ContentSection {
+  key: SectionKey;
+  title: string;
+  fields: ContentField[];
+}
+
+function sectionOf(name: string): SectionKey {
+  return Object.hasOwn(FIELD_SECTIONS, name) ? (FIELD_SECTIONS[name] ?? "other") : "other";
+}
+
+/**
+ * The fields grouped into the short sections of the editor (S11), so the form reads in a few blocks
+ * instead of one long list: «Festejado», «Cuándo», «Dónde», «Contenido», and one last group for any
+ * property those do not name. A group with no field is left out, and the schema order of the fields is
+ * kept inside each group.
+ */
+export function contentSections(fields: readonly ContentField[]): ContentSection[] {
+  const grouped = new Map<SectionKey, ContentField[]>();
+  for (const field of fields) {
+    const key = sectionOf(field.name);
+    const group = grouped.get(key);
+
+    if (group === undefined) {
+      grouped.set(key, [field]);
+    } else {
+      group.push(field);
+    }
+  }
+
+  const sections: ContentSection[] = [];
+  for (const key of SECTION_KEYS) {
+    const group = grouped.get(key);
+
+    if (group !== undefined) {
+      sections.push({ key, title: SECTION_TITLES[key], fields: group });
+    }
+  }
+  return sections;
 }
 
 /** The version that an invitation is pinned to, with the fields of its schema (A2). */
@@ -138,12 +324,58 @@ export type ContentFormParse = { ok: true; content: Record<string, unknown> } | 
 const INTEGER = /^-?\d+$/;
 const NUMBER = /^-?\d+(?:\.\d+)?$/;
 
+/** Whether the text is a real calendar day in the schema's `format: "date"` shape. */
+function isCalendarDate(text: string): boolean {
+  const match = ISO_DATE.exec(text);
+
+  if (match === null) {
+    return false;
+  }
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  );
+}
+
+/**
+ * Whether the control refuses the text on its own: a malformed date or time, or text longer than the
+ * schema's `maxLength`. The browser applies the same rules from the input's attributes, so this is the
+ * server's own check, and it refuses instead of trimming or clamping.
+ */
+function stringRefused(input: FieldInput, text: string): boolean {
+  switch (input.kind) {
+    case "date":
+      return !isCalendarDate(text);
+    case "time":
+      return !TIME_OF_DAY.test(text);
+    case "text":
+    case "textarea":
+    case "url":
+      return input.maxLength !== undefined && [...text].length > input.maxLength;
+    default:
+      return false;
+  }
+}
+
+/** Whether a number is outside the `minimum`/`maximum` the schema declares (S7, S11). */
+function numberRefused(input: FieldInput, value: number): boolean {
+  if (input.kind !== "number") {
+    return false;
+  }
+  return (
+    (input.min !== undefined && value < input.min) || (input.max !== undefined && value > input.max)
+  );
+}
+
 /**
  * The content a submitted form asks to store. Only the fields of the pinned schema are read, so a
  * submitted key the schema does not declare is never sent (the API refuses one anyway). An empty input is
  * omitted, because a draft may stay partial (S7); an integer is converted here, because the API validates
- * an integer and a form sends text; a value this form cannot read refuses the whole submission instead of
- * being dropped silently. A checkbox is `true` when it was checked and `false` when it was not.
+ * an integer and a form sends text; a value the form cannot read, a number outside the schema's range, or
+ * a malformed date or time refuses the whole submission instead of being dropped or clamped. A checkbox
+ * is `true` when it was checked and `false` when it was not.
  */
 export function parseContentForm(
   fields: readonly ContentField[],
@@ -170,6 +402,9 @@ export function parseContentForm(
       continue;
     }
     if (field.type === "string") {
+      if (stringRefused(field.input, text)) {
+        return { ok: false };
+      }
       content[field.name] = text;
       continue;
     }
@@ -180,6 +415,9 @@ export function parseContentForm(
     }
     const value = Number(text);
     if (!(whole ? Number.isSafeInteger(value) : Number.isFinite(value))) {
+      return { ok: false };
+    }
+    if (numberRefused(field.input, value)) {
       return { ok: false };
     }
     content[field.name] = value;
@@ -227,28 +465,35 @@ export function invitationRows(items: readonly InvitationSummary[]): InvitationR
   }));
 }
 
-export interface SelectOption {
+/** One choice of «Nueva invitación» as a selectable card: the version or package to send, and its text. */
+export interface ChoiceCard {
   value: string;
-  label: string;
+  name: string;
+  /** The category of a template, or the price in force of a package, always shown with the name. */
+  meta: string;
+  description: string | null;
 }
 
-/** Each template to start from, named with its category; the value is the version to pin. */
-export function templateOptions(templates: readonly CreatorTemplate[]): SelectOption[] {
+/** Each template to start from, with its category; the value is the version to pin (S8). */
+export function templateChoices(templates: readonly CreatorTemplate[]): ChoiceCard[] {
   return templates.map((template) => ({
     value: template.publishedVersion.id,
-    label: `${template.name} (${template.category.name})`,
+    name: template.name,
+    meta: template.category.name,
+    description: template.description,
   }));
 }
 
-/** Each package to choose, with its price in force (S6); a free package shows `sin precio`. */
-export function packageOptions(packages: readonly CreatorPackage[]): SelectOption[] {
+/** Each package to choose, with its price in force in its own currency (S6); a free one says so. */
+export function packageChoices(packages: readonly CreatorPackage[]): ChoiceCard[] {
   return packages.map((stored) => ({
     value: stored.id,
-    label: `${stored.name}: ${
+    name: stored.name,
+    meta:
       stored.currentPrice === null
         ? INVITATION_COPY.priceMissing
-        : formatMxn(stored.currentPrice.amountMinor, stored.currentPrice.currency)
-    }`,
+        : `${formatMxn(stored.currentPrice.amountMinor, stored.currentPrice.currency)} ${stored.currentPrice.currency}`,
+    description: stored.description,
   }));
 }
 

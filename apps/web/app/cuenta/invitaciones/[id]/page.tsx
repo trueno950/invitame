@@ -4,6 +4,7 @@ import { connection } from "next/server";
 
 import { INVITATION_COPY, INVITATION_ERROR_COPY } from "../../../../lib/customer/copy.ts";
 import {
+  contentSections,
   fieldLabel,
   INVITATION_PATHS,
   invitationFieldsFor,
@@ -12,8 +13,8 @@ import {
   statusLabel,
 } from "../../../../lib/customer/invitations.ts";
 import { isInvitationId } from "../../../../lib/server/invitations-api.ts";
-import { CustomerShell } from "../../../_components/customer-shell.tsx";
-import { focusRing, quietButton, statusNote, textButton } from "../../../_components/ui.ts";
+import { CustomerWorkspaceShell } from "../../../_components/customer-workspace-shell.tsx";
+import { quietButton, statusNote } from "../../../_components/ui.ts";
 import { archiveInvitationAction, saveInvitationContentAction } from "../actions.ts";
 import { ContentForm } from "../_components/content-form.tsx";
 import { ContentSummary } from "../_components/content-summary.tsx";
@@ -28,24 +29,30 @@ export const metadata: Metadata = {
 
 type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
 
-/** The shell of a draft nothing can be shown for, with the way back to the list. */
+/** The label of one block of the page, above what it holds. */
+function BlockLabel({ children }: { children: string }) {
+  return <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">{children}</p>;
+}
+
+/** The workspace of a draft nothing can be shown for, with the way back to the list. */
 function PlainShell({ heading, body, path }: { heading: string; body: string; path: string }) {
   return (
-    <CustomerShell eyebrow={INVITATION_COPY.detailEyebrow} heading={heading} intro={body}>
-      <div className="flex flex-col items-center gap-4">
-        <Link className={quietButton} href={path}>
-          {INVITATION_COPY.backToList}
-        </Link>
-      </div>
-    </CustomerShell>
+    <CustomerWorkspaceShell eyebrow={INVITATION_COPY.detailEyebrow} heading={heading} intro={body}>
+      <Link className={quietButton} href={path}>
+        {INVITATION_COPY.backToList}
+      </Link>
+    </CustomerWorkspaceShell>
   );
 }
 
 /**
- * `/cuenta/invitaciones/[id]` (M4 T5; S1, S3, S7): the draft's own page. The form has one input per
- * property of the pinned version's schema, which the creator catalog publishes with the version; the pin
- * never changes in M4 (A2), and a retired version is absent from that catalog, so its stored content is
- * shown read-only with a note instead of a guessed form. Saving and archiving post to server actions,
+ * `/cuenta/invitaciones/[id]` (M4 T5, T8; S1, S3, S7, S11): the draft's own page, in the wide workspace.
+ * The form takes the wide column and its fields are grouped into short sections with two columns from
+ * `sm` up, so the draft is edited with little scrolling; the narrow side column holds the status, the
+ * public slug as text, what is still missing, and archiving. The form has one input per property of the
+ * pinned version's schema, which the creator catalog publishes with the version; the pin never changes in
+ * M4 (A2), and a retired version is absent from that catalog, so its stored content is shown read-only
+ * with a note instead of a guessed form, in the same layout. Saving and archiving post to server actions,
  * because the browser cannot send `PUT` to the API (L8). The public URL is text: publication is M5.
  */
 export default async function InvitationDetailPage({
@@ -117,7 +124,12 @@ export default async function InvitationDetailPage({
       : undefined;
 
   return (
-    <CustomerShell
+    <CustomerWorkspaceShell
+      actions={
+        <Link className={quietButton} href={INVITATION_PATHS.list}>
+          {INVITATION_COPY.backToList}
+        </Link>
+      }
       eyebrow={INVITATION_COPY.detailEyebrow}
       heading={
         pinned?.template.name ??
@@ -125,59 +137,59 @@ export default async function InvitationDetailPage({
       }
       intro={archived ? INVITATION_COPY.archivedNote : INVITATION_COPY.detailIntro}
     >
-      <div className="flex flex-col gap-6">
-        <Notices notice={notices.notice} error={notices.error} />
+      <div className="flex flex-col gap-4">
+        <Notices error={notices.error} notice={notices.notice} />
 
-        <dl className="flex flex-col gap-4">
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
-              {INVITATION_COPY.statusLabel}
-            </dt>
-            <dd className="mt-1">
-              <StatusBadge label={statusLabel(invitation.status)} />
-            </dd>
+        <div className="grid items-start gap-4 lg:grid-cols-3 lg:gap-6">
+          <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
+            {readOnlyNote === undefined ? null : <p className={statusNote}>{readOnlyNote}</p>}
+
+            {editable && pinned !== undefined ? (
+              <ContentForm
+                action={saveInvitationContentAction}
+                content={invitation.content}
+                id={invitation.id}
+                sections={contentSections(pinned.fields)}
+              />
+            ) : (
+              <div className="rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5">
+                <ContentSummary content={invitation.content} rows={rows} />
+              </div>
+            )}
           </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
-              {INVITATION_COPY.slugLabel}
-            </dt>
-            <dd className="mt-1 font-medium break-all text-ink">{invitation.slug}</dd>
-            <dd className="mt-1 text-sm leading-6 text-muted">{INVITATION_COPY.slugHint}</dd>
-          </div>
-        </dl>
 
-        {missing === null ? null : <p className={statusNote}>{missing}</p>}
+          <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">
+            <div className="flex flex-col gap-4 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5">
+              <div>
+                <BlockLabel>{INVITATION_COPY.statusLabel}</BlockLabel>
+                <p className="mt-1.5">
+                  <StatusBadge label={statusLabel(invitation.status)} />
+                </p>
+              </div>
+              <div>
+                <BlockLabel>{INVITATION_COPY.slugLabel}</BlockLabel>
+                <p className="mt-1.5 font-medium break-all text-ink">{invitation.slug}</p>
+                <p className="mt-1 text-sm leading-6 text-muted">{INVITATION_COPY.slugHint}</p>
+              </div>
+              {missing === null ? null : <p className={statusNote}>{missing}</p>}
+            </div>
 
-        {readOnlyNote === undefined ? null : <p className={statusNote}>{readOnlyNote}</p>}
-
-        <div className="border-t border-gold/40 pt-6">
-          {editable && pinned !== undefined ? (
-            <ContentForm
-              action={saveInvitationContentAction}
-              content={invitation.content}
-              fields={pinned.fields}
-              id={invitation.id}
-            />
-          ) : (
-            <ContentSummary content={invitation.content} rows={rows} />
-          )}
-        </div>
-
-        {archived ? null : (
-          <form action={archiveInvitationAction} className="border-t border-gold/40 pt-6">
-            <input name="id" type="hidden" value={invitation.id} />
-            <button className={quietButton} type="submit">
-              {INVITATION_COPY.archive}
-            </button>
-          </form>
-        )}
-
-        <div className="border-t border-gold/40 pt-6 text-center">
-          <Link className={`${textButton} ${focusRing}`} href={INVITATION_PATHS.list}>
-            {INVITATION_COPY.backToList}
-          </Link>
+            {archived ? null : (
+              <form
+                action={archiveInvitationAction}
+                className="flex flex-col gap-3 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5"
+              >
+                <input name="id" type="hidden" value={invitation.id} />
+                <BlockLabel>{INVITATION_COPY.archiveHeading}</BlockLabel>
+                <p className="text-sm leading-6 text-muted">{INVITATION_COPY.archiveHint}</p>
+                <button className={quietButton} type="submit">
+                  {INVITATION_COPY.archive}
+                </button>
+              </form>
+            )}
+          </aside>
         </div>
       </div>
-    </CustomerShell>
+    </CustomerWorkspaceShell>
   );
 }

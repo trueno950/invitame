@@ -6,32 +6,24 @@ import { Ornament } from "./ornament.tsx";
 import { focusRing, textButton } from "./ui.ts";
 import { Wordmark } from "./wordmark.tsx";
 
-interface CustomerShellProperties {
-  eyebrow: string;
-  heading: string;
-  intro: string;
-  /** Optional supporting text, shown under the card. */
-  aside?: ReactNode;
-  /** The page's main panel: a form or the account details. */
-  children: ReactNode;
-}
-
 /**
- * The frame of the customer pages (M2 T8c, restyled in T8t; S35): the pink paper wash with
- * fine-line flowers in two corners, a header with the wordmark, and one framed white card with the
- * eyebrow, a gold flourish, the heading, and the intro above the page's panel. Centered on every
- * screen size, as in the approved sign-in concept. The header also names the two pages a signed-in
- * customer owns (M4 T5), so `/cuenta` reaches "Mis invitaciones" without a hidden entry.
+ * The paper background and the customer header every signed-in customer page shares (M2 T8c, restyled
+ * in T8t; S35, S12): the pink paper wash with fine-line flowers in two corners, and a header with the
+ * wordmark and the two pages a signed-in customer owns. `CustomerShell` centers one reading-width card
+ * inside it; `CustomerWorkspaceShell` (`customer-workspace-shell.tsx`) uses the width instead (M4 T8).
  */
-export function CustomerShell({
-  eyebrow,
-  heading,
-  intro,
-  aside,
+export function CustomerPageFrame({
+  className,
   children,
-}: CustomerShellProperties) {
+}: {
+  /** Extra classes of the page, such as the bottom padding a card or a workspace needs. */
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <main className="paper-wash relative isolate min-h-screen overflow-hidden px-4 pb-44 pt-4 text-ink sm:px-10 sm:pb-28 sm:pt-6">
+    <main
+      className={`paper-wash relative isolate min-h-screen overflow-hidden px-4 pt-4 text-ink sm:px-10 sm:pt-6 ${className ?? ""}`}
+    >
       <Ornament
         className="pointer-events-none absolute -right-24 top-16 -z-10 w-56 -scale-100 sm:-right-16 sm:top-24 sm:w-96 lg:w-[30rem]"
         name="corner"
@@ -60,6 +52,36 @@ export function CustomerShell({
         </nav>
       </header>
 
+      {children}
+    </main>
+  );
+}
+
+interface CustomerShellProperties {
+  eyebrow: string;
+  heading: string;
+  intro: string;
+  /** Optional supporting text, shown under the card. */
+  aside?: ReactNode;
+  /** The page's main panel: a form or the account details. */
+  children: ReactNode;
+}
+
+/**
+ * The centered card of `/ingresar` and `/cuenta` (M2 T8c; S35): the eyebrow with its bud, a gold
+ * flourish, the heading, and the intro above the page's panel, all in one framed white card on the
+ * shared paper frame. Centered on every screen size, as in the approved sign-in concept. The invitation
+ * pages use the wider `CustomerWorkspaceShell` instead (M4 T8; S11, S12).
+ */
+export function CustomerShell({
+  eyebrow,
+  heading,
+  intro,
+  aside,
+  children,
+}: CustomerShellProperties) {
+  return (
+    <CustomerPageFrame className="pb-44 sm:pb-28">
       <div className="mx-auto flex w-full max-w-[30rem] flex-col items-center pt-12 sm:pt-16 lg:pt-20">
         <div className="w-full rounded-card bg-surface/55 p-2 shadow-paper ring-1 ring-gold/45">
           <div className="rounded-panel bg-surface px-6 pb-6 pt-9 ring-1 ring-rose/50 sm:px-10 sm:pb-7 sm:pt-11">
@@ -81,6 +103,6 @@ export function CustomerShell({
         </div>
         {aside}
       </div>
-    </main>
+    </CustomerPageFrame>
   );
 }

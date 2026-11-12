@@ -19,6 +19,7 @@ import {
 import {
   archiveInvitation,
   contentFields,
+  contentSections,
   createInvitation,
   fieldValue,
   invitationErrorTarget,
@@ -27,10 +28,10 @@ import {
   invitationPageNotices,
   invitationRows,
   missingFieldsMessage,
-  packageOptions,
+  packageChoices,
   parseContentForm,
   saveInvitationContent,
-  templateOptions,
+  templateChoices,
 } from "./invitations.ts";
 
 // The invitation pages of `/cuenta` (M4 T5; S1, S6, S7): how the pinned schema becomes a form, how the
@@ -103,14 +104,50 @@ const PACKAGE: CreatorPackage = {
 describe("contentFields", () => {
   it("turns the pinned birthday schema into its eight fields, labelled in Spanish", () => {
     assert.deepEqual(contentFields(BIRTHDAY_SCHEMA), [
-      { name: "celebrantName", type: "string", label: "Nombre del festejado" },
-      { name: "age", type: "integer", label: "Edad" },
-      { name: "date", type: "string", label: "Fecha" },
-      { name: "time", type: "string", label: "Hora" },
-      { name: "location", type: "string", label: "Lugar" },
-      { name: "address", type: "string", label: "Dirección" },
-      { name: "mainPhoto", type: "string", label: "Foto principal (URL)" },
-      { name: "message", type: "string", label: "Mensaje" },
+      {
+        name: "celebrantName",
+        type: "string",
+        label: "Nombre del festejado",
+        required: true,
+        input: { kind: "text", maxLength: 80 },
+      },
+      {
+        name: "age",
+        type: "integer",
+        label: "Edad",
+        required: true,
+        input: { kind: "number", min: 1, max: 120, step: "1" },
+      },
+      { name: "date", type: "string", label: "Fecha", required: true, input: { kind: "date" } },
+      { name: "time", type: "string", label: "Hora", required: true, input: { kind: "time" } },
+      {
+        name: "location",
+        type: "string",
+        label: "Lugar",
+        required: true,
+        input: { kind: "text", maxLength: 120 },
+      },
+      {
+        name: "address",
+        type: "string",
+        label: "Dirección",
+        required: true,
+        input: { kind: "text", maxLength: 200 },
+      },
+      {
+        name: "mainPhoto",
+        type: "string",
+        label: "Foto principal (URL)",
+        required: true,
+        input: { kind: "url" },
+      },
+      {
+        name: "message",
+        type: "string",
+        label: "Mensaje",
+        required: true,
+        input: { kind: "textarea", maxLength: 500, rows: 5 },
+      },
     ]);
   });
 
@@ -138,8 +175,14 @@ describe("contentFields", () => {
     });
 
     assert.deepEqual(fields, [
-      { name: "cake", type: "string", label: "cake" },
-      { name: "guests", type: "integer", label: "guests" },
+      { name: "cake", type: "string", label: "cake", required: false, input: { kind: "text" } },
+      {
+        name: "guests",
+        type: "integer",
+        label: "guests",
+        required: false,
+        input: { kind: "number", step: "1" },
+      },
     ]);
   });
 
@@ -155,6 +198,121 @@ describe("contentFields", () => {
     ]) {
       assert.deepEqual(contentFields(schema), [], JSON.stringify(schema) ?? "undefined");
     }
+  });
+});
+
+describe("content field inputs", () => {
+  /** The single input a one-property schema declares, so a case reads as the property it maps. */
+  function inputOf(definition: Record<string, unknown>): unknown {
+    return contentFields({ properties: { field: definition }, required: [] })[0]?.input;
+  }
+
+  it("keeps a short string single-line, bounded by the maxLength the schema declares", () => {
+    assert.deepEqual(inputOf({ type: "string", maxLength: 120 }), {
+      kind: "text",
+      maxLength: 120,
+    });
+    assert.deepEqual(inputOf({ type: "string" }), { kind: "text" });
+  });
+
+  it("asks for a multi-line field only above the textarea threshold of 200 characters", () => {
+    assert.deepEqual(inputOf({ type: "string", maxLength: 200 }), {
+      kind: "text",
+      maxLength: 200,
+    });
+    assert.deepEqual(inputOf({ type: "string", maxLength: 201 }), {
+      kind: "textarea",
+      maxLength: 201,
+      rows: 3,
+    });
+    assert.deepEqual(inputOf({ type: "string", maxLength: 2000 }), {
+      kind: "textarea",
+      maxLength: 2000,
+      rows: 6,
+    });
+  });
+
+  it("recognizes a time from its format or from a HH:MM pattern, and leaves any other pattern text", () => {
+    assert.deepEqual(inputOf({ type: "string", format: "time" }), { kind: "time" });
+    assert.deepEqual(inputOf({ type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }), {
+      kind: "time",
+    });
+    assert.deepEqual(inputOf({ type: "string", pattern: "^[0-9]{3}$" }), { kind: "text" });
+    assert.deepEqual(inputOf({ type: "string", pattern: "([" }), { kind: "text" });
+  });
+
+  it("reads a date and a URI from the schema's own format", () => {
+    assert.deepEqual(inputOf({ type: "string", format: "date" }), { kind: "date" });
+    assert.deepEqual(inputOf({ type: "string", format: "uri" }), { kind: "url" });
+    assert.deepEqual(inputOf({ type: "string", format: "uri", maxLength: 300 }), {
+      kind: "url",
+      maxLength: 300,
+    });
+  });
+
+  it("bounds a number by the schema's minimum and maximum, stepping integers by one", () => {
+    assert.deepEqual(inputOf({ type: "integer", minimum: 1, maximum: 120 }), {
+      kind: "number",
+      min: 1,
+      max: 120,
+      step: "1",
+    });
+    assert.deepEqual(inputOf({ type: "number", minimum: 0, maximum: 1.5 }), {
+      kind: "number",
+      min: 0,
+      max: 1.5,
+      step: "any",
+    });
+    assert.deepEqual(inputOf({ type: "integer" }), { kind: "number", step: "1" });
+  });
+
+  it("reads a boolean as a checkbox", () => {
+    assert.deepEqual(inputOf({ type: "boolean" }), { kind: "checkbox" });
+  });
+});
+
+describe("contentSections", () => {
+  it("groups the birthday fields into the four short sections of the editor", () => {
+    const sections = contentSections(contentFields(BIRTHDAY_SCHEMA));
+
+    assert.deepEqual(
+      sections.map((section) => ({
+        title: section.title,
+        fields: section.fields.map((field) => field.name),
+      })),
+      [
+        { title: "Festejado", fields: ["celebrantName", "age"] },
+        { title: "Cuándo", fields: ["date", "time"] },
+        { title: "Dónde", fields: ["location", "address"] },
+        { title: "Contenido", fields: ["mainPhoto", "message"] },
+      ],
+    );
+  });
+
+  it("keeps a property no section names in one last section, in schema order", () => {
+    const fields = contentFields({
+      properties: {
+        cake: { type: "string" },
+        date: { type: "string", format: "date" },
+        guests: { type: "integer" },
+      },
+      required: [],
+    });
+
+    assert.deepEqual(
+      contentSections(fields).map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ]),
+      [
+        ["Cuándo", ["date"]],
+        ["Otros datos", ["cake", "guests"]],
+      ],
+    );
+  });
+
+  it("has no section for a schema that declares no field", () => {
+    assert.deepEqual(contentSections([]), []);
   });
 });
 
@@ -188,10 +346,56 @@ describe("parseContentForm", () => {
     for (const age of ["7.5", "siete", "7 años", "1e2", "0x10", "Infinity"]) {
       assert.deepEqual(parseContentForm(fields, form({ age })), { ok: false }, age);
     }
-    assert.deepEqual(parseContentForm(fields, form({ age: " -7 " })), {
+    assert.deepEqual(parseContentForm(fields, form({ age: " -7 " })), { ok: false });
+  });
+
+  it("refuses an age outside the schema's range before it reaches the API", () => {
+    for (const age of ["-1", "0", "121", "-7"]) {
+      assert.deepEqual(parseContentForm(fields, form({ age })), { ok: false }, age);
+    }
+    assert.deepEqual(parseContentForm(fields, form({ age: "1" })), {
       ok: true,
-      content: { age: -7 },
+      content: { age: 1 },
     });
+    assert.deepEqual(parseContentForm(fields, form({ age: "120" })), {
+      ok: true,
+      content: { age: 120 },
+    });
+  });
+
+  it("refuses a date that is not a real calendar day in the schema's format", () => {
+    for (const date of ["2026-02-30", "2026-2-3", "11/11/2026", "mañana", "2026-13-01"]) {
+      assert.deepEqual(parseContentForm(fields, form({ date })), { ok: false }, date);
+    }
+    assert.deepEqual(parseContentForm(fields, form({ date: "2026-11-11" })), {
+      ok: true,
+      content: { date: "2026-11-11" },
+    });
+  });
+
+  it("refuses a time that is not a 24-hour HH:MM value", () => {
+    for (const time of ["24:00", "25:00", "9:5", "19:60", "7 pm", "19:30:00"]) {
+      assert.deepEqual(parseContentForm(fields, form({ time })), { ok: false }, time);
+    }
+    assert.deepEqual(parseContentForm(fields, form({ time: "19:30" })), {
+      ok: true,
+      content: { time: "19:30" },
+    });
+    assert.deepEqual(parseContentForm(fields, form({ time: "00:00" })), {
+      ok: true,
+      content: { time: "00:00" },
+    });
+  });
+
+  it("refuses text longer than the schema's maxLength", () => {
+    assert.deepEqual(parseContentForm(fields, form({ celebrantName: "a".repeat(81) })), {
+      ok: false,
+    });
+    assert.deepEqual(parseContentForm(fields, form({ message: "a".repeat(500) })), {
+      ok: true,
+      content: { message: "a".repeat(500) },
+    });
+    assert.deepEqual(parseContentForm(fields, form({ message: "a".repeat(501) })), { ok: false });
   });
 
   it("reads a number field as a decimal and refuses what is not one", () => {
@@ -292,17 +496,19 @@ describe("invitationFieldsFor", () => {
   });
 });
 
-describe("select options", () => {
-  it("offers each template with its category, and each package with its price in pesos", () => {
-    assert.deepEqual(templateOptions([TEMPLATE]), [
-      { value: VERSION_ID, label: "Cumpleaños (Cumpleaños)" },
+describe("creation choices", () => {
+  it("offers each template as a card with its category, and each package with its price", () => {
+    assert.deepEqual(templateChoices([TEMPLATE]), [
+      { value: VERSION_ID, name: "Cumpleaños", meta: "Cumpleaños", description: null },
     ]);
-    assert.deepEqual(packageOptions([PACKAGE]), [{ value: PACKAGE_ID, label: "Basic: $1,500.00" }]);
+    assert.deepEqual(packageChoices([PACKAGE]), [
+      { value: PACKAGE_ID, name: "Basic", meta: "$1,500.00 MXN", description: null },
+    ]);
   });
 
   it("says a package has no price instead of showing zero", () => {
-    assert.deepEqual(packageOptions([{ ...PACKAGE, currentPrice: null }]), [
-      { value: PACKAGE_ID, label: `Basic: ${INVITATION_COPY.priceMissing}` },
+    assert.deepEqual(packageChoices([{ ...PACKAGE, currentPrice: null }]), [
+      { value: PACKAGE_ID, name: "Basic", meta: INVITATION_COPY.priceMissing, description: null },
     ]);
   });
 });
@@ -310,6 +516,20 @@ describe("select options", () => {
 describe("invitation copy", () => {
   it("labels the two statuses of a draft", () => {
     assert.deepEqual(INVITATION_STATUS_LABELS, { DRAFT: "Borrador", ARCHIVED: "Archivada" });
+  });
+
+  it("names the field sections and marks the fields that publication needs", () => {
+    assert.deepEqual(
+      [
+        INVITATION_COPY.sectionCelebrant,
+        INVITATION_COPY.sectionWhen,
+        INVITATION_COPY.sectionWhere,
+        INVITATION_COPY.sectionContent,
+        INVITATION_COPY.sectionOther,
+      ],
+      ["Festejado", "Cuándo", "Dónde", "Contenido", "Otros datos"],
+    );
+    assert.equal(INVITATION_COPY.fieldRequired, "Necesario para publicar");
   });
 
   it("labels every field of the birthday template", () => {
@@ -540,13 +760,24 @@ describe("saveInvitationContent", () => {
   });
 
   it("refuses an unreadable value instead of sending it", async () => {
-    const { api, calls } = stub(answers());
+    for (const invalid of [
+      { age: "siete" },
+      { age: "-1" },
+      { age: "0" },
+      { age: "121" },
+      { date: "2026-02-30" },
+      { time: "25:00" },
+      { message: "a".repeat(501) },
+    ]) {
+      const { api, calls } = stub(answers());
 
-    assert.equal(
-      await saveInvitationContent(api, formData({ id: ID, age: "siete" })),
-      `/cuenta/invitaciones/${ID}?error=invalid-form`,
-    );
-    assert.equal(calls.includes("replaceContent"), false);
+      assert.equal(
+        await saveInvitationContent(api, formData({ id: ID, ...invalid })),
+        `/cuenta/invitaciones/${ID}?error=invalid-form`,
+        JSON.stringify(invalid),
+      );
+      assert.equal(calls.includes("replaceContent"), false, JSON.stringify(invalid));
+    }
   });
 
   it("maps an archived draft, a foreign id, and an ended session", async () => {

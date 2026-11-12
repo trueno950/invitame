@@ -8,8 +8,11 @@ import {
   invitationPageNotices,
   invitationRows,
 } from "../../../lib/customer/invitations.ts";
-import { CustomerShell } from "../../_components/customer-shell.tsx";
-import { errorNote, focusRing, quietButton } from "../../_components/ui.ts";
+import {
+  CustomerWorkspaceShell,
+  pageActionButton,
+} from "../../_components/customer-workspace-shell.tsx";
+import { errorNote, quietButton, textButton } from "../../_components/ui.ts";
 import { Notices } from "./_components/notices.tsx";
 import { StatusBadge } from "./_components/status-badge.tsx";
 import { invitations } from "./_lib/api.ts";
@@ -22,9 +25,11 @@ export const metadata: Metadata = {
 type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
 
 /**
- * `/cuenta/invitaciones` (M4 T5; S1, S7): the signed-in customer's own drafts, newest first. The list
- * endpoint carries no missing-field data, so "incomplete" is shown on the draft's own page only. A
- * customer without a session is sent to `/ingresar`; a failed read shows the retry notice.
+ * `/cuenta/invitaciones` (M4 T5, T8; S1, S7, S11): the signed-in customer's own drafts, newest first, as
+ * a grid of cards in the wide workspace so a few invitations fit on one screen. Each card names the
+ * status in words as well as in the badge, the public slug, when it was created, and the way to edit it.
+ * The list endpoint carries no missing-field data, so "incomplete" is shown on the draft's own page only.
+ * A customer without a session is sent to `/ingresar`; a failed read shows the retry notice.
  */
 export default async function InvitationsPage({
   searchParams,
@@ -39,41 +44,43 @@ export default async function InvitationsPage({
   const available = loaded.status === "ok";
 
   return (
-    <CustomerShell
+    <CustomerWorkspaceShell
+      actions={
+        available ? (
+          <Link className={pageActionButton} href={INVITATION_PATHS.create}>
+            {INVITATION_COPY.newLink}
+          </Link>
+        ) : undefined
+      }
       eyebrow={INVITATION_COPY.listEyebrow}
       heading={available ? INVITATION_COPY.listHeading : INVITATION_COPY.unavailableHeading}
       intro={available ? INVITATION_COPY.listIntro : INVITATION_COPY.unavailableBody}
     >
-      <div className="flex flex-col gap-6">
-        <Notices notice={notices.notice} error={notices.error} />
-
-        <div className="flex justify-center">
-          <Link className={quietButton} href={INVITATION_PATHS.create}>
-            {INVITATION_COPY.newLink}
-          </Link>
-        </div>
+      <div className="flex flex-col gap-5">
+        <Notices error={notices.error} notice={notices.notice} />
 
         {available && rows.length === 0 ? (
-          <p className="text-center leading-7 text-pretty text-muted">
-            {INVITATION_COPY.listEmpty}
-          </p>
+          <div className="rounded-panel bg-surface/80 px-6 py-10 text-center ring-1 ring-gold/45">
+            <p className="mx-auto max-w-md leading-7 text-pretty text-muted">
+              {INVITATION_COPY.listEmpty}
+            </p>
+          </div>
         ) : null}
 
         {rows.length > 0 ? (
-          <ul className="flex flex-col gap-3">
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {rows.map((row) => (
-              <li key={row.id}>
-                <Link
-                  className={`flex flex-col gap-1.5 rounded-field bg-surface px-4 py-3 ring-[1.5px] ring-gold/45 transition-colors hover:bg-rose-50 ${focusRing}`}
-                  href={row.href}
-                >
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="font-medium break-all text-ink">{row.slug}</span>
-                    <StatusBadge label={row.statusLabel} />
-                  </span>
-                  <span className="text-sm text-muted">
-                    {INVITATION_COPY.createdOn(row.createdOn)}
-                  </span>
+              <li
+                className="flex flex-col gap-3 rounded-panel bg-surface/90 p-5 shadow-soft ring-1 ring-gold/45"
+                key={row.id}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="min-w-0 font-medium break-all text-ink">{row.slug}</p>
+                  <StatusBadge label={row.statusLabel} />
+                </div>
+                <p className="text-sm text-muted">{INVITATION_COPY.createdOn(row.createdOn)}</p>
+                <Link className={`${textButton} mt-auto self-start`} href={row.href}>
+                  {INVITATION_COPY.editLink}
                 </Link>
               </li>
             ))}
@@ -81,7 +88,7 @@ export default async function InvitationsPage({
         ) : null}
 
         {available ? null : (
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-start gap-4">
             <p className={errorNote}>{INVITATION_COPY.unavailableBody}</p>
             {/* A full reload asks the API again, as the account page's retry does. */}
             <a className={quietButton} href={INVITATION_PATHS.list}>
@@ -90,6 +97,6 @@ export default async function InvitationsPage({
           </div>
         )}
       </div>
-    </CustomerShell>
+    </CustomerWorkspaceShell>
   );
 }

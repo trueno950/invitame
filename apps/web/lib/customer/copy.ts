@@ -114,6 +114,21 @@ export const INVITATION_COPY = {
     "Aquí están los borradores que has creado. Puedes editarlos cuando quieras antes de publicarlos.",
   listEmpty: "Aún no tienes invitaciones. Crea una cuando quieras: es gratis.",
   newLink: "Nueva invitación",
+  editLink: "Editar",
+  chosen: "Elegido",
+  /** Marks a field the pinned schema requires, as a note instead of the HTML `required` attribute. */
+  fieldRequired: "Necesario para publicar",
+  /** Why no field is HTML-required: a draft may stay incomplete until publication (S7). */
+  fieldsHint:
+    "Puedes guardar el borrador con campos vacíos. Los campos marcados como «Necesario para publicar» hacen falta para publicar la invitación.",
+  urlPlaceholder: "https://…",
+  /** The short groups of the draft's form, in the order they appear. */
+  sectionCelebrant: "Festejado",
+  sectionWhen: "Cuándo",
+  sectionWhere: "Dónde",
+  sectionContent: "Contenido",
+  sectionOther: "Otros datos",
+  detailAsideHeading: "Resumen",
   createdOn: (date: string) => `Creada el ${date}`,
   statusLabel: "Estado",
   slugLabel: "Dirección pública",
@@ -121,6 +136,9 @@ export const INVITATION_COPY = {
   missingLabel: (names: string) => `Faltan: ${names}.`,
   save: "Guardar cambios",
   archive: "Archivar",
+  /** The block of the side column that archives the draft, and what archiving does (S7). */
+  archiveHeading: "Archivar",
+  archiveHint: "Archivar no borra la invitación: la guarda y deja de poder editarse.",
   archivedNote: "Esta invitación está archivada: puedes consultarla, pero ya no editarla.",
   readOnlyVersionNote:
     "Esta versión de la plantilla ya no está disponible en el catálogo, así que solo puedes consultar el contenido guardado.",
@@ -173,7 +191,8 @@ export type InvitationErrorCode =
   | "unavailable";
 
 export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
-  "invalid-form": "Revisa los datos: hay un campo que no tiene el formato esperado.",
+  "invalid-form":
+    "Revisa los datos: hay un valor fuera del rango permitido o con un formato que no corresponde, como la fecha o la hora.",
   validation: "Revisa los datos e inténtalo de nuevo.",
   "package-does-not-fit":
     "Ese paquete no incluye las funciones que necesita la plantilla. Elige otro paquete.",
