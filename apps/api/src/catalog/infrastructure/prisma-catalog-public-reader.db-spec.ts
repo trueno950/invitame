@@ -13,13 +13,14 @@ import {
 import { requireLocalDatabaseUrl } from "../../../test/database";
 import { PrismaCatalogPublicReader } from "./prisma-catalog-public-reader";
 
-// The creator reads of the catalog's public reader on PostgreSQL (M4 T4; S8, A5): only PUBLISHED templates
-// whose PUBLISHED version exists are listed, a published version whose renderer the in-code registry no longer
-// knows is left out (fail closed, exactly like `findPublishedVersion`), and only ACTIVE packages are listed,
-// each with the feature keys it actually includes and the price in force. Runs only through
-// `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that points at a disposable, already
-// migrated local database; not part of `pnpm test`. The database is shared with parallel suites, so every row
-// here carries a key made from this run's id and only those rows are read back or removed.
+// The creator reads of the catalog's public reader on PostgreSQL (M4 T4 and M5 T3; S2, S8, A1, A3, A5): only
+// PUBLISHED templates whose PUBLISHED version exists are listed, a published version whose renderer the in-code
+// registry no longer knows is left out (fail closed, exactly like `findPublishedVersion`), only ACTIVE packages
+// are listed, each with the feature keys it actually includes and the price in force, and the render data of a
+// pinned version is answered in any status so a published invitation keeps rendering a retired version. Runs
+// only through `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL that points at a disposable,
+// already migrated local database; not part of `pnpm test`. The database is shared with parallel suites, so
+// every row here carries a key made from this run's id and only those rows are read back or removed.
 
 describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
@@ -51,6 +52,7 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
     componentKey?: string;
     version?: number;
     schema?: Prisma.InputJsonObject;
+    configuration?: Prisma.InputJsonObject;
   }
 
   interface TemplateInput {
@@ -86,7 +88,9 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
             status: version.status,
             componentKey: version.componentKey ?? "birthday-adventure-01",
             schema: version.schema ?? { type: "object", required: [], properties: {} },
-            configuration: { componentKey: version.componentKey ?? "birthday-adventure-01" },
+            configuration: version.configuration ?? {
+              componentKey: version.componentKey ?? "birthday-adventure-01",
+            },
           },
         }),
       );
@@ -145,6 +149,33 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
     (await reader.listPublishedTemplates()).filter((template) => template.key.startsWith(prefix));
   const ourPackages = async () =>
     (await reader.listActivePackages()).filter((stored) => stored.key.startsWith(prefix));
+
+  describe("findVersionRenderData", () => {
+    it("answers the render data of a version in any status and null for an unknown id (A1, A3)", async () => {
+      const schema = {
+        type: "object",
+        required: ["celebrantName"],
+        properties: { celebrantName: { type: "string", maxLength: 80 } },
+      };
+      const configuration = { componentKey: "birthday-adventure-01", theme: "festive" };
+      const retired = await newTemplate({
+        key: "aa-retired-render",
+        status: "ARCHIVED",
+        versions: [{ status: "RETIRED", schema, configuration }],
+      });
+      const versionId = retired.versions[0]?.id ?? "";
+
+      assert.deepEqual(await reader.findVersionRenderData(versionId), {
+        componentKey: "birthday-adventure-01",
+        configuration,
+        schema,
+      });
+      assert.equal(await reader.findVersionRenderData(randomUUID()), null);
+      // The registry is the API's in-code allow-list, never a database value (A3).
+      assert.equal(reader.isRendererRegistered("birthday-adventure-01"), true);
+      assert.equal(reader.isRendererRegistered("retired-renderer-99"), false);
+    });
+  });
 
   describe("listPublishedTemplates", () => {
     it("answers only PUBLISHED templates whose PUBLISHED version exists, ordered by key", async () => {

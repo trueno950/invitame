@@ -7,10 +7,12 @@ import type {
 } from "../application/invitation.repository";
 import {
   InvitationAlreadyArchivedError,
+  InvitationAlreadyPublishedError,
   InvitationNotEditableError,
+  InvitationNotPublishedError,
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
-import { archive, assertEditable } from "../domain/invitation-lifecycle";
+import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
 
 const INVITATION_SELECT = {
   id: true,
@@ -21,6 +23,8 @@ const INVITATION_SELECT = {
   status: true,
   content: true,
   archivedAt: true,
+  publishedAt: true,
+  expiresAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.InvitationSelect;
@@ -46,14 +50,17 @@ function isPrismaError(error: unknown, code: string): boolean {
 }
 
 /**
- * The invitation port on PostgreSQL (M4 T3; S1, S3, S5, S7, S9, A3, A4). Every statement that names one
- * invitation carries the owner id in its own `WHERE` (S9): another owner's row is indistinguishable from a
- * missing one, so no read-then-check outside the write can ever let a foreign row through (A4). Each content
- * change and each archive runs in one interactive transaction that re-states the owner and the DRAFT status in
- * the `WHERE` of the write itself, so the domain check and the write cannot disagree: a concurrent archive
- * makes the write match nothing and is reported as `InvitationNotEditableError` instead of silently rewriting
- * a read-only invitation (S7, A3). The unique index on `slug` is the only uniqueness guard (S3); its violation
- * (P2002) is reported as `InvitationSlugTakenError` so the create use case can draw another slug.
+ * The invitation port on PostgreSQL (M4 T3 and M5 T3; S1, S2, S3, S5, S7, S9, A1, A2, A3, A4). Every statement
+ * that names one invitation carries the owner id in its own `WHERE` (S9): another owner's row is
+ * indistinguishable from a missing one, so no read-then-check outside the write can ever let a foreign row
+ * through (A4). Each content change and each lifecycle write runs in one interactive transaction that re-states
+ * the owner and the expected status in the `WHERE` of the write itself, so the domain check and the write cannot
+ * disagree: a concurrent archive makes the write match nothing and is reported with the transition's own error
+ * instead of silently rewriting a read-only invitation (S7, A2). Publishing and unpublishing write `status` and
+ * `publishedAt` together, which the `Invitation_publishedAt_matches_status` check requires (S7). The public read
+ * by slug is a single query on the unique slug index that also filters the status and the expiry, so a guest
+ * read is bounded (S2, S3, A3). The unique index on `slug` is the only uniqueness guard; its violation (P2002)
+ * is reported as `InvitationSlugTakenError` so the create use case can draw another slug.
  */
 export class PrismaInvitationRepository implements InvitationRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -116,11 +123,12 @@ export class PrismaInvitationRepository implements InvitationRepository {
       assertEditable(toRecord(stored).status);
 
       const changed = await tx.invitation.updateMany({
-        where: { id, ownerId, status: "DRAFT" },
+        // A DRAFT or a PUBLISHED invitation changes; a published one changes live (S7).
+        where: { id, ownerId, status: { in: ["DRAFT", "PUBLISHED"] } },
         data: { content: content as Prisma.InputJsonObject },
       });
       if (changed.count !== 1) {
-        // The row stopped being an editable draft after the read: the only other status is ARCHIVED.
+        // The row stopped being editable after the read: the only other status is ARCHIVED.
         throw new InvitationNotEditableError("ARCHIVED");
       }
 
@@ -140,12 +148,14 @@ export class PrismaInvitationRepository implements InvitationRepository {
         return null;
       }
       const current = toRecord(stored);
-      // The domain states the transition; ARCHIVED and its marker are written together below (A3).
+      // The domain states the transition (DRAFT or PUBLISHED -> ARCHIVED, A2); ARCHIVED and its marker are
+      // written together below. The status is no longer PUBLISHED, so the marker is cleared in the same write,
+      // as the `Invitation_publishedAt_matches_status` check requires.
       const next = archive(current.status);
 
       const changed = await tx.invitation.updateMany({
-        where: { id, ownerId, status: "DRAFT" },
-        data: { status: next, archivedAt: new Date() },
+        where: { id, ownerId, status: current.status },
+        data: { status: next, archivedAt: new Date(), publishedAt: null },
       });
       if (changed.count !== 1) {
         // A concurrent archive won; this request archived nothing, so it is not a successful change.
@@ -156,5 +166,76 @@ export class PrismaInvitationRepository implements InvitationRepository {
         await tx.invitation.findUniqueOrThrow({ where: { id }, select: INVITATION_SELECT }),
       );
     });
+  }
+
+  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecord | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const stored = await tx.invitation.findFirst({
+        where: { id, ownerId },
+        select: INVITATION_SELECT,
+      });
+      if (stored === null) {
+        return null;
+      }
+      // The domain states the transition and gives each wrong status its own error: an already published
+      // invitation and an archived one are not the same outcome (S7, A2).
+      const next = publish(toRecord(stored).status);
+
+      const changed = await tx.invitation.updateMany({
+        where: { id, ownerId, status: "DRAFT" },
+        data: { status: next, publishedAt: at },
+      });
+      if (changed.count !== 1) {
+        // A concurrent publish or archive won; nothing was published by this request.
+        throw new InvitationAlreadyPublishedError();
+      }
+
+      return toRecord(
+        await tx.invitation.findUniqueOrThrow({ where: { id }, select: INVITATION_SELECT }),
+      );
+    });
+  }
+
+  async unpublish(ownerId: string, id: string): Promise<InvitationRecord | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const stored = await tx.invitation.findFirst({
+        where: { id, ownerId },
+        select: INVITATION_SELECT,
+      });
+      if (stored === null) {
+        return null;
+      }
+      const next = unpublish(toRecord(stored).status);
+
+      const changed = await tx.invitation.updateMany({
+        where: { id, ownerId, status: "PUBLISHED" },
+        // The status is no longer PUBLISHED, so `publishedAt` is cleared in the same write (S7, A2).
+        data: { status: next, publishedAt: null },
+      });
+      if (changed.count !== 1) {
+        // A concurrent unpublish or archive won; nothing returned to DRAFT by this request.
+        throw new InvitationNotPublishedError();
+      }
+
+      return toRecord(
+        await tx.invitation.findUniqueOrThrow({ where: { id }, select: INVITATION_SELECT }),
+      );
+    });
+  }
+
+  async findPublishedBySlug(slug: string): Promise<InvitationRecord | null> {
+    const now = new Date();
+    // One query on the unique slug index: the status and the expiry are filtered there too, so a draft, an
+    // archived, an expired, and an unknown slug are all a single miss (S2, A3, S8).
+    const stored = await this.prisma.invitation.findFirst({
+      where: {
+        slug,
+        status: "PUBLISHED",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      select: INVITATION_SELECT,
+    });
+
+    return stored === null ? null : toRecord(stored);
   }
 }

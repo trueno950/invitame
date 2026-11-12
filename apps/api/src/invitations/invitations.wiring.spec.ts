@@ -17,19 +17,25 @@ import {
   ArchiveInvitationUseCase,
   CreateInvitationDraftUseCase,
   GetOwnInvitationUseCase,
+  GetPublicInvitationUseCase,
   ListOwnInvitationsUseCase,
+  PublishInvitationUseCase,
+  UnpublishInvitationUseCase,
   UpdateInvitationContentUseCase,
 } from "./application/invitation.use-cases";
 import { INVITATION_CATALOG } from "./application/invitation-catalog";
+import { INVITATION_PAYMENT_GATE } from "./application/invitation-payment-gate";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
+import { NoPaymentRequiredGate } from "./infrastructure/no-payment-required";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { InvitationsModule } from "./invitations.module";
 import { InvitationsController } from "./presentation/invitations.controller";
 
-// InvitationsModule composition (M4 T3 and T4; S1, S3, S6, S7, S9): every use case is provided and bound to the
-// Prisma repository and to the catalog's exported public reader, the module registers the `/invitations`
-// controller, and `AppModule` registers the whole module, so the routes exist behind the global guard. A Prisma
-// stub stands in for the database, so the suite never connects to one; no adapter is exercised here.
+// InvitationsModule composition (M4 T3 and T4 and M5 T3; S1, S2, S3, S6, S7, S9): every use case is provided
+// and bound to the Prisma repository, to the catalog's exported public reader, and to the payment gate, the
+// module registers the `/invitations` controller, and `AppModule` registers the whole module, so the routes
+// exist behind the global guard. A Prisma stub stands in for the database, so the suite never connects to one;
+// no adapter is exercised here.
 
 @Global()
 @Module({
@@ -42,7 +48,7 @@ class StubDatabaseModule {}
 class InvitationsTestModule {}
 
 describe("InvitationsModule wiring", () => {
-  it("provides every use case bound to the Prisma repository and the catalog public reader", async () => {
+  it("provides every use case bound to the Prisma repository, the catalog public reader, and the payment gate", async () => {
     const context = await NestFactory.createApplicationContext(InvitationsTestModule, {
       logger: false,
       abortOnError: false,
@@ -55,6 +61,9 @@ describe("InvitationsModule wiring", () => {
         GetOwnInvitationUseCase,
         UpdateInvitationContentUseCase,
         ArchiveInvitationUseCase,
+        PublishInvitationUseCase,
+        UnpublishInvitationUseCase,
+        GetPublicInvitationUseCase,
       ]) {
         assert.ok(context.get(useCase) instanceof useCase, useCase.name);
       }
@@ -64,9 +73,23 @@ describe("InvitationsModule wiring", () => {
       );
       // The catalog's own public reader is what the invitations adapter delegates to: the cross-module
       // boundary is the catalog contract, not a catalog repository (module-template.md).
-      assert.ok(context.get(CATALOG_PUBLIC_READER, { strict: false }) !== undefined);
+      const catalog: unknown = context.get(CATALOG_PUBLIC_READER, { strict: false });
+      assert.ok(catalog !== undefined);
+      // The public read needs the rendering facet of the same contract (M5 T3; A1, A3).
+      assert.equal(
+        typeof (catalog as { findVersionRenderData?: unknown }).findVersionRenderData,
+        "function",
+      );
+      assert.equal(
+        typeof (catalog as { isRendererRegistered?: unknown }).isRendererRegistered,
+        "function",
+      );
       assert.ok(
         context.get(INVITATION_CATALOG, { strict: false }) instanceof CatalogInvitationReader,
+      );
+      // Milestone 7 swaps only this provider, so publication is free today (S6).
+      assert.ok(
+        context.get(INVITATION_PAYMENT_GATE, { strict: false }) instanceof NoPaymentRequiredGate,
       );
     } finally {
       await context.close();

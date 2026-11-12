@@ -3,16 +3,30 @@ import {
   missingRequiredFields,
   validateDraftContent,
 } from "../domain/invitation-content";
-import { archive, assertEditable, type InvitationStatus } from "../domain/invitation-lifecycle";
-import { generateInvitationSlug, isReservedSlug } from "../domain/invitation-slug";
+import {
+  archive,
+  assertEditable,
+  type InvitationStatus,
+  publish,
+  unpublish,
+} from "../domain/invitation-lifecycle";
+import {
+  generateInvitationSlug,
+  isReservedSlug,
+  isValidInvitationSlug,
+} from "../domain/invitation-slug";
+import { InvitationNotPublishableError } from "../domain/invitation.errors";
 import { packageFitsTemplateVersion } from "../domain/package-fit";
+import { publicationIssues } from "../domain/publication-readiness";
 import {
   InvalidInvitationContentError,
   InvitationPackageDoesNotFitError,
   InvitationPackageNotFoundError,
+  InvitationPaymentRequiredError,
   InvitationSlugTakenError,
   InvitationSlugUnavailableError,
   InvitationTemplateVersionNotPublishedError,
+  PublicInvitationNotRenderableError,
 } from "./invitation.application.errors";
 import type {
   InvitationRecord,
@@ -20,13 +34,16 @@ import type {
   NewInvitation,
 } from "./invitation.repository";
 import type { InvitationCatalog } from "./invitation-catalog";
+import type { InvitationPaymentGate } from "./invitation-payment-gate";
+import { type PublicInvitation, projectPublicContent } from "./invitation-public";
 
-// The invitation use cases (M4 T3; S1, S3, S6, S7, S9, A1, A3, A4). Creating and editing a draft is free for
-// any signed-in customer: the chosen package is only validated against the pinned version's renderer, and
-// payment belongs to publication (M5/M7). Every command receives the owner from the caller, which the route
-// reads from the session (S9); no command accepts an owner in its payload, and every read or write goes
-// through a port whose query carries that owner (S9, A4). Nothing is deleted: archiving is the only lifecycle
-// write of M4 (S7, A3).
+// The invitation use cases (M4 T3 and M5 T3; S1, S2, S3, S6, S7, S9, A1, A3, A4, A7). Creating and editing a
+// draft is free for any signed-in customer: the chosen package is only validated against the pinned version's
+// renderer, and payment belongs to publication (M5/M7). Every command receives the owner from the caller, which
+// the route reads from the session (S9); no command accepts an owner in its payload, and every read or write
+// goes through a port whose query carries that owner (S9, A4). Publishing re-states the readiness rule, asks
+// the payment gate, then writes; the public read carries no owner at all and answers only the allow-listed
+// projection (A7). Nothing is deleted: archiving is the only terminal lifecycle write (S7, A2).
 
 /** How many slugs one create request may try before it reports that no slug is available (S5). */
 export const MAX_SLUG_ATTEMPTS = 5;
@@ -62,6 +79,12 @@ export interface InvitationSummary {
   slug: string;
   status: InvitationStatus;
   archivedAt: Date | null;
+  /**
+   * When the invitation was published, null while it is a DRAFT. `expiresAt` is deliberately not exposed: the
+   * column exists for a later milestone and Milestone 5 never writes it, so a response must not pretend a
+   * client can rely on an expiry (S8).
+   */
+  publishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -94,6 +117,7 @@ function toSummary(record: InvitationRecord): InvitationSummary {
     slug: record.slug,
     status: record.status,
     archivedAt: record.archivedAt,
+    publishedAt: record.publishedAt,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
@@ -234,10 +258,11 @@ export class GetOwnInvitationUseCase {
 }
 
 /**
- * Replaces the bounded content of a DRAFT (S7). Only a DRAFT changes (A3); the content is validated against
- * the pinned version's schema, which is read regardless of the version's status (S3). Throws
- * `InvitationNotEditableError` for an archived invitation and `InvalidInvitationContentError` with the issues
- * for content the pinned schema refuses; either way nothing is stored. Another owner's id answers null (A4).
+ * Replaces the bounded content of a DRAFT or a PUBLISHED invitation (S7): a published invitation changes live.
+ * The content is validated against the pinned version's schema, which is read regardless of the version's
+ * status (S3). Throws `InvitationNotEditableError` for an archived invitation and
+ * `InvalidInvitationContentError` with the issues for content the pinned schema refuses; either way nothing is
+ * stored. Another owner's id answers null (A4).
  */
 export class UpdateInvitationContentUseCase {
   constructor(
@@ -253,7 +278,7 @@ export class UpdateInvitationContentUseCase {
     if (stored === null) {
       return null;
     }
-    // A read-only invitation is refused before its content is even looked at (S7, A3).
+    // A read-only invitation is refused before its content is even looked at (S7, A2).
     assertEditable(stored.status);
 
     const snapshot = await this.catalog.findVersionSchema(stored.templateVersionId);
@@ -272,9 +297,10 @@ export class UpdateInvitationContentUseCase {
 }
 
 /**
- * Archives a DRAFT: it becomes read-only and stays stored, because an invitation is never deleted (S7, A3).
- * Throws `InvitationAlreadyArchivedError` for an invitation that is already archived, so a repeated archive
- * never looks like a change. Another owner's id answers null and changes nothing (A4).
+ * Archives a DRAFT or a PUBLISHED invitation: it becomes read-only and stays stored, because an invitation is
+ * never deleted (S7, A2). Archiving a published invitation clears `publishedAt`, so the public slug stops
+ * resolving. Throws `InvitationAlreadyArchivedError` for an invitation that is already archived, so a repeated
+ * archive never looks like a change. Another owner's id answers null and changes nothing (A4).
  */
 export class ArchiveInvitationUseCase {
   constructor(private readonly invitations: InvitationRepository) {}
@@ -293,5 +319,139 @@ export class ArchiveInvitationUseCase {
     const archived = await this.invitations.archive(ownerId, id);
 
     return archived === null ? null : toSummary(archived);
+  }
+}
+
+/** The instant a publication writes; injectable so a test can observe `publishedAt` exactly (S7). */
+export type PublicationClock = () => Date;
+
+/**
+ * Publishes an owned DRAFT (M5 T3; S1, S2, S3, S6, A1). The readiness rule of the pinned snapshot is applied
+ * first — the pinned schema's required fields and validation, whether the package still fits what the pinned
+ * version's renderer requires, and whether that version is still PUBLISHED — and every reason is reported in
+ * `InvitationNotPublishableError` without storing anything. Then the payment gate is asked once (S6), and only
+ * then does the write happen with `publishedAt` set to the current instant. An id that names nothing or belongs
+ * to another owner answers null before the catalog or the gate is consulted (A4); publishing an already
+ * published or an archived invitation is refused by the domain with its own error (S7, A2).
+ */
+export class PublishInvitationUseCase {
+  constructor(
+    private readonly invitations: InvitationRepository,
+    private readonly catalog: InvitationCatalog,
+    private readonly payments: InvitationPaymentGate,
+    private readonly now: PublicationClock = () => new Date(),
+  ) {}
+
+  async execute(ownerId: string, id: string): Promise<OwnedInvitation | null> {
+    if (!isInvitationId(id)) {
+      return null;
+    }
+    const stored = await this.invitations.findOwned(ownerId, id);
+    if (stored === null) {
+      return null;
+    }
+    // The transition is stated before any catalog read: only a DRAFT publishes (S7, A2).
+    publish(stored.status);
+
+    const versionId = stored.templateVersionId;
+    const version = await this.catalog.findPublishedVersion(versionId);
+    const snapshot = await this.catalog.findVersionSchema(versionId);
+    const entitlements = await this.catalog.findPackageEntitlements(stored.packageId);
+
+    const issues = publicationIssues({
+      // The schema the draft was validated against, whatever the version's status is (S3).
+      schema: snapshot?.schema ?? null,
+      content: stored.content,
+      // A package that can no longer be read fails the fit rule instead of publishing unchecked (A1).
+      packageEntitlements: {
+        packageStatus: entitlements?.status ?? "",
+        includedFeatureKeys: entitlements?.includedFeatureKeys ?? [],
+      },
+      // A retired pinned version reports its own issue and requires no feature of the new package (A1).
+      requiredFeatureKeys: version?.requiredFeatureKeys ?? [],
+      versionPublished: version !== null,
+    });
+    if (issues.length > 0) {
+      throw new InvitationNotPublishableError(issues);
+    }
+
+    const payment = await this.payments.publicationPaymentRequired(stored);
+    if (payment.required) {
+      throw new InvitationPaymentRequiredError(payment.reason);
+    }
+
+    const published = await this.invitations.publish(ownerId, id, this.now());
+    if (published === null) {
+      return null;
+    }
+
+    return toOwnedInvitation(published, snapshot?.schema ?? null);
+  }
+}
+
+/**
+ * Returns an owned PUBLISHED invitation to DRAFT (M5 T3; S7), clearing `publishedAt`, so the slug stops
+ * resolving and the owner can edit and publish again. Only a published invitation changes; a draft throws
+ * `InvitationNotPublishedError` and an archived one `InvitationAlreadyArchivedError`. Another owner's id
+ * answers null and changes nothing (A4).
+ */
+export class UnpublishInvitationUseCase {
+  constructor(private readonly invitations: InvitationRepository) {}
+
+  async execute(ownerId: string, id: string): Promise<InvitationSummary | null> {
+    if (!isInvitationId(id)) {
+      return null;
+    }
+    const stored = await this.invitations.findOwned(ownerId, id);
+    if (stored === null) {
+      return null;
+    }
+    // The domain states the transition; the adapter repeats it inside the write as the last guard.
+    unpublish(stored.status);
+
+    const draft = await this.invitations.unpublish(ownerId, id);
+
+    return draft === null ? null : toSummary(draft);
+  }
+}
+
+/**
+ * The public page of a published invitation (M5 T3; S1, S2, S3, A1, A3, A7). It carries no owner: the slug from
+ * the URL is the only input. The slug format is checked first, so a malformed value never reaches a query; the
+ * repository resolves the slug in one query and answers only a live PUBLISHED row, so a draft, an archived, an
+ * expired, and an unknown slug all answer null (A3). The pinned version's render data is then read in any
+ * status, so an already published invitation keeps rendering a version the catalog has since retired (A1). A
+ * renderer the API's allow-list does not know is refused with `PublicInvitationNotRenderableError`, an
+ * operational fault the caller logs and still answers as the same guest-facing 404 (A3). What comes back is
+ * only the allow-listed projection: no owner, package, price, ids, or status (A7).
+ */
+export class GetPublicInvitationUseCase {
+  constructor(
+    private readonly invitations: InvitationRepository,
+    private readonly catalog: InvitationCatalog,
+  ) {}
+
+  async execute(slug: string): Promise<PublicInvitation | null> {
+    if (!isValidInvitationSlug(slug)) {
+      return null;
+    }
+    const published = await this.invitations.findPublishedBySlug(slug);
+    if (published === null) {
+      return null;
+    }
+
+    const render = await this.catalog.findVersionRenderData(published.templateVersionId);
+    // Fail closed: with no pinned version or a renderer nobody implements there is nothing to render (A3).
+    if (render === null || !this.catalog.isRendererRegistered(render.componentKey)) {
+      throw new PublicInvitationNotRenderableError(render?.componentKey ?? null);
+    }
+
+    return {
+      slug: published.slug,
+      componentKey: render.componentKey,
+      configuration: render.configuration,
+      content: projectPublicContent(render.schema, published.content),
+      publishedAt: published.publishedAt,
+    };
   }
 }

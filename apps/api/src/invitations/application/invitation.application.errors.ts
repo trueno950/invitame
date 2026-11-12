@@ -65,3 +65,34 @@ export class InvalidInvitationContentError extends Error {
     this.name = "InvalidInvitationContentError";
   }
 }
+
+/**
+ * The payment gate refused this publication (M5 T3; S6). Milestone 5 binds an adapter that always answers
+ * "no payment required", so nothing throws this yet; Milestone 7 swaps the adapter and this outcome starts
+ * arriving without any other change. `reason` is the machine-readable code the gate answered; nothing was
+ * stored and the invitation is still a DRAFT.
+ */
+export class InvitationPaymentRequiredError extends Error {
+  constructor(readonly reason: string) {
+    super("The publication requires a payment.");
+    this.name = "InvitationPaymentRequiredError";
+  }
+}
+
+/**
+ * A published invitation names a renderer the API cannot render (M5 T3; A3). This is an operational fault, not
+ * a guest-facing "not found": the row is published and reachable, and only the deployed allow-list is missing
+ * the code. It is a distinct type so the caller logs it as an operational error and still answers the guest
+ * with the same friendly 404. `componentKey` is what the pinned version names, so the log says which renderer
+ * the deployment lacks; null when the pinned version itself could not be read.
+ */
+export class PublicInvitationNotRenderableError extends Error {
+  constructor(readonly componentKey: string | null) {
+    super(
+      componentKey === null
+        ? "The published invitation has no renderable template version."
+        : `The renderer ${JSON.stringify(componentKey)} is not registered.`,
+    );
+    this.name = "PublicInvitationNotRenderableError";
+  }
+}
