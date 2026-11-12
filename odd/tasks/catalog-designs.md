@@ -66,6 +66,17 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
     1 created only when that template is created by the run; re-running the seed creates nothing. No catalog name or
     description uses a protected name (S5).
 
+- S9 — Template preview when choosing (L11). Owner, verbatim: "funciona pero una mejora quepodriamos hacer al momento de
+  elegir la plantilla un preview porque asi el usuario solo ve las opciones". Owner choice for "¿Cómo quieres que el
+  cliente vea las plantillas antes de elegir?": "Agrupado por diseño + temas (Recomendado)" — "Una tarjeta por diseño
+  (Mapa, Cartel, Cuento) con su miniatura real; botones de tema cambian la miniatura; «Ver completa» abre la
+  invitación de ejemplo a pantalla de celular." Preview shown: "Menos tarjetas (4 en vez de 25)". Parent decisions
+  within S9 (L11): previews render the real allow-listed renderer with fixed sample content, never a stored
+  screenshot; grouping uses the version's `componentKey` and its `configuration.theme`, never catalog names;
+  a template whose renderer has no themes (`birthday-adventure-01`, other categories) keeps its own card with its own
+  live thumbnail; switching themes needs no client JavaScript if plain form controls can do it; «Ver completa» is a
+  signed-in creator page that shows the sample invitation at phone width and leads back to choosing that template.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -78,6 +89,7 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T6a | API: three renderer contracts, shared theme allow-list, registry, seed for 24 templates, tests, `docs/architecture/overview.md` | S2, S3, S5, S7, S8 | worker | `00cb26a` |
 | T6b | Web: theme tokens and fonts, three layout renderers, parsers, registries, tests, `docs/design/theme.md` | S2, S3, S5, S7, S8 | worker | `2e9c69d`, `71e4830` |
 | T6c | Integration check: key and theme lists in sync, full unit suites, typecheck, lint, 390 px screenshots | S3, S8 | inline | `71e4830` |
+| T9 | Template chooser with live previews grouped by layout, theme switch, and a full sample preview page | S9 | worker | |
 | T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
 | T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
 
@@ -141,3 +153,5 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   surfaces 4.61-6.82:1, and no decoration over text. Round 3 (parent) fixed the one new defect, a poster motif hidden
   behind the polaroid: the motif is now in flow above the hero, with 0 hidden shapes, 0 text overlaps, and 0 console
   errors on all eight themes. Slice 2 ends here; T7 starts slice 3.
+- L11 — Owner tested the 24 templates on the local app ("funciona") and asked for a preview when choosing; chose the
+  grouped layout cards with theme switches (S9). Added T9 ahead of T7.
