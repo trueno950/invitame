@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { LANDING_COPY } from "../../../lib/landing/copy.ts";
+import { accountAction, LANDING_COPY } from "../../../lib/landing/copy.ts";
 import { Ornament } from "../ornament.tsx";
 import { focusRing } from "../ui.ts";
 import { Wordmark } from "../wordmark.tsx";
@@ -98,8 +98,8 @@ export function GuestExperience() {
   );
 }
 
-/** The closing band: the wax seal in its crest, the aspiration, and «Ingresar». */
-export function ClosingBand() {
+/** The closing band: the wax seal in its crest, the aspiration, and «Ingresar» (or «Mi cuenta» with a session). */
+export function ClosingBand({ signedIn }: { signedIn: boolean }) {
   return (
     <section aria-labelledby="cierre-title" className={styles.section}>
       <div className={`${styles.wrap} ${styles.closingShell}`}>
@@ -116,7 +116,7 @@ export function ClosingBand() {
           </h2>
           <p className={styles.closingBody}>{closing.body}</p>
           <div className={styles.closingActions}>
-            <SignInLink action={closing.signIn} />
+            <SignInLink action={signedIn ? accountAction(true) : closing.signIn} />
             <span className={styles.closingUpcoming}>
               {closing.upcoming.feature}
               <ComingSoon action={closing.upcoming.action} />
@@ -128,7 +128,8 @@ export function ClosingBand() {
   );
 }
 
-export function LandingFooter() {
+export function LandingFooter({ signedIn }: { signedIn: boolean }) {
+  const account = signedIn ? accountAction(true) : footer.signIn;
   return (
     <footer className={styles.footer}>
       <Ornament className={styles.footerDivider} name="divider" />
@@ -140,8 +141,8 @@ export function LandingFooter() {
               {link.label}
             </a>
           ))}
-          <Link className={`${styles.footerLink} ${focusRing}`} href={footer.signIn.href}>
-            {footer.signIn.label}
+          <Link className={`${styles.footerLink} ${focusRing}`} href={account.href}>
+            {account.label}
           </Link>
         </nav>
         <small className={styles.footerNote}>{footer.copyright(new Date().getFullYear())}</small>
