@@ -346,6 +346,52 @@ describe("invitation publication schema (real PostgreSQL)", () => {
   });
 
   describe("pinned fields of a published invitation", () => {
+    it("refuses changing the owner of a PUBLISHED invitation and leaves it unchanged", async () => {
+      const invitation = await newPublished();
+      const before = await stored(invitation.id);
+
+      await assert.rejects(
+        prisma.invitation.update({
+          where: { id: invitation.id },
+          data: { ownerId: await newOwner() },
+        }),
+        PINNED_IMMUTABLE,
+      );
+
+      assert.deepEqual(await stored(invitation.id), before);
+    });
+
+    it("refuses changing the template version of a PUBLISHED invitation and leaves it unchanged", async () => {
+      const invitation = await newPublished();
+      const before = await stored(invitation.id);
+      const { versionId: otherVersionId } = await newTemplateWithVersion();
+
+      await assert.rejects(
+        prisma.invitation.update({
+          where: { id: invitation.id },
+          data: { templateVersionId: otherVersionId },
+        }),
+        PINNED_IMMUTABLE,
+      );
+
+      assert.deepEqual(await stored(invitation.id), before);
+    });
+
+    it("refuses changing the package of a PUBLISHED invitation and leaves it unchanged", async () => {
+      const invitation = await newPublished();
+      const before = await stored(invitation.id);
+
+      await assert.rejects(
+        prisma.invitation.update({
+          where: { id: invitation.id },
+          data: { packageId: await newPackage() },
+        }),
+        PINNED_IMMUTABLE,
+      );
+
+      assert.deepEqual(await stored(invitation.id), before);
+    });
+
     it("refuses changing the slug of a PUBLISHED invitation and leaves it unchanged", async () => {
       const invitation = await newPublished();
       const before = await stored(invitation.id);

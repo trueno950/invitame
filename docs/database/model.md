@@ -78,8 +78,8 @@ separately in [`future-model.md`](future-model.md); that document does not add t
   draft row reads `NULL`.
 - The public read by slug needs no extra index: `Invitation_slug_key` is already unique, so `WHERE slug = $1` reads at
   most one row through it and the status is filtered on that row. No partial index on published rows is added.
-- The application updates only `status`, `content`, `publishedAt`, `archivedAt`, and `updatedAt`; it never writes
-  `expiresAt` today and can never change the pinned fields.
+- The columns the application may update are `status`, `content`, `publishedAt`, `archivedAt`, and `updatedAt`;
+  today no route writes `publishedAt` yet, nothing writes `expiresAt`, and the pinned fields can never change.
 
 ## Identity tables
 
