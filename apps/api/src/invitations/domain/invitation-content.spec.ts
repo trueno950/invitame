@@ -1,35 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { BIRTHDAY_ADVENTURE_SCHEMA } from "../../../prisma/catalog-seed";
 import {
   DEFAULT_MAX_CONTENT_STRING_LENGTH,
   missingRequiredFields,
   validateDraftContent,
 } from "./invitation-content";
 
-// Partial draft content against the pinned `TemplateVersion` schema (M4 T2; S7, A3). A draft may be
+// Partial draft content against the pinned `TemplateVersion` schema (M4 T2, T7; S7, S11, A3). A draft may be
 // incomplete and is never required to satisfy `required`; each provided field must be declared by the
-// pinned schema and match its declared primitive type, and the whole object stays bounded. Values are
-// validated, never transformed. The expected messages are literals on purpose.
+// pinned schema and satisfy the rules that schema declares for it, and the whole object stays bounded.
+// Values are validated, never transformed. The expected messages are literals on purpose.
 
-const BIRTHDAY_SCHEMA = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  type: "object",
-  additionalProperties: false,
-  required: ["celebrantName", "age", "date", "time", "location", "address", "mainPhoto", "message"],
-  properties: {
-    celebrantName: { type: "string", title: "Nombre", minLength: 1, maxLength: 80 },
-    age: { type: "integer", title: "Edad", minimum: 1, maximum: 120 },
-    date: { type: "string", title: "Fecha", format: "date" },
-    time: { type: "string", title: "Hora", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
-    location: { type: "string", title: "Lugar", maxLength: 120 },
-    address: { type: "string", title: "Dirección", maxLength: 200 },
-    mainPhoto: { type: "string", title: "Foto principal", format: "uri" },
-    message: { type: "string", title: "Mensaje", maxLength: 500 },
-  },
-};
+/** A generic pinned schema: five declared properties, two of them required, none of them formatted. */
 
-/** A small pinned schema: five declared properties, two of them required. */
 function draftSchema(): Record<string, unknown> {
   return {
     $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -276,7 +261,222 @@ describe("validateDraftContent", () => {
     assert.equal(result.ok && result.value.title, "  Cumple  ");
   });
 
-  it("accepts values that only violate a format, pattern, minimum, or minLength (S7: drafts may be partial)", () => {
+  it("enforces the inclusive minimum and maximum an integer declares (S11: no negative age)", () => {
+    const schema = {
+      type: "object",
+      required: [],
+      properties: { age: { type: "integer", minimum: 1, maximum: 120 } },
+    };
+
+    for (const age of [1, 120]) {
+      assert.deepEqual(validateDraftContent(schema, { age }), { ok: true, value: { age } });
+    }
+    const refused: [number, string][] = [
+      [0, "content.age must be at least 1"],
+      [-5, "content.age must be at least 1"],
+      [121, "content.age must be at most 120"],
+    ];
+
+    for (const [age, expected] of refused) {
+      assert.deepEqual(issuesOf(schema, { age }), [expected], String(age));
+    }
+  });
+
+  it("enforces the numeric exclusive bounds a number declares and ignores any other shape", () => {
+    const exclusive = {
+      type: "object",
+      required: [],
+      properties: { ratio: { type: "number", exclusiveMinimum: 0, exclusiveMaximum: 1 } },
+    };
+
+    assert.deepEqual(validateDraftContent(exclusive, { ratio: 0.5 }), {
+      ok: true,
+      value: { ratio: 0.5 },
+    });
+    assert.deepEqual(issuesOf(exclusive, { ratio: 0 }), ["content.ratio must be greater than 0"]);
+    assert.deepEqual(issuesOf(exclusive, { ratio: -0.5 }), [
+      "content.ratio must be greater than 0",
+    ]);
+    assert.deepEqual(issuesOf(exclusive, { ratio: 1 }), ["content.ratio must be less than 1"]);
+
+    // The draft-04 boolean form and a bound that is not a number declare no rule this validation enforces.
+    const legacy = {
+      type: "object",
+      required: [],
+      properties: { ratio: { type: "number", minimum: 0, exclusiveMinimum: true, maximum: "1" } },
+    };
+
+    for (const ratio of [0, 5]) {
+      assert.deepEqual(validateDraftContent(legacy, { ratio }), { ok: true, value: { ratio } });
+    }
+  });
+
+  it("enforces the minLength the pinned schema declares, counted in code points", () => {
+    const schema = {
+      type: "object",
+      required: [],
+      properties: { celebrantName: { type: "string", minLength: 1, maxLength: 2 } },
+    };
+
+    for (const celebrantName of ["A", "😀", "😀😀"]) {
+      assert.deepEqual(validateDraftContent(schema, { celebrantName }), {
+        ok: true,
+        value: { celebrantName },
+      });
+    }
+    assert.deepEqual(issuesOf(schema, { celebrantName: "" }), [
+      "content.celebrantName must be a string of at least 1 character",
+    ]);
+    assert.deepEqual(issuesOf(schema, { celebrantName: "😀😀😀" }), [
+      "content.celebrantName must be a string of at most 2 characters",
+    ]);
+
+    const longer = {
+      type: "object",
+      required: [],
+      properties: { note: { type: "string", minLength: 2 } },
+    };
+
+    assert.deepEqual(issuesOf(longer, { note: "a" }), [
+      "content.note must be a string of at least 2 characters",
+    ]);
+  });
+
+  it("enforces the pattern the pinned schema declares for a string", () => {
+    const schema = {
+      type: "object",
+      required: [],
+      properties: { time: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" } },
+    };
+
+    assert.deepEqual(validateDraftContent(schema, { time: "18:30" }), {
+      ok: true,
+      value: { time: "18:30" },
+    });
+    for (const time of ["24:00", "6:30", ""]) {
+      assert.deepEqual(
+        issuesOf(schema, { time }),
+        ["content.time must match the pattern ^([01]\\d|2[0-3]):[0-5]\\d$"],
+        time,
+      );
+    }
+  });
+
+  it("fails closed when the pinned schema declares a pattern that does not compile", () => {
+    for (const pattern of ["(", "[", 42, null, {}]) {
+      const schema = {
+        type: "object",
+        required: [],
+        properties: { time: { type: "string", pattern } },
+      };
+
+      assert.deepEqual(
+        issuesOf(schema, { time: "18:30" }),
+        ["content.time is declared with an invalid pattern in the template version schema"],
+        JSON.stringify(pattern),
+      );
+    }
+  });
+
+  it("enforces the date format the pinned schema declares as a real calendar date", () => {
+    const schema = {
+      type: "object",
+      required: [],
+      properties: { date: { type: "string", format: "date" } },
+    };
+
+    for (const date of ["2026-02-28", "2024-02-29", "2026-12-31"]) {
+      assert.deepEqual(validateDraftContent(schema, { date }), { ok: true, value: { date } });
+    }
+    for (const date of ["2026-02-30", "2026-02-29", "28/02/2026", "2026-2-28", " 2026-02-28", ""]) {
+      assert.deepEqual(
+        issuesOf(schema, { date }),
+        ["content.date must be a calendar date as YYYY-MM-DD"],
+        date,
+      );
+    }
+  });
+
+  it("enforces the uri format the pinned schema declares as an absolute http or https URL", () => {
+    const schema = {
+      type: "object",
+      required: [],
+      properties: { mainPhoto: { type: "string", format: "uri" } },
+    };
+
+    for (const mainPhoto of [
+      "https://cdn.example.test/ana.jpg",
+      "http://example.test/foto.jpg?x=1#y",
+    ]) {
+      assert.deepEqual(validateDraftContent(schema, { mainPhoto }), {
+        ok: true,
+        value: { mainPhoto },
+      });
+    }
+    for (const mainPhoto of [
+      "ftp://example.test/foto.jpg",
+      "foto.jpg",
+      "/foto.jpg",
+      "example.test",
+      "",
+    ]) {
+      assert.deepEqual(
+        issuesOf(schema, { mainPhoto }),
+        ["content.mainPhoto must be an absolute http or https URL"],
+        mainPhoto,
+      );
+    }
+  });
+
+  it("enforces the time format when the pinned schema declares it", () => {
+    const schema = {
+      type: "object",
+      required: [],
+      properties: { time: { type: "string", format: "time" } },
+    };
+
+    for (const time of ["18:30", "00:00", "23:59", "18:30:00", "23:59:59"]) {
+      assert.deepEqual(validateDraftContent(schema, { time }), { ok: true, value: { time } });
+    }
+    for (const time of ["24:00", "6:30", "18:60", "18:30:60", "18:30:00.000", ""]) {
+      assert.deepEqual(
+        issuesOf(schema, { time }),
+        ["content.time must be a time as HH:MM or HH:MM:SS"],
+        time,
+      );
+    }
+  });
+
+  it("ignores a format the pinned schema declares that draft validation does not implement", () => {
+    const schema = {
+      type: "object",
+      required: [],
+      properties: { email: { type: "string", format: "email" } },
+    };
+
+    assert.deepEqual(validateDraftContent(schema, { email: "not-an-email" }), {
+      ok: true,
+      value: { email: "not-an-email" },
+    });
+  });
+
+  it("reports every rule one string violates in a fixed order", () => {
+    const schema = {
+      type: "object",
+      required: [],
+      properties: {
+        code: { type: "string", minLength: 3, maxLength: 5, pattern: "^[a-c]+$", format: "date" },
+      },
+    };
+
+    assert.deepEqual(issuesOf(schema, { code: "xy" }), [
+      "content.code must be a string of at least 3 characters",
+      "content.code must match the pattern ^[a-c]+$",
+      "content.code must be a calendar date as YYYY-MM-DD",
+    ]);
+  });
+
+  it("refuses every field of a birthday draft the seeded schema's rules reject", () => {
     const content = {
       celebrantName: "",
       age: 0,
@@ -285,16 +485,92 @@ describe("validateDraftContent", () => {
       mainPhoto: "not-a-uri",
     };
 
-    assert.deepEqual(validateDraftContent(BIRTHDAY_SCHEMA, content), { ok: true, value: content });
+    assert.deepEqual(issuesOf(BIRTHDAY_ADVENTURE_SCHEMA, content), [
+      "content.celebrantName must be a string of at least 1 character",
+      "content.age must be at least 1",
+      "content.date must be a calendar date as YYYY-MM-DD",
+      "content.time must match the pattern ^([01]\\d|2[0-3]):[0-5]\\d$",
+      "content.mainPhoto must be an absolute http or https URL",
+    ]);
+  });
+
+  it("still accepts an incomplete birthday draft because required is not enforced", () => {
+    for (const content of [
+      {},
+      { age: 120 },
+      { time: "18:30" },
+      { mainPhoto: "https://a.test/b.jpg" },
+    ]) {
+      assert.deepEqual(validateDraftContent(BIRTHDAY_ADVENTURE_SCHEMA, content), {
+        ok: true,
+        value: content,
+      });
+    }
   });
 
   it("validates a real birthday draft against the seeded birthday-adventure schema", () => {
-    const content = { celebrantName: "Ana", age: 9, message: "a".repeat(500) };
+    const content = {
+      celebrantName: "Ana",
+      age: 9,
+      date: "2026-12-05",
+      time: "18:30",
+      location: "Salón Aurora",
+      address: "Calle 12 #34-56",
+      mainPhoto: "https://cdn.example.test/ana.jpg",
+      message: "Te espero para celebrar.",
+    };
 
-    assert.deepEqual(validateDraftContent(BIRTHDAY_SCHEMA, content), { ok: true, value: content });
-    assert.deepEqual(issuesOf(BIRTHDAY_SCHEMA, { message: "a".repeat(501) }), [
-      "content.message must be a string of at most 500 characters",
-    ]);
+    assert.deepEqual(validateDraftContent(BIRTHDAY_ADVENTURE_SCHEMA, content), {
+      ok: true,
+      value: content,
+    });
+  });
+
+  it("refuses each invalid field of a birthday draft against the seeded schema", () => {
+    const valid = {
+      celebrantName: "Ana",
+      age: 9,
+      date: "2026-12-05",
+      time: "18:30",
+      location: "Salón Aurora",
+      address: "Calle 12 #34-56",
+      mainPhoto: "https://cdn.example.test/ana.jpg",
+      message: "Te espero para celebrar.",
+    };
+    const timePattern = "content.time must match the pattern ^([01]\\d|2[0-3]):[0-5]\\d$";
+    const cases: [string, unknown, string][] = [
+      ["celebrantName", "", "content.celebrantName must be a string of at least 1 character"],
+      [
+        "celebrantName",
+        "a".repeat(81),
+        "content.celebrantName must be a string of at most 80 characters",
+      ],
+      ["age", -5, "content.age must be at least 1"],
+      ["age", 0, "content.age must be at least 1"],
+      ["age", 121, "content.age must be at most 120"],
+      ["date", "2026-02-30", "content.date must be a calendar date as YYYY-MM-DD"],
+      ["date", "28/02/2026", "content.date must be a calendar date as YYYY-MM-DD"],
+      ["time", "24:00", timePattern],
+      ["time", "6:30", timePattern],
+      ["location", "", "content.location must be a string of at least 1 character"],
+      ["address", "", "content.address must be a string of at least 1 character"],
+      [
+        "mainPhoto",
+        "ftp://example.test/ana.jpg",
+        "content.mainPhoto must be an absolute http or https URL",
+      ],
+      ["mainPhoto", "ana.jpg", "content.mainPhoto must be an absolute http or https URL"],
+      ["message", "", "content.message must be a string of at least 1 character"],
+      ["message", "a".repeat(501), "content.message must be a string of at most 500 characters"],
+    ];
+
+    for (const [key, value, expected] of cases) {
+      assert.deepEqual(
+        issuesOf(BIRTHDAY_ADVENTURE_SCHEMA, { ...valid, [key]: value }),
+        [expected],
+        `${key}=${String(value)}`,
+      );
+    }
   });
 });
 
@@ -332,7 +608,7 @@ describe("missingRequiredFields", () => {
   });
 
   it("reports the incomplete fields of a real birthday draft", () => {
-    assert.deepEqual(missingRequiredFields(BIRTHDAY_SCHEMA, { celebrantName: "Ana" }), [
+    assert.deepEqual(missingRequiredFields(BIRTHDAY_ADVENTURE_SCHEMA, { celebrantName: "Ana" }), [
       "age",
       "date",
       "time",
