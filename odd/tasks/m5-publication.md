@@ -50,8 +50,8 @@ metadata (title from `celebrantName`, description from `message`), no generated 
 | T2 | Domain: lifecycle (publish, unpublish, archive from DRAFT or PUBLISHED, edit while DRAFT or PUBLISHED), completeness rule, payment port contract with a "no payment required" adapter; unit tests | S2, S3, S6, S7 | worker | `32ca239` |
 | T3 | Application and Prisma: publish and unpublish use cases (owner-scoped), public read by slug with the allow-listed projection, catalog public contract for the pinned version's render data; database tests | S1, S2, S3, S7 | worker | `9b1b21c` |
 | T4 | API: `POST /invitations/:id/publish`, `POST /invitations/:id/unpublish`, `@Public()` `GET /public/invitations/:slug`; controller tests (401, 404, 409, public 404 cases) | S2, S3, S9 | worker | `b4bd2b4` |
-| T5 | Web: `/i/[slug]` public page (renderer, friendly 404, noindex, metadata), publish/unpublish controls and the public link in `/cuenta/invitaciones/[id]`; unit tests and a Playwright public-journey spec | S1, S5, S7, S9 | worker | |
-| T6 | Docs: overview public flow (`/i/<slug>`), `CONTEXT.md` Publication, `docs/database/model.md`, ROADMAP status | S1–S10 | inline | |
+| T5 | Web: `/i/[slug]` public page (renderer, friendly 404, noindex, metadata), publish/unpublish controls and the public link in `/cuenta/invitaciones/[id]`; unit tests and a Playwright public-journey spec | S1, S5, S7, S9 | worker | `68be4a8` |
+| T6 | Docs: overview public flow (`/i/<slug>`), `CONTEXT.md` Publication, `docs/database/model.md`, ROADMAP status | S1–S10 | inline | this commit |
 
 ## Log
 
@@ -68,3 +68,8 @@ metadata (title from `celebrantName`, description from `message`), no generated 
   `POST /invitations/:id/unpublish` → 200, 404, 409 `INVITATION_NOT_PUBLISHED`; `@Public()`
   `GET /public/invitations/:slug` → 200 `{ slug, componentKey, configuration, content, publishedAt }` or 404
   `PUBLIC_INVITATION_NOT_FOUND`, both `Cache-Control: no-store`.
+- L6 (2026-11-12): T5 web (`68be4a8`): `/i/[slug]` guest page and the owner publish/unpublish controls. The public 404
+  page was proven against the local servers; the 200 guest render and `e2e/public-invitation.spec.ts` were not run
+  locally (the journey needs the disposable e2e database, Mailpit, and a seeded published template). T6 docs: overview
+  public flow is now `/i/<slug>` and current, `CONTEXT.md` Invitation and Publication, `docs/database/model.md`,
+  ROADMAP marks Milestone 5 implemented. Slice 2 = T4 + T5 + T6.

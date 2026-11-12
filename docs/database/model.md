@@ -49,9 +49,8 @@ separately in [`future-model.md`](future-model.md); that document does not add t
   only `MXN` today. The database does not forbid deleting a price row; no API route deletes one, and deleting a
   `Package` is restricted while rows reference it.
 - Current status: the `Invitation` table exists and an invitation references a `TemplateVersion`, never mutable
-  `Template` fields. Milestone 4 created, edited, and archived invitations through the API; the publish and unpublish
-  use cases are the following Milestone 5 tasks, so today the database accepts the publication state and no API route
-  writes it yet.
+  `Template` fields. Milestone 4 created, edited, and archived invitations through the API, and Milestone 5 publishes
+  and unpublishes them (`POST /invitations/:id/publish` and `/unpublish`), writing `status` and `publishedAt` together.
 - `Invitation` is pinned at creation: `ownerId`, `templateVersionId`, `packageId`, and `slug` are protected against
   updates by the `Invitation_pinned_fields_immutable` trigger, so an invitation keeps rendering its pinned version
   after the template catalog publishes a newer one. The three references are `ON DELETE RESTRICT`, so a referenced
@@ -79,7 +78,7 @@ separately in [`future-model.md`](future-model.md); that document does not add t
 - The public read by slug needs no extra index: `Invitation_slug_key` is already unique, so `WHERE slug = $1` reads at
   most one row through it and the status is filtered on that row. No partial index on published rows is added.
 - The columns the application may update are `status`, `content`, `publishedAt`, `archivedAt`, and `updatedAt`;
-  today no route writes `publishedAt` yet, nothing writes `expiresAt`, and the pinned fields can never change.
+  publish and unpublish write `publishedAt`, nothing writes `expiresAt`, and the pinned fields can never change.
 
 ## Identity tables
 
