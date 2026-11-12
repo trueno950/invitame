@@ -63,3 +63,47 @@ describe("renderer props checks", () => {
     }
   });
 });
+
+// The three themed layouts (T6b; S7, S8): the same eight content fields, and a configuration that is exactly
+// `{componentKey, theme}`. A refused snapshot must reach the page as `false`, never as a throw.
+const THEMED_LAYOUTS = [
+  { key: "birthday-map-01", theme: "ice-kingdom" },
+  { key: "birthday-poster-01", theme: "blocks-and-pixels" },
+  { key: "birthday-story-01", theme: "fairytale-princess" },
+] as const;
+
+describe("themed layout props checks", () => {
+  it("accepts the published props of every themed layout", () => {
+    for (const { key, theme } of THEMED_LAYOUTS) {
+      assert.equal(
+        rendererAcceptsProps(key, {
+          configuration: { componentKey: key, theme },
+          content: CONTENT,
+        }),
+        true,
+        key,
+      );
+    }
+  });
+
+  it("refuses a drifted themed snapshot without throwing at the page", () => {
+    for (const { key, theme } of THEMED_LAYOUTS) {
+      for (const props of [
+        { configuration: { componentKey: key, theme: "neon" }, content: CONTENT },
+        { configuration: { componentKey: key }, content: CONTENT },
+        { configuration: { componentKey: key, theme: 7 }, content: CONTENT },
+        {
+          configuration: { componentKey: key, theme, palette: "sunset" },
+          content: CONTENT,
+        },
+        { configuration: { componentKey: key, theme }, content: { ...CONTENT, mainPhoto: "x" } },
+      ]) {
+        assert.equal(
+          rendererAcceptsProps(key, props),
+          false,
+          `${key} ${JSON.stringify(props.configuration)}`,
+        );
+      }
+    }
+  });
+});

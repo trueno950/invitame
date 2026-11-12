@@ -49,11 +49,15 @@ draws the pale pink wash behind the customer pages; the landing draws its own wa
 
 ## Typography
 
-`apps/web/app/layout.tsx` loads three Google Fonts families through `next/font/local` from woff2 files committed in
+`apps/web/app/layout.tsx` loads every family through `next/font/local` from woff2 files committed in
 `apps/web/app/fonts/` (Latin subset, `display: swap`) and sets their variables on `<html>`; the `@theme inline` block
-maps them to utilities. The build fetches no font over the network (S43); a unit test in
-`apps/web/lib/theme/fonts.test.ts` fails if any `apps/web` source imports `next/font/google` again, or if a font
-file the layout names is missing, is not woff2, or has no license next to it.
+maps the three product fonts to utilities. The build fetches no font over the network (S43); a unit test in
+`apps/web/lib/theme/fonts.test.ts` fails if any `apps/web` source imports `next/font/google` again, if a font file
+the layout names is missing, is not woff2, if a file cannot draw the weight the layout declares for it, or if a
+family has no license next to it.
+
+Status: **current** (T6b; S2, S5, S8). Ten families are loaded: three for the product interface and the landing, and
+seven display faces for the guest invitation themes.
 
 | Utility | Font | Weights | Use |
 | --- | --- | --- | --- |
@@ -61,25 +65,44 @@ file the layout names is missing, is not woff2, or has no license next to it.
 | `font-script` | Great Vibes | 400 | Names and accents only: the wordmark's "Me", the names on the landing's sample stationery, and «Para cada celebración»; couple and guest names on future invitations. Never body text, labels, buttons, or anything a person must read quickly. |
 | `font-sans` | Jost | 400, 500 | Interface and body text, labels, buttons, fields (the default body font). |
 
+The invitation display fonts are not utilities, because the face depends on the theme of the stored
+`TemplateVersion` and not on the place in the page: each is exposed as a CSS variable on `<html>`
+(`--font-cinzel-decorative`, `--font-luckiest-guy`, `--font-bangers`, `--font-chewy`, `--font-lilita-one`,
+`--font-pacifico`, `--font-press-start-2p`, and the already-loaded `--font-great-vibes`) and the renderer points
+`--inv-display` at the one its theme names. All seven new files are declared with `preload: false`, because a guest
+page renders one theme and must not download eight faces. They are used for names and titles only; body text stays
+Jost 400/500, so no Jost 600/700 file was added and emphasis inside a layout uses Jost 500 (the variable file does
+draw 100–900, so a real bold is a deliberate, documented change later, never a silent one).
+
 Add a weight or the italic only when a page uses it, so the build ships no unused font files.
 
 ### Font files and licenses
 
-Each family has its own folder under `apps/web/app/fonts/` with its woff2 files and its SIL Open Font License 1.1
-(`OFL.txt`, copied byte for byte from `ofl/<family>/OFL.txt` in the [google/fonts](https://github.com/google/fonts)
-repository). The files are the same Latin-subset files `next/font/google` used to download:
+Each family has its own folder under `apps/web/app/fonts/` with its woff2 files and the license google/fonts ships
+for it, copied byte for byte: `OFL.txt` for the SIL Open Font License 1.1 families (`ofl/<family>/OFL.txt`) and
+`LICENSE.txt` for the Apache License 2.0 families (`apache/<family>/LICENSE.txt`) in the
+[google/fonts](https://github.com/google/fonts) repository. The files are the same Latin-subset files
+`next/font/google` used to download.
 
-| Folder | Files | Declared weights |
-| --- | --- | --- |
-| `cormorant-garamond/` | `cormorant-garamond-latin-normal.woff2`, `cormorant-garamond-latin-italic.woff2` (variable) | `500 600` |
-| `great-vibes/` | `great-vibes-latin-normal.woff2` | `400` |
-| `jost/` | `jost-latin-normal.woff2` (variable) | `400 500` |
+| Folder | Files | Declared weights | License |
+| --- | --- | --- | --- |
+| `cormorant-garamond/` | `cormorant-garamond-latin-normal.woff2`, `cormorant-garamond-latin-italic.woff2` (variable) | `500 600` | `OFL.txt` |
+| `great-vibes/` | `great-vibes-latin-normal.woff2` | `400` | `OFL.txt` |
+| `jost/` | `jost-latin-normal.woff2` (variable) | `400 500` | `OFL.txt` |
+| `cinzel-decorative/` | `cinzel-decorative-latin-normal.woff2` | `400` | `OFL.txt` |
+| `luckiest-guy/` | `luckiest-guy-latin-normal.woff2` | `400` | `LICENSE.txt` (Apache 2.0) |
+| `bangers/` | `bangers-latin-normal.woff2` | `400` | `OFL.txt` |
+| `chewy/` | `chewy-latin-normal.woff2` | `400` | `LICENSE.txt` (Apache 2.0) |
+| `lilita-one/` | `lilita-one-latin-normal.woff2` | `400` | `OFL.txt` |
+| `pacifico/` | `pacifico-latin-normal.woff2` | `400` | `OFL.txt` |
+| `press-start-2p/` | `press-start-2p-latin-normal.woff2` | `400` | `OFL.txt` |
 
 The fallback faces keep the fonts `next/font/google` used: `adjustFontFallback: "Times New Roman"` for Cormorant
-Garamond and `"Arial"` for Great Vibes and Jost. `next/font/local` computes the fallback metrics from the files, so
-the ascent and descent match the old ones and `size-adjust` differs by up to about five points (Great Vibes); it
-affects only the fallback shown before a font loads. `apps/web/app/fonts/.gitattributes` marks the woff2 files as
-binary and keeps `git diff --check` from flagging the trailing spaces of the upstream license text.
+Garamond and Cinzel Decorative, and `"Arial"` for the other families. `next/font/local` computes the fallback metrics
+from the files, so the ascent and descent match the old ones and `size-adjust` differs by up to about five points
+(Great Vibes); it affects only the fallback shown before a font loads. `apps/web/app/fonts/.gitattributes` marks the
+woff2 files as binary and keeps `git diff --check` from flagging the trailing spaces of the upstream license text,
+for `OFL.txt` and `LICENSE.txt` alike.
 
 To add or update a font, a weight, or a style:
 
@@ -89,9 +112,14 @@ To add or update a font, a weight, or a style:
 2. Treat downloads as untrusted: save each in a new empty temporary directory outside the repository, execute
    nothing from it, check that each font starts with the woff2 signature `wOF2`, and record its source URL, size,
    and SHA-256 in the change description.
-3. Copy the files and the family's `OFL.txt` from google/fonts into `apps/web/app/fonts/<family>/`, add them to
-   the `src` list in `layout.tsx` with their weight and style, and update the table above.
+3. Copy the files and the family's license from google/fonts into `apps/web/app/fonts/<family>/` — `OFL.txt` for
+   an SIL family, `LICENSE.txt` for an Apache 2.0 family; confirm which one the family ships under `ofl/` or
+   `apache/` before copying, and never rename or reflow it. Add the files to the `src` list in `layout.tsx` with
+   their weight and style, and update the table above.
 4. Run `pnpm --filter @invitame/web test` and `pnpm build`, and compare the pages before and after.
+
+A theme display font is a title face only: one file, the weight it ships, `preload: false`, and the theme board's
+fallback stack behind it in `lib/renderers/birthday-themes.ts`.
 
 ## Ornaments
 
@@ -176,6 +204,46 @@ drawn.
   3:1 for `field-border` on `surface` and `background`. A missing token fails the test.
 - Focus is a 2 px wine outline: on `focus-visible` for buttons and links, on every focus for text fields.
 - Gold is never used for text that must be read; `ring-gold/*` hairlines are decoration, not component borders.
+
+## Guest invitation themes
+
+Status: **current** (T6b; S2, S3, S5, S7, S8). A children's birthday template is a **layout** plus a **theme**: the
+layout is an allow-listed renderer that codes the page structure once, and the theme is an allow-listed palette, a
+licensed display font, and an original motif that the layout applies. Each combination is its own catalog template
+and `TemplateVersion`.
+
+- Layouts, from the directions in `design/birthday-adventure-v2/`: `birthday-map-01` (Mapa, `01-mapa-aventura.html`),
+  `birthday-poster-01` (Cartel, `02-cartel-fiesta.html`), and `birthday-story-01` (Cuento, `03-cuento-ilustrado.html`).
+  `birthday-adventure-01` keeps its own files, behavior, and tests, and gains no theme.
+- Themes, from `design/kids-themes/01-tablero-temas.html`, in this order:
+
+| Key | Catalog name | Display font | Motif |
+| --- | --- | --- | --- |
+| `ice-kingdom` | Reino de hielo | Cinzel Decorative | Copos de nieve |
+| `rescue-team` | Equipo de rescate | Luckiest Guy | Huellas y estrellas |
+| `spider-hero` | Héroe arácnido | Bangers | Telarañas |
+| `classic-mouse` | Ratón clásico | Chewy | Lunares |
+| `dinosaurs` | Dinosaurios | Lilita One | Montañas y huevos |
+| `under-the-sea` | Bajo el mar | Pacifico | Burbujas y olas |
+| `fairytale-princess` | Princesa de cuento | Great Vibes | Coronas y estrellas |
+| `blocks-and-pixels` | Bloques y píxeles | Press Start 2P | Bloques |
+
+- Guardrail (S5): a palette may be inspired by a popular character or brand and a font may be the official one only
+  when its license allows commercial use. No theme carries character artwork, a logo, or a protected name — not in
+  its key, its catalog name, or its marketing. The motifs are original shapes drawn in
+  `app/_components/renderers/birthday/motif.ts`.
+- Configuration: exactly `{ "componentKey": <layout key>, "theme": <theme key> }`, both required; an extra key,
+  another layout's key, an unknown theme, and a wrongly typed value are refused by the API before publication and by
+  the web parser again (`lib/renderers/birthday-themes.ts`), so a drifted snapshot never renders. The content is the
+  same eight fields as `birthday-adventure-01` (`lib/renderers/birthday-content.ts`), so the creator form is shared.
+- Colors reach the markup as CSS variables on the invitation root: `--inv-background`, `--inv-surface`, `--inv-soft`,
+  `--inv-ink`, `--inv-accent`, `--inv-decoration-one`, `--inv-decoration-two`, plus `--inv-display` for the font. The
+  root also carries `data-theme` and `data-component-key`. No color is a literal in a component or a stylesheet.
+- Contrast: `ink` and `accent` reach 4.5:1 on `background`, `surface`, and `soft`, and white reaches 4.5:1 on
+  `accent`, for all eight themes; `lib/renderers/birthday-themes.test.ts` pins the palettes to the board and checks
+  every pair with `lib/theme/contrast.ts`. Decoration colors never carry text.
+- Rendering: server components with no client script, mobile-first at 390 px, a real `<img>` for `mainPhoto` with its
+  alt text, headings tied to their sections, and every motif a decorative `aria-hidden` SVG.
 
 ## Customer workspace
 
@@ -264,6 +332,8 @@ JavaScript.
 | Shared classes and components | `apps/web/app/_components/` |
 | Ornament files | `apps/web/public/ornaments/` |
 | Contrast helper and test, font loading test | `apps/web/lib/theme/` |
+| Invitation theme tokens, shared content parser, layout parsers and registries | `apps/web/lib/renderers/` |
+| Themed invitation components, display-font bridge, and motifs | `apps/web/app/_components/renderers/` |
 | Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/page.tsx` |
 | Customer workspace (invitation pages) | `apps/web/app/cuenta/invitaciones/`, `apps/web/app/_components/customer-workspace-shell.tsx` |
 | Administration classes and frames | `apps/web/app/admin/_components/` |

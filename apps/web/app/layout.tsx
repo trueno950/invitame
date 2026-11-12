@@ -48,6 +48,99 @@ const sans = localFont({
   variable: "--font-jost",
 });
 
+/*
+ * Guest invitation display fonts (T6b; S2, S5, S8): the licensed title face of each children's birthday theme,
+ * committed as Latin woff2 files under `./fonts/<family>/` next to the license google/fonts ships for it. Each
+ * file is drawn at its single shipped weight and used for names and titles only, so body text stays Jost
+ * 400/500 (S8). They are never preloaded: a guest page uses at most one of them, and the fonts test fails if a
+ * declaration stops disabling preload. The fallback faces are the theme board's.
+ */
+const cinzelDecorative = localFont({
+  src: [
+    {
+      path: "./fonts/cinzel-decorative/cinzel-decorative-latin-normal.woff2",
+      weight: "400",
+      style: "normal",
+    },
+  ],
+  display: "swap",
+  adjustFontFallback: "Times New Roman",
+  preload: false,
+  variable: "--font-cinzel-decorative",
+});
+
+const luckiestGuy = localFont({
+  src: [
+    {
+      path: "./fonts/luckiest-guy/luckiest-guy-latin-normal.woff2",
+      weight: "400",
+      style: "normal",
+    },
+  ],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-luckiest-guy",
+});
+
+const bangers = localFont({
+  src: [{ path: "./fonts/bangers/bangers-latin-normal.woff2", weight: "400", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-bangers",
+});
+
+const chewy = localFont({
+  src: [{ path: "./fonts/chewy/chewy-latin-normal.woff2", weight: "400", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-chewy",
+});
+
+const lilitaOne = localFont({
+  src: [
+    { path: "./fonts/lilita-one/lilita-one-latin-normal.woff2", weight: "400", style: "normal" },
+  ],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-lilita-one",
+});
+
+const pacifico = localFont({
+  src: [{ path: "./fonts/pacifico/pacifico-latin-normal.woff2", weight: "400", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-pacifico",
+});
+
+const pressStart2P = localFont({
+  src: [
+    {
+      path: "./fonts/press-start-2p/press-start-2p-latin-normal.woff2",
+      weight: "400",
+      style: "normal",
+    },
+  ],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-press-start-2p",
+});
+
+const themeFontVariables = [
+  cinzelDecorative.variable,
+  luckiestGuy.variable,
+  bangers.variable,
+  chewy.variable,
+  lilitaOne.variable,
+  pacifico.variable,
+  pressStart2P.variable,
+].join(" ");
+
 /** Defaults for every page; the landing's honest pre-launch title and description (T8l; S37). */
 export const metadata: Metadata = {
   title: LANDING_COPY.metadata.title,
@@ -60,7 +153,10 @@ interface RootLayoutProperties {
 
 export default function RootLayout({ children }: RootLayoutProperties) {
   return (
-    <html className={`${display.variable} ${script.variable} ${sans.variable}`} lang="es">
+    <html
+      className={`${display.variable} ${script.variable} ${sans.variable} ${themeFontVariables}`}
+      lang="es"
+    >
       <body>{children}</body>
     </html>
   );

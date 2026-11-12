@@ -75,7 +75,7 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T3 | Rewrite the track and guardrail for layouts plus themes, more occasions, and palette-inspired themes (L5) | S1-S6 | inline | `fee7417` |
 | T4 | Children's theme board: palette-inspired themes with contrast-checked palettes and font suggestions | S2, S5, S6 | inline | `fee7417` |
 | T5 | Owner picks the birthday layouts (01-03) and the first themes; confirm new `componentKey` per layout | S3, S7 | owner | L7 |
-| T6a | API: three renderer contracts, shared theme allow-list, registry, seed for 24 templates, tests, `docs/architecture/overview.md` | S2, S3, S5, S7, S8 | worker | |
+| T6a | API: three renderer contracts, shared theme allow-list, registry, seed for 24 templates, tests, `docs/architecture/overview.md` | S2, S3, S5, S7, S8 | worker | `00cb26a` |
 | T6b | Web: theme tokens and fonts, three layout renderers, parsers, registries, tests, `docs/design/theme.md` | S2, S3, S5, S7, S8 | worker | |
 | T6c | Integration check: key and theme lists in sync, full unit suites, typecheck, lint, 390 px screenshots | S3, S8 | inline | |
 | T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
@@ -124,3 +124,9 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   pins the exact font folder set and OFL licenses; tests run with `node --test` (API through `@swc-node/register`),
   and the seed db-spec needs a local Postgres. The parent fixed the S8 contract and split T6 into an API worker and a
   web worker with disjoint edit surfaces.
+- L9 — T6a done in `00cb26a` (API: 1096 unit tests pass, tsc clean; the seed db-spec was not run because no database
+  or Docker is available here). T6b passed 617 web tests, but the 390 px browser check (worker `mwe2z0ui-5-8byk`,
+  27 renders) found defects: theme background never painted, `text-white` not emitted (ink on accent 2.2-2.8:1),
+  duplicate React keys in the rescue-team motif, stretched motifs, motifs behind text, a clipped ticket time in
+  blocks-and-pixels, and a long polaroid caption overlapping the photo. Fixes sent back to the web worker
+  (`mwe3p3pm-6-a0t8`); T6b stays open until a second browser check passes.
