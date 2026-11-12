@@ -12,10 +12,22 @@ import {
   missingFieldsMessage,
   statusLabel,
 } from "../../../../lib/customer/invitations.ts";
+import { publicInvitationPath } from "../../../../lib/public/invitation-page.ts";
 import { isInvitationId } from "../../../../lib/server/invitations-api.ts";
 import { CustomerWorkspaceShell } from "../../../_components/customer-workspace-shell.tsx";
-import { quietButton, statusNote } from "../../../_components/ui.ts";
-import { archiveInvitationAction, saveInvitationContentAction } from "../actions.ts";
+import {
+  primaryButton,
+  quietButton,
+  statusNote,
+  textButton,
+  textField,
+} from "../../../_components/ui.ts";
+import {
+  archiveInvitationAction,
+  publishInvitationAction,
+  saveInvitationContentAction,
+  unpublishInvitationAction,
+} from "../actions.ts";
 import { ContentForm } from "../_components/content-form.tsx";
 import { ContentSummary } from "../_components/content-summary.tsx";
 import { Notices } from "../_components/notices.tsx";
@@ -46,14 +58,16 @@ function PlainShell({ heading, body, path }: { heading: string; body: string; pa
 }
 
 /**
- * `/cuenta/invitaciones/[id]` (M4 T5, T8; S1, S3, S7, S11): the draft's own page, in the wide workspace.
+ * `/cuenta/invitaciones/[id]` (M4 T5, T8; M5 T5; S1, S3, S7, S11): the invitation's own page, in the wide workspace.
  * The form takes the wide column and its fields are grouped into short sections with two columns from
  * `sm` up, so the draft is edited with little scrolling; the narrow side column holds the status, the
  * public slug as text, what is still missing, and archiving. The form has one input per property of the
  * pinned version's schema, which the creator catalog publishes with the version; the pin never changes in
  * M4 (A2), and a retired version is absent from that catalog, so its stored content is shown read-only
  * with a note instead of a guessed form, in the same layout. Saving and archiving post to server actions,
- * because the browser cannot send `PUT` to the API (L8). The public URL is text: publication is M5.
+ * because the browser cannot send `PUT` to the API (L8). The side column also publishes a complete draft,
+ * shows the public `/i/<slug>` link of a published one, and unpublishes it back to draft (S7): editing stays
+ * available while published, because a guest reads the stored content on every request (A6).
  */
 export default async function InvitationDetailPage({
   params,
@@ -109,6 +123,8 @@ export default async function InvitationDetailPage({
       ? undefined
       : invitationFieldsFor(templates, invitation.templateVersionId);
   const archived = invitation.status === "ARCHIVED";
+  const published = invitation.status === "PUBLISHED";
+  const publicHref = published ? publicInvitationPath(invitation.slug) : null;
   const missing = missingFieldsMessage(invitation.missingRequiredFields);
   const editable = pinned !== undefined && !archived;
   const rows =
@@ -138,11 +154,14 @@ export default async function InvitationDetailPage({
       intro={archived ? INVITATION_COPY.archivedNote : INVITATION_COPY.detailIntro}
     >
       <div className="flex flex-col gap-4">
-        <Notices error={notices.error} notice={notices.notice} />
+        <Notices error={notices.error} issues={notices.issues} notice={notices.notice} />
 
         <div className="grid items-start gap-4 lg:grid-cols-3 lg:gap-6">
           <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
             {readOnlyNote === undefined ? null : <p className={statusNote}>{readOnlyNote}</p>}
+            {published && editable ? (
+              <p className={statusNote}>{INVITATION_COPY.publishedNote}</p>
+            ) : null}
 
             {editable && pinned !== undefined ? (
               <ContentForm
@@ -167,12 +186,62 @@ export default async function InvitationDetailPage({
                 </p>
               </div>
               <div>
-                <BlockLabel>{INVITATION_COPY.slugLabel}</BlockLabel>
-                <p className="mt-1.5 font-medium break-all text-ink">{invitation.slug}</p>
-                <p className="mt-1 text-sm leading-6 text-muted">{INVITATION_COPY.slugHint}</p>
+                <BlockLabel>
+                  {publicHref === null
+                    ? INVITATION_COPY.slugLabel
+                    : INVITATION_COPY.publicLinkLabel}
+                </BlockLabel>
+                {publicHref === null ? (
+                  <>
+                    <p className="mt-1.5 font-medium break-all text-ink">{invitation.slug}</p>
+                    <p className="mt-1 text-sm leading-6 text-muted">{INVITATION_COPY.slugHint}</p>
+                  </>
+                ) : (
+                  <div className="mt-1.5 flex flex-col gap-2">
+                    <Link className={textButton} href={publicHref} rel="noreferrer" target="_blank">
+                      {INVITATION_COPY.openPublic}
+                    </Link>
+                    {/* A read-only field is one click to select, so the link is easy to copy. */}
+                    <input
+                      aria-label={INVITATION_COPY.publicLinkLabel}
+                      className={textField}
+                      readOnly
+                      value={publicHref}
+                    />
+                    <p className="text-sm leading-6 text-muted">{INVITATION_COPY.publicLinkHint}</p>
+                  </div>
+                )}
               </div>
               {missing === null ? null : <p className={statusNote}>{missing}</p>}
             </div>
+
+            {invitation.status === "DRAFT" ? (
+              <form
+                action={publishInvitationAction}
+                className="flex flex-col gap-3 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5"
+              >
+                <input name="id" type="hidden" value={invitation.id} />
+                <BlockLabel>{INVITATION_COPY.publishHeading}</BlockLabel>
+                <p className="text-sm leading-6 text-muted">{INVITATION_COPY.publishHint}</p>
+                <button className={primaryButton} type="submit">
+                  {INVITATION_COPY.publish}
+                </button>
+              </form>
+            ) : null}
+
+            {published ? (
+              <form
+                action={unpublishInvitationAction}
+                className="flex flex-col gap-3 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5"
+              >
+                <input name="id" type="hidden" value={invitation.id} />
+                <BlockLabel>{INVITATION_COPY.unpublishHeading}</BlockLabel>
+                <p className="text-sm leading-6 text-muted">{INVITATION_COPY.unpublishHint}</p>
+                <button className={quietButton} type="submit">
+                  {INVITATION_COPY.unpublish}
+                </button>
+              </form>
+            ) : null}
 
             {archived ? null : (
               <form

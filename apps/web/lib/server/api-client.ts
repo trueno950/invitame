@@ -92,8 +92,12 @@ export interface ApiClientOptions {
 }
 
 export interface ApiRequest {
-  /** The already filtered session cookies (`sessionCookieHeader`). */
-  cookie: string;
+  /**
+   * The already filtered session cookies (`sessionCookieHeader`). Omitted by a guest call such as the
+   * public invitation read (M5 T5; S5, A3): then no `Cookie` header is sent at all, because a guest has
+   * no session and the page must never forward a browser cookie it did not choose.
+   */
+  cookie?: string;
   method: "GET" | "POST" | "PATCH" | "PUT";
   path: string;
   body?: unknown;
@@ -106,10 +110,11 @@ export interface ApiResponse {
 }
 
 /**
- * Sends one request to the API with the session cookies and the shared secret, never following a
- * redirect and never caching. The body is read only when `readsBody(status)` is true; otherwise it is
- * cancelled unread, so a failure body never reaches the web server's memory or logs. A network error,
- * a timeout, and a body that stalls or breaks off throw `unavailable` with the failure as the `cause`.
+ * Sends one request to the API with the session cookies the caller chose (none at all when the request
+ * names none) and the shared secret, never following a redirect and never caching. The body is read only
+ * when `readsBody(status)` is true; otherwise it is cancelled unread, so a failure body never reaches the
+ * web server's memory or logs. A network error, a timeout, and a body that stalls or breaks off throw
+ * `unavailable` with the failure as the `cause`.
  */
 export async function sendApiRequest(
   options: ApiClientOptions,
@@ -117,7 +122,11 @@ export async function sendApiRequest(
   readsBody: (status: number) => boolean,
 ): Promise<ApiResponse> {
   const { config } = options;
-  const headers = new Headers({ accept: "application/json", cookie: request.cookie });
+  const headers = new Headers({ accept: "application/json" });
+
+  if (request.cookie !== undefined) {
+    headers.set("cookie", request.cookie);
+  }
 
   if (config.proxySecret !== undefined) {
     headers.set(AUTH_PROXY_SECRET_HEADER, config.proxySecret);

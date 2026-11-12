@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ACCOUNT_COPY, INVITATION_COPY, SIGN_IN_CODE_POLICY, SIGN_IN_COPY } from "./copy.ts";
+import {
+  ACCOUNT_COPY,
+  INVITATION_COPY,
+  PUBLIC_INVITATION_COPY,
+  SIGN_IN_CODE_POLICY,
+  SIGN_IN_COPY,
+} from "./copy.ts";
 
 // Customer product copy (M2 T8c; L39): Spanish, addressed with "tú", in one reviewable module.
 
@@ -22,7 +28,7 @@ function numbersBefore(unit: string): Set<number> {
 
 function strings(): string[] {
   const values: string[] = [];
-  for (const copy of [SIGN_IN_COPY, ACCOUNT_COPY, INVITATION_COPY]) {
+  for (const copy of [SIGN_IN_COPY, ACCOUNT_COPY, INVITATION_COPY, PUBLIC_INVITATION_COPY]) {
     for (const value of Object.values(copy)) {
       values.push(typeof value === "function" ? value("11 nov 2026") : value);
     }

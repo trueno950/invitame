@@ -30,8 +30,12 @@ import {
   missingFieldsMessage,
   packageChoices,
   parseContentForm,
+  publishInvitation,
+  publishIssueCodes,
+  publishIssueMessages,
   saveInvitationContent,
   templateChoices,
+  unpublishInvitation,
 } from "./invitations.ts";
 
 // The invitation pages of `/cuenta` (M4 T5; S1, S6, S7): how the pinned schema becomes a form, how the
@@ -67,6 +71,7 @@ const SUMMARY: InvitationSummary = {
   packageId: PACKAGE_ID,
   slug: "invitacion-k7m2qx",
   status: "DRAFT",
+  publishedAt: null,
   archivedAt: null,
   createdAt: AT,
   updatedAt: AT,
@@ -461,15 +466,28 @@ describe("missingFieldsMessage", () => {
 });
 
 describe("invitationRows", () => {
-  it("maps each draft to a row of the list with its status and creation date", () => {
+  it("maps each invitation to a row of the list with its status and creation date", () => {
     assert.deepEqual(
-      invitationRows([SUMMARY, { ...SUMMARY, status: "ARCHIVED", archivedAt: AT }]),
+      invitationRows([
+        SUMMARY,
+        { ...SUMMARY, status: "PUBLISHED", publishedAt: AT },
+        { ...SUMMARY, status: "ARCHIVED", archivedAt: AT },
+      ]),
       [
         {
           id: ID,
           href: `/cuenta/invitaciones/${ID}`,
           slug: "invitacion-k7m2qx",
           statusLabel: "Borrador",
+          publicHref: null,
+          createdOn: "11 nov 2026",
+        },
+        {
+          id: ID,
+          href: `/cuenta/invitaciones/${ID}`,
+          slug: "invitacion-k7m2qx",
+          statusLabel: "Publicada",
+          publicHref: "/i/invitacion-k7m2qx",
           createdOn: "11 nov 2026",
         },
         {
@@ -477,6 +495,7 @@ describe("invitationRows", () => {
           href: `/cuenta/invitaciones/${ID}`,
           slug: "invitacion-k7m2qx",
           statusLabel: "Archivada",
+          publicHref: null,
           createdOn: "11 nov 2026",
         },
       ],
@@ -514,8 +533,12 @@ describe("creation choices", () => {
 });
 
 describe("invitation copy", () => {
-  it("labels the two statuses of a draft", () => {
-    assert.deepEqual(INVITATION_STATUS_LABELS, { DRAFT: "Borrador", ARCHIVED: "Archivada" });
+  it("labels the three statuses of an invitation", () => {
+    assert.deepEqual(INVITATION_STATUS_LABELS, {
+      DRAFT: "Borrador",
+      PUBLISHED: "Publicada",
+      ARCHIVED: "Archivada",
+    });
   });
 
   it("names the field sections and marks the fields that publication needs", () => {
@@ -549,6 +572,10 @@ describe("invitation copy", () => {
       "not-found",
       "not-editable",
       "already-archived",
+      "already-published",
+      "not-published",
+      "not-publishable",
+      "payment-required",
       "content-invalid",
       "content-unavailable",
       "unavailable",
@@ -598,6 +625,8 @@ interface Answers {
   create?: () => Promise<InvitationResult<OwnedInvitation>>;
   replaceContent?: () => Promise<InvitationResult<OwnedInvitation>>;
   archive?: () => Promise<InvitationResult<InvitationSummary>>;
+  publish?: () => Promise<InvitationResult<OwnedInvitation>>;
+  unpublish?: () => Promise<InvitationResult<InvitationSummary>>;
   templates?: () => Promise<InvitationResult<CreatorTemplate[]>>;
   packages?: () => Promise<InvitationResult<CreatorPackage[]>>;
 }
@@ -634,6 +663,14 @@ function stub(answers: Answers = {}): Stub {
     archive: (id) => {
       calls.push(`archive:${id}`);
       return answers.archive?.() ?? unexpected("archive");
+    },
+    publish: (id) => {
+      calls.push(`publish:${id}`);
+      return answers.publish?.() ?? unexpected("publish");
+    },
+    unpublish: (id) => {
+      calls.push(`unpublish:${id}`);
+      return answers.unpublish?.() ?? unexpected("unpublish");
     },
     templates: () => {
       calls.push("templates");
@@ -850,5 +887,206 @@ describe("archiveInvitation", () => {
       await archiveInvitation(api, formData({ id: ID })),
       `/cuenta/invitaciones/${ID}?error=unavailable`,
     );
+  });
+});
+
+const PUBLISHED: OwnedInvitation = { ...OWNED, status: "PUBLISHED", publishedAt: AT };
+
+describe("publishInvitation", () => {
+  it("publishes the draft and returns to it with the confirmation", async () => {
+    const { api, calls } = stub({ publish: async () => ({ ok: true, value: PUBLISHED }) });
+
+    assert.equal(
+      await publishInvitation(api, formData({ id: ID })),
+      `/cuenta/invitaciones/${ID}?notice=published`,
+    );
+    assert.deepEqual(calls, [`publish:${ID}`]);
+  });
+
+  it("comes back with the readiness issues as codes the page turns into Spanish", async () => {
+    const { api } = stub({
+      publish: async () => ({
+        ok: false,
+        failure: "not-publishable",
+        issues: [
+          "content.date is required to publish",
+          "content.time is required to publish",
+          "package does not include the template's required features",
+        ],
+      }),
+    });
+
+    assert.equal(
+      await publishInvitation(api, formData({ id: ID })),
+      `/cuenta/invitaciones/${ID}?error=not-publishable&issues=field:date,field:time,package`,
+    );
+  });
+
+  it("comes back with the generic issue when the API names none", async () => {
+    const { api } = stub({
+      publish: async () => ({ ok: false, failure: "not-publishable" }),
+    });
+
+    assert.equal(
+      await publishInvitation(api, formData({ id: ID })),
+      `/cuenta/invitaciones/${ID}?error=not-publishable&issues=other`,
+    );
+  });
+
+  it("reports a repeated publication, the payment gate, and an ended session", async () => {
+    for (const [failure, code] of [
+      ["already-published", "already-published"],
+      ["payment-required", "payment-required"],
+      ["not-found", "not-found"],
+    ] as const) {
+      const { api } = stub({ publish: async () => ({ ok: false, failure }) });
+
+      assert.equal(
+        await publishInvitation(api, formData({ id: ID })),
+        `/cuenta/invitaciones/${ID}?error=${code}`,
+        failure,
+      );
+    }
+
+    const ended = stub({ publish: async () => ({ ok: false, failure: "signed-out" }) });
+    assert.equal(await publishInvitation(ended.api, formData({ id: ID })), "/ingresar");
+  });
+
+  it("refuses an id that is not a UUID, and an unreachable API, without guessing", async () => {
+    const { api, calls } = stub();
+
+    assert.equal(
+      await publishInvitation(api, formData({ id: "1" })),
+      "/cuenta/invitaciones?error=not-found",
+    );
+    assert.deepEqual(calls, []);
+
+    const failing = stub({
+      publish: async () => {
+        throw new Error("unreachable");
+      },
+    });
+    assert.equal(
+      await publishInvitation(failing.api, formData({ id: ID })),
+      `/cuenta/invitaciones/${ID}?error=unavailable`,
+    );
+  });
+});
+
+describe("unpublishInvitation", () => {
+  it("returns the invitation to draft and confirms it", async () => {
+    const { api, calls } = stub({ unpublish: async () => ({ ok: true, value: SUMMARY }) });
+
+    assert.equal(
+      await unpublishInvitation(api, formData({ id: ID })),
+      `/cuenta/invitaciones/${ID}?notice=unpublished`,
+    );
+    assert.deepEqual(calls, [`unpublish:${ID}`]);
+  });
+
+  it("reports a draft that is not published, an archived one, and an ended session", async () => {
+    for (const [failure, code] of [
+      ["not-published", "not-published"],
+      ["already-archived", "already-archived"],
+    ] as const) {
+      const { api } = stub({ unpublish: async () => ({ ok: false, failure }) });
+
+      assert.equal(
+        await unpublishInvitation(api, formData({ id: ID })),
+        `/cuenta/invitaciones/${ID}?error=${code}`,
+        failure,
+      );
+    }
+
+    const ended = stub({ unpublish: async () => ({ ok: false, failure: "signed-out" }) });
+    assert.equal(await unpublishInvitation(ended.api, formData({ id: ID })), "/ingresar");
+  });
+});
+
+describe("publication issues", () => {
+  it("turns each known API issue into its own small code, and any other into one generic code", () => {
+    assert.deepEqual(publishIssueCodes(["content.date is required to publish"]), ["field:date"]);
+    assert.deepEqual(
+      publishIssueCodes([
+        "content.celebrantName is required to publish",
+        "content.celebrantName is required to publish",
+        "package does not include the template's required features",
+      ]),
+      ["field:celebrantName", "package"],
+    );
+    assert.deepEqual(publishIssueCodes(["template version is no longer published"]), ["version"]);
+    assert.deepEqual(
+      publishIssueCodes([
+        "content.age must be an integer from 1 to 120",
+        "content.date must be a calendar date as YYYY-MM-DD",
+      ]),
+      ["other"],
+    );
+    assert.deepEqual(publishIssueCodes([]), ["other"]);
+  });
+
+  it("bounds the codes it puts in a query", () => {
+    const many = Array.from(
+      { length: 20 },
+      (_, index) => `content.field${index} is required to publish`,
+    );
+
+    assert.equal(publishIssueCodes(many).length, 8);
+    assert.equal(
+      publishIssueMessages(Array.from({ length: 20 }, (_, index) => `field:field${index}`)).length,
+      10,
+    );
+  });
+
+  it("writes each code as a Spanish sentence and never echoes English", () => {
+    assert.deepEqual(publishIssueMessages("field:date,package"), [
+      "Falta: Fecha.",
+      "El paquete que elegiste ya no incluye lo que necesita esta plantilla. Elige otro paquete.",
+    ]);
+    assert.deepEqual(publishIssueMessages(["field:date", "field:date"]), ["Falta: Fecha."]);
+    assert.deepEqual(publishIssueMessages("version"), [
+      "La versión de la plantilla de esta invitación ya no está publicada.",
+    ]);
+    assert.deepEqual(publishIssueMessages("other"), [
+      "Hay un dato que no cumple lo que pide la plantilla. Revísalo y vuelve a intentarlo.",
+    ]);
+  });
+
+  it("ignores a code it does not know, a repeated parameter, and anything that is not a string list", () => {
+    for (const value of [
+      undefined,
+      "",
+      "invented",
+      "content.date is required to publish",
+      ["invented"],
+      ["field:date", 7],
+      ["field:", "field:date,package"],
+    ]) {
+      assert.deepEqual(
+        publishIssueMessages(value as string | string[] | undefined),
+        [],
+        JSON.stringify(value),
+      );
+    }
+  });
+
+  it("is what the page reads back from its own query", () => {
+    assert.deepEqual(
+      invitationPageNotices({
+        error: "not-publishable",
+        issues: "field:date,package",
+      }),
+      {
+        error: INVITATION_ERROR_COPY["not-publishable"],
+        issues: [
+          "Falta: Fecha.",
+          "El paquete que elegiste ya no incluye lo que necesita esta plantilla. Elige otro paquete.",
+        ],
+      },
+    );
+    assert.deepEqual(invitationPageNotices({ error: "already-published", issues: "package" }), {
+      error: INVITATION_ERROR_COPY["already-published"],
+    });
+    assert.deepEqual(invitationPageNotices({ issues: "package" }), {});
   });
 });

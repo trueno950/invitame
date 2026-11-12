@@ -74,6 +74,8 @@ export const invitations = {
   replaceContent: (id: string, content: Record<string, unknown>) =>
     logged((api) => api.replaceContent(id, content)),
   archive: (id: string) => logged((api) => api.archive(id)),
+  publish: (id: string) => logged((api) => api.publish(id)),
+  unpublish: (id: string) => logged((api) => api.unpublish(id)),
   templates: () => logged((api) => api.templates()),
   packages: () => logged((api) => api.packages()),
 };

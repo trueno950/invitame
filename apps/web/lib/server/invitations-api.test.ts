@@ -31,6 +31,7 @@ const SUMMARY = {
   packageId: PACKAGE_ID,
   slug: "invitacion-k7m2qx",
   status: "DRAFT",
+  publishedAt: null,
   archivedAt: null,
   createdAt: AT,
   updatedAt: AT,
@@ -41,6 +42,9 @@ const OWNED = {
   content: { celebrantName: "Ana", age: 7 },
   missingRequiredFields: ["date", "time"],
 };
+
+/** A published invitation, as `POST /invitations/:id/publish` returns it (M5 T4). */
+const PUBLISHED = { ...OWNED, status: "PUBLISHED", publishedAt: AT };
 
 const TEMPLATE = {
   id: ID,
@@ -147,6 +151,8 @@ describe("requests", () => {
         OWNED,
       ],
       [() => api.archive(ID), "POST", `/invitations/${ID}/archive`, undefined, SUMMARY],
+      [() => api.publish(ID), "POST", `/invitations/${ID}/publish`, undefined, PUBLISHED],
+      [() => api.unpublish(ID), "POST", `/invitations/${ID}/unpublish`, undefined, SUMMARY],
       [() => api.templates(), "GET", "/catalog/templates", undefined, [TEMPLATE]],
       [() => api.packages(), "GET", "/catalog/packages", undefined, [PACKAGE]],
     ];
@@ -191,6 +197,8 @@ describe("requests", () => {
       assert.deepEqual(await api.get(id), { ok: false, failure: "not-found" }, id);
       assert.deepEqual(await api.replaceContent(id, {}), { ok: false, failure: "not-found" }, id);
       assert.deepEqual(await api.archive(id), { ok: false, failure: "not-found" }, id);
+      assert.deepEqual(await api.publish(id), { ok: false, failure: "not-found" }, id);
+      assert.deepEqual(await api.unpublish(id), { ok: false, failure: "not-found" }, id);
     }
     assert.deepEqual(received, []);
   });
@@ -249,6 +257,41 @@ describe("errors", () => {
     }
   });
 
+  it("maps the 409 codes of a publication, with the readiness issues of a refused publish", async () => {
+    answer(409, { code: "INVITATION_ALREADY_PUBLISHED" });
+    assert.deepEqual(await client().publish(ID), { ok: false, failure: "already-published" });
+
+    answer(409, { code: "INVITATION_NOT_PUBLISHED" });
+    assert.deepEqual(await client().unpublish(ID), { ok: false, failure: "not-published" });
+
+    answer(409, {
+      code: "INVITATION_NOT_PUBLISHABLE",
+      issues: ["content.date is required to publish", "template version is no longer published"],
+    });
+    assert.deepEqual(await client().publish(ID), {
+      ok: false,
+      failure: "not-publishable",
+      issues: ["content.date is required to publish", "template version is no longer published"],
+    });
+
+    // An issues list that is not an array of strings is not trusted either way.
+    answer(409, { code: "INVITATION_NOT_PUBLISHABLE", issues: "content.date" });
+    assert.deepEqual(await client().publish(ID), { ok: false, failure: "not-publishable" });
+  });
+
+  it("maps the 402 payment gate, and refuses a 402 without its code", async () => {
+    answer(402, { code: "INVITATION_PAYMENT_REQUIRED", reason: "PAYMENT_REQUIRED" });
+    assert.deepEqual(await client().publish(ID), { ok: false, failure: "payment-required" });
+
+    answer(402, { code: "SOMETHING_ELSE" });
+    await assert.rejects(client().publish(ID), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "rejected");
+      assert.equal(error.status, 402);
+      return true;
+    });
+  });
+
   it("fails closed on a 5xx, a redirect, and a success body that breaks the contract", async () => {
     answer(503, { code: "INVITATION_SLUG_UNAVAILABLE" });
     await assert.rejects(
@@ -275,7 +318,7 @@ describe("errors", () => {
       return true;
     });
 
-    answer(200, [{ ...SUMMARY, status: "PUBLISHED" }]);
+    answer(200, [{ ...SUMMARY, status: "EXPIRED" }]);
     await assert.rejects(client().list(), (error: unknown) => {
       assert.ok(error instanceof ApiClientError);
       assert.equal(error.kind, "invalid-response");
@@ -299,7 +342,9 @@ describe("validators", () => {
       { ...SUMMARY, packageId: 7 },
       { ...SUMMARY, slug: "" },
       { ...SUMMARY, slug: "Inv itacion" },
-      { ...SUMMARY, status: "PUBLISHED" },
+      { ...SUMMARY, status: "EXPIRED" },
+      { ...SUMMARY, publishedAt: "yesterday" },
+      { ...SUMMARY, publishedAt: undefined },
       { ...SUMMARY, archivedAt: "yesterday" },
       { ...SUMMARY, createdAt: 0 },
       { ...SUMMARY, updatedAt: null },
