@@ -352,7 +352,7 @@ describe("Prisma template repository on PostgreSQL", () => {
       assert.deepEqual(await statuses(other.id), [[1, "DRAFT"]]);
     });
 
-    it("lets exactly one of two concurrent publishes of two drafts win, never two PUBLISHED versions", async () => {
+    it("never leaves two PUBLISHED versions after two concurrent publishes of two drafts", async () => {
       for (const withPrevious of [false, true, false, true, true]) {
         const created = await newTemplate();
         if (withPrevious) {
@@ -385,21 +385,37 @@ describe("Prisma template repository on PostgreSQL", () => {
 
         const won = results.filter((result) => result.status === "fulfilled");
         const lost = results.filter((result) => result.status === "rejected");
-        assert.equal(won.length, 1, JSON.stringify(results));
-        assert.equal(lost.length, 1);
-        assert.ok(
-          lost[0]?.status === "rejected" && lost[0].reason instanceof CatalogConcurrentUpdateError,
-        );
-        const published = (await rows(created.id)).filter((row) => row.status === "PUBLISHED");
-        assert.equal(published.length, 1);
-        const winner = won[0]?.status === "fulfilled" ? won[0].value : null;
-        assert.equal(published[0]?.id, winner?.id);
-        // The loser stays a DRAFT and can be published later, retiring the winner.
-        const loserId = winner?.id === first.id ? second.id : first.id;
-        assert.equal(
-          (await prisma.templateVersion.findUniqueOrThrow({ where: { id: loserId } })).status,
-          "DRAFT",
-        );
+        const stored = await rows(created.id);
+        const statusOf = (id: string) => stored.find((row) => row.id === id)?.status;
+        const published = stored.filter((row) => row.status === "PUBLISHED");
+
+        // The invariant, whatever the interleaving: exactly one PUBLISHED version, and a previously
+        // published one is always retired.
+        assert.equal(published.length, 1, JSON.stringify(results));
+        if (withPrevious) {
+          assert.equal(stored.find((row) => row.version === 1)?.status, "RETIRED");
+        }
+        for (const failure of lost) {
+          assert.ok(failure.reason instanceof CatalogConcurrentUpdateError, String(failure.reason));
+        }
+
+        if (lost.length === 1) {
+          // The writes overlapped: the partial unique index refused the loser, which stays a DRAFT
+          // and can be published later, retiring the winner.
+          const winner = won[0]?.status === "fulfilled" ? won[0].value : null;
+          assert.equal(published[0]?.id, winner?.id);
+          const loserId = winner?.id === first.id ? second.id : first.id;
+          assert.equal(statusOf(loserId), "DRAFT");
+        } else {
+          // Under READ COMMITTED each statement sees what committed before it, so when one transaction
+          // committed before the other wrote, the second publish ran after it: it retired the first
+          // version and published its own, exactly like two publishes in a row.
+          assert.equal(won.length, 2, JSON.stringify(results));
+          const laterId = published[0]?.id;
+          const earlierId = laterId === first.id ? second.id : first.id;
+          assert.ok(laterId === first.id || laterId === second.id);
+          assert.equal(statusOf(earlierId), "RETIRED");
+        }
       }
     });
   });
