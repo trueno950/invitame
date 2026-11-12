@@ -5,8 +5,8 @@ import type {
   CreatorPackage,
   CreatorTemplate,
   InvitationResult,
-  InvitationsClient,
   InvitationSummary,
+  InvitationsClient,
   OwnedInvitation,
 } from "../server/invitations-api.ts";
 import {
@@ -34,7 +34,6 @@ import {
   publishIssueCodes,
   publishIssueMessages,
   saveInvitationContent,
-  templateChoices,
   unpublishInvitation,
 } from "./invitations.ts";
 
@@ -93,6 +92,7 @@ const TEMPLATE: CreatorTemplate = {
     id: VERSION_ID,
     version: 2,
     componentKey: "birthday-adventure-01",
+    configuration: { componentKey: "birthday-adventure-01", layout: "adventure" },
     schema: BIRTHDAY_SCHEMA,
   },
 };
@@ -516,10 +516,8 @@ describe("invitationFieldsFor", () => {
 });
 
 describe("creation choices", () => {
-  it("offers each template as a card with its category, and each package with its price", () => {
-    assert.deepEqual(templateChoices([TEMPLATE]), [
-      { value: VERSION_ID, name: "Cumpleaños", meta: "Cumpleaños", description: null },
-    ]);
+  it("offers each package as a card with its price", () => {
+    // The templates are the chooser's preview cards (`template-preview.ts`); the packages keep this card.
     assert.deepEqual(packageChoices([PACKAGE]), [
       { value: PACKAGE_ID, name: "Basic", meta: "$1,500.00 MXN", description: null },
     ]);

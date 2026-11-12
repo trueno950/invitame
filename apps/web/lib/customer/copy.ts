@@ -184,6 +184,22 @@ export const INVITATION_COPY = {
   createIntro:
     "Elige una plantilla y un paquete. Crear y editar el borrador es gratis; el cobro del paquete se hace al publicar.",
   templateLabel: "Plantilla",
+  /** The switches of a layout card: one per published theme, named as the theme board names it. */
+  themeLabel: "Tema",
+  /** The link that opens the full sample invitation of the selected theme (S9). */
+  viewFull: "Ver completa",
+  /** What a preview is, so nobody mistakes the sample for their own invitation (S9). */
+  sampleNote: "Datos de ejemplo",
+  previewPageTitle: "Vista previa | InvitaMe",
+  previewEyebrow: "Vista previa",
+  previewIntro:
+    "Así se ve la invitación con datos de ejemplo. Si te gusta, elige esta plantilla y escribe los tuyos.",
+  previewHeading: (name: string) => `Vista previa de «${name}»`,
+  previewChoose: "Elegir esta plantilla",
+  previewBack: "Volver a las plantillas",
+  previewNotFoundHeading: "No encontramos esa plantilla",
+  previewNotFoundBody: "Puede que ya no esté publicada. Vuelve a elegir una plantilla.",
+  previewUnavailableHeading: "No pudimos cargar la vista previa",
   packageLabel: "Paquete",
   createSubmit: "Crear borrador",
   priceMissing: "sin precio",

@@ -256,6 +256,22 @@ and `TemplateVersion`.
   strip at an edge — above the map hero, in the poster band's empty bottom area, and at the foot of the story's page
   sheet — with `preserveAspectRatio="xMidYMid meet"`, so the shapes keep their proportions in any box instead of
   stretching to it. Every motif is one `aria-hidden` SVG, and its element groups carry unique React keys.
+- Choosing (T9; S9): the owner of a new invitation sees the templates instead of reading 25 cards. The chooser
+  (`app/cuenta/invitaciones/nueva`) shows one card per themed layout — Mapa, Cartel, and Cuento — with the
+  miniature of the theme that is chosen and one switch per published version, labelled with the theme's display
+  name read from `configuration.theme`; `birthday-adventure-01` and the templates of other categories keep a card
+  of their own. Every miniature is the real, allow-listed renderer rendering one fixed sample per category
+  (`lib/renderers/samples.ts`, photo `public/samples/birthday-mateo.svg`, an original illustration), never a stored
+  screenshot, so a catalog edit shows up in the chooser with no asset to refresh. The miniature is drawn at 390 px
+  and scaled down inside a frame with `contain: paint`; the scale on the wrapper is also what makes the renderer's
+  `position: fixed` background layer relative to the miniature instead of the page. «Ver completa» opens
+  `/cuenta/invitaciones/nueva/vista/<versionId>`, a signed-in page that renders the same sample at phone width and
+  leads back to choosing that template. The switches are native radios and the miniature and the link of the chosen
+  theme are shown by the generated `:has(:checked)` rules of `lib/customer/template-preview.ts`, so the whole
+  chooser still ships no client script; the form still submits the published version id.
+- Samples: one fixed sample per category, and a renderer that refuses it (a drifted configuration, a category
+  without a sample, an unregistered key) only loses its miniature. `samples.test.ts` proves the birthday sample
+  passes every registered renderer's own props parser, for every theme.
 
 ## Customer workspace
 
@@ -272,7 +288,8 @@ plain text. The customer «Rosa y vino» theme stays; the invitation pages simpl
   in one small panel.
 - Create: the template and the package are two radio groups of cards (`fieldset`/`legend` per group, a native radio
   inside each label), so the whole choice is visible without a select popup, works from the keyboard, and needs no
-  JavaScript. The package card shows its price in force.
+  JavaScript. The templates are grouped by layout with a live miniature per theme and a «Ver completa» link, as
+  [Guest invitation themes](#guest-invitation-themes) describes. The package card shows its price in force.
 - Detail: two columns from `lg` up. The form takes two thirds and its fields are grouped into the short sections
   `contentSections` derives from the property names: «Festejado» (`celebrantName`, `age`), «Cuándo» (`date`,
   `time`), «Dónde» (`location`, `address`), «Contenido» (`mainPhoto`, `message`), and one last «Otros datos» group

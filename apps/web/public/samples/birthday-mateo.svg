@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" role="img" aria-label="Ilustración de una fiesta de cumpleaños con pastel, globos y banderines">
+  <title>Fiesta de cumpleaños ilustrada</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdf2f6"/>
+      <stop offset="1" stop-color="#f7e2ea"/>
+    </linearGradient>
+    <linearGradient id="cake" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbe8ef"/>
+      <stop offset="1" stop-color="#f3cfdd"/>
+    </linearGradient>
+    <clipPath id="frame">
+      <rect width="800" height="800" rx="48"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="800" height="800" fill="url(#sky)"/>
+
+    <!-- Sun and its rays, drawn as a simple geometric ornament. -->
+    <g fill="none" stroke="#e8b4c6" stroke-width="6" stroke-linecap="round" opacity="0.85">
+      <path d="M400 112v-40"/>
+      <path d="M400 728v40"/>
+      <path d="M112 420h-40"/>
+      <path d="M728 420h40"/>
+      <path d="M203 223l-28-28"/>
+      <path d="M597 617l28 28"/>
+      <path d="M597 223l28-28"/>
+      <path d="M203 617l-28 28"/>
+    </g>
+    <circle cx="400" cy="420" r="272" fill="#fff8f4"/>
+    <circle cx="400" cy="420" r="272" fill="none" stroke="#f0d3dd" stroke-width="4"/>
+
+    <!-- Bunting across the top: six pennants on one cord. -->
+    <path d="M84 176q316 96 632 0" fill="none" stroke="#a06e7e" stroke-width="5" stroke-linecap="round"/>
+    <g>
+      <path d="M150 194l40 6-22 58z" fill="#c76a8c"/>
+      <path d="M246 212l40 2-24 56z" fill="#e2ac5a"/>
+      <path d="M342 220l40-2-22 56z" fill="#8fae94"/>
+      <path d="M438 218l40-4-20 58z" fill="#c76a8c"/>
+      <path d="M534 206l40-6-18 60z" fill="#e2ac5a"/>
+      <path d="M630 186l40-10-16 60z" fill="#8fae94"/>
+    </g>
+
+    <!-- Balloons: one cluster on the left, one on the right, with their strings. -->
+    <g>
+      <path d="M188 470q10 90 44 140" fill="none" stroke="#a06e7e" stroke-width="4" stroke-linecap="round"/>
+      <path d="M240 500q6 76-14 124" fill="none" stroke="#a06e7e" stroke-width="4" stroke-linecap="round"/>
+      <ellipse cx="180" cy="414" rx="46" ry="56" fill="#c76a8c"/>
+      <path d="M180 470l-10 16 20 0z" fill="#a24f6f"/>
+      <ellipse cx="248" cy="446" rx="40" ry="48" fill="#e2ac5a"/>
+      <path d="M248 494l-9 14 18 0z" fill="#c08f3f"/>
+    </g>
+    <g>
+      <path d="M612 470q-10 90-44 140" fill="none" stroke="#a06e7e" stroke-width="4" stroke-linecap="round"/>
+      <path d="M560 500q-6 76 14 124" fill="none" stroke="#a06e7e" stroke-width="4" stroke-linecap="round"/>
+      <ellipse cx="620" cy="414" rx="46" ry="56" fill="#8fae94"/>
+      <path d="M620 470l-10 16 20 0z" fill="#6f8c75"/>
+      <ellipse cx="552" cy="446" rx="40" ry="48" fill="#b98fa6"/>
+      <path d="M552 494l-9 14 18 0z" fill="#966d84"/>
+    </g>
+
+    <!-- The cake: two tiers, seven candles, and a plate. -->
+    <ellipse cx="400" cy="668" rx="184" ry="26" fill="#eddbe2"/>
+    <rect x="248" y="566" width="304" height="96" rx="20" fill="url(#cake)"/>
+    <rect x="248" y="566" width="304" height="26" rx="13" fill="#f9f0f3"/>
+    <rect x="296" y="470" width="208" height="100" rx="18" fill="url(#cake)"/>
+    <rect x="296" y="470" width="208" height="24" rx="12" fill="#f9f0f3"/>
+    <g fill="#c76a8c">
+      <circle cx="316" cy="620" r="9"/>
+      <circle cx="372" cy="620" r="9"/>
+      <circle cx="428" cy="620" r="9"/>
+      <circle cx="484" cy="620" r="9"/>
+      <circle cx="340" cy="598" r="7"/>
+      <circle cx="400" cy="598" r="7"/>
+      <circle cx="460" cy="598" r="7"/>
+    </g>
+    <g>
+      <rect x="330" y="416" width="14" height="56" rx="7" fill="#e2ac5a"/>
+      <rect x="372" y="416" width="14" height="56" rx="7" fill="#8fae94"/>
+      <rect x="414" y="416" width="14" height="56" rx="7" fill="#c76a8c"/>
+      <rect x="456" y="416" width="14" height="56" rx="7" fill="#8fae94"/>
+      <path d="M337 400q10-18 0-32 12 12 8 32z" fill="#e2ac5a"/>
+      <path d="M379 400q10-18 0-32 12 12 8 32z" fill="#e2ac5a"/>
+      <path d="M421 400q10-18 0-32 12 12 8 32z" fill="#e2ac5a"/>
+      <path d="M463 400q10-18 0-32 12 12 8 32z" fill="#e2ac5a"/>
+    </g>
+
+    <!-- Confetti: plain dots and strokes, scattered so nothing sits in a grid. -->
+    <g fill="#c76a8c" opacity="0.9">
+      <circle cx="130" cy="300" r="7"/>
+      <circle cx="300" cy="268" r="6"/>
+      <circle cx="680" cy="310" r="7"/>
+      <circle cx="520" cy="252" r="6"/>
+      <circle cx="168" cy="586" r="6"/>
+      <circle cx="652" cy="596" r="6"/>
+    </g>
+    <g fill="#e2ac5a" opacity="0.9">
+      <circle cx="212" cy="330" r="5"/>
+      <circle cx="470" cy="300" r="5"/>
+      <circle cx="588" cy="330" r="5"/>
+      <circle cx="112" cy="470" r="5"/>
+      <circle cx="700" cy="470" r="5"/>
+    </g>
+    <g stroke="#8fae94" stroke-width="6" stroke-linecap="round" opacity="0.9">
+      <path d="M262 350l18-18"/>
+      <path d="M540 360l18-18"/>
+      <path d="M196 640l16-16"/>
+      <path d="M600 648l16-16"/>
+    </g>
+  </g>
+</svg>

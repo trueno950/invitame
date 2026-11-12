@@ -5,9 +5,9 @@ import type {
   CreatorTemplate,
   InvitationFailure,
   InvitationResult,
-  InvitationsClient,
   InvitationStatus,
   InvitationSummary,
+  InvitationsClient,
 } from "../server/invitations-api.ts";
 import { isInvitationId } from "../server/invitations-api.ts";
 import {
@@ -16,9 +16,9 @@ import {
   INVITATION_FIELD_LABELS,
   INVITATION_NOTICE_COPY,
   INVITATION_STATUS_LABELS,
-  PUBLISH_ISSUE_COPY,
   type InvitationErrorCode,
   type InvitationNoticeCode,
+  PUBLISH_ISSUE_COPY,
 } from "./copy.ts";
 
 /**
@@ -473,23 +473,13 @@ export function invitationRows(items: readonly InvitationSummary[]): InvitationR
   }));
 }
 
-/** One choice of «Nueva invitación» as a selectable card: the version or package to send, and its text. */
+/** One package of «Nueva invitación» as a selectable card: what the form sends, and its text. */
 export interface ChoiceCard {
   value: string;
   name: string;
-  /** The category of a template, or the price in force of a package, always shown with the name. */
+  /** The price in force of a package, always shown with the name. */
   meta: string;
   description: string | null;
-}
-
-/** Each template to start from, with its category; the value is the version to pin (S8). */
-export function templateChoices(templates: readonly CreatorTemplate[]): ChoiceCard[] {
-  return templates.map((template) => ({
-    value: template.publishedVersion.id,
-    name: template.name,
-    meta: template.category.name,
-    description: template.description,
-  }));
 }
 
 /** Each package to choose, with its price in force in its own currency (S6); a free one says so. */
