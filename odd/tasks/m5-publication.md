@@ -79,3 +79,8 @@ metadata (title from `celebrantName`, description from `message`), no generated 
   `/cuenta` and `/cuenta/invitaciones` (M4) are prefetched in production from `/ingresar`, and the prefetch's
   session read through `proxy.ts` clears a dead cookie; it had also failed on master after PR #58 (run 43151477952).
   Fixed by `prefetch={false}` on both links. The catalog concurrency test stays a follow-up.
+- L8 (2026-11-12): the catalog concurrency test failed 2 of 3 PR #60 runs. Cause: after both transactions leave
+  `verify`, one can commit before the other writes; under READ COMMITTED the second then retires the first and
+  publishes its own (a valid sequential publish), while the test demanded a rejection. The test now asserts the real
+  invariant (exactly one PUBLISHED, previous one retired, any loser is `CatalogConcurrentUpdateError`) with exact
+  statuses for both interleavings; 8/8 local runs pass.
