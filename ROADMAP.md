@@ -6,8 +6,8 @@ package scripts remain the source of truth for the current repository.
 
 ## Product direction
 
-**Status:** Planned direction; not implemented beyond the Milestone 1 catalog foundation and the Milestone 2
-identity work.
+**Status:** Planned direction; implemented through Milestone 4 (foundation, identity, catalog, and invitation
+drafts).
 
 InvitaMe is planned as a self-service invitation service with no manual operator step between an order and its
 publication: a customer chooses a catalog design, completes the invitation, pays, and the backend publishes it after
@@ -111,7 +111,9 @@ No arbitrary code in the database, dynamic module imports, or general-purpose vi
 
 ## Milestone 4 — Invitation authoring and snapshotting
 
-**Status:** Planned.
+**Status:** Implemented (`odd/tasks/m4-invitations.md`): `Invitation` drafts pinned to a published template version
+and a package, generated unique slugs, partial content validated against the pinned schema, archive instead of
+delete, the `/invitations` API, signed-in creator catalog reads, and «Mis invitaciones» under `/cuenta`.
 
 ### Outcome
 

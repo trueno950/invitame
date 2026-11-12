@@ -41,8 +41,8 @@ catalog read requires a signed-in customer (not `@Public()`).
 | T2 | Domain: slug generator and reserved words, lifecycle (DRAFT → ARCHIVED, edits only in DRAFT), partial content validation against the pinned version schema, renderer `requiredFeatureKeys` and the package-fit rule; unit tests | S2, S5, S6, S7 | worker | `45b3f9d` |
 | T3 | Application and Prisma adapter: create draft (published version only, package fit, slug retry on unique violation), list own, get own, update content, archive; database tests | S1, S3, S6, S7, S9 | worker | `95bc89f` |
 | T4 | API presentation: `/invitations` routes with `@SessionUserId()`, DTOs, 400/401/404 tests; creator catalog read (published templates with their published version, active packages with price and feature keys) | S3, S8, S9 | worker | `6f579f9` |
-| T5 | Web: «Mis invitaciones» under `/cuenta`, create (template + package), edit the draft from the pinned schema, archive; server actions | S1, S6, S7 | worker | |
-| T6 | Docs: `docs/database/model.md`, `CONTEXT.md`, `docs/architecture/overview.md`, ROADMAP status | S1–S10 | inline | |
+| T5 | Web: «Mis invitaciones» under `/cuenta`, create (template + package), edit the draft from the pinned schema, archive; server actions | S1, S6, S7 | worker | `5f05be3` |
+| T6 | Docs: `docs/database/model.md`, `CONTEXT.md`, `docs/architecture/overview.md`, ROADMAP status | S1–S10 | inline | this commit |
 
 ## Log
 
@@ -72,3 +72,8 @@ catalog read requires a signed-in customer (not `@Public()`).
   answers 400 `INVITATION_PACKAGE_DOES_NOT_FIT` (the API uses no 422); slug exhaustion 503. Known gap: CORS allows
   only GET/HEAD/POST/OPTIONS, so the web must call `PUT` from server actions (no browser preflight), as in Milestone 3.
   `/invitations/:id` refuses a non-UUID id with 400 (`ParseUUIDPipe`), unlike the admin catalog's 404.
+- L9 (2026-11-11): T5 web pages `/cuenta/invitaciones`, `/cuenta/invitaciones/nueva`, `/cuenta/invitaciones/[id]`;
+  every write is a server action; a draft whose pinned version was retired shows its content read-only. The worker
+  ran web tests (504), typecheck, lint, and `next build`; the Playwright spec `apps/web/e2e/invitations.spec.ts`
+  was written but not run locally (needs the disposable e2e PostgreSQL and Mailpit and a seeded published
+  template). Owner merged slice 2 as `0d30f2c`. Slice 3 = T5 + T6.
