@@ -41,11 +41,16 @@ export function CustomerPageFrame({
           <Link className={`rounded-lg ${focusRing}`} href="/">
             <Wordmark />
           </Link>
+          {/*
+            Not prefetched: both pages read the session through `proxy.ts`, so a prefetch from
+            `/ingresar` would run that read in the background and clear a dead session cookie on its
+            own. A session page gains nothing from a prefetch anyway, since it renders per request.
+          */}
           <div className="ml-auto flex items-center gap-4">
-            <Link className={textButton} href="/cuenta">
+            <Link className={textButton} href="/cuenta" prefetch={false}>
               {ACCOUNT_COPY.accountLink}
             </Link>
-            <Link className={textButton} href="/cuenta/invitaciones">
+            <Link className={textButton} href="/cuenta/invitaciones" prefetch={false}>
               {ACCOUNT_COPY.invitationsLink}
             </Link>
           </div>
