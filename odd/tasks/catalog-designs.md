@@ -76,8 +76,8 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T4 | Children's theme board: palette-inspired themes with contrast-checked palettes and font suggestions | S2, S5, S6 | inline | `fee7417` |
 | T5 | Owner picks the birthday layouts (01-03) and the first themes; confirm new `componentKey` per layout | S3, S7 | owner | L7 |
 | T6a | API: three renderer contracts, shared theme allow-list, registry, seed for 24 templates, tests, `docs/architecture/overview.md` | S2, S3, S5, S7, S8 | worker | `00cb26a` |
-| T6b | Web: theme tokens and fonts, three layout renderers, parsers, registries, tests, `docs/design/theme.md` | S2, S3, S5, S7, S8 | worker | |
-| T6c | Integration check: key and theme lists in sync, full unit suites, typecheck, lint, 390 px screenshots | S3, S8 | inline | |
+| T6b | Web: theme tokens and fonts, three layout renderers, parsers, registries, tests, `docs/design/theme.md` | S2, S3, S5, S7, S8 | worker | `2e9c69d`, `71e4830` |
+| T6c | Integration check: key and theme lists in sync, full unit suites, typecheck, lint, 390 px screenshots | S3, S8 | inline | `71e4830` |
 | T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
 | T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
 
@@ -130,3 +130,14 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   duplicate React keys in the rescue-team motif, stretched motifs, motifs behind text, a clipped ticket time in
   blocks-and-pixels, and a long polaroid caption overlapping the photo. Fixes sent back to the web worker
   (`mwe3p3pm-6-a0t8`); T6b stays open until a second browser check passes.
+- L10 — T6b and T6c done. Fonts in `2e9c69d` (seven self-hosted latin woff2 families, licenses byte-identical to
+  google/fonts: OFL for Cinzel Decorative, Bangers, Lilita One, Pacifico, Press Start 2P; Apache 2.0 for Luckiest
+  Guy and Chewy). Layouts in `71e4830`. Owner, verbatim: "como que no hay docker? ni db creala entonces". Docker was
+  running; the shell's redirected HOME hid its socket. Evidence: web 638/638 tests, API 1096/1096 unit tests, API
+  292/292 db-specs on `invitame_test` after `prisma migrate deploy`, both typechecks clean, docs check and Biome on the
+  changed files clean. The dev database `invitame` was seeded: eight PUBLISHED versions each for `birthday-map-01`,
+  `birthday-poster-01`, and `birthday-story-01`. Browser check at 390 px, round 2 (worker `mwe45ppc-7-jxzs`, 27 pages):
+  the seven round-1 defects and three fidelity gaps pass, with 0 console errors, no overflow, contrast on accent
+  surfaces 4.61-6.82:1, and no decoration over text. Round 3 (parent) fixed the one new defect, a poster motif hidden
+  behind the polaroid: the motif is now in flow above the hero, with 0 hidden shapes, 0 text overlaps, and 0 console
+  errors on all eight themes. Slice 2 ends here; T7 starts slice 3.
