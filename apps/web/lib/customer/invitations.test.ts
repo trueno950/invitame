@@ -36,6 +36,8 @@ import {
   saveInvitationContent,
   unpublishInvitation,
 } from "./invitations.ts";
+import { templateChoiceCards } from "./template-preview.ts";
+import { chooserOccasions, resolveChooserStep } from "./template-steps.ts";
 
 // The invitation pages of `/cuenta` (M4 T5; S1, S6, S7): how the pinned schema becomes a form, how the
 // form becomes the JSON the API validates, and how each outcome of the server actions reaches a page as
@@ -46,7 +48,7 @@ const VERSION_ID = "4b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e14";
 const PACKAGE_ID = "5b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e15";
 const AT = "2026-11-11T12:00:00.000Z";
 
-/** The shape of the seeded `birthday-adventure-01` schema, as the creator catalog returns it. */
+/** The shape of the seeded birthday content schema, as the creator catalog returns it. */
 const BIRTHDAY_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
@@ -91,8 +93,8 @@ const TEMPLATE: CreatorTemplate = {
   publishedVersion: {
     id: VERSION_ID,
     version: 2,
-    componentKey: "birthday-adventure-01",
-    configuration: { componentKey: "birthday-adventure-01", layout: "adventure" },
+    componentKey: "birthday-poster-01",
+    configuration: { componentKey: "birthday-poster-01", theme: "dinosaurs" },
     schema: BIRTHDAY_SCHEMA,
   },
 };
@@ -703,16 +705,91 @@ describe("createInvitation", () => {
     assert.deepEqual(calls, [`create:${VERSION_ID}:${PACKAGE_ID}`]);
   });
 
-  it("returns to the form with the reason the API refused the package", async () => {
+  it("returns to step 3 with the selection kept and the reason the API refused the package", async () => {
     const { api } = stub({ create: async () => ({ ok: false, failure: "package-does-not-fit" }) });
 
     assert.equal(
       await createInvitation(
         api,
-        formData({ templateVersionId: VERSION_ID, packageId: PACKAGE_ID }),
+        formData({
+          templateVersionId: VERSION_ID,
+          packageId: PACKAGE_ID,
+          ocasion: "birthday",
+          diseno: "birthday-poster-01",
+        }),
       ),
-      "/cuenta/invitaciones/nueva?error=package-does-not-fit",
+      `/cuenta/invitaciones/nueva?paso=3&ocasion=birthday&diseno=birthday-poster-01&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=package-does-not-fit`,
     );
+  });
+
+  it("carries the theme and the package from the values the command already validated", async () => {
+    const { api } = stub({ create: async () => ({ ok: false, failure: "validation" }) });
+    // The same version and package the API refused: the selection the URL keeps is the one that was posted.
+    const posted = { templateVersionId: VERSION_ID, packageId: PACKAGE_ID };
+
+    const target = await createInvitation(api, formData(posted));
+
+    assert.equal(
+      target,
+      `/cuenta/invitaciones/nueva?paso=3&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=validation`,
+    );
+  });
+
+  it("drops a carried selection value that is not shaped like a catalog id", async () => {
+    const { api } = stub({ create: async () => ({ ok: false, failure: "package-not-found" }) });
+
+    // The URL the step still answers: the code, the theme, and the package, plus each carried value only when
+    // it is shaped like a catalog key. A slash, a space, a colon, or 65 characters is not one.
+    const kept = (ocasion?: string, diseno?: string) =>
+      `/cuenta/invitaciones/nueva?paso=3${ocasion === undefined ? "" : `&ocasion=${ocasion}`}${diseno === undefined ? "" : `&diseno=${diseno}`}&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=package-not-found`;
+
+    for (const [ocasion, diseno, keptOcasion, keptDiseno] of [
+      ["../../etc/passwd", "birthday-poster-01&error=not-found", undefined, undefined],
+      ["birthday", "javascript:alert(1)", "birthday", undefined],
+      ["", "   ", undefined, undefined],
+      ["x".repeat(65), "birthday-poster-01", undefined, "birthday-poster-01"],
+      ["ocasion con espacio", "birthday/poster", undefined, undefined],
+    ] as const) {
+      assert.equal(
+        await createInvitation(
+          api,
+          formData({ templateVersionId: VERSION_ID, packageId: PACKAGE_ID, ocasion, diseno }),
+        ),
+        kept(keptOcasion, keptDiseno),
+        `${ocasion} ${diseno}`,
+      );
+    }
+  });
+
+  it("carries a well-shaped but stale selection the chooser resolves safely", async () => {
+    const { api } = stub({ create: async () => ({ ok: false, failure: "version-not-published" }) });
+    const stale = "0b6f3e0e-8c1e-4b8e-9a51-000000000000";
+
+    const target = await createInvitation(
+      api,
+      formData({
+        templateVersionId: stale,
+        packageId: PACKAGE_ID,
+        ocasion: "no-such-occasion",
+        diseno: "birthday-nope-01",
+      }),
+    );
+
+    assert.equal(
+      target,
+      `/cuenta/invitaciones/nueva?paso=3&ocasion=no-such-occasion&diseno=birthday-nope-01&tema=${stale}&paquete=${PACKAGE_ID}&error=version-not-published`,
+    );
+
+    // The page re-reads every parameter against the creator catalog, so a stale or tampered one only loses
+    // the selection: it lands on step 1 of the first occasion, never on an error page.
+    const occasions = chooserOccasions(templateChoiceCards([TEMPLATE], "https://invitame.test"));
+    const query = Object.fromEntries(new URLSearchParams(target.split("?")[1] ?? ""));
+    const state = resolveChooserStep(occasions, [], query);
+
+    assert.equal(state.step, 1);
+    assert.equal(state.occasion?.key, "cumpleanos");
+    assert.equal(state.design, undefined);
+    assert.equal(state.style, undefined);
   });
 
   it("answers signed-out at the form itself and sends the visitor to sign in", async () => {
@@ -731,7 +808,7 @@ describe("createInvitation", () => {
     const incomplete = stub();
     assert.equal(
       await createInvitation(incomplete.api, formData({ templateVersionId: VERSION_ID })),
-      "/cuenta/invitaciones/nueva?error=invalid-form",
+      `/cuenta/invitaciones/nueva?paso=3&tema=${VERSION_ID}&error=invalid-form`,
     );
     assert.deepEqual(incomplete.calls, []);
 
@@ -745,7 +822,7 @@ describe("createInvitation", () => {
         failing.api,
         formData({ templateVersionId: VERSION_ID, packageId: PACKAGE_ID }),
       ),
-      "/cuenta/invitaciones/nueva?error=unavailable",
+      `/cuenta/invitaciones/nueva?paso=3&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=unavailable`,
     );
   });
 });

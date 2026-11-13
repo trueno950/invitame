@@ -91,7 +91,7 @@ export const INVITATION_STATUS_LABELS = {
 } as const;
 
 /**
- * The Spanish label of each data field of the pinned `birthday-adventure-01` template (M4 T5). Keyed by
+ * The Spanish label of each data field of the pinned birthday templates (M4 T5). Keyed by
  * the property name the schema declares, because the schema's own `title` is technical catalog data; an
  * unlabelled property of another renderer falls back to its name.
  */

@@ -34,6 +34,23 @@ export const INVITATION_PATHS = {
   detail: (id: string) => `/cuenta/invitaciones/${id}`,
 } as const;
 
+// The query parameters of the «Paso a paso» chooser on the create page (S10, S12). The chooser itself reads and
+// writes them (`lib/customer/template-steps.ts`), and a refused create rebuilds the step-3 URL from them, so
+// both sides take the names from here instead of repeating the strings.
+
+/** The current step, counting from 1. */
+export const STEP_PARAM = "paso";
+/** The chosen design: its allow-listed `componentKey`, never a name. */
+export const DESIGN_PARAM = "diseno";
+/** The chosen theme: the published version id, which is also what the create form posts. */
+export const THEME_PARAM = "tema";
+/** The occasion: the catalog category key that has published templates. */
+export const OCCASION_PARAM = "ocasion";
+/** The chosen package. */
+export const PACKAGE_PARAM = "paquete";
+/** The error code a page shows as a Spanish message. */
+const ERROR_PARAM = "error";
+
 /** Where a customer signs in; the customer pages share it with `/cuenta`. */
 export const CUSTOMER_SIGN_IN_PATH = "/ingresar";
 
@@ -502,7 +519,7 @@ export function invitationNoticeTarget(path: string, code: InvitationNoticeCode)
 }
 
 export function invitationErrorTarget(path: string, code: InvitationErrorCode): string {
-  return `${path}?error=${code}`;
+  return `${path}?${ERROR_PARAM}=${code}`;
 }
 
 function lookup<T extends string>(
@@ -562,20 +579,62 @@ function text(form: FormData, name: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-/** Creates a free draft and goes to it (S1, S6). */
+/** The shape of one carried selection value: a catalog key, a version id, or a package id (S12). */
+const SELECTION_VALUE = /^[A-Za-z0-9._-]{1,64}$/;
+
+/** One selection value the form carried, or nothing when it is missing or not shaped like an id (S12). */
+function carriedSelection(form: FormData, name: string): string | undefined {
+  const value = text(form, name);
+  return value !== undefined && SELECTION_VALUE.test(value) ? value : undefined;
+}
+
+/**
+ * Step 3 of the chooser with the selection the form carried, plus the error code (S12), so a refused create
+ * lands where the customer was instead of on a bare create URL. The theme and the package are the version id
+ * and the package id the same form already posts, so the URL repeats them from those values instead of a
+ * second copy that could disagree with them. Nothing here trusts a carried value beyond its shape: the page
+ * resolves every parameter against the creator catalog again, so a stale or tampered one only loses the
+ * selection it names and falls back to the nearest step that still holds.
+ */
+function failedCreateTarget(
+  form: FormData,
+  choice: { templateVersionId?: string | undefined; packageId?: string | undefined },
+  code: InvitationErrorCode,
+): string {
+  const parameters = new URLSearchParams([[STEP_PARAM, "3"]]);
+  const put = (name: string, value: string | undefined) => {
+    if (value !== undefined) {
+      parameters.set(name, value);
+    }
+  };
+
+  put(OCCASION_PARAM, carriedSelection(form, OCCASION_PARAM));
+  put(DESIGN_PARAM, carriedSelection(form, DESIGN_PARAM));
+  put(THEME_PARAM, choice.templateVersionId);
+  put(PACKAGE_PARAM, choice.packageId);
+  parameters.set(ERROR_PARAM, code);
+
+  return `${INVITATION_PATHS.create}?${parameters.toString()}`;
+}
+
+/** Creates a free draft and goes to it (S1, S6); a refusal returns to step 3 with the selection kept (S12). */
 export async function createInvitation(api: InvitationsClient, form: FormData): Promise<string> {
   const templateVersionId = text(form, "templateVersionId");
   const packageId = text(form, "packageId");
+  const choice = { templateVersionId, packageId };
 
   if (templateVersionId === undefined || packageId === undefined) {
-    return invitationErrorTarget(INVITATION_PATHS.create, "invalid-form");
+    return failedCreateTarget(form, choice, "invalid-form");
   }
 
   const created = await send(() => api.create({ templateVersionId, packageId }));
 
-  return created.ok
-    ? invitationNoticeTarget(INVITATION_PATHS.detail(created.value.id), "created")
-    : failureTarget(INVITATION_PATHS.create, created.failure);
+  if (created.ok) {
+    return invitationNoticeTarget(INVITATION_PATHS.detail(created.value.id), "created");
+  }
+  return created.failure === "signed-out"
+    ? CUSTOMER_SIGN_IN_PATH
+    : failedCreateTarget(form, choice, created.failure);
 }
 
 /**

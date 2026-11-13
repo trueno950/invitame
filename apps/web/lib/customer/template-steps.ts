@@ -1,6 +1,14 @@
 import type { SampleInvitation } from "../renderers/samples.ts";
 import { INVITATION_COPY } from "./copy.ts";
-import { type ChoiceCard, INVITATION_PATHS } from "./invitations.ts";
+import {
+  type ChoiceCard,
+  DESIGN_PARAM,
+  INVITATION_PATHS,
+  OCCASION_PARAM,
+  PACKAGE_PARAM,
+  STEP_PARAM,
+  THEME_PARAM,
+} from "./invitations.ts";
 import type { TemplateCardView } from "./template-preview.ts";
 
 /**
@@ -16,19 +24,13 @@ import type { TemplateCardView } from "./template-preview.ts";
  * The design, the theme, and the package travel in the query. Every value is validated against the creator
  * catalog, and an unknown or stale one never renders an error page: it falls back to the nearest step that
  * still holds. Nothing here reads a catalog name to decide what to show — a design comes from its
- * `componentKey`, a theme from its `configuration.theme`, and an occasion from its category.
+ * `componentKey`, a theme from its `configuration.theme`, and an occasion from its category. The parameter
+ * names live with the create page's paths (`lib/customer/invitations.ts`), because a refused create rebuilds
+ * this query to come back to step 3 with the selection (S12).
  */
 
-/** The query parameter of the current step, counting from 1. */
-export const STEP_PARAM = "paso";
-/** The query parameter of the chosen design: its allow-listed `componentKey`, never a name. */
-export const DESIGN_PARAM = "diseno";
-/** The query parameter of the chosen theme: the published version id, which is also what the form posts. */
-export const THEME_PARAM = "tema";
-/** The query parameter of the occasion: the catalog category key that has published templates. */
-export const OCCASION_PARAM = "ocasion";
-/** The query parameter of the chosen package. */
-export const PACKAGE_PARAM = "paquete";
+// Re-exported so a page and a test can name the parameters from the module that owns the chooser.
+export { DESIGN_PARAM, OCCASION_PARAM, PACKAGE_PARAM, STEP_PARAM, THEME_PARAM };
 
 /** How many steps the chooser shows, and what the summary counts («Paso 2 de 3»). */
 export const CHOOSER_STEP_COUNT = 3;

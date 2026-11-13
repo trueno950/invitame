@@ -19,7 +19,9 @@ import {
   type ChooserState,
   type ChooserStep,
   chooserOccasions,
+  DESIGN_PARAM,
   draftChoice,
+  OCCASION_PARAM,
   type OccasionChoice,
   resolveChooserStep,
   stepHref,
@@ -279,7 +281,7 @@ export default async function NewInvitationPage({
                     </li>
                   ))}
                 </ul>
-                {draft === undefined ? null : (
+                {draft === undefined || design === undefined ? null : (
                   <form
                     action={createInvitationAction}
                     className="flex justify-end"
@@ -291,6 +293,16 @@ export default async function NewInvitationPage({
                       value={draft.templateVersionId}
                     />
                     <input name="packageId" type="hidden" value={draft.packageId} />
+                    {/*
+                      The occasion and the design come back with the form so a refused create returns to this
+                      step with the selection kept (S12). The server rebuilds the URL from them, adding the
+                      theme and the package from the two values above, and the page resolves every value
+                      against the catalog again before it renders anything.
+                    */}
+                    {state.occasion === undefined ? null : (
+                      <input name={OCCASION_PARAM} type="hidden" value={state.occasion.key} />
+                    )}
+                    <input name={DESIGN_PARAM} type="hidden" value={design.componentKey} />
                   </form>
                 )}
               </section>
