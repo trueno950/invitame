@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { listRendererKeys } from "../renderers/registry.ts";
+import { findRenderer, listRendererKeys } from "../renderers/registry.ts";
 import { propsCheckKeys, rendererAcceptsProps } from "./invitation-render.ts";
 
 // The guard that turns a drifted renderer snapshot into the guest's friendly 404 (M5 T5; A3). A stored
@@ -101,6 +101,100 @@ describe("themed layout props checks", () => {
           `${key} ${JSON.stringify(props.configuration)}`,
         );
       }
+    }
+  });
+});
+
+// The two celebration layouts (T7c; S13) use their own content parsers, so the props check must accept their
+// published snapshots and refuse a drifted one the same way it refuses a birthday layout's.
+const CELEBRATION_LAYOUTS = [
+  { key: "baby-shower-classic-01", theme: "teddy-honey" },
+  { key: "baptism-classic-01", theme: "dove-olive" },
+] as const;
+
+const BABY_SHOWER_CONTENT = {
+  hosts: "Mariana y Lucía Ruiz",
+  date: "2027-03-13",
+  time: "12:00",
+  location: "Jardín Las Palmas",
+  address: "Av. de los Cedros 88",
+  message: "¡Te esperamos!",
+  rsvpContact: "Mariana 55 1234 5678",
+};
+
+const BAPTISM_CONTENT = {
+  celebrantName: "Emilia",
+  date: "2027-04-11",
+  parents: "Diego y Valentina Ortiz",
+  godparents: "Andrés Ortiz y Camila Reyes",
+  ceremonyPlace: "Parroquia San Miguel",
+  ceremonyAddress: "Calle Hidalgo 45",
+  ceremonyTime: "11:00",
+  receptionPlace: "Casa de los abuelos",
+  receptionAddress: "Av. de los Fresnos 210",
+  receptionTime: "13:30",
+  message: "Acompáñanos.",
+  rsvpContact: "Valentina 55 9876 5432",
+};
+
+describe("celebration layout props checks", () => {
+  it("accepts the published props of both celebration layouts", () => {
+    assert.equal(
+      rendererAcceptsProps("baby-shower-classic-01", {
+        configuration: { componentKey: "baby-shower-classic-01", theme: "teddy-honey" },
+        content: BABY_SHOWER_CONTENT,
+      }),
+      true,
+    );
+    assert.equal(
+      rendererAcceptsProps("baptism-classic-01", {
+        configuration: { componentKey: "baptism-classic-01", theme: "dove-olive" },
+        content: BAPTISM_CONTENT,
+      }),
+      true,
+    );
+  });
+
+  it("refuses a drifted celebration snapshot without throwing at the page", () => {
+    for (const { key, theme } of CELEBRATION_LAYOUTS) {
+      const content = key === "baby-shower-classic-01" ? BABY_SHOWER_CONTENT : BAPTISM_CONTENT;
+
+      for (const props of [
+        { configuration: { componentKey: key, theme: "neon" }, content },
+        { configuration: { componentKey: key }, content },
+        { configuration: { componentKey: key, theme, palette: "sunset" }, content },
+        {
+          configuration: { componentKey: key, theme },
+          content: { ...content, date: "2027-02-30" },
+        },
+        { configuration: { componentKey: key, theme }, content: {} },
+      ]) {
+        assert.equal(
+          rendererAcceptsProps(key, props),
+          false,
+          `${key} ${JSON.stringify(props.configuration)}`,
+        );
+      }
+    }
+  });
+});
+
+describe("retired single-design snapshot", () => {
+  it("refuses the removed single-design snapshot (S11)", () => {
+    // T11 deleted `birthday-adventure-01` and its five-variable palette configuration. A stored snapshot of
+    // the retired key must be refused before React renders it, whichever shape its configuration has.
+    assert.equal(findRenderer("birthday-adventure-01"), undefined);
+    for (const configuration of [
+      { componentKey: "birthday-adventure-01", palette: "sunset" },
+      { componentKey: "birthday-adventure-01", theme: "adventure" },
+      { palette: "sunset" },
+      "birthday-adventure-01",
+    ]) {
+      assert.equal(
+        rendererAcceptsProps("birthday-adventure-01", { configuration, content: CONTENT }),
+        false,
+        JSON.stringify(configuration),
+      );
     }
   });
 });

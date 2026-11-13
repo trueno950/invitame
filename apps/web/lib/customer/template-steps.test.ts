@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { BABY_SHOWER_THEME, BABY_SHOWER_THEMES } from "../renderers/baby-shower-themes.ts";
 import {
   BIRTHDAY_THEME,
   BIRTHDAY_THEMES,
@@ -581,3 +582,76 @@ function directorySources(directory: URL): string[] {
     .sort()
     .map((entry) => fileURLToPath(new URL(entry, directory)));
 }
+
+// A second occasion is picked up from the catalog alone (T7c; S13): the baby shower has one layout with eight
+// themes, so the chooser shows a single design and its theme step, without any code that names the occasion.
+
+const BABY_SHOWER_CATEGORY = { key: "baby-shower", name: "Baby shower" };
+
+const BABY_SHOWER_SEEDED: CreatorTemplate[] = BABY_SHOWER_THEMES.map((theme) =>
+  template(`baby-shower-classic-01-${theme}`, "baby-shower-classic-01", {
+    name: `Clásica · ${BABY_SHOWER_THEME[theme].displayName}`,
+    category: BABY_SHOWER_CATEGORY,
+    configuration: { componentKey: "baby-shower-classic-01", theme },
+  }),
+);
+
+const BABY_SHOWER_OCCASIONS = occasionsOf(BABY_SHOWER_SEEDED);
+
+describe("single-layout occasion with themes", () => {
+  it("offers the new occasion with its one design and eight themes", () => {
+    assert.equal(BABY_SHOWER_OCCASIONS.length, 1);
+    const [occasion] = BABY_SHOWER_OCCASIONS;
+
+    assert.equal(occasion?.key, "baby-shower");
+    assert.equal(occasion?.name, "Baby shower");
+    assert.equal(occasion?.designs.length, 1);
+
+    const design = occasion?.designs[0];
+
+    assert.equal(design?.componentKey, "baby-shower-classic-01");
+    assert.equal(design?.title, "Clásica");
+    assert.deepEqual(
+      design?.styles.map((style) => style.label),
+      BABY_SHOWER_THEMES.map((theme) => BABY_SHOWER_THEME[theme].displayName),
+    );
+    assert.equal(
+      design?.styles.every((style) => style.sample !== undefined),
+      true,
+    );
+  });
+
+  it("resolves step 2 and step 3 for the baby shower selection", () => {
+    const design = BABY_SHOWER_OCCASIONS[0]?.designs[0];
+    const version = design?.styles[3]?.versionId ?? "";
+
+    const themeStep = resolve(
+      { [STEP_PARAM]: "2", [DESIGN_PARAM]: "baby-shower-classic-01" },
+      { occasions: BABY_SHOWER_OCCASIONS },
+    );
+    assert.equal(themeStep.step, 2);
+    assert.equal(themeStep.occasion?.key, "baby-shower");
+    assert.equal(themeStep.design?.componentKey, "baby-shower-classic-01");
+    assert.equal(themeStep.style?.versionId, design?.styles[0]?.versionId);
+
+    const packageStep = resolve(
+      {
+        [STEP_PARAM]: "3",
+        [OCCASION_PARAM]: "baby-shower",
+        [DESIGN_PARAM]: "baby-shower-classic-01",
+        [THEME_PARAM]: version,
+      },
+      { occasions: BABY_SHOWER_OCCASIONS },
+    );
+    assert.equal(packageStep.step, 3);
+    assert.equal(packageStep.style?.versionId, version);
+    assert.deepEqual(draftChoice(packageStep), {
+      templateVersionId: version,
+      packageId: PACKAGES[0]?.value,
+    });
+    assert.equal(
+      stepHref(packageStep, 2),
+      `/cuenta/invitaciones/nueva?paso=2&ocasion=baby-shower&diseno=baby-shower-classic-01&tema=${version}&paquete=${PACKAGES[0]?.value}`,
+    );
+  });
+});

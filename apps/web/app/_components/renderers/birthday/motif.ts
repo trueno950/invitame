@@ -1,6 +1,9 @@
 import { createElement, type ReactElement } from "react";
 
 import type { BirthdayMotif } from "../../../../lib/renderers/birthday-themes.ts";
+import { MOTIF_PALETTES, type MotifPalette, MotifSvg, type MotifTone } from "../themed/motif.ts";
+
+export type { MotifPalette, MotifTone } from "../themed/motif.ts";
 
 /*
  * The original decorative motif of each theme (T6b; S5, S8), redrawn from
@@ -12,28 +15,6 @@ import type { BirthdayMotif } from "../../../../lib/renderers/birthday-themes.ts
  */
 
 const h = createElement;
-
-export type MotifTone = "accent" | "paper";
-
-interface MotifPalette {
-  /** The near-white (accent band) or near-ink (paper) shape. */
-  readonly light: string;
-  readonly one: string;
-  readonly two: string;
-}
-
-const PALETTES: Readonly<Record<MotifTone, MotifPalette>> = {
-  accent: {
-    light: "var(--inv-on-accent)",
-    one: "var(--inv-decoration-one)",
-    two: "var(--inv-decoration-two)",
-  },
-  paper: {
-    light: "var(--inv-ink)",
-    one: "var(--inv-accent)",
-    two: "var(--inv-decoration-one)",
-  },
-};
 
 /** A five-pointed star path at `x`, `y`, the board's own four-unit star. */
 function star(x: number, y: number): string {
@@ -214,21 +195,11 @@ export interface MotifProps {
 }
 
 /**
- * The decorative motif of the theme, as one `aria-hidden` SVG. It repeats the board's 280 × 140 drawing area
- * and is drawn with `xMidYMid meet`, so its shapes keep their proportions in any box; the layouts place it in
- * a short, fixed-height strip at an edge where no text sits (docs/design/theme.md), never under live text.
+ * The decorative motif of the theme, as one `aria-hidden` SVG drawn by the shared `MotifSvg` frame. It
+ * repeats the board's 280 × 140 drawing area and is drawn with `xMidYMid meet`, so its shapes keep their
+ * proportions in any box; the layouts place it in a short, fixed-height strip at an edge where no text sits
+ * (docs/design/theme.md), never under live text.
  */
 export function Motif({ motif, tone = "accent", className }: MotifProps): ReactElement {
-  return h(
-    "svg",
-    {
-      "aria-hidden": "true",
-      focusable: "false",
-      "data-motif": motif,
-      viewBox: "0 0 280 140",
-      preserveAspectRatio: "xMidYMid meet",
-      className: className ?? "block h-full w-full",
-    },
-    artwork(motif, PALETTES[tone]),
-  );
+  return MotifSvg({ motif, className, children: artwork(motif, MOTIF_PALETTES[tone]) });
 }

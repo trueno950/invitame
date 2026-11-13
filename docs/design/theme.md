@@ -226,7 +226,7 @@ drawn.
 
 ## Guest invitation themes
 
-Status: **current** (T6b; S2, S3, S5, S7, S8). A children's birthday template is a **layout** plus a **theme**: the
+Status: **current** (T6b, T7c; S2, S3, S5, S7, S8, S13). A themed template is a **layout** plus a **theme**: the
 layout is an allow-listed renderer that codes the page structure once, and the theme is an allow-listed palette, a
 licensed display font, and an original motif that the layout applies. Each combination is its own catalog template
 and `TemplateVersion`.
@@ -235,7 +235,18 @@ and `TemplateVersion`.
   `birthday-poster-01` (Cartel, `02-cartel-fiesta.html`), and `birthday-story-01` (Cuento, `03-cuento-ilustrado.html`).
   These three replaced the first single design, `birthday-adventure-01` (its own palette, typography, and section
   order), which was deleted with its files, tests, seed template, and catalog rows once they shipped (S11).
-- Themes, from `design/kids-themes/01-tablero-temas.html`, in this order:
+- Baby showers and themed baptisms (T7c, S13), from `design/celebration-themes/`, each ship one layout, «Clásica»:
+  `baby-shower-classic-01` with eight themes (Osito y miel, Nubes y estrellas, Safari bebé, Globos aerostáticos,
+  Arcoíris boho, Lunita, Amigos del bosque, Conejito dulce) and `baptism-classic-01` with six (Paloma y olivo,
+  Angelitos, Cielo y nubes, Floral suave, Corderito, Luz de estrella). A theme is a seven-color palette, one licensed
+  display font used at the single weight it is loaded with, and an original geometric motif; every text pair reaches
+  4.5:1, and a test pins the palettes and the weights. The baby shower layout asks for the hosts, date, time, place,
+  address, message, and an RSVP contact, and shows the baby's name, the gender reveal, the gift registry, and a photo
+  only when the invitation has them. The themed baptism layout asks for the child's name and date, the parents, the
+  godparents, the ceremony (place, address, time), the reception (place, address, time), the message, and an RSVP
+  contact, with the photo and the gift registry optional. Both take exactly `{componentKey, theme}` as configuration;
+  the formal baptism stays in the elegant line (T8).
+- Birthday themes, from `design/kids-themes/01-tablero-temas.html`, in this order:
 
 | Key | Catalog name | Display font | Motif |
 | --- | --- | --- | --- |

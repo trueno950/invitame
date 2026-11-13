@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { BABY_SHOWER_THEME, BABY_SHOWER_THEMES } from "../renderers/baby-shower-themes.ts";
 import {
   BIRTHDAY_THEME,
   BIRTHDAY_THEMES,
@@ -264,5 +265,43 @@ describe("previewPath", () => {
 
     assert.equal(previewPath(version), `/cuenta/invitaciones/nueva/vista/${version}`);
     assert.equal(previewPath("a/b?c"), "/cuenta/invitaciones/nueva/vista/a%2Fb%3Fc");
+  });
+});
+
+// A second occasion (T7c; S13): its one layout groups by `componentKey` exactly like the birthday ones, so the
+// chooser never needs a name or a key written into it for a new occasion.
+
+const BABY_SHOWER_CATEGORY = { key: "baby-shower", name: "Baby shower" };
+
+const BABY_SHOWER_SEEDED: CreatorTemplate[] = BABY_SHOWER_THEMES.map((theme) =>
+  template(`baby-shower-classic-01-${theme}`, "baby-shower-classic-01", {
+    name: `Clásica · ${BABY_SHOWER_THEME[theme].displayName}`,
+    category: BABY_SHOWER_CATEGORY,
+    configuration: { componentKey: "baby-shower-classic-01", theme },
+  }),
+);
+
+describe("celebration occasion cards", () => {
+  it("groups the single baby shower layout into one card with its eight themes", () => {
+    const cards = templateChoiceCards(BABY_SHOWER_SEEDED, ORIGIN);
+
+    assert.equal(cards.length, 1);
+    const [card] = cards;
+
+    assert.equal(card?.kind, "layout");
+    if (card?.kind !== "layout") {
+      return;
+    }
+    assert.equal(card.componentKey, "baby-shower-classic-01");
+    assert.equal(card.title, "Clásica");
+    assert.notEqual(card.description.length, 0);
+    assert.deepEqual(card.category, BABY_SHOWER_CATEGORY);
+    assert.deepEqual(
+      card.options.map((option) => option.label),
+      BABY_SHOWER_THEMES.map((theme) => BABY_SHOWER_THEME[theme].displayName),
+    );
+    for (const option of card.options) {
+      assert.notEqual(option.sample, undefined, option.label);
+    }
   });
 });

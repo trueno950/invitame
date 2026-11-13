@@ -1,22 +1,21 @@
-import {
-  BIRTHDAY_THEME,
-  BIRTHDAY_THEMES,
-  isBirthdayTheme,
-  parseThemedLayoutConfiguration,
-  THEMED_LAYOUT_KEYS,
-  type ThemedLayoutKey,
-} from "../renderers/birthday-themes.ts";
 import { RendererPropsError } from "../renderers/renderer-props-error.ts";
 import { type SampleInvitation, sampleInvitation } from "../renderers/samples.ts";
+import { parseThemedConfiguration } from "../renderers/theme-tokens.ts";
+import {
+  type ThemedLayoutDefinition,
+  themedLayoutFor,
+  themedLayoutTheme,
+} from "../renderers/themed-layouts.ts";
 import type { CreatorTemplate } from "../server/invitations-api.ts";
 
 /**
- * The cards the «Paso a paso» chooser is built from (T9; S9, S10). A themed layout is one design that groups
- * every published version of its `componentKey`, with one style per version; every other template — a key
- * without themes, or the templates of other categories — keeps a design of its own with a single style.
- * Nothing here reads a catalog name to decide what to show: the design comes from the version's
- * `componentKey`, the theme from its `configuration.theme`, the occasion from the category, and the label
- * from the theme's own Spanish display name.
+ * The cards the «Paso a paso» chooser is built from (T9; S9, S10, T7c; S13). A themed layout is one design
+ * that groups every published version of its `componentKey`, with one style per version; every other
+ * template — a key without themes, or the templates of other categories — keeps a design of its own with a
+ * single style. Nothing here reads a catalog name to decide what to show: the design comes from the
+ * version's `componentKey`, the theme from its `configuration.theme`, the occasion from the category, and
+ * the label from the theme's own Spanish display name. The themed layouts and their themes come from
+ * `lib/renderers/themed-layouts.ts`, so a new occasion seeded into the catalog needs no code here.
  *
  * What the create form submits is unchanged: the field `templateVersionId` with the published version id the
  * draft is pinned to.
@@ -35,26 +34,6 @@ export const PREVIEW_PATHS = {
 export function previewPath(versionId: string): string {
   return PREVIEW_PATHS.preview(versionId);
 }
-
-/**
- * The Spanish title and description of each themed layout. The catalog names carry the theme as well
- * («Mapa · Dinosaurios»), so a card that holds all eight themes of one layout needs its own neutral label;
- * it is keyed by the allow-listed `componentKey`, never parsed out of a name.
- */
-const LAYOUT_COPY: Readonly<Record<ThemedLayoutKey, { title: string; description: string }>> = {
-  "birthday-map-01": {
-    title: "Mapa",
-    description: "Una ruta de aventura con paradas para la fecha, la hora y el lugar de la fiesta.",
-  },
-  "birthday-poster-01": {
-    title: "Cartel",
-    description: "Un cartel festivo con la foto y los datos del cumpleaños en primer plano.",
-  },
-  "birthday-story-01": {
-    title: "Cuento",
-    description: "Un cuento ilustrado que narra la fiesta de cumpleaños paso a paso.",
-  },
-};
 
 /** One theme of a themed design, and the published version it selects. */
 export interface ThemeOptionView {
@@ -77,7 +56,7 @@ export interface LayoutCardView {
   kind: "layout";
   /** A CSS-safe token that names this design, unique on the page. */
   groupId: string;
-  componentKey: ThemedLayoutKey;
+  componentKey: string;
   title: string;
   /** The category of its templates, which is the occasion the chooser offers. */
   category: DesignCategory;
@@ -100,22 +79,17 @@ export interface SingleTemplateCardView {
 
 export type TemplateCardView = LayoutCardView | SingleTemplateCardView;
 
-/** The layout a `componentKey` names, or undefined for a key without themes. Compared by equality only. */
-function themedLayout(componentKey: string): ThemedLayoutKey | undefined {
-  return THEMED_LAYOUT_KEYS.find((key) => key === componentKey);
-}
-
 /**
  * The theme a stored configuration selects, or undefined when it is not the exact `{componentKey, theme}`
  * shape the renderer accepts. A drifted snapshot is not a reason to drop the template: it falls back to a
  * card of its own without a miniature, and the API still owns whether the version may be pinned.
  */
 function configuredTheme(
-  componentKey: ThemedLayoutKey,
+  layout: ThemedLayoutDefinition,
   configuration: unknown,
 ): string | undefined {
   try {
-    return parseThemedLayoutConfiguration(componentKey, configuration).theme;
+    return parseThemedConfiguration(layout.componentKey, layout.themes, configuration).theme;
   } catch (error) {
     if (error instanceof RendererPropsError) {
       return undefined;
@@ -124,16 +98,17 @@ function configuredTheme(
   }
 }
 
-/** The owner's theme order, so the switches of a card read like the theme board (S8). */
-function themeRank(theme: string): number {
-  const index = BIRTHDAY_THEMES.indexOf(theme as (typeof BIRTHDAY_THEMES)[number]);
-  return index === -1 ? BIRTHDAY_THEMES.length : index;
+/** The owner's theme order, so the switches of a card read like the theme board. */
+function themeRank(layout: ThemedLayoutDefinition, theme: string): number {
+  const index = layout.themes.indexOf(theme);
+
+  return index === -1 ? layout.themes.length : index;
 }
 
 /** One themed layout being collected, with the versions that belong to it. */
 interface LayoutEntry {
   kind: "layout";
-  layout: ThemedLayoutKey;
+  layout: ThemedLayoutDefinition;
   category: DesignCategory;
   members: Array<{ template: CreatorTemplate; theme: string; sample: SampleInvitation }>;
 }
@@ -154,7 +129,7 @@ export function templateChoiceCards(
   origin: string,
 ): TemplateCardView[] {
   const entries: Array<LayoutEntry | SingleEntry> = [];
-  const groups = new Map<ThemedLayoutKey, LayoutEntry>();
+  const groups = new Map<string, LayoutEntry>();
 
   for (const template of templates) {
     const version = template.publishedVersion;
@@ -164,11 +139,11 @@ export function templateChoiceCards(
       template.category.key,
       origin,
     );
-    const layout = themedLayout(version.componentKey);
+    const layout = themedLayoutFor(version.componentKey);
     const theme = layout === undefined ? undefined : configuredTheme(layout, version.configuration);
 
     if (layout !== undefined && theme !== undefined && sample !== undefined) {
-      let group = groups.get(layout);
+      let group = groups.get(layout.componentKey);
 
       if (group === undefined) {
         group = {
@@ -177,7 +152,7 @@ export function templateChoiceCards(
           category: { key: template.category.key, name: template.category.name },
           members: [],
         };
-        groups.set(layout, group);
+        groups.set(layout.componentKey, group);
         entries.push(group);
       }
       group.members.push({ template, theme, sample });
@@ -209,16 +184,18 @@ export function templateChoiceCards(
           kind: "layout",
           // Unique on the page, CSS-safe, and never derived from a name or a version id.
           groupId: `tema-${index}`,
-          componentKey: entry.layout,
-          ...LAYOUT_COPY[entry.layout],
+          componentKey: entry.layout.componentKey,
+          title: entry.layout.title,
+          description: entry.layout.description,
           category: entry.category,
           options: [...entry.members]
-            .sort((left, right) => themeRank(left.theme) - themeRank(right.theme))
+            .sort(
+              (left, right) =>
+                themeRank(entry.layout, left.theme) - themeRank(entry.layout, right.theme),
+            )
             .map((member) => ({
               versionId: member.template.publishedVersion.id,
-              label: isBirthdayTheme(member.theme)
-                ? BIRTHDAY_THEME[member.theme].displayName
-                : member.theme,
+              label: themedLayoutTheme(entry.layout, member.theme)?.displayName ?? member.theme,
               sample: member.sample,
             })),
         },

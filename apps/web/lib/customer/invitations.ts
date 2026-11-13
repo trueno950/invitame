@@ -237,7 +237,15 @@ export function contentFields(schema: unknown): ContentField[] {
 }
 
 /** The short groups of the draft's form, in the order the editor shows them. */
-const SECTION_KEYS = ["celebrant", "when", "where", "content", "other"] as const;
+const SECTION_KEYS = [
+  "celebrant",
+  "when",
+  "where",
+  "ceremony",
+  "reception",
+  "content",
+  "other",
+] as const;
 type SectionKey = (typeof SECTION_KEYS)[number];
 
 /**
@@ -253,12 +261,29 @@ const FIELD_SECTIONS: Readonly<Record<string, SectionKey>> = {
   address: "where",
   mainPhoto: "content",
   message: "content",
+  // Baby shower and themed baptism (T7c; S13). The two places of a baptism are their own groups, so the
+  // form reads as «quién», «cuándo», «ceremonia», «recepción», and «contenido» instead of one long list.
+  hosts: "celebrant",
+  babyName: "celebrant",
+  genderReveal: "celebrant",
+  parents: "celebrant",
+  godparents: "celebrant",
+  ceremonyPlace: "ceremony",
+  ceremonyAddress: "ceremony",
+  ceremonyTime: "ceremony",
+  receptionPlace: "reception",
+  receptionAddress: "reception",
+  receptionTime: "reception",
+  giftRegistry: "content",
+  rsvpContact: "content",
 };
 
 const SECTION_TITLES: Readonly<Record<SectionKey, string>> = {
   celebrant: INVITATION_COPY.sectionCelebrant,
   when: INVITATION_COPY.sectionWhen,
   where: INVITATION_COPY.sectionWhere,
+  ceremony: INVITATION_COPY.sectionCeremony,
+  reception: INVITATION_COPY.sectionReception,
   content: INVITATION_COPY.sectionContent,
   other: INVITATION_COPY.sectionOther,
 };
@@ -275,10 +300,10 @@ function sectionOf(name: string): SectionKey {
 }
 
 /**
- * The fields grouped into the short sections of the editor (S11), so the form reads in a few blocks
- * instead of one long list: «Festejado», «Cuándo», «Dónde», «Contenido», and one last group for any
- * property those do not name. A group with no field is left out, and the schema order of the fields is
- * kept inside each group.
+ * The fields grouped into the short sections of the editor (S11, S13), so the form reads in a few blocks
+ * instead of one long list: «Festejado», «Cuándo», «Dónde», «Ceremonia», «Recepción», «Contenido», and one
+ * last group for any property those do not name. A group with no field is left out, and the schema order of
+ * the fields is kept inside each group.
  */
 export function contentSections(fields: readonly ContentField[]): ContentSection[] {
   const grouped = new Map<SectionKey, ContentField[]>();

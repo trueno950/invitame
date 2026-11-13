@@ -1,4 +1,14 @@
 import {
+  BABY_SHOWER_CLASSIC_COMPONENT_KEY,
+  parseBabyShowerClassicConfiguration,
+  parseBabyShowerClassicContent,
+} from "../renderers/baby-shower-classic-01.ts";
+import {
+  BAPTISM_CLASSIC_COMPONENT_KEY,
+  parseBaptismClassicConfiguration,
+  parseBaptismClassicContent,
+} from "../renderers/baptism-classic-01.ts";
+import {
   BIRTHDAY_MAP_COMPONENT_KEY,
   parseBirthdayMapConfiguration,
   parseBirthdayMapContent,
@@ -52,6 +62,20 @@ const PROPS_CHECKS: ReadonlyMap<string, PropsCheck> = new Map<string, PropsCheck
     (props) => {
       parseBirthdayStoryConfiguration(props.configuration);
       parseBirthdayStoryContent(props.content);
+    },
+  ],
+  [
+    BABY_SHOWER_CLASSIC_COMPONENT_KEY,
+    (props) => {
+      parseBabyShowerClassicConfiguration(props.configuration);
+      parseBabyShowerClassicContent(props.content);
+    },
+  ],
+  [
+    BAPTISM_CLASSIC_COMPONENT_KEY,
+    (props) => {
+      parseBaptismClassicConfiguration(props.configuration);
+      parseBaptismClassicContent(props.content);
     },
   ],
 ]);

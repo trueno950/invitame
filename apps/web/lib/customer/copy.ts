@@ -104,6 +104,20 @@ export const INVITATION_FIELD_LABELS: Readonly<Record<string, string>> = {
   address: "Dirección",
   mainPhoto: "Foto principal (URL)",
   message: "Mensaje",
+  // Baby shower and themed baptism (T7c; S13): every new field of the two occasions.
+  hosts: "Anfitriones",
+  babyName: "Nombre del bebé (opcional)",
+  genderReveal: "Revelación de género",
+  giftRegistry: "Mesa de regalos",
+  rsvpContact: "Confirmación de asistencia",
+  parents: "Padres",
+  godparents: "Padrinos",
+  ceremonyPlace: "Lugar de la ceremonia",
+  ceremonyAddress: "Dirección de la ceremonia",
+  ceremonyTime: "Hora de la ceremonia",
+  receptionPlace: "Lugar de la recepción",
+  receptionAddress: "Dirección de la recepción",
+  receptionTime: "Hora de la recepción",
 };
 
 /** Copy of the three invitation pages under `/cuenta` (M4 T5; S1, S6, S7). */
@@ -127,6 +141,9 @@ export const INVITATION_COPY = {
   sectionCelebrant: "Festejado",
   sectionWhen: "Cuándo",
   sectionWhere: "Dónde",
+  /** The ceremony and the reception are two places of a baptism, each with its own address and time. */
+  sectionCeremony: "Ceremonia",
+  sectionReception: "Recepción",
   sectionContent: "Contenido",
   sectionOther: "Otros datos",
   detailAsideHeading: "Resumen",

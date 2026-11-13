@@ -1,4 +1,15 @@
+import {
+  isCalendarDate,
+  isClockTime,
+  isHttpUrl,
+  isPlainObject,
+  readOwn,
+} from "./invitation-fields.ts";
 import { RendererPropsError } from "./renderer-props-error.ts";
+
+// The date wording is shared with the celebration layouts (T7c; S13); re-exported here because the birthday
+// layouts and their tests name it from this module.
+export { formatLongDate } from "./invitation-fields.ts";
 
 /**
  * The eight content fields of a themed birthday layout (T6b; S2, S8). Every layout reads the same fields
@@ -19,45 +30,6 @@ export interface BirthdayContent {
   /** An http or https URL. */
   readonly mainPhoto: string;
   readonly message: string;
-}
-
-type PlainObject = Record<string, unknown>;
-
-function isPlainObject(value: unknown): value is PlainObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Reads an own property only, so `__proto__`, `constructor`, and `toString` never resolve. */
-function readOwn(object: PlainObject, key: string): unknown {
-  return Object.hasOwn(object, key) ? object[key] : undefined;
-}
-
-const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-function isCalendarDate(value: string): boolean {
-  const match = ISO_DATE.exec(value);
-
-  if (!match) {
-    return false;
-  }
-
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const date = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-  );
-}
-
-function isHttpUrl(value: string): boolean {
-  try {
-    const { protocol } = new URL(value);
-
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 /** The typed content of a themed birthday invitation, or a `RendererPropsError` naming every defect. */
@@ -95,7 +67,7 @@ export function parseBirthdayContent(componentKey: string, value: unknown): Birt
   }
 
   const date = formatted("date", isCalendarDate, "a calendar date as YYYY-MM-DD");
-  const time = formatted("time", (field) => CLOCK_TIME.test(field), "a time as HH:MM");
+  const time = formatted("time", isClockTime, "a time as HH:MM");
   const location = text("location");
   const address = text("address");
   const mainPhoto = formatted("mainPhoto", isHttpUrl, "an http or https URL");
@@ -105,28 +77,6 @@ export function parseBirthdayContent(componentKey: string, value: unknown): Birt
     throw new RendererPropsError(componentKey, "content", issues);
   }
   return { celebrantName, age, date, time, location, address, mainPhoto, message };
-}
-
-const MONTHS = [
-  "enero",
-  "febrero",
-  "marzo",
-  "abril",
-  "mayo",
-  "junio",
-  "julio",
-  "agosto",
-  "septiembre",
-  "octubre",
-  "noviembre",
-  "diciembre",
-] as const;
-
-/** `2026-12-05` as «5 de diciembre de 2026»; the input is already parsed as a calendar date. */
-export function formatLongDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split("-").map(Number);
-
-  return `${day} de ${MONTHS[(month ?? 1) - 1]} de ${year}`;
 }
 
 /** The age line the layouts show, in neutral professional Spanish: «Cumple 7 años». */

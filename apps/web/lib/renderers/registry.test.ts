@@ -8,12 +8,19 @@ import { findRenderer, listRendererKeys } from "./registry.ts";
 
 // The web renderer map (M3 T7; S2, S3, S6): an explicit componentKey -> component allow-list.
 
-// The three themed layouts (T6b; S7, S8) are the whole list, each its own reviewed component that takes an
-// allow-listed theme. The single `birthday-adventure-01` renderer was deleted (S11).
-const THEMED_KEYS = ["birthday-map-01", "birthday-poster-01", "birthday-story-01"] as const;
+// The themed layouts are the whole list (T6b, T7c; S7, S8, S13), each its own reviewed component that takes
+// an allow-listed theme: the three children's birthday layouts, the baby shower layout, and the themed
+// baptism layout. The single `birthday-adventure-01` renderer was deleted (S11).
+const THEMED_KEYS = [
+  "birthday-map-01",
+  "birthday-poster-01",
+  "birthday-story-01",
+  "baby-shower-classic-01",
+  "baptism-classic-01",
+] as const;
 
 describe("web renderer registry", () => {
-  it("lists exactly the three themed layouts", () => {
+  it("lists exactly the five themed layouts, in registration order", () => {
     assert.deepEqual(listRendererKeys(), [...THEMED_KEYS]);
     for (const key of THEMED_KEYS) {
       assert.equal(typeof findRenderer(key), "function", key);

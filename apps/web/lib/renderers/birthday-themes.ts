@@ -1,4 +1,6 @@
-import { RendererPropsError } from "./renderer-props-error.ts";
+import { type InvitationTheme, isAllowedTheme, parseThemedConfiguration } from "./theme-tokens.ts";
+
+export { THEME_COLOR_ROLES, type ThemeColorRole, type ThemeColors } from "./theme-tokens.ts";
 
 /**
  * The eight children's birthday themes the owner chose (T6b; S2, S5, S7, S8), taken from
@@ -27,20 +29,6 @@ export const BIRTHDAY_THEMES = [
 
 export type BirthdayThemeKey = (typeof BIRTHDAY_THEMES)[number];
 
-/** The seven colors of a theme, in the order the theme board shows them. Decoration never carries text. */
-export const THEME_COLOR_ROLES = [
-  "background",
-  "surface",
-  "soft",
-  "ink",
-  "accent",
-  "decorationOne",
-  "decorationTwo",
-] as const;
-
-export type ThemeColorRole = (typeof THEME_COLOR_ROLES)[number];
-export type ThemeColors = Readonly<Record<ThemeColorRole, string>>;
-
 /** The original motif each theme draws; `app/_components/renderers/birthday/motif.ts` renders them. */
 export const BIRTHDAY_MOTIFS = [
   "flakes",
@@ -55,21 +43,8 @@ export const BIRTHDAY_MOTIFS = [
 
 export type BirthdayMotif = (typeof BIRTHDAY_MOTIFS)[number];
 
-export interface BirthdayTheme {
-  /** The neutral Spanish name the catalog uses, without a protected name (S5). */
-  readonly displayName: string;
-  /** `ink` and `accent` keep 4.5:1 on `background`, `surface`, and `soft`; white keeps 4.5:1 on `accent`. */
-  readonly colors: ThemeColors;
-  /** The CSS variable `app/layout.tsx` sets for the theme's licensed display font. */
-  readonly fontVariable: string;
-  /** The font stack behind the display font, from the theme board. */
-  readonly fontFallback: string;
+export interface BirthdayTheme extends InvitationTheme {
   readonly motif: BirthdayMotif;
-  /**
-   * The title size as a CSS length with a fluid step, applied inline: Press Start 2P is drawn on a wide grid
-   * and the script faces need more width, so one Tailwind scale cannot serve every theme at 390 px.
-   */
-  readonly titleSize: string;
 }
 
 export const BIRTHDAY_THEME: Readonly<Record<BirthdayThemeKey, BirthdayTheme>> = {
@@ -206,7 +181,7 @@ export const BIRTHDAY_THEME: Readonly<Record<BirthdayThemeKey, BirthdayTheme>> =
 
 /** Whether a stored configuration value names an allowed theme, without prototype lookups. */
 export function isBirthdayTheme(value: unknown): value is BirthdayThemeKey {
-  return BIRTHDAY_THEMES.some((theme) => theme === value);
+  return isAllowedTheme(BIRTHDAY_THEMES, value);
 }
 
 /** The layouts that take their look from a theme: Mapa, Cartel, and Cuento (S8). */
@@ -223,51 +198,15 @@ export interface ThemedLayoutConfiguration {
   readonly theme: BirthdayThemeKey;
 }
 
-const CONFIGURATION_KEYS = ["componentKey", "theme"] as const;
-
 /**
  * The configuration of a themed birthday layout is exactly `{componentKey, theme}` (S8). Both keys are
  * required; an extra key, another layout's key, a wrongly typed theme, and an unknown theme are refused, so
- * a drifted snapshot never renders. The API enforces the same shape before publication.
+ * a drifted snapshot never renders. The rules live in `theme-tokens.ts`, because the celebration layouts
+ * follow the same contract (S13); the API enforces it before publication too.
  */
 export function parseThemedLayoutConfiguration(
   componentKey: ThemedLayoutKey,
   value: unknown,
 ): ThemedLayoutConfiguration {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new RendererPropsError(componentKey, "configuration", [
-      "configuration must be a JSON object",
-    ]);
-  }
-
-  const configuration = value as Record<string, unknown>;
-  const issues: string[] = [];
-
-  for (const key of Object.keys(configuration)) {
-    if (!CONFIGURATION_KEYS.some((allowed) => allowed === key)) {
-      issues.push(
-        `configuration.${key} is not allowed; allowed keys: ${CONFIGURATION_KEYS.join(", ")}`,
-      );
-    }
-  }
-  for (const key of CONFIGURATION_KEYS) {
-    if (!Object.hasOwn(configuration, key)) {
-      issues.push(`configuration.${key} is required`);
-    }
-  }
-
-  if (Object.hasOwn(configuration, "componentKey") && configuration.componentKey !== componentKey) {
-    issues.push(`configuration.componentKey must be ${JSON.stringify(componentKey)}`);
-  }
-
-  const theme = Object.hasOwn(configuration, "theme") ? configuration.theme : undefined;
-
-  if (Object.hasOwn(configuration, "theme") && !isBirthdayTheme(theme)) {
-    issues.push(`configuration.theme must be one of: ${BIRTHDAY_THEMES.join(", ")}`);
-  }
-
-  if (issues.length > 0 || !isBirthdayTheme(theme)) {
-    throw new RendererPropsError(componentKey, "configuration", issues);
-  }
-  return { componentKey, theme };
+  return parseThemedConfiguration(componentKey, BIRTHDAY_THEMES, value);
 }

@@ -37,7 +37,7 @@ import {
   unpublishInvitation,
 } from "./invitations.ts";
 import { templateChoiceCards } from "./template-preview.ts";
-import { chooserOccasions, resolveChooserStep } from "./template-steps.ts";
+import { chooserOccasions, resolveChooserStep, stepHref } from "./template-steps.ts";
 
 // The invitation pages of `/cuenta` (M4 T5; S1, S6, S7): how the pinned schema becomes a form, how the
 // form becomes the JSON the API validates, and how each outcome of the server actions reaches a page as
@@ -63,6 +63,64 @@ const BIRTHDAY_SCHEMA = {
     address: { type: "string", title: "Dirección", maxLength: 200 },
     mainPhoto: { type: "string", title: "Foto principal", format: "uri" },
     message: { type: "string", title: "Mensaje", maxLength: 500 },
+  },
+};
+
+/** The baby shower content schema T7a publishes, with the fields the owner approved (S13). */
+const BABY_SHOWER_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  additionalProperties: false,
+  required: ["hosts", "date", "time", "location", "address", "message", "rsvpContact"],
+  properties: {
+    hosts: { type: "string", maxLength: 120 },
+    babyName: { type: "string", maxLength: 80 },
+    genderReveal: { type: "boolean" },
+    date: { type: "string", format: "date" },
+    time: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    location: { type: "string", maxLength: 120 },
+    address: { type: "string", maxLength: 200 },
+    giftRegistry: { type: "string", maxLength: 120 },
+    rsvpContact: { type: "string", maxLength: 120 },
+    message: { type: "string", maxLength: 500 },
+    mainPhoto: { type: "string", format: "uri" },
+  },
+};
+
+/** The themed baptism content schema T7a publishes: ceremony and reception are two blocks (S13). */
+const BAPTISM_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "celebrantName",
+    "date",
+    "parents",
+    "godparents",
+    "ceremonyPlace",
+    "ceremonyAddress",
+    "ceremonyTime",
+    "receptionPlace",
+    "receptionAddress",
+    "receptionTime",
+    "message",
+    "rsvpContact",
+  ],
+  properties: {
+    celebrantName: { type: "string", maxLength: 80 },
+    date: { type: "string", format: "date" },
+    parents: { type: "string", maxLength: 120 },
+    godparents: { type: "string", maxLength: 120 },
+    ceremonyPlace: { type: "string", maxLength: 120 },
+    ceremonyAddress: { type: "string", maxLength: 200 },
+    ceremonyTime: { type: "string", format: "time" },
+    receptionPlace: { type: "string", maxLength: 120 },
+    receptionAddress: { type: "string", maxLength: 200 },
+    receptionTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    giftRegistry: { type: "string", maxLength: 120 },
+    rsvpContact: { type: "string", maxLength: 120 },
+    message: { type: "string", maxLength: 500 },
+    mainPhoto: { type: "string", format: "uri" },
   },
 };
 
@@ -1163,5 +1221,276 @@ describe("publication issues", () => {
       error: INVITATION_ERROR_COPY["already-published"],
     });
     assert.deepEqual(invitationPageNotices({ issues: "package" }), {});
+  });
+});
+
+// The baby shower and themed baptism draft forms (T7c; S13): every new field gets a Spanish label, its own
+// section (ceremony and reception apart), and the control its schema declares, so the customer can fill an
+// invitation of either occasion without a second form.
+
+/** A form the browser would submit for a schema, with only the controls that were filled. */
+function contentForm(entries: Record<string, string>): FormData {
+  const data = new FormData();
+  for (const [name, value] of Object.entries(entries)) {
+    data.set(name, value);
+  }
+  return data;
+}
+
+describe("celebration occasion forms", () => {
+  it("gives every baby shower field a Spanish label and the right control", () => {
+    const fields = contentFields(BABY_SHOWER_SCHEMA);
+    const byName = new Map(fields.map((field) => [field.name, field]));
+
+    for (const field of fields) {
+      assert.notEqual(field.label, field.name, `${field.name} has a Spanish label`);
+      assert.ok(field.label.trim().length > 0, `${field.name} label is not empty`);
+    }
+    assert.equal(byName.get("hosts")?.label, "Anfitriones");
+    assert.equal(byName.get("babyName")?.label, "Nombre del bebé (opcional)");
+    assert.equal(byName.get("genderReveal")?.input.kind, "checkbox");
+    assert.equal(byName.get("date")?.input.kind, "date");
+    assert.equal(byName.get("time")?.input.kind, "time");
+    assert.equal(byName.get("giftRegistry")?.label, "Mesa de regalos");
+    assert.equal(byName.get("giftRegistry")?.input.kind, "text");
+    assert.equal(byName.get("rsvpContact")?.label, "Confirmación de asistencia");
+  });
+
+  it("marks only the fields the baby shower schema requires", () => {
+    const fields = contentFields(BABY_SHOWER_SCHEMA);
+
+    assert.deepEqual(
+      fields.filter((field) => field.required).map((field) => field.name),
+      ["hosts", "date", "time", "location", "address", "message", "rsvpContact"],
+    );
+    for (const name of ["babyName", "genderReveal", "giftRegistry", "mainPhoto"]) {
+      assert.equal(
+        fields.find((field) => field.name === name)?.required,
+        false,
+        `${name} is optional`,
+      );
+    }
+  });
+
+  it("groups the baby shower fields into short sections", () => {
+    assert.deepEqual(
+      contentSections(contentFields(BABY_SHOWER_SCHEMA)).map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ]),
+      [
+        ["Festejado", ["hosts", "babyName", "genderReveal"]],
+        ["Cuándo", ["date", "time"]],
+        ["Dónde", ["location", "address"]],
+        ["Contenido", ["message", "rsvpContact", "giftRegistry", "mainPhoto"]],
+      ],
+    );
+  });
+
+  it("gives every baptism field a Spanish label, its own ceremony and reception groups", () => {
+    const fields = contentFields(BAPTISM_SCHEMA);
+    const byName = new Map(fields.map((field) => [field.name, field]));
+
+    for (const field of fields) {
+      assert.notEqual(field.label, field.name, `${field.name} has a Spanish label`);
+      assert.ok(field.label.trim().length > 0, `${field.name} label is not empty`);
+    }
+    assert.equal(byName.get("parents")?.label, "Padres");
+    assert.equal(byName.get("godparents")?.label, "Padrinos");
+    assert.equal(byName.get("ceremonyPlace")?.input.kind, "text");
+    assert.equal(byName.get("ceremonyTime")?.input.kind, "time");
+    assert.equal(byName.get("ceremonyTime")?.required, true);
+    assert.equal(byName.get("receptionTime")?.input.kind, "time");
+    assert.equal(byName.get("giftRegistry")?.input.kind, "text");
+    assert.equal(byName.get("giftRegistry")?.required, false);
+
+    assert.deepEqual(
+      contentSections(fields).map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ]),
+      [
+        ["Festejado", ["celebrantName", "parents", "godparents"]],
+        ["Cuándo", ["date"]],
+        ["Ceremonia", ["ceremonyPlace", "ceremonyAddress", "ceremonyTime"]],
+        ["Recepción", ["receptionPlace", "receptionAddress", "receptionTime"]],
+        ["Contenido", ["message", "rsvpContact", "giftRegistry", "mainPhoto"]],
+      ],
+    );
+  });
+
+  it("reads a baby shower form, including its optional checkbox and gift registry", () => {
+    const fields = contentFields(BABY_SHOWER_SCHEMA);
+
+    assert.deepEqual(
+      parseContentForm(
+        fields,
+        contentForm({
+          hosts: " Mariana y Lucía ",
+          babyName: "Sofía",
+          genderReveal: "true",
+          date: "2027-03-13",
+          time: "12:00",
+          giftRegistry: "Mesa de regalos · Código 5123 4471",
+          message: "¡Te esperamos!",
+          rsvpContact: "Mariana 55 1234 5678",
+        }),
+      ),
+      {
+        ok: true,
+        content: {
+          hosts: "Mariana y Lucía",
+          date: "2027-03-13",
+          time: "12:00",
+          message: "¡Te esperamos!",
+          rsvpContact: "Mariana 55 1234 5678",
+          babyName: "Sofía",
+          genderReveal: true,
+          giftRegistry: "Mesa de regalos · Código 5123 4471",
+        },
+      },
+    );
+
+    assert.deepEqual(parseContentForm(fields, contentForm({ hosts: "Mariana" })), {
+      ok: true,
+      content: { hosts: "Mariana", genderReveal: false },
+    });
+  });
+
+  it("never posts an empty optional photo, which the API would refuse as a URI", () => {
+    // The API keeps `format: "uri"` on the optional photo, so an empty string is not a valid value: the form
+    // omits it and the invitation simply has no photo (S13).
+    for (const [schema, required] of [
+      [
+        BABY_SHOWER_SCHEMA,
+        {
+          hosts: "Mariana",
+          date: "2027-03-13",
+          time: "12:00",
+          location: "Jardín Las Palmas",
+          address: "Av. de los Cedros 88",
+          message: "¡Te esperamos!",
+          rsvpContact: "Mariana 55 1234 5678",
+        },
+      ],
+      [
+        BAPTISM_SCHEMA,
+        {
+          celebrantName: "Emilia",
+          date: "2027-04-11",
+          parents: "Diego y Valentina Ortiz",
+          godparents: "Andrés Ortiz y Camila Reyes",
+          ceremonyPlace: "Parroquia San Miguel",
+          ceremonyAddress: "Calle Hidalgo 45",
+          ceremonyTime: "11:00",
+          receptionPlace: "Casa de los abuelos",
+          receptionAddress: "Av. de los Fresnos 210",
+          receptionTime: "13:30",
+          message: "Acompáñanos.",
+          rsvpContact: "Valentina 55 9876 5432",
+        },
+      ],
+    ] as const) {
+      const parsed = parseContentForm(
+        contentFields(schema),
+        contentForm({ ...required, mainPhoto: "  ", giftRegistry: "" }),
+      );
+
+      assert.equal(parsed.ok, true);
+      if (!parsed.ok) {
+        return;
+      }
+      assert.equal(Object.hasOwn(parsed.content, "mainPhoto"), false);
+      assert.equal(Object.hasOwn(parsed.content, "giftRegistry"), false);
+    }
+  });
+
+  it("reads a baptism form with both times and refuses a malformed one", () => {
+    const fields = contentFields(BAPTISM_SCHEMA);
+    const complete = {
+      celebrantName: "Emilia",
+      date: "2027-04-11",
+      parents: "Diego y Valentina Ortiz",
+      godparents: "Andrés Ortiz y Camila Reyes",
+      ceremonyPlace: "Parroquia San Miguel",
+      ceremonyAddress: "Calle Hidalgo 45",
+      ceremonyTime: "11:00",
+      receptionPlace: "Casa de los abuelos",
+      receptionAddress: "Av. de los Fresnos 210",
+      receptionTime: "13:30",
+      message: "Acompáñanos.",
+      rsvpContact: "Valentina 55 9876 5432",
+    };
+
+    assert.deepEqual(parseContentForm(fields, contentForm(complete)), {
+      ok: true,
+      content: complete,
+    });
+    for (const [name, value] of [
+      ["ceremonyTime", "11 h"],
+      ["receptionTime", "25:00"],
+      ["date", "2027-04-31"],
+    ] as const) {
+      assert.deepEqual(
+        parseContentForm(fields, contentForm({ ...complete, [name]: value })),
+        { ok: false },
+        name,
+      );
+    }
+  });
+});
+
+describe("refused create keeps the selection", () => {
+  it("never leaves the create page or the site for a tampered theme or package (S12)", async () => {
+    const { api } = stub({ create: async () => ({ ok: false, failure: "validation" }) });
+
+    for (const posted of [
+      { templateVersionId: "https://evil.test/x", packageId: "//evil.test" },
+      { templateVersionId: "x\r\nLocation: https://evil.test", packageId: "a&error=not-found" },
+      { templateVersionId: "javascript:alert(1)", packageId: "?paso=1" },
+      { templateVersionId: "../../etc/passwd", packageId: "\\evil.test" },
+    ]) {
+      const target = await createInvitation(
+        api,
+        formData({
+          ...posted,
+          ocasion: "birthday",
+          diseno: "birthday-poster-01",
+        }),
+      );
+      const resolved = new URL(target, "https://invitame.test");
+
+      assert.equal(resolved.origin, "https://invitame.test", target);
+      assert.equal(resolved.pathname, "/cuenta/invitaciones/nueva", target);
+      assert.equal(resolved.searchParams.get("paso"), "3", target);
+      assert.equal(resolved.searchParams.get("tema"), posted.templateVersionId, target);
+      assert.equal(resolved.searchParams.get("paquete"), posted.packageId, target);
+      assert.equal(resolved.searchParams.get("error"), "validation", target);
+      assert.doesNotMatch(target, /[\r\n]/, target);
+    }
+  });
+
+  it("resolves the refused-create URL back to step 3 with the whole selection (S12)", async () => {
+    const { api } = stub({ create: async () => ({ ok: false, failure: "package-does-not-fit" }) });
+    const target = await createInvitation(
+      api,
+      formData({
+        templateVersionId: VERSION_ID,
+        packageId: PACKAGE_ID,
+        ocasion: TEMPLATE.category.key,
+        diseno: TEMPLATE.publishedVersion.componentKey,
+      }),
+    );
+    const occasions = chooserOccasions(templateChoiceCards([TEMPLATE], "https://invitame.test"));
+    const packages = packageChoices([PACKAGE]);
+    const query = Object.fromEntries(new URLSearchParams(target.split("?")[1] ?? ""));
+    const state = resolveChooserStep(occasions, packages, query);
+
+    assert.equal(state.step, 3);
+    assert.equal(state.occasion?.key, TEMPLATE.category.key);
+    assert.equal(state.design?.componentKey, TEMPLATE.publishedVersion.componentKey);
+    assert.equal(state.style?.versionId, VERSION_ID);
+    assert.equal(state.package?.value, PACKAGE_ID);
+    assert.equal(target, `${stepHref(state, 3)}&error=package-does-not-fit`);
   });
 });
