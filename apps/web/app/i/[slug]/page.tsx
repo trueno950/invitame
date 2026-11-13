@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
+import { publicFeatureBlock } from "../../../lib/public/invitation-features.ts";
 import { invitationMetadata } from "../../../lib/public/invitation-page.ts";
 import { rendererAcceptsProps } from "../../../lib/public/invitation-render.ts";
 import { findRenderer } from "../../../lib/renderers/registry.ts";
@@ -90,10 +91,18 @@ export default async function PublicInvitationPage({ params }: PublicInvitationP
     notFound();
   }
 
+  // What the API gated, mapped to the block's props (F3; S4). With nothing to show the layouts render
+  // exactly the markup they rendered before the block existed.
+  const block = publicFeatureBlock(invitation);
+  const rendererProps =
+    block === undefined
+      ? props
+      : { ...props, features: block.features, calendarHref: block.calendarHref };
+
   return (
     <main className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-        <Renderer {...props} />
+        <Renderer {...rendererProps} />
         <footer className="flex justify-center">
           <Link className={textButton} href="/">
             {PUBLIC_INVITATION_COPY.madeWith}

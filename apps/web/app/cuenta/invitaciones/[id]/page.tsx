@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 
 import { INVITATION_COPY, INVITATION_ERROR_COPY } from "../../../../lib/customer/copy.ts";
+import { featureSettingsView } from "../../../../lib/customer/invitation-features.ts";
 import {
   contentSections,
   fieldLabel,
@@ -22,18 +23,20 @@ import {
   textButton,
   textField,
 } from "../../../_components/ui.ts";
-import {
-  archiveInvitationAction,
-  publishInvitationAction,
-  saveInvitationContentAction,
-  unpublishInvitationAction,
-} from "../actions.ts";
 import { ContentForm } from "../_components/content-form.tsx";
 import { ContentSummary } from "../_components/content-summary.tsx";
+import { FeaturesForm, FeaturesSummary } from "../_components/features-form.tsx";
 import { Notices } from "../_components/notices.tsx";
 import { StatusBadge } from "../_components/status-badge.tsx";
 import { invitations } from "../_lib/api.ts";
 import { attempt, resolveRead } from "../_lib/load.ts";
+import {
+  archiveInvitationAction,
+  publishInvitationAction,
+  saveInvitationContentAction,
+  saveInvitationFeaturesAction,
+  unpublishInvitationAction,
+} from "../actions.ts";
 
 export const metadata: Metadata = {
   title: INVITATION_COPY.detailPageTitle,
@@ -90,9 +93,10 @@ export default async function InvitationDetailPage({
     );
   }
 
-  const [read, catalog] = await Promise.all([
+  const [read, catalog, packageCatalog] = await Promise.all([
     attempt(() => invitations.get(id)),
     attempt(() => invitations.templates()),
+    attempt(() => invitations.packages()),
   ]);
   const loaded = resolveRead(read);
 
@@ -118,6 +122,10 @@ export default async function InvitationDetailPage({
 
   const invitation = loaded.value;
   const templates = catalog === "unavailable" || !catalog.ok ? undefined : catalog.value;
+  /** The creator catalog's packages, which decide whether the WhatsApp field is offered (F3; S4). */
+  const packages =
+    packageCatalog === "unavailable" || !packageCatalog.ok ? undefined : packageCatalog.value;
+  const features = featureSettingsView(invitation, packages);
   const pinned =
     templates === undefined
       ? undefined
@@ -174,6 +182,12 @@ export default async function InvitationDetailPage({
               <div className="rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5">
                 <ContentSummary content={invitation.content} rows={rows} />
               </div>
+            )}
+
+            {features.editable ? (
+              <FeaturesForm action={saveInvitationFeaturesAction} view={features} />
+            ) : (
+              <FeaturesSummary view={features} />
             )}
           </div>
 

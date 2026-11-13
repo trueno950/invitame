@@ -140,6 +140,9 @@ const OWNED: OwnedInvitation = {
   ...SUMMARY,
   content: { celebrantName: "Ana" },
   missingRequiredFields: ["age", "date", "time", "location", "address", "mainPhoto", "message"],
+  timeZone: "America/Mexico_City",
+  featureSettings: { whatsappPhone: null },
+  availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
 };
 
 const TEMPLATE: CreatorTemplate = {
@@ -717,6 +720,10 @@ function stub(answers: Answers = {}): Stub {
     replaceContent: (id, content) => {
       calls.push(`replaceContent:${id}:${JSON.stringify(content)}`);
       return answers.replaceContent?.() ?? unexpected("replaceContent");
+    },
+    updateInvitationFeatures: (id, features) => {
+      calls.push(`updateInvitationFeatures:${id}:${JSON.stringify(features)}`);
+      return unexpected("updateInvitationFeatures");
     },
     archive: (id) => {
       calls.push(`archive:${id}`);

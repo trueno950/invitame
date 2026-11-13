@@ -41,8 +41,18 @@ const OWNED = {
   ...SUMMARY,
   content: { celebrantName: "Ana", age: 7 },
   missingRequiredFields: ["date", "time"],
+  timeZone: "America/Mexico_City",
+  featureSettings: { whatsappPhone: null },
+  availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
 };
 
+/** The same draft after its feature settings were saved (F3; S4). */
+const FEATURED = {
+  ...OWNED,
+  timeZone: "America/Tijuana",
+  featureSettings: { whatsappPhone: "+525512345678" },
+  availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "CALENDAR"],
+};
 /** A published invitation, as `POST /invitations/:id/publish` returns it (M5 T4). */
 const PUBLISHED = { ...OWNED, status: "PUBLISHED", publishedAt: AT };
 
@@ -151,6 +161,17 @@ describe("requests", () => {
         { content: { celebrantName: "Ana" } },
         OWNED,
       ],
+      [
+        () =>
+          api.updateInvitationFeatures(ID, {
+            timeZone: "America/Tijuana",
+            whatsappPhone: "+525512345678",
+          }),
+        "PUT",
+        `/invitations/${ID}/features`,
+        { timeZone: "America/Tijuana", whatsappPhone: "+525512345678" },
+        FEATURED,
+      ],
       [() => api.archive(ID), "POST", `/invitations/${ID}/archive`, undefined, SUMMARY],
       [() => api.publish(ID), "POST", `/invitations/${ID}/publish`, undefined, PUBLISHED],
       [() => api.unpublish(ID), "POST", `/invitations/${ID}/unpublish`, undefined, SUMMARY],
@@ -197,6 +218,14 @@ describe("requests", () => {
     for (const id of ["", "1", "not-a-uuid", `${ID}/../x`]) {
       assert.deepEqual(await api.get(id), { ok: false, failure: "not-found" }, id);
       assert.deepEqual(await api.replaceContent(id, {}), { ok: false, failure: "not-found" }, id);
+      assert.deepEqual(
+        await api.updateInvitationFeatures(id, {
+          timeZone: "America/Tijuana",
+          whatsappPhone: null,
+        }),
+        { ok: false, failure: "not-found" },
+        id,
+      );
       assert.deepEqual(await api.archive(id), { ok: false, failure: "not-found" }, id);
       assert.deepEqual(await api.publish(id), { ok: false, failure: "not-found" }, id);
       assert.deepEqual(await api.unpublish(id), { ok: false, failure: "not-found" }, id);
@@ -246,6 +275,31 @@ describe("errors", () => {
         String(code),
       );
     }
+  });
+
+  it("maps the 400 feature issues the API names, and never trusts an unreadable list", async () => {
+    const issues = [
+      "timeZone must be one of the supported time zones",
+      "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
+    ];
+
+    answer(400, { code: "INVALID_INVITATION_FEATURES", issues });
+    assert.deepEqual(
+      await client().updateInvitationFeatures(ID, {
+        timeZone: "Europe/Madrid",
+        whatsappPhone: "12",
+      }),
+      { ok: false, failure: "features-invalid", issues },
+    );
+
+    answer(400, { code: "INVALID_INVITATION_FEATURES", issues: "timeZone" });
+    assert.deepEqual(
+      await client().updateInvitationFeatures(ID, {
+        timeZone: "Europe/Madrid",
+        whatsappPhone: null,
+      }),
+      { ok: false, failure: "features-invalid" },
+    );
   });
 
   it("maps the 409 codes of an archived draft", async () => {
@@ -371,6 +425,29 @@ describe("validators", () => {
     }
     assert.equal(parseOwnedInvitation({ ...OWNED, missingRequiredFields: "date" }), undefined);
     assert.equal(parseOwnedInvitation({ ...OWNED, missingRequiredFields: [1] }), undefined);
+  });
+
+  it("keeps the stored feature data, and refuses a zone or a feature key it does not know (S4)", () => {
+    const broken = [
+      { ...OWNED, timeZone: undefined },
+      { ...OWNED, timeZone: "Europe/Madrid" },
+      { ...OWNED, timeZone: "America/mexico_city" },
+      { ...OWNED, timeZone: 7 },
+      { ...OWNED, featureSettings: undefined },
+      { ...OWNED, featureSettings: {} },
+      { ...OWNED, featureSettings: { whatsappPhone: 7 } },
+      // The API stores E.164, so a national number is not a stored phone this client reads.
+      { ...OWNED, featureSettings: { whatsappPhone: "5512345678" } },
+      { ...OWNED, availableFeatures: undefined },
+      { ...OWNED, availableFeatures: "CALENDAR" },
+      { ...OWNED, availableFeatures: ["CALENDAR", "PLAYLIST"] },
+      { ...OWNED, availableFeatures: [7] },
+    ];
+
+    for (const value of broken) {
+      assert.equal(parseOwnedInvitation(value), undefined, JSON.stringify(value));
+    }
+    assert.deepEqual(parseOwnedInvitation(FEATURED), FEATURED);
   });
 
   it("refuses a template or a package that breaks the creator catalog contract", () => {

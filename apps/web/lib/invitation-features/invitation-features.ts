@@ -34,6 +34,23 @@ export function isE164Phone(phone: string): boolean {
   return E164.test(phone);
 }
 
+/**
+ * The feature keys the API implements and gates (S4). This is the web's mirror of the API's allow-list,
+ * used only to read an `availableFeatures` list strictly: a key outside it is data this deployment does not
+ * understand, so the client refuses the whole body instead of letting an unknown key through. A key never
+ * selects a code path on the guest page.
+ */
+export const INVITATION_FEATURE_KEYS = ["COUNTDOWN", "MAP", "WHATSAPP", "CALENDAR"] as const;
+
+export type InvitationFeatureKey = (typeof INVITATION_FEATURE_KEYS)[number];
+
+/** Whether a value is one exact, implemented feature key. */
+export function isInvitationFeatureKey(value: unknown): value is InvitationFeatureKey {
+  return (
+    typeof value === "string" && (INVITATION_FEATURE_KEYS as readonly string[]).includes(value)
+  );
+}
+
 /** Whether an invitation has any feature to show, which decides whether the block renders at all. */
 export function hasAnyFeature(features: InvitationFeatures): boolean {
   return features.countdown || features.map || features.calendar || features.whatsapp !== null;

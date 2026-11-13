@@ -20,6 +20,7 @@ import {
   type InvitationNoticeCode,
   PUBLISH_ISSUE_COPY,
 } from "./copy.ts";
+import { FEATURE_ERROR_CODE, featureIssueMessages } from "./feature-issues.ts";
 
 /**
  * What the invitation pages under `/cuenta` render and how their forms answer (M4 T5; S1, S6, S7). The API
@@ -557,14 +558,22 @@ function lookup<T extends string>(
 export interface InvitationPageNotices {
   notice?: string;
   error?: string;
-  /** The Spanish sentences of a refused publication, when the query names known issue codes (S7). */
+  /**
+   * The Spanish sentences of a refusal, when the query names known issue codes: a publication's readiness
+   * issues (S7), or the issues of a refused feature save (F3; S4).
+   */
   issues?: string[];
 }
 
 /** The messages a page shows for its query; an unknown or repeated value shows nothing (as in M3). */
 export function invitationPageNotices(parameters: SearchParameters): InvitationPageNotices {
   const { notice, error } = parameters;
-  const issues = error === "not-publishable" ? publishIssueMessages(parameters.issues) : [];
+  const issues =
+    error === "not-publishable"
+      ? publishIssueMessages(parameters.issues)
+      : error === FEATURE_ERROR_CODE
+        ? featureIssueMessages(parameters.issues)
+        : [];
 
   return {
     ...(lookup(INVITATION_NOTICE_COPY, notice) ? { notice: INVITATION_NOTICE_COPY[notice] } : {}),
@@ -579,7 +588,9 @@ type Outcome<T> =
   | { ok: false; failure: InvitationFailure | "unavailable"; issues?: string[] };
 
 /** Runs one call, turning a thrown failure (already logged by the server wrapper) into `unavailable`. */
-async function send<T>(call: () => Promise<InvitationResult<T>>): Promise<Outcome<T>> {
+export async function sendInvitationCall<T>(
+  call: () => Promise<InvitationResult<T>>,
+): Promise<Outcome<T>> {
   try {
     const result = await call();
     return result.ok
@@ -595,7 +606,10 @@ async function send<T>(call: () => Promise<InvitationResult<T>>): Promise<Outcom
 }
 
 /** An ended session goes to sign-in; every other refusal comes back to the page with its code. */
-function failureTarget(path: string, failure: InvitationFailure | "unavailable"): string {
+export function invitationFailureTarget(
+  path: string,
+  failure: InvitationFailure | "unavailable",
+): string {
   return failure === "signed-out" ? CUSTOMER_SIGN_IN_PATH : invitationErrorTarget(path, failure);
 }
 
@@ -652,7 +666,7 @@ export async function createInvitation(api: InvitationsClient, form: FormData): 
     return failedCreateTarget(form, choice, "invalid-form");
   }
 
-  const created = await send(() => api.create({ templateVersionId, packageId }));
+  const created = await sendInvitationCall(() => api.create({ templateVersionId, packageId }));
 
   if (created.ok) {
     return invitationNoticeTarget(INVITATION_PATHS.detail(created.value.id), "created");
@@ -678,16 +692,16 @@ export async function saveInvitationContent(
   }
 
   const path = INVITATION_PATHS.detail(id);
-  const read = await send(() => api.get(id));
+  const read = await sendInvitationCall(() => api.get(id));
 
   if (!read.ok) {
-    return failureTarget(path, read.failure);
+    return invitationFailureTarget(path, read.failure);
   }
 
-  const catalog = await send(() => api.templates());
+  const catalog = await sendInvitationCall(() => api.templates());
 
   if (!catalog.ok) {
-    return failureTarget(path, catalog.failure);
+    return invitationFailureTarget(path, catalog.failure);
   }
 
   const pinned = invitationFieldsFor(catalog.value, read.value.templateVersionId);
@@ -702,9 +716,11 @@ export async function saveInvitationContent(
     return invitationErrorTarget(path, "invalid-form");
   }
 
-  const written = await send(() => api.replaceContent(id, parsed.content));
+  const written = await sendInvitationCall(() => api.replaceContent(id, parsed.content));
 
-  return written.ok ? invitationNoticeTarget(path, "saved") : failureTarget(path, written.failure);
+  return written.ok
+    ? invitationNoticeTarget(path, "saved")
+    : invitationFailureTarget(path, written.failure);
 }
 
 /** Archives a draft: it stays stored and becomes read-only (S7, A3). */
@@ -716,11 +732,11 @@ export async function archiveInvitation(api: InvitationsClient, form: FormData):
   }
 
   const path = INVITATION_PATHS.detail(id);
-  const archived = await send(() => api.archive(id));
+  const archived = await sendInvitationCall(() => api.archive(id));
 
   return archived.ok
     ? invitationNoticeTarget(path, "archived")
-    : failureTarget(path, archived.failure);
+    : invitationFailureTarget(path, archived.failure);
 }
 
 /**
@@ -834,7 +850,7 @@ export async function publishInvitation(api: InvitationsClient, form: FormData):
   }
 
   const path = INVITATION_PATHS.detail(id);
-  const published = await send(() => api.publish(id));
+  const published = await sendInvitationCall(() => api.publish(id));
 
   if (published.ok) {
     return invitationNoticeTarget(path, "published");
@@ -842,7 +858,7 @@ export async function publishInvitation(api: InvitationsClient, form: FormData):
   if (published.failure === "not-publishable") {
     return invitationIssuesTarget(path, publishIssueCodes(published.issues ?? []));
   }
-  return failureTarget(path, published.failure);
+  return invitationFailureTarget(path, published.failure);
 }
 
 /**
@@ -857,9 +873,9 @@ export async function unpublishInvitation(api: InvitationsClient, form: FormData
   }
 
   const path = INVITATION_PATHS.detail(id);
-  const unpublished = await send(() => api.unpublish(id));
+  const unpublished = await sendInvitationCall(() => api.unpublish(id));
 
   return unpublished.ok
     ? invitationNoticeTarget(path, "unpublished")
-    : failureTarget(path, unpublished.failure);
+    : invitationFailureTarget(path, unpublished.failure);
 }

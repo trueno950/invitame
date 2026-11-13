@@ -1,0 +1,182 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import type { PublicInvitation } from "../server/public-invitations-api.ts";
+import {
+  INVITATION_CALENDAR_HEADERS,
+  invitationCalendar,
+  invitationCalendarFile,
+  invitationCalendarPath,
+  publicFeatureBlock,
+} from "./invitation-features.ts";
+
+// The guest page's wiring (F3; S4): the public read becomes the features block's props, the `.ics` download
+// path, and the file the route handler answers. An unsupported zone or a snapshot whose facts cannot be read
+// degrades the features it affects instead of failing the page.
+
+const PUBLIC: PublicInvitation = {
+  slug: "invitacion-k7m2qx",
+  componentKey: "birthday-poster-01",
+  configuration: { componentKey: "birthday-poster-01", theme: "dinosaurs" },
+  content: {
+    celebrantName: "Ana",
+    age: 7,
+    date: "2026-12-05",
+    time: "16:30",
+    location: "Jardín Los Pinos",
+    address: "Calle Reforma 123",
+    mainPhoto: "https://example.com/ana.jpg",
+    message: "Ven a celebrar conmigo.",
+  },
+  publishedAt: "2026-11-12T15:30:00.000Z",
+  timeZone: "America/Mexico_City",
+  features: {
+    countdown: true,
+    map: true,
+    calendar: true,
+    whatsapp: { phone: "+525512345678" },
+  },
+};
+
+const NOW = new Date("2026-11-13T10:00:00.000Z");
+
+const FACTS = {
+  title: "Cumpleaños de Ana",
+  date: "2026-12-05",
+  time: "16:30",
+  places: [{ label: "Lugar", name: "Jardín Los Pinos", address: "Calle Reforma 123" }],
+};
+
+describe("publicFeatureBlock", () => {
+  it("maps the public read to the block's features, facts, and download path", () => {
+    assert.deepEqual(publicFeatureBlock(PUBLIC), {
+      features: {
+        timeZone: "America/Mexico_City",
+        countdown: true,
+        map: true,
+        calendar: true,
+        whatsapp: { phone: "+525512345678" },
+      },
+      facts: FACTS,
+      calendarHref: "/i/invitacion-k7m2qx/calendario.ics",
+    });
+  });
+
+  it("passes no block when the API gated nothing at all", () => {
+    // The strict public read refuses a body like this one (`calendar` is always true), so it is the second
+    // line of defense: were such a body ever to reach the page, no block would render.
+    const gatedNothing = {
+      ...PUBLIC,
+      features: { countdown: false, map: false, calendar: false, whatsapp: null },
+    } as unknown as PublicInvitation;
+
+    assert.equal(publicFeatureBlock(gatedNothing), undefined);
+  });
+
+  it("turns off only the features that need a zone when it is not one this runtime knows", () => {
+    const block = publicFeatureBlock({ ...PUBLIC, timeZone: "Mars/Olympus" });
+
+    assert.deepEqual(block?.features, {
+      timeZone: "Mars/Olympus",
+      countdown: false,
+      map: true,
+      calendar: false,
+      whatsapp: { phone: "+525512345678" },
+    });
+    assert.equal(block?.calendarHref, "/i/invitacion-k7m2qx/calendario.ics");
+  });
+
+  it("passes no block when the layout's own facts cannot be read", () => {
+    for (const invitation of [
+      { ...PUBLIC, content: { celebrantName: "Ana" } },
+      { ...PUBLIC, content: {} },
+      { ...PUBLIC, componentKey: "birthday-layout-99" },
+    ]) {
+      assert.equal(publicFeatureBlock(invitation), undefined, invitation.componentKey);
+    }
+  });
+
+  it("keeps the map alone when the zone is unknown and nothing else is gated", () => {
+    const block = publicFeatureBlock({
+      ...PUBLIC,
+      timeZone: "Mars/Olympus",
+      features: { countdown: true, map: true, calendar: true, whatsapp: null },
+    });
+
+    assert.deepEqual(block?.features, {
+      timeZone: "Mars/Olympus",
+      countdown: false,
+      map: true,
+      calendar: false,
+      whatsapp: null,
+    });
+  });
+});
+
+describe("invitationCalendarPath", () => {
+  it("puts the download next to the invitation it belongs to", () => {
+    assert.equal(
+      invitationCalendarPath("invitacion-k7m2qx"),
+      "/i/invitacion-k7m2qx/calendario.ics",
+    );
+  });
+});
+
+describe("invitationCalendar", () => {
+  it("builds the four-hour .ics of the invitation from its own facts", () => {
+    const body = invitationCalendar(PUBLIC, NOW);
+
+    assert.ok(body !== undefined);
+    assert.match(body, /\r\n$/);
+    const lines = body.split("\r\n");
+    for (const line of [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      "UID:invitacion-k7m2qx@invitame",
+      "DTSTAMP:20261113T100000Z",
+      // 16:30 in Mexico City is UTC-06:00, so the four hours run from 22:30Z to 02:30Z.
+      "DTSTART:20261205T223000Z",
+      "DTEND:20261206T023000Z",
+      "SUMMARY:Cumpleaños de Ana",
+      "LOCATION:Jardín Los Pinos\\, Calle Reforma 123",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ]) {
+      assert.ok(lines.includes(line), line);
+    }
+  });
+
+  it("refuses to build a calendar from a zone or facts it cannot read", () => {
+    assert.equal(invitationCalendar({ ...PUBLIC, timeZone: "Mars/Olympus" }, NOW), undefined);
+    assert.equal(
+      invitationCalendar({ ...PUBLIC, content: { celebrantName: "Ana" } }, NOW),
+      undefined,
+    );
+    assert.equal(
+      invitationCalendar({ ...PUBLIC, componentKey: "birthday-layout-99" }, NOW),
+      undefined,
+    );
+  });
+});
+
+describe("invitationCalendarFile", () => {
+  it("answers the download with a calendar type, an attachment name, and no store", () => {
+    const file = invitationCalendarFile(PUBLIC, NOW);
+
+    assert.ok(file !== undefined);
+    assert.deepEqual(file.headers, {
+      "content-type": "text/calendar; charset=utf-8",
+      "content-disposition": 'attachment; filename="invitacion.ics"',
+      "cache-control": "no-store",
+    });
+    assert.deepEqual(file.headers, INVITATION_CALENDAR_HEADERS);
+    assert.equal(file.body, invitationCalendar(PUBLIC, NOW));
+    assert.match(file.body, /^BEGIN:VCALENDAR\r\n/);
+  });
+
+  it("answers nothing, which the route turns into a 404, when the calendar cannot be built", () => {
+    assert.equal(invitationCalendarFile({ ...PUBLIC, timeZone: "Mars/Olympus" }, NOW), undefined);
+    assert.equal(invitationCalendarFile({ ...PUBLIC, content: {} }, NOW), undefined);
+  });
+});
