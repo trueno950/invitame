@@ -47,6 +47,10 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
   - **Creator.** The draft page gets a «Funcionalidades» section with a time zone select (Spanish labels) and, when
     the package includes WhatsApp, a phone field; it lists the automatic features (map, countdown, calendar) the
     guests will see.
+- S5 — Owner answers (L8), verbatim: "1 si es hoy 2 si 3 si" to: (1) «¿Prefieres "¡Es hoy!" mientras dura el
+  evento?» — the countdown says «¡Es hoy!» from the start for the four hours the event lasts, then «La celebración ya
+  pasó»; (2) «¿Los dejo así o los cambio?» about «Todo lo que necesitas» and the WhatsApp greeting — kept as they
+  are; (3) «¿Lo quito y dejo solo el nombre del lugar?» — the time zone labels drop the IANA id.
 
 ## Tasks
 
@@ -55,6 +59,7 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
 | F1 | API: migration, time zone and phone domain, feature settings use cases and REST, gated public read, tests | S3, S4 | worker | `bb0e94e` |
 | F2 | Web: event facts per layout, features block, countdown island, map/WhatsApp/calendar links, ICS builder, placement in the five layouts | S3, S4 | worker | `d350dd0` |
 | F3 | Web: public page wiring, `.ics` route, creator «Funcionalidades» section, API client, browser check | S3, S4 | worker | `aa246d4` |
+| F5 | Countdown «¡Es hoy!» during the event; zone labels without IANA ids; keep the provisional copy | S5 | inline | `c779bcd` |
 | F4 | Independent verification of the migration and the gating | S4 | verify | `617c2b5` |
 
 ## Log
@@ -102,3 +107,7 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
   ticked, the Maps, Waze, WhatsApp, and Google Calendar links were correct, the `.ics` was parseable, 0 console
   errors, no overflow, and the minimum contrast in the block was 5.47:1. Not run: the Playwright e2e specs. Batch
   complete; next is the design polish with real illustrations per theme.
+- L8 — Owner answers (S5). F5 done inline in `c779bcd`, test-first: 6 RED failures on «live» and the labels, then GREEN.
+  A new status `live` covers the start through the four-hour `CALENDAR_EVENT_HOURS`. Labels are now only the place
+  name. Web: 884/884 tests; tsc, docs, and Biome pass. Not checked in a browser: the change is copy and status logic
+  pinned by markup tests.
