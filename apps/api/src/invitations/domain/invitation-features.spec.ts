@@ -37,6 +37,15 @@ const SEEDED_PACKAGE_FEATURES = {
 const PHONE = "+525512345678";
 
 describe("invitation time zones (S4)", () => {
+  it("keeps every allow-listed zone inside the database Invitation_timeZone_format check", () => {
+    // The migration's CHECK is invisible to Prisma; a zone it refused would only fail on the first real write.
+    const check = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)+$/;
+
+    for (const zone of INVITATION_TIME_ZONES) {
+      assert.match(zone, check, zone);
+    }
+  });
+
   it("offers exactly the eleven Mexico zones S4 lists, Mexico City first", () => {
     assert.deepEqual(INVITATION_TIME_ZONES, [
       "America/Mexico_City",
