@@ -52,7 +52,7 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| F1 | API: migration, time zone and phone domain, feature settings use cases and REST, gated public read, tests | S3, S4 | worker | |
+| F1 | API: migration, time zone and phone domain, feature settings use cases and REST, gated public read, tests | S3, S4 | worker | `bb0e94e` |
 | F2 | Web: event facts per layout, features block, countdown island, map/WhatsApp/calendar links, ICS builder, placement in the five layouts | S3, S4 | worker | `d350dd0` |
 | F3 | Web: public page wiring, `.ics` route, creator «Funcionalidades» section, API client, browser check | S3, S4 | worker | |
 | F4 | Independent verification of the migration and the gating | S4 | verify | |
@@ -74,3 +74,11 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
   that HEAD-reading test from the committed file, because committed tests must not read git history. Owner flags:
   the countdown reads «ya pasó» from the start instant; the copy is provisional («Todo lo que necesitas», the WhatsApp
   greeting).
+- L5 — F1 done in `bb0e94e` (worker `mwf7dvy1-j-dib2`). It adds the migration `20261113164740_add_invitation_features`, which
+  is additive only: `Invitation.timeZone` NOT NULL with default `America/Mexico_City` and a format CHECK; the
+  one-to-one `InvitationFeatureSettings` table with RESTRICT on delete and an E.164 CHECK on the phone. It also adds
+  the domain gating, `PUT /invitations/:id/features`, and the gated public read. All 11 time zones are canonical in tz
+  data, so none were dropped. A phone stored without the WHATSAPP package key is kept but never shown publicly. API:
+  1173/1173 unit tests and 308/308 db-specs pass; tsc and Biome clean. The worker applied the migration to
+  `invitame_test` only; the parent then applied it to the dev database. Dev check: the public read answers 200 with
+  `timeZone` and the gated `features`. F3 and F4 launched.
