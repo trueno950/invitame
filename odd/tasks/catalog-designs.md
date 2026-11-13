@@ -92,6 +92,15 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   design with a single style (the owner did not answer the removal question, and removing it is a catalog decision);
   occasions shown are only the catalog categories that have published templates, never hard-coded names.
 
+- S11 — Remove Birthday Adventure (L17). Owner, verbatim: "borralo si lo retiras no tiene caso conservarlo". This
+  supersedes S7/S8's "`birthday-adventure-01` and its files, tests, seed row, and behavior stay unchanged" and the
+  L15 decision to keep it as a fourth design: the renderer `birthday-adventure-01`, its API contract, web component,
+  parsers, palettes, props check, seed template, tests, and docs are deleted; fixtures that used it as a generic
+  example move to a themed layout; the dev and test databases lose its rows (pre-launch, no production data).
+- S12 — Failed create keeps the selection (L17). Owner, verbatim: "y por lodel la correcion si hazlo". When creating
+  the draft fails, the creator lands back on step 3 with the occasion, design, theme, and package kept and the
+  existing error message shown, instead of step 1 with the selection lost.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -107,6 +116,8 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T9 | Template chooser with live previews grouped by layout, theme switch, and a full sample preview page | S9 | worker | `e3c0284`, `ba3debb` |
 | T10 | Chooser refinement: three visual directions under `design/template-chooser-v2/` | S9 | worker | `e915ab7`, `dfea662` |
 | T10b | Implement the «Paso a paso» chooser (02) in Next.js: step URLs, design row, theme miniatures beside the sample, package cards | S9, S10 | worker | `acec85d` |
+| T11 | Delete Birthday Adventure everywhere: API, web, seed, tests, docs, dev/test database rows | S11 | worker | |
+| T12 | Failed create returns to step 3 with the selection and the error | S12 | worker | |
 | T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
 | T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
 
@@ -200,3 +211,8 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   the artboard: one step per page, real renderers instead of drawings, and four designs. Known gap: a failed create
   still returns to step 1 without the selection, because the create command was left unchanged. Canvas handoff
   reported implemented with preview http://localhost:3000/cuenta/invitaciones/nueva.
+- L17 — Owner, verbatim: "borralo si lo retiras no tiene caso conservarlo, y por lodel la correcion si hazlo luego
+  continua con lo tro del tablero". The parent had recommended retiring Birthday Adventure without deleting it; the
+  owner chose deletion. Before the change, the dev database had 40 `birthday-adventure-01` versions and 1 invitation
+  pinned to one of them, the test database had 1 version, and 65 repository files referenced it. T11 and T12 go to
+  one worker in sequence; the T7 theme board goes to a parallel design worker.
