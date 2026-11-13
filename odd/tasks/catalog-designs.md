@@ -90,6 +90,7 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T6b | Web: theme tokens and fonts, three layout renderers, parsers, registries, tests, `docs/design/theme.md` | S2, S3, S5, S7, S8 | worker | `2e9c69d`, `71e4830` |
 | T6c | Integration check: key and theme lists in sync, full unit suites, typecheck, lint, 390 px screenshots | S3, S8 | inline | `71e4830` |
 | T9 | Template chooser with live previews grouped by layout, theme switch, and a full sample preview page | S9 | worker | `e3c0284`, `ba3debb` |
+| T10 | Chooser refinement: three visual directions under `design/template-chooser-v2/`, owner choice, then implementation | S9 | worker | |
 | T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
 | T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
 
@@ -162,3 +163,6 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   created from a chosen theme; the preview page requires sign-in and shows «No encontramos esa plantilla» for
   unknown ids. Not run: the Playwright e2e specs. The chooser server-renders all 25 miniatures (about 515 KB of HTML),
   which needs a reviewed strategy if the catalog grows much.
+- L13 — Owner on the T9 chooser, verbatim: "me gusto pero podrias mejorar aun mas". The parent reads it as a request
+  for a better chooser and, following S3's rule that visuals are chosen before code, prepares three directions under
+  `design/template-chooser-v2/` (T10) for the owner to pick from.
