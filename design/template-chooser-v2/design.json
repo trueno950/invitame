@@ -6,32 +6,44 @@
     {
       "file": "01-galeria-filtros-movil.html",
       "title": "Galería con filtros — móvil",
-      "tradeoff": "El catálogo entero se escanea en una página: cinco ocasiones en dos filas, filtro Temático/Elegante, tres tarjetas compactas con puntos de color por tema y una barra fija con «Cartel de fiesta · Dinosaurios» y el paquete. Baja de 3.552 a 1.792 px y el «Elegido» pasa a ser un radio real (borde vino, fondo rosa, chip con palomita). Pierde tamaño de miniatura: el tema se juzga de verdad en «Ver completa». JavaScript del cliente: ninguno para el flujo central (radios y CSS :has cambian miniatura y nombre del tema; la barra es solo CSS). En Next.js, cambiar el tema sin script obliga a renderizar en el servidor las ocho miniaturas por tarjeta —las 24 que L12 midió en 515 KB— o a aceptar dibujos simplificados como estos; las ocasiones y «Quitar filtro» son enlaces con recarga del servidor, así que el filtro activo tiene que viajar en la URL."
+      "tradeoff": "El catálogo entero se escanea en una página: cinco ocasiones en dos filas, filtro Temático/Elegante, tres tarjetas compactas con puntos de color por tema y una barra fija con «Cartel de fiesta · Dinosaurios» y el paquete. Baja de 3.552 a 1.792 px y el «Elegido» pasa a ser un radio real (borde vino, fondo rosa, chip con palomita). Pierde tamaño de miniatura: el tema se juzga de verdad en «Ver completa». JavaScript del cliente: ninguno para el flujo central (radios y CSS :has cambian miniatura y nombre del tema; la barra es solo CSS). En Next.js, cambiar el tema sin script obliga a renderizar en el servidor las ocho miniaturas por tarjeta —las 24 que L12 midió en 515 KB— o a aceptar dibujos simplificados como estos; las ocasiones y «Quitar filtro» son enlaces con recarga del servidor, así que el filtro activo tiene que viajar en la URL.",
+      "width": 390,
+      "height": 1792
     },
     {
       "file": "01-galeria-filtros-escritorio.html",
       "title": "Galería con filtros — escritorio",
-      "tradeoff": "Tres tarjetas en una fila con la misma anatomía que en el móvil (miniatura a la izquierda, temas en dos filas de cuatro puntos, nombre del tema elegido a la derecha), así que la decisión no cambia al agrandar la pantalla. El paquete son tres filas cortas en la misma vista y la barra de resumen queda al alcance. Con más ocasiones la fila de chips deja de caber: habrá que pasarla a un desplegable o a una lista lateral. JavaScript del cliente: ninguno; el filtro y las ocasiones son enlaces y el resumen se deriva de los radios con CSS. En Next.js cada tarjeta cuesta una miniatura por tema si se quiere el renderer real; con dibujos simplificados el coste baja, pero una miniatura dibujada puede separarse del renderer y hay que mantenerla."
+      "tradeoff": "Tres tarjetas en una fila con la misma anatomía que en el móvil (miniatura a la izquierda, temas en dos filas de cuatro puntos, nombre del tema elegido a la derecha), así que la decisión no cambia al agrandar la pantalla. El paquete son tres filas cortas en la misma vista y la barra de resumen queda al alcance. Con más ocasiones la fila de chips deja de caber: habrá que pasarla a un desplegable o a una lista lateral. JavaScript del cliente: ninguno; el filtro y las ocasiones son enlaces y el resumen se deriva de los radios con CSS. En Next.js cada tarjeta cuesta una miniatura por tema si se quiere el renderer real; con dibujos simplificados el coste baja, pero una miniatura dibujada puede separarse del renderer y hay que mantenerla.",
+      "width": 1280,
+      "height": 1136
     },
     {
       "file": "02-paso-a-paso-movil.html",
       "title": "Paso a paso — móvil",
-      "tradeoff": "Un paso por decisión con un stepper visible: diseño en un carrusel de vistas grandes que se desliza con scroll-snap, tema en una rejilla de ocho miniaturas del diseño elegido con una vista grande arriba, y paquete al final. La barra inferior dice «Paso 2 de 3» y repite la elección. Resuelve el catálogo que crezca sin apilar tarjetas y deja claro qué falta. Es el flujo más largo (2.243 px) y exige estado: sin JavaScript son tres páginas con `?paso=` y una recarga por decisión; con JavaScript es un asistente en una sola página. El carrusel es solo CSS; mostrar el paso 2 cuando ya hay diseño se puede hacer con CSS :has, pero la etiqueta «Paso 2 de 3» y «Atrás» necesitan script o URL. El tema cuesta ocho renderizados del diseño elegido, no 24."
+      "tradeoff": "Un paso por decisión con un stepper visible: diseño en un carrusel de vistas grandes que se desliza con scroll-snap, tema en una rejilla de ocho miniaturas del diseño elegido con una vista grande arriba, y paquete al final. La barra inferior dice «Paso 2 de 3» y repite la elección. Resuelve el catálogo que crezca sin apilar tarjetas y deja claro qué falta. Es el flujo más largo (2.243 px) y exige estado: sin JavaScript son tres páginas con `?paso=` y una recarga por decisión; con JavaScript es un asistente en una sola página. El carrusel es solo CSS; mostrar el paso 2 cuando ya hay diseño se puede hacer con CSS :has, pero la etiqueta «Paso 2 de 3» y «Atrás» necesitan script o URL. El tema cuesta ocho renderizados del diseño elegido, no 24.",
+      "width": 390,
+      "height": 2243
     },
     {
       "file": "02-paso-a-paso-escritorio.html",
       "title": "Paso a paso — escritorio",
-      "tradeoff": "Los tres diseños en fila con vistas de 190 px, el tema en ocho miniaturas comparables de un vistazo al lado de la invitación de ejemplo, y el paquete en tres tarjetas. La comparación de temas es la mejor de las tres direcciones. Ocupa 1.830 px porque el paso 2 necesita su vista grande, y el paso 1 ya cumplido sigue ocupando espacio en lugar de plegarse. JavaScript del cliente: ninguno si cada paso es una URL del servidor; para plegar pasos cumplidos y avanzar sin recargar hace falta script. En Next.js el paso 2 vuelve a renderizar el diseño elegido en ocho temas en el servidor (ocho instancias del renderer por petición)."
+      "tradeoff": "Los tres diseños en fila con vistas de 190 px, el tema en ocho miniaturas comparables de un vistazo al lado de la invitación de ejemplo, y el paquete en tres tarjetas. La comparación de temas es la mejor de las tres direcciones. Ocupa 1.830 px porque el paso 2 necesita su vista grande, y el paso 1 ya cumplido sigue ocupando espacio en lugar de plegarse. JavaScript del cliente: ninguno si cada paso es una URL del servidor; para plegar pasos cumplidos y avanzar sin recargar hace falta script. En Next.js el paso 2 vuelve a renderizar el diseño elegido en ocho temas en el servidor (ocho instancias del renderer por petición).",
+      "width": 1280,
+      "height": 1830
     },
     {
       "file": "03-vista-dividida-movil.html",
       "title": "Vista dividida — móvil",
-      "tradeoff": "La invitación completa abre la página (390 px de render, sin recortes) y las opciones quedan debajo en filas compactas: ocasión, tres diseños de una fila cada uno, ocho puntos de tema en una línea y tres paquetes. Se ve el resultado antes de elegir, pero las opciones empiezan a 600 px y la página mide 1.776 px. La vista fija y el resumen son CSS. JavaScript del cliente: para que la vista siga cada clic hay que re-renderizar en el servidor (un enlace por opción, una instancia del renderer, barato) o guardar las 24 vistas en el HTML y cambiarlas con CSS —demasiado peso—; con JavaScript se puede actualizar solo la vista, pero el renderer es de servidor (S8), así que sería una llamada y no un cálculo en el navegador."
+      "tradeoff": "La invitación completa abre la página (390 px de render, sin recortes) y las opciones quedan debajo en filas compactas: ocasión, tres diseños de una fila cada uno, ocho puntos de tema en una línea y tres paquetes. Se ve el resultado antes de elegir, pero las opciones empiezan a 600 px y la página mide 1.776 px. La vista fija y el resumen son CSS. JavaScript del cliente: para que la vista siga cada clic hay que re-renderizar en el servidor (un enlace por opción, una instancia del renderer, barato) o guardar las 24 vistas en el HTML y cambiarlas con CSS —demasiado peso—; con JavaScript se puede actualizar solo la vista, pero el renderer es de servidor (S8), así que sería una llamada y no un cálculo en el navegador.",
+      "width": 390,
+      "height": 1776
     },
     {
       "file": "03-vista-dividida-escritorio.html",
       "title": "Vista dividida — escritorio",
-      "tradeoff": "Opciones a la izquierda y una vista grande dentro de un marco de teléfono a la derecha, fija mientras se recorre la lista; el botón lleva la elección completa en una línea. Es la dirección que menos se parece a una tienda y más a un editor, y escala a más ocasiones porque cada diseño es una fila. El riesgo es que la vista fija con 430 px de ancho se coma el espacio de las opciones en pantallas de 1024 px, y que la vista no cambie sin recargar. JavaScript del cliente: solo para refrescar la vista sin recargar; con HTML y CSS la selección es un enlace al servidor y la vista llega ya renderizada."
+      "tradeoff": "Opciones a la izquierda y una vista grande dentro de un marco de teléfono a la derecha, fija mientras se recorre la lista; el botón lleva la elección completa en una línea. Es la dirección que menos se parece a una tienda y más a un editor, y escala a más ocasiones porque cada diseño es una fila. El riesgo es que la vista fija con 430 px de ancho se coma el espacio de las opciones en pantallas de 1024 px, y que la vista no cambie sin recargar. JavaScript del cliente: solo para refrescar la vista sin recargar; con HTML y CSS la selección es un enlace al servidor y la vista llega ya renderizada.",
+      "width": 1280,
+      "height": 1249
     }
   ]
 }
