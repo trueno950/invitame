@@ -77,6 +77,21 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   live thumbnail; switching themes needs no client JavaScript if plain form controls can do it; «Ver completa» is a
   signed-in creator page that shows the sample invitation at phone width and leads back to choosing that template.
 
+- S10 — Chooser refinement chosen by the owner through the design canvas (L15): implement
+  `design/template-chooser-v2/02-paso-a-paso-escritorio.html` «Paso a paso — escritorio», verbatim tradeoff: "Los tres
+  diseños en fila con vistas de 190 px, el tema en ocho miniaturas comparables de un vistazo al lado de la invitación
+  de ejemplo, y el paquete en tres tarjetas. La comparación de temas es la mejor de las tres direcciones. Ocupa 1.830
+  px porque el paso 2 necesita su vista grande, y el paso 1 ya cumplido sigue ocupando espacio en lugar de plegarse.
+  JavaScript del cliente: ninguno si cada paso es una URL del servidor; para plegar pasos cumplidos y avanzar sin
+  recargar hace falta script. En Next.js el paso 2 vuelve a renderizar el diseño elegido en ocho temas en el servidor
+  (ocho instancias del renderer por petición)." Handoff instruction: "Implement it in the project's real stack. Use
+  the artboard as the visual spec: map its parts to the project's existing components and styles, and do not copy
+  the artboard HTML verbatim. Take colors, typography, spacing, radius and shadows from design/system.md, the
+  project's token source." Parent decisions within S10 (L15; the owner may overturn): each step is a server URL with
+  no client script; narrow screens follow `02-paso-a-paso-movil.html`; Birthday Adventure stays visible as a fourth
+  design with a single style (the owner did not answer the removal question, and removing it is a catalog decision);
+  occasions shown are only the catalog categories that have published templates, never hard-coded names.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -90,7 +105,8 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T6b | Web: theme tokens and fonts, three layout renderers, parsers, registries, tests, `docs/design/theme.md` | S2, S3, S5, S7, S8 | worker | `2e9c69d`, `71e4830` |
 | T6c | Integration check: key and theme lists in sync, full unit suites, typecheck, lint, 390 px screenshots | S3, S8 | inline | `71e4830` |
 | T9 | Template chooser with live previews grouped by layout, theme switch, and a full sample preview page | S9 | worker | `e3c0284`, `ba3debb` |
-| T10 | Chooser refinement: three visual directions under `design/template-chooser-v2/`, owner choice, then implementation | S9 | worker | |
+| T10 | Chooser refinement: three visual directions under `design/template-chooser-v2/` | S9 | worker | `e915ab7`, `dfea662` |
+| T10b | Implement the «Paso a paso» chooser (02) in Next.js: step URLs, design row, theme miniatures beside the sample, package cards | S9, S10 | worker | `acec85d` |
 | T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
 | T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
 
@@ -170,3 +186,17 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   02 «Paso a paso», and 03 «Vista dividida», each at 390 and 1280 px. All six render with no overflow or console
   errors, pass the contrast and accessibility probes, and use no external URLs. The worker recommends 01. Waiting for
   the owner's choice; Birthday Adventure is not shown in the directions, which is an open question for the owner.
+- L15 — Owner chose direction 02 through the design canvas handoff: "Implement the design artboard
+  design/template-chooser-v2/02-paso-a-paso-escritorio.html" (S10). The question about removing Birthday Adventure
+  stays unanswered; the parent keeps it visible as a fourth design. T10b opened; canvas handoff reported
+  `in_progress`. This handoff commits nothing by itself; T10b work-unit commits follow ODD.
+- L16 — T10b done in `acec85d` (worker `mwe92vm4-a-9lkp`). Every step is a server URL
+  (`?paso=1|2|3&ocasion&diseno&tema&paquete`) with no client script. Step 1 shows four designs with real-renderer
+  miniatures, Birthday Adventure included; step 2 shows the chosen design in its themes beside a 390 px sample;
+  step 3 shows the packages and the unchanged create form, which posts the version id and the package. Stale or
+  unknown params fall back to the nearest valid step. Evidence: web 691/691 tests, tsc, docs check, and Biome on the
+  changed files pass. In the browser at 1280 and 390 px every step plus the preview shows no overflow and no console
+  errors, and one draft was created end to end. Not run: the updated Playwright e2e specs. Kept on purpose versus
+  the artboard: one step per page, real renderers instead of drawings, and four designs. Known gap: a failed create
+  still returns to step 1 without the selection, because the create command was left unchanged. Canvas handoff
+  reported implemented with preview http://localhost:3000/cuenta/invitaciones/nueva.
