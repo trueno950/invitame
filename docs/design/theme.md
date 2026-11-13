@@ -256,19 +256,27 @@ and `TemplateVersion`.
   strip at an edge — above the map hero, in the poster band's empty bottom area, and at the foot of the story's page
   sheet — with `preserveAspectRatio="xMidYMid meet"`, so the shapes keep their proportions in any box instead of
   stretching to it. Every motif is one `aria-hidden` SVG, and its element groups carry unique React keys.
-- Choosing (T9; S9): the owner of a new invitation sees the templates instead of reading 25 cards. The chooser
-  (`app/cuenta/invitaciones/nueva`) shows one card per themed layout — Mapa, Cartel, and Cuento — with the
-  miniature of the theme that is chosen and one switch per published version, labelled with the theme's display
-  name read from `configuration.theme`; `birthday-adventure-01` and the templates of other categories keep a card
-  of their own. Every miniature is the real, allow-listed renderer rendering one fixed sample per category
-  (`lib/renderers/samples.ts`, photo `public/samples/birthday-mateo.svg`, an original illustration), never a stored
-  screenshot, so a catalog edit shows up in the chooser with no asset to refresh. The miniature is drawn at 390 px
-  and scaled down inside a frame with `contain: paint`; the scale on the wrapper is also what makes the renderer's
-  `position: fixed` background layer relative to the miniature instead of the page. «Ver completa» opens
-  `/cuenta/invitaciones/nueva/vista/<versionId>`, a signed-in page that renders the same sample at phone width and
-  leads back to choosing that template. The switches are native radios and the miniature and the link of the chosen
-  theme are shown by the generated `:has(:checked)` rules of `lib/customer/template-preview.ts`, so the whole
-  chooser still ships no client script; the form still submits the published version id.
+- Choosing (T9, T10b; S9, S10): the owner of a new invitation picks the design, then the theme, then the package,
+  one step at a time, following `design/template-chooser-v2/02-paso-a-paso-escritorio.html` and its
+  narrow-screen artboard. Each step is a server URL of the same page with no client script:
+  `?paso=1|2|3&ocasion=<category>&diseno=<componentKey>&tema=<versionId>&paquete=<packageId>`. `resolveChooserStep`
+  (`lib/customer/template-steps.ts`) reads every value against the creator catalog — the finer selection wins, so
+  a version decides its design and its occasion — and a missing, unknown, or stale value never renders an error
+  page: it falls back to the nearest step that still holds. Step 1 shows the occasion's designs in one row, each
+  one a link to its theme step with a live miniature of the real renderer; the occasion is a catalog category
+  that publishes templates, so no name is written in code and no occasion is offered empty. Step 2 shows the
+  chosen design in each of its themes as comparable miniatures beside the large sample of the chosen one, and a
+  design with a single style (`birthday-adventure-01` and the templates of other categories) shows that one style
+  and moves on. Step 3 shows the packages and the create form. The stepper marks the done steps as links back to
+  their own URL with the whole selection kept, and the footer bar repeats «Paso N de 3», the selection
+  (design · theme · package), «Atrás», and the step's primary action; on step 3 that action submits the form,
+  which still posts the published version id. Every miniature is the real, allow-listed renderer rendering one
+  fixed sample per category (`lib/renderers/samples.ts`, photo `public/samples/birthday-mateo.svg`, an original
+  illustration), never a stored screenshot, so a catalog edit shows up in the chooser with no asset to refresh.
+  The sample is drawn at 390 px and scaled down inside a frame with `contain: paint`; the scale on the wrapper is
+  also what makes the renderer's `position: fixed` background layer relative to the frame instead of the page.
+  «Ver completa» opens `/cuenta/invitaciones/nueva/vista/<versionId>`, a signed-in page that renders the same
+  sample at phone width and leads back to the theme step with that version still selected.
 - Samples: one fixed sample per category, and a renderer that refuses it (a drifted configuration, a category
   without a sample, an unregistered key) only loses its miniature. `samples.test.ts` proves the birthday sample
   passes every registered renderer's own props parser, for every theme.
@@ -286,10 +294,10 @@ plain text. The customer «Rosa y vino» theme stays; the invitation pages simpl
 - List: the drafts are a card grid (`sm:grid-cols-2 xl:grid-cols-3`) with the status badge, the public slug, the
   creation date, and «Editar»; «Nueva invitación» is the header action, and an empty account sees the empty state
   in one small panel.
-- Create: the template and the package are two radio groups of cards (`fieldset`/`legend` per group, a native radio
-  inside each label), so the whole choice is visible without a select popup, works from the keyboard, and needs no
-  JavaScript. The templates are grouped by layout with a live miniature per theme and a «Ver completa» link, as
-  [Guest invitation themes](#guest-invitation-themes) describes. The package card shows its price in force.
+- Create: the chooser is the three-step flow («Paso a paso») described in
+  [Guest invitation themes](#guest-invitation-themes). Every choice is a link to a step URL, so it works from the
+  keyboard and needs no JavaScript; the create form posts the published version id and the chosen package, and the
+  package card shows its price in force.
 - Detail: two columns from `lg` up. The form takes two thirds and its fields are grouped into the short sections
   `contentSections` derives from the property names: «Festejado» (`celebrantName`, `age`), «Cuándo» (`date`,
   `time`), «Dónde» (`location`, `address`), «Contenido» (`mainPhoto`, `message`), and one last «Otros datos» group

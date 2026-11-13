@@ -11,15 +11,15 @@ import { type SampleInvitation, sampleInvitation } from "../renderers/samples.ts
 import type { CreatorTemplate } from "../server/invitations-api.ts";
 
 /**
- * The cards of the «Nueva invitación» chooser (T9; S9). A themed layout is one card that groups every
- * published version of its `componentKey`, with one theme switch per version: choosing a switch changes the
- * miniature and selects that version for the form. Every other template — `birthday-adventure-01` and the
- * templates of other categories — keeps a card of its own. Nothing here reads a catalog name to decide what
- * to show: the layout comes from the version's `componentKey`, the theme from its `configuration.theme`, and
- * the label from the theme's own Spanish display name.
+ * The cards the «Paso a paso» chooser is built from (T9; S9, S10). A themed layout is one design that groups
+ * every published version of its `componentKey`, with one style per version; every other template —
+ * `birthday-adventure-01` and the templates of other categories — keeps a design of its own with a single
+ * style. Nothing here reads a catalog name to decide what to show: the design comes from the version's
+ * `componentKey`, the theme from its `configuration.theme`, the occasion from the category, and the label
+ * from the theme's own Spanish display name.
  *
- * What the form submits is unchanged: one radio group named `templateVersionId`, one radio per published
- * version, and its value is the version id the draft is pinned to.
+ * What the create form submits is unchanged: the field `templateVersionId` with the published version id the
+ * draft is pinned to.
  */
 
 /** The form field every card fills; the draft is still created from the published version id (S8). */
@@ -56,7 +56,7 @@ const LAYOUT_COPY: Readonly<Record<ThemedLayoutKey, { title: string; description
   },
 };
 
-/** One theme switch of a layout card, and the version it selects. */
+/** One theme of a themed design, and the published version it selects. */
 export interface ThemeOptionView {
   /** The value the form submits: the published version id of that theme. */
   versionId: string;
@@ -66,27 +66,33 @@ export interface ThemeOptionView {
   sample: SampleInvitation;
 }
 
-/** One card of the chooser: a themed layout with its theme switches, or a single template. */
+/** The catalog category of a design: the occasion the chooser groups it under. */
+export interface DesignCategory {
+  readonly key: string;
+  readonly name: string;
+}
+
+/** One design of the chooser: a themed layout with its themes, or a single template. */
 export interface LayoutCardView {
   kind: "layout";
-  /** A CSS-safe token that scopes this card's generated switch rules, unique on the page. */
+  /** A CSS-safe token that names this design, unique on the page. */
   groupId: string;
   componentKey: ThemedLayoutKey;
   title: string;
-  /** The category of its templates, as the list shows it on every card. */
-  meta: string;
+  /** The category of its templates, which is the occasion the chooser offers. */
+  category: DesignCategory;
   description: string;
   options: readonly ThemeOptionView[];
 }
 
 export interface SingleTemplateCardView {
   kind: "template";
-  /** The renderer identity, so the card can draw its own miniature. */
+  /** The renderer identity, so the design can draw its own miniature. */
   componentKey: string;
   /** The value the form submits: the published version id. */
   versionId: string;
   title: string;
-  meta: string;
+  category: DesignCategory;
   description: string | null;
   /** The renderer props of the fixed sample, or undefined when the renderer refuses it: no miniature. */
   sample?: SampleInvitation;
@@ -128,7 +134,7 @@ function themeRank(theme: string): number {
 interface LayoutEntry {
   kind: "layout";
   layout: ThemedLayoutKey;
-  meta: string;
+  category: DesignCategory;
   members: Array<{ template: CreatorTemplate; theme: string; sample: SampleInvitation }>;
 }
 
@@ -165,7 +171,12 @@ export function templateChoiceCards(
       let group = groups.get(layout);
 
       if (group === undefined) {
-        group = { kind: "layout", layout, meta: template.category.name, members: [] };
+        group = {
+          kind: "layout",
+          layout,
+          category: { key: template.category.key, name: template.category.name },
+          members: [],
+        };
         groups.set(layout, group);
         entries.push(group);
       }
@@ -187,7 +198,10 @@ export function templateChoiceCards(
           componentKey: entry.template.publishedVersion.componentKey,
           versionId: entry.template.publishedVersion.id,
           title: entry.template.name,
-          meta: entry.template.category.name,
+          category: {
+            key: entry.template.category.key,
+            name: entry.template.category.name,
+          },
           description: entry.template.description,
           ...(entry.sample === undefined ? {} : { sample: entry.sample }),
         }
@@ -197,7 +211,7 @@ export function templateChoiceCards(
           groupId: `tema-${index}`,
           componentKey: entry.layout,
           ...LAYOUT_COPY[entry.layout],
-          meta: entry.meta,
+          category: entry.category,
           options: [...entry.members]
             .sort((left, right) => themeRank(left.theme) - themeRank(right.theme))
             .map((member) => ({
@@ -209,64 +223,6 @@ export function templateChoiceCards(
             })),
         },
   );
-}
-
-/** Every version id the chooser offers, in the order the cards show them. */
-export function offeredVersionIds(cards: readonly TemplateCardView[]): string[] {
-  return cards.flatMap((card) =>
-    card.kind === "layout" ? card.options.map((option) => option.versionId) : [card.versionId],
-  );
-}
-
-/**
- * The version the form has checked: the one the page was asked for (the preview page's way back), or the
- * first card's first version, which is what the chooser always preselected.
- */
-export function checkedVersionId(
-  cards: readonly TemplateCardView[],
-  requested?: string,
-): string | undefined {
-  const offered = offeredVersionIds(cards);
-
-  if (requested !== undefined && offered.some((value) => value === requested)) {
-    return requested;
-  }
-
-  return offered[0];
-}
-
-/**
- * The rules that switch the miniature and the «Ver completa» link of a layout card without any client
- * script: every miniature and link is hidden, only the one whose theme radio is checked is shown, and while
- * none of the card's switches is chosen the first theme is shown, so every card has a miniature from the
- * first paint. The selectors are built from the card's own version ids, which the API publishes as canonical
- * UUIDs, and are scoped to the card's `groupId`, so two cards never switch each other.
- */
-export function previewSwitchCss(card: LayoutCardView): string {
-  const scope = `[data-preview-group="${card.groupId}"]`;
-  const hidden = card.options
-    .flatMap((option) => [
-      `${scope} [data-miniature="${option.versionId}"]`,
-      `${scope} [data-preview-link="${option.versionId}"]`,
-    ])
-    .join(",");
-  const first = card.options[0];
-  const fallback =
-    first === undefined
-      ? []
-      : [
-          `${scope}:not(:has([data-theme-choice]:checked)) [data-miniature="${first.versionId}"]{display:block}`,
-          `${scope}:not(:has([data-theme-choice]:checked)) [data-preview-link="${first.versionId}"]{display:inline-flex}`,
-        ];
-
-  return [
-    `${hidden}{display:none}`,
-    ...card.options.flatMap((option) => [
-      `${scope}:has([data-theme-choice="${option.versionId}"]:checked) [data-miniature="${option.versionId}"]{display:block}`,
-      `${scope}:has([data-theme-choice="${option.versionId}"]:checked) [data-preview-link="${option.versionId}"]{display:inline-flex}`,
-    ]),
-    ...fallback,
-  ].join("\n");
 }
 
 /** The template and the sample of one preview link, when the creator catalog still publishes that version. */

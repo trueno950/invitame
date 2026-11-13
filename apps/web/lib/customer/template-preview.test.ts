@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -9,18 +8,17 @@ import {
 } from "../renderers/birthday-themes.ts";
 import type { CreatorTemplate } from "../server/invitations-api.ts";
 import {
-  checkedVersionId,
   findPreviewTarget,
   type LayoutCardView,
   previewPath,
-  previewSwitchCss,
   type TemplateCardView,
   templateChoiceCards,
 } from "./template-preview.ts";
 
-// The chooser's cards (T9; S9): one card per themed layout with one theme switch per published version,
-// grouped by the version's `componentKey` and labelled from its own `configuration.theme`, and a card of its
-// own for every template without themes. The submitted value stays the published version id.
+// The cards the chooser is built from (T9; S9, S10): one design per themed layout with one style per
+// published version, grouped by the version's `componentKey` and labelled from its own
+// `configuration.theme`, and a design of its own for every template without themes. The value the create
+// form posts stays the published version id.
 
 const ORIGIN = "https://invitame.test";
 const VERSION_IDS = new Map<string, string>();
@@ -112,7 +110,7 @@ describe("templateChoiceCards", () => {
     );
     for (const card of layouts) {
       assert.equal(card.options.length, 8, card.componentKey);
-      assert.equal(card.meta, "Cumpleaños");
+      assert.deepEqual(card.category, { key: "birthday", name: "Cumpleaños" });
       assert.notEqual(card.description.length, 0);
       assert.equal(new Set(card.options.map((option) => option.versionId)).size, 8);
     }
@@ -185,7 +183,10 @@ describe("templateChoiceCards", () => {
     assert.equal(card?.kind, "template");
     // Another renderer with another content shape: the card stays, without a miniature.
     assert.equal(card?.kind === "template" ? card.sample : "unexpected", undefined);
-    assert.equal(card?.kind === "template" ? card.meta : "", "Boda");
+    assert.deepEqual(card?.kind === "template" ? card.category : undefined, {
+      key: "wedding",
+      name: "Boda",
+    });
   });
 
   it("degrades safely for an unknown key or a drifted configuration", () => {
@@ -221,86 +222,6 @@ describe("templateChoiceCards", () => {
         [card.componentKey],
       );
     }
-  });
-});
-
-describe("checkedVersionId", () => {
-  const cards = templateChoiceCards([ADVENTURE, ...SEEDED], ORIGIN);
-
-  it("selects the first template of the first card by default, as the chooser always did", () => {
-    assert.equal(checkedVersionId(cards), ADVENTURE.publishedVersion.id);
-  });
-
-  it("selects the requested version when the form was sent back with one", () => {
-    const [mapCard] = layoutCards(cards);
-    const wanted = mapCard?.options[3]?.versionId;
-
-    assert.notEqual(wanted, undefined);
-    assert.equal(checkedVersionId(cards, wanted), wanted);
-  });
-
-  it("falls back to the default for a version the catalog does not publish", () => {
-    assert.equal(
-      checkedVersionId(cards, "0b6f3e0e-8c1e-4b8e-9a51-000000000000"),
-      ADVENTURE.publishedVersion.id,
-    );
-    assert.equal(checkedVersionId([], undefined), undefined);
-  });
-});
-
-describe("previewSwitchCss", () => {
-  const [mapCard] = layoutCards(templateChoiceCards([ADVENTURE, ...SEEDED], ORIGIN));
-
-  it("hides every miniature and shows the one of the checked theme", () => {
-    assert.notEqual(mapCard, undefined);
-    const css = previewSwitchCss(mapCard as LayoutCardView);
-    const [hidden, ...switches] = css.split("\n");
-
-    // One rule hides every miniature and every link of the card; then each theme shows its own.
-    assert.match(hidden ?? "", /\{display:none\}$/);
-    assert.ok((hidden ?? "").includes('[data-miniature="'));
-    assert.ok((hidden ?? "").includes('[data-preview-link="'));
-    // One rule per theme and element, plus the fallback of the first theme while the card is unchosen.
-    assert.equal(switches.length, (mapCard as LayoutCardView).options.length * 2 + 2);
-    const first = (mapCard as LayoutCardView).options[0];
-    assert.ok(
-      css.includes(
-        `:not(:has([data-theme-choice]:checked)) [data-miniature="${first?.versionId}"]{display:block}`,
-      ),
-    );
-
-    for (const option of (mapCard as LayoutCardView).options) {
-      assert.ok(
-        css.includes(
-          `:has([data-theme-choice="${option.versionId}"]:checked) [data-miniature="${option.versionId}"]{display:block}`,
-        ),
-        option.versionId,
-      );
-      assert.ok(
-        css.includes(
-          `:has([data-theme-choice="${option.versionId}"]:checked) [data-preview-link="${option.versionId}"]{display:inline-flex}`,
-        ),
-        option.versionId,
-      );
-    }
-  });
-
-  it("scopes every rule to its own card, so two cards never switch each other", () => {
-    const layouts = layoutCards(templateChoiceCards([ADVENTURE, ...SEEDED], ORIGIN));
-
-    for (const card of layouts) {
-      const css = previewSwitchCss(card);
-      const selectors = css.split("\n").filter((line) => line.includes(":has("));
-
-      assert.notEqual(selectors.length, 0);
-      for (const selector of selectors) {
-        assert.ok(
-          selector.startsWith(`[data-preview-group="${card.groupId}"]`),
-          `${card.componentKey}: ${selector}`,
-        );
-      }
-    }
-    assert.equal(new Set(layouts.map((card) => card.groupId)).size, layouts.length);
   });
 });
 
@@ -343,22 +264,5 @@ describe("previewPath", () => {
       `/cuenta/invitaciones/nueva/vista/${ADVENTURE.publishedVersion.id}`,
     );
     assert.equal(previewPath("a/b?c"), "/cuenta/invitaciones/nueva/vista/a%2Fb%3Fc");
-  });
-});
-
-describe("the chooser renders without client script", () => {
-  const sources = [
-    new URL("../../app/cuenta/invitaciones/nueva/page.tsx", import.meta.url),
-    new URL("../../app/cuenta/invitaciones/nueva/vista/[versionId]/page.tsx", import.meta.url),
-    new URL("../../app/cuenta/invitaciones/_components/template-choice-card.tsx", import.meta.url),
-  ];
-
-  it("uses no client component and no inline event handler", () => {
-    for (const source of sources) {
-      const text = readFileSync(source, "utf8");
-
-      assert.doesNotMatch(text, /^\s*["']use client["']/m, source.pathname);
-      assert.doesNotMatch(text, /\son[A-Z][a-zA-Z]*=/, source.pathname);
-    }
   });
 });

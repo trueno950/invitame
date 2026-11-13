@@ -29,21 +29,23 @@ test.describe("customer invitations", () => {
     await page.getByRole("link", { name: INVITATION_COPY.newLink }).click();
     await expect(page).toHaveURL("/cuenta/invitaciones/nueva");
 
-    // Each choice is a radio group of cards, so the whole choice is visible without a select popup.
-    const templateRadios = page
-      .getByRole("group", { name: INVITATION_COPY.templateLabel })
-      .getByRole("radio");
+    // Three steps, each one a server URL: the design, then the theme, then the package (T10b; S10).
+    const designLinks = page
+      .getByRole("list", { name: INVITATION_COPY.templateLabel })
+      .getByRole("link");
     test.skip(
-      (await templateRadios.count()) === 0,
+      (await designLinks.count()) === 0,
       "the e2e database has no published template; seed the catalog with `pnpm db:seed`",
     );
 
-    await templateRadios.first().check();
+    await designLinks.first().click();
+    await expect(page).toHaveURL(/[?&]paso=2/);
     await page
-      .getByRole("group", { name: INVITATION_COPY.packageLabel })
-      .getByRole("radio")
+      .getByRole("list", { name: INVITATION_COPY.themeLabel })
+      .getByRole("link")
       .first()
-      .check();
+      .click();
+    await expect(page).toHaveURL(/[?&]paso=3/);
     await page.getByRole("button", { name: INVITATION_COPY.createSubmit }).click();
 
     await expect(page).toHaveURL(DRAFT_URL);

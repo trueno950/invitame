@@ -1,54 +1,49 @@
 import type { ReactElement } from "react";
 
 import { INVITATION_COPY } from "../../../../lib/customer/copy.ts";
-import {
-  type LayoutCardView,
-  previewPath,
-  previewSwitchCss,
-  type SingleTemplateCardView,
-  TEMPLATE_FIELD_NAME,
-} from "../../../../lib/customer/template-preview.ts";
+import type { DesignChoice, StyleChoice } from "../../../../lib/customer/template-steps.ts";
 import { findRenderer } from "../../../../lib/renderers/registry.ts";
 import type { SampleInvitation } from "../../../../lib/renderers/samples.ts";
-import { textButton } from "../../../_components/ui.ts";
 
 /*
- * The cards of «Nueva invitación» with a live miniature (T9; S9). A themed layout is one card: the
- * miniature of the theme that is chosen, a switch per theme, and one «Ver completa» link per theme, so
- * changing the theme changes the miniature and selects that version for the form without a line of client
- * script. The rules that show the chosen theme's miniature and link are generated from the card's own
- * version ids (`previewSwitchCss`) and rendered as a `<style>` element; the switches themselves are native
- * radios inside their labels.
+ * The visual parts of the «Paso a paso» chooser (T10b; S9, S10), following
+ * `design/template-chooser-v2/02-paso-a-paso-*.html`. A design is a link to the theme step, a theme is a
+ * link that reloads the same step with that theme selected, and the large sample is the chosen theme at
+ * phone width. Every choice is a server URL, so nothing here needs a line of client script: no `use client`,
+ * no effect, and no inline handler.
+ *
+ * Every miniature is the real, allow-listed renderer rendering the fixed sample content of `samples.ts`,
+ * never a stored screenshot. The renderer draws its own viewport-sized background layer with
+ * `position: fixed`; the scaled wrapper makes it the containing block of that layer, and `contain: paint`
+ * clips it to the frame, so a miniature never paints behind the page.
  */
 
 /** The layouts draw a phone-width page of 390 px, and the miniature shows the top of it, scaled down. */
-const PREVIEW_WIDTH = 390;
-const PREVIEW_SCALE = 0.6;
-const PREVIEW_HEIGHT = 300;
+const RENDER_WIDTH = 390;
 
-const CARD =
-  "group flex flex-col gap-3 rounded-panel bg-surface p-4 text-left ring-[1.5px] ring-field-border transition-colors duration-150 ease-out-soft has-[:checked]:bg-rose-50 has-[:checked]:ring-2 has-[:checked]:ring-primary";
+const CARD = "transition-colors duration-150 ease-out-soft";
 const CHOSEN_BADGE =
-  "hidden shrink-0 rounded-full bg-surface px-2.5 py-0.5 text-xs font-medium uppercase tracking-[0.1em] text-primary ring-1 ring-primary/40 group-has-[:checked]:inline";
-const THEME_LABEL =
-  "inline-flex min-h-9 cursor-pointer items-center rounded-full bg-rose-50 px-3 text-sm font-medium text-ink ring-1 ring-field-border transition-colors peer-checked:bg-primary peer-checked:text-on-primary peer-checked:ring-primary peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary";
-const CARD_TITLE = "font-medium text-ink";
-const CARD_META = "text-sm font-medium text-primary";
-const CARD_BODY = "text-sm leading-6 text-muted";
+  "absolute right-2.5 top-2.5 shrink-0 rounded-full bg-surface px-2.5 py-0.5 text-xs font-medium uppercase tracking-[0.1em] text-primary ring-1 ring-primary/40";
 
-/**
- * The sample invitation as the card shows it. The renderer draws its own viewport-sized background layer
- * with `position: fixed`; the scaled wrapper makes it the containing block of that layer, and
- * `contain: paint` clips it to the frame, so a miniature never paints behind the page. The frame is
- * decoration for assistive technology: the switches carry the same information as text.
- */
-function Miniature({
-  componentKey,
-  sample,
-}: {
+interface FrameProperties {
+  /** The frame's own size and its clip; the inner page keeps the renderer's 390 px width. */
+  frameClass: string;
+  frameStyle?: { width: number; height: number };
+  scaleClass: string;
+  scaleStyle?: { transform: string };
   componentKey: string;
   sample: SampleInvitation;
-}): ReactElement | null {
+}
+
+/** One scaled, clipped page of the real renderer: the only thing every miniature and stage share. */
+function ScaledInvitation({
+  frameClass,
+  frameStyle,
+  scaleClass,
+  scaleStyle,
+  componentKey,
+  sample,
+}: FrameProperties): ReactElement | null {
   const Renderer = findRenderer(componentKey);
 
   if (Renderer === undefined) {
@@ -58,20 +53,13 @@ function Miniature({
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none relative mx-auto overflow-hidden rounded-xl bg-surface ring-1 ring-gold/45"
-      data-miniature-frame=""
-      style={{
-        width: PREVIEW_WIDTH * PREVIEW_SCALE,
-        height: PREVIEW_HEIGHT,
-        contain: "paint",
-      }}
+      className={`pointer-events-none relative overflow-hidden bg-surface ${frameClass}`}
+      data-miniature=""
+      style={{ contain: "paint", ...frameStyle }}
     >
       <div
-        style={{
-          width: PREVIEW_WIDTH,
-          transform: `scale(${PREVIEW_SCALE})`,
-          transformOrigin: "top left",
-        }}
+        className={`origin-top-left ${scaleClass}`}
+        style={{ width: RENDER_WIDTH, ...scaleStyle }}
       >
         <Renderer configuration={sample.configuration} content={sample.content} />
       </div>
@@ -79,131 +67,150 @@ function Miniature({
   );
 }
 
-/** One theme switch: a native radio drawn as a chip, inside its label, so no script is needed. */
-function ThemeSwitch({
-  checked,
-  label,
-  versionId,
+/** The step-1 miniature of one design: its theme at 200 px, the size the artboard draws it. */
+function DesignMiniature({
+  componentKey,
+  sample,
 }: {
-  checked: boolean;
-  label: string;
-  versionId: string;
-}): ReactElement {
+  componentKey: string;
+  sample: SampleInvitation;
+}): ReactElement | null {
   return (
-    <label className="inline-flex">
-      <input
-        className="peer sr-only"
-        data-theme-choice={versionId}
-        defaultChecked={checked}
-        name={TEMPLATE_FIELD_NAME}
-        type="radio"
-        value={versionId}
-      />
-      <span className={THEME_LABEL}>{label}</span>
-    </label>
+    <ScaledInvitation
+      componentKey={componentKey}
+      frameClass="mx-auto rounded-xl ring-1 ring-gold/45"
+      frameStyle={{ width: 200, height: 267 }}
+      sample={sample}
+      scaleClass=""
+      scaleStyle={{ transform: "scale(0.5128205128)" }}
+    />
   );
 }
 
-/** One card per themed layout: its miniature per theme, the theme switches, and «Ver completa». */
-export function LayoutChoiceCard({
-  card,
-  selectedVersionId,
+/** One step-1 design: a link to its theme step, marked when it is the design the query names. */
+export function DesignCard({
+  design,
+  href,
+  selected,
 }: {
-  card: LayoutCardView;
-  selectedVersionId: string | undefined;
+  design: DesignChoice;
+  href: string;
+  selected: boolean;
+}): ReactElement {
+  const style = design.styles[0];
+
+  return (
+    <a
+      aria-current={selected ? "true" : undefined}
+      className={`group relative flex h-full flex-col gap-2 rounded-panel p-3.5 text-center ring-[1.5px] hover:bg-rose-50 ${
+        selected ? "bg-rose-50 ring-2 ring-primary" : "bg-surface ring-field-border"
+      } ${CARD} focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-primary`}
+      href={href}
+    >
+      <span className="flex items-baseline justify-center gap-1.5 text-base font-semibold text-ink">
+        {design.title}
+      </span>
+      {selected ? <span className={CHOSEN_BADGE}>{INVITATION_COPY.chosen}</span> : null}
+      <span className="text-xs font-medium text-primary">
+        {INVITATION_COPY.styleCount(design.styles.length)}
+      </span>
+      <span className="mb-1 text-xs leading-5 text-pretty text-muted">
+        {design.description ?? ""}
+      </span>
+      {style?.sample === undefined ? null : (
+        <DesignMiniature componentKey={design.componentKey} sample={style.sample} />
+      )}
+    </a>
+  );
+}
+
+/** One step-2 theme: a comparable miniature, its name, and the fact that it is the chosen one. */
+export function ThemeTile({
+  componentKey,
+  href,
+  selected,
+  style,
+}: {
+  componentKey: string;
+  href: string;
+  selected: boolean;
+  style: StyleChoice;
 }): ReactElement {
   return (
-    <div className={CARD} data-preview-group={card.groupId}>
-      <style>{previewSwitchCss(card)}</style>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className={CARD_TITLE}>{card.title}</p>
-          <p className={CARD_META}>{card.meta}</p>
-        </div>
-        <span className={CHOSEN_BADGE}>{INVITATION_COPY.chosen}</span>
-      </div>
-      <p className={CARD_BODY}>{card.description}</p>
-
-      <div className="relative" style={{ height: PREVIEW_HEIGHT }}>
-        {card.options.map((option) => (
-          <div
-            className="absolute inset-x-0 top-0"
-            data-miniature={option.versionId}
-            key={option.versionId}
-          >
-            <Miniature componentKey={card.componentKey} sample={option.sample} />
-          </div>
-        ))}
-      </div>
-
-      <fieldset className="flex flex-wrap gap-2 border-0 p-0">
-        <legend className="sr-only">{INVITATION_COPY.themeLabel}</legend>
-        {card.options.map((option) => (
-          <ThemeSwitch
-            checked={option.versionId === selectedVersionId}
-            key={option.versionId}
-            label={option.label}
-            versionId={option.versionId}
+    <a
+      aria-current={selected ? "true" : undefined}
+      className={`group flex flex-col items-center gap-1.5 rounded-xl p-1.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+        selected ? "bg-rose-50" : "hover:bg-rose-50"
+      } ${CARD}`}
+      href={href}
+    >
+      <span
+        className={`relative block rounded-[0.625rem] ${
+          selected ? "ring-2 ring-primary ring-offset-2 ring-offset-surface" : ""
+        }`}
+      >
+        {style.sample === undefined ? (
+          <span className="block h-[104px] w-[78px] rounded-[0.625rem] bg-rose-50 ring-1 ring-field-border sm:h-[146px] sm:w-[109px]" />
+        ) : (
+          <ScaledInvitation
+            componentKey={componentKey}
+            frameClass="h-[104px] w-[78px] rounded-[0.625rem] ring-1 ring-field-border sm:h-[146px] sm:w-[109px]"
+            sample={style.sample}
+            scaleClass="scale-[0.2] sm:scale-[0.28]"
           />
-        ))}
-      </fieldset>
-
-      <div className="flex justify-end">
-        {card.options.map((option) => (
-          <a
-            className={textButton}
-            data-preview-link={option.versionId}
-            href={previewPath(option.versionId)}
-            key={option.versionId}
-          >
-            {INVITATION_COPY.viewFull}
-          </a>
-        ))}
-      </div>
-    </div>
+        )}
+        {selected ? (
+          <span className="absolute -right-1.5 -top-1.5 grid size-4 place-items-center rounded-full bg-primary text-[0.625rem] font-bold leading-none text-on-primary">
+            ✓
+          </span>
+        ) : null}
+      </span>
+      <span
+        className={`text-center text-[0.6875rem] leading-tight ${
+          selected ? "font-semibold text-primary" : "text-muted"
+        }`}
+      >
+        {style.label}
+      </span>
+    </a>
   );
 }
 
 /**
- * The card of a template without themes, such as `birthday-adventure-01` or a template of another
- * category: its own miniature when its renderer takes the sample, and «Ver completa» for the same sample.
- * The radio lives in the label that holds the text, and the miniature and the link sit outside it, so
- * neither of them selects the card by accident.
+ * The stage of step 2: the chosen theme at phone width, clipped to a frame the artboard sizes, with the tag
+ * that says the invitation shows example data. The step head carries the one link to the full sample page.
  */
-export function TemplateChoiceCard({
-  card,
-  checked,
+export function SampleStage({
+  componentKey,
+  sample,
 }: {
-  card: SingleTemplateCardView;
-  checked: boolean;
+  componentKey: string;
+  sample: SampleInvitation | undefined;
 }): ReactElement {
-  const sample = card.sample;
-
   return (
-    <div className={CARD}>
-      <label className="flex cursor-pointer flex-col gap-1.5">
-        <input
-          className="sr-only"
-          defaultChecked={checked}
-          name={TEMPLATE_FIELD_NAME}
-          type="radio"
-          value={card.versionId}
-        />
-        <span className="flex items-start justify-between gap-2">
-          <span className={CARD_TITLE}>{card.title}</span>
-          <span className={CHOSEN_BADGE}>{INVITATION_COPY.chosen}</span>
+    <div className="rounded-panel bg-surface p-3 ring-[1.5px] ring-gold sm:p-4">
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-ink">{INVITATION_COPY.stageTitle}</p>
+        <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-muted">
+          {INVITATION_COPY.sampleNote}
         </span>
-        <span className={CARD_META}>{card.meta}</span>
-        {card.description === null ? null : <span className={CARD_BODY}>{card.description}</span>}
-      </label>
-
-      {sample === undefined ? null : <Miniature componentKey={card.componentKey} sample={sample} />}
-
-      <div className="flex justify-end">
-        <a className={textButton} href={previewPath(card.versionId)}>
-          {INVITATION_COPY.viewFull}
-        </a>
       </div>
+
+      {sample === undefined ? (
+        <p className="rounded-xl bg-rose-50 px-3 py-8 text-center text-sm leading-6 text-pretty text-muted">
+          {INVITATION_COPY.sampleMissing}
+        </p>
+      ) : (
+        <div className="relative">
+          <ScaledInvitation
+            componentKey={componentKey}
+            frameClass="mx-auto h-[430px] w-[325px] rounded-xl ring-1 ring-gold/45 sm:h-[560px] sm:w-[390px]"
+            sample={sample}
+            scaleClass="scale-[0.8333] sm:scale-100"
+          />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-b from-transparent to-surface sm:hidden" />
+        </div>
+      )}
     </div>
   );
 }

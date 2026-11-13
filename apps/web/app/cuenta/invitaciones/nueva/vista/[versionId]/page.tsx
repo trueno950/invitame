@@ -5,10 +5,8 @@ import { connection } from "next/server";
 
 import { INVITATION_COPY } from "../../../../../../lib/customer/copy.ts";
 import { INVITATION_PATHS } from "../../../../../../lib/customer/invitations.ts";
-import {
-  findPreviewTarget,
-  TEMPLATE_FIELD_NAME,
-} from "../../../../../../lib/customer/template-preview.ts";
+import { findPreviewTarget } from "../../../../../../lib/customer/template-preview.ts";
+import { themeStepPath } from "../../../../../../lib/customer/template-steps.ts";
 import { findRenderer } from "../../../../../../lib/renderers/registry.ts";
 import { requestOrigin } from "../../../../../../lib/server/request-origin.ts";
 import { CustomerWorkspaceShell } from "../../../../../_components/customer-workspace-shell.tsx";
@@ -37,13 +35,14 @@ function PlainShell({ heading, body }: { heading: string; body: string }) {
 }
 
 /**
- * `/cuenta/invitaciones/nueva/vista/[versionId]` (T9; S9): «Ver completa» from the chooser. The page shows
- * the sample invitation of one published version at phone width, rendered by the same allow-listed renderer
- * the guest page uses, with the configuration the version stores — never a screenshot. It sits under
+ * `/cuenta/invitaciones/nueva/vista/[versionId]` (T9, T10b; S9, S10): «Ver completa» from the theme step of
+ * the chooser. The page shows the sample invitation of one published version at phone width, rendered by the
+ * same allow-listed renderer the guest page uses, with the configuration the version stores — never a
+ * screenshot. It sits under
  * `/cuenta`, so it needs a session like the rest of the account: a signed-out visitor is sent to sign in by
  * the shared read step. An id the creator catalog does not publish, a template id instead of a version id,
  * and a snapshot the renderer refuses all answer the same friendly notice, and the page leads back to
- * choosing that template.
+ * choosing that template, which is the theme step with this theme still selected.
  */
 export default async function TemplatePreviewPage({
   params,
@@ -79,7 +78,8 @@ export default async function TemplatePreviewPage({
     );
   }
 
-  const chooser = `${INVITATION_PATHS.create}?${TEMPLATE_FIELD_NAME}=${encodeURIComponent(versionId)}`;
+  // The way back keeps the choice: the theme step, with this published version selected.
+  const chooser = themeStepPath(versionId);
 
   return (
     <main className="paper-wash relative isolate min-h-screen px-4 py-5 text-ink sm:px-8 sm:py-8">
@@ -104,7 +104,7 @@ export default async function TemplatePreviewPage({
         <Renderer configuration={target.sample.configuration} content={target.sample.content} />
 
         <div className="flex justify-center pb-4">
-          <Link className={textButton} href={INVITATION_PATHS.create}>
+          <Link className={textButton} href={chooser}>
             {INVITATION_COPY.previewBack}
           </Link>
         </div>

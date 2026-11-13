@@ -182,8 +182,39 @@ export const INVITATION_COPY = {
   createEyebrow: "Nueva invitación",
   createHeading: "Crea tu invitación",
   createIntro:
-    "Elige una plantilla y un paquete. Crear y editar el borrador es gratis; el cobro del paquete se hace al publicar.",
+    "Primero el diseño, después el tema y al final el paquete. Crear y editar el borrador es gratis; el cobro del paquete se hace al publicar.",
   templateLabel: "Plantilla",
+  /** The three steps of the chooser, in the order the stepper shows them (T10b; S10). */
+  stepDesign: "Diseño",
+  stepTheme: "Tema",
+  stepPackage: "Paquete",
+  stepsLabel: "Pasos",
+  stepOf: (step: number) => `Paso ${step} de 3`,
+  /** What the stepper says besides the name of a step, for screen readers only. */
+  stepDone: "completado",
+  stepCurrent: "paso actual",
+  stepDesignHeading: "Elige el diseño",
+  stepThemeHeading: "Elige el tema",
+  stepPackageHeading: "Elige el paquete",
+  /** The note of a step whose choice is already made, as the artboard writes it. */
+  chosenNote: (label: string) => `Elegido: ${label}`,
+  designStepHint: "Toca un diseño para verlo en sus temas, con datos de ejemplo.",
+  /** How many styles one design offers, so a design with one style is not a surprise. */
+  styleCount: (count: number) => (count === 1 ? "1 estilo" : `${count} temas`),
+  singleStyle: "Estilo único",
+  singleStyleNote:
+    "Este diseño tiene un solo estilo, así que ya está elegido. Puedes verlo en grande y continuar.",
+  /** The occasion the whole flow belongs to: a catalog category that publishes templates. */
+  occasionLabel: "Ocasión",
+  /** The stage of step 2: the real renderer with the fixed sample content (S9). */
+  stageTitle: "Así se ve tu invitación",
+  themeNote:
+    "El tema cambia los colores, la tipografía y los adornos; la estructura del diseño no cambia.",
+  packageNote: "El cobro se hace al publicar. Puedes cambiarlo después.",
+  continueStep: "Continuar",
+  backStep: "Atrás",
+  /** Shown instead of the stage when a renderer refuses its sample: no miniature, no error page. */
+  sampleMissing: "No pudimos cargar la vista previa de este diseño. Puedes seguir con tu elección.",
   /** The switches of a layout card: one per published theme, named as the theme board names it. */
   themeLabel: "Tema",
   /** The link that opens the full sample invitation of the selected theme (S9). */
@@ -196,7 +227,7 @@ export const INVITATION_COPY = {
     "Así se ve la invitación con datos de ejemplo. Si te gusta, elige esta plantilla y escribe los tuyos.",
   previewHeading: (name: string) => `Vista previa de «${name}»`,
   previewChoose: "Elegir esta plantilla",
-  previewBack: "Volver a las plantillas",
+  previewBack: "Volver a elegir el tema",
   previewNotFoundHeading: "No encontramos esa plantilla",
   previewNotFoundBody: "Puede que ya no esté publicada. Vuelve a elegir una plantilla.",
   previewUnavailableHeading: "No pudimos cargar la vista previa",
