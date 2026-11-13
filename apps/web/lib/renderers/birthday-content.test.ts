@@ -10,7 +10,7 @@ import {
 import { RendererPropsError } from "./renderer-props-error.ts";
 
 // The content of a themed birthday layout (T6b; S2, S8): the three new layouts reuse exactly the eight
-// fields of `birthday-adventure-01` with the same types and rules, so the creator form needs no change.
+// fields of every birthday layout with the same types and rules, so the creator form needs no change.
 // The API validates a version before publication; this parse re-reads a stored snapshot defensively, so a
 // failure is an operational error and throws, naming every defect at once.
 

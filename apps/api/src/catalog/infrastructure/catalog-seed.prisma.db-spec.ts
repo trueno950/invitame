@@ -123,22 +123,6 @@ describe("catalog seed (real PostgreSQL)", () => {
     assert.deepEqual(second, ZERO_SUMMARY);
   });
 
-  it("seeds the birthday-adventure template with a published version 1", async () => {
-    await seedCatalog(prisma);
-
-    const template = await prisma.template.findUniqueOrThrow({
-      where: { key: "birthday-adventure" },
-      include: { category: true, versions: true },
-    });
-
-    assert.equal(template.category.key, "birthday");
-    assert.equal(template.status, "PUBLISHED");
-    const versionOne = template.versions.find((version) => version.version === 1);
-    assert.ok(versionOne);
-    assert.equal(versionOne.componentKey, "birthday-adventure-01");
-    assert.equal(versionOne.status, "PUBLISHED");
-  });
-
   it("seeds one birthday layout template per layout and theme with a published version 1", async () => {
     await seedCatalog(prisma);
 

@@ -128,9 +128,11 @@ const PACKAGE_SEEDS = [
   },
 ] as const;
 
-const BIRTHDAY_ADVENTURE_COMPONENT_KEY = "birthday-adventure-01";
-
-export const BIRTHDAY_ADVENTURE_SCHEMA = {
+/**
+ * The content schema every birthday layout shares: the eight invitation fields with the same types, limits,
+ * and required list, so the creator form is the same for all of them (S8).
+ */
+export const BIRTHDAY_CONTENT_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
@@ -184,14 +186,6 @@ export const BIRTHDAY_ADVENTURE_SCHEMA = {
   },
 } satisfies Prisma.InputJsonObject;
 
-export const BIRTHDAY_ADVENTURE_CONFIGURATION = {
-  componentKey: BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-  layout: "adventure",
-  palette: "sunset",
-  typography: "rounded",
-  sectionOrder: ["hero", "details", "message"],
-} satisfies Prisma.InputJsonObject;
-
 /** One seeded template and the version 1 it receives when this run creates the template. */
 export interface CatalogTemplateSeed {
   readonly key: string;
@@ -207,15 +201,7 @@ export interface BirthdayLayoutTemplateSeed extends CatalogTemplateSeed {
   readonly theme: BirthdayTheme;
 }
 
-const BIRTHDAY_ADVENTURE_TEMPLATE: CatalogTemplateSeed = {
-  key: "birthday-adventure",
-  name: "Birthday Adventure",
-  description: "Una aventura colorida para celebrar un cumpleaños.",
-  componentKey: BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-  schema: BIRTHDAY_ADVENTURE_SCHEMA,
-  configuration: BIRTHDAY_ADVENTURE_CONFIGURATION,
-};
-
+/** One row per layout the catalog publishes; its key, Spanish label, and short neutral description (S8). */
 const BIRTHDAY_LAYOUT_SEEDS = [
   {
     slug: "map",
@@ -252,7 +238,7 @@ const BIRTHDAY_THEME_NAMES: Readonly<Record<BirthdayTheme, string>> = {
 
 /**
  * One published birthday layout template per layout and theme (3 layouts x 8 themes), in the theme order
- * the owner chose (S8). Every template shares the `birthday-adventure-01` content schema and takes exactly
+ * the owner chose (S8). Every template shares the birthday content schema and takes exactly
  * `{ componentKey, theme }` as configuration. Catalog names stay generic: a theme name never names a
  * character or a brand (S5).
  */
@@ -263,7 +249,7 @@ export const BIRTHDAY_LAYOUT_TEMPLATE_SEEDS: readonly BirthdayLayoutTemplateSeed
       name: `${layout.label} · ${BIRTHDAY_THEME_NAMES[theme]}`,
       description: layout.description,
       componentKey: layout.componentKey,
-      schema: BIRTHDAY_ADVENTURE_SCHEMA,
+      schema: BIRTHDAY_CONTENT_SCHEMA,
       configuration: { componentKey: layout.componentKey, theme },
       theme,
     })),
@@ -416,7 +402,7 @@ async function seedTemplates(
   return { templates, templateVersions };
 }
 
-/** Creates `birthday-adventure` and the 24 birthday layout-and-theme templates (S8). */
+/** Creates the 24 birthday layout-and-theme templates (S8). */
 async function seedBirthdayTemplates(
   transaction: Transaction,
 ): Promise<{ templates: number; templateVersions: number }> {
@@ -429,10 +415,7 @@ async function seedBirthdayTemplates(
     throw new Error("Missing seeded record for key: birthday.");
   }
 
-  return seedTemplates(transaction, category.id, [
-    BIRTHDAY_ADVENTURE_TEMPLATE,
-    ...BIRTHDAY_LAYOUT_TEMPLATE_SEEDS,
-  ]);
+  return seedTemplates(transaction, category.id, BIRTHDAY_LAYOUT_TEMPLATE_SEEDS);
 }
 
 /** Inserts the base catalog records that do not exist yet, in one transaction. */

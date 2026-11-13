@@ -71,7 +71,7 @@ interface PackageRow {
 }
 
 /** The renderer keys the in-code registry knows; a published version with another key cannot be rendered. */
-const KNOWN_RENDERER_KEYS = ["birthday-adventure-01", "wedding-story-01", "birthday-map-01"];
+const KNOWN_RENDERER_KEYS = ["birthday-poster-01", "wedding-story-01", "birthday-map-01"];
 
 /**
  * The catalog's public contract in memory. The two `list` methods mirror the queries of
@@ -241,17 +241,17 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
         id: randomUUID(),
         version: 1,
         status: "RETIRED",
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         schema: { type: "object", required: [], properties: {} },
       },
       {
         id: randomUUID(),
         version: 2,
         status: "PUBLISHED",
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         schema: { type: "object", required: ["title"], properties: { title: { type: "string" } } },
         configuration: {
-          componentKey: "birthday-adventure-01",
+          componentKey: "birthday-poster-01",
           layout: "adventure",
           palette: "ocean",
           typography: "rounded",
@@ -315,7 +315,7 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
             id: randomUUID(),
             version: 1,
             status: "PUBLISHED",
-            componentKey: "birthday-adventure-01",
+            componentKey: "birthday-poster-01",
             schema: {},
           },
         ],
@@ -328,7 +328,7 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
             id: randomUUID(),
             version: 1,
             status: "DRAFT",
-            componentKey: "birthday-adventure-01",
+            componentKey: "birthday-poster-01",
             schema: {},
           },
         ],
@@ -342,7 +342,7 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
             id: randomUUID(),
             version: 1,
             status: "PUBLISHED",
-            componentKey: "birthday-adventure-01",
+            componentKey: "birthday-poster-01",
             schema: {},
           },
         ],
@@ -497,10 +497,10 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
       assert.deepEqual(listed?.publishedVersion, {
         id: birthday.versions[1]?.id,
         version: 2,
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         schema: { type: "object", required: ["title"], properties: { title: { type: "string" } } },
         configuration: {
-          componentKey: "birthday-adventure-01",
+          componentKey: "birthday-poster-01",
           layout: "adventure",
           palette: "ocean",
           typography: "rounded",

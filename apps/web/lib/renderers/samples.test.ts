@@ -14,15 +14,6 @@ import { SAMPLE_CATEGORY_KEYS, sampleContentFor, sampleInvitation } from "./samp
 const ORIGIN = "https://invitame.test";
 const SAMPLE_IMAGE_PATH = "/samples/birthday-mateo.svg";
 
-/** The configuration the seeded `birthday-adventure-01` version stores, so its parser accepts the sample. */
-const ADVENTURE_CONFIGURATION = {
-  componentKey: "birthday-adventure-01",
-  layout: "adventure",
-  palette: "sunset",
-  typography: "rounded",
-  sectionOrder: ["hero", "details", "message"],
-};
-
 /** A configuration one themed layout accepts, for each layout the web knows. */
 function themedConfiguration(componentKey: string, theme: string) {
   return { componentKey, theme };
@@ -51,15 +42,16 @@ describe("chooser sample content", () => {
 
   it("answers a preview that every registered renderer accepts", () => {
     const keys = listRendererKeys();
-    assert.deepEqual(keys, ["birthday-adventure-01", ...THEMED_LAYOUT_KEYS]);
+    assert.deepEqual(keys, [...THEMED_LAYOUT_KEYS]);
 
     for (const componentKey of keys) {
-      const configuration = THEMED_LAYOUT_KEYS.some((key) => key === componentKey)
-        ? themedConfiguration(componentKey, BIRTHDAY_THEMES[0])
-        : ADVENTURE_CONFIGURATION;
-
       assert.notEqual(
-        sampleInvitation(componentKey, configuration, "birthday", ORIGIN),
+        sampleInvitation(
+          componentKey,
+          themedConfiguration(componentKey, BIRTHDAY_THEMES[0]),
+          "birthday",
+          ORIGIN,
+        ),
         undefined,
         componentKey,
       );
@@ -90,12 +82,12 @@ describe("chooser sample content", () => {
     // An unregistered key, a drifted configuration, and a category without a sample all degrade to a card
     // without a miniature instead of throwing while the chooser renders.
     for (const [componentKey, configuration] of [
-      ["birthday-nope-01", ADVENTURE_CONFIGURATION],
+      ["birthday-nope-01", themedConfiguration("birthday-map-01", BIRTHDAY_THEMES[0])],
       ["birthday-map-01", themedConfiguration("birthday-map-01", "no-such-theme")],
       ["birthday-map-01", { theme: "dinosaurs" }],
       ["birthday-map-01", "not-an-object"],
-      ["birthday-adventure-01", { componentKey: "birthday-adventure-01" }],
-      ["__proto__", ADVENTURE_CONFIGURATION],
+      ["birthday-poster-01", { componentKey: "birthday-poster-01" }],
+      ["__proto__", themedConfiguration("birthday-map-01", BIRTHDAY_THEMES[0])],
     ] as const) {
       assert.equal(
         sampleInvitation(componentKey, configuration, "birthday", ORIGIN),

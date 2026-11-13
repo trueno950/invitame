@@ -573,9 +573,9 @@ describe("publishTemplateVersion and retireTemplateVersion", () => {
 describe("createTemplateVersion", () => {
   const input = {
     id: ID,
-    componentKey: "birthday-adventure-01",
+    componentKey: "birthday-poster-01",
     schema: '{ "fields": ["name"] }',
-    configuration: '{"palette":"ocean"}',
+    configuration: '{"theme":"dinosaurs"}',
   };
 
   it("parses both JSON texts on the server and sends them as values, then returns to the template", async () => {
@@ -592,9 +592,9 @@ describe("createTemplateVersion", () => {
         args: [
           ID,
           {
-            componentKey: "birthday-adventure-01",
+            componentKey: "birthday-poster-01",
             schema: { fields: ["name"] },
-            configuration: { palette: "ocean" },
+            configuration: { theme: "dinosaurs" },
           },
         ],
       },

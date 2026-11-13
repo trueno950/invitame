@@ -8,14 +8,14 @@ import { findRenderer, listRendererKeys } from "./registry.ts";
 
 // The web renderer map (M3 T7; S2, S3, S6): an explicit componentKey -> component allow-list.
 
-// The three themed layouts (T6b; S7, S8) are additional keys, each its own reviewed component; the
-// original `birthday-adventure-01` stays registered and unchanged.
+// The three themed layouts (T6b; S7, S8) are the whole list, each its own reviewed component that takes an
+// allow-listed theme. The single `birthday-adventure-01` renderer was deleted (S11).
 const THEMED_KEYS = ["birthday-map-01", "birthday-poster-01", "birthday-story-01"] as const;
 
 describe("web renderer registry", () => {
-  it("lists the adventure renderer and the three themed layouts", () => {
-    assert.deepEqual(listRendererKeys(), ["birthday-adventure-01", ...THEMED_KEYS]);
-    for (const key of ["birthday-adventure-01", ...THEMED_KEYS]) {
+  it("lists exactly the three themed layouts", () => {
+    assert.deepEqual(listRendererKeys(), [...THEMED_KEYS]);
+    for (const key of THEMED_KEYS) {
       assert.equal(typeof findRenderer(key), "function", key);
     }
   });
@@ -52,27 +52,21 @@ describe("web renderer registry", () => {
       "hasOwnProperty",
       "unknown",
       "",
-      "BIRTHDAY-ADVENTURE-01",
-      "BIRTHDAY-MAP-01",
+      "BIRTHDAY-POSTER-01",
       "birthday-map-02",
+      "birthday-map-00",
     ]) {
       assert.equal(findRenderer(key), undefined, JSON.stringify(key));
     }
   });
 
   it("resolves a key to a component that renders the invitation", () => {
-    const Renderer = findRenderer("birthday-adventure-01");
+    const Renderer = findRenderer("birthday-map-01");
 
     assert.ok(Renderer);
     const html = renderToStaticMarkup(
       createElement(Renderer, {
-        configuration: {
-          componentKey: "birthday-adventure-01",
-          layout: "adventure",
-          palette: "forest",
-          typography: "rounded",
-          sectionOrder: ["hero"],
-        },
+        configuration: { componentKey: "birthday-map-01", theme: "dinosaurs" },
         content: {
           celebrantName: "Lucía",
           age: 5,
@@ -87,6 +81,6 @@ describe("web renderer registry", () => {
     );
 
     assert.match(html, /Lucía/);
-    assert.match(html, /data-palette="forest"/);
+    assert.match(html, /data-theme="dinosaurs"/);
   });
 });

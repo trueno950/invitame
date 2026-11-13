@@ -12,9 +12,9 @@ import type { CreatorTemplate } from "../server/invitations-api.ts";
 
 /**
  * The cards the «Paso a paso» chooser is built from (T9; S9, S10). A themed layout is one design that groups
- * every published version of its `componentKey`, with one style per version; every other template —
- * `birthday-adventure-01` and the templates of other categories — keeps a design of its own with a single
- * style. Nothing here reads a catalog name to decide what to show: the design comes from the version's
+ * every published version of its `componentKey`, with one style per version; every other template — a key
+ * without themes, or the templates of other categories — keeps a design of its own with a single style.
+ * Nothing here reads a catalog name to decide what to show: the design comes from the version's
  * `componentKey`, the theme from its `configuration.theme`, the occasion from the category, and the label
  * from the theme's own Spanish display name.
  *

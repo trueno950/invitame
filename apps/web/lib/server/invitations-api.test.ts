@@ -55,9 +55,9 @@ const TEMPLATE = {
   publishedVersion: {
     id: VERSION_ID,
     version: 2,
-    componentKey: "birthday-adventure-01",
+    componentKey: "birthday-poster-01",
     schema: { type: "object", properties: {} },
-    configuration: { componentKey: "birthday-adventure-01", layout: "adventure" },
+    configuration: { componentKey: "birthday-poster-01", theme: "dinosaurs" },
   },
 };
 

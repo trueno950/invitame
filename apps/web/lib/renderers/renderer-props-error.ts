@@ -3,7 +3,7 @@
  * (T6b; S8). The themed birthday layouts share this one error, so `lib/public/invitation-render.ts` can
  * refuse a drifted snapshot before React renders it. The failure is an operational error — a hand-edited or
  * drifted `TemplateVersion` — never guest input, so it throws and names the renderer and every defect at
- * once. `birthday-adventure-01` keeps its own instance of the same shape and behaviour (unchanged).
+ * once. Every layout throws this one class, so a caller has a single class to recognise.
  */
 export class RendererPropsError extends Error {
   override name = "RendererPropsError";

@@ -1,9 +1,9 @@
 import { RendererPropsError } from "./renderer-props-error.ts";
 
 /**
- * The eight content fields of a themed birthday layout (T6b; S2, S8). They are exactly the fields of
- * `birthday-adventure-01` with the same types, limits, and required list, so the creator form needs no change
- * when a template moves to one of the new layouts. This module is the one content parser of the themed
+ * The eight content fields of a themed birthday layout (T6b; S2, S8). Every layout reads the same fields
+ * with the same types, limits, and required list, so the creator form needs no change when a template moves
+ * to one of the new layouts. This module is the one content parser of the themed
  * layouts; the API validates the same shape before publication, and this parse re-reads a stored snapshot
  * defensively.
  */

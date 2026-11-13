@@ -214,7 +214,8 @@ and `TemplateVersion`.
 
 - Layouts, from the directions in `design/birthday-adventure-v2/`: `birthday-map-01` (Mapa, `01-mapa-aventura.html`),
   `birthday-poster-01` (Cartel, `02-cartel-fiesta.html`), and `birthday-story-01` (Cuento, `03-cuento-ilustrado.html`).
-  `birthday-adventure-01` keeps its own files, behavior, and tests, and gains no theme.
+  These three replaced the first single design, `birthday-adventure-01` (its own palette, typography, and section
+  order), which was deleted with its files, tests, seed template, and catalog rows once they shipped (S11).
 - Themes, from `design/kids-themes/01-tablero-temas.html`, in this order:
 
 | Key | Catalog name | Display font | Motif |
@@ -235,7 +236,7 @@ and `TemplateVersion`.
 - Configuration: exactly `{ "componentKey": <layout key>, "theme": <theme key> }`, both required; an extra key,
   another layout's key, an unknown theme, and a wrongly typed value are refused by the API before publication and by
   the web parser again (`lib/renderers/birthday-themes.ts`), so a drifted snapshot never renders. The content is the
-  same eight fields as `birthday-adventure-01` (`lib/renderers/birthday-content.ts`), so the creator form is shared.
+  same eight fields every birthday layout reads (`lib/renderers/birthday-content.ts`), so the creator form is shared.
 - Colors reach the markup as CSS variables on the invitation root: `--inv-background`, `--inv-surface`, `--inv-soft`,
   `--inv-ink`, `--inv-accent`, `--inv-decoration-one`, `--inv-decoration-two`, plus `--inv-display` for the font. The
   root also carries `data-theme` and `data-component-key`. No color is a literal in a component or a stylesheet.
@@ -266,11 +267,16 @@ and `TemplateVersion`.
   one a link to its theme step with a live miniature of the real renderer; the occasion is a catalog category
   that publishes templates, so no name is written in code and no occasion is offered empty. Step 2 shows the
   chosen design in each of its themes as comparable miniatures beside the large sample of the chosen one, and a
-  design with a single style (`birthday-adventure-01` and the templates of other categories) shows that one style
-  and moves on. Step 3 shows the packages and the create form. The stepper marks the done steps as links back to
+  design with a single style (the templates of other categories) shows that one style and moves on. Step 3 shows
+  the packages and the create form. The stepper marks the done steps as links back to
   their own URL with the whole selection kept, and the footer bar repeats «Paso N de 3», the selection
   (design · theme · package), «Atrás», and the step's primary action; on step 3 that action submits the form,
-  which still posts the published version id. Every miniature is the real, allow-listed renderer rendering one
+  which still posts the published version id. A create the API refuses comes back to step 3 with the same
+  `ocasion`, `diseno`, `tema`, and `paquete` in its URL and the message shown (`?paso=3&…&error=<code>`), so the
+  written-out selection is never lost; the theme and the package are rebuilt from the version id and the
+  package id the form posted, the occasion and the design are re-read against the catalog on arrival, and a
+  tampered value only falls back to the nearest step that still holds (S12). Every miniature is the real,
+  allow-listed renderer rendering one
   fixed sample per category (`lib/renderers/samples.ts`, photo `public/samples/birthday-mateo.svg`, an original
   illustration), never a stored screenshot, so a catalog edit shows up in the chooser with no asset to refresh.
   The sample is drawn at 390 px and scaled down inside a frame with `contain: paint`; the scale on the wrapper is

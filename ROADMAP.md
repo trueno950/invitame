@@ -85,7 +85,8 @@ No OAuth, social login, custom domains, multi-organization billing, or invitatio
 ## Milestone 3 — Catalog and renderer contracts
 
 **Status:** Implemented (`odd/tasks/m3-catalog.md`): administrator catalog API and pages, MXN package prices,
-version publication rules, and the allow-listed renderer registry with `birthday-adventure-01`. Public catalog
+version publication rules, and the allow-listed renderer registry with `birthday-adventure-01`. That first single
+design was later retired: the catalog design track replaced it with the themed birthday layouts. Public catalog
 reads for creators belong to Milestone 4.
 
 ### Outcome
@@ -172,8 +173,10 @@ No custom domains, arbitrary page builders, search indexing program, or multi-re
 
 ## Catalog design track
 
-**Status:** Planned. It runs in parallel with Milestones 6 to 9 and must be complete before the first release
-(Milestone 10). The catalog currently holds one design, `birthday-adventure-01`.
+**Status:** In progress. It runs in parallel with Milestones 6 to 9 and must be complete before the first release
+(Milestone 10). The catalog currently holds the three themed children's birthday layouts (`birthday-map-01`,
+`birthday-poster-01`, `birthday-story-01`) in eight themes each. The first single design, `birthday-adventure-01`,
+was deleted once those layouts replaced it.
 
 ### Outcome
 

@@ -81,17 +81,6 @@ function template(
   };
 }
 
-const ADVENTURE = template("birthday-adventure", "birthday-adventure-01", {
-  name: "Birthday Adventure",
-  configuration: {
-    componentKey: "birthday-adventure-01",
-    layout: "adventure",
-    palette: "sunset",
-    typography: "rounded",
-    sectionOrder: ["hero", "details", "message"],
-  },
-});
-
 /** The 24 seeded templates: three layouts times eight themes, as the seed creates them (S8). */
 const SEEDED: CreatorTemplate[] = THEMED_LAYOUT_KEYS.flatMap((componentKey) =>
   BIRTHDAY_THEMES.map((theme) =>
@@ -110,7 +99,7 @@ const WEDDING_STORY = template("boda-cuento", "wedding-story-01", {
   description: "Un cuento para una boda.",
 });
 
-const CATALOG = [ADVENTURE, ...SEEDED];
+const CATALOG = [...SEEDED];
 
 function packagesFixture(): ChoiceCard[] {
   const stored: CreatorPackage[] = [
@@ -171,27 +160,25 @@ function themeVersion(componentKey: string, theme: string): string {
 }
 
 describe("chooserOccasions", () => {
-  it("keeps one occasion with the four designs in catalog order", () => {
+  it("keeps one occasion with the three designs in catalog order", () => {
     assert.equal(OCCASIONS.length, 1);
     const [birthday] = OCCASIONS;
     assert.equal(birthday?.key, "birthday");
     assert.equal(birthday?.name, "Cumpleaños");
     assert.deepEqual(
       birthday?.designs.map((design) => design.componentKey),
-      ["birthday-adventure-01", ...THEMED_LAYOUT_KEYS],
+      [...THEMED_LAYOUT_KEYS],
     );
     assert.deepEqual(
       birthday?.designs.map((design) => design.title),
-      ["Birthday Adventure", "Mapa", "Cartel", "Cuento"],
+      ["Mapa", "Cartel", "Cuento"],
     );
   });
 
   it("gives every layout its eight styles, labelled and ordered by the theme board", () => {
     const designs = OCCASIONS[0]?.designs ?? [];
 
-    for (const design of designs.filter(
-      (candidate) => candidate.componentKey !== "birthday-adventure-01",
-    )) {
+    for (const design of designs) {
       assert.equal(design.styles.length, 8, design.componentKey);
       assert.deepEqual(
         design.styles.map((style) => style.label),
@@ -208,17 +195,18 @@ describe("chooserOccasions", () => {
     }
   });
 
-  it("gives a design without themes a single style and its own miniature", () => {
-    const adventure = OCCASIONS[0]?.designs[0];
+  it("gives a design without themes a single style of its own", () => {
+    const occasions = occasionsOf([...SEEDED, WEDDING_STORY]);
+    const wedding = occasions[1]?.designs[0];
 
-    assert.equal(adventure?.styles.length, 1);
-    assert.equal(adventure?.styles[0]?.label, "Estilo único");
-    assert.equal(adventure?.styles[0]?.versionId, ADVENTURE.publishedVersion.id);
-    assert.notEqual(adventure?.styles[0]?.sample, undefined);
+    assert.equal(wedding?.componentKey, "wedding-story-01");
+    assert.equal(wedding?.styles.length, 1);
+    assert.equal(wedding?.styles[0]?.label, "Estilo único");
+    assert.equal(wedding?.styles[0]?.versionId, WEDDING_STORY.publishedVersion.id);
   });
 
   it("groups by the version's category, never by a catalog name", () => {
-    const occasions = occasionsOf([ADVENTURE, WEDDING_STORY, ...SEEDED]);
+    const occasions = occasionsOf([...SEEDED, WEDDING_STORY]);
 
     assert.deepEqual(
       occasions.map((occasion) => [occasion.key, occasion.name]),
@@ -348,7 +336,7 @@ describe("resolveChooserStep", () => {
   });
 
   it("follows the occasion of the published version, and never mixes two occasions", () => {
-    const occasions = occasionsOf([ADVENTURE, WEDDING_STORY, ...SEEDED]);
+    const occasions = occasionsOf([...SEEDED, WEDDING_STORY]);
     const version = themeVersion("birthday-map-01", "classic-mouse");
 
     const wedding = resolve({ [OCCASION_PARAM]: "wedding" }, { occasions });
@@ -409,12 +397,16 @@ describe("step-2 theme list", () => {
   });
 
   it("offers the single style of a design without themes, and stays on that step", () => {
-    const state = resolve({ [DESIGN_PARAM]: "birthday-adventure-01" });
+    const state = resolve(
+      { [OCCASION_PARAM]: "wedding", [DESIGN_PARAM]: "wedding-story-01" },
+      { occasions: occasionsOf([...SEEDED, WEDDING_STORY]) },
+    );
 
     assert.equal(state.step, 2);
+    assert.equal(state.design?.componentKey, "wedding-story-01");
     assert.equal(state.design?.styles.length, 1);
     assert.equal(state.style?.label, "Estilo único");
-    assert.equal(state.style?.versionId, ADVENTURE.publishedVersion.id);
+    assert.equal(state.style?.versionId, WEDDING_STORY.publishedVersion.id);
   });
 });
 
@@ -458,7 +450,7 @@ describe("stepHref", () => {
 
     assert.equal(
       continueToTheme,
-      `/cuenta/invitaciones/nueva?paso=2&ocasion=birthday&diseno=birthday-adventure-01&tema=${ADVENTURE.publishedVersion.id}&paquete=${PACKAGES[0]?.value ?? ""}`,
+      `/cuenta/invitaciones/nueva?paso=2&ocasion=birthday&diseno=birthday-map-01&tema=${themeVersion("birthday-map-01", BIRTHDAY_THEMES[0])}&paquete=${PACKAGES[0]?.value ?? ""}`,
     );
     assert.equal(resolve({}).style, undefined);
 
@@ -554,13 +546,18 @@ describe("the chooser renders without client script", () => {
     }
   });
 
-  it("posts the two fields the create action already validates", () => {
+  it("posts the two fields the create action already validates, plus the selection a refusal keeps", () => {
     const text = readFileSync(fileURLToPath(new URL("nueva/page.tsx", chooser)), "utf8");
 
     assert.match(text, /action=\{createInvitationAction\}/);
     assert.match(text, /name=\{TEMPLATE_FIELD_NAME\}/);
     assert.match(text, /value=\{draft\.templateVersionId\}/);
     assert.match(text, /name="packageId"/);
+    // The occasion and the design travel with the form too, so a refused create comes back to step 3 with
+    // the selection kept; the theme and the package are taken from the two values above (S12).
+    assert.match(text, /name=\{OCCASION_PARAM\}/);
+    assert.match(text, /name=\{DESIGN_PARAM\}/);
+    assert.match(text, /value=\{design\.componentKey\}/);
   });
 
   it("keeps the empty-catalog, missing-package, and unavailable states", () => {

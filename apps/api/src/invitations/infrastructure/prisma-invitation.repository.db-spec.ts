@@ -100,10 +100,10 @@ describe("Prisma invitation repository on PostgreSQL", () => {
         templateId: template.id,
         version: 1,
         status: options.versionStatus ?? "PUBLISHED",
-        componentKey: options.componentKey ?? "birthday-adventure-01",
+        componentKey: options.componentKey ?? "birthday-poster-01",
         schema: options.schema ?? { type: "object", required: [], properties: {} },
         configuration: options.configuration ?? {
-          componentKey: options.componentKey ?? "birthday-adventure-01",
+          componentKey: options.componentKey ?? "birthday-poster-01",
         },
       },
     });
@@ -391,9 +391,9 @@ describe("Prisma invitation repository on PostgreSQL", () => {
           ).templateId,
           version: 2,
           status: "DRAFT",
-          componentKey: "birthday-adventure-01",
+          componentKey: "birthday-poster-01",
           schema: { type: "object", required: [], properties: {} },
-          configuration: { componentKey: "birthday-adventure-01" },
+          configuration: { componentKey: "birthday-poster-01" },
         },
       });
       await prisma.$transaction([
@@ -585,7 +585,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       assert.deepEqual(version, {
         id: catalog.templateVersionId,
         templateId: catalog.templateId,
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         schema,
         // Read from the in-code renderer registry, not from the database (A1).
         requiredFeatureKeys: [],
@@ -652,7 +652,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
         required: ["celebrantName"],
         properties: { celebrantName: { type: "string", maxLength: 80 } },
       };
-      const configuration = { componentKey: "birthday-adventure-01", theme: "festive" };
+      const configuration = { componentKey: "birthday-poster-01", theme: "dinosaurs" };
       const retired = await newCatalog({
         templateStatus: "ARCHIVED",
         versionStatus: "RETIRED",
@@ -661,12 +661,12 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       });
 
       assert.deepEqual(await catalogReader.findVersionRenderData(retired.templateVersionId), {
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         configuration,
         schema,
       });
       assert.equal(await catalogReader.findVersionRenderData(UNKNOWN_ID), null);
-      assert.equal(catalogReader.isRendererRegistered("birthday-adventure-01"), true);
+      assert.equal(catalogReader.isRendererRegistered("birthday-poster-01"), true);
       assert.equal(catalogReader.isRendererRegistered("retired-renderer-99"), false);
     });
 

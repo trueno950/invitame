@@ -7,11 +7,11 @@ import {
 } from "./renderer-contract";
 
 // The shared contract of a themed birthday layout (S8): the three layouts the owner chose read the same
-// eight content fields as `birthday-adventure-01`, so the creator form needs no change, and they take
-// exactly `{ componentKey, theme }` as configuration. A layout module owns only its own key and schema
-// entry point; the field list and the configuration rules live here once.
+// eight content fields, so the creator form needs no change, and they take exactly `{ componentKey, theme }`
+// as configuration. A layout module owns only its own key and schema entry point; the field list and the
+// configuration rules live here once.
 
-/** The eight invitation fields every birthday layout reads; the same ones `birthday-adventure-01` reads. */
+/** The eight invitation fields every birthday layout reads. */
 export const BIRTHDAY_CONTENT_FIELDS: readonly RendererField[] = [
   { name: "celebrantName", type: "string" },
   { name: "age", type: "integer" },

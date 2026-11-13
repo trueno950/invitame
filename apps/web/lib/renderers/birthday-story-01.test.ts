@@ -90,7 +90,7 @@ describe("parseBirthdayStoryConfiguration", () => {
   it("refuses the key of another layout", () => {
     assert.deepEqual(
       issuesOf(() =>
-        parseBirthdayStoryConfiguration(configuration({ componentKey: "birthday-adventure-01" })),
+        parseBirthdayStoryConfiguration(configuration({ componentKey: "birthday-map-01" })),
       ),
       ['configuration.componentKey must be "birthday-story-01"'],
     );

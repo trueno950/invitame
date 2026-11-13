@@ -11,7 +11,7 @@ import { listRendererKeys } from "./registry.ts";
 //
 // Extraction contract, on `apps/api/src/catalog/domain/renderers/renderer-registry.ts`:
 //   1. The registered keys are the first elements of the entries of the `new Map([ ... ])` literal, as in
-//      `[BIRTHDAY_ADVENTURE_COMPONENT_KEY, birthdayAdventureRenderer],` (or `["literal-key", renderer],`).
+//      `[BIRTHDAY_MAP_COMPONENT_KEY, birthdayMapRenderer],` (or `["literal-key", renderer],`).
 //   2. An identifier key is resolved through the file's own `import { IDENT } from "./module"` to that
 //      module's `export const IDENT = "literal-key";`.
 // Anything the extractor cannot resolve, a missing `new Map([ ... ])`, or zero keys is an error and the

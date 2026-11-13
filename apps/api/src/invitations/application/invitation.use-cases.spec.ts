@@ -206,14 +206,14 @@ class MemoryInvitationCatalog implements InvitationCatalog {
   /** The render data of every stored version, whatever its current status (S3, A1). */
   readonly renderData = new Map<string, CatalogVersionRenderData>();
   /** The `componentKey` values the API's in-code allow-list still knows (A3). */
-  readonly registeredRenderers = new Set(["birthday-adventure-01"]);
+  readonly registeredRenderers = new Set(["birthday-poster-01"]);
 
   addPublishedVersion(
     input: Partial<CatalogTemplateVersionSnapshot> & { id: string; schema?: unknown },
   ): CatalogTemplateVersionSnapshot {
     const snapshot: CatalogTemplateVersionSnapshot = {
       templateId: randomUUID(),
-      componentKey: "birthday-adventure-01",
+      componentKey: "birthday-poster-01",
       schema: SCHEMA,
       requiredFeatureKeys: [],
       ...input,
@@ -232,7 +232,7 @@ class MemoryInvitationCatalog implements InvitationCatalog {
   addStoredVersion(options: { schema?: unknown; componentKey?: string } = {}): string {
     const id = randomUUID();
     const schema = options.schema ?? SCHEMA;
-    const componentKey = options.componentKey ?? "birthday-adventure-01";
+    const componentKey = options.componentKey ?? "birthday-poster-01";
     this.schemas.set(id, { id, schema });
     this.renderData.set(id, { componentKey, configuration: { componentKey }, schema });
     return id;
@@ -1029,8 +1029,8 @@ describe("GetPublicInvitationUseCase", () => {
 
     assert.deepEqual(page, {
       slug: created.slug,
-      componentKey: "birthday-adventure-01",
-      configuration: { componentKey: "birthday-adventure-01" },
+      componentKey: "birthday-poster-01",
+      configuration: { componentKey: "birthday-poster-01" },
       content: { celebrantName: "Ana", date: "2027-03-14" },
       publishedAt: PUBLISHED_AT,
     });

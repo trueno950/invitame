@@ -8,14 +8,11 @@ import { propsCheckKeys, rendererAcceptsProps } from "./invitation-render.ts";
 // snapshot that the renderer refuses is an operational error, not a guest error, so the page must learn
 // it *before* React renders the element: a throw during render would become a 500 page instead.
 
-const RENDERER_KEY = "birthday-adventure-01";
+const RENDERER_KEY = "birthday-story-01";
 
 const CONFIGURATION = {
   componentKey: RENDERER_KEY,
-  layout: "adventure",
-  palette: "sunset",
-  typography: "rounded",
-  sectionOrder: ["hero", "details", "message"],
+  theme: "dinosaurs",
 };
 
 const CONTENT = {
@@ -45,7 +42,7 @@ describe("renderer props checks", () => {
     for (const props of [
       { configuration: CONFIGURATION, content: { ...CONTENT, celebrantName: "" } },
       { configuration: CONFIGURATION, content: { ...CONTENT, age: 1.5 } },
-      { configuration: { ...CONFIGURATION, palette: "neon" }, content: CONTENT },
+      { configuration: { ...CONFIGURATION, theme: "neon" }, content: CONTENT },
       { configuration: null, content: CONTENT },
       { configuration: CONFIGURATION, content: null },
     ]) {

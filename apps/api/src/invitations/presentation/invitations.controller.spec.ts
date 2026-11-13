@@ -18,6 +18,12 @@ import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-
 import { SystemEmailDeliveryRuntime } from "../../email/infrastructure/system-email-delivery-runtime";
 import { InvitationSlugTakenError } from "../application/invitation.application.errors";
 import {
+  INVITATION_REPOSITORY,
+  type InvitationRecord,
+  type InvitationRepository,
+  type NewInvitation,
+} from "../application/invitation.repository";
+import {
   type CatalogPackageEntitlements,
   type CatalogTemplateVersionSnapshot,
   type CatalogVersionRenderData,
@@ -26,24 +32,18 @@ import {
   type InvitationCatalog,
 } from "../application/invitation-catalog";
 import {
-  INVITATION_REPOSITORY,
-  type InvitationRecord,
-  type InvitationRepository,
-  type NewInvitation,
-} from "../application/invitation.repository";
-import {
   INVITATION_PAYMENT_GATE,
   type InvitationPaymentDecision,
   type InvitationPaymentGate,
 } from "../application/invitation-payment-gate";
-import type { JsonObject } from "../domain/invitation-content";
-import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import {
   InvitationAlreadyArchivedError,
   InvitationAlreadyPublishedError,
   InvitationNotEditableError,
   InvitationNotPublishedError,
 } from "../domain/invitation.errors";
+import type { JsonObject } from "../domain/invitation-content";
+import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import { INVITATION_USE_CASES } from "../invitations.module";
 import { InvitationsController } from "./invitations.controller";
 import { PublicInvitationsController } from "./public-invitations.controller";
@@ -68,7 +68,7 @@ const DRAFT_PACKAGE_ID = "33333333-3333-4333-8333-333333333333";
 const DRAFT_VERSION_ID = "44444444-4444-4444-8444-444444444444";
 /** PUBLISHED, but its `componentKey` is outside the API's renderer allow-list (A3). */
 const UNRENDERABLE_VERSION_ID = "55555555-5555-4555-8555-555555555555";
-const RENDERER = "birthday-adventure-01";
+const RENDERER = "birthday-poster-01";
 const UNREGISTERED_RENDERER = "unregistered-renderer-99";
 const SCHEMA = {
   type: "object",

@@ -61,9 +61,9 @@ const TEMPLATE_VERSION = {
   id: VERSION_ID,
   version: 1,
   status: "DRAFT",
-  componentKey: "birthday-adventure-01",
+  componentKey: "birthday-poster-01",
   schema: { a: 1 },
-  configuration: { palette: "ocean" },
+  configuration: { theme: "dinosaurs" },
   createdAt: AT,
 };
 
@@ -222,16 +222,16 @@ describe("requests", () => {
       [
         () =>
           api.templates.createVersion(ID, {
-            componentKey: "birthday-adventure-01",
+            componentKey: "birthday-poster-01",
             schema: { a: 1 },
-            configuration: { palette: "ocean" },
+            configuration: { theme: "dinosaurs" },
           }),
         "POST",
         `/admin/catalog/templates/${ID}/versions`,
         {
-          componentKey: "birthday-adventure-01",
+          componentKey: "birthday-poster-01",
           schema: { a: 1 },
-          configuration: { palette: "ocean" },
+          configuration: { theme: "dinosaurs" },
         },
         TEMPLATE_VERSION,
       ],
@@ -254,7 +254,7 @@ describe("requests", () => {
         "GET",
         "/admin/catalog/renderers",
         undefined,
-        [{ componentKey: "birthday-adventure-01" }],
+        [{ componentKey: "birthday-poster-01" }],
       ],
     );
 

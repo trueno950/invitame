@@ -1,25 +1,24 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 
-import {
-  BIRTHDAY_ADVENTURE_CONFIGURATION,
-  BIRTHDAY_ADVENTURE_SCHEMA,
-  BIRTHDAY_LAYOUT_TEMPLATE_SEEDS,
-} from "../../../../prisma/catalog-seed";
+import { BIRTHDAY_LAYOUT_TEMPLATE_SEEDS } from "../../../../prisma/catalog-seed";
 import { BIRTHDAY_THEMES } from "./birthday-themes";
 import { validateTemplateVersionContract } from "./renderer-registry";
 
-// The seed's own constants, not a copy: a drift between the seeded version and the registry fails here.
+// The seed's own constants, not a copy: a drift between a seeded version and the registry fails here.
 
-it("the seeded birthday-adventure version satisfies the registry contract", () => {
-  assert.deepEqual(
-    validateTemplateVersionContract({
-      componentKey: BIRTHDAY_ADVENTURE_CONFIGURATION.componentKey,
-      schema: BIRTHDAY_ADVENTURE_SCHEMA,
-      configuration: BIRTHDAY_ADVENTURE_CONFIGURATION,
-    }),
-    { ok: true },
-  );
+it("every seeded template version satisfies the registry contract", () => {
+  for (const seed of BIRTHDAY_LAYOUT_TEMPLATE_SEEDS) {
+    assert.deepEqual(
+      validateTemplateVersionContract({
+        componentKey: seed.componentKey,
+        schema: seed.schema,
+        configuration: seed.configuration,
+      }),
+      { ok: true },
+      seed.key,
+    );
+  }
 });
 
 it("seeds one template for every layout and theme, with unique keys", () => {

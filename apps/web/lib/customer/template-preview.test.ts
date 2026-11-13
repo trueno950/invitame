@@ -66,15 +66,11 @@ function template(
   };
 }
 
-const ADVENTURE = template("birthday-adventure", "birthday-adventure-01", {
-  name: "Birthday Adventure",
-  configuration: {
-    componentKey: "birthday-adventure-01",
-    layout: "adventure",
-    palette: "sunset",
-    typography: "rounded",
-    sectionOrder: ["hero", "details", "message"],
-  },
+/** A template without themes: a renderer this catalog has no sample for, in another occasion. */
+const WEDDING_STORY = template("boda-cuento", "wedding-story-01", {
+  name: "Boda · Cuento",
+  category: { key: "wedding", name: "Boda" },
+  description: "Un cuento para una boda.",
 });
 
 /** The 24 seeded templates: three layouts times eight themes, as the seed creates them (S8). */
@@ -94,7 +90,7 @@ function layoutCards(cards: readonly TemplateCardView[]): LayoutCardView[] {
 
 describe("templateChoiceCards", () => {
   it("groups the seeded catalog into one card per layout with one switch per theme", () => {
-    const cards = templateChoiceCards([ADVENTURE, ...SEEDED], ORIGIN);
+    const cards = templateChoiceCards([WEDDING_STORY, ...SEEDED], ORIGIN);
 
     assert.equal(cards.length, 4);
     assert.equal(cards[0]?.kind, "template");
@@ -117,7 +113,7 @@ describe("templateChoiceCards", () => {
   });
 
   it("labels each switch with its own configuration theme, in the owner's theme order", () => {
-    const layouts = layoutCards(templateChoiceCards([ADVENTURE, ...SEEDED], ORIGIN));
+    const layouts = layoutCards(templateChoiceCards([WEDDING_STORY, ...SEEDED], ORIGIN));
 
     for (const card of layouts) {
       assert.deepEqual(
@@ -147,24 +143,28 @@ describe("templateChoiceCards", () => {
   });
 
   it("submits the published version id of every choice", () => {
-    const cards = templateChoiceCards([ADVENTURE, ...SEEDED], ORIGIN);
+    const cards = templateChoiceCards([WEDDING_STORY, ...SEEDED], ORIGIN);
     const submitted = cards.flatMap((card) =>
       card.kind === "layout" ? card.options.map((option) => option.versionId) : [card.versionId],
     );
-    const published = [ADVENTURE, ...SEEDED].map((stored) => stored.publishedVersion.id);
+    const published = [WEDDING_STORY, ...SEEDED].map((stored) => stored.publishedVersion.id);
 
     assert.deepEqual([...submitted].sort(), [...published].sort());
     assert.equal(new Set(submitted).size, submitted.length);
   });
 
-  it("gives a template without themes its own card with its own miniature", () => {
-    const cards = templateChoiceCards([ADVENTURE, ...SEEDED], ORIGIN);
+  it("gives a template without themes its own card, without a miniature its renderer cannot draw", () => {
+    const cards = templateChoiceCards([WEDDING_STORY, ...SEEDED], ORIGIN);
     const [first] = cards;
 
     assert.equal(first?.kind, "template");
-    assert.equal(first?.kind === "template" ? first.versionId : "", ADVENTURE.publishedVersion.id);
-    assert.equal(first?.kind === "template" ? first.title : "", "Birthday Adventure");
-    assert.notEqual(first?.kind === "template" ? first.sample : undefined, undefined);
+    assert.equal(
+      first?.kind === "template" ? first.versionId : "",
+      WEDDING_STORY.publishedVersion.id,
+    );
+    assert.equal(first?.kind === "template" ? first.title : "", "Boda · Cuento");
+    // A design without themes keeps its own card; the sample it has no content for is simply absent.
+    assert.equal(first?.kind === "template" ? first.sample : "unexpected", undefined);
   });
 
   it("gives a template of another category its own card, with a miniature only when its renderer takes the sample", () => {
@@ -226,12 +226,13 @@ describe("templateChoiceCards", () => {
 });
 
 describe("findPreviewTarget", () => {
-  const templates = [ADVENTURE, ...SEEDED];
+  const templates = [WEDDING_STORY, ...SEEDED];
 
   it("finds the template and the sample of a published version", () => {
-    const target = findPreviewTarget(templates, ADVENTURE.publishedVersion.id, ORIGIN);
+    const themed = SEEDED[0] as CreatorTemplate;
+    const target = findPreviewTarget(templates, themed.publishedVersion.id, ORIGIN);
 
-    assert.equal(target?.template, ADVENTURE);
+    assert.equal(target?.template, themed);
     assert.notEqual(target?.sample, undefined);
   });
 
@@ -240,7 +241,7 @@ describe("findPreviewTarget", () => {
       "",
       "no-es-un-id",
       "0b6f3e0e-8c1e-4b8e-9a51-000000000000",
-      ADVENTURE.id,
+      WEDDING_STORY.id,
       "constructor",
       "__proto__",
     ]) {
@@ -259,10 +260,9 @@ describe("findPreviewTarget", () => {
 
 describe("previewPath", () => {
   it("builds the signed-in preview page of a version", () => {
-    assert.equal(
-      previewPath(ADVENTURE.publishedVersion.id),
-      `/cuenta/invitaciones/nueva/vista/${ADVENTURE.publishedVersion.id}`,
-    );
+    const version = "0b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e14";
+
+    assert.equal(previewPath(version), `/cuenta/invitaciones/nueva/vista/${version}`);
     assert.equal(previewPath("a/b?c"), "/cuenta/invitaciones/nueva/vista/a%2Fb%3Fc");
   });
 });

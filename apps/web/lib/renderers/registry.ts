@@ -1,10 +1,8 @@
 import type { ReactElement } from "react";
 
-import { BirthdayAdventureRenderer } from "../../app/_components/renderers/birthday-adventure-01/birthday-adventure-renderer.ts";
 import { BirthdayMapRenderer } from "../../app/_components/renderers/birthday-map-01/birthday-map-renderer.ts";
 import { BirthdayPosterRenderer } from "../../app/_components/renderers/birthday-poster-01/birthday-poster-renderer.ts";
 import { BirthdayStoryRenderer } from "../../app/_components/renderers/birthday-story-01/birthday-story-renderer.ts";
-import { BIRTHDAY_ADVENTURE_COMPONENT_KEY } from "./birthday-adventure-01.ts";
 import { BIRTHDAY_MAP_COMPONENT_KEY } from "./birthday-map-01.ts";
 import { BIRTHDAY_POSTER_COMPONENT_KEY } from "./birthday-poster-01.ts";
 import { BIRTHDAY_STORY_COMPONENT_KEY } from "./birthday-story-01.ts";
@@ -26,7 +24,6 @@ export interface RendererProps {
 export type RendererComponent = (props: RendererProps) => ReactElement;
 
 const RENDERERS: ReadonlyMap<string, RendererComponent> = new Map([
-  [BIRTHDAY_ADVENTURE_COMPONENT_KEY, BirthdayAdventureRenderer],
   [BIRTHDAY_MAP_COMPONENT_KEY, BirthdayMapRenderer],
   [BIRTHDAY_POSTER_COMPONENT_KEY, BirthdayPosterRenderer],
   [BIRTHDAY_STORY_COMPONENT_KEY, BirthdayStoryRenderer],

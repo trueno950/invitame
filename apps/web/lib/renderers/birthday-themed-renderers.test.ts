@@ -258,12 +258,11 @@ const RENDERERS_DIRECTORY = fileURLToPath(
   new URL("../../app/_components/renderers/", import.meta.url),
 );
 
-/** Every themed renderer source under `app/_components/renderers/`, without the untouched originals. */
+/** Every themed renderer source under `app/_components/renderers/`. */
 function themedRendererSources(): Array<{ file: string; source: string }> {
   return readdirSync(RENDERERS_DIRECTORY, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
     .map((entry) => join(entry.parentPath, entry.name))
-    .filter((file) => !file.includes("birthday-adventure-01"))
     .map((file) => ({ file, source: readFileSync(file, "utf8") }));
 }
 

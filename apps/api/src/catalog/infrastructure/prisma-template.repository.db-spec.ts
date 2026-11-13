@@ -2,10 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, describe, it } from "node:test";
 
-import { PrismaClient, type Prisma, type TemplateVersionStatus } from "@prisma/client";
-
-import { birthdayAdventureVersionInput } from "../../../test/memory-catalog-templates.repository";
+import { type Prisma, PrismaClient, type TemplateVersionStatus } from "@prisma/client";
 import { requireLocalDatabaseUrl } from "../../../test/database";
+import { themedVersionInput } from "../../../test/memory-catalog-templates.repository";
 import {
   CatalogCategoryNotFoundError,
   CatalogConcurrentUpdateError,
@@ -77,9 +76,9 @@ describe("Prisma template repository on PostgreSQL", () => {
     templateId: string,
     version: number,
     status: TemplateVersionStatus,
-    componentKey = "birthday-adventure-01",
+    componentKey = "birthday-poster-01",
   ) {
-    const input = birthdayAdventureVersionInput();
+    const input = themedVersionInput();
     return prisma.templateVersion.create({
       data: {
         templateId,
@@ -221,7 +220,7 @@ describe("Prisma template repository on PostgreSQL", () => {
   describe("versions", () => {
     it("numbers versions one above the highest, starting at 1, and lists them newest first", async () => {
       const created = await newTemplate();
-      const input = birthdayAdventureVersionInput();
+      const input = themedVersionInput();
 
       const first = await repository.createVersion(created.id, input);
       const second = await repository.createVersion(created.id, input);
@@ -230,7 +229,7 @@ describe("Prisma template repository on PostgreSQL", () => {
 
       assert.deepEqual([first?.version, second?.version, third?.version], [1, 2, 8]);
       assert.equal(first?.status, "DRAFT");
-      assert.equal(first?.componentKey, "birthday-adventure-01");
+      assert.equal(first?.componentKey, "birthday-poster-01");
       assert.deepEqual(first?.schema, input.schema);
       assert.deepEqual(first?.configuration, input.configuration);
       assert.deepEqual(
@@ -240,16 +239,13 @@ describe("Prisma template repository on PostgreSQL", () => {
     });
 
     it("answers null for an unknown template", async () => {
-      assert.equal(
-        await repository.createVersion(UNKNOWN_ID, birthdayAdventureVersionInput()),
-        null,
-      );
+      assert.equal(await repository.createVersion(UNKNOWN_ID, themedVersionInput()), null);
       assert.equal(await repository.listVersions(UNKNOWN_ID), null);
     });
 
     it("keeps concurrent creates apart: each gets a distinct number or CatalogConcurrentUpdateError", async () => {
       const created = await newTemplate();
-      const input = birthdayAdventureVersionInput();
+      const input = themedVersionInput();
 
       const results = await Promise.allSettled(
         Array.from({ length: 8 }, () => repository.createVersion(created.id, input)),

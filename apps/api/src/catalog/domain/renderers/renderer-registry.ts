@@ -3,10 +3,6 @@
 // dynamic import, no lookup by name, and no key is resolved from a catalog string. Adding a renderer
 // means adding reviewed code in this directory, the matching web component in `apps/web`, and a new
 // `TemplateVersion` that references the key; an existing version is never edited (AGENTS.md).
-import {
-  BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-  birthdayAdventureRenderer,
-} from "./birthday-adventure-01.renderer";
 import { BIRTHDAY_MAP_COMPONENT_KEY, birthdayMapRenderer } from "./birthday-map-01.renderer";
 import {
   BIRTHDAY_POSTER_COMPONENT_KEY,
@@ -16,7 +12,6 @@ import { BIRTHDAY_STORY_COMPONENT_KEY, birthdayStoryRenderer } from "./birthday-
 import type { RendererContract } from "./renderer-contract";
 
 const RENDERERS: ReadonlyMap<string, RendererContract> = new Map([
-  [BIRTHDAY_ADVENTURE_COMPONENT_KEY, birthdayAdventureRenderer],
   [BIRTHDAY_MAP_COMPONENT_KEY, birthdayMapRenderer],
   [BIRTHDAY_POSTER_COMPONENT_KEY, birthdayPosterRenderer],
   [BIRTHDAY_STORY_COMPONENT_KEY, birthdayStoryRenderer],

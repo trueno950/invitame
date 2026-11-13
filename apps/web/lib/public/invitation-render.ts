@@ -1,10 +1,4 @@
 import {
-  BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-  parseBirthdayAdventureConfiguration,
-  parseBirthdayAdventureContent,
-  RendererPropsError,
-} from "../renderers/birthday-adventure-01.ts";
-import {
   BIRTHDAY_MAP_COMPONENT_KEY,
   parseBirthdayMapConfiguration,
   parseBirthdayMapContent,
@@ -20,7 +14,7 @@ import {
   parseBirthdayStoryContent,
 } from "../renderers/birthday-story-01.ts";
 import type { RendererProps } from "../renderers/registry.ts";
-import { RendererPropsError as ThemedRendererPropsError } from "../renderers/renderer-props-error.ts";
+import { RendererPropsError } from "../renderers/renderer-props-error.ts";
 
 /**
  * Whether a registered renderer will accept the stored props of an invitation (M5 T5; A3). A renderer
@@ -39,13 +33,6 @@ import { RendererPropsError as ThemedRendererPropsError } from "../renderers/ren
 type PropsCheck = (props: RendererProps) => void;
 
 const PROPS_CHECKS: ReadonlyMap<string, PropsCheck> = new Map<string, PropsCheck>([
-  [
-    BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-    (props) => {
-      parseBirthdayAdventureConfiguration(props.configuration);
-      parseBirthdayAdventureContent(props.content);
-    },
-  ],
   [
     BIRTHDAY_MAP_COMPONENT_KEY,
     (props) => {
@@ -77,11 +64,8 @@ export function propsCheckKeys(): readonly string[] {
 /**
  * Whether the props of `componentKey` satisfy its renderer's contract. A refused snapshot is `false`; any
  * other error is a real bug in the check itself and is rethrown unchanged, so it is not mistaken for a
- * guest's missing page.
- *
- * `birthday-adventure-01` keeps the error class it shipped with (its files are unchanged), and the themed
- * layouts share the one in `renderers/renderer-props-error.ts`; both mean "a drifted snapshot", so both are
- * refused here.
+ * guest's missing page. Every layout shares the one `RendererPropsError`, so a drifted snapshot is refused
+ * the same way whichever theme it names.
  */
 export function rendererAcceptsProps(componentKey: string, props: RendererProps): boolean {
   const check = PROPS_CHECKS.get(componentKey);
@@ -94,7 +78,7 @@ export function rendererAcceptsProps(componentKey: string, props: RendererProps)
     check(props);
     return true;
   } catch (error) {
-    if (error instanceof RendererPropsError || error instanceof ThemedRendererPropsError) {
+    if (error instanceof RendererPropsError) {
       return false;
     }
     throw error;

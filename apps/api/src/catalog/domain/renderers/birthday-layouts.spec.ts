@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BIRTHDAY_ADVENTURE_SCHEMA } from "../../../../prisma/catalog-seed";
+import { BIRTHDAY_CONTENT_SCHEMA } from "../../../../prisma/catalog-seed";
 import { BIRTHDAY_THEMES } from "./birthday-themes";
 import { findRenderer, validateTemplateVersionContract } from "./renderer-registry";
 
 // The three birthday layouts the owner chose (S7, S8): each one is its own allow-listed `componentKey`,
-// shares the eight `birthday-adventure-01` content fields, and takes exactly `{ componentKey, theme }`
-// as configuration. Expected messages are literals on purpose.
+// shares the eight birthday content fields, and takes exactly `{ componentKey, theme }` as configuration.
+// Expected messages are literals on purpose.
 
 const THEME_ISSUE =
   "configuration.theme must be one of: ice-kingdom, rescue-team, spider-hero, classic-mouse, dinosaurs, under-the-sea, fairytale-princess, blocks-and-pixels";
@@ -23,7 +23,7 @@ function validate(input: { componentKey: string; schema?: unknown; configuration
 
   return validateTemplateVersionContract({
     componentKey,
-    schema: "schema" in input ? input.schema : BIRTHDAY_ADVENTURE_SCHEMA,
+    schema: "schema" in input ? input.schema : BIRTHDAY_CONTENT_SCHEMA,
     configuration:
       "configuration" in input ? input.configuration : { componentKey, theme: BIRTHDAY_THEMES[0] },
   });
@@ -35,7 +35,7 @@ function issuesOf(result: ReturnType<typeof validate>): string[] {
 }
 
 function schemaMissing(field: string): unknown {
-  const schema = structuredClone(BIRTHDAY_ADVENTURE_SCHEMA) as SchemaFixture;
+  const schema = structuredClone(BIRTHDAY_CONTENT_SCHEMA) as SchemaFixture;
   delete schema.properties[field];
   return schema;
 }
@@ -124,7 +124,7 @@ for (const componentKey of LAYOUT_KEYS) {
     });
 
     it("refuses a componentKey that differs from the version's", () => {
-      for (const value of ["birthday-adventure-01", "other", 1, null, undefined]) {
+      for (const value of ["other", "birthday-nope-01", 1, null, undefined]) {
         assert.deepEqual(
           issuesOf(
             validate({
@@ -144,7 +144,7 @@ for (const componentKey of LAYOUT_KEYS) {
         'schema.required lists "message", which is not declared in schema.properties',
       ]);
 
-      const mistyped = structuredClone(BIRTHDAY_ADVENTURE_SCHEMA) as SchemaFixture;
+      const mistyped = structuredClone(BIRTHDAY_CONTENT_SCHEMA) as SchemaFixture;
       (mistyped.properties.age as Record<string, unknown>).type = "string";
       assert.deepEqual(issuesOf(validate({ componentKey, schema: mistyped })), [
         'schema.properties.age.type must be "integer"',
@@ -156,34 +156,3 @@ for (const componentKey of LAYOUT_KEYS) {
     });
   });
 }
-
-describe("birthday-adventure-01 keeps its own contract", () => {
-  it("still accepts its seeded configuration and refuses a theme-only one", () => {
-    const componentKey = "birthday-adventure-01";
-
-    assert.deepEqual(
-      validate({
-        componentKey,
-        configuration: {
-          componentKey,
-          layout: "adventure",
-          palette: "sunset",
-          typography: "rounded",
-          sectionOrder: ["hero", "details", "message"],
-        },
-      }),
-      { ok: true },
-    );
-
-    assert.deepEqual(
-      issuesOf(validate({ componentKey, configuration: { componentKey, theme: "ice-kingdom" } })),
-      [
-        "configuration.theme is not allowed; allowed keys: componentKey, layout, palette, typography, sectionOrder",
-        "configuration.layout is required",
-        "configuration.palette is required",
-        "configuration.typography is required",
-        "configuration.sectionOrder is required",
-      ],
-    );
-  });
-});
