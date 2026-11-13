@@ -101,6 +101,32 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   the draft fails, the creator lands back on step 3 with the occasion, design, theme, and package kept and the
   existing error message shown, instead of step 1 with the selection lost.
 
+- S13 — Baby shower and themed baptism (L19). Owner answers, verbatim: "1 si 2 si 3 si 4 si", approving: (1) the 8
+  baby shower and 6 themed baptism themes in `design/celebration-themes/`; (2) baptism content with ceremony and
+  reception as two places, each with address and time, plus parents, godparents, and an RSVP contact; (3) baby
+  shower content with hosts, optional baby name, optional gender reveal, gift registry, and an RSVP contact; (4) the
+  formal baptism stays in the elegant line with XV años and weddings (T8). Parent decisions within S13 (L19; owner may
+  overturn):
+  - **Layouts.** One layout per occasion first, the full-page form of the board's approved preview (accent band with
+    name and date, information rows, place cards), with the same quality rules as the birthday layouts (theme
+    background layer, `--inv-on-accent`, motif strips never behind text, real `<img>` with alt text, 390 px first,
+    no client script): `baby-shower-classic-01` («Clásica») and `baptism-classic-01` («Clásica»). Configuration is
+    exactly `{componentKey, theme}`.
+  - **Themes.** Baby shower: `teddy-honey`, `clouds-stars`, `baby-safari`, `hot-air-balloons`, `boho-rainbow`,
+    `little-moon`, `woodland-friends`, `sweet-bunny`. Baptism: `dove-olive`, `little-angels`, `sky-clouds`,
+    `soft-floral`, `little-lamb`, `star-light`. Colors, fonts, and motifs exactly as on the boards; contrast pinned by
+    tests like the birthday themes.
+  - **Content.** Baby shower required: `hosts`, `date`, `time`, `location`, `address`, `message`, `rsvpContact`;
+    optional: `babyName`, `genderReveal` (boolean), `giftRegistry`, `mainPhoto`. Baptism required:
+    `celebrantName`, `date`, `parents`, `godparents`, `ceremonyPlace`, `ceremonyAddress`, `ceremonyTime`,
+    `receptionPlace`, `receptionAddress`, `receptionTime`, `message`, `rsvpContact`; optional: `mainPhoto`,
+    `giftRegistry`. Every string bounded like the birthday fields; optional fields render nothing when empty.
+  - **Catalog.** Baby shower templates go in the existing category for new families; baptism gets a new category
+    if none exists (seed create-only). Template key `<occasion>-classic-<theme>`, Spanish name `Clásica · <theme
+    name>`, no protected names.
+  - **Fonts.** Baloo 2, Quicksand, Fredoka, Playfair Display, Josefin Sans, Fraunces, Caveat, Nunito, and Lora are
+    self-hosted latin woff2 files with licenses byte-identical to google/fonts, following the T6b procedure.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -116,9 +142,12 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T9 | Template chooser with live previews grouped by layout, theme switch, and a full sample preview page | S9 | worker | `e3c0284`, `ba3debb` |
 | T10 | Chooser refinement: three visual directions under `design/template-chooser-v2/` | S9 | worker | `e915ab7`, `dfea662` |
 | T10b | Implement the «Paso a paso» chooser (02) in Next.js: step URLs, design row, theme miniatures beside the sample, package cards | S9, S10 | worker | `acec85d` |
-| T11 | Delete Birthday Adventure everywhere: API, web, seed, tests, docs, dev/test database rows | S11 | worker | |
-| T12 | Failed create returns to step 3 with the selection and the error | S12 | worker | |
-| T7 | Baby shower and themed baptism themes: directions, owner choice, implementation | S2-S5 | pending | |
+| T11 | Delete Birthday Adventure everywhere: API, web, seed, tests, docs, dev/test database rows | S11 | worker | `280bb9c` |
+| T12 | Failed create returns to step 3 with the selection and the error | S12 | worker | `4f8c9a1` |
+| T7 | Baby shower and themed baptism theme boards | S2-S6 | worker | `aa2af15` |
+| T7a | API: optional schema fields, baby shower and baptism contracts, themes, category, seed | S13 | worker | |
+| T7b | Web: nine display fonts | S13 | worker | |
+| T7c | Web: two layouts, 14 themes, samples, creator form labels and field kinds | S13 | worker | |
 | T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
 
 ## Log
@@ -223,3 +252,14 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   4.70:1 or more (WCAG formula); both boards render at 1440 px with no overflow or console errors. Waiting for the
   owner's theme choice and approval of the proposed content fields. The baptism proposal splits the place into
   ceremony and reception blocks, which needs a new schema per layout.
+- L19 — Owner approved the boards, the content fields, and the elegant formal baptism ("1 si 2 si 3 si 4 si"). The
+  parent fixed S13 and split the work into T7a-T7c. They start after T11 and T12 finish, because they edit the same
+  registries, seed, and tests.
+- L20 — T11 committed in `280bb9c` and T12 in `4f8c9a1` (worker `mwea2erb-b-z70t`). The parent deleted the database
+  rows in one transaction per database. Dev: 1 invitation, 40 versions, and 38 templates deleted, leaving 25
+  templates. Test: 1 version and 1 template deleted. Independent verify `mweayl5j-d-fu1c` returned S11 met and S12
+  met with no blockers: web 675, API 1092 unit and 291 db-specs pass, both typechecks and the docs check pass, and
+  the probes showed no open redirect or CR/LF injection in the carried selection. Its advisories: a stale
+  adventure-shaped configuration in `creator-catalog.controller.spec.ts`; no fixture exercising a single-style card
+  miniature; five suggested regression tests, which go to T7a (API: D, E) and T7c (web: A, B, C); and an old dev-only
+  `retired-renderer-99` row, left as is. T7a-T7c launched in parallel with disjoint edit surfaces.
