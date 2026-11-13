@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Temas de baby shower — tablero de selección</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fafafa; color: #18181b; font-family: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif; line-height: 1.5; }
+  header { padding: 40px 56px 8px; }
+  .eyebrow { margin: 0 0 10px; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #52525b; }
+  h1 { margin: 0; font-size: 34px; line-height: 1.15; }
+  header p.lead { margin: 8px 0 0; color: #52525b; max-width: 96ch; }
+  main { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; padding: 28px 56px 40px; }
+  .card { background: #ffffff; border: 1px solid #e4e4e7; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
+  .preview { background: var(--bg); padding: 14px; display: grid; gap: 8px; align-content: start; }
+  .band { position: relative; overflow: hidden; background: var(--accent); color: #ffffff; text-align: center; border-radius: 14px; padding: 18px 76px 20px; }
+  .art { position: absolute; width: 64px; height: 53px; opacity: .95; }
+  .art svg { display: block; width: 100%; height: 100%; }
+  .art--tl { top: 6px; left: 6px; }
+  .art--br { right: 6px; bottom: 6px; }
+  .band > p { position: relative; margin: 0; }
+  .kicker { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; }
+  .name { font-family: var(--font); font-size: 36px; line-height: 1.06; margin-top: 4px !important; overflow-wrap: anywhere; }
+  .bandsub { font-size: 12px; }
+  .row { background: var(--surface); border-radius: 10px; padding: 8px 10px; color: var(--ink); font-size: 12.5px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .row.soft { background: var(--soft); }
+  .row b { color: var(--accent); font-weight: 600; }
+  .row .when { white-space: nowrap; }
+  .info { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; flex: 1; font-size: 14px; }
+  .info h2 { margin: 0; font-size: 19px; }
+  .contrast { margin: auto 0 0; padding-top: 9px; border-top: 1px solid #e4e4e7; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; color: #52525b; }
+  .contrast b { color: #18181b; }
+  .swatches { display: flex; gap: 4px; }
+  .swatches span { flex: 1; height: 22px; border-radius: 6px; border: 1px solid #e4e4e7; }
+  .swatch-note { margin: -4px 0 0; font-size: 10px; color: #52525b; display: grid; line-height: 1.4; }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
+  dt { color: #52525b; }
+  dd { margin: 0; }
+  .facts { margin: 0 56px 40px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 18px; padding: 28px 32px 30px; }
+  .facts h2 { margin: 0; font-size: 24px; }
+  .badge { display: inline-block; margin: 8px 0 0; padding: 3px 10px; border-radius: 999px; background: #fffbeb; border: 1px solid #e4e4e7; color: #92400e; font-size: 12px; letter-spacing: .04em; }
+  .facts p.note { margin: 12px 0 0; color: #3f3f46; max-width: 100ch; font-size: 14.5px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 44px; margin-top: 22px; }
+  .cols h3 { margin: 0 0 10px; font-size: 15px; }
+  .cols ul { margin: 0; padding-left: 18px; display: grid; gap: 9px; color: #3f3f46; font-size: 14px; }
+  .cols b { color: #18181b; }
+  .cols .hint { color: #52525b; }
+  footer { padding: 0 56px 40px; color: #52525b; font-size: 14px; max-width: 120ch; display: grid; gap: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Tablero de temas · propuesta</p>
+  <h1>Baby shower — ocho temas temáticos</h1>
+  <p class="lead">Cada tema es una paleta inspirada en un estilo popular, una tipografía con licencia comercial (OFL) e ilustraciones originales. No hay dibujos de personajes, logos ni nombres protegidos en ninguna parte: el tema toma el aire y los colores, no la marca. Algunas paletas se inspiran en marcas o personajes de bebé conocidos y por eso llevan un nombre descriptivo y genérico, sin nombrar la marca. Los ocho temas funcionan con cualquier estructura; aquí se muestran sobre una invitación vertical de baby shower. Todos los pares de texto de cada tema pasan 4.5:1, calculado con la fórmula WCAG.</p>
+</header>
+<main id="themes"></main>
+
+<section class="facts" aria-labelledby="campos-baby">
+  <h2 id="campos-baby">Datos que pide esta ocasión</h2>
+  <span class="badge">Propuesta para revisar · todavía no cambia el formulario</span>
+  <p class="note">Hoy el formulario pide los mismos ocho datos de un cumpleaños. Para un baby shower alcanza con casi los mismos, pero faltan dos: quién invita y la mesa de regalos. Además el nombre se puede omitir cuando es sorpresa, y no hay edad que mostrar.</p>
+  <div class="cols">
+    <div>
+      <h3>Ya existe hoy</h3>
+      <ul>
+        <li><b>Nombre</b> del bebé, o de la familia cuando el nombre es sorpresa. <span class="hint">Hoy es obligatorio; aquí pasaría a opcional.</span></li>
+        <li><b>Fecha y hora</b> del baby shower.</li>
+        <li><b>Lugar y dirección</b>, con enlace al mapa.</li>
+        <li><b>Foto principal</b>, por ejemplo la ecografía o una foto de la pareja.</li>
+        <li><b>Mensaje o nota</b> de las anfitrionas.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Nuevo propuesto</h3>
+      <ul>
+        <li><b>Anfitrionas o anfitriones</b>: quién invita y a quién se le confirma la asistencia.</li>
+        <li><b>Revelación de género</b> opcional: niña, niño o sorpresa. Si es sorpresa, no se muestra ningún color de género.</li>
+        <li><b>Mesa de regalos</b>: tienda, código y enlace. Opcional; si no se llena, la sección no aparece.</li>
+        <li><b>Confirmar asistencia</b> por teléfono o nombre de la persona de contacto.</li>
+        <li><b>Edad</b>: se oculta en esta ocasión. No se pide y no se muestra.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Detalle técnico para quien implemente: <code>celebrantName</code>, <code>date</code>, <code>time</code>, <code>location</code>, <code>address</code>, <code>mainPhoto</code> y <code>message</code> ya existen; <code>age</code> no aplica. Los campos nuevos serían tres bloques opcionales (anfitriones, mesa de regalos, confirmación) y un nombre opcional.</p>
+</section>
+
+<footer>
+  <span>Las previsualizaciones usan pilas de fuentes del sistema como equivalente; la fuente final de cada tema se carga con su licencia al implementarlo. Las ilustraciones del tablero son marcadores geométricos simples, no el arte final.</span>
+  <span>Contraste calculado con la fórmula WCAG 2.x sobre fondo, superficie y suave para texto y acento, y blanco sobre acento. El mínimo impreso es el par más bajo de cada paleta.</span>
+</footer>
+
+<script>
+  const motifs = {
+    miel: {
+      tl: '<g fill="none" stroke="#ffffff" stroke-opacity=".32" stroke-width="1.4"><path d="M14 8l8 4.6v9.2L14 26.4 6 21.8V12.6z"/><path d="M31 17l8 4.6v9.2L31 35.4 23 30.8v-9.2z"/><path d="M14 26l8 4.6v9.2L14 44.4 6 39.8v-9.2z"/></g>',
+      br: '<g fill="var(--d1)"><circle cx="46" cy="30" r="16"/><circle cx="32" cy="14" r="6.5"/><circle cx="60" cy="14" r="6.5"/></g><g fill="#ffffff" opacity=".5"><circle cx="42" cy="26" r="1.8"/><circle cx="51" cy="26" r="1.8"/></g>',
+    },
+    nubes: {
+      tl: '<g fill="#ffffff" opacity=".35"><ellipse cx="24" cy="36" rx="19" ry="9.5"/><ellipse cx="37" cy="28" rx="12" ry="7.5"/></g>',
+      br: '<g fill="var(--d1)"><path d="M28 32l3.2 8.2 8.2 1.1-6.1 5.7 1.6 8.2-6.9-4.1-6.9 4.1 1.6-8.2-6.1-5.7 8.2-1.1z"/><path d="M55 12l2.2 5.6 5.6 .8-4.2 3.9 1.1 5.6-4.7-2.8-4.7 2.8 1.1-5.6-4.2-3.9 5.6-.8z"/></g>',
+    },
+    safari: {
+      tl: '<g fill="var(--d1)" opacity=".85"><ellipse cx="22" cy="28" rx="17" ry="7" transform="rotate(-32 22 28)"/><ellipse cx="36" cy="44" rx="13" ry="5.5" transform="rotate(-18 36 44)"/></g><g fill="none" stroke="#ffffff" stroke-opacity=".4" stroke-width="1.4" stroke-linecap="round"><path d="M8 56q10-24 28-36"/></g>',
+      br: '<g fill="none" stroke="#ffffff" stroke-opacity=".42" stroke-width="2" stroke-linecap="round"><path d="M28 58q4-16 2-26"/><path d="M38 58q2-14 10-22"/><path d="M48 58q6-12 12-16"/></g>',
+    },
+    globos: {
+      tl: '<g fill="var(--d1)"><path d="M20 10a9 10 0 0 1 18 0c0 7-9 14-9 14s-9-7-9-14z"/><path d="M20 28q9 3 18 0"/><path d="M25 26l4 5 4-5"/><rect x="25" y="33" width="8" height="6" rx="1.5"/></g>',
+      br: '<g fill="var(--d1)"><path d="M38 12a12 13 0 0 1 24 0c0 9-12 18-12 18s-12-9-12-18z"/><path d="M38 34q12 4 24 0"/><path d="M45 32l5 6 5-6"/><rect x="45" y="40" width="10" height="8" rx="2"/></g>',
+    },
+    arcoiris: {
+      tl: '<g fill="none" stroke="var(--d1)" stroke-width="2" stroke-linecap="round"><circle cx="28" cy="26" r="9"/><path d="M28 6v7M28 39v8M8 26h7M41 26h7M14 12l5 5M42 40l5 5M42 12l-5 5M19 40l-5 5"/></g>',
+      br: '<g fill="none" stroke-linecap="round"><path d="M8 58a28 28 0 0 1 56 0" stroke="var(--d1)" stroke-width="7"/><path d="M19 58a17 17 0 0 1 34 0" stroke="#ffffff" stroke-opacity=".45" stroke-width="6"/><path d="M29 58a7 7 0 0 1 14 0" stroke="var(--d1)" stroke-width="5"/></g>',
+    },
+    lunita: {
+      tl: '<circle cx="26" cy="24" r="15" fill="var(--d1)"/><circle cx="35" cy="17" r="13" fill="var(--accent)"/>',
+      br: '<g fill="#ffffff" opacity=".6"><path d="M30 22l2.6 6.6 6.6 1-5 4.6 1.3 6.6-5.5-3.3-5.5 3.3 1.3-6.6-5-4.6 6.6-1z"/></g><g fill="none" stroke="var(--d1)" stroke-opacity=".7" stroke-width="1.5"><circle cx="54" cy="44" r="5"/><circle cx="44" cy="52" r="3"/></g>',
+    },
+    bosque: {
+      tl: '<g fill="var(--d1)" opacity=".85"><path d="M20 46l13-26 13 26z"/><path d="M4 46l9-18 9 18z"/><path d="M32 46l9-18 9 18z"/></g>',
+      br: '<g fill="none" stroke="#ffffff" stroke-opacity=".42" stroke-width="1.8" stroke-linecap="round"><path d="M22 58q12-20 8-38"/><path d="M29 36q-11-2-15-11M31 24q11-2 15-11M33 48q-8-2-11-9"/></g>',
+    },
+    conejito: {
+      tl: '<g fill="#ffffff" opacity=".42"><ellipse cx="24" cy="14" rx="5.5" ry="13" transform="rotate(-14 24 14)"/><ellipse cx="40" cy="14" rx="5.5" ry="13" transform="rotate(14 40 14)"/><circle cx="32" cy="40" r="15"/></g>',
+      br: '<g fill="var(--d1)"><path d="M34 32q-8-8-16-1 0 9 16 16 16-7 16-16-8-7-16 1z"/><path d="M52 8q-5-5-10-1 0 6 10 10 10-4 10-10-5-4-10 1z"/></g>',
+    },
+  };
+  const themes = [
+    { name: "Osito y miel", motif: "miel", font: '"Baloo 2", "Avenir Next Rounded", "Trebuchet MS", sans-serif', fontName: "Baloo 2 (OFL)", art: "Panal de hexágonos y osito", insp: "Oso de peluche clásico y miel", c: ["#fdf6ec","#ffffff","#f7e3c3","#3d2a12","#8a5a12","#e0a83c","#b3763a"], min: "4.71" },
+    { name: "Nubes y estrellas", motif: "nubes", font: '"Quicksand", "Avenir Next", "Segoe UI", sans-serif', fontName: "Quicksand (OFL)", art: "Nubes redondas y estrellas", insp: "Marca de ropa de bebé con cielos ilustrados", c: ["#eef4fd","#ffffff","#d6e6fa","#1b2c4a","#2f5a9e","#f5c96b","#9fc4ef"], min: "5.38" },
+    { name: "Safari bebé", motif: "safari", font: '"Fredoka", "Avenir Next Rounded", "Trebuchet MS", sans-serif', fontName: "Fredoka (OFL)", art: "Hojas y pasto", insp: "Ilustración de safari infantil", c: ["#f6f1e7","#ffffff","#e3d8c0","#2f2a1c","#3f5b20","#d18a4f","#b6c4a0"], min: "5.44" },
+    { name: "Globos aerostáticos", motif: "globos", font: '"Playfair Display", Georgia, "Times New Roman", serif', fontName: "Playfair Display (OFL)", art: "Globos con canasta", insp: "Cartel de feria antiguo", c: ["#fbf3ee","#ffffff","#f3ddd2","#33202c","#35647f","#e08a6a","#dcae57"], min: "4.90" },
+    { name: "Arcoíris boho", motif: "arcoiris", font: '"Cormorant Garamond", "Iowan Old Style", Georgia, serif', fontName: "Cormorant Garamond (OFL, ya cargada)", art: "Arcos de arcoíris y sol", insp: "Decoración boho de baby shower", c: ["#fdf4ef","#ffffff","#f2ded2","#3b2620","#9c4a2f","#e2b19a","#9aa88f"], min: "4.70" },
+    { name: "Lunita", motif: "lunita", font: '"Josefin Sans", "Avenir Next", "Segoe UI", sans-serif', fontName: "Josefin Sans (OFL)", art: "Luna creciente, estrellas y puntos", insp: "Marca de cunas y sueño con lunas", c: ["#f4f1e8","#ffffff","#e2ddc9","#1e2a44","#4b5a92","#d9b26a","#a7b6d9"], min: "4.85" },
+    { name: "Amigos del bosque", motif: "bosque", font: '"Fraunces", "Iowan Old Style", Georgia, serif', fontName: "Fraunces (OFL)", art: "Pinos y helechos", insp: "Cuentos de animales del bosque", c: ["#f2f5ee","#ffffff","#dde7d6","#24301f","#41633a","#c07a4b","#9fbe8a"], min: "5.37" },
+    { name: "Conejito dulce", motif: "conejito", font: '"Caveat", "Bradley Hand", "Segoe Print", cursive', fontName: "Caveat (OFL)", art: "Orejas y carita de conejo, corazones", insp: "Mascota dulce de tienda de bebé", c: ["#fdf2f4","#ffffff","#f8dde3","#4a2230","#a63d5e","#8fc9b6","#e8b0bf"], min: "4.77" },
+  ];
+  const vars = ["--bg","--surface","--soft","--ink","--accent","--d1","--d2"];
+  const roles = ["fondo","superficie","suave","texto","acento","decoración 1","decoración 2"];
+  document.getElementById("themes").innerHTML = themes.map((t, i) => `
+    <article class="card" style="${vars.map((v, k) => `${v}:${t.c[k]}`).join(";")};--font:${t.font.replace(/"/g, "'")}" aria-labelledby="tema-${i}">
+      <div class="preview">
+        <div class="band">
+          <span class="art art--tl" aria-hidden="true"><svg viewBox="0 0 72 60">${motifs[t.motif].tl}</svg></span>
+          <span class="art art--br" aria-hidden="true"><svg viewBox="0 0 72 60">${motifs[t.motif].br}</svg></span>
+          <p class="kicker">Baby shower de</p>
+          <p class="name">Sofía</p>
+          <p class="bandsub">Te esperamos</p>
+        </div>
+        <div class="row"><span><b>Sábado 14 de marzo</b></span><span class="when">12:00 h</span></div>
+        <div class="row"><span>Jardín Las Palmas</span></div>
+        <div class="row soft"><span>Anfitrionas: Mariana y Lucía Ruiz</span></div>
+        <div class="row soft"><span><b>Mesa de regalos</b></span><span class="when">Código 5123 4471</span></div>
+      </div>
+      <div class="info">
+        <h2 id="tema-${i}">${t.name}</h2>
+        <div class="swatches" role="img" aria-label="Paleta: ${t.c.map((c, k) => `${roles[k]} ${c}`).join(", ")}">${t.c.map(c => `<span style="background:${c}"></span>`).join("")}</div>
+        <p class="swatch-note"><span>1 fondo · 2 superficie · 3 suave · 4 texto</span><span>5 acento · 6 decoración 1 · 7 decoración 2</span></p>
+        <dl>
+          <dt>Tipografía</dt><dd>${t.fontName}</dd>
+          <dt>Ilustraciones</dt><dd>${t.art}</dd>
+          <dt>Inspiración</dt><dd>${t.insp}</dd>
+        </dl>
+        <p class="contrast"><span>Contraste mínimo</span><b>${t.min}:1</b></p>
+      </div>
+    </article>`).join("");
+</script>
+</body>
+</html>

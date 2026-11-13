@@ -216,3 +216,10 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   owner chose deletion. Before the change, the dev database had 40 `birthday-adventure-01` versions and 1 invitation
   pinned to one of them, the test database had 1 version, and 65 repository files referenced it. T11 and T12 go to
   one worker in sequence; the T7 theme board goes to a parallel design worker.
+- L18 — T7 boards written by worker `mwea2erh-c-pmwa` to `design/celebration-themes/`: `01-baby-shower.html`, eight
+  themes (Osito y miel, Nubes y estrellas, Safari bebé, Globos aerostáticos, Arcoíris boho, Lunita, Amigos del bosque,
+  Conejito dulce), and `02-bautizo-tematico.html`, six themes (Paloma y olivo, Angelitos, Cielo y nubes, Floral suave,
+  Corderito, Luz de estrella), each with a «Datos que pide esta ocasión» proposal. Every palette pairs at
+  4.70:1 or more (WCAG formula); both boards render at 1440 px with no overflow or console errors. Waiting for the
+  owner's theme choice and approval of the proposed content fields. The baptism proposal splits the place into
+  ceremony and reception blocks, which needs a new schema per layout.
