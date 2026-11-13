@@ -1,0 +1,68 @@
+# Invitation features — first batch
+
+Branch `feat/invitation-features` from `feat/catalog-designs` at `4918aa6`. The guest invitation shows the features its
+package includes: map links, a live countdown, WhatsApp, and add-to-calendar, with feature data stored per invitation.
+
+## Specs
+
+- S1 — Owner request, verbatim: "me gusta lo que ya tenemos hasta ahora, pero me gustaria mejorar, pulir los disenos
+  de plantillas, agregarle mejor diseno, y otra cosa aun no desarrollamos mas funcionalidades que mostrara cada
+  invitacion no como mapa, playslist, y otras funcionalides no ?"
+- S2 — Owner choices (L2), verbatim answers: «¿Qué hacemos primero?» → "Funcionalidades primero (Recomendado)";
+  «¿Qué funcionalidades quieres en la primera tanda?» → "Rápidas: mapa, cuenta regresiva, WhatsApp, calendario";
+  «¿Qué mejoras de diseño te interesan más?» → "Ilustraciones reales por tema" (a later feature, after this batch).
+- S3 — Owner choices (L3), verbatim answers: feature data → "Aparte, por invitación (Recomendado)" — "Una sección
+  «Funcionalidades» en el borrador, independiente de la plantilla. Agrega una tabla nueva en la base (migración que
+  solo agrega, no borra). Cambiar de plantilla no las afecta."; time zone → "El cliente la elige"; calendar →
+  "Sí, en todos (Recomendado)" — "Es básico para el invitado y no está en el catálogo de funcionalidades hoy.";
+  countdown → "Días, horas y minutos en vivo (Recomendado)" — "Se ve viva; usa un poco de JavaScript solo en ese
+  bloque. Sin JavaScript muestra el valor al abrir."
+- S4 — Contract decided by the parent within S1-S3 (L3; the owner may overturn), workers treat it as spec:
+  - **Gating.** The API decides which features a guest page shows: the invitation package's feature keys
+    intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `WHATSAPP`; add-to-calendar is always on and is not
+    a catalog feature. WhatsApp also needs a stored phone. Package and feature names never select code paths beyond
+    this explicit allow-list (AGENTS.md).
+  - **Data.** Additive migration only. `Invitation.timeZone` is an IANA zone from an allow-list (Mexico's zones:
+    `America/Mexico_City`, `America/Cancun`, `America/Mazatlan`, `America/Hermosillo`, `America/Chihuahua`,
+    `America/Tijuana`, `America/Matamoros`, `America/Monterrey`, `America/Merida`, `America/Ojinaga`,
+    `America/Bahia_Banderas` — narrow it to the zones current tz data treats as distinct if a worker proves some are
+    aliases), default `America/Mexico_City` for new and existing rows. A one-to-one `InvitationFeatureSettings` table
+    (invitation id primary key and foreign key, `whatsappPhone` nullable, timestamps) holds feature data; it is
+    owned by the invitation's creator, and changing the template does not touch it.
+  - **WhatsApp phone.** Accept a Mexican 10-digit number with spaces, dashes, or parentheses, or an international
+    `+` number of 8 to 15 digits; store E.164 (`+52` added to a 10-digit Mexican number); never log it.
+  - **API.** The draft read returns `timeZone`, `featureSettings: { whatsappPhone }`, and `availableFeatures` (the
+    gated keys plus `CALENDAR`). Updating the time zone and feature settings is creator-owned, validated, and refused
+    for archived invitations, like content saves. The public read returns `timeZone` and `features` with `countdown`,
+    `map`, and `calendar` as booleans and `whatsapp` as `{ phone }` or null, and nothing else about the package.
+  - **Guest page.** Each layout places one shared, themed features block in its flow, using the theme CSS variables.
+    No feature data means no block, so current renders stay byte-identical. Map: «Cómo llegar» buttons to Google Maps
+    and Waze per place (two places for baptisms), built from the layout's own address fields, with no embedded map and
+    no API key. Countdown: days, hours, and minutes to the event start in the invitation's time zone, rendered on the
+    server at request time, ticking in a small client island; it says the event is today or has passed when it
+    should, and has no motion. Calendar: a Google Calendar link and an `.ics` download for a four-hour event at the
+    start time in the invitation's zone; for baptisms the ceremony is the start and the reception goes in the
+    description. WhatsApp: a button to `wa.me/<digits>` with a neutral prefilled Spanish greeting naming the
+    celebration.
+  - **Creator.** The draft page gets a «Funcionalidades» section with a time zone select (Spanish labels) and, when
+    the package includes WhatsApp, a phone field; it lists the automatic features (map, countdown, calendar) the
+    guests will see.
+
+## Tasks
+
+| ID | Task | Specs | Route | Commit |
+| --- | --- | --- | --- | --- |
+| F1 | API: migration, time zone and phone domain, feature settings use cases and REST, gated public read, tests | S3, S4 | worker | |
+| F2 | Web: event facts per layout, features block, countdown island, map/WhatsApp/calendar links, ICS builder, placement in the five layouts | S3, S4 | worker | |
+| F3 | Web: public page wiring, `.ics` route, creator «Funcionalidades» section, API client, browser check | S3, S4 | worker | |
+| F4 | Independent verification of the migration and the gating | S4 | verify | |
+
+## Log
+
+- L1 — Owner request (S1). The parent explained that 9 features exist only as catalog data and that packages already
+  promise some of them (Basic: COUNTDOWN, MAP, WHATSAPP); no layout implements any. Before charging (Milestone 7),
+  each promised feature must work or the package text must change.
+- L2 — Priorities chosen (S2): features first, starting with the quick batch; design polish later with real
+  illustrations per theme; the elegant line after both.
+- L3 — Data, time zone, calendar, and countdown choices (S3). The parent fixed the contract S4 and split the work: F1
+  (API) and F2 (web rendering) run in parallel with disjoint surfaces; F3 waits for F1's real contract.
