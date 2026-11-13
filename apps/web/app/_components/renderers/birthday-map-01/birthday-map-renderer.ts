@@ -1,5 +1,6 @@
 import { createElement, type ReactElement, useId } from "react";
-
+import { birthdayMapEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
+import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
 import {
   formatAgeLabel,
   formatAgeUnit,
@@ -10,6 +11,7 @@ import {
   parseBirthdayMapContent,
 } from "../../../../lib/renderers/birthday-map-01.ts";
 import { BIRTHDAY_THEME } from "../../../../lib/renderers/birthday-themes.ts";
+import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { Motif } from "../birthday/motif.ts";
 import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthday/theme.ts";
 
@@ -26,6 +28,10 @@ export interface BirthdayMapRendererProps {
   readonly configuration: unknown;
   /** The invitation data that fits the version's schema; parsed here, so an invalid one throws. */
   readonly content: unknown;
+  /** The features the API gated for this invitation; absent when it has none, which renders nothing. */
+  readonly features?: InvitationFeatures;
+  /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
+  readonly calendarHref?: string;
 }
 
 const h = createElement;
@@ -120,11 +126,23 @@ function Compass({ age }: { readonly age: number }): ReactElement {
 export function BirthdayMapRenderer({
   configuration,
   content,
+  features,
+  calendarHref,
 }: BirthdayMapRendererProps): ReactElement {
   const { theme: themeKey } = parseBirthdayMapConfiguration(configuration);
   const data = parseBirthdayMapContent(content);
   const theme = BIRTHDAY_THEME[themeKey];
   const idPrefix = useId();
+
+  // After the route and before the message: a guest reads where the party is, then acts on it (S4).
+  const featuresBlock =
+    features === undefined
+      ? null
+      : h(InvitationFeaturesBlock, {
+          features,
+          facts: birthdayMapEventFacts(data),
+          ...(calendarHref === undefined ? {} : { calendarHref }),
+        });
 
   const stops = [
     {
@@ -269,6 +287,7 @@ export function BirthdayMapRenderer({
         ),
       ),
     ),
+    featuresBlock,
     h(
       "section",
       { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },

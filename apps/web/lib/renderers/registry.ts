@@ -5,6 +5,7 @@ import { BaptismClassicRenderer } from "../../app/_components/renderers/baptism-
 import { BirthdayMapRenderer } from "../../app/_components/renderers/birthday-map-01/birthday-map-renderer.ts";
 import { BirthdayPosterRenderer } from "../../app/_components/renderers/birthday-poster-01/birthday-poster-renderer.ts";
 import { BirthdayStoryRenderer } from "../../app/_components/renderers/birthday-story-01/birthday-story-renderer.ts";
+import type { InvitationFeatures } from "../invitation-features/invitation-features.ts";
 import { BABY_SHOWER_CLASSIC_COMPONENT_KEY } from "./baby-shower-classic-01.ts";
 import { BAPTISM_CLASSIC_COMPONENT_KEY } from "./baptism-classic-01.ts";
 import { BIRTHDAY_MAP_COMPONENT_KEY } from "./birthday-map-01.ts";
@@ -24,6 +25,15 @@ import { BIRTHDAY_STORY_COMPONENT_KEY } from "./birthday-story-01.ts";
 export interface RendererProps {
   readonly configuration: unknown;
   readonly content: unknown;
+  /**
+   * The features the API gated for this invitation (S3, S4): countdown, map, calendar, and WhatsApp. Absent
+   * when the invitation has none, and then the renderer places no features block and its markup is exactly
+   * the markup it produced before the block existed. The public page passes them (F3); a package or a
+   * feature name never does.
+   */
+  readonly features?: InvitationFeatures;
+  /** The `.ics` download the public page owns; the features block links to it when it is present. */
+  readonly calendarHref?: string;
 }
 
 export type RendererComponent = (props: RendererProps) => ReactElement;
