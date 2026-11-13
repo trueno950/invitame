@@ -360,17 +360,17 @@ export const FEATURE_COPY = {
  * parentheses, because several zones serve neighboring cities and the id is what the invitation stores.
  */
 export const INVITATION_TIME_ZONE_LABELS: Readonly<Record<InvitationTimeZone, string>> = {
-  "America/Mexico_City": "Ciudad de México y centro del país (America/Mexico_City)",
-  "America/Cancun": "Cancún y Quintana Roo (America/Cancun)",
-  "America/Mazatlan": "Mazatlán, Sinaloa y Nayarit (America/Mazatlan)",
-  "America/Hermosillo": "Hermosillo, Sonora (America/Hermosillo)",
-  "America/Chihuahua": "Chihuahua (America/Chihuahua)",
-  "America/Tijuana": "Tijuana y Baja California (America/Tijuana)",
-  "America/Matamoros": "Matamoros, Tamaulipas (America/Matamoros)",
-  "America/Monterrey": "Monterrey (America/Monterrey)",
-  "America/Merida": "Mérida (America/Merida)",
-  "America/Ojinaga": "Ojinaga (America/Ojinaga)",
-  "America/Bahia_Banderas": "Bahía de Banderas (America/Bahia_Banderas)",
+  "America/Mexico_City": "Ciudad de México y centro del país",
+  "America/Cancun": "Cancún y Quintana Roo",
+  "America/Mazatlan": "Mazatlán, Sinaloa y Nayarit",
+  "America/Hermosillo": "Hermosillo, Sonora",
+  "America/Chihuahua": "Chihuahua",
+  "America/Tijuana": "Tijuana y Baja California",
+  "America/Matamoros": "Matamoros, Tamaulipas",
+  "America/Monterrey": "Monterrey",
+  "America/Merida": "Mérida",
+  "America/Ojinaga": "Ojinaga",
+  "America/Bahia_Banderas": "Bahía de Banderas",
 };
 
 /**

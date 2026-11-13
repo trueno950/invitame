@@ -337,7 +337,8 @@ which is always on and is not a catalog feature; WhatsApp also needs a stored ph
 - Countdown: days, hours, and minutes to the event start, computed in the invitation's IANA zone
   (`lib/invitation-features/start-instant.ts`, `countdown.ts`). It is rendered on the server at request time, so it
   reads without JavaScript, and `CountdownIsland` is the block's only client component: it ticks once a minute,
-  says the event is today or has passed, and has no animation, so reduced motion needs no special case.
+  says «¡Hoy es el día!» on the event's day, «¡Es hoy!» from the start for the four hours the calendar event lasts,
+  and «La celebración ya pasó» after that, and has no animation, so reduced motion needs no special case.
 - Map: «Cómo llegar» per place, with two buttons to Google Maps and Waze. The links come from the layout's own
   address fields (`lib/invitation-features/map-links.ts`): no embedded map, no API key, and a baptism shows its
   ceremony and its reception.
@@ -352,8 +353,8 @@ which is always on and is not a catalog feature; WhatsApp also needs a stored ph
 - Degradation: an unsupported zone turns off only the countdown and the calendar (the two features that read a
   wall clock); a snapshot whose facts cannot be read turns off the whole block. Neither is a guest-visible error.
 - Creator side: the draft page (`/cuenta/invitaciones/[id]`) has a «Funcionalidades» section after the content
-  form. It offers the time zone select with the Spanish place labels («Ciudad de México y centro del país
-  (America/Mexico_City)», «Cancún y Quintana Roo», ...), shows the WhatsApp field only while the pinned package
+  form. It offers the time zone select with Spanish place labels only («Ciudad de México y centro del país»,
+  «Cancún y Quintana Roo», ...), shows the WhatsApp field only while the pinned package
   includes WhatsApp (and carries a stored number in a hidden field otherwise, so saving the zone never clears it),
   lists the automatic features the guests will see, and saves through a server action that mirrors the content
   form's notice/error redirects. An archived invitation shows the section read-only.

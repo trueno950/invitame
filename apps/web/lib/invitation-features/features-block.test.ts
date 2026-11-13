@@ -178,6 +178,15 @@ describe("countdown in the features block", () => {
     assert.doesNotMatch(html, /data-countdown-part="days"/);
   });
 
+  it("says «¡Es hoy!» while the celebration is happening", () => {
+    const html = render(featuresOf({ countdown: true }), FACTS, new Date("2026-12-05T23:00:00Z"));
+
+    assert.match(html, /data-countdown="live"/);
+    assert.match(html, />¡Es hoy!</);
+    assert.doesNotMatch(html, /data-countdown-part=/);
+    assert.doesNotMatch(html, /ya pasó/);
+  });
+
   it("says the celebration has passed instead of counting to a past start", () => {
     const html = render(featuresOf({ countdown: true }), FACTS, new Date("2026-12-06T18:00:00Z"));
 

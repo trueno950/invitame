@@ -69,25 +69,36 @@ describe("countdown parts", () => {
     });
   });
 
-  it("says the celebration has passed once its start is behind us", () => {
+  it("says it is today while the celebration lasts, from its start to four hours later", () => {
+    // 16:30 in Mexico City is 22:30Z; 23:00Z is half an hour into the celebration.
     assert.deepEqual(partsFrom("2026-12-05", "16:30", "2026-12-05T23:00:00Z"), {
-      status: "passed",
+      status: "live",
       days: 0,
       hours: 0,
       minutes: 0,
     });
-    assert.equal(partsFrom("2026-12-05", "16:30", "2027-01-01T00:00:00Z").status, "passed");
+    assert.equal(partsFrom("2026-12-05", "16:30", "2026-12-06T02:29:00Z").status, "live");
   });
 
-  it("counts a start exactly at the current instant as passed", () => {
+  it("counts a start exactly at the current instant as live", () => {
     assert.equal(
       countdownParts(
         startInstant("2026-12-05", "16:30", ZONE),
         startInstant("2026-12-05", "16:30", ZONE),
         ZONE,
       ).status,
-      "passed",
+      "live",
     );
+  });
+
+  it("says the celebration has passed once its four hours are over", () => {
+    assert.deepEqual(partsFrom("2026-12-05", "16:30", "2026-12-06T02:30:00Z"), {
+      status: "passed",
+      days: 0,
+      hours: 0,
+      minutes: 0,
+    });
+    assert.equal(partsFrom("2026-12-05", "16:30", "2027-01-01T00:00:00Z").status, "passed");
   });
 });
 
@@ -117,6 +128,7 @@ describe("countdown groups", () => {
 
   it("shows no number once the celebration has passed", () => {
     assert.deepEqual(countdownGroups({ status: "passed", days: 0, hours: 0, minutes: 0 }), []);
+    assert.deepEqual(countdownGroups({ status: "live", days: 0, hours: 0, minutes: 0 }), []);
   });
 });
 
@@ -152,5 +164,6 @@ describe("countdown label", () => {
       countdownLabel({ status: "passed", days: 0, hours: 0, minutes: 0 }),
       "La celebración ya pasó",
     );
+    assert.equal(countdownLabel({ status: "live", days: 0, hours: 0, minutes: 0 }), "¡Es hoy!");
   });
 });

@@ -20,9 +20,11 @@ export function countdownMarkup(parts: CountdownParts): ReactElement {
   const note =
     parts.status === "today"
       ? "¡Hoy es el día!"
-      : parts.status === "passed"
-        ? "La celebración ya pasó"
-        : null;
+      : parts.status === "live"
+        ? "¡Es hoy!"
+        : parts.status === "passed"
+          ? "La celebración ya pasó"
+          : null;
 
   return createElement(
     "div",

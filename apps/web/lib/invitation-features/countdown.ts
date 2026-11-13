@@ -1,16 +1,17 @@
+import { CALENDAR_EVENT_HOURS } from "./calendar.ts";
 import { zonedDateKey } from "./start-instant.ts";
 
 /**
  * The countdown of the guest page (S3, S4): days, hours, and minutes to the start of the celebration in the
- * invitation's own zone, plus the two states a countdown has to say out loud — the celebration is today, or
- * it has already started. The value is computed on the server at request time and recomputed in the client
+ * invitation's own zone, plus the states a countdown has to say out loud — the celebration is today, it is
+ * happening now, or it is over. The value is computed on the server at request time and recomputed in the client
  * island from the same pure functions, so a guest without JavaScript still reads the server's answer.
  *
- * The start instant is behind us once the countdown reaches zero, so a celebration that began ten minutes
- * ago reads «La celebración ya pasó» instead of a negative count.
+ * Once the countdown reaches zero the celebration is happening: for the same four hours the calendar event
+ * lasts it reads «¡Es hoy!», and only after that «La celebración ya pasó» (owner decision, invitation-features L8).
  */
 
-export type CountdownStatus = "upcoming" | "today" | "passed";
+export type CountdownStatus = "upcoming" | "today" | "live" | "passed";
 
 /** What the countdown shows: a status and the whole days, hours, and minutes that are left. */
 export interface CountdownParts {
@@ -30,6 +31,7 @@ export interface CountdownGroup {
 const MINUTE_MS = 60_000;
 const MINUTES_PER_DAY = 1440;
 const MINUTES_PER_HOUR = 60;
+const EVENT_MS = CALENDAR_EVENT_HOURS * MINUTES_PER_HOUR * MINUTE_MS;
 
 /**
  * The countdown of `target` seen from `now` in `timeZone`. The status compares calendar days in the
@@ -39,7 +41,7 @@ export function countdownParts(target: Date, now: Date, timeZone: string): Count
   const remaining = target.getTime() - now.getTime();
 
   if (remaining <= 0) {
-    return { status: "passed", days: 0, hours: 0, minutes: 0 };
+    return { status: remaining > -EVENT_MS ? "live" : "passed", days: 0, hours: 0, minutes: 0 };
   }
 
   const totalMinutes = Math.floor(remaining / MINUTE_MS);
@@ -54,9 +56,9 @@ export function countdownParts(target: Date, now: Date, timeZone: string): Count
   };
 }
 
-/** The numbers the countdown shows: no days for a celebration that is today, none at all once it passed. */
+/** The numbers the countdown shows: no days for a celebration that is today, none once it started. */
 export function countdownGroups(parts: CountdownParts): readonly CountdownGroup[] {
-  if (parts.status === "passed") {
+  if (parts.status === "live" || parts.status === "passed") {
     return [];
   }
 
@@ -74,6 +76,10 @@ export function countdownGroups(parts: CountdownParts): readonly CountdownGroup[
 
 /** The countdown as one neutral Spanish sentence, for the accessible name of the block. */
 export function countdownLabel(parts: CountdownParts): string {
+  if (parts.status === "live") {
+    return "¡Es hoy!";
+  }
+
   if (parts.status === "passed") {
     return "La celebración ya pasó";
   }

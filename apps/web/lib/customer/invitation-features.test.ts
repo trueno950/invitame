@@ -119,26 +119,17 @@ describe("time zone choices", () => {
         "America/Bahia_Banderas",
       ],
     );
-    assert.equal(
-      timeZoneLabel("America/Mexico_City"),
-      "Ciudad de México y centro del país (America/Mexico_City)",
-    );
-    assert.equal(timeZoneLabel("America/Cancun"), "Cancún y Quintana Roo (America/Cancun)");
-    assert.equal(
-      timeZoneLabel("America/Mazatlan"),
-      "Mazatlán, Sinaloa y Nayarit (America/Mazatlan)",
-    );
-    assert.equal(timeZoneLabel("America/Hermosillo"), "Hermosillo, Sonora (America/Hermosillo)");
-    assert.equal(timeZoneLabel("America/Chihuahua"), "Chihuahua (America/Chihuahua)");
-    assert.equal(timeZoneLabel("America/Tijuana"), "Tijuana y Baja California (America/Tijuana)");
-    assert.equal(timeZoneLabel("America/Matamoros"), "Matamoros, Tamaulipas (America/Matamoros)");
-    assert.equal(timeZoneLabel("America/Monterrey"), "Monterrey (America/Monterrey)");
-    assert.equal(timeZoneLabel("America/Merida"), "Mérida (America/Merida)");
-    assert.equal(timeZoneLabel("America/Ojinaga"), "Ojinaga (America/Ojinaga)");
-    assert.equal(
-      timeZoneLabel("America/Bahia_Banderas"),
-      "Bahía de Banderas (America/Bahia_Banderas)",
-    );
+    assert.equal(timeZoneLabel("America/Mexico_City"), "Ciudad de México y centro del país");
+    assert.equal(timeZoneLabel("America/Cancun"), "Cancún y Quintana Roo");
+    assert.equal(timeZoneLabel("America/Mazatlan"), "Mazatlán, Sinaloa y Nayarit");
+    assert.equal(timeZoneLabel("America/Hermosillo"), "Hermosillo, Sonora");
+    assert.equal(timeZoneLabel("America/Chihuahua"), "Chihuahua");
+    assert.equal(timeZoneLabel("America/Tijuana"), "Tijuana y Baja California");
+    assert.equal(timeZoneLabel("America/Matamoros"), "Matamoros, Tamaulipas");
+    assert.equal(timeZoneLabel("America/Monterrey"), "Monterrey");
+    assert.equal(timeZoneLabel("America/Merida"), "Mérida");
+    assert.equal(timeZoneLabel("America/Ojinaga"), "Ojinaga");
+    assert.equal(timeZoneLabel("America/Bahia_Banderas"), "Bahía de Banderas");
     // A stored value outside the list is shown as it is, never guessed into another place.
     assert.equal(timeZoneLabel("Europe/Madrid"), "Europe/Madrid");
   });
