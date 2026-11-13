@@ -131,6 +131,96 @@ const pressStart2P = localFont({
   variable: "--font-press-start-2p",
 });
 
+/*
+ * Baby shower and themed baptism display fonts (T7b; S13): the nine title faces of
+ * `design/celebration-themes/`, each a Latin woff2 file at one weight suited to display titles and each
+ * with the license google/fonts ships for it. Same rules as the birthday faces above: names and titles
+ * only, and never preloaded, because a guest page renders one theme.
+ */
+const baloo2 = localFont({
+  src: [{ path: "./fonts/baloo-2/baloo-2-latin-normal.woff2", weight: "700", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-baloo-2",
+});
+
+const quicksand = localFont({
+  src: [{ path: "./fonts/quicksand/quicksand-latin-normal.woff2", weight: "600", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-quicksand",
+});
+
+const fredoka = localFont({
+  src: [{ path: "./fonts/fredoka/fredoka-latin-normal.woff2", weight: "600", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-fredoka",
+});
+
+const playfairDisplay = localFont({
+  src: [
+    {
+      path: "./fonts/playfair-display/playfair-display-latin-normal.woff2",
+      weight: "700",
+      style: "normal",
+    },
+  ],
+  display: "swap",
+  adjustFontFallback: "Times New Roman",
+  preload: false,
+  variable: "--font-playfair-display",
+});
+
+const josefinSans = localFont({
+  src: [
+    {
+      path: "./fonts/josefin-sans/josefin-sans-latin-normal.woff2",
+      weight: "600",
+      style: "normal",
+    },
+  ],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-josefin-sans",
+});
+
+const fraunces = localFont({
+  src: [{ path: "./fonts/fraunces/fraunces-latin-normal.woff2", weight: "700", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Times New Roman",
+  preload: false,
+  variable: "--font-fraunces",
+});
+
+const caveat = localFont({
+  src: [{ path: "./fonts/caveat/caveat-latin-normal.woff2", weight: "700", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-caveat",
+});
+
+const nunito = localFont({
+  src: [{ path: "./fonts/nunito/nunito-latin-normal.woff2", weight: "700", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Arial",
+  preload: false,
+  variable: "--font-nunito",
+});
+
+const lora = localFont({
+  src: [{ path: "./fonts/lora/lora-latin-normal.woff2", weight: "700", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Times New Roman",
+  preload: false,
+  variable: "--font-lora",
+});
+
 const themeFontVariables = [
   cinzelDecorative.variable,
   luckiestGuy.variable,
@@ -139,6 +229,15 @@ const themeFontVariables = [
   lilitaOne.variable,
   pacifico.variable,
   pressStart2P.variable,
+  baloo2.variable,
+  quicksand.variable,
+  fredoka.variable,
+  playfairDisplay.variable,
+  josefinSans.variable,
+  fraunces.variable,
+  caveat.variable,
+  nunito.variable,
+  lora.variable,
 ].join(" ");
 
 /** Defaults for every page; the landing's honest pre-launch title and description (T8l; S37). */
