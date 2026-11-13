@@ -145,9 +145,9 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T11 | Delete Birthday Adventure everywhere: API, web, seed, tests, docs, dev/test database rows | S11 | worker | `280bb9c` |
 | T12 | Failed create returns to step 3 with the selection and the error | S12 | worker | `4f8c9a1` |
 | T7 | Baby shower and themed baptism theme boards | S2-S6 | worker | `aa2af15` |
-| T7a | API: optional schema fields, baby shower and baptism contracts, themes, category, seed | S13 | worker | |
-| T7b | Web: nine display fonts | S13 | worker | |
-| T7c | Web: two layouts, 14 themes, samples, creator form labels and field kinds | S13 | worker | |
+| T7a | API: optional schema fields, baby shower and baptism contracts, themes, category, seed | S13 | worker | `7f38b01` |
+| T7b | Web: nine display fonts | S13 | worker | `4250615` |
+| T7c | Web: two layouts, 14 themes, samples, creator form labels and field kinds | S13 | worker | `abc2494`, `87d7e9b` |
 | T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
 
 ## Log
@@ -263,3 +263,15 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   adventure-shaped configuration in `creator-catalog.controller.spec.ts`; no fixture exercising a single-style card
   miniature; five suggested regression tests, which go to T7a (API: D, E) and T7c (web: A, B, C); and an old dev-only
   `retired-renderer-99` row, left as is. T7a-T7c launched in parallel with disjoint edit surfaces.
+- L21 — T7a in `7f38b01`: API with optional renderer fields (`presence: "optional"`), the two layouts, theme
+  allow-lists, the «Bautizos» category, and 14 seeded templates; 1129 unit tests and 293 db-specs pass. T7b in
+  `4250615`: nine OFL fonts, licenses byte-identical to google/fonts. T7c in `abc2494`: the web layouts, 14 themes,
+  samples, and form fields; birthday markup is byte-identical to the base commit across all 24 renders. The parent
+  fixed Biome formatting in three new renderer files and added the T7c docs paragraph to `docs/design/theme.md`.
+  The dev database was seeded and now holds 8 baby shower and 6 baptism PUBLISHED versions. Browser verify
+  `mwec4dx6-h-dohz` found S13 met at 390 and 1280 px with no blockers: the occasions come from the catalog, the
+  steps work, drafts are saved and published, empty optional fields render nothing, there is no overflow, there are
+  no console errors, fonts load, and contrast holds (lowest 4.71:1). Its advisory A1, a baby shower page titled only
+  «Invitación», was fixed test-first in `87d7e9b`, so the title now names the baby. Not adopted: the verifier's
+  proposed Playwright spec, because the e2e suite needs a production build that was not run here. Full checks
+  after integration: web 757/757 tests, API 1129/1129, both typechecks, docs, Biome, and `git diff --check`.
