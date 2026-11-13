@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elegir plantilla — Galería con filtros (móvil 390)</title>
+<style>
+  /* App tokens «Rosa y vino» from apps/web/app/globals.css. */
+  :root {
+    --background: #fff7f5;
+    --surface: #ffffff;
+    --rose-50: #fdeef2;
+    --rose-100: #f8d7e0;
+    --ink: #3b1424;
+    --muted: #6b3a4c;
+    --primary: #8c1c3a;
+    --primary-deep: #6e1530;
+    --on-primary: #ffffff;
+    --field-border: #a06e7e;
+    --rose: #e9a3b5;
+    --gold: #c29a54;
+    --radius-field: 1rem;
+    --radius-panel: 1.6rem;
+    --font-display: "Cormorant Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+    --font-sans: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+  }
+
+  /* Guest themes, colors copied from apps/web/lib/renderers/birthday-themes.ts. */
+  .th--ice   { --t-bg:#eef5fc; --t-surface:#ffffff; --t-soft:#d9e8f7; --t-ink:#162544; --t-accent:#2c5aa0; --t-d1:#b9a8e3; --t-d2:#8fd0f2; }
+  .th--rescue{ --t-bg:#fff8e7; --t-surface:#ffffff; --t-soft:#ffe8ad; --t-ink:#14213d; --t-accent:#b5121b; --t-d1:#1f5fbf; --t-d2:#f6c312; }
+  .th--spider{ --t-bg:#f3f5fb; --t-surface:#ffffff; --t-soft:#dde5f5; --t-ink:#0f172a; --t-accent:#b91c1c; --t-d1:#1d4ed8; --t-d2:#0f172a; }
+  .th--mouse { --t-bg:#fff9ec; --t-surface:#ffffff; --t-soft:#fde9b4; --t-ink:#1a1a1a; --t-accent:#b5121b; --t-d1:#f5c400; --t-d2:#1a1a1a; }
+  .th--dino  { --t-bg:#f1f6e8; --t-surface:#ffffff; --t-soft:#ddebc6; --t-ink:#1f2d16; --t-accent:#3b6a1c; --t-d1:#e07a1f; --t-d2:#a3c06b; }
+  .th--sea   { --t-bg:#eafaf7; --t-surface:#ffffff; --t-soft:#c9eee8; --t-ink:#0d3340; --t-accent:#0f6d66; --t-d1:#8a6bd1; --t-d2:#f2a7c3; }
+  .th--princess{ --t-bg:#fff3f7; --t-surface:#ffffff; --t-soft:#fadbe7; --t-ink:#3a1230; --t-accent:#a32b65; --t-d1:#e9b6d2; --t-d2:#d4af37; }
+  .th--pixel { --t-bg:#f0f4ea; --t-surface:#ffffff; --t-soft:#d8e6c6; --t-ink:#1f2a1a; --t-accent:#3a6f27; --t-d1:#8b5a2b; --t-d2:#6fb3d2; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    padding-bottom: 104px; /* room for the bar that stays within reach */
+    background-color: var(--background);
+    background-image:
+      radial-gradient(90% 32% at 50% 0, var(--surface) 0%, rgba(255, 255, 255, 0) 72%),
+      linear-gradient(180deg, var(--rose-50), var(--background) 46%);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+
+  .wrap { width: 100%; max-width: 422px; margin: 0 auto; padding: 0 16px; }
+
+  /* App header: the frame the workspace pages already use. */
+  .topbar { background: var(--surface); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .topbar-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; max-width: 422px; margin: 0 auto; padding: 11px 16px; }
+  .wordmark { display: inline-flex; align-items: baseline; gap: 1px; color: var(--primary); font-size: 19px; font-weight: 500; letter-spacing: -0.01em; text-decoration: none; }
+  .wordmark em { font-family: var(--font-display); font-style: italic; font-size: 24px; line-height: 1; }
+  .topnav { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+  .topnav a { color: var(--muted); text-decoration: none; }
+  .topnav a[aria-current="page"] { color: var(--primary); text-decoration: underline; text-decoration-color: var(--rose); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .topnav .sep { width: 1px; height: 14px; background: var(--rose-100); }
+
+  header.page { padding: 18px 0 0; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 6px; margin: 0;
+    border-radius: 999px; padding: 4px 12px 4px 8px;
+    background: rgba(255, 255, 255, 0.8);
+    box-shadow: inset 0 0 0 1px rgba(194, 154, 84, 0.55);
+    color: var(--primary); font-size: 11px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .eyebrow svg { width: 14px; height: 14px; }
+  h1 { margin: 10px 0 0; font-family: var(--font-display); font-size: 31px; font-weight: 600; line-height: 1.1; letter-spacing: -0.01em; }
+  .lede { margin: 6px 0 0; max-width: 34ch; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+
+  /* Occasions: five chips, two rows, the planned ones named «Pronto» instead of hidden. */
+  .occasions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+  .chip {
+    display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center;
+    min-height: 48px; padding: 6px 13px; border-radius: var(--radius-field);
+    background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border);
+    color: var(--ink); font-size: 13.5px; font-weight: 500; line-height: 1.25; text-decoration: none;
+    transition: background-color 0.15s, box-shadow 0.15s;
+  }
+  .chip[aria-current="page"] { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+  .chip-sub { margin-top: 1px; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }
+  .chip[aria-current="page"] .chip-sub { color: rgba(255, 255, 255, 0.88); }
+  .chip--soon { background: var(--rose-50); }
+  .chip--soon .chip-label { color: var(--muted); }
+
+  /* Style filter: a segmented control; «Elegante» is announced, not available yet. */
+  .filters { margin-top: 10px; }
+  .segment { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); }
+  .segment label { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 36px; padding: 0 6px; border-radius: 999px; color: var(--ink); font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color 0.15s; }
+  .segment input { position: absolute; opacity: 0; pointer-events: none; }
+  .segment label:has(input:checked) { background: var(--primary); color: var(--on-primary); }
+  .segment label:has(input:disabled) { color: var(--muted); cursor: not-allowed; }
+  .segment label:has(input:focus-visible) { outline: 3px solid var(--primary); outline-offset: 2px; }
+  .soon { padding: 2px 5px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--rose-100); color: var(--muted); font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
+  .hint { margin: 7px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  .count { margin: 14px 0 8px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12.5px; }
+  .count b { color: var(--ink); font-weight: 600; }
+  .count a { color: var(--primary); font-size: 12.5px; text-decoration: underline; text-decoration-color: var(--rose); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+  /* Cards: one per design. Compact, so all three fit in about one and a half screens. */
+  .cards { display: flex; flex-direction: column; gap: 10px; }
+  .card {
+    padding: 12px 14px; border-radius: var(--radius-panel); background: var(--surface);
+    box-shadow: inset 0 0 0 1.5px var(--field-border);
+    transition: background-color 0.15s, box-shadow 0.15s;
+  }
+  .card:has(input:checked) { background: var(--rose-50); box-shadow: inset 0 0 0 2px var(--primary); }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .card-title { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
+  .badge {
+    display: none; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 999px; background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--primary);
+    color: var(--primary); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .card:has(input:checked) .badge { display: inline-flex; }
+  .card-desc { margin: 4px 0 10px; color: var(--muted); font-size: 13.5px; line-height: 1.45; text-wrap: pretty; }
+  .card-body { display: flex; gap: 12px; align-items: flex-start; }
+  .card-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
+
+  /* Theme swatches: each dot carries the theme's accent and decorations; the name names the choice. */
+  .swatches { margin: 0; padding: 0; border: 0; }
+  .swatches legend { padding: 0; margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+  .swatch-row { display: grid; grid-template-columns: repeat(4, 30px); gap: 9px; }
+  .swatch { position: relative; display: block; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; }
+  .swatch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .dot {
+    position: relative; display: block; width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(150deg, var(--sw-accent) 0 56%, var(--sw-deco) 56% 100%);
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--sw-soft);
+  }
+  .dot::after { content: ""; position: absolute; right: 2px; bottom: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--sw-mark); box-shadow: 0 0 0 1.5px var(--sw-accent); }
+  .swatch:has(input:checked) .dot { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary); }
+  .swatch:has(input:checked) .dot::after { box-shadow: 0 0 0 1.5px var(--primary); }
+  .swatch:has(input:focus-visible) .dot { outline: 3px solid var(--primary-deep); outline-offset: 3px; }
+  .theme-now { margin: 0; color: var(--muted); font-size: 13px; }
+  .theme-now b { color: var(--primary); font-weight: 600; }
+  .theme-now .name { display: none; }
+  .theme-now .prefix--chosen { display: none; }
+  .card:has(input:checked) .prefix--chosen { display: inline; }
+  .card:has(input:checked) .prefix--default { display: none; }
+  .theme-now .name--default { display: inline; color: var(--ink); }
+  .card:has(input:checked) .name--default { display: none; }
+  .card:has(input[value$="-ice"]:checked) .name--ice,
+  .card:has(input[value$="-rescue"]:checked) .name--rescue,
+  .card:has(input[value$="-spider"]:checked) .name--spider,
+  .card:has(input[value$="-mouse"]:checked) .name--mouse,
+  .card:has(input[value$="-dino"]:checked) .name--dino,
+  .card:has(input[value$="-sea"]:checked) .name--sea,
+  .card:has(input[value$="-princess"]:checked) .name--princess,
+  .card:has(input[value$="-pixel"]:checked) .name--pixel { display: inline; }
+  .card-foot { display: flex; justify-content: flex-end; }
+  .link { color: var(--primary); font-size: 13px; font-weight: 500; text-decoration: underline; text-decoration-color: var(--rose); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .link:hover { color: var(--primary-deep); text-decoration-color: var(--primary); }
+
+  /* Package: three compact rows, on the same screen as the design, next to the action. */
+  .packages { margin-top: 20px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  h2 { margin: 0; font-family: var(--font-display); font-size: 21px; font-weight: 600; }
+  .section-note { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+  .pkg-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .pkg {
+    position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: var(--radius-field); background: var(--surface);
+    box-shadow: inset 0 0 0 1.5px var(--field-border); cursor: pointer;
+    transition: background-color 0.15s, box-shadow 0.15s;
+  }
+  .pkg:has(input:checked) { background: var(--rose-50); box-shadow: inset 0 0 0 2px var(--primary); }
+  .pkg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .pkg-mark { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--field-border); color: transparent; font-size: 12px; font-weight: 700; }
+  .pkg:has(input:checked) .pkg-mark { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+  .pkg:has(input:focus-visible) { outline: 3px solid var(--primary); outline-offset: 2px; }
+  .pkg-text { min-width: 0; }
+  .pkg-name { display: block; font-size: 14px; font-weight: 600; }
+  .pkg-desc { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; }
+  .pkg-price { color: var(--ink); font-size: 13px; font-weight: 600; text-align: right; white-space: nowrap; }
+  .pkg-price small { display: block; color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: 0.06em; }
+
+  /* Summary: the whole choice in one line, within reach while the page scrolls. */
+  .summary-wrap {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(255, 247, 245, 0) 0%, var(--background) 34%);
+  }
+  .summary {
+    display: flex; align-items: center; gap: 10px; max-width: 390px; margin: 0 auto;
+    padding: 9px 9px 9px 10px; border-radius: 22px; background: var(--surface);
+    box-shadow: inset 0 0 0 1.5px var(--gold), 0 18px 40px -24px rgba(110, 21, 48, 0.55);
+  }
+  .summary-choice { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .summary-mark { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(150deg, #3b6a1c 0 56%, #e07a1f 56% 100%); }
+  .summary-mark::after { content: ""; position: absolute; width: 8px; height: 8px; margin: 16px 0 0 16px; border-radius: 50%; background: #a3c06b; }
+  .summary-mark { position: relative; }
+  .summary-text { min-width: 0; }
+  .summary-title { display: block; overflow: hidden; color: var(--ink); font-size: 13.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .summary-sub { display: block; color: var(--muted); font-size: 11.5px; }
+  .btn {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 46px; padding: 0 17px; border-radius: 999px; border: 0;
+    background: linear-gradient(180deg, var(--primary) 55%, var(--primary-deep));
+    box-shadow: 0 14px 30px -12px rgba(140, 28, 58, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    color: var(--on-primary); font-family: inherit; font-size: 15px; font-weight: 500; letter-spacing: 0.02em; text-decoration: none;
+    transition: transform 0.15s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:focus-visible { outline: 3px solid var(--primary-deep); outline-offset: 3px; }
+
+  footer { padding: 16px 0 8px; }
+  footer a { color: var(--primary); font-size: 13px; font-weight: 500; text-decoration: underline; text-decoration-color: var(--rose); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+
+  /* ---- Miniatures: simplified drawings of the three real layouts, in the chosen theme's colors. ---- */
+  .mini { position: relative; width: 128px; flex: 0 0 128px; aspect-ratio: 3 / 4; overflow: hidden; border-radius: 11px; background: var(--t-bg); color: var(--t-ink); font-size: 8px; line-height: 1.3; box-shadow: inset 0 0 0 1px rgba(59, 20, 36, 0.1); }
+
+  /* Ruta de aventura: dotted paper, a dashed invitation, the name, the age as a compass. */
+  .mini-map { padding: 1.7em 1.2em; text-align: center; background-image: radial-gradient(var(--t-d2) 1.1px, transparent 1.2px); background-size: 2.2em 2.2em; }
+  .mm-kicker { display: inline-block; margin: 0; padding: 0.5em 0.9em; border: 0.24em dashed var(--t-accent); border-radius: 999px; background: var(--t-surface); color: var(--t-accent); font-size: 1em; font-weight: 500; }
+  .mm-name { margin: 0.55em 0 0; font-family: var(--font-display); font-size: 2.65em; font-weight: 600; line-height: 1; }
+  .mm-compass { position: relative; display: grid; place-items: center; width: 7.8em; height: 7.8em; margin: 0.8em auto 0; }
+  .mm-compass svg { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--t-accent); }
+  .mm-age { position: relative; color: var(--t-accent); font-size: 3.4em; font-weight: 700; line-height: 0.85; }
+  .mm-age small { display: block; margin-top: 0.12em; font-size: 0.26em; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; }
+
+  /* Cartel de fiesta: an accent band with the name, a photo, then the details. */
+  .mini-poster { display: flex; flex-direction: column; }
+  .mp-band { padding: 1.5em 1em 3.6em; background: var(--t-accent); color: #ffffff; text-align: center; }
+  .mp-kicker { margin: 0; font-size: 0.92em; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; }
+  .mp-name { margin: 0.16em 0 0; font-family: var(--font-display); font-size: 2.7em; font-weight: 600; line-height: 1; }
+  .mp-age { margin: 0.2em 0 0; font-size: 1em; font-weight: 500; }
+  .mp-photo { width: 6.4em; margin: -2.6em auto 0; padding: 0.45em 0.45em 1.7em; background: var(--t-surface); border-radius: 0.2em; transform: rotate(3deg); }
+  .mp-photo svg { display: block; width: 100%; height: auto; border-radius: 0.15em; background: var(--t-soft); }
+  .mp-lines { display: grid; gap: 0.55em; width: 74%; margin: 1em auto 0; }
+  .mp-line { height: 1.5em; border-radius: 0.4em; background: var(--t-surface); box-shadow: inset 0 0 0 0.14em var(--t-soft); }
+
+  /* Cuento ilustrado: a book page, an arched picture, the name in a storybook voice. */
+  .mini-story { padding: 1.2em 0.9em; }
+  .ms-sheet { height: 100%; padding: 1.5em 0.9em 1em; border-radius: 0.4em 0.4em 1.4em 1.4em; background: var(--t-surface); text-align: center; box-shadow: 0 0.4em 1.2em -0.6em rgba(59, 20, 36, 0.45); }
+  .ms-arch { position: relative; width: 5.4em; height: 6.2em; margin: 0 auto; overflow: hidden; border: 0.4em solid var(--t-soft); border-radius: 4em 4em 0.4em 0.4em; background: var(--t-bg); }
+  .ms-arch svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .ms-once { margin: 0.9em 0 0; font-size: 1em; font-style: italic; }
+  .ms-name { margin: 0.05em 0 0; color: var(--t-accent); font-family: var(--font-display); font-size: 2.3em; font-weight: 600; line-height: 1.05; }
+  .ms-lines { display: grid; gap: 0.36em; width: 82%; margin: 0.8em auto 0; }
+  .ms-line { height: 0.55em; border-radius: 999px; background: var(--t-soft); }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="wordmark" href="#">Invita<em>Me</em></a>
+      <nav class="topnav" aria-label="Tu cuenta">
+        <a href="#">Mi cuenta</a>
+        <span class="sep" aria-hidden="true"></span>
+        <a href="#" aria-current="page">Mis invitaciones</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <header class="page">
+      <p class="eyebrow">
+        <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <path d="M8 13V6" /><path d="M8 6c0-2 1.6-3.4 3.6-3.4C11.6 4.6 10 6 8 6Z" /><path d="M8 8.6C8 6.8 6.6 5.4 4.6 5.4 4.6 7.2 6 8.6 8 8.6Z" />
+        </svg>
+        Nueva invitación
+      </p>
+      <h1>Crea tu invitación</h1>
+      <p class="lede">Elige diseño, tema y paquete. Puedes cambiarlos cuando quieras antes de publicar.</p>
+    </header>
+
+    <nav class="occasions" aria-label="Ocasión">
+      <a class="chip" href="#" aria-current="page"><span class="chip-label">Cumpleaños</span><span class="chip-sub">3 diseños</span></a>
+      <span class="chip chip--soon"><span class="chip-label">Baby shower</span><span class="chip-sub">Pronto</span></span>
+      <span class="chip chip--soon"><span class="chip-label">Bautizo</span><span class="chip-sub">Pronto</span></span>
+      <span class="chip chip--soon"><span class="chip-label">XV años</span><span class="chip-sub">Pronto</span></span>
+      <span class="chip chip--soon"><span class="chip-label">Bodas</span><span class="chip-sub">Pronto</span></span>
+    </nav>
+
+    <div class="filters">
+      <div class="segment" role="group" aria-label="Estilo">
+        <label><input type="radio" name="estilo" value="tematico" checked>Temático</label>
+        <label><input type="radio" name="estilo" value="todos">Todos</label>
+        <label><input type="radio" name="estilo" value="elegante" disabled>Elegante <span class="soon">Pronto</span></label>
+      </div>
+    </div>
+    <p class="hint">El estilo elegante llega con XV años y bodas.</p>
+
+    <p class="count"><span><b>3</b> diseños · <b>24</b> invitaciones</span> <a href="#">Quitar filtro</a></p>
+
+    <main class="cards" aria-label="Diseños de cumpleaños">
+      <!-- 1 · Ruta de aventura -->
+      <article class="card">
+        <div class="card-head">
+          <h2 class="card-title">Ruta de aventura</h2>
+          <span class="badge">
+            <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 6.4 4.6 9 10 3.4" /></svg>
+            Elegido
+          </span>
+        </div>
+        <p class="card-desc">El cumpleaños como un mapa: la edad en una brújula y tres paradas con fecha, hora y lugar.</p>
+        <div class="card-body">
+          <div class="mini mini-map th--ice" aria-hidden="true">
+            <p class="mm-kicker">¡Te invitamos!</p>
+            <p class="mm-name">Mateo</p>
+            <div class="mm-compass">
+              <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="2 8"><circle cx="50" cy="50" r="46" /></svg>
+              <span class="mm-age">7<small>años</small></span>
+            </div>
+          </div>
+          <div class="card-side">
+            <fieldset class="swatches">
+              <legend>Tema</legend>
+              <div class="swatch-row">
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="ruta-ice">
+                  <span class="dot" style="--sw-accent:#2c5aa0;--sw-deco:#b9a8e3;--sw-mark:#8fd0f2;--sw-soft:#d9e8f7"></span>
+                  <span class="sr-only">Reino de hielo</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="ruta-rescue">
+                  <span class="dot" style="--sw-accent:#b5121b;--sw-deco:#1f5fbf;--sw-mark:#f6c312;--sw-soft:#ffe8ad"></span>
+                  <span class="sr-only">Equipo de rescate</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="ruta-spider">
+                  <span class="dot" style="--sw-accent:#b91c1c;--sw-deco:#1d4ed8;--sw-mark:#0f172a;--sw-soft:#dde5f5"></span>
+                  <span class="sr-only">Héroe arácnido</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="ruta-mouse">
+                  <span class="dot" style="--sw-accent:#b5121b;--sw-deco:#f5c400;--sw-mark:#1a1a1a;--sw-soft:#fde9b4"></span>
+                  <span class="sr-only">Ratón clásico</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="ruta-dino">
+                  <span class="dot" style="--sw-accent:#3b6a1c;--sw-deco:#e07a1f;--sw-mark:#a3c06b;--sw-soft:#ddebc6"></span>
+                  <span class="sr-only">Dinosaurios</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="ruta-sea">
+                  <span class="dot" style="--sw-accent:#0f6d66;--sw-deco:#8a6bd1;--sw-mark:#f2a7c3;--sw-soft:#c9eee8"></span>
+                  <span class="sr-only">Bajo el mar</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="ruta-princess">
+                  <span class="dot" style="--sw-accent:#a32b65;--sw-deco:#e9b6d2;--sw-mark:#d4af37;--sw-soft:#fadbe7"></span>
+                  <span class="sr-only">Princesa de cuento</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="ruta-pixel">
+                  <span class="dot" style="--sw-accent:#3a6f27;--sw-deco:#8b5a2b;--sw-mark:#6fb3d2;--sw-soft:#d8e6c6"></span>
+                  <span class="sr-only">Bloques y píxeles</span>
+                </label>
+              </div>
+            </fieldset>
+            <p class="theme-now"><span class="prefix prefix--chosen">Tema: </span><span class="prefix prefix--default">Vista previa: </span><span class="name name--default">Reino de hielo</span><span class="name name--ice">Reino de hielo</span><span class="name name--rescue">Equipo de rescate</span><span class="name name--spider">Héroe arácnido</span><span class="name name--mouse">Ratón clásico</span><span class="name name--dino">Dinosaurios</span><span class="name name--sea">Bajo el mar</span><span class="name name--princess">Princesa de cuento</span><span class="name name--pixel">Bloques y píxeles</span></p>
+            <p class="card-foot"><a class="link" href="#">Ver completa</a></p>
+          </div>
+        </div>
+      </article>
+
+      <!-- 2 · Cartel de fiesta (chosen) -->
+      <article class="card">
+        <div class="card-head">
+          <h2 class="card-title">Cartel de fiesta</h2>
+          <span class="badge">
+            <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 6.4 4.6 9 10 3.4" /></svg>
+            Elegido
+          </span>
+        </div>
+        <p class="card-desc">Un cartel con foto y un boleto con los datos. El más festivo para grupos grandes.</p>
+        <div class="card-body">
+          <div class="mini mini-poster th--dino" aria-hidden="true">
+            <div class="mp-band">
+              <p class="mp-kicker">¡Es mi fiesta!</p>
+              <p class="mp-name">Mateo</p>
+              <p class="mp-age">7 años de risas</p>
+            </div>
+            <div class="mp-photo">
+              <svg viewBox="0 0 100 92">
+                <rect width="100" height="92" fill="#ddebc6" />
+                <path d="M0 70q26-12 50-2t50 0v24H0Z" fill="#a3c06b" />
+                <path d="M14 26q22 9 44 0" fill="none" stroke="#e07a1f" stroke-width="2.6" stroke-linecap="round" />
+                <path d="M20 28l5 9 5-9M34 31l5 9 5-9M48 30l5 9 5-9" fill="#3b6a1c" />
+                <rect x="42" y="46" width="24" height="16" rx="4" fill="#3b6a1c" />
+                <rect x="45" y="42" width="18" height="5" rx="2.5" fill="#f1f6e8" />
+                <circle cx="30" cy="42" r="5" fill="#e07a1f" /><circle cx="74" cy="44" r="4" fill="#8fd0f2" />
+              </svg>
+            </div>
+            <div class="mp-lines"><span class="mp-line"></span><span class="mp-line"></span></div>
+          </div>
+          <div class="card-side">
+            <fieldset class="swatches">
+              <legend>Tema</legend>
+              <div class="swatch-row">
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cartel-ice">
+                  <span class="dot" style="--sw-accent:#2c5aa0;--sw-deco:#b9a8e3;--sw-mark:#8fd0f2;--sw-soft:#d9e8f7"></span>
+                  <span class="sr-only">Reino de hielo</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cartel-rescue">
+                  <span class="dot" style="--sw-accent:#b5121b;--sw-deco:#1f5fbf;--sw-mark:#f6c312;--sw-soft:#ffe8ad"></span>
+                  <span class="sr-only">Equipo de rescate</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cartel-spider">
+                  <span class="dot" style="--sw-accent:#b91c1c;--sw-deco:#1d4ed8;--sw-mark:#0f172a;--sw-soft:#dde5f5"></span>
+                  <span class="sr-only">Héroe arácnido</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cartel-mouse">
+                  <span class="dot" style="--sw-accent:#b5121b;--sw-deco:#f5c400;--sw-mark:#1a1a1a;--sw-soft:#fde9b4"></span>
+                  <span class="sr-only">Ratón clásico</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cartel-dino" checked>
+                  <span class="dot" style="--sw-accent:#3b6a1c;--sw-deco:#e07a1f;--sw-mark:#a3c06b;--sw-soft:#ddebc6"></span>
+                  <span class="sr-only">Dinosaurios</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cartel-sea">
+                  <span class="dot" style="--sw-accent:#0f6d66;--sw-deco:#8a6bd1;--sw-mark:#f2a7c3;--sw-soft:#c9eee8"></span>
+                  <span class="sr-only">Bajo el mar</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cartel-princess">
+                  <span class="dot" style="--sw-accent:#a32b65;--sw-deco:#e9b6d2;--sw-mark:#d4af37;--sw-soft:#fadbe7"></span>
+                  <span class="sr-only">Princesa de cuento</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cartel-pixel">
+                  <span class="dot" style="--sw-accent:#3a6f27;--sw-deco:#8b5a2b;--sw-mark:#6fb3d2;--sw-soft:#d8e6c6"></span>
+                  <span class="sr-only">Bloques y píxeles</span>
+                </label>
+              </div>
+            </fieldset>
+            <p class="theme-now"><span class="prefix prefix--chosen">Tema: </span><span class="prefix prefix--default">Vista previa: </span><span class="name name--default">Reino de hielo</span><span class="name name--ice">Reino de hielo</span><span class="name name--rescue">Equipo de rescate</span><span class="name name--spider">Héroe arácnido</span><span class="name name--mouse">Ratón clásico</span><span class="name name--dino">Dinosaurios</span><span class="name name--sea">Bajo el mar</span><span class="name name--princess">Princesa de cuento</span><span class="name name--pixel">Bloques y píxeles</span></p>
+            <p class="card-foot"><a class="link" href="#">Ver completa</a></p>
+          </div>
+        </div>
+      </article>
+
+      <!-- 3 · Cuento ilustrado -->
+      <article class="card">
+        <div class="card-head">
+          <h2 class="card-title">Cuento ilustrado</h2>
+          <span class="badge">
+            <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 6.4 4.6 9 10 3.4" /></svg>
+            Elegido
+          </span>
+        </div>
+        <p class="card-desc">Una página de cuento que narra la fiesta en capítulos. Tranquilo y fácil de leer.</p>
+        <div class="card-body">
+          <div class="mini mini-story th--sea" aria-hidden="true">
+            <div class="ms-sheet">
+              <div class="ms-arch">
+                <svg viewBox="0 0 100 116">
+                  <rect width="100" height="116" fill="#eafaf7" />
+                  <path d="M0 88q22-10 50-2t50 0v30H0Z" fill="#c9eee8" />
+                  <path d="M12 26q20 8 40 0" fill="none" stroke="#8a6bd1" stroke-width="2.4" stroke-linecap="round" />
+                  <rect x="40" y="52" width="22" height="16" rx="4" fill="#0f6d66" />
+                  <rect x="43" y="48" width="16" height="5" rx="2.5" fill="#f2a7c3" />
+                  <circle cx="24" cy="44" r="6" fill="#f2a7c3" /><circle cx="78" cy="46" r="5" fill="#8a6bd1" />
+                  <circle cx="70" cy="22" r="3.4" fill="#c9eee8" /><circle cx="30" cy="16" r="2.4" fill="#c9eee8" />
+                </svg>
+              </div>
+              <p class="ms-once">Había una vez…</p>
+              <p class="ms-name">Mateo</p>
+              <div class="ms-lines"><span class="ms-line"></span><span class="ms-line"></span></div>
+            </div>
+          </div>
+          <div class="card-side">
+            <fieldset class="swatches">
+              <legend>Tema</legend>
+              <div class="swatch-row">
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cuento-ice">
+                  <span class="dot" style="--sw-accent:#2c5aa0;--sw-deco:#b9a8e3;--sw-mark:#8fd0f2;--sw-soft:#d9e8f7"></span>
+                  <span class="sr-only">Reino de hielo</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cuento-rescue">
+                  <span class="dot" style="--sw-accent:#b5121b;--sw-deco:#1f5fbf;--sw-mark:#f6c312;--sw-soft:#ffe8ad"></span>
+                  <span class="sr-only">Equipo de rescate</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cuento-spider">
+                  <span class="dot" style="--sw-accent:#b91c1c;--sw-deco:#1d4ed8;--sw-mark:#0f172a;--sw-soft:#dde5f5"></span>
+                  <span class="sr-only">Héroe arácnido</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cuento-mouse">
+                  <span class="dot" style="--sw-accent:#b5121b;--sw-deco:#f5c400;--sw-mark:#1a1a1a;--sw-soft:#fde9b4"></span>
+                  <span class="sr-only">Ratón clásico</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cuento-dino">
+                  <span class="dot" style="--sw-accent:#3b6a1c;--sw-deco:#e07a1f;--sw-mark:#a3c06b;--sw-soft:#ddebc6"></span>
+                  <span class="sr-only">Dinosaurios</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cuento-sea">
+                  <span class="dot" style="--sw-accent:#0f6d66;--sw-deco:#8a6bd1;--sw-mark:#f2a7c3;--sw-soft:#c9eee8"></span>
+                  <span class="sr-only">Bajo el mar</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cuento-princess">
+                  <span class="dot" style="--sw-accent:#a32b65;--sw-deco:#e9b6d2;--sw-mark:#d4af37;--sw-soft:#fadbe7"></span>
+                  <span class="sr-only">Princesa de cuento</span>
+                </label>
+                <label class="swatch">
+                  <input type="radio" name="plantilla" value="cuento-pixel">
+                  <span class="dot" style="--sw-accent:#3a6f27;--sw-deco:#8b5a2b;--sw-mark:#6fb3d2;--sw-soft:#d8e6c6"></span>
+                  <span class="sr-only">Bloques y píxeles</span>
+                </label>
+              </div>
+            </fieldset>
+            <p class="theme-now"><span class="prefix prefix--chosen">Tema: </span><span class="prefix prefix--default">Vista previa: </span><span class="name name--default">Bajo el mar</span><span class="name name--ice">Reino de hielo</span><span class="name name--rescue">Equipo de rescate</span><span class="name name--spider">Héroe arácnido</span><span class="name name--mouse">Ratón clásico</span><span class="name name--dino">Dinosaurios</span><span class="name name--sea">Bajo el mar</span><span class="name name--princess">Princesa de cuento</span><span class="name name--pixel">Bloques y píxeles</span></p>
+            <p class="card-foot"><a class="link" href="#">Ver completa</a></p>
+          </div>
+        </div>
+      </article>
+    </main>
+
+    <section class="packages" aria-labelledby="paquete">
+      <div class="section-head">
+        <h2 id="paquete">Paquete</h2>
+      </div>
+      <p class="section-note">El cobro se hace al publicar. Puedes cambiarlo después.</p>
+      <div class="pkg-list">
+        <label class="pkg">
+          <input type="radio" name="paquete" value="basico">
+          <span class="pkg-mark" aria-hidden="true">✓</span>
+          <span class="pkg-text"><span class="pkg-name">Basic</span><span class="pkg-desc">Una selección inicial para empezar a planificar.</span></span>
+          <span class="pkg-price">$100.00<small>MXN</small></span>
+        </label>
+        <label class="pkg">
+          <input type="radio" name="paquete" value="deluxe" checked>
+          <span class="pkg-mark" aria-hidden="true">✓</span>
+          <span class="pkg-text"><span class="pkg-name">Deluxe</span><span class="pkg-desc">El catálogo más amplio para celebraciones con más necesidades.</span></span>
+          <span class="pkg-price">$200.00<small>MXN</small></span>
+        </label>
+        <label class="pkg">
+          <input type="radio" name="paquete" value="premium">
+          <span class="pkg-mark" aria-hidden="true">✓</span>
+          <span class="pkg-text"><span class="pkg-name">Premium</span><span class="pkg-desc">Más recursos para una experiencia visual completa.</span></span>
+          <span class="pkg-price">$300.00<small>MXN</small></span>
+        </label>
+      </div>
+    </section>
+
+    <footer>
+      <a href="#">Volver a mis invitaciones</a>
+    </footer>
+  </div>
+
+  <div class="summary-wrap">
+    <div class="summary" role="group" aria-label="Tu elección">
+      <div class="summary-choice">
+        <span class="summary-mark" aria-hidden="true"></span>
+        <p class="summary-text">
+          <span class="summary-title">Cartel de fiesta · Dinosaurios</span>
+          <span class="summary-sub">Deluxe · $200.00 MXN</span>
+        </p>
+      </div>
+      <a class="btn" href="#">Continuar</a>
+    </div>
+  </div>
+</body>
+</html>

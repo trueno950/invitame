@@ -166,3 +166,7 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 - L13 — Owner on the T9 chooser, verbatim: "me gusto pero podrias mejorar aun mas". The parent reads it as a request
   for a better chooser and, following S3's rule that visuals are chosen before code, prepares three directions under
   `design/template-chooser-v2/` (T10) for the owner to pick from.
+- L14 — T10 directions written by worker `mwe7nql2-9-n6a3` to `design/template-chooser-v2/`: 01 «Galería con filtros»,
+  02 «Paso a paso», and 03 «Vista dividida», each at 390 and 1280 px. All six render with no overflow or console
+  errors, pass the contrast and accessibility probes, and use no external URLs. The worker recommends 01. Waiting for
+  the owner's choice; Birthday Adventure is not shown in the directions, which is an open question for the owner.

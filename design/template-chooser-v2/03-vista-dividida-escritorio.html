@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elegir plantilla — Vista dividida (escritorio 1280)</title>
+<style>
+  /* App tokens «Rosa y vino» from apps/web/app/globals.css. */
+  :root {
+    --background: #fff7f5;
+    --surface: #ffffff;
+    --rose-50: #fdeef2;
+    --rose-100: #f8d7e0;
+    --ink: #3b1424;
+    --muted: #6b3a4c;
+    --primary: #8c1c3a;
+    --primary-deep: #6e1530;
+    --on-primary: #ffffff;
+    --field-border: #a06e7e;
+    --rose: #e9a3b5;
+    --gold: #c29a54;
+    --radius-field: 1rem;
+    --radius-panel: 1.6rem;
+    --font-display: "Cormorant Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+    --font-sans: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+  }
+
+  /* Guest themes, colors copied from apps/web/lib/renderers/birthday-themes.ts. */
+  .th--ice   { --t-bg:#eef5fc; --t-surface:#ffffff; --t-soft:#d9e8f7; --t-ink:#162544; --t-accent:#2c5aa0; --t-d1:#b9a8e3; --t-d2:#8fd0f2; }
+  .th--rescue{ --t-bg:#fff8e7; --t-surface:#ffffff; --t-soft:#ffe8ad; --t-ink:#14213d; --t-accent:#b5121b; --t-d1:#1f5fbf; --t-d2:#f6c312; }
+  .th--spider{ --t-bg:#f3f5fb; --t-surface:#ffffff; --t-soft:#dde5f5; --t-ink:#0f172a; --t-accent:#b91c1c; --t-d1:#1d4ed8; --t-d2:#0f172a; }
+  .th--mouse { --t-bg:#fff9ec; --t-surface:#ffffff; --t-soft:#fde9b4; --t-ink:#1a1a1a; --t-accent:#b5121b; --t-d1:#f5c400; --t-d2:#1a1a1a; }
+  .th--dino  { --t-bg:#f1f6e8; --t-surface:#ffffff; --t-soft:#ddebc6; --t-ink:#1f2d16; --t-accent:#3b6a1c; --t-d1:#e07a1f; --t-d2:#a3c06b; }
+  .th--sea   { --t-bg:#eafaf7; --t-surface:#ffffff; --t-soft:#c9eee8; --t-ink:#0d3340; --t-accent:#0f6d66; --t-d1:#8a6bd1; --t-d2:#f2a7c3; }
+  .th--princess{ --t-bg:#fff3f7; --t-surface:#ffffff; --t-soft:#fadbe7; --t-ink:#3a1230; --t-accent:#a32b65; --t-d1:#e9b6d2; --t-d2:#d4af37; }
+  .th--pixel { --t-bg:#f0f4ea; --t-surface:#ffffff; --t-soft:#d8e6c6; --t-ink:#1f2a1a; --t-accent:#3a6f27; --t-d1:#8b5a2b; --t-d2:#6fb3d2; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; padding-bottom: 24px;
+    background-color: var(--background);
+    background-image:
+      radial-gradient(90% 26% at 50% 0, var(--surface) 0%, rgba(255, 255, 255, 0) 70%),
+      linear-gradient(180deg, var(--rose-50), var(--background) 34%);
+    color: var(--ink); font-family: var(--font-sans); font-size: 16px; line-height: 1.5;
+  }
+  :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  .wrap { width: 100%; max-width: 422px; margin: 0 auto; padding: 0 16px; }
+
+  .topbar { background: var(--surface); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .topbar-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; max-width: 422px; margin: 0 auto; padding: 11px 16px; }
+  .wordmark { display: inline-flex; align-items: baseline; gap: 1px; color: var(--primary); font-size: 19px; font-weight: 500; text-decoration: none; }
+  .wordmark em { font-family: var(--font-display); font-style: italic; font-size: 24px; line-height: 1; }
+  .topnav { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+  .topnav a { color: var(--muted); text-decoration: none; }
+  .topnav a[aria-current="page"] { color: var(--primary); text-decoration: underline; text-decoration-color: var(--rose); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .topnav .sep { width: 1px; height: 14px; background: var(--rose-100); }
+
+  header.page { padding: 16px 0 0; }
+  .back { display: block; width: fit-content; margin-bottom: 10px; color: var(--primary); font-size: 13px; font-weight: 500; text-decoration: none; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 6px; margin: 0; border-radius: 999px; padding: 4px 12px 4px 8px;
+    background: rgba(255, 255, 255, 0.8); box-shadow: inset 0 0 0 1px rgba(194, 154, 84, 0.55);
+    color: var(--primary); font-size: 11px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .eyebrow svg { width: 14px; height: 14px; }
+  h1 { margin: 10px 0 0; font-family: var(--font-display); font-size: 29px; font-weight: 600; line-height: 1.1; }
+  .lede { margin: 5px 0 0; color: var(--muted); font-size: 14px; }
+
+  /* The preview leads: it stays on top while the options scroll below it. */
+  .preview-panel { margin-top: 14px; }
+  .phone { padding: 7px; border-radius: 26px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--gold), 0 22px 44px -28px rgba(110, 21, 48, 0.6); }
+  .phone-screen { position: relative; overflow: hidden; border-radius: 20px; }
+  .preview-caption { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+  .preview-title { min-width: 0; margin: 0; font-size: 13px; color: var(--muted); }
+  .preview-title b { display: block; color: var(--ink); font-weight: 600; }
+  .preview-title span { display: block; font-size: 11.5px; }
+  .sample-tag { padding: 2px 8px; border-radius: 999px; background: var(--rose-50); color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+
+  .link { color: var(--primary); font-size: 13px; font-weight: 500; text-decoration: underline; text-decoration-color: var(--rose); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .link:hover { color: var(--primary-deep); text-decoration-color: var(--primary); }
+
+  /* Options: everything is a compact row next to the preview. */
+  .options { margin-top: 16px; }
+  .occasion-row { display: flex; align-items: center; gap: 8px; }
+  .occ-label { color: var(--muted); font-size: 12.5px; }
+  .occasion-row .link { margin-left: auto; }
+  .hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 0 11px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); color: var(--ink); font-size: 12.5px; font-weight: 500; text-decoration: none; }
+  .chip[aria-current="page"] { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+  .chip--soon { background: var(--rose-50); color: var(--muted); }
+  .soon { padding: 1px 5px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--rose-100); color: var(--muted); font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .group { margin-top: 16px; }
+  .group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  h2 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 600; }
+  .group-meta { color: var(--muted); font-size: 12px; }
+
+  .layout-rows { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; border: 0; }
+  .row {
+    position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+    padding: 8px 12px 8px 8px; border-radius: var(--radius-field); background: var(--surface);
+    box-shadow: inset 0 0 0 1.5px var(--field-border); cursor: pointer;
+  }
+  .row:has(input:checked) { background: var(--rose-50); box-shadow: inset 0 0 0 2px var(--primary); }
+  .row input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .row:has(input:focus-visible) { outline: 3px solid var(--primary); outline-offset: 2px; }
+  .row-name { display: block; font-size: 14.5px; font-weight: 600; }
+  .row-desc { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }
+  .row-meta { color: var(--muted); font-size: 11.5px; }
+  .row-check { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--field-border); color: transparent; font-size: 11px; font-weight: 700; }
+  .row:has(input:checked) .row-check { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+
+  /* The thumbnails are built from inline spans, so they need their own block layout. */
+  .row-thumb * { display: block; }
+  .row-thumb .mm-kicker { display: inline-block; }
+  .row-thumb .mm-compass { display: grid; }
+  .row-thumb svg { display: block; }
+  .row-thumb { position: relative; width: 54px; aspect-ratio: 3 / 4; overflow: hidden; border-radius: 8px; background: var(--t-bg); font-size: 3.2px; line-height: 1.3; box-shadow: inset 0 0 0 1px rgba(59, 20, 36, 0.12); }
+
+  .swatches { display: grid; grid-template-columns: repeat(8, 34px); gap: 10px; justify-content: start; min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+  .swatch { position: relative; display: grid; place-items: center; aspect-ratio: 1; cursor: pointer; }
+  .swatch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .dot { display: block; width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(150deg, var(--sw-accent) 0 56%, var(--sw-deco) 56% 100%); box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--sw-soft); }
+  .dot::after { content: ""; position: absolute; width: 9px; height: 9px; margin: 17px 0 0 17px; border-radius: 50%; background: var(--sw-mark); }
+  .swatch { position: relative; }
+  .swatch:has(input:checked) .dot { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary); }
+  .swatch:has(input:focus-visible) .dot { outline: 3px solid var(--primary-deep); outline-offset: 3px; }
+  .theme-now { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+  .theme-now b { color: var(--primary); font-weight: 600; }
+
+  .pkg-list { display: flex; flex-direction: column; gap: 6px; }
+  .pkg { position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-field); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); cursor: pointer; }
+  .pkg:has(input:checked) { background: var(--rose-50); box-shadow: inset 0 0 0 2px var(--primary); }
+  .pkg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .pkg-mark { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--field-border); color: transparent; font-size: 11px; font-weight: 700; }
+  .pkg:has(input:checked) .pkg-mark { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+  .pkg:has(input:focus-visible) { outline: 3px solid var(--primary); outline-offset: 2px; }
+  .pkg-name { display: block; font-size: 14px; font-weight: 600; }
+  .pkg-desc { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+  .pkg-price { color: var(--ink); font-size: 13px; font-weight: 600; white-space: nowrap; }
+
+  /* The action carries the whole choice, one line above the button. */
+  .action { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--gold); }
+  .choice-line { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  .choice-line b { color: var(--ink); font-weight: 600; }
+  .btn {
+    display: flex; align-items: center; justify-content: center; width: 100%; min-height: 50px; padding: 0 22px;
+    border-radius: 999px; border: 0; background: linear-gradient(180deg, var(--primary) 55%, var(--primary-deep));
+    box-shadow: 0 14px 30px -12px rgba(140, 28, 58, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    color: var(--on-primary); font-family: inherit; font-size: 15.5px; font-weight: 500; text-decoration: none;
+  }
+  .btn:focus-visible { outline: 3px solid var(--primary-deep); outline-offset: 3px; }
+  footer { padding: 14px 0 4px; }
+
+  /* ---- Simplified drawings of the three layouts, at thumbnail size. ---- */
+  .mini-map { padding: 1.7em 1.2em; text-align: center; background-image: radial-gradient(var(--t-d2) 1.1px, transparent 1.2px); background-size: 2.2em 2.2em; }
+  .mm-kicker { display: inline-block; margin: 0; padding: 0.5em 0.9em; border: 0.24em dashed var(--t-accent); border-radius: 999px; background: var(--t-surface); color: var(--t-accent); font-size: 1em; font-weight: 500; }
+  .mm-name { margin: 0.55em 0 0; font-family: var(--font-display); font-size: 2.65em; font-weight: 600; line-height: 1; }
+  .mm-compass { position: relative; display: grid; place-items: center; width: 7.8em; height: 7.8em; margin: 0.7em auto 0; }
+  .mm-compass svg { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--t-accent); }
+  .mm-age { position: relative; color: var(--t-accent); font-size: 3.4em; font-weight: 700; line-height: 0.85; }
+  .mini-poster { display: flex; flex-direction: column; }
+  .mp-band { padding: 1.5em 1em 3.6em; background: var(--t-accent); color: #ffffff; text-align: center; }
+  .mp-kicker { margin: 0; font-size: 0.92em; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; }
+  .mp-name { margin: 0.16em 0 0; font-family: var(--font-display); font-size: 2.7em; font-weight: 600; line-height: 1; }
+  .mp-age { margin: 0.2em 0 0; font-size: 1em; font-weight: 500; }
+  .mp-photo { width: 6.4em; margin: -2.6em auto 0; padding: 0.45em 0.45em 1.7em; background: var(--t-surface); border-radius: 0.2em; transform: rotate(3deg); }
+  .mp-photo svg { display: block; width: 100%; height: auto; border-radius: 0.15em; background: var(--t-soft); }
+  .mp-lines { display: grid; gap: 0.55em; width: 74%; margin: 1em auto 0; }
+  .mp-line { height: 1.5em; border-radius: 0.4em; background: var(--t-surface); box-shadow: inset 0 0 0 0.14em var(--t-soft); }
+  .mini-story { padding: 1.2em 0.9em; }
+  .ms-sheet { height: 100%; padding: 1.5em 0.9em 1em; border-radius: 0.4em 0.4em 1.4em 1.4em; background: var(--t-surface); text-align: center; box-shadow: 0 0.4em 1.2em -0.6em rgba(59, 20, 36, 0.45); }
+  .ms-arch { position: relative; width: 5.4em; height: 6.2em; margin: 0 auto; overflow: hidden; border: 0.4em solid var(--t-soft); border-radius: 4em 4em 0.4em 0.4em; background: var(--t-bg); }
+  .ms-arch svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .ms-once { margin: 0.9em 0 0; font-size: 1em; font-style: italic; }
+  .ms-name { margin: 0.05em 0 0; color: var(--t-accent); font-family: var(--font-display); font-size: 2.3em; font-weight: 600; line-height: 1.05; }
+  .ms-lines { display: grid; gap: 0.36em; width: 82%; margin: 0.8em auto 0; }
+  .ms-line { height: 0.55em; border-radius: 999px; background: var(--t-soft); }
+
+  /* ---- The sample invitation inside the phone frame. ---- */
+  .invite { background: var(--t-bg); color: var(--t-ink); font-size: 13.5px; line-height: 1.45; }
+  .inv-band { position: relative; overflow: hidden; padding: 1.7em 1.2em 2.4em; background: var(--t-accent); color: #ffffff; text-align: center; }
+  .inv-band svg { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.75; }
+  .inv-kicker { position: relative; margin: 0; font-size: 0.85em; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; }
+  .inv-name { position: relative; margin: 0.15em 0 0; font-family: var(--font-display); font-size: 2.5em; font-weight: 600; line-height: 1; }
+  .inv-age { position: relative; margin: 0.2em 0 0; font-size: 0.95em; font-weight: 500; }
+  .inv-photo { position: relative; width: 48%; margin: -1.6em auto 0; padding: 0.4em 0.4em 1.6em; background: var(--t-surface); border-radius: 0.25em; transform: rotate(3deg); box-shadow: 0 10px 20px -12px rgba(31, 45, 22, 0.7); }
+  .inv-photo svg { display: block; width: 100%; height: auto; border-radius: 0.2em; background: var(--t-soft); }
+  .inv-photo figcaption { position: absolute; left: 0; right: 0; bottom: 0.35em; color: var(--t-accent); font-size: 0.85em; font-weight: 600; text-align: center; }
+  .inv-body { padding: 1.2em 1em 1em; }
+  .inv-ticket { display: grid; grid-template-columns: 1fr auto; gap: 0.7em; padding: 0.9em; border-radius: 0.9em; background: var(--t-surface); box-shadow: 0 1px 0 var(--t-soft); }
+  .inv-ticket dt { color: var(--t-accent); font-size: 0.68em; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+  .inv-ticket dd { margin: 0.1em 0 0.6em; font-size: 0.95em; font-weight: 600; line-height: 1.25; }
+  .inv-ticket dd:last-child { margin-bottom: 0; }
+  .inv-ticket small { display: block; font-size: 0.85em; font-weight: 400; }
+  .inv-stub { display: grid; place-content: center; min-width: 3.6em; padding: 0.5em; border-radius: 0.6em; background: var(--t-soft); text-align: center; }
+  .inv-stub b { color: var(--t-accent); font-size: 1.15em; font-weight: 700; line-height: 1; }
+  .inv-stub span { font-size: 0.7em; font-weight: 500; }
+  .inv-msg { margin-top: 1em; padding: 0.9em 1em; border-radius: 1em; background: var(--t-soft); font-size: 0.95em; line-height: 1.5; }
+
+  /* ---- Desktop artboard (1280) ---- */
+  .wrap { max-width: 1120px; padding: 0 32px; }
+  .topbar-inner { max-width: 1120px; padding: 12px 32px; }
+  .wordmark { font-size: 21px; }
+  .wordmark em { font-size: 27px; }
+  .topnav { gap: 18px; font-size: 14px; }
+  header.page { padding: 22px 0 0; }
+  h1 { font-size: 40px; line-height: 1.06; }
+  .lede { max-width: 58ch; font-size: 15px; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: start; margin-top: 22px; }
+  .options { order: 1; margin-top: 0; }
+  .preview-panel { order: 2; position: sticky; top: 20px; margin-top: 0; }
+  .phone { max-width: 430px; margin: 0 auto; padding: 9px; border-radius: 32px; }
+  .phone-screen { border-radius: 24px; }
+  .invite { font-size: 15px; }
+  .preview-caption { max-width: 430px; margin: 12px auto 0; align-items: center; }
+  .preview-title b { font-size: 14.5px; }
+  .preview-title span { font-size: 12px; }
+  .occasion-row { font-size: 13px; }
+  .hint { font-size: 12.5px; }
+  h2 { font-size: 22px; }
+  .group { margin-top: 20px; }
+  .group-meta { font-size: 12.5px; }
+  .row { padding: 10px 14px 10px 10px; gap: 14px; }
+  .row-thumb { width: 64px; font-size: 3.8px; }
+  .row-name { font-size: 15px; }
+  .row-desc { font-size: 12.5px; }
+  .row-meta { font-size: 12px; }
+  .swatches { gap: 12px; }
+  .theme-now { font-size: 13.5px; }
+  .pkg { padding: 10px 14px; }
+  .pkg-name { font-size: 14.5px; }
+  .pkg-desc { font-size: 12.5px; }
+  .pkg-price { font-size: 13.5px; }
+  .action { margin-top: 22px; padding-top: 16px; }
+  .choice-line { font-size: 13px; }
+  .btn { max-width: 320px; }
+  footer { padding: 18px 0 8px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="wordmark" href="#">Invita<em>Me</em></a>
+      <nav class="topnav" aria-label="Tu cuenta">
+        <a href="#">Mi cuenta</a>
+        <span class="sep" aria-hidden="true"></span>
+        <a href="#" aria-current="page">Mis invitaciones</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <header class="page">
+      <a class="back" href="#">← Volver a mis invitaciones</a>
+      <p class="eyebrow">
+        <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+          <path d="M8 13V6" /><path d="M8 6c0-2 1.6-3.4 3.6-3.4C11.6 4.6 10 6 8 6Z" /><path d="M8 8.6C8 6.8 6.6 5.4 4.6 5.4 4.6 7.2 6 8.6 8 8.6Z" />
+        </svg>
+        Nueva invitación
+      </p>
+      <h1>Crea tu invitación</h1>
+      <p class="lede">Cada cambio se ve en la vista de arriba.</p>
+    </header>
+
+    <div class="split">
+    <section class="preview-panel" aria-labelledby="vista">
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="invite th--dino">
+            <div class="inv-band">
+              <svg viewBox="0 0 320 150" preserveAspectRatio="none" aria-hidden="true">
+                <g fill="#ddebc6" opacity="0.9"><rect x="24" y="26" width="12" height="5" rx="2.5" transform="rotate(28 30 28)" /><rect x="272" y="38" width="14" height="5" rx="2.5" transform="rotate(-24 279 40)" /><rect x="48" y="112" width="12" height="5" rx="2.5" transform="rotate(-38 54 114)" /><rect x="258" y="104" width="12" height="5" rx="2.5" transform="rotate(20 264 106)" /></g>
+                <g fill="#ffffff" opacity="0.65"><circle cx="84" cy="30" r="3.4" /><circle cx="224" cy="24" r="3" /><circle cx="292" cy="84" r="3.4" /><circle cx="20" cy="78" r="3" /></g>
+              </svg>
+              <p class="inv-kicker">¡Es mi fiesta!</p>
+              <p class="inv-name">Mateo</p>
+              <p class="inv-age">7 años de risas</p>
+            </div>
+            <figure class="inv-photo">
+              <svg viewBox="0 0 100 92" role="img" aria-label="Foto de ejemplo de Mateo">
+                <rect width="100" height="92" fill="#ddebc6" />
+                <path d="M0 70q26-12 50-2t50 0v24H0Z" fill="#a3c06b" />
+                <path d="M14 26q22 9 44 0" fill="none" stroke="#e07a1f" stroke-width="2.6" stroke-linecap="round" />
+                <path d="M20 28l5 9 5-9M34 31l5 9 5-9M48 30l5 9 5-9" fill="#3b6a1c" />
+                <rect x="42" y="46" width="24" height="16" rx="4" fill="#3b6a1c" />
+                <rect x="45" y="42" width="18" height="5" rx="2.5" fill="#f1f6e8" />
+                <circle cx="30" cy="42" r="5" fill="#e07a1f" /><circle cx="74" cy="44" r="4" fill="#8fd0f2" />
+              </svg>
+              <figcaption>¡Mateo!</figcaption>
+            </figure>
+            <div class="inv-body">
+              <div class="inv-ticket">
+                <dl>
+                  <dt>Fecha</dt>
+                  <dd>Sábado 5 de diciembre de 2026</dd>
+                  <dt>Lugar</dt>
+                  <dd>Jardín Los Arcos<small>Av. de las Flores 214, Col. Del Valle</small></dd>
+                </dl>
+                <div class="inv-stub"><b>16:30</b><span>horas</span></div>
+              </div>
+              <p class="inv-msg">¡Ven a celebrar conmigo! Habrá juegos, pastel y muchas sorpresas.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="preview-caption">
+        <p class="preview-title" id="vista"><b>Cartel de fiesta · Dinosaurios</b><span>Vista de ejemplo con datos ficticios</span></p>
+        <a class="link" href="#">Ver completa</a>
+      </div>
+    </section>
+
+    <div class="options">
+      <div class="occasion-row">
+        <span class="occ-label">Ocasión</span>
+        <span class="chip" aria-current="page">Cumpleaños</span>
+        <a class="link" href="#">Cambiar</a>
+      </div>
+      <p class="hint">Pronto también: baby shower, bautizos, XV años y bodas.</p>
+
+      <section class="group" aria-labelledby="diseno">
+        <div class="group-head">
+          <h2 id="diseno">Diseño</h2>
+          <span class="group-meta">3 opciones</span>
+        </div>
+        <fieldset class="layout-rows">
+          <legend class="sr-only">Diseño</legend>
+          <label class="row">
+            <input type="radio" name="plantilla" value="ruta">
+            <span class="row-thumb mini-map th--ice" aria-hidden="true">
+              <span class="mm-kicker">¡Hola!</span>
+              <span class="mm-name">Mateo</span>
+              <span class="mm-compass">
+                <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="2 8"><circle cx="50" cy="50" r="46" /></svg>
+                <span class="mm-age">7</span>
+              </span>
+            </span>
+            <span class="row-text">
+              <span class="row-name">Ruta de aventura</span>
+              <span class="row-desc">La edad en una brújula y una ruta con fecha, hora y lugar.</span>
+              <span class="row-meta">8 temas</span>
+            </span>
+            <span class="row-check" aria-hidden="true">✓</span>
+          </label>
+
+          <label class="row">
+            <input type="radio" name="plantilla" value="cartel" checked>
+            <span class="row-thumb mini-poster th--dino" aria-hidden="true">
+              <span class="mp-band"><span class="mp-kicker">Fiesta</span><span class="mp-name">Mateo</span></span>
+              <span class="mp-photo">
+                <svg viewBox="0 0 100 92">
+                  <rect width="100" height="92" fill="#ddebc6" />
+                  <path d="M0 70q26-12 50-2t50 0v24H0Z" fill="#a3c06b" />
+                  <rect x="42" y="46" width="24" height="16" rx="4" fill="#3b6a1c" />
+                  <circle cx="30" cy="42" r="5" fill="#e07a1f" />
+                </svg>
+              </span>
+            </span>
+            <span class="row-text">
+              <span class="row-name">Cartel de fiesta</span>
+              <span class="row-desc">Foto y boleto con los datos. El más festivo.</span>
+              <span class="row-meta">8 temas</span>
+            </span>
+            <span class="row-check" aria-hidden="true">✓</span>
+          </label>
+
+          <label class="row">
+            <input type="radio" name="plantilla" value="cuento">
+            <span class="row-thumb mini-story th--sea" aria-hidden="true">
+              <span class="ms-sheet">
+                <span class="ms-arch">
+                  <svg viewBox="0 0 100 116">
+                    <rect width="100" height="116" fill="#eafaf7" />
+                    <path d="M0 88q22-10 50-2t50 0v30H0Z" fill="#c9eee8" />
+                    <rect x="40" y="52" width="22" height="16" rx="4" fill="#0f6d66" />
+                    <circle cx="24" cy="44" r="6" fill="#f2a7c3" /><circle cx="78" cy="46" r="5" fill="#8a6bd1" />
+                  </svg>
+                </span>
+                <span class="ms-name">Mateo</span>
+              </span>
+            </span>
+            <span class="row-text">
+              <span class="row-name">Cuento ilustrado</span>
+              <span class="row-desc">La fiesta narrada en capítulos, tranquila y fácil de leer.</span>
+              <span class="row-meta">8 temas</span>
+            </span>
+            <span class="row-check" aria-hidden="true">✓</span>
+          </label>
+        </fieldset>
+      </section>
+
+      <section class="group" aria-labelledby="tema">
+        <div class="group-head">
+          <h2 id="tema">Tema</h2>
+          <span class="group-meta">8 temas para Cartel de fiesta</span>
+        </div>
+        <fieldset class="swatches">
+          <legend class="sr-only">Tema</legend>
+          <label class="swatch">
+            <input type="radio" name="tema" value="ice">
+            <span class="dot" style="--sw-accent:#2c5aa0;--sw-deco:#b9a8e3;--sw-mark:#8fd0f2;--sw-soft:#d9e8f7"></span>
+            <span class="sr-only">Reino de hielo</span>
+          </label>
+          <label class="swatch">
+            <input type="radio" name="tema" value="rescue">
+            <span class="dot" style="--sw-accent:#b5121b;--sw-deco:#1f5fbf;--sw-mark:#f6c312;--sw-soft:#ffe8ad"></span>
+            <span class="sr-only">Equipo de rescate</span>
+          </label>
+          <label class="swatch">
+            <input type="radio" name="tema" value="spider">
+            <span class="dot" style="--sw-accent:#b91c1c;--sw-deco:#1d4ed8;--sw-mark:#0f172a;--sw-soft:#dde5f5"></span>
+            <span class="sr-only">Héroe arácnido</span>
+          </label>
+          <label class="swatch">
+            <input type="radio" name="tema" value="mouse">
+            <span class="dot" style="--sw-accent:#b5121b;--sw-deco:#f5c400;--sw-mark:#1a1a1a;--sw-soft:#fde9b4"></span>
+            <span class="sr-only">Ratón clásico</span>
+          </label>
+          <label class="swatch">
+            <input type="radio" name="tema" value="dino" checked>
+            <span class="dot" style="--sw-accent:#3b6a1c;--sw-deco:#e07a1f;--sw-mark:#a3c06b;--sw-soft:#ddebc6"></span>
+            <span class="sr-only">Dinosaurios</span>
+          </label>
+          <label class="swatch">
+            <input type="radio" name="tema" value="sea">
+            <span class="dot" style="--sw-accent:#0f6d66;--sw-deco:#8a6bd1;--sw-mark:#f2a7c3;--sw-soft:#c9eee8"></span>
+            <span class="sr-only">Bajo el mar</span>
+          </label>
+          <label class="swatch">
+            <input type="radio" name="tema" value="princess">
+            <span class="dot" style="--sw-accent:#a32b65;--sw-deco:#e9b6d2;--sw-mark:#d4af37;--sw-soft:#fadbe7"></span>
+            <span class="sr-only">Princesa de cuento</span>
+          </label>
+          <label class="swatch">
+            <input type="radio" name="tema" value="pixel">
+            <span class="dot" style="--sw-accent:#3a6f27;--sw-deco:#8b5a2b;--sw-mark:#6fb3d2;--sw-soft:#d8e6c6"></span>
+            <span class="sr-only">Bloques y píxeles</span>
+          </label>
+        </fieldset>
+        <p class="theme-now">Tema: <b>Dinosaurios</b></p>
+      </section>
+
+      <section class="group" aria-labelledby="paquete">
+        <div class="group-head">
+          <h2 id="paquete">Paquete</h2>
+          <span class="group-meta">El cobro se hace al publicar</span>
+        </div>
+        <div class="pkg-list">
+          <label class="pkg">
+            <input type="radio" name="paquete" value="basico">
+            <span class="pkg-mark" aria-hidden="true">✓</span>
+            <span class="pkg-text"><span class="pkg-name">Basic</span><span class="pkg-desc">Una selección inicial para empezar a planificar.</span></span>
+            <span class="pkg-price">$100.00</span>
+          </label>
+          <label class="pkg">
+            <input type="radio" name="paquete" value="deluxe" checked>
+            <span class="pkg-mark" aria-hidden="true">✓</span>
+            <span class="pkg-text"><span class="pkg-name">Deluxe</span><span class="pkg-desc">El catálogo más amplio para celebraciones con más necesidades.</span></span>
+            <span class="pkg-price">$200.00</span>
+          </label>
+          <label class="pkg">
+            <input type="radio" name="paquete" value="premium">
+            <span class="pkg-mark" aria-hidden="true">✓</span>
+            <span class="pkg-text"><span class="pkg-name">Premium</span><span class="pkg-desc">Más recursos para una experiencia visual completa.</span></span>
+            <span class="pkg-price">$300.00</span>
+          </label>
+        </div>
+      </section>
+
+      <div class="action">
+        <p class="choice-line"><b>Cartel de fiesta · Dinosaurios</b> · Deluxe $200.00 MXN · datos de ejemplo</p>
+        <a class="btn" href="#">Continuar</a>
+      </div>
+
+      <footer>
+        <a class="link" href="#">Volver a mis invitaciones</a>
+      </footer>
+    </div>
+    </div>
+  </div>
+</body>
+</html>
