@@ -100,15 +100,40 @@ function issuesOf(result: ReturnType<typeof validate>): string[] {
 }
 
 describe("renderer registry", () => {
-  it("lists exactly the three themed birthday layouts", () => {
+  it("lists exactly the five registered renderers", () => {
     assert.deepEqual(listRendererKeys(), [
       "birthday-map-01",
       "birthday-poster-01",
       "birthday-story-01",
+      "baby-shower-classic-01",
+      "baptism-classic-01",
     ]);
     for (const key of listRendererKeys()) {
       assert.equal(findRenderer(key)?.componentKey, key);
     }
+  });
+
+  it("refuses the removed birthday-adventure-01 renderer and its legacy configuration (S11)", () => {
+    const legacy = {
+      componentKey: "birthday-adventure-01",
+      layout: "adventure",
+      palette: "ocean",
+      typography: "rounded",
+      sectionOrder: ["hero", "details", "message"],
+    };
+
+    assert.equal(findRenderer("birthday-adventure-01"), undefined);
+    assert.deepEqual(
+      validateTemplateVersionContract({
+        componentKey: "birthday-adventure-01",
+        schema: seededSchema(),
+        configuration: legacy,
+      }),
+      {
+        ok: false,
+        issues: ['componentKey "birthday-adventure-01" is not a registered renderer'],
+      },
+    );
   });
 
   it("treats prototype keys and unknown keys as not registered", () => {

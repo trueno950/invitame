@@ -252,10 +252,7 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
         schema: { type: "object", required: ["title"], properties: { title: { type: "string" } } },
         configuration: {
           componentKey: "birthday-poster-01",
-          layout: "adventure",
-          palette: "ocean",
-          typography: "rounded",
-          sectionOrder: ["hero", "details", "message"],
+          theme: "dinosaurs",
         },
       },
     ],
@@ -501,10 +498,7 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
         schema: { type: "object", required: ["title"], properties: { title: { type: "string" } } },
         configuration: {
           componentKey: "birthday-poster-01",
-          layout: "adventure",
-          palette: "ocean",
-          typography: "rounded",
-          sectionOrder: ["hero", "details", "message"],
+          theme: "dinosaurs",
         },
       });
       assert.equal(listed?.description, "Una aventura");

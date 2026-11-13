@@ -216,6 +216,8 @@ describe("ListRenderersUseCase", () => {
       { componentKey: "birthday-map-01" },
       { componentKey: "birthday-poster-01" },
       { componentKey: "birthday-story-01" },
+      { componentKey: "baby-shower-classic-01" },
+      { componentKey: "baptism-classic-01" },
     ]);
   });
 });

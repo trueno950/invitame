@@ -1,17 +1,16 @@
 import { BIRTHDAY_THEMES } from "./birthday-themes";
 import {
-  isJsonObject,
   type RendererField,
-  readOwn,
   validateRendererSchema,
+  validateThemedConfiguration,
 } from "./renderer-contract";
 
 // The shared contract of a themed birthday layout (S8): the three layouts the owner chose read the same
 // eight content fields, so the creator form needs no change, and they take exactly `{ componentKey, theme }`
 // as configuration. A layout module owns only its own key and schema entry point; the field list and the
-// configuration rules live here once.
+// configuration rules it shares live here once.
 
-/** The eight invitation fields every birthday layout reads. */
+/** The eight invitation fields every birthday layout reads, all of them required. */
 export const BIRTHDAY_CONTENT_FIELDS: readonly RendererField[] = [
   { name: "celebrantName", type: "string" },
   { name: "age", type: "integer" },
@@ -23,50 +22,16 @@ export const BIRTHDAY_CONTENT_FIELDS: readonly RendererField[] = [
   { name: "message", type: "string" },
 ];
 
-const CONFIGURATION_KEYS = ["componentKey", "theme"] as const;
-
 /**
  * Validates the configuration of a themed birthday layout: exactly `componentKey` and `theme`, both
- * required and read as own properties, the key equal to the version's, and the theme from the allow-list.
+ * required and read as own properties, the key equal to the version's, and the theme from the shared
+ * birthday allow-list.
  */
 export function validateThemedLayoutConfiguration(
   configuration: unknown,
   componentKey: string,
 ): string[] {
-  if (!isJsonObject(configuration)) {
-    return ["configuration must be a JSON object"];
-  }
-
-  const issues: string[] = [];
-  const known: readonly string[] = CONFIGURATION_KEYS;
-
-  for (const key of Object.keys(configuration)) {
-    if (!known.includes(key)) {
-      issues.push(
-        `configuration.${key} is not allowed; allowed keys: ${CONFIGURATION_KEYS.join(", ")}`,
-      );
-    }
-  }
-  for (const key of CONFIGURATION_KEYS) {
-    if (!Object.hasOwn(configuration, key)) {
-      issues.push(`configuration.${key} is required`);
-    }
-  }
-
-  if (
-    Object.hasOwn(configuration, "componentKey") &&
-    readOwn(configuration, "componentKey") !== componentKey
-  ) {
-    issues.push(`configuration.componentKey must equal ${JSON.stringify(componentKey)}`);
-  }
-  if (
-    Object.hasOwn(configuration, "theme") &&
-    !BIRTHDAY_THEMES.some((allowed) => allowed === readOwn(configuration, "theme"))
-  ) {
-    issues.push(`configuration.theme must be one of: ${BIRTHDAY_THEMES.join(", ")}`);
-  }
-
-  return issues;
+  return validateThemedConfiguration(configuration, componentKey, BIRTHDAY_THEMES);
 }
 
 /** Validates a layout's data schema against the shared eight birthday content fields. */

@@ -3,8 +3,14 @@ import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import { PackageStatus, PrismaClient } from "@prisma/client";
-import { BIRTHDAY_LAYOUT_TEMPLATE_SEEDS, seedCatalog } from "../../../prisma/catalog-seed";
+import {
+  BABY_SHOWER_TEMPLATE_SEEDS,
+  BAPTISM_TEMPLATE_SEEDS,
+  BIRTHDAY_LAYOUT_TEMPLATE_SEEDS,
+  seedCatalog,
+} from "../../../prisma/catalog-seed";
 import { requireLocalDatabaseUrl } from "../../../test/database";
+import { listRendererKeys } from "../../catalog/domain/renderers/renderer-registry";
 
 // The catalog seed (M3 T2; S7, L4) on real PostgreSQL: it only creates what is missing and never
 // updates, reactivates, or deletes a row an administrator changed. Runs only through
@@ -19,6 +25,7 @@ const SEEDED_CATEGORY_KEYS = [
   "wedding",
   "quinceanera",
   "baby-shower",
+  "baptism",
   "graduation",
   "anniversary",
   "corporate-event",
@@ -147,6 +154,79 @@ describe("catalog seed (real PostgreSQL)", () => {
       assert.equal(versionOne.status, "PUBLISHED", seed.key);
       assert.deepEqual(versionOne.configuration, seed.configuration, seed.key);
     }
+  });
+
+  it("seeds the celebration categories and the 14 baby shower and baptism templates (S13)", async () => {
+    await seedCatalog(prisma);
+
+    const [babyShower, baptism] = await Promise.all([
+      prisma.category.findUniqueOrThrow({ where: { key: "baby-shower" } }),
+      prisma.category.findUniqueOrThrow({ where: { key: "baptism" } }),
+    ]);
+
+    assert.equal(babyShower.name, "Baby shower");
+    assert.ok(babyShower.description && babyShower.description.length > 0);
+    assert.equal(baptism.name, "Bautizos");
+    assert.ok(baptism.description && baptism.description.length > 0);
+
+    const seeds = [...BABY_SHOWER_TEMPLATE_SEEDS, ...BAPTISM_TEMPLATE_SEEDS];
+    const templates = await prisma.template.findMany({
+      where: { key: { in: seeds.map((seed) => seed.key) } },
+      include: { category: true, versions: true },
+    });
+
+    assert.equal(templates.length, 14);
+
+    for (const seed of seeds) {
+      const template = templates.find((row) => row.key === seed.key);
+      const expectedCategory =
+        seed.componentKey === "baby-shower-classic-01" ? "baby-shower" : "baptism";
+
+      assert.ok(template, seed.key);
+      assert.equal(template.category.key, expectedCategory, seed.key);
+      assert.equal(template.name, seed.name, seed.key);
+      assert.equal(template.description, seed.description, seed.key);
+      assert.equal(template.status, "PUBLISHED", seed.key);
+
+      const versionOne = template.versions.find((version) => version.version === 1);
+      assert.ok(versionOne, seed.key);
+      assert.equal(versionOne.componentKey, seed.componentKey, seed.key);
+      assert.equal(versionOne.status, "PUBLISHED", seed.key);
+      assert.deepEqual(versionOne.schema, seed.schema, seed.key);
+      assert.deepEqual(versionOne.configuration, seed.configuration, seed.key);
+    }
+  });
+
+  it("seeds no version for the removed renderer and no unregistered key (S11)", async () => {
+    await seedCatalog(prisma);
+
+    const seeds = [
+      ...BIRTHDAY_LAYOUT_TEMPLATE_SEEDS,
+      ...BABY_SHOWER_TEMPLATE_SEEDS,
+      ...BAPTISM_TEMPLATE_SEEDS,
+    ];
+    const versions = await prisma.templateVersion.findMany({
+      where: { template: { key: { in: seeds.map((seed) => seed.key) } } },
+      select: { componentKey: true, template: { select: { key: true } } },
+    });
+    const registered = new Set(listRendererKeys());
+
+    assert.equal(versions.length, seeds.length);
+    for (const version of versions) {
+      assert.ok(
+        registered.has(version.componentKey),
+        `${version.template.key} names ${version.componentKey}`,
+      );
+    }
+
+    assert.equal(
+      await prisma.templateVersion.count({ where: { componentKey: "birthday-adventure-01" } }),
+      0,
+    );
+    assert.equal(
+      await prisma.template.count({ where: { key: { startsWith: "birthday-adventure" } } }),
+      0,
+    );
   });
 
   it("links each seeded package to its features when it creates the package", async () => {

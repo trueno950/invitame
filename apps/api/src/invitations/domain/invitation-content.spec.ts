@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BIRTHDAY_CONTENT_SCHEMA } from "../../../prisma/catalog-seed";
+import {
+  BABY_SHOWER_CONTENT_SCHEMA,
+  BAPTISM_CONTENT_SCHEMA,
+  BIRTHDAY_CONTENT_SCHEMA,
+} from "../../../prisma/catalog-seed";
 import {
   DEFAULT_MAX_CONTENT_STRING_LENGTH,
   missingRequiredFields,
@@ -616,6 +620,44 @@ describe("missingRequiredFields", () => {
       "address",
       "mainPhoto",
       "message",
+    ]);
+  });
+});
+
+describe("baby shower and baptism content with optional fields (S13)", () => {
+  const COMPLETE_BABY_SHOWER = {
+    hosts: "Ana y Luis",
+    date: "2027-03-14",
+    time: "17:00",
+    location: "Casa de la familia",
+    address: "Calle 1",
+    message: "Te esperamos",
+    rsvpContact: "Ana",
+  };
+
+  it("accepts a baby shower draft that omits every optional field", () => {
+    assert.deepEqual(validateDraftContent(BABY_SHOWER_CONTENT_SCHEMA, COMPLETE_BABY_SHOWER), {
+      ok: true,
+      value: COMPLETE_BABY_SHOWER,
+    });
+  });
+
+  it("accepts an optional boolean and an optional text, and keeps both out of the required list", () => {
+    const content = { genderReveal: false, giftRegistry: "Tienda Luna, código 1234" };
+
+    assert.deepEqual(validateDraftContent(BABY_SHOWER_CONTENT_SCHEMA, content), {
+      ok: true,
+      value: content,
+    });
+    assert.deepEqual(missingRequiredFields(BABY_SHOWER_CONTENT_SCHEMA, COMPLETE_BABY_SHOWER), []);
+  });
+
+  it("refuses a non-boolean gender reveal and a mistyped required baptism field", () => {
+    assert.deepEqual(issuesOf(BABY_SHOWER_CONTENT_SCHEMA, { genderReveal: "sorpresa" }), [
+      "content.genderReveal must be a boolean",
+    ]);
+    assert.deepEqual(issuesOf(BAPTISM_CONTENT_SCHEMA, { parents: 42 }), [
+      "content.parents must be a string of at most 160 characters",
     ]);
   });
 });
