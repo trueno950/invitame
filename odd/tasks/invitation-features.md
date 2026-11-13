@@ -53,7 +53,7 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
 | F1 | API: migration, time zone and phone domain, feature settings use cases and REST, gated public read, tests | S3, S4 | worker | |
-| F2 | Web: event facts per layout, features block, countdown island, map/WhatsApp/calendar links, ICS builder, placement in the five layouts | S3, S4 | worker | |
+| F2 | Web: event facts per layout, features block, countdown island, map/WhatsApp/calendar links, ICS builder, placement in the five layouts | S3, S4 | worker | `d350dd0` |
 | F3 | Web: public page wiring, `.ics` route, creator «Funcionalidades» section, API client, browser check | S3, S4 | worker | |
 | F4 | Independent verification of the migration and the gating | S4 | verify | |
 
@@ -66,3 +66,11 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
   illustrations per theme; the elegant line after both.
 - L3 — Data, time zone, calendar, and countdown choices (S3). The parent fixed the contract S4 and split the work: F1
   (API) and F2 (web rendering) run in parallel with disjoint surfaces; F3 waits for F1's real contract.
+- L4 — F2 done in `d350dd0` (worker `mwf7dw2m-k-5ivx`). It adds pure helpers (start instant in an IANA zone, countdown,
+  map, Google Calendar, an RFC 5545 `.ics` builder, and `wa.me` links), event facts for the five layouts, and one
+  themed features block whose only client component is the countdown island; each layout places the block after its
+  details. Web: 853/853 tests; tsc and Biome clean. Differential: with no features, all five layouts in every theme,
+  with full and minimal content, rendered byte-identical to HEAD (25/25, run before commit). The parent then removed
+  that HEAD-reading test from the committed file, because committed tests must not read git history. Owner flags:
+  the countdown reads «ya pasó» from the start instant; the copy is provisional («Todo lo que necesitas», the WhatsApp
+  greeting).
