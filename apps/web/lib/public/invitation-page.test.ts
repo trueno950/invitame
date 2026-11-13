@@ -38,6 +38,14 @@ describe("invitationMetadata", () => {
   });
 
   it("falls back to the plain title when the content has no celebrant name", () => {
+    assert.equal(
+      invitationMetadata({ babyName: "Sofía", hosts: "Mariana" }).title,
+      "Invitación de Sofía",
+    );
+    assert.equal(
+      invitationMetadata({ celebrantName: "Ana", babyName: "Sofía" }).title,
+      "Invitación de Ana",
+    );
     for (const content of [{}, { celebrantName: 7 }, { celebrantName: "   " }, null, "text"]) {
       assert.deepEqual(invitationMetadata(content), {
         title: PUBLIC_INVITATION_COPY.titleFallback,
