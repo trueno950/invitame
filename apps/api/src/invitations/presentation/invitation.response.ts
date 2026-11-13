@@ -9,16 +9,15 @@ import {
 
 import {
   InvalidInvitationContentError,
+  InvalidInvitationFeaturesError,
   InvitationPackageDoesNotFitError,
   InvitationPackageNotFoundError,
   InvitationPaymentRequiredError,
   InvitationSlugUnavailableError,
   InvitationTemplateVersionNotPublishedError,
 } from "../application/invitation.application.errors";
-import type { PublicInvitation } from "../application/invitation-public";
 import type { InvitationSummary, OwnedInvitation } from "../application/invitation.use-cases";
-import type { JsonObject } from "../domain/invitation-content";
-import type { InvitationStatus } from "../domain/invitation-lifecycle";
+import type { PublicInvitation } from "../application/invitation-public";
 import {
   InvitationAlreadyArchivedError,
   InvitationAlreadyPublishedError,
@@ -26,6 +25,8 @@ import {
   InvitationNotPublishableError,
   InvitationNotPublishedError,
 } from "../domain/invitation.errors";
+import type { JsonObject } from "../domain/invitation-content";
+import type { InvitationStatus } from "../domain/invitation-lifecycle";
 
 // The stable REST shapes of an invitation (M4 T4 and M5 T4; S1, S3, S7, S9, A3, A4, A7). `ownerId` is
 // deliberately absent: it comes from the session and never belongs in a response (S9). An id that names nothing,
@@ -48,16 +49,26 @@ export interface InvitationSummaryResponse {
   updatedAt: string;
 }
 
-/** One invitation as its owner edits it: the stored fields, the content, and the fields it still lacks (S7). */
+/**
+ * One invitation as its owner edits it: the stored fields, the content, the feature data, the gated features the
+ * guest will see, and the fields it still lacks (F1; S4, S7).
+ */
 export interface OwnedInvitationResponse extends InvitationSummaryResponse {
   content: JsonObject;
   missingRequiredFields: string[];
+  /** The stored IANA zone (S4). */
+  timeZone: string;
+  /** The stored feature data; `whatsappPhone` is E.164 or null (S4). */
+  featureSettings: { whatsappPhone: string | null };
+  /** The gated feature keys the guest will see, `CALENDAR` included (S4). */
+  availableFeatures: string[];
 }
 
 /**
- * What a guest's page renders (M5 T4; S2, S3, A7): the renderer identity, its configuration, the content keys
- * the pinned schema declares, the slug, and the publication instant. Nothing else is here, so no owner, package,
- * price, status, or internal id can leak by accident. T5 builds the public page from this shape alone.
+ * What a guest's page renders (M5 T4, F1; S2, S3, S4, A7): the renderer identity, its configuration, the content
+ * keys the pinned schema declares, the slug, the publication instant, the invitation's time zone, and the gated
+ * features. Nothing else is here, so no owner, package, price, status, package feature key, or internal id can
+ * leak by accident (S4).
  */
 export interface PublicInvitationResponse {
   slug: string;
@@ -65,6 +76,13 @@ export interface PublicInvitationResponse {
   configuration: unknown;
   content: JsonObject;
   publishedAt: string | null;
+  timeZone: string;
+  features: {
+    countdown: boolean;
+    map: boolean;
+    calendar: true;
+    whatsapp: { phone: string } | null;
+  };
 }
 
 export function toInvitationSummaryResponse(stored: InvitationSummary): InvitationSummaryResponse {
@@ -86,10 +104,13 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
     ...toInvitationSummaryResponse(stored),
     content: stored.content,
     missingRequiredFields: [...stored.missingRequiredFields],
+    timeZone: stored.timeZone,
+    featureSettings: { whatsappPhone: stored.featureSettings.whatsappPhone },
+    availableFeatures: [...stored.availableFeatures],
   };
 }
 
-/** The guest's page of a published invitation, mapped from the application projection (A7). */
+/** The guest's page of a published invitation, mapped from the application projection (A7, S4). */
 export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvitationResponse {
   return {
     slug: stored.slug,
@@ -97,6 +118,14 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
     configuration: stored.configuration,
     content: stored.content,
     publishedAt: stored.publishedAt?.toISOString() ?? null,
+    timeZone: stored.timeZone,
+    features: {
+      countdown: stored.features.countdown,
+      map: stored.features.map,
+      calendar: true,
+      whatsapp:
+        stored.features.whatsapp === null ? null : { phone: stored.features.whatsapp.phone },
+    },
   };
 }
 
@@ -135,6 +164,7 @@ export function orInvitationSummaryNotFound(
  * - a package that does not fit is 400 with `INVITATION_PACKAGE_DOES_NOT_FIT`: the request is well formed, the
  *   API has no 422 anywhere, and a stable code is what the client branches on;
  * - content the pinned schema refuses is 400 with its issues (S3, S7);
+ * - feature data the domain refuses is 400 `INVALID_INVITATION_FEATURES` with its issues (F1; S4);
  * - an archived invitation is 409 with `INVITATION_NOT_EDITABLE`, or `INVITATION_ALREADY_ARCHIVED` for a
  *   repeated archive (A3, S7);
  * - a publication the lifecycle refuses is 409 with `INVITATION_ALREADY_PUBLISHED` or `INVITATION_NOT_PUBLISHED`,
@@ -160,6 +190,12 @@ export function mapInvitationError(error: unknown): never {
   if (error instanceof InvalidInvitationContentError) {
     throw new BadRequestException({
       code: "INVALID_INVITATION_CONTENT",
+      issues: [...error.issues],
+    });
+  }
+  if (error instanceof InvalidInvitationFeaturesError) {
+    throw new BadRequestException({
+      code: "INVALID_INVITATION_FEATURES",
       issues: [...error.issues],
     });
   }

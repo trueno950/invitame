@@ -142,6 +142,15 @@ describe("Prisma invitation repository on PostgreSQL", () => {
 
   const stored = (id: string) => prisma.invitation.findUniqueOrThrow({ where: { id } });
 
+  /** The stored row as the repository reports it: the port flattens the one-to-one feature settings row (F1). */
+  async function storedRecord(id: string) {
+    const row = await stored(id);
+    const settings = await prisma.invitationFeatureSettings.findUnique({
+      where: { invitationId: id },
+    });
+    return { ...row, whatsappPhone: settings?.whatsappPhone ?? null };
+  }
+
   /** The instant every publication fixture writes, so `publishedAt` is compared exactly (S7). */
   const PUBLISHED_AT = new Date("2026-11-12T09:30:00.000Z");
 
@@ -182,7 +191,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       assert.equal(created.expiresAt, null);
       assert.deepEqual(created.content, { celebrantName: "Ana" });
       assert.ok(created.createdAt instanceof Date);
-      assert.deepEqual(await stored(created.id), { ...created });
+      assert.deepEqual(await storedRecord(created.id), { ...created });
     });
 
     it("reports a duplicate slug as InvitationSlugTakenError and keeps the stored invitation", async () => {
@@ -423,7 +432,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       assert.equal(published?.archivedAt, null);
       assert.deepEqual(published?.content, { celebrantName: "Ana" });
       // The record and the stored row agree, including both publication columns.
-      assert.deepEqual(await stored(created.id), { ...published });
+      assert.deepEqual(await storedRecord(created.id), { ...published });
     });
 
     it("returns a PUBLISHED invitation to DRAFT and clears publishedAt (S7)", async () => {
@@ -434,7 +443,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
 
       assert.equal(draft?.status, "DRAFT");
       assert.equal(draft?.publishedAt, null);
-      assert.deepEqual(await stored(published.id), { ...draft });
+      assert.deepEqual(await storedRecord(published.id), { ...draft });
     });
 
     it("refuses to publish twice and leaves the row unchanged", async () => {
@@ -542,7 +551,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
         where: { id: future.id },
         data: { expiresAt: later },
       });
-      const futureBefore = await stored(future.id);
+      const futureBefore = await storedRecord(future.id);
 
       assert.equal(await repository.findPublishedBySlug(expired.slug), null);
       assert.deepEqual(await repository.findPublishedBySlug(future.slug), futureBefore);

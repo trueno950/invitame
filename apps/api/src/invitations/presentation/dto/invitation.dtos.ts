@@ -1,4 +1,30 @@
-import { IsDefined, IsUUID } from "class-validator";
+import {
+  IsDefined,
+  IsUUID,
+  Validate,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
+} from "class-validator";
+
+/**
+ * The field must be present in the payload, but `null` is a meaningful value (it clears the stored phone), so
+ * `class-validator`'s `IsDefined` — which refuses both `undefined` and `null` — cannot state this rule.
+ */
+@ValidatorConstraint({ name: "isProvided" })
+class IsProvidedConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    return value !== undefined;
+  }
+
+  defaultMessage(): string {
+    return "$property must be provided; null clears it";
+  }
+}
+
+/** `@IsProvided()`: the property is present, and any value it carries — including `null` — is accepted. */
+function IsProvided(): PropertyDecorator {
+  return Validate(IsProvidedConstraint);
+}
 
 /**
  * `POST /invitations` body (M4 T4; S1, S6, S9). The pinned template version and the package the entitlements
@@ -22,4 +48,19 @@ export class CreateInvitationDto {
 export class UpdateInvitationContentDto {
   @IsDefined()
   content!: unknown;
+}
+
+/**
+ * `PUT /invitations/:id/features` body (F1; S4). Both fields are required and both are validated by the domain,
+ * which owns the time zone allow-list and the phone rules; only their presence is checked here, so a value the
+ * domain refuses reaches the client as 400 `INVALID_INVITATION_FEATURES` with its issues. `whatsappPhone` accepts
+ * null or an empty string to clear the stored phone. `PUT` not `PATCH`: the whole feature data is replaced, and
+ * the web client sends it from a server action, like a content save.
+ */
+export class UpdateInvitationFeaturesDto {
+  @IsProvided()
+  timeZone!: unknown;
+
+  @IsProvided()
+  whatsappPhone!: unknown;
 }

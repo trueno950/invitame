@@ -11,6 +11,7 @@ import {
 } from "../domain/invitation.errors";
 import {
   InvalidInvitationContentError,
+  InvalidInvitationFeaturesError,
   InvitationPackageDoesNotFitError,
   InvitationPackageNotFoundError,
   InvitationPaymentRequiredError,
@@ -20,6 +21,7 @@ import {
   PublicInvitationNotRenderableError,
 } from "./invitation.application.errors";
 import type {
+  InvitationFeatureSettingsWrite,
   InvitationRecord,
   InvitationRepository,
   NewInvitation,
@@ -34,6 +36,7 @@ import {
   PublishInvitationUseCase,
   UnpublishInvitationUseCase,
   UpdateInvitationContentUseCase,
+  UpdateInvitationFeaturesUseCase,
 } from "./invitation.use-cases";
 import type {
   CatalogPackageEntitlements,
@@ -98,6 +101,9 @@ class MemoryInvitationRepository implements InvitationRepository {
       expiresAt: null,
       createdAt: now,
       updatedAt: now,
+      // The database default every new row reads (S4).
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
       ...input,
       content: { ...input.content },
     };
@@ -131,6 +137,25 @@ class MemoryInvitationRepository implements InvitationRepository {
       throw new InvitationNotEditableError(stored.status);
     }
     stored.content = { ...content };
+    stored.updatedAt = new Date(stored.updatedAt.getTime() + 1000);
+    return { ...stored, content: { ...stored.content } };
+  }
+
+  async updateFeatures(
+    ownerId: string,
+    id: string,
+    features: InvitationFeatureSettingsWrite,
+  ): Promise<InvitationRecord | null> {
+    const stored = this.rows.find((row) => row.id === id && row.ownerId === ownerId);
+    if (!stored) {
+      return null;
+    }
+    // A DRAFT or a PUBLISHED invitation changes; a published one changes live (S7).
+    if (stored.status === "ARCHIVED") {
+      throw new InvitationNotEditableError(stored.status);
+    }
+    stored.timeZone = features.timeZone;
+    stored.whatsappPhone = features.whatsappPhone;
     stored.updatedAt = new Date(stored.updatedAt.getTime() + 1000);
     return { ...stored, content: { ...stored.content } };
   }
@@ -278,7 +303,13 @@ class MemoryPaymentGate implements InvitationPaymentGate {
   }
 }
 
-function seeded(options: { requireFeatureKeys?: readonly string[] } = {}) {
+function seeded(
+  options: {
+    requireFeatureKeys?: readonly string[];
+    /** The feature keys the package includes, when a test needs them to differ from what a renderer requires. */
+    includedFeatureKeys?: readonly string[];
+  } = {},
+) {
   // The M5 fixtures reuse the M4 seeds: one PUBLISHED version of a PUBLISHED template and an ACTIVE package.
   const repository = new MemoryInvitationRepository();
   const catalog = new MemoryInvitationCatalog();
@@ -288,7 +319,7 @@ function seeded(options: { requireFeatureKeys?: readonly string[] } = {}) {
     requiredFeatureKeys: options.requireFeatureKeys ?? [],
   });
   const packageId = catalog.addPackage({
-    includedFeatureKeys: options.requireFeatureKeys ?? [],
+    includedFeatureKeys: options.includedFeatureKeys ?? options.requireFeatureKeys ?? [],
   });
   return { repository, catalog, ownerId, version, packageId };
 }
@@ -344,6 +375,30 @@ function publisher(
 function publicReader(fixture: ReturnType<typeof seeded>) {
   return new GetPublicInvitationUseCase(fixture.repository, fixture.catalog);
 }
+
+/** The feature update wired to the same in-memory ports (F1; S4). */
+function features(fixture: ReturnType<typeof seeded>) {
+  return new UpdateInvitationFeaturesUseCase(fixture.repository, fixture.catalog);
+}
+
+/** The feature keys of every seeded package (prisma/catalog-seed.ts), by package key (S4). */
+const SEEDED_PACKAGE_FEATURES = {
+  basic: ["COUNTDOWN", "MAP", "WHATSAPP"],
+  premium: ["COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
+  deluxe: [
+    "COUNTDOWN",
+    "MUSIC",
+    "GALLERY",
+    "MAP",
+    "RSVP",
+    "WHATSAPP",
+    "GIFT_REGISTRY",
+    "GUEST_LIST",
+    "QR_PASS",
+  ],
+} as const;
+
+const PHONE = "+525512345678";
 
 /** Publishes a complete draft through the use case, so a fixture starts from a real PUBLISHED row (S7). */
 async function publishedInvitation(fixture: ReturnType<typeof seeded>, nextSlug?: () => string) {
@@ -592,6 +647,21 @@ describe("GetOwnInvitationUseCase", () => {
     assert.deepEqual(found?.missingRequiredFields, ["celebrantName", "date"]);
   });
 
+  it("answers the drafted invitation with its time zone and the gated features of its package (F1; S4)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await createDraft(fixture);
+
+    const stored = await new GetOwnInvitationUseCase(fixture.repository, fixture.catalog).execute(
+      fixture.ownerId,
+      created.id,
+    );
+
+    assert.equal(stored?.timeZone, "America/Mexico_City");
+    assert.deepEqual(stored?.featureSettings, { whatsappPhone: null });
+    // WhatsApp needs a stored phone, and no catalog feature outside the implemented list appears (S4).
+    assert.deepEqual(stored?.availableFeatures, ["COUNTDOWN", "MAP", "CALENDAR"]);
+  });
+
   it("answers null for another owner's invitation and for an id that names nothing (A4)", async () => {
     const fixture = seeded();
     const created = await createDraft(fixture);
@@ -735,6 +805,144 @@ describe("UpdateInvitationContentUseCase", () => {
     assert.deepEqual(updated?.publishedAt, PUBLISHED_AT);
     assert.deepEqual(updated?.content, { celebrantName: "Beatriz", date: "2027-03-14" });
     assert.equal(fixture.repository.rows[0]?.status, "PUBLISHED");
+    assert.deepEqual(fixture.repository.rows[0]?.publishedAt, PUBLISHED_AT);
+  });
+});
+
+describe("UpdateInvitationFeaturesUseCase", () => {
+  it("stores the zone and the normalized phone, and answers the gated features (F1; S4)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await createDraft(fixture);
+
+    const updated = await features(fixture).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Tijuana",
+      whatsappPhone: "(55) 1234-5678",
+    });
+
+    assert.equal(updated?.timeZone, "America/Tijuana");
+    assert.deepEqual(updated?.featureSettings, { whatsappPhone: PHONE });
+    assert.deepEqual(updated?.availableFeatures, ["COUNTDOWN", "MAP", "WHATSAPP", "CALENDAR"]);
+    // The owner id never enters a response, and the stored row carries the E.164 value.
+    assert.equal(Object.hasOwn(updated ?? {}, "ownerId"), false);
+    assert.equal(fixture.repository.rows[0]?.timeZone, "America/Tijuana");
+    assert.equal(fixture.repository.rows[0]?.whatsappPhone, PHONE);
+  });
+
+  it("clears the stored phone with null or an empty value and drops WhatsApp from the gated features", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await createDraft(fixture);
+    const useCase = features(fixture);
+    await useCase.execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Cancun",
+      whatsappPhone: PHONE,
+    });
+
+    for (const cleared of [null, "", "   "]) {
+      const updated = await useCase.execute({
+        ownerId: fixture.ownerId,
+        id: created.id,
+        timeZone: "America/Cancun",
+        whatsappPhone: cleared,
+      });
+
+      assert.deepEqual(updated?.featureSettings, { whatsappPhone: null }, String(cleared));
+      assert.deepEqual(updated?.availableFeatures, ["COUNTDOWN", "MAP", "CALENDAR"]);
+      assert.equal(fixture.repository.rows[0]?.whatsappPhone, null);
+    }
+  });
+
+  it("refuses a zone outside the allow-list and a phone it cannot normalize, storing neither (S4)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await createDraft(fixture);
+    const before = { ...fixture.repository.rows[0] };
+
+    await assert.rejects(
+      features(fixture).execute({
+        ownerId: fixture.ownerId,
+        id: created.id,
+        timeZone: "Europe/Madrid",
+        whatsappPhone: "12345",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof InvalidInvitationFeaturesError);
+        assert.deepEqual(error.issues, [
+          "timeZone must be one of the supported time zones",
+          "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
+        ]);
+        return true;
+      },
+    );
+
+    assert.deepEqual(fixture.repository.rows[0], before);
+  });
+
+  it("refuses an archived invitation before looking at the request, and leaves it unchanged (S7, A2)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await createDraft(fixture);
+    await new ArchiveInvitationUseCase(fixture.repository).execute(fixture.ownerId, created.id);
+    const before = { ...fixture.repository.rows[0] };
+
+    await assert.rejects(
+      features(fixture).execute({
+        ownerId: fixture.ownerId,
+        id: created.id,
+        // Even a valid request is refused: the status is checked first.
+        timeZone: "America/Tijuana",
+        whatsappPhone: PHONE,
+      }),
+      InvitationNotEditableError,
+    );
+
+    assert.deepEqual(fixture.repository.rows[0], before);
+  });
+
+  it("answers null for another owner's invitation, for an unknown id, and for a malformed id (A4)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await createDraft(fixture);
+    const before = { ...fixture.repository.rows[0] };
+    const otherOwnerId = randomUUID();
+
+    assert.equal(
+      await features(fixture).execute({
+        ownerId: otherOwnerId,
+        id: created.id,
+        timeZone: "America/Tijuana",
+        whatsappPhone: PHONE,
+      }),
+      null,
+    );
+    for (const id of [UNKNOWN_ID, MALFORMED_ID, ""]) {
+      assert.equal(
+        await features(fixture).execute({
+          ownerId: fixture.ownerId,
+          id,
+          timeZone: "America/Tijuana",
+          whatsappPhone: PHONE,
+        }),
+        null,
+      );
+    }
+
+    assert.deepEqual(fixture.repository.rows[0], before);
+  });
+
+  it("edits a published invitation live and keeps it published (S7)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await publishedInvitation(fixture);
+
+    const updated = await features(fixture).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Merida",
+      whatsappPhone: PHONE,
+    });
+
+    assert.equal(updated?.status, "PUBLISHED");
+    assert.equal(updated?.timeZone, "America/Merida");
     assert.deepEqual(fixture.repository.rows[0]?.publishedAt, PUBLISHED_AT);
   });
 });
@@ -1033,14 +1241,19 @@ describe("GetPublicInvitationUseCase", () => {
       configuration: { componentKey: "birthday-poster-01" },
       content: { celebrantName: "Ana", date: "2027-03-14" },
       publishedAt: PUBLISHED_AT,
+      timeZone: "America/Mexico_City",
+      // The fixture's package includes no catalog feature, so only the always-available calendar is left (S4).
+      features: { countdown: false, map: false, calendar: true, whatsapp: null },
     });
     // Nothing outside the allow-list leaks: no owner, package, price, id, or status (A7).
     assert.deepEqual(Object.keys(page ?? {}).sort(), [
       "componentKey",
       "configuration",
       "content",
+      "features",
       "publishedAt",
       "slug",
+      "timeZone",
     ]);
     // One query resolves the invitation (S3).
     assert.equal(fixture.repository.findPublishedBySlugCalls, 1);
@@ -1117,5 +1330,64 @@ describe("GetPublicInvitationUseCase", () => {
       assert.equal(error.componentKey, "retired-renderer-99");
       return true;
     });
+  });
+
+  it("answers the gated features of each seeded package, with WhatsApp only while a phone is stored (S4)", async () => {
+    for (const [packageKey, includedFeatureKeys] of Object.entries(SEEDED_PACKAGE_FEATURES)) {
+      const fixture = seeded({ includedFeatureKeys });
+      const created = await publishedInvitation(fixture);
+
+      const withoutPhone = await publicReader(fixture).execute(created.slug);
+      assert.deepEqual(
+        withoutPhone?.features,
+        { countdown: true, map: true, calendar: true, whatsapp: null },
+        packageKey,
+      );
+
+      await features(fixture).execute({
+        ownerId: fixture.ownerId,
+        id: created.id,
+        timeZone: "America/Tijuana",
+        whatsappPhone: PHONE,
+      });
+
+      const page = await publicReader(fixture).execute(created.slug);
+      assert.equal(page?.timeZone, "America/Tijuana", packageKey);
+      assert.deepEqual(
+        page?.features,
+        { countdown: true, map: true, calendar: true, whatsapp: { phone: PHONE } },
+        packageKey,
+      );
+      // Nothing about the package travels: no key list, no name, no id (S4, A7).
+      assert.deepEqual(Object.keys(page?.features ?? {}).sort(), [
+        "calendar",
+        "countdown",
+        "map",
+        "whatsapp",
+      ]);
+      assert.equal(JSON.stringify(page).includes("COUNTDOWN"), false);
+    }
+  });
+
+  it("keeps a stored phone private when the package does not include WHATSAPP (S4)", async () => {
+    const fixture = seeded({ includedFeatureKeys: ["COUNTDOWN", "MUSIC"] });
+    const created = await publishedInvitation(fixture);
+    await features(fixture).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Cancun",
+      whatsappPhone: PHONE,
+    });
+
+    const page = await publicReader(fixture).execute(created.slug);
+
+    assert.equal(page?.timeZone, "America/Cancun");
+    assert.deepEqual(page?.features, {
+      countdown: true,
+      map: false,
+      calendar: true,
+      whatsapp: null,
+    });
+    assert.equal(JSON.stringify(page).includes(PHONE), false);
   });
 });

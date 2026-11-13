@@ -19,6 +19,7 @@ import {
   PublishInvitationUseCase,
   UnpublishInvitationUseCase,
   UpdateInvitationContentUseCase,
+  UpdateInvitationFeaturesUseCase,
 } from "./application/invitation.use-cases";
 import { INVITATION_CATALOG, type InvitationCatalog } from "./application/invitation-catalog";
 import {
@@ -68,6 +69,7 @@ export const INVITATION_USE_CASES: Provider[] = [
   useCase(CreateInvitationDraftUseCase),
   useCase(GetOwnInvitationUseCase),
   useCase(UpdateInvitationContentUseCase),
+  useCase(UpdateInvitationFeaturesUseCase),
   useCase(GetPublicInvitationUseCase),
   {
     provide: PublishInvitationUseCase,

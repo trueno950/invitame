@@ -67,6 +67,18 @@ export class InvalidInvitationContentError extends Error {
 }
 
 /**
+ * The feature data a request asked for is not acceptable (F1; S4): the zone is not an allow-list member or the
+ * phone is not a Mexican ten-digit or international number. `issues` are the deterministic English explanations
+ * the domain produced; nothing was stored.
+ */
+export class InvalidInvitationFeaturesError extends Error {
+  constructor(readonly issues: readonly string[]) {
+    super("The invitation features are not valid.");
+    this.name = "InvalidInvitationFeaturesError";
+  }
+}
+
+/**
  * The payment gate refused this publication (M5 T3; S6). Milestone 5 binds an adapter that always answers
  * "no payment required", so nothing throws this yet; Milestone 7 swaps the adapter and this outcome starts
  * arriving without any other change. `reason` is the machine-readable code the gate answered; nothing was

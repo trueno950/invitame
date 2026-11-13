@@ -22,6 +22,7 @@ import {
   PublishInvitationUseCase,
   UnpublishInvitationUseCase,
   UpdateInvitationContentUseCase,
+  UpdateInvitationFeaturesUseCase,
 } from "./application/invitation.use-cases";
 import { INVITATION_CATALOG } from "./application/invitation-catalog";
 import { INVITATION_PAYMENT_GATE } from "./application/invitation-payment-gate";
@@ -61,6 +62,7 @@ describe("InvitationsModule wiring", () => {
         ListOwnInvitationsUseCase,
         GetOwnInvitationUseCase,
         UpdateInvitationContentUseCase,
+        UpdateInvitationFeaturesUseCase,
         ArchiveInvitationUseCase,
         PublishInvitationUseCase,
         UnpublishInvitationUseCase,
@@ -138,6 +140,11 @@ describe("AppModule invitation wiring", () => {
       ["GET", "/invitations"],
       ["GET", `/invitations/${id}`],
       ["PUT", `/invitations/${id}/content`, { content: {} }],
+      [
+        "PUT",
+        `/invitations/${id}/features`,
+        { timeZone: "America/Mexico_City", whatsappPhone: null },
+      ],
       ["POST", `/invitations/${id}/archive`],
       ["POST", `/invitations/${id}/publish`],
       ["POST", `/invitations/${id}/unpublish`],
