@@ -54,8 +54,8 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
 | --- | --- | --- | --- | --- |
 | F1 | API: migration, time zone and phone domain, feature settings use cases and REST, gated public read, tests | S3, S4 | worker | `bb0e94e` |
 | F2 | Web: event facts per layout, features block, countdown island, map/WhatsApp/calendar links, ICS builder, placement in the five layouts | S3, S4 | worker | `d350dd0` |
-| F3 | Web: public page wiring, `.ics` route, creator «Funcionalidades» section, API client, browser check | S3, S4 | worker | |
-| F4 | Independent verification of the migration and the gating | S4 | verify | |
+| F3 | Web: public page wiring, `.ics` route, creator «Funcionalidades» section, API client, browser check | S3, S4 | worker | `aa246d4` |
+| F4 | Independent verification of the migration and the gating | S4 | verify | `617c2b5` |
 
 ## Log
 
@@ -92,3 +92,13 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
   1173 unit tests and 308 db-specs pass. Advisory: the database checks the zone's shape only, by design. The parent
   added the verifier's zone-versus-CHECK regression test (`test(api)` commit after `727e312`) and removed the
   verifier's scratch directory.
+- L7 — F3 done in `aa246d4` (worker `mwf8an3l-l-6zhd`). It adds strict web parsers for the new API fields, the public page
+  passing `features` and `calendarHref`, the `/i/<slug>/calendario.ics` route (`text/calendar`, attachment,
+  `no-store`, 404 when not public), and the creator «Funcionalidades» section: a select of the 11 zones with Spanish
+  labels, the WhatsApp field only when the package includes it (otherwise the stored phone is carried unchanged), the
+  automatic features list, and a read-only state when archived. Web: 882/882 tests; tsc, docs, Biome, and
+  `git diff --check` pass. A differential on the shared `lib/customer/invitations.ts` surface found 0 differences
+  in 43 cases. In the browser at 390 and 1280 px: zone and phone saved, the block rendered in the theme, the countdown
+  ticked, the Maps, Waze, WhatsApp, and Google Calendar links were correct, the `.ics` was parseable, 0 console
+  errors, no overflow, and the minimum contrast in the block was 5.47:1. Not run: the Playwright e2e specs. Batch
+  complete; next is the design polish with real illustrations per theme.
