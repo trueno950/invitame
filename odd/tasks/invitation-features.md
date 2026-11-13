@@ -82,3 +82,13 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
   1173/1173 unit tests and 308/308 db-specs pass; tsc and Biome clean. The worker applied the migration to
   `invitame_test` only; the parent then applied it to the dev database. Dev check: the public read answers 200 with
   `timeZone` and the gated `features`. F3 and F4 launched.
+- L6 — F4 independent verify `mwf8an7b-m-s8le` returned every point met. Migration: additive only; its checksum in
+  both databases equals the file, so it was not edited after application; the dev database's 7 existing invitations
+  read `America/Mexico_City`; the CHECKs and the RESTRICT foreign key match the domain; `docs/database/model.md` gives
+  a real rollback. Gating: exactly package keys ∩ {COUNTDOWN, MAP, WHATSAPP} plus CALENDAR; a phone under a package
+  without WHATSAPP never reaches the public body; nothing about the package leaks. Authorization: foreign id 404,
+  archived 409, unknown DTO fields 400, the owner and status guard enforced in the same write, and stored rows
+  unchanged on every refusal. The phone is never logged. The public read uses 6 queries for any feature count. API:
+  1173 unit tests and 308 db-specs pass. Advisory: the database checks the zone's shape only, by design. The parent
+  added the verifier's zone-versus-CHECK regression test (`test(api)` commit after `727e312`) and removed the
+  verifier's scratch directory.
