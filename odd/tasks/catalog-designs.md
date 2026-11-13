@@ -275,3 +275,10 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
   «Invitación», was fixed test-first in `87d7e9b`, so the title now names the baby. Not adopted: the verifier's
   proposed Playwright spec, because the e2e suite needs a production build that was not run here. Full checks
   after integration: web 757/757 tests, API 1129/1129, both typechecks, docs, Biome, and `git diff --check`.
+- L22 — Independent verify `mwecofg6-i-u4tf` of the shared renderer-contract change in `7f38b01` (high-risk item 3)
+  returned PASS with no blockers. A differential run of 141 checks against `7f38b01^` showed no differences in the
+  birthday contracts. The optional rule refuses optional fields listed in `required`, missing declarations, wrong
+  types, and prototype-named keys exactly as before. Absent optional fields never block publication, and an empty
+  optional photo is refused by the API and omitted by the form. API: 1129 unit tests and 293 db-specs pass. Its
+  suggested extra regression specs mostly duplicate `celebration-layouts.spec.ts` and were not added. Scratch copies
+  removed.
