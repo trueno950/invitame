@@ -26,6 +26,11 @@ on one sample theme.
   theme's illustration stays under about 25 KB; the illustrations replace today's motif strips in all five layouts,
   so existing invitations change look (pre-launch, accepted); a theme without an illustration yet keeps its motif
   strip.
+- S5 — Owner review of the 22 illustrations (L6), verbatim: "baby-safari y el del oso mejoralos, y los de cumpleanos
+  si mejoralos mas se ven muy simples". Parent decisions within S5 (L6): richer, deeper scenes for `baby-safari`,
+  `teddy-honey`, and all eight birthday themes — more depth layers, more detail on the hero objects, secondary
+  props, and texture — in the same paper-cut technique and within S3; the per-theme markup budget rises from 25 KB
+  to 40 KB.
 
 ## Tasks
 
@@ -37,6 +42,10 @@ on one sample theme.
 | I3b | Paper-cut illustrations for the other 7 birthday themes | S1-S4 | worker | `493acdf` |
 | I3c | Paper-cut illustrations for the 8 baby shower themes | S1-S4 | worker | `493acdf` |
 | I3d | Paper-cut illustrations for the 6 themed baptism themes | S1-S4 | worker | `493acdf` |
+| I4a | Richer `baby-safari` and `teddy-honey` | S3, S5 | worker | |
+| I4b | Richer birthday scenes: dinosaurs, ice-kingdom, rescue-team, spider-hero | S3, S5 | worker | |
+| I4c | Richer birthday scenes: classic-mouse, under-the-sea, fairytale-princess, blocks-and-pixels | S3, S5 | worker | |
+| I4d | Integration: checks, browser review, new contact sheets | S5 | inline | |
 | I3e | Integration: all 22 themes in the browser at 390 px, docs, canvas handoff | S1-S4 | worker | `493acdf` |
 
 ## Log
@@ -75,3 +84,6 @@ on one sample theme.
   and `git diff --check` pass. Browser: 38 pages at 390 px plus 5 at 1280 px with 0 overflow, 0 decoration over
   text, 0 console errors, and no text below 4.5:1. The parent reviewed the three contact sheets for the theme
   guardrail and found no character, logo, or franchise element. Canvas handoff reported implemented.
+- L6 — Owner review (S5): improve baby-safari and the teddy bear, and make the birthday themes richer because they look
+  too simple. The parent raised the markup budget to 40 KB (test constant and docs) and split the work into three
+  parallel workers with disjoint theme files (I4a-I4c), then integration (I4d).

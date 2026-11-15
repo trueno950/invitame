@@ -103,8 +103,8 @@ const THEME_PAINTS = [
 /** A paint a drawing may write: a theme variable, or one of the three that carry no color of their own. */
 const ALLOWED_PAINT = /^(?:none|transparent|currentColor|var\(--inv-[a-z-]+\))$/;
 
-/** The markup budget of one theme's three parts (S4): the artboards stay cheap to ship inline. */
-const MARKUP_BUDGET = 25 * 1024;
+/** The markup budget of one theme's three parts (S4, raised for richer scenes in L6): still cheap to ship inline. */
+const MARKUP_BUDGET = 40 * 1024;
 
 function renderElement(element: ReactElement): string {
   return renderToStaticMarkup(element);

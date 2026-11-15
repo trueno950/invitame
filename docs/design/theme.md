@@ -321,7 +321,7 @@ real layout.
   occasion's registry; the occurrence test fails if a theme drawing is not registered, or a registered theme has no
   file. `themeIllustration` answers `undefined` for a theme without a drawing (including `constructor` and
   `__proto__`, through `Object.hasOwn`), and the layout then keeps its motif strip.
-- Budget: one theme's three parts stay under 25 KB of markup, checked by the test suite per theme, so a heavy drawing
+- Budget: one theme's three parts stay under 40 KB of markup, checked by the test suite per theme, so a heavy drawing
   cannot creep into every guest page. Today the lightest is `blocks-and-pixels` at about 9 KB and the heaviest
   `dove-olive` at about 24 KB.
 - Placement in the five layouts, chosen per layout from the Cartel artboard: `birthday-poster-01` opens its accent
