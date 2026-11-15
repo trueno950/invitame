@@ -12,6 +12,7 @@ import { Motif } from "../../app/_components/renderers/birthday/motif.ts";
 import { BirthdayMapRenderer } from "../../app/_components/renderers/birthday-map-01/birthday-map-renderer.ts";
 import { BirthdayPosterRenderer } from "../../app/_components/renderers/birthday-poster-01/birthday-poster-renderer.ts";
 import { BirthdayStoryRenderer } from "../../app/_components/renderers/birthday-story-01/birthday-story-renderer.ts";
+import { DecorationZone } from "../../app/_components/renderers/illustrations/decoration.ts";
 import { IllustrationVignette } from "../../app/_components/renderers/illustrations/frame.ts";
 import {
   illustratedThemes,
@@ -29,7 +30,7 @@ import {
   BABY_SHOWER_THEMES,
   type BabyShowerMotif,
 } from "./baby-shower-themes.ts";
-import { BAPTISM_THEME, BAPTISM_THEMES, type BaptismMotif } from "./baptism-themes.ts";
+import { BAPTISM_THEME, BAPTISM_THEMES } from "./baptism-themes.ts";
 import { BIRTHDAY_THEME, BIRTHDAY_THEMES, type BirthdayMotif } from "./birthday-themes.ts";
 
 /*
@@ -199,14 +200,21 @@ const ILLUSTRATIONS_DIRECTORY = fileURLToPath(
 );
 
 describe("the theme illustration registry", () => {
-  it("registers the dinosaurios illustration and none of the other themes today", () => {
-    const dinosaurios = themeIllustration("dinosaurs");
+  it("holds exactly the 22 catalog theme keys — 8 birthday, 8 baby shower, 6 baptism — and nothing else", () => {
+    const catalog = [...BIRTHDAY_THEMES, ...BABY_SHOWER_THEMES, ...BAPTISM_THEMES];
 
-    assert.ok(dinosaurios, "dinosaurs has an illustration (S4)");
-    assert.equal(dinosaurios.theme, "dinosaurs");
-    assert.equal(themeIllustration("ice-kingdom"), undefined, "a theme without an illustration");
-    assert.equal(themeIllustration("teddy-honey"), undefined, "a baby shower theme without one");
-    assert.equal(themeIllustration("dove-olive"), undefined, "a baptism theme without one");
+    assert.equal(BIRTHDAY_THEMES.length, 8, "birthday themes");
+    assert.equal(BABY_SHOWER_THEMES.length, 8, "baby shower themes");
+    assert.equal(BAPTISM_THEMES.length, 6, "baptism themes");
+    assert.equal(catalog.length, 22, "the catalog holds 22 guest themes");
+    assert.deepEqual(
+      [...illustratedThemes()].sort(),
+      [...catalog].sort(),
+      "every catalog theme has a drawing, and no other key is registered",
+    );
+    for (const theme of catalog) {
+      assert.equal(themeIllustration(theme)?.theme, theme, `${theme} is filed under its own key`);
+    }
   });
 
   it("answers undefined for a theme key it does not hold, never a prototype value", () => {
@@ -247,7 +255,7 @@ describe("the theme illustration registry", () => {
 });
 
 describe("a theme illustration", () => {
-  for (const theme of ["dinosaurs"]) {
+  for (const theme of illustratedThemes()) {
     it(`${theme} draws a scene, a divider, and a footer, each hidden from assistive technology`, () => {
       const illustration = themeIllustration(theme);
 
@@ -355,18 +363,63 @@ describe("a theme illustration", () => {
   });
 });
 
+interface FallbackShape {
+  /** The layout shape a motif strip belongs to; the two celebration layouts share one shape. */
+  readonly shape: string;
+  /** The zone classes that strip has always carried, verbatim. */
+  readonly className: string;
+  /** The motif that strip hangs, rendered by the layout's own motif component. */
+  readonly motif: (motif: string) => ReactElement;
+}
+
+/** The fallback strip of the Cartel layout: the motif sits in the accent band's empty top row. */
+const POSTER_STRIP: FallbackShape = {
+  shape: "poster accent strip",
+  className: "pointer-events-none flex h-16 justify-center px-6 pt-4",
+  motif: (motif) => createElement(Motif, { motif: motif as BirthdayMotif, tone: "accent" }),
+};
+
+/** The fallback strip of the Mapa layout: a tall motif row above the hero. */
+const MAP_STRIP: FallbackShape = {
+  shape: "map motif row",
+  className: "pointer-events-none flex h-24 justify-center",
+  motif: (motif) => createElement(Motif, { motif: motif as BirthdayMotif, tone: "paper" }),
+};
+
+/** The fallback strip of the Cuento layout: the motif at the foot of the page sheet. */
+const STORY_STRIP: FallbackShape = {
+  shape: "story foot strip",
+  className: "pointer-events-none mt-6 flex h-20 justify-center",
+  motif: (motif) => createElement(Motif, { motif: motif as BirthdayMotif, tone: "paper" }),
+};
+
+/** The fallback strip of the two celebration layouts: the motif row above their accent band. */
+const CELEBRATION_STRIP: FallbackShape = {
+  shape: "celebration motif row",
+  className: "pointer-events-none flex h-20 justify-center",
+  motif: (motif) =>
+    createElement(CelebrationMotif, { motif: motif as BabyShowerMotif, tone: "paper" }),
+};
+
+/** One fallback case per layout shape: the poster strip, the map, the story, and the celebration. */
+const FALLBACK_SHAPES: readonly FallbackShape[] = [
+  POSTER_STRIP,
+  MAP_STRIP,
+  STORY_STRIP,
+  CELEBRATION_STRIP,
+];
+
 interface LayoutCase {
   readonly key: string;
   readonly Renderer: (props: { configuration: unknown; content: unknown }) => ReactElement;
   readonly themes: readonly string[];
   readonly content: Record<string, unknown>;
-  /** The theme the layout has always drawn a motif for, and the motif markup it draws for it. */
+  /** A real theme whose drawing the fallback test removes for one render, to reach the layout's strip. */
   readonly fallbackTheme: string;
-  readonly fallbackClassName: string;
-  readonly motifMarkup: (motif: string) => string;
+  /** The shape whose strip this layout hangs when its theme has no drawing. */
+  readonly fallbackShape: FallbackShape;
   /** The section that holds the details, which the paper-cut divider follows. */
   readonly detailsSection: string;
-  readonly illustrated: boolean;
 }
 
 const LAYOUTS: readonly LayoutCase[] = [
@@ -376,11 +429,8 @@ const LAYOUTS: readonly LayoutCase[] = [
     themes: BIRTHDAY_THEMES,
     content: CONTENT,
     fallbackTheme: "ice-kingdom",
-    fallbackClassName: "pointer-events-none flex h-24 justify-center",
-    motifMarkup: (motif) =>
-      renderElement(createElement(Motif, { motif: motif as BirthdayMotif, tone: "paper" })),
+    fallbackShape: MAP_STRIP,
     detailsSection: "route",
-    illustrated: true,
   },
   {
     key: "birthday-poster-01",
@@ -388,11 +438,8 @@ const LAYOUTS: readonly LayoutCase[] = [
     themes: BIRTHDAY_THEMES,
     content: CONTENT,
     fallbackTheme: "ice-kingdom",
-    fallbackClassName: "pointer-events-none flex h-16 justify-center px-6 pt-4",
-    motifMarkup: (motif) =>
-      renderElement(createElement(Motif, { motif: motif as BirthdayMotif, tone: "accent" })),
+    fallbackShape: POSTER_STRIP,
     detailsSection: "details",
-    illustrated: true,
   },
   {
     key: "birthday-story-01",
@@ -400,11 +447,8 @@ const LAYOUTS: readonly LayoutCase[] = [
     themes: BIRTHDAY_THEMES,
     content: CONTENT,
     fallbackTheme: "ice-kingdom",
-    fallbackClassName: "pointer-events-none mt-6 flex h-20 justify-center",
-    motifMarkup: (motif) =>
-      renderElement(createElement(Motif, { motif: motif as BirthdayMotif, tone: "paper" })),
+    fallbackShape: STORY_STRIP,
     detailsSection: "place",
-    illustrated: true,
   },
   {
     key: "baby-shower-classic-01",
@@ -412,13 +456,8 @@ const LAYOUTS: readonly LayoutCase[] = [
     themes: BABY_SHOWER_THEMES,
     content: BABY_SHOWER_CONTENT,
     fallbackTheme: "teddy-honey",
-    fallbackClassName: "pointer-events-none flex h-20 justify-center",
-    motifMarkup: (motif) =>
-      renderElement(
-        createElement(CelebrationMotif, { motif: motif as BabyShowerMotif, tone: "paper" }),
-      ),
+    fallbackShape: CELEBRATION_STRIP,
     detailsSection: "details",
-    illustrated: false,
   },
   {
     key: "baptism-classic-01",
@@ -426,13 +465,8 @@ const LAYOUTS: readonly LayoutCase[] = [
     themes: BAPTISM_THEMES,
     content: BAPTISM_CONTENT,
     fallbackTheme: "dove-olive",
-    fallbackClassName: "pointer-events-none flex h-20 justify-center",
-    motifMarkup: (motif) =>
-      renderElement(
-        createElement(CelebrationMotif, { motif: motif as BaptismMotif, tone: "paper" }),
-      ),
+    fallbackShape: CELEBRATION_STRIP,
     detailsSection: "reception",
-    illustrated: false,
   },
 ];
 
@@ -449,17 +483,64 @@ function motifOf(theme: string): string {
   return found.motif;
 }
 
+/**
+ * The registry with one theme's drawing removed for the duration of `run`, and put back in `finally`. Every
+ * catalog theme has a drawing today, so a layout can only reach its fallback strip with a key the registry does
+ * not hold; removing the entry for one render lets a real theme key still exercise that path.
+ */
+function withoutIllustration<T>(theme: string, run: () => T): T {
+  const registry = THEME_ILLUSTRATIONS as Record<string, ThemeIllustration | undefined>;
+  const drawing = registry[theme];
+
+  assert.ok(drawing, `${theme} has a drawing to remove`);
+  delete registry[theme];
+  try {
+    return run();
+  } finally {
+    registry[theme] = drawing;
+  }
+}
+
 describe("the motif strip a theme without an illustration keeps", () => {
+  // No catalog theme is without a drawing any more, so the zone is rendered directly with an unregistered key
+  // and each layout shape's own fallback: the strip must stay byte-identical to the motif component.
+  for (const shape of FALLBACK_SHAPES) {
+    it(`DecorationZone draws the ${shape.shape} for a theme with no drawing`, () => {
+      const theme = "no-such-theme";
+      const motif = "dino";
+
+      assert.equal(themeIllustration(theme), undefined, `${theme} has no drawing`);
+      const zone = renderElement(
+        createElement(DecorationZone, {
+          theme,
+          part: "scene",
+          illustrationClassName: "pointer-events-none block",
+          fallback: { node: shape.motif(motif), className: shape.className },
+        }),
+      );
+
+      assert.equal(
+        zone,
+        `<div aria-hidden="true" data-decoration="" class="${shape.className}">` +
+          `${renderElement(shape.motif(motif))}</div>`,
+        `${shape.shape} fallback markup`,
+      );
+      assert.doesNotMatch(zone, /data-illustration=/, `${shape.shape} draws no illustration`);
+    });
+  }
+
   for (const layout of LAYOUTS) {
     it(`${layout.key} renders the same motif strip it rendered before the illustrations`, () => {
-      const html = renderLayout(layout.Renderer, layout.key, layout.fallbackTheme, layout.content);
+      const html = withoutIllustration(layout.fallbackTheme, () =>
+        renderLayout(layout.Renderer, layout.key, layout.fallbackTheme, layout.content),
+      );
       const zone = decorationZones(html)[0];
 
       assert.ok(zone, `${layout.key} draws its motif strip`);
       assert.equal(
         zone.markup,
-        `<div aria-hidden="true" data-decoration="" class="${layout.fallbackClassName}">` +
-          `${layout.motifMarkup(motifOf(layout.fallbackTheme))}</div>`,
+        `<div aria-hidden="true" data-decoration="" class="${layout.fallbackShape.className}">` +
+          `${renderElement(layout.fallbackShape.motif(motifOf(layout.fallbackTheme)))}</div>`,
         `${layout.key} fallback markup`,
       );
       assert.doesNotMatch(html, /data-illustration=/, `${layout.key} draws no illustration`);
@@ -501,9 +582,11 @@ describe("every decoration zone stays out of the text", () => {
 });
 
 describe("the paper-cut illustration in the layouts", () => {
-  for (const layout of LAYOUTS.filter((candidate) => candidate.illustrated)) {
-    it(`${layout.key} draws the scene, the divider, and the footer for dinosaurs`, () => {
-      const html = renderLayout(layout.Renderer, layout.key, "dinosaurs", layout.content);
+  for (const layout of LAYOUTS) {
+    const theme = layout.themes[0] as string;
+
+    it(`${layout.key} draws the scene, the divider, and the footer for ${theme}`, () => {
+      const html = renderLayout(layout.Renderer, layout.key, theme, layout.content);
       const parts = [...html.matchAll(/data-illustration="([a-z]+)"/g)].map(
         (match) => match[1] as string,
       );
@@ -530,8 +613,8 @@ describe("the paper-cut illustration in the layouts", () => {
       assert.ok(footer > last.end, `${layout.key} footer closes the page`);
     });
 
-    it(`${layout.key} keeps the scene out of the way of the text for dinosaurs`, () => {
-      const html = renderLayout(layout.Renderer, layout.key, "dinosaurs", layout.content);
+    it(`${layout.key} keeps the scene out of the way of the text for ${theme}`, () => {
+      const html = renderLayout(layout.Renderer, layout.key, theme, layout.content);
       const scene = decorationZones(html)[0];
 
       assert.ok(scene, `${layout.key} scene zone`);
@@ -544,7 +627,7 @@ describe("the paper-cut illustration in the layouts", () => {
     });
 
     it(`${layout.key} ships no client script for the illustrations`, () => {
-      const html = renderLayout(layout.Renderer, layout.key, "dinosaurs", layout.content);
+      const html = renderLayout(layout.Renderer, layout.key, theme, layout.content);
 
       assert.doesNotMatch(html, /<script/);
       assert.doesNotMatch(html, /\son[a-z]+=/);

@@ -254,7 +254,7 @@ and `TemplateVersion`.
 | `rescue-team` | Equipo de rescate | Luckiest Guy | Huellas y estrellas |
 | `spider-hero` | Héroe arácnido | Bangers | Telarañas |
 | `classic-mouse` | Ratón clásico | Chewy | Lunares |
-| `dinosaurs` | Dinosaurios | Lilita One | Montañas y huevos — paper-cut illustration |
+| `dinosaurs` | Dinosaurios | Lilita One | Montañas y huevos |
 | `under-the-sea` | Bajo el mar | Pacifico | Burbujas y olas |
 | `fairytale-princess` | Princesa de cuento | Great Vibes | Coronas y estrellas |
 | `blocks-and-pixels` | Bloques y píxeles | Press Start 2P | Bloques |
@@ -294,12 +294,15 @@ and `TemplateVersion`.
 
 ## Paper-cut theme illustrations
 
-Status: **current** (I3a; S1-S4). The owner chose the «Papel recortado» artboard,
+Status: **current** (I3a–I3e; S1-S4). The owner chose the «Papel recortado» artboard,
 `design/theme-illustrations/01-papel-recortado.html`, from the three hand-built SVG samples (L3) and asked for the
-real stack to implement it. A theme with an illustration replaces its motif strip in all five themed layouts, so
-existing invitations change look (pre-launch, accepted); a theme without one keeps exactly the motif strip it drew
-before, byte for byte, which `theme-illustrations.test.ts` compares against the motif component rendered in the same
-test.
+real stack to implement it. All 22 guest themes now have one — 8 birthday, 8 baby shower, 6 baptism — so every
+themed layout draws an illustration instead of its motif strip, and existing invitations change look (pre-launch,
+accepted). A theme that has none, such as one added later, keeps exactly the motif strip its layout drew before,
+byte for byte; because no catalog theme is without a drawing any more, `theme-illustrations.test.ts` proves that
+strip by rendering `DecorationZone` with an unregistered key and each layout shape's own fallback, compared against
+the motif component rendered in the same test, and by removing one registry entry for a single render of each
+real layout.
 
 - Shape of an illustration (`app/_components/renderers/illustrations/types.ts`): `ThemeIllustration` names the theme
   key and three `IllustrationDrawing` parts — `scene` (header diorama, `390 × 200`, `xMidYMid slice`), `divider`
@@ -311,21 +314,29 @@ test.
   in `<defs>`; `tornEdge` draws the irregular torn line with notches of different depth; `grain` multiplies one
   `feTurbulence` over the scene; `THEME_PAINTS` is the only palette a drawing can name, the eight theme variables.
   Tints are `opacity` on a theme color, never a color of their own.
-- Registry (`illustrations/registry.ts`): an allow-listed map keyed by theme key, with one file per occasion so three
-  workers can add themes without touching each other — `registry-birthday.ts`, `registry-baby-shower.ts`,
-  `registry-baptism.ts`. Adding a theme is one drawing file `<theme-key>.ts` next to the registry plus one line in its
+- Registries (`illustrations/registry.ts`): an allow-listed map keyed by theme key, with one file per occasion so a
+  worker adding themes never touches another occasion — `registry-birthday.ts` (8), `registry-baby-shower.ts` (8),
+  and `registry-baptism.ts` (6), merged into `THEME_ILLUSTRATIONS`, which holds exactly the catalog's 22 theme keys
+  and nothing else. Adding a theme is one drawing file `<theme-key>.ts` next to the registry plus one line in its
   occasion's registry; the occurrence test fails if a theme drawing is not registered, or a registered theme has no
   file. `themeIllustration` answers `undefined` for a theme without a drawing (including `constructor` and
   `__proto__`, through `Object.hasOwn`), and the layout then keeps its motif strip.
-- Budget: one theme's three parts stay under 25 KB of markup (the Dinosaurios set is about 17 KB), checked by the test
-  suite per theme, so a heavy drawing cannot creep into every guest page.
+- Budget: one theme's three parts stay under 25 KB of markup, checked by the test suite per theme, so a heavy drawing
+  cannot creep into every guest page. Today the lightest is `blocks-and-pixels` at about 9 KB and the heaviest
+  `dove-olive` at about 24 KB.
 - Placement in the five layouts, chosen per layout from the Cartel artboard: `birthday-poster-01` opens its accent
   band with the scene and bleeds the divider and the footer full width; `birthday-map-01` bleeds the scene over the
   top of the page and keeps the strips in the column; `birthday-story-01` opens the page sheet with the scene,
-  clipped to the sheet's rounded top, and closes it with the footer; `baby-shower-classic-01` and
-  `baptism-classic-01` put the scene in the strip above the accent band and the divider before the message.
-- Current coverage: `dinosaurs` is drawn (I3a). I3b–I3d add the other seven birthday themes and the baby shower and
-  baptism themes; until then those themes keep their motif strip.
+  clipped to the sheet's rounded top, and closes it with the footer; `baby-shower-classic-01` puts the scene in the
+  strip above the accent band, the divider before the message, and the footer after the RSVP; and
+  `baptism-classic-01` does the same, with its divider between the reception place card and the features block. Each
+  zone is its own `aria-hidden`, `data-decoration` block outside every `data-section`, so a drawing never sits under
+  text.
+- Coverage: all 22 themes are drawn (I3a–I3d). Every drawing is original SVG code — layered paper shapes, no
+  character artwork, logo, or protected name (S3) — and the per-theme tests prove, for each of the 22, that the
+  markup stays inside the palette and the budget, carries no text or script, repeats no React key, and gets its own
+  grain-filter id per render. The I3e pass refined six drawings (dove wing tips, lamb wool tufts, star ray lengths,
+  safari palm leaves, carrot contrast, block hills depth) without widening any of those rules.
 - Choosing (T9, T10b; S9, S10): the owner of a new invitation picks the design, then the theme, then the package,
   one step at a time, following `design/template-chooser-v2/02-paso-a-paso-escritorio.html` and its
   narrow-screen artboard. Each step is a server URL of the same page with no client script:
