@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mateo, 7 años — Cartel con ilustración de papel recortado</title>
+<style>
+  /* Theme tokens: dinosaurios (apps/web/lib/renderers/birthday-themes.ts) — the seven colors, nothing else. */
+  :root {
+    --bg: #f1f6e8; --surface: #ffffff; --soft: #ddebc6; --ink: #1f2d16;
+    --accent: #3b6a1c; --d1: #e07a1f; --d2: #a3c06b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #15181a; color: #eef1ec;
+    font: 400 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .stage { width: 390px; margin: 0 auto; }
+
+  /* ── design-tool chrome (not part of the invitation) ─────────────────────── */
+  .chrome {
+    display: flex; gap: 8px; align-items: center; padding: 10px 14px;
+    background: #0f1214; border-bottom: 1px solid #272d29;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #9aa79b;
+  }
+  .chrome b { color: #eef1ec; font-weight: 600; }
+  .chrome .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--d1); }
+
+  /* ── invitation ─────────────────────────────────────────────────────────── */
+  .inv {
+    background: var(--bg); color: var(--ink);
+    font-family: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+  }
+  .display {
+    font-family: "Lilita One", "Arial Rounded MT Bold", "Arial Black", system-ui, sans-serif;
+    font-weight: 400;
+  }
+  .band {
+    position: relative; overflow: hidden; background: var(--accent); color: #fff;
+    text-align: center; border-radius: 0 0 50% 50% / 0 0 2rem 2rem;
+  }
+  .band .scene { display: block; width: 100%; height: auto; }
+  .hero { padding: 6px 24px 128px; }
+  .kicker {
+    margin: 0; font-size: 14px; font-weight: 500;
+    letter-spacing: .18em; text-transform: uppercase;
+  }
+  h1 { margin: 6px 0 0; font-size: clamp(2.75rem, 12vw, 3.75rem); line-height: .98; letter-spacing: -.02em; }
+  .age { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 4px 0 0; }
+  .age b {
+    font-size: 80px; line-height: .85; font-weight: 400;
+    color: transparent; -webkit-text-stroke: 3px #fff;
+  }
+  .age span { font-size: 18px; font-weight: 500; text-align: left; line-height: 1.15; }
+
+  .polaroid {
+    position: relative; z-index: 1; width: 248px; margin: -128px auto 0;
+    background: var(--surface); padding: 12px; transform: rotate(3deg);
+    box-shadow: 0 22px 40px -18px rgba(31, 45, 22, .55);
+  }
+  .photo { display: block; width: 100%; height: auto; }
+  .polaroid figcaption {
+    margin-top: 8px; text-align: center; font-size: 17px; color: var(--accent);
+  }
+  .tape {
+    position: absolute; top: -9px; left: -10px; width: 76px; height: 21px;
+    transform: rotate(-7deg); background: var(--d1); opacity: .55;
+    clip-path: polygon(3% 12%, 12% 0, 28% 14%, 46% 2%, 62% 16%, 80% 3%, 97% 15%, 100% 76%, 92% 100%, 74% 84%, 56% 98%, 38% 82%, 20% 100%, 4% 86%);
+  }
+
+  .body { display: flex; flex-direction: column; gap: 30px; padding: 26px 20px 22px; }
+  .sec-title {
+    margin: 0 0 12px; text-align: center; font-size: 12px; font-weight: 500;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--accent);
+  }
+  .ticket {
+    position: relative; display: grid; grid-template-columns: 1fr auto;
+    background: var(--surface); border-radius: 16px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(31, 45, 22, .16);
+    -webkit-mask:
+      radial-gradient(circle 11px at calc(100% - 96px) 0, #0000 98%, #000) top / 100% 51% no-repeat,
+      radial-gradient(circle 11px at calc(100% - 96px) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+    mask:
+      radial-gradient(circle 11px at calc(100% - 96px) 0, #0000 98%, #000) top / 100% 51% no-repeat,
+      radial-gradient(circle 11px at calc(100% - 96px) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+  }
+  .ticket dl { margin: 0; padding: 16px; display: grid; gap: 12px; }
+  .ticket dt {
+    font-size: 11px; font-weight: 500; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .ticket dd { margin: 0; font-size: 18px; font-weight: 500; line-height: 1.25; }
+  .ticket dd small { display: block; font-size: 14px; font-weight: 400; }
+  .stub {
+    width: 96px; display: grid; place-content: center; text-align: center;
+    padding: 10px; background: var(--soft);
+    border-left: 3px dotted rgba(31, 45, 22, .35);
+  }
+  .stub b { font-size: 24px; line-height: 1; color: var(--accent); }
+  .stub span { font-size: 12px; font-weight: 500; }
+
+  .divider { display: block; width: 100%; height: auto; margin: -6px 0; }
+
+  .bubble {
+    position: relative; margin-top: 0; background: var(--soft); border-radius: 24px;
+    padding: 18px 20px; font-size: 17px; line-height: 1.6;
+  }
+  .bubble p { margin: 0; }
+  .bubble::after {
+    content: ""; position: absolute; left: 38px; bottom: -13px; width: 26px; height: 26px;
+    background: var(--soft); clip-path: polygon(0 0, 100% 0, 0 100%);
+  }
+  .from { margin: 20px 0 0 26px; font-size: 18px; }
+
+  .footer { padding: 8px 0 0; text-align: center; }
+  .trail { display: block; width: 100%; height: auto; margin-top: 12px; }
+  .made { margin: 0; font-size: 13px; }
+  .made a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ── style note (design-tool chrome, outside the invitation) ─────────────── */
+  .note { padding: 20px 16px 34px; background: #15181a; border-top: 1px solid #272d29; font-size: 13px; line-height: 1.6; color: #c7d0c6; }
+  .note h2 { margin: 0 0 4px; font-size: 15px; color: #f2f5f0; }
+  .note .tag { display: inline-block; margin-bottom: 10px; padding: 2px 8px; border: 1px solid #3a453b; border-radius: 999px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #9aa79b; }
+  .note dl { margin: 12px 0 0; display: grid; gap: 10px; }
+  .note dt { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #8f9c90; }
+  .note dd { margin: 2px 0 0; }
+  .note code { font-size: 12px; color: #dfe6dc; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="chrome"><span class="dot"></span><b>Papel recortado</b> · Cartel · Tema Dinosaurios · 390 px</div>
+
+  <article class="inv" aria-label="Invitación de cumpleaños de Mateo">
+    <section class="band" aria-labelledby="name">
+      <!-- Decoration: paper diorama. Nothing here sits behind live text. -->
+      <svg class="scene" viewBox="0 0 390 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><defs><path id="s-sheet" d="M0 12L18 15L34 12L52 10L72 13L88 14L110 10L128 12L150 15L170 11L190 9L212 13L232 12L252 10L274 12L296 14L314 11L334 13L352 9L372 12L390 10L390 202L0 202Z"/><path id="s-edge" d="M0 12L18 15L34 12L52 10L72 13L88 14L110 10L128 12L150 15L170 11L190 9L212 13L232 12L252 10L274 12L296 14L314 11L334 13L352 9L372 12L390 10"/><path id="s-sun" d="M322 28C325.5 27.6 333.2 28.9 336 31C338.8 33.1 342.5 40.3 343 44C343.5 47.7 342.3 56.2 340 59C337.7 61.8 329.9 64.7 326 65C322.1 65.3 313.9 63.3 311 61C308.1 58.7 304.1 51.6 304 48C303.9 44.4 307.6 36.7 310 34C312.4 31.3 318.5 28.4 322 28Z"/><path id="s-puffA" d="M38 86C37.2 84.3 39.4 78 41 76C42.6 74 47.3 71.3 50 71C52.7 70.7 59 72.5 61 74C63 75.5 65.3 80.1 65 82C64.7 83.9 61.4 87.1 59 88C56.6 88.9 49.8 89.3 47 89C44.2 88.7 38.8 87.7 38 86Z"/><path id="s-puffB" d="M58 68C57.7 66 60.9 59.7 63 58C65.1 56.3 71.2 54.7 74 55C76.8 55.3 82.5 58.1 84 60C85.5 61.9 86.1 67.1 85 69C83.9 70.9 78.7 73.5 76 74C73.3 74.5 67.4 73.8 65 73C62.6 72.2 58.3 70 58 68Z"/><path id="s-volc" d="M16 152C7.8 150.6 25.2 141 28 138C30.8 135 37.4 128.6 40 126C42.6 123.4 47.9 116.6 50 116C52.1 115.4 56.1 121.2 58 121C59.9 120.8 63.9 113.6 66 114C68.1 114.4 73.7 121.4 76 124C78.3 126.6 83.4 133 86 136C88.6 139 106.2 148.1 98 150C89.8 151.9 24.2 153.4 16 152Z"/><path id="s-hillfar" d="M-8 152C-0.8 143.3 24.4 142.6 40 142C55.6 141.4 79.5 145.9 96 148C112.5 150.1 132.9 156 150 156C167.1 156 192 148.3 210 148C228 147.7 252 154.3 270 154C288 153.7 311.1 146.3 330 146C348.9 145.7 386.1 143.9 396 152C405.9 160.1 456.6 192.8 396 200C335.4 207.2 52.6 207.2 -8 200C-68.6 192.8 -15.2 160.7 -8 152Z"/><path id="s-hillL" d="M-8 164C-4.7 160.1 5.9 150.4 14 146C22.1 141.6 36.1 137 46 135C55.9 133 70.1 132.1 80 133C89.9 133.9 103.3 137.7 112 141C120.7 144.3 131.4 150.4 138 155C144.6 159.6 177.9 169.4 156 172C134.1 174.6 16.6 173.2 -8 172C-32.6 170.8 -11.3 167.9 -8 164Z"/><path id="s-hillR" d="M236 172C239 169.6 248.2 160.2 256 156C263.8 151.8 278.4 146.4 288 144C297.6 141.6 310.7 139.7 320 140C329.3 140.3 341.3 143.2 350 146C358.7 148.8 370.8 155.1 378 159C385.2 162.9 419.3 170 398 172C376.7 174 260.3 172 236 172C211.7 172 233 174.4 236 172Z"/><path id="s-dino" d="M154 88C153.5 85.9 154.8 78.4 156 76C157.2 73.6 160.3 71.3 163 70C165.7 68.7 172.4 66.3 176 66C179.6 65.7 186.8 66.7 190 68C193.2 69.3 198.1 73.3 200 76C201.9 78.7 202.4 84.8 204 88C205.6 91.2 209.6 97.1 212 100C214.4 102.9 218.5 109.5 222 110C225.5 110.5 232.9 105.1 238 104C243.1 102.9 253.9 101.7 260 102C266.1 102.3 277.9 104.7 284 106C290.1 107.3 300.9 112.3 306 112C311.1 111.7 317.5 105.9 322 104C326.5 102.1 335.5 98.4 340 98C344.5 97.6 355.2 99.4 356 101C356.8 102.6 349.5 108 346 110C342.5 112 334.3 113.9 330 116C325.7 118.1 316.7 122.8 314 126C311.3 129.2 311.1 136.5 310 140C308.9 143.5 306.5 148.5 306 152C305.5 155.5 308.4 164.1 306 166C303.6 167.9 290.4 168.1 288 166C285.6 163.9 290.1 152.4 288 150C285.9 147.6 276.8 148.3 272 148C267.2 147.7 255.2 146.9 252 148C248.8 149.1 248.5 153.6 248 156C247.5 158.4 250.4 164.7 248 166C245.6 167.3 232.4 167.9 230 166C227.6 164.1 231.3 154.7 230 152C228.7 149.3 222.4 148.4 220 146C217.6 143.6 213.9 137.2 212 134C210.1 130.8 207.6 125.2 206 122C204.4 118.8 201.6 112.9 200 110C198.4 107.1 195.9 102.4 194 100C192.1 97.6 188.9 93.1 186 92C183.1 90.9 175.5 92 172 92C168.5 92 162.4 92.5 160 92C157.6 91.5 154.5 90.1 154 88Z"/><path id="s-ground" d="M-8 172C-4.4 171.1 8.2 166.3 16 166C23.8 165.7 35.3 170.3 44 170C52.7 169.7 65 163.8 74 164C83 164.2 95 170.8 104 171C113 171.2 125 165.2 134 165C143 164.8 154.7 170.2 164 170C173.3 169.8 186.4 163.8 196 164C205.6 164.2 218.7 170.7 228 171C237.3 171.3 248.7 166 258 166C267.3 166 280.7 171.3 290 171C299.3 170.7 311 164.3 320 164C329 163.7 341.3 168.8 350 169C358.7 169.2 371.1 164.7 378 165C384.9 165.3 393.3 170.1 396 171L396 202L-8 202Z"/><path id="s-frond0" d="M-11.3 207C-10.3 206.9 3.9 205 5.2 204.2C6.5 203.4 10.4 194.7 11.5 193.7C12.6 192.7 23.1 188.9 24.1 187.9C25.1 186.9 27.3 176.9 28.1 175.8C28.9 174.7 37.9 169.6 38.6 168.4C39.3 167.2 39.9 156 40.5 154.7C41.1 153.4 48.3 147.2 48.7 145.7C49.1 144.2 46.9 130 46.7 129C46.5 128 46.2 127.8 45.6 128.2C45 128.6 37.7 135.7 36.4 136.5C35.1 137.3 23.9 140.5 22.8 141.5C21.7 142.5 18.6 151.8 17.6 152.8C16.6 153.9 7 158.4 6.2 159.5C5.4 160.6 3.8 171.1 3.1 172.3C2.4 173.5 -5.6 179.2 -6.2 180.5C-6.8 181.8 -6.7 193.5 -7.1 195C-7.5 196.5 -12.2 205.5 -12.4 206.2C-12.6 206.9 -12.3 207.1 -11.3 207Z"/><path id="s-frond1" d="M1.2 208.6C2.1 208.9 15.2 212.2 16.6 212C18 211.8 24.1 204.9 25.3 204.4C26.5 203.9 36.8 203.7 37.9 203C39 202.3 43.6 193.3 44.6 192.4C45.6 191.5 54.4 189.2 55.3 188C56.2 186.8 59 173.6 59.2 172.6C59.4 171.6 59.1 171.3 58.4 171.5C57.7 171.7 49.2 175.7 47.8 175.9C46.4 176.1 35.5 175.2 34.3 175.7C33.1 176.2 27.7 184.2 26.6 184.9C25.5 185.6 15.9 186.8 14.9 187.7C13.9 188.6 9.9 198.7 9.1 199.9C8.3 201.1 0.9 207 0.4 207.5C-0.1 208 0.3 208.3 1.2 208.6Z"/><path id="s-frond2" d="M394.7 209C394.8 208 396.5 193.4 396.1 191.9C395.7 190.4 388.1 184 387.4 182.6C386.7 181.2 385.7 169.9 384.9 168.6C384.1 167.3 374.9 162.2 374 161C373.1 159.8 370.4 149.7 369.4 148.6C368.4 147.5 357.6 143.6 356.4 142.6C355.2 141.6 351 132.7 349.6 131.9C348.2 131.1 333.8 129.1 332.7 129C331.6 128.9 331.3 129.1 331.6 129.8C331.9 130.5 337.1 139.8 337.5 141.3C337.9 142.8 338.2 154.8 338.9 156.2C339.6 157.6 348 163.3 348.8 164.6C349.6 165.9 351.5 176.6 352.4 177.8C353.3 179 363.3 183.5 364.3 184.6C365.3 185.7 368.8 195.2 369.9 196.2C371 197.2 382.6 200.5 384 201.3C385.4 202.1 393 209.4 393.6 209.8C394.2 210.2 394.6 210 394.7 209Z"/><path id="s-frond3" d="M387.1 211.3C387 210.4 385.9 198.5 385.3 197.5C384.7 196.5 377.2 194.7 376.4 193.9C375.6 193.1 372.8 184.7 371.9 184.1C371 183.5 362.1 183.8 361.1 183.3C360.1 182.8 355.9 176.4 354.7 176.2C353.5 176 341.9 179 341.1 179.3C340.3 179.6 339.9 180.1 340.3 180.5C340.7 180.9 346.7 185.7 347.3 186.7C347.9 187.7 350.1 197.1 350.9 197.9C351.7 198.7 359.9 199.5 360.8 200.1C361.7 200.7 365.3 208 366.3 208.5C367.3 209 376.8 207.9 378 208.1C379.2 208.3 385.8 212.3 386.3 212.5C386.8 212.7 387.2 212.2 387.1 211.3Z"/><path id="s-plate0" d="M240 104C242 97 245 94 248 96 251 98 252 101 253 105Z"/><path id="s-plate1" d="M254 101C256 89 260 84 264 87 268 90 269 95 270 102Z"/><path id="s-plate2" d="M270 102C272 93 275 90 279 92 283 94 284 98 285 104Z"/><path id="s-plate3" d="M286 106C288 101 290 98 293 100 296 102 297 105 298 109Z"/><g id="s-foot"><ellipse cx="0" cy="2.6" rx="2.9" ry="2.7"/><ellipse cx="-3.9" cy="-2.6" rx="1.9" ry="3" transform="rotate(-26 -3.9 -2.6)"/><ellipse cx="0" cy="-4.4" rx="2" ry="3.2"/><ellipse cx="3.9" cy="-2.6" rx="1.9" ry="3" transform="rotate(26 3.9 -2.6)"/></g><clipPath id="s-dinoclip"><use href="#s-dino"/></clipPath></defs><use href="#s-sheet" fill="#ddebc6"/><use href="#s-edge" fill="none" stroke="#ffffff" stroke-width="1.1" opacity=".38"/><use href="#s-sun" x="7" y="-7" fill="#e07a1f"/><use href="#s-sun" x="1.2" y="3.6" fill="#1f2d16" opacity="0.13"/><use href="#s-sun" fill="#ffffff"/><use href="#s-hillfar" x="1.2" y="3.6" fill="#1f2d16" opacity="0.1"/><use href="#s-hillfar" fill="#a3c06b"/><use href="#s-puffB" x="1.2" y="3.6" fill="#1f2d16" opacity="0.13"/><use href="#s-puffB" fill="#ffffff"/><use href="#s-puffA" x="1.2" y="3.6" fill="#1f2d16" opacity="0.13"/><use href="#s-puffA" fill="#ffffff"/><use href="#s-volc" x="1.2" y="3.6" fill="#1f2d16" opacity="0.14"/><use href="#s-volc" fill="#1f2d16"/><use href="#s-volc" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.18"/><path d="M55 121C59 117 65 117 68 121 65 125 59 125 55 121Z" fill="#e07a1f"/><use href="#s-hillL" x="1.2" y="3.6" fill="#1f2d16" opacity="0.12"/><use href="#s-hillL" fill="#a3c06b"/><use href="#s-hillR" x="1.2" y="3.6" fill="#1f2d16" opacity="0.12"/><use href="#s-hillR" fill="#a3c06b"/><use href="#s-dino" x="1.2" y="4" fill="#1f2d16" opacity="0.2"/><use href="#s-dino" fill="#e07a1f"/><use href="#s-dino" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.2"/><g transform="rotate(-7 246 102)"><use href="#s-plate0" x="1.2" y="3.6" fill="#1f2d16" opacity="0.14"/></g><g transform="rotate(4 264 99)"><use href="#s-plate1" x="1.2" y="3.6" fill="#1f2d16" opacity="0.14"/></g><g transform="rotate(-3 279 101)"><use href="#s-plate2" x="1.2" y="3.6" fill="#1f2d16" opacity="0.14"/></g><g transform="rotate(6 294 106)"><use href="#s-plate3" x="1.2" y="3.6" fill="#1f2d16" opacity="0.14"/></g><g transform="rotate(-7 246 102)"><use href="#s-plate0" fill="#a3c06b"/></g><g transform="rotate(4 264 99)"><use href="#s-plate1" fill="#a3c06b"/></g><g transform="rotate(-3 279 101)"><use href="#s-plate2" fill="#a3c06b"/></g><g transform="rotate(6 294 106)"><use href="#s-plate3" fill="#a3c06b"/></g><circle cx="173" cy="86" r="5" fill="#ddebc6" opacity=".5"/><circle cx="188" cy="78" r="7" fill="#ffffff"/><circle cx="186.2" cy="78.6" r="3.2" fill="#1f2d16"/><circle cx="160" cy="84" r="1.5" fill="#1f2d16"/><path d="M161 87c4 3.6 9.5 4.2 14 2.6" fill="none" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round"/><use href="#s-ground" fill="#3b6a1c"/><g fill="#ffffff" opacity=".92"><g transform="translate(62 190) rotate(-13) scale(1.05)"><use href="#s-foot"/></g><g transform="translate(94 184) rotate(5) scale(1)"><use href="#s-foot"/></g><g transform="translate(126 188) rotate(-7) scale(1.1)"><use href="#s-foot"/></g><g transform="translate(158 181) rotate(9) scale(1)"><use href="#s-foot"/></g></g><use href="#s-frond1" x="1.2" y="4" fill="#1f2d16" opacity="0.16"/><use href="#s-frond1" fill="#a3c06b"/><use href="#s-frond1" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.22"/><use href="#s-frond0" x="1.2" y="4" fill="#1f2d16" opacity="0.16"/><use href="#s-frond0" fill="#a3c06b"/><use href="#s-frond0" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.22"/><use href="#s-frond3" x="1.2" y="4" fill="#1f2d16" opacity="0.16"/><use href="#s-frond3" fill="#a3c06b"/><use href="#s-frond3" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.22"/><use href="#s-frond2" x="1.2" y="4" fill="#1f2d16" opacity="0.16"/><use href="#s-frond2" fill="#a3c06b"/><use href="#s-frond2" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.22"/><filter id="s-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="390" height="200" filter="url(#s-grain)" opacity=".13" style="mix-blend-mode:multiply"/></svg>
+
+      <div class="hero">
+        <p class="kicker">¡Es mi fiesta!</p>
+        <h1 id="name" class="display">Mateo</h1>
+        <p class="age" aria-label="Cumple 7 años">
+          <b class="display" aria-hidden="true">7</b><span aria-hidden="true">años<br>de risas</span>
+        </p>
+      </div>
+    </section>
+
+    <figure class="polaroid">
+      <span class="tape" aria-hidden="true"></span>
+      <svg class="photo" viewBox="0 0 224 224" role="img" aria-label="Foto de Mateo">
+        <rect width="224" height="224" fill="#ddebc6"/>
+        <rect x="12" y="12" width="200" height="200" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="9 8" opacity=".9"/>
+        <g fill="#3b6a1c">
+          <rect x="86" y="104" width="52" height="38" rx="7"/>
+          <path d="M96 104 103 92H121L128 104Z"/>
+          <circle cx="112" cy="122" r="12" fill="#f1f6e8"/>
+        </g>
+        <circle cx="112" cy="122" r="6" fill="#3b6a1c"/>
+        <text x="112" y="166" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#1f2d16">Foto de Mateo</text>
+      </svg>
+      <figcaption class="display">¡Mateo!</figcaption>
+    </figure>
+
+    <div class="body">
+      <section aria-labelledby="details">
+        <h2 class="sec-title" id="details">Tu boleto de entrada</h2>
+        <div class="ticket">
+          <dl>
+            <div><dt>Fecha</dt><dd><time datetime="2026-12-05">Sábado 5 de diciembre de 2026</time></dd></div>
+            <div><dt>Lugar</dt><dd>Jardín Los Arcos<small>Av. de las Flores 214, Col. Del Valle, Ciudad de México</small></dd></div>
+          </dl>
+          <div class="stub" aria-label="Hora: 16:30 h">
+            <b class="display" aria-hidden="true">16:30</b><span aria-hidden="true">horas</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Decoration: a torn strip with a footprint trail, in the gap between two sections. -->
+      <svg class="divider" viewBox="0 0 390 56" aria-hidden="true" focusable="false"><path d="M0 40C26 30 58 27 92 31 126 35 156 40 186 41 220 42 260 37 300 32 336 28 368 31 390 38V56H0Z" fill="#a3c06b"/><path d="M0 46C34 40 70 42 108 44 150 46 196 44 240 42 288 40 338 43 390 47V56H0Z" fill="#a3c06b" opacity=".7"/><path d="M330 46C324 38 316 32 306 28 316 27 326 32 332 38 336 41 334 45 330 46Z" fill="#3b6a1c" opacity=".55"/><path d="M338 46C336 37 338 29 344 23 344 32 343 39 341 46Z" fill="#3b6a1c" opacity=".45"/><path d="M348 46C350 39 356 33 365 30 358 38 352 43 351 47Z" fill="#3b6a1c" opacity=".35"/><g fill="#3b6a1c" opacity="0.5" transform="translate(62 27) rotate(-12) scale(1.05)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#3b6a1c" opacity="0.5" transform="translate(96 30) rotate(6) scale(1.05)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#3b6a1c" opacity="0.5" transform="translate(130 33) rotate(-8) scale(1.05)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#3b6a1c" opacity="0.5" transform="translate(164 36) rotate(9) scale(1.05)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#3b6a1c" opacity="0.5" transform="translate(198 37) rotate(-6) scale(1.05)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#3b6a1c" opacity="0.5" transform="translate(232 35) rotate(7) scale(1.05)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g></svg>
+
+      <section aria-labelledby="message">
+        <h2 class="sec-title" id="message">Mensaje</h2>
+        <div class="bubble"><p>¡Ven a celebrar conmigo! Habrá juegos, pastel y muchas sorpresas.</p></div>
+        <p class="from display">— Mateo</p>
+      </section>
+    </div>
+
+    <!-- Decoration: footer trail, above the footer text and never behind it. -->
+    <div class="footer">
+      <p class="made"><a href="#">Hecha con InvitaMe</a></p>
+      <svg class="trail" viewBox="0 0 390 62" aria-hidden="true" focusable="false"><path d="M0 12L20 15L38 11L58 9L78 12L96 13L118 10L138 12L158 14L178 11L198 9L220 12L240 13L262 10L282 12L302 14L322 11L344 12L364 9L390 11L390 70L0 70Z" fill="#a3c06b"/><path d="M0 46C26 40 56 42 86 44 120 46 154 42 188 44 226 46 262 42 300 43 336 44 368 46 390 44V62H0Z" fill="#3b6a1c" opacity=".18"/><path d="M14 12C24 20 30 28 32 38 24 32 16 22 12 14Z" fill="#3b6a1c" opacity=".45"/><path d="M24 12C30 22 32 30 32 40 30 30 28 22 22 12Z" fill="#3b6a1c" opacity=".35"/><path d="M376 12C366 20 360 28 358 38 366 32 374 22 378 14Z" fill="#3b6a1c" opacity=".45"/><path d="M366 12C360 22 358 30 358 40 360 30 362 22 368 12Z" fill="#3b6a1c" opacity=".35"/><g fill="#ffffff" opacity="0.85" transform="translate(58 40) rotate(-12) scale(1.1)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#ffffff" opacity="0.85" transform="translate(94 44) rotate(6) scale(1)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#ffffff" opacity="0.85" transform="translate(130 40) rotate(-8) scale(1.15)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#ffffff" opacity="0.85" transform="translate(166 45) rotate(9) scale(1)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#ffffff" opacity="0.85" transform="translate(202 41) rotate(-5) scale(1.1)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g><g fill="#ffffff" opacity="0.85" transform="translate(238 44) rotate(7) scale(1)"><ellipse cx="0" cy="1.6" rx="2.5" ry="2.3"/><ellipse cx="-3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(-27 -3.3 -2.8)"/><ellipse cx="0" cy="-4.3" rx="1.7" ry="2.8"/><ellipse cx="3.3" cy="-2.8" rx="1.6" ry="2.6" transform="rotate(27 3.3 -2.8)"/></g></svg>
+    </div>
+  </article>
+
+  <section class="note">
+    <span class="tag">Style 01 / 03</span>
+    <h2>Paper cut-out</h2>
+    <dl>
+      <div>
+        <dt>What makes it read as hand-made</dt>
+        <dd>Every element is a separate cut sheet with its own 3-4 px offset shadow, never a symmetric glow. The top edge is torn: an irregular line with notches of different depth, not a zigzag. The hills, ground and fronds come from hand-placed splines, not arcs; the plates come in four sizes and two tilts; the tail and the crest do not close exactly on the body; the footprints sit at four different angles. A <code>feTurbulence</code> grain at 13 % is multiplied over the scene, so nothing stays flat vector.</dd>
+      </div>
+      <div>
+        <dt>Cost for 28 themes</dt>
+        <dd>One base scene sheet, one character sheet (a 38-point silhouette plus details), 3-5 props, a divider and a footer strip: about 5-8 h of real drawing per theme. Scene SVG 11.0 kB, whole illustration set 17.6 kB; almost all of it is path data, so the frames stay cheap to ship inline.</dd>
+      </div>
+      <div>
+        <dt>Palette, font, assets</dt>
+        <dd>The theme's seven colours only, tints by opacity. Display font is Lilita One in the product (via <code>next/font</code>); this artboard shows the system stack «Arial Rounded MT Bold». No external images, no motion, one filter for grain.</dd>
+      </div>
+    </dl>
+  </section>
+</div>
+</body>
+</html>

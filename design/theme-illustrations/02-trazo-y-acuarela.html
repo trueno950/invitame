@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mateo, 7 años — Cartel con ilustración de trazo y acuarela</title>
+<style>
+  /* Theme tokens: dinosaurios (apps/web/lib/renderers/birthday-themes.ts) — the seven colors, nothing else. */
+  :root {
+    --bg: #f1f6e8; --surface: #ffffff; --soft: #ddebc6; --ink: #1f2d16;
+    --accent: #3b6a1c; --d1: #e07a1f; --d2: #a3c06b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #15181a; color: #eef1ec;
+    font: 400 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .stage { width: 390px; margin: 0 auto; }
+
+  /* ── design-tool chrome (not part of the invitation) ─────────────────────── */
+  .chrome {
+    display: flex; gap: 8px; align-items: center; padding: 10px 14px;
+    background: #0f1214; border-bottom: 1px solid #272d29;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #9aa79b;
+  }
+  .chrome b { color: #eef1ec; font-weight: 600; }
+  .chrome .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--d1); }
+
+  /* ── invitation ─────────────────────────────────────────────────────────── */
+  .inv {
+    background: var(--bg); color: var(--ink);
+    font-family: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+  }
+  .display {
+    font-family: "Lilita One", "Arial Rounded MT Bold", "Arial Black", system-ui, sans-serif;
+    font-weight: 400;
+  }
+  .band {
+    position: relative; overflow: hidden; background: var(--accent); color: #fff;
+    text-align: center; border-radius: 0 0 50% 50% / 0 0 2rem 2rem;
+  }
+  .band .scene { display: block; width: 100%; height: auto; }
+  .hero { padding: 6px 24px 128px; }
+  .kicker {
+    margin: 0; font-size: 14px; font-weight: 500;
+    letter-spacing: .18em; text-transform: uppercase;
+  }
+  h1 { margin: 6px 0 0; font-size: clamp(2.75rem, 12vw, 3.75rem); line-height: .98; letter-spacing: -.02em; }
+  .age { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 4px 0 0; }
+  .age b {
+    font-size: 80px; line-height: .85; font-weight: 400;
+    color: transparent; -webkit-text-stroke: 3px #fff;
+  }
+  .age span { font-size: 18px; font-weight: 500; text-align: left; line-height: 1.15; }
+
+  .polaroid {
+    position: relative; z-index: 1; width: 248px; margin: -128px auto 0;
+    background: var(--surface); padding: 12px; transform: rotate(3deg);
+    box-shadow: 0 22px 40px -18px rgba(31, 45, 22, .55);
+  }
+  .photo { display: block; width: 100%; height: auto; }
+  .polaroid figcaption {
+    margin-top: 8px; text-align: center; font-size: 17px; color: var(--accent);
+  }
+  .tape {
+    position: absolute; top: -9px; left: -10px; width: 76px; height: 21px;
+    transform: rotate(-7deg); background: var(--d1); opacity: .55;
+    clip-path: polygon(3% 12%, 12% 0, 28% 14%, 46% 2%, 62% 16%, 80% 3%, 97% 15%, 100% 76%, 92% 100%, 74% 84%, 56% 98%, 38% 82%, 20% 100%, 4% 86%);
+  }
+
+  .body { display: flex; flex-direction: column; gap: 30px; padding: 26px 20px 22px; }
+  .sec-title {
+    margin: 0 0 12px; text-align: center; font-size: 12px; font-weight: 500;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--accent);
+  }
+  .ticket {
+    position: relative; display: grid; grid-template-columns: 1fr auto;
+    background: var(--surface); border-radius: 16px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(31, 45, 22, .16);
+    -webkit-mask:
+      radial-gradient(circle 11px at calc(100% - 96px) 0, #0000 98%, #000) top / 100% 51% no-repeat,
+      radial-gradient(circle 11px at calc(100% - 96px) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+    mask:
+      radial-gradient(circle 11px at calc(100% - 96px) 0, #0000 98%, #000) top / 100% 51% no-repeat,
+      radial-gradient(circle 11px at calc(100% - 96px) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+  }
+  .ticket dl { margin: 0; padding: 16px; display: grid; gap: 12px; }
+  .ticket dt {
+    font-size: 11px; font-weight: 500; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .ticket dd { margin: 0; font-size: 18px; font-weight: 500; line-height: 1.25; }
+  .ticket dd small { display: block; font-size: 14px; font-weight: 400; }
+  .stub {
+    width: 96px; display: grid; place-content: center; text-align: center;
+    padding: 10px; background: var(--soft);
+    border-left: 3px dotted rgba(31, 45, 22, .35);
+  }
+  .stub b { font-size: 24px; line-height: 1; color: var(--accent); }
+  .stub span { font-size: 12px; font-weight: 500; }
+
+  .divider { display: block; width: 100%; height: auto; margin: -6px 0; }
+
+  .bubble {
+    position: relative; margin-top: 0; background: var(--soft); border-radius: 24px;
+    padding: 18px 20px; font-size: 17px; line-height: 1.6;
+  }
+  .bubble p { margin: 0; }
+  .bubble::after {
+    content: ""; position: absolute; left: 38px; bottom: -13px; width: 26px; height: 26px;
+    background: var(--soft); clip-path: polygon(0 0, 100% 0, 0 100%);
+  }
+  .from { margin: 20px 0 0 26px; font-size: 18px; }
+
+  .footer { padding: 8px 0 0; text-align: center; }
+  .trail { display: block; width: 100%; height: auto; margin-top: 12px; }
+  .made { margin: 0; font-size: 13px; }
+  .made a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ── style note (design-tool chrome, outside the invitation) ─────────────── */
+  .note { padding: 20px 16px 34px; background: #15181a; border-top: 1px solid #272d29; font-size: 13px; line-height: 1.6; color: #c7d0c6; }
+  .note h2 { margin: 0 0 4px; font-size: 15px; color: #f2f5f0; }
+  .note .tag { display: inline-block; margin-bottom: 10px; padding: 2px 8px; border: 1px solid #3a453b; border-radius: 999px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #9aa79b; }
+  .note dl { margin: 12px 0 0; display: grid; gap: 10px; }
+  .note dt { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #8f9c90; }
+  .note dd { margin: 2px 0 0; }
+  .note code { font-size: 12px; color: #dfe6dc; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="chrome"><span class="dot"></span><b>Trazo y acuarela</b> · Cartel · Tema Dinosaurios · 390 px</div>
+
+  <article class="inv" aria-label="Invitación de cumpleaños de Mateo">
+    <section class="band" aria-labelledby="name">
+      <!-- Decoration: paper diorama. Nothing here sits behind live text. -->
+      <svg class="scene" viewBox="0 0 390 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><defs><path id="w-panel" d="M-6.5 9.5C-1.2 -5.6 46.6 5.3 57.8 5.3C69.1 5.3 116.7 9.7 128.4 9.6C140.1 9.5 186.8 4.1 198.3 4C209.9 4 255.5 9.1 267.2 9.2C278.9 9.2 328 4.6 338.8 4.5C349.5 4.5 391.2 -6.5 395.9 8.7C400.7 23.8 401 171.4 395.5 186.5C389.9 201.7 340.9 190.8 329.8 190.7C318.7 190.6 273.9 185.3 262.4 185.3C251 185.3 204.2 190.2 192.6 190.2C181 190.3 134.5 185.6 122.8 185.5C111 185.5 62.4 189.8 51.6 189.8C40.8 189.8 -2 200.6 -6.8 185.6C-11.6 170.5 -11.9 24.5 -6.5 9.5Z"/><clipPath id="w-clip"><use href="#w-panel"/></clipPath><filter id="w-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter></defs><use href="#w-panel" y="3" fill="#1f2d16" opacity=".1"/><use href="#w-panel" fill="#ffffff"/><g clip-path="url(#w-clip)"><path d="M-9.1 162.8C-3.3 153.6 18.6 152 30.1 149.2C41.6 146.5 60.5 143.1 72 143.2C83.4 143.3 100.1 147.1 110.9 149.9C121.8 152.7 136.1 162.3 148.9 163C161.6 163.7 186.6 156.8 200.8 154.7C215.1 152.5 235.6 149.4 249.6 147.8C263.5 146.2 285 143 299.4 143.5C313.7 144 336.6 149 350.6 151.6C364.7 154.1 392 152.4 398.5 161.3C405.1 170.3 454.7 207.2 396.7 214.6C338.7 222.1 46.5 221.5 -11 214.1C-68.5 206.8 -14.9 172 -9.1 162.8Z" fill="#a3c06b" opacity="0.55" style="mix-blend-mode:multiply" transform="translate(-2 1)"/><path d="M318.1 28.8C321.5 28.6 332.1 31.1 334.9 33.5C337.7 35.8 342.1 45.7 342.3 49C342.5 52.3 339.2 59.6 336.9 61.8C334.7 64 326.4 67.8 322.9 68C319.3 68.2 309.1 65.9 306.4 63.5C303.7 61 299.8 50.5 299.8 47.2C299.7 43.9 303.8 37.3 305.9 35.2C308.1 33 314.7 29 318.1 28.8Z" fill="#e07a1f" opacity="0.5" style="mix-blend-mode:multiply" transform="translate(-3 2)"/><path d="M153.1 87.8C152.4 85.6 153.8 78.7 155.1 76.2C156.5 73.8 159.9 72.2 162.8 70.7C165.7 69.3 171.5 66.4 175.4 66C179.4 65.7 187.2 66.8 190.6 68.3C194 69.7 197.3 73.5 199.2 76.2C201.2 78.9 202.7 84 204.3 87.4C206 90.7 208.5 96.7 211.1 99.9C213.8 103.1 219 109.2 222.7 109.7C226.5 110.2 232.1 104.3 237.5 103.3C242.9 102.3 254.2 102.2 260.9 102.6C267.5 103 277.9 104.8 284.4 106C290.9 107.3 301.3 111.7 306.7 111.4C312 111.2 317.4 106.2 322.3 104.3C327.1 102.4 336.2 98.4 340.8 98C345.5 97.5 354.5 99.5 355.3 101.1C356 102.8 349.5 107.6 346 109.7C342.5 111.8 335 113.8 330.5 116.2C326 118.6 317.1 123.2 314.2 126.5C311.3 129.7 311.1 135.6 309.9 139.2C308.7 142.8 306.4 148.1 305.7 151.8C305.1 155.5 316.1 163.3 305.5 165.3C294.8 167.3 241.6 167.8 230.8 165.9C220 164.1 230.8 155.4 229.3 152.5C227.8 149.6 222.6 148 220.2 145.4C217.9 142.7 214.8 137.1 212.8 133.8C210.9 130.6 208 126 206.2 122.6C204.4 119.1 202.1 112.9 200.3 109.6C198.5 106.3 195.7 101.7 193.7 99.3C191.7 96.8 189.5 93 186.3 92C183.1 91.1 175 92.6 171.3 92.6C167.6 92.6 162.8 92.7 160.2 92C157.7 91.4 153.8 90.1 153.1 87.8Z" fill="#e07a1f" opacity="0.62" style="mix-blend-mode:multiply" transform="rotate(1.2 255 120) translate(-3 2.5)"/><path d="M-11.2 190.7C-4.1 185.9 26.2 179.9 40.1 178.9C54 177.8 74 183.7 86.7 183.4C99.4 183 117.3 176 129.9 176.2C142.5 176.5 162.6 184.9 175.7 185C188.8 185.1 209 177 222.3 176.7C235.6 176.5 256.3 183.4 269.8 183.3C283.4 183.2 305 176.1 318.3 176C331.6 176 352.7 182.6 364 182.8C375.2 183 393 173 397.8 177.5C402.7 182 455.8 209.4 398.1 214.4C340.3 219.4 48.3 216.3 -9.7 212.9C-67.6 209.5 -18.2 195.5 -11.2 190.7Z" fill="#3b6a1c" opacity="0.3" style="mix-blend-mode:multiply" transform="translate(3 -2)"/><path d="M240 106C240.4 104.6 242.8 93 244 92C245.2 91 250.8 94.6 252 96C253.2 97.4 257.2 105 256 106C254.8 107 241.6 106 240 106C238.4 106 239.6 107.4 240 106Z" fill="#e07a1f" opacity="0.45" style="mix-blend-mode:multiply" transform="translate(2 -1)"/><path d="M256 103C256.6 101.3 260.4 87.3 262 86C263.6 84.7 270.7 88.2 272 90C273.3 91.8 276.6 102.7 275 104C273.4 105.3 257.9 103.1 256 103C254.1 102.9 255.4 104.7 256 103Z" fill="#e07a1f" opacity="0.45" style="mix-blend-mode:multiply" transform="translate(2 -1)"/><path d="M274 104C274.6 102.8 278.6 92.9 280 92C281.4 91.1 287 93.4 288 95C289 96.6 291.4 107.1 290 108C288.6 108.9 275.6 104.4 274 104C272.4 103.6 273.4 105.2 274 104Z" fill="#e07a1f" opacity="0.45" style="mix-blend-mode:multiply" transform="translate(2 -1)"/><path d="M318.5 28.4C322 28.2 331.1 30.1 333.9 32.2C336.6 34.2 341.1 41.8 341.6 45.4C342.1 49 340.2 59.5 337.9 62.2C335.6 64.9 326.3 68 322.4 68C318.5 68 308 64.4 305.4 62C302.7 59.5 300.6 51.3 300.5 47.9C300.4 44.4 302.4 35.7 304.5 33.3C306.7 31 315 28.5 318.5 28.4Z" fill="none" stroke="#1f2d16" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/><path d="M318 22L319 12" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round" opacity=".8"/><path d="M342 30L349 22" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round" opacity=".8"/><path d="M350 48L360 47" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round" opacity=".8"/><path d="M342 66L349 74" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round" opacity=".8"/><path d="M318 74L319 84" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round" opacity=".8"/><path d="M294 66L287 74" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round" opacity=".8"/><path d="M286 48L276 47" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round" opacity=".8"/><path d="M294 30L287 22" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round" opacity=".8"/><path d="M152.6 90.8C152.7 90.4 152.8 89.6 153.1 87.8C153.4 86.1 154 78.3 155.1 76.2C156.3 74.2 160.4 72 162.8 70.7C165.2 69.5 172.1 66.3 175.4 66C178.8 65.7 187.7 67.1 190.6 68.3C193.4 69.5 197.6 73.9 199.2 76.2C200.9 78.5 202.9 84.5 204.3 87.4C205.8 90.2 208.9 97.2 211.1 99.9C213.4 102.6 219.6 109.3 222.7 109.7C225.9 110.1 232.9 104.1 237.5 103.3C242.1 102.4 255.2 102.3 260.9 102.6C266.5 102.9 278.9 105 284.4 106C289.9 107.1 302.1 111.7 306.7 111.4C311.2 111.2 318.2 105.9 322.3 104.3C326.4 102.7 336.9 98.3 340.8 98C344.8 97.6 354.6 99.7 355.3 101.1C355.9 102.5 349 107.9 346 109.7C343 111.5 334.3 114.2 330.5 116.2C326.7 118.2 316.7 123.7 314.2 126.5C311.7 129.2 310.9 136.2 309.9 139.2C308.9 142.3 306.3 150.2 305.7 151.8C305.2 153.5 305.5 152.7 305.4 152.8" fill="none" stroke="#1f2d16" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/><path d="M310.2 138.3C310.2 138.4 310.5 137.6 309.9 139.2C309.4 140.9 306.3 148.7 305.7 151.8C305.2 155 307.5 163.5 305.5 165.3C303.4 167.1 290.5 168.5 288.5 166.7C286.4 164.9 290.7 152.4 288.7 150.2C286.6 147.9 275.8 148.1 271.5 147.9C267.1 147.7 255.1 147.5 252.2 148.6C249.3 149.6 248 154.5 247.5 156.6C247 158.8 250.3 165.6 248.3 166.7C246.3 167.8 233.1 166.1 230.8 165.9C228.4 165.8 229 165.9 228.8 165.9" fill="none" stroke="#1f2d16" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"/><path d="M250.3 166.8C250.1 166.8 250.7 166.8 248.3 166.7C246 166.6 233.1 167.7 230.8 165.9C228.5 164.2 230.5 155 229.3 152.5C228 150.1 222.2 147.6 220.2 145.4C218.3 143.1 214.5 136.6 212.8 133.8C211.2 131.1 207.7 125.5 206.2 122.6C204.7 119.7 201.8 112.4 200.3 109.6C198.8 106.8 195.4 101.4 193.7 99.3C192 97.1 189 92.8 186.3 92C183.6 91.2 174.4 92.6 171.3 92.6C168.1 92.6 161.7 92.1 160.2 92C158.8 92 159.3 92 159.2 92" fill="none" stroke="#1f2d16" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"/><path d="M187.3 92C187.2 92 188.2 91.9 186.3 92C184.4 92.1 174.4 92.6 171.3 92.6C168.1 92.6 162.4 92.6 160.2 92C158 91.5 153.7 89.7 153.1 87.8C152.5 85.9 154 78.3 155.1 76.2C156.3 74.2 161.7 71.5 162.8 70.7C163.9 69.9 164.2 69.7 164.4 69.6" fill="none" stroke="#1f2d16" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/><path d="M240 106C240.5 104.3 242.6 93.2 244 92C245.4 90.8 250.6 94.3 252 96C253.4 97.7 255.5 104.8 256 106" fill="none" stroke="#1f2d16" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/><path d="M256 103C256.7 101 260.1 87.6 262 86C263.9 84.4 270.4 87.8 272 90C273.6 92.2 274.6 102.3 275 104" fill="none" stroke="#1f2d16" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/><path d="M274 104C274.7 102.6 278.3 93.1 280 92C281.7 90.9 286.8 93.1 288 95C289.2 96.9 289.8 106.4 290 108" fill="none" stroke="#1f2d16" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/><circle cx="188" cy="79" r="6.6" fill="#ffffff" stroke="#1f2d16" stroke-width="1.7"/><circle cx="186.6" cy="79.6" r="2.9" fill="#1f2d16"/><path d="M164 87c3 4 8 5 13 3" fill="none" stroke="#1f2d16" stroke-width="2" stroke-linecap="round"/><circle cx="161" cy="84" r="1.5" fill="#1f2d16"/><path d="M232 164v-3M240 164v-3M292 164v-3M300 164v-3" stroke="#1f2d16" stroke-width="1.4" stroke-linecap="round" opacity=".7"/><path d="M-13.1 191.1C-12.9 191.1 -17.5 192.2 -11.2 190.7C-4.8 189.2 28.4 179.8 40.1 178.9C51.8 178 76 183.7 86.7 183.4C97.5 183 119.2 176 129.9 176.2C140.6 176.4 164.7 185 175.7 185C186.8 185.1 211 176.9 222.3 176.7C233.6 176.5 258.3 183.4 269.8 183.3C281.4 183.3 307 176.1 318.3 176C329.6 176 354.4 182.7 364 182.8C373.5 183 393.5 178.2 397.8 177.5C402.1 176.8 399.6 177.2 399.8 177.2" fill="none" stroke="#1f2d16" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/><path d="M10 184c1.6-5.3999999999999995 2.6-7.6499999999999995 5-9" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(-14 10 184)"/><path d="M24 188c1.6-7.8 2.6-11.049999999999999 5-13" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(6 24 188)"/><path d="M38 180c1.6-4.2 2.6-5.95 5-7" fill="none" stroke="#1f2d16" stroke-width="1.4" stroke-linecap="round" opacity=".6" transform="rotate(-4 38 180)"/><path d="M52 187c1.6-6.6 2.6-9.35 5-11" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(13 52 187)"/><path d="M64 182c1.6-3.5999999999999996 2.6-5.1 5-6" fill="none" stroke="#1f2d16" stroke-width="1.4" stroke-linecap="round" opacity=".6" transform="rotate(-9 64 182)"/><path d="M80 188c1.6-8.4 2.6-11.9 5-14" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(7 80 188)"/><path d="M94 180c1.6-4.8 2.6-6.8 5-8" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(-12 94 180)"/><path d="M112 186c1.6-7.199999999999999 2.6-10.2 5-12" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(10 112 186)"/><path d="M126 182c1.6-4.2 2.6-5.95 5-7" fill="none" stroke="#1f2d16" stroke-width="1.4" stroke-linecap="round" opacity=".6" transform="rotate(-6 126 182)"/><path d="M144 188c1.6-6.0 2.6-8.5 5-10" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(14 144 188)"/><path d="M160 181c1.6-7.8 2.6-11.049999999999999 5-13" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(-3 160 181)"/><path d="M174 186c1.6-4.2 2.6-5.95 5-7" fill="none" stroke="#1f2d16" stroke-width="1.4" stroke-linecap="round" opacity=".6" transform="rotate(8 174 186)"/><path d="M196 180c1.6-6.6 2.6-9.35 5-11" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(-11 196 180)"/><path d="M300 186c1.6-5.3999999999999995 2.6-7.6499999999999995 5-9" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(5 300 186)"/><path d="M316 180c1.6-7.199999999999999 2.6-10.2 5-12" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(-13 316 180)"/><path d="M334 188c1.6-4.2 2.6-5.95 5-7" fill="none" stroke="#1f2d16" stroke-width="1.4" stroke-linecap="round" opacity=".6" transform="rotate(9 334 188)"/><path d="M350 182c1.6-7.8 2.6-11.049999999999999 5-13" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(-7 350 182)"/><path d="M366 187c1.6-4.8 2.6-6.8 5-8" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(12 366 187)"/><path d="M382 181c1.6-6.0 2.6-8.5 5-10" fill="none" stroke="#1f2d16" stroke-width="1.8" stroke-linecap="round" opacity=".6" transform="rotate(-5 382 181)"/></g><path transform="translate(72 46) scale(1)" fill="#1f2d16" opacity=".5" d="M0-8C1-2.5 2.5-1 8 0 2.5 1 1 2.5 0 8-1 2.5-2.5 1-8 0-2.5-1-1-2.5 0-8Z"/><path transform="translate(110 30) scale(0.75)" fill="#1f2d16" opacity=".5" d="M0-8C1-2.5 2.5-1 8 0 2.5 1 1 2.5 0 8-1 2.5-2.5 1-8 0-2.5-1-1-2.5 0-8Z"/><path transform="translate(300 128) scale(0.7)" fill="#1f2d16" opacity=".5" d="M0-8C1-2.5 2.5-1 8 0 2.5 1 1 2.5 0 8-1 2.5-2.5 1-8 0-2.5-1-1-2.5 0-8Z"/><path transform="translate(44 112) scale(0.55)" fill="#1f2d16" opacity=".5" d="M0-8C1-2.5 2.5-1 8 0 2.5 1 1 2.5 0 8-1 2.5-2.5 1-8 0-2.5-1-1-2.5 0-8Z"/><path transform="translate(256 54) scale(0.6)" fill="#1f2d16" opacity=".5" d="M0-8C1-2.5 2.5-1 8 0 2.5 1 1 2.5 0 8-1 2.5-2.5 1-8 0-2.5-1-1-2.5 0-8Z"/><path d="M30 62c8-6 18 0 14 8-3 6-12 4-12-2 0-5 7-7 11-3" fill="none" stroke="#1f2d16" stroke-width="1.6" stroke-linecap="round" opacity=".45"/><g clip-path="url(#w-clip)"><path d="M-11.2 190.7C-3.5 188.9 25.4 180 40.1 178.9C54.8 177.8 73.3 183.8 86.7 183.4C100.2 183 116.5 176 129.9 176.2C143.2 176.5 161.9 184.9 175.7 185C189.6 185.1 208.2 177 222.3 176.7C236.4 176.5 255.5 183.4 269.8 183.3C284.2 183.2 304.2 176.1 318.3 176C332.4 176 352 182.6 364 182.8C375.9 183.1 392.8 178.3 397.8 177.5" fill="none" stroke="#3b6a1c" stroke-width="2.4" opacity=".18"/></g><use href="#w-panel" fill="none" stroke="#1f2d16" stroke-width="1.1" opacity=".16"/><rect width="390" height="200" filter="url(#w-grain)" opacity=".09" style="mix-blend-mode:multiply"/></svg>
+
+      <div class="hero">
+        <p class="kicker">¡Es mi fiesta!</p>
+        <h1 id="name" class="display">Mateo</h1>
+        <p class="age" aria-label="Cumple 7 años">
+          <b class="display" aria-hidden="true">7</b><span aria-hidden="true">años<br>de risas</span>
+        </p>
+      </div>
+    </section>
+
+    <figure class="polaroid">
+      <span class="tape" aria-hidden="true"></span>
+      <svg class="photo" viewBox="0 0 224 224" role="img" aria-label="Foto de Mateo">
+        <rect width="224" height="224" fill="#ddebc6"/>
+        <rect x="12" y="12" width="200" height="200" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="9 8" opacity=".9"/>
+        <g fill="#3b6a1c">
+          <rect x="86" y="104" width="52" height="38" rx="7"/>
+          <path d="M96 104 103 92H121L128 104Z"/>
+          <circle cx="112" cy="122" r="12" fill="#f1f6e8"/>
+        </g>
+        <circle cx="112" cy="122" r="6" fill="#3b6a1c"/>
+        <text x="112" y="166" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#1f2d16">Foto de Mateo</text>
+      </svg>
+      <figcaption class="display">¡Mateo!</figcaption>
+    </figure>
+
+    <div class="body">
+      <section aria-labelledby="details">
+        <h2 class="sec-title" id="details">Tu boleto de entrada</h2>
+        <div class="ticket">
+          <dl>
+            <div><dt>Fecha</dt><dd><time datetime="2026-12-05">Sábado 5 de diciembre de 2026</time></dd></div>
+            <div><dt>Lugar</dt><dd>Jardín Los Arcos<small>Av. de las Flores 214, Col. Del Valle, Ciudad de México</small></dd></div>
+          </dl>
+          <div class="stub" aria-label="Hora: 16:30 h">
+            <b class="display" aria-hidden="true">16:30</b><span aria-hidden="true">horas</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Decoration: a torn strip with a footprint trail, in the gap between two sections. -->
+      <svg class="divider" viewBox="0 0 390 44" aria-hidden="true" focusable="false"><path d="M8 26C42 18 76 24 110 22 144 20 176 26 210 23 244 20 278 26 312 22 336 19 366 22 382 25" fill="none" stroke="#1f2d16" stroke-width="1.6" stroke-linecap="round" opacity=".28"/><path d="M8 26C42 18 76 24 110 22 144 20 176 26 210 23 244 20 278 26 312 22 336 19 366 22 382 25" fill="none" stroke="#3b6a1c" stroke-width="3.4" stroke-linecap="round" opacity=".12"/><g transform="translate(150 20) rotate(-10) scale(1.15)" fill="#1f2d16" opacity=".5"><ellipse cx="0" cy="2.2" rx="2.4" ry="2.1"/><ellipse cx="-3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(-28 -3.3 -2.4)"/><ellipse cx="0" cy="-4" rx="1.7" ry="2.9"/><ellipse cx="3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(28 3.3 -2.4)"/></g><g transform="translate(190 16) rotate(6) scale(1.15)" fill="#1f2d16" opacity=".5"><ellipse cx="0" cy="2.2" rx="2.4" ry="2.1"/><ellipse cx="-3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(-28 -3.3 -2.4)"/><ellipse cx="0" cy="-4" rx="1.7" ry="2.9"/><ellipse cx="3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(28 3.3 -2.4)"/></g><g transform="translate(230 20) rotate(-6) scale(1.15)" fill="#1f2d16" opacity=".5"><ellipse cx="0" cy="2.2" rx="2.4" ry="2.1"/><ellipse cx="-3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(-28 -3.3 -2.4)"/><ellipse cx="0" cy="-4" rx="1.7" ry="2.9"/><ellipse cx="3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(28 3.3 -2.4)"/></g><g transform="translate(270 16) rotate(9) scale(1.15)" fill="#1f2d16" opacity=".5"><ellipse cx="0" cy="2.2" rx="2.4" ry="2.1"/><ellipse cx="-3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(-28 -3.3 -2.4)"/><ellipse cx="0" cy="-4" rx="1.7" ry="2.9"/><ellipse cx="3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(28 3.3 -2.4)"/></g></svg>
+
+      <section aria-labelledby="message">
+        <h2 class="sec-title" id="message">Mensaje</h2>
+        <div class="bubble"><p>¡Ven a celebrar conmigo! Habrá juegos, pastel y muchas sorpresas.</p></div>
+        <p class="from display">— Mateo</p>
+      </section>
+    </div>
+
+    <!-- Decoration: footer trail, above the footer text and never behind it. -->
+    <div class="footer">
+      <p class="made"><a href="#">Hecha con InvitaMe</a></p>
+      <svg class="trail" viewBox="0 0 390 46" aria-hidden="true" focusable="false"><path d="M20 34C70 24 130 30 190 26 250 22 320 28 370 30" fill="none" stroke="#1f2d16" stroke-width="1.5" stroke-linecap="round" opacity=".2"/><g transform="translate(96 26) rotate(-9) scale(1.0)" fill="#1f2d16" opacity=".5"><ellipse cx="0" cy="2.2" rx="2.4" ry="2.1"/><ellipse cx="-3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(-28 -3.3 -2.4)"/><ellipse cx="0" cy="-4" rx="1.7" ry="2.9"/><ellipse cx="3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(28 3.3 -2.4)"/></g><g transform="translate(146 21) rotate(5) scale(1.0)" fill="#1f2d16" opacity=".5"><ellipse cx="0" cy="2.2" rx="2.4" ry="2.1"/><ellipse cx="-3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(-28 -3.3 -2.4)"/><ellipse cx="0" cy="-4" rx="1.7" ry="2.9"/><ellipse cx="3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(28 3.3 -2.4)"/></g><g transform="translate(196 26) rotate(-6) scale(1.0)" fill="#1f2d16" opacity=".5"><ellipse cx="0" cy="2.2" rx="2.4" ry="2.1"/><ellipse cx="-3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(-28 -3.3 -2.4)"/><ellipse cx="0" cy="-4" rx="1.7" ry="2.9"/><ellipse cx="3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(28 3.3 -2.4)"/></g><g transform="translate(246 20) rotate(8) scale(1.0)" fill="#1f2d16" opacity=".5"><ellipse cx="0" cy="2.2" rx="2.4" ry="2.1"/><ellipse cx="-3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(-28 -3.3 -2.4)"/><ellipse cx="0" cy="-4" rx="1.7" ry="2.9"/><ellipse cx="3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(28 3.3 -2.4)"/></g><g transform="translate(296 25) rotate(-4) scale(1.0)" fill="#1f2d16" opacity=".5"><ellipse cx="0" cy="2.2" rx="2.4" ry="2.1"/><ellipse cx="-3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(-28 -3.3 -2.4)"/><ellipse cx="0" cy="-4" rx="1.7" ry="2.9"/><ellipse cx="3.3" cy="-2.4" rx="1.6" ry="2.7" transform="rotate(28 3.3 -2.4)"/></g><path d="M40 34c3-7 5-10 9-13M66 30c2-6 5-9 9-11" fill="none" stroke="#1f2d16" stroke-width="1.5" stroke-linecap="round" opacity=".3"/></svg>
+    </div>
+  </article>
+
+  <section class="note">
+    <span class="tag">Style 02 / 03</span>
+    <h2>Ink line and wash</h2>
+    <dl>
+      <div>
+        <dt>What makes it read as hand-made</dt>
+        <dd>The outline is not one vector contour: it is three overlapping ink strokes of different weight (3.1 / 2.6 / 1.9) whose ends overshoot the join, over a point-to-point 1 px wobble. The washes are painted above and below the line, offset 3-4 px and multiplied, so they never meet the contour — the way water ignores a pen. The grass wash is laid in front of the feet and the pigment darkens under the belly. <code>feTurbulence</code> paper grain at 9 %, ink-dab doodles, a spiral that stops where the pen lifted.</dd>
+      </div>
+      <div>
+        <dt>Cost for 28 themes</dt>
+        <dd>The most expensive: a filled path cannot be reused as a line, so every contour is redrawn piece by piece — about 55-75 strokes, 5-8 washes and 10 doodles per theme, 6-8 h per theme. The 1 px wobble can be scripted from a hand-placed point list, and that is exactly where it stops feeling drawn.</dd>
+      </div>
+      <div>
+        <dt>Palette, font, assets</dt>
+        <dd>The theme's seven colours, with multiply so two washes make a third tone. Lilita One is the product font; the stack here falls back to «Arial Rounded MT Bold». No external images, no motion, no shadows.</dd>
+      </div>
+    </dl>
+  </section>
+</div>
+</body>
+</html>
