@@ -34,10 +34,10 @@ on one sample theme.
 | I1 | Style samples: Dinosaurios on the Cartel layout at 390 px in three SVG illustration styles under `design/theme-illustrations/` | S1-S3 | worker | |
 | I2 | Owner picks a style (or a mix) | S2, S4 | owner | L3 |
 | I3a | Paper-cut illustration system: shared SVG primitives, per-theme contract, Dinosaurios, placement in the five layouts with fallback to today's motif strips, tests, browser check | S1-S4 | worker | `d945484` |
-| I3b | Paper-cut illustrations for the other 7 birthday themes | S1-S4 | worker | |
-| I3c | Paper-cut illustrations for the 8 baby shower themes | S1-S4 | worker | |
-| I3d | Paper-cut illustrations for the 6 themed baptism themes | S1-S4 | worker | |
-| I3e | Integration: all 22 themes in the browser at 390 px, docs, canvas handoff | S1-S4 | inline | |
+| I3b | Paper-cut illustrations for the other 7 birthday themes | S1-S4 | worker | `493acdf` |
+| I3c | Paper-cut illustrations for the 8 baby shower themes | S1-S4 | worker | `493acdf` |
+| I3d | Paper-cut illustrations for the 6 themed baptism themes | S1-S4 | worker | `493acdf` |
+| I3e | Integration: all 22 themes in the browser at 390 px, docs, canvas handoff | S1-S4 | worker | `493acdf` |
 
 ## Log
 
@@ -64,3 +64,14 @@ on one sample theme.
   and Biome pass. Browser: 16 runs at 390 and 1280 px with 0 overflow, 0 decoration over text, and 0 console
   errors; minimum contrast 5.14:1. Adding a theme takes one file plus one line in its occasion registry. I3b-I3d
   launched in parallel.
+- L5 — I3b-I3e done in `493acdf`. Workers `mwh954dn-p-r13d` (7 birthday), `mwh954jg-q-s8yj` (8 baby shower), and
+  `mwh954yq-r-5qst` (6 baptism) drew the remaining themes. Each worker stopped on the same shared-test assumption
+  (only dinosaurs illustrated); I3e (worker `mwhb7ko1-s-sl76`) resolved it. The registry test now requires exactly
+  the 22 catalog keys. The fallback is proven with an unregistered key per layout shape, plus a real layout with
+  one registry entry removed for a single render. The per-theme property block runs for all 22 themes. I3e also
+  added the missing baptism divider zone and refined six drawings (dove wing, lamb wool, star rays, safari leaves,
+  bunny carrots, blocks depth); it fixed a duplicate React key in woodland-friends found by the broadened suite.
+  Sizes: 9.0-24.9 KB per theme (dove-olive 24.9 KB is near the 25 KB budget). Checks: web 1030/1030, tsc, docs, Biome,
+  and `git diff --check` pass. Browser: 38 pages at 390 px plus 5 at 1280 px with 0 overflow, 0 decoration over
+  text, 0 console errors, and no text below 4.5:1. The parent reviewed the three contact sheets for the theme
+  guardrail and found no character, logo, or franchise element. Canvas handoff reported implemented.
