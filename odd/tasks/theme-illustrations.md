@@ -33,7 +33,7 @@ on one sample theme.
 | --- | --- | --- | --- | --- |
 | I1 | Style samples: Dinosaurios on the Cartel layout at 390 px in three SVG illustration styles under `design/theme-illustrations/` | S1-S3 | worker | |
 | I2 | Owner picks a style (or a mix) | S2, S4 | owner | L3 |
-| I3a | Paper-cut illustration system: shared SVG primitives, per-theme contract, Dinosaurios, placement in the five layouts with fallback to today's motif strips, tests, browser check | S1-S4 | worker | |
+| I3a | Paper-cut illustration system: shared SVG primitives, per-theme contract, Dinosaurios, placement in the five layouts with fallback to today's motif strips, tests, browser check | S1-S4 | worker | `d945484` |
 | I3b | Paper-cut illustrations for the other 7 birthday themes | S1-S4 | worker | |
 | I3c | Paper-cut illustrations for the 8 baby shower themes | S1-S4 | worker | |
 | I3d | Paper-cut illustrations for the 6 themed baptism themes | S1-S4 | worker | |
@@ -55,3 +55,12 @@ on one sample theme.
   and the owner chose 01 alone. Correction: there are 22 guest themes, not 28. I3 split into I3a (system,
   Dinosaurios, placement), I3b-I3d (themes per occasion, parallel workers after I3a), and I3e (integration). Canvas
   handoff reported `in_progress`.
+- L4 — I3a done in `d945484` (worker `mwh85o4n-o-n6ur`). The paper-cut system under
+  `app/_components/renderers/illustrations/` includes cut-sheet primitives with offset shadows, deterministic torn
+  edges, grain with per-render ids, and colors only from the `--inv-*` variables (`ThemePaint` type). It also
+  includes the per-theme contract {scene, divider, footer}, `DecorationZone`, and per-occasion registries. The
+  Dinosaurios drawing is 17.1 KB, with a redrawn volcano. All five layouts place it in decoration-only zones;
+  themes without a drawing keep their motif strip byte-identical, pinned in tests. Web: 915/915 tests; tsc, docs,
+  and Biome pass. Browser: 16 runs at 390 and 1280 px with 0 overflow, 0 decoration over text, and 0 console
+  errors; minimum contrast 5.14:1. Adding a theme takes one file plus one line in its occasion registry. I3b-I3d
+  launched in parallel.
