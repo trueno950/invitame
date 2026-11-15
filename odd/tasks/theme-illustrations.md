@@ -42,10 +42,10 @@ on one sample theme.
 | I3b | Paper-cut illustrations for the other 7 birthday themes | S1-S4 | worker | `493acdf` |
 | I3c | Paper-cut illustrations for the 8 baby shower themes | S1-S4 | worker | `493acdf` |
 | I3d | Paper-cut illustrations for the 6 themed baptism themes | S1-S4 | worker | `493acdf` |
-| I4a | Richer `baby-safari` and `teddy-honey` | S3, S5 | worker | |
-| I4b | Richer birthday scenes: dinosaurs, ice-kingdom, rescue-team, spider-hero | S3, S5 | worker | |
-| I4c | Richer birthday scenes: classic-mouse, under-the-sea, fairytale-princess, blocks-and-pixels | S3, S5 | worker | |
-| I4d | Integration: checks, browser review, new contact sheets | S5 | inline | |
+| I4a | Richer `baby-safari` and `teddy-honey` | S3, S5 | worker | `0d6315f` |
+| I4b | Richer birthday scenes: dinosaurs, ice-kingdom, rescue-team, spider-hero | S3, S5 | worker | `0d6315f` |
+| I4c | Richer birthday scenes: classic-mouse, under-the-sea, fairytale-princess, blocks-and-pixels | S3, S5 | worker | `0d6315f` |
+| I4d | Integration: checks, browser review, new contact sheets | S5 | inline | `0d6315f` |
 | I3e | Integration: all 22 themes in the browser at 390 px, docs, canvas handoff | S1-S4 | worker | `493acdf` |
 
 ## Log
@@ -87,3 +87,13 @@ on one sample theme.
 - L6 — Owner review (S5): improve baby-safari and the teddy bear, and make the birthday themes richer because they look
   too simple. The parent raised the markup budget to 40 KB (test constant and docs) and split the work into three
   parallel workers with disjoint theme files (I4a-I4c), then integration (I4d).
+- L7 — I4a-I4d done in `0d6315f` (workers `mwi82yyq-t-gl5s`, `mwi82yyt-u-sdtf`, and `mwi82yyt-v-hc60`). The ten scenes are
+  redrawn with at least three depth planes, framing on both sides, pattern fills, and story props. Baby safari adds
+  an acacia, a zebra foal, and detailed animals. The teddy bear has new anatomy, stitches, a hive, a pot with a
+  dipper, and a picnic blanket. Each of the eight birthday themes gains a story: the dinosaur nest and bunting, the
+  ice castle's lake and bridge, the fire station with an ambulance, the three-plane night city, the vintage party
+  table, the reef with a turtle and chest, the castle with a moat and path, and the deep pixel valley with a
+  waterfall. Sizes: 18-40 KB (classic-mouse 39.8 KB is 97% of the budget). Integrated checks: web 1030/1030, tsc,
+  docs, Biome, and `git diff --check` pass. Each worker checked its layouts at 390 px with 0 overflow, 0 decoration
+  over text, and 0 console errors. Not run: a 1280 px re-sweep for these ten themes. The parent reviewed the
+  before/after sheets for the theme guardrail.
