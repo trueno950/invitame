@@ -1,7 +1,7 @@
 # Theme illustrations — hand-built SVG
 
 Branch `feat/theme-illustrations` from `feat/invitation-features` at `618b95f`. Replace the geometric placeholder
-motifs of the 28 guest themes with richer original illustrations drawn as SVG code, after the owner approves a style
+motifs of the 22 guest themes (8 birthday, 8 baby shower, 6 baptism) with richer original illustrations drawn as SVG code, after the owner approves a style
 on one sample theme.
 
 ## Specs
@@ -15,14 +15,29 @@ on one sample theme.
 - S3 — Rules inherited from the catalog design track: original artwork only, never character artwork, logos, or
   protected names (ROADMAP theme guardrail); decoration never behind text; colors only from the theme's seven
   tokens; motion-free; WCAG AA for any text; mobile-first at 390 px.
+- S4 — Owner choice through the design canvas (L3), verbatim: "Implement the design artboard
+  design/theme-illustrations/01-papel-recortado.html" — «Paper cut-out», tradeoff: "Chunky, warm and instantly
+  readable at 390 px, and each theme becomes a physical diorama; the heaviest hand-drawing of the three, and a busy
+  scene needs a tall header". Handoff instruction: "Implement it in the project's real stack. Use the artboard as the
+  visual spec: map its parts to the project's existing components and styles, and do not copy the artboard HTML
+  verbatim." Parent decisions within S4 (L3; owner may overturn): every theme gets a header scene, a divider, and a
+  footer strip in the paper-cut technique (layered flat sheets, 3-4 px offset shadows, torn edges, subtle grain),
+  drawn as original SVG from the theme's seven colors; decoration stays in its own zones, never behind text; each
+  theme's illustration stays under about 25 KB; the illustrations replace today's motif strips in all five layouts,
+  so existing invitations change look (pre-launch, accepted); a theme without an illustration yet keeps its motif
+  strip.
 
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
 | I1 | Style samples: Dinosaurios on the Cartel layout at 390 px in three SVG illustration styles under `design/theme-illustrations/` | S1-S3 | worker | |
-| I2 | Owner picks a style (or a mix) | S2 | owner | |
-| I3 | Illustration contract and the 28 themes in the chosen style, wired into the five layouts, tests, browser check | S1-S3 | pending I2 | |
+| I2 | Owner picks a style (or a mix) | S2, S4 | owner | L3 |
+| I3a | Paper-cut illustration system: shared SVG primitives, per-theme contract, Dinosaurios, placement in the five layouts with fallback to today's motif strips, tests, browser check | S1-S4 | worker | |
+| I3b | Paper-cut illustrations for the other 7 birthday themes | S1-S4 | worker | |
+| I3c | Paper-cut illustrations for the 8 baby shower themes | S1-S4 | worker | |
+| I3d | Paper-cut illustrations for the 6 themed baptism themes | S1-S4 | worker | |
+| I3e | Integration: all 22 themes in the browser at 390 px, docs, canvas handoff | S1-S4 | inline | |
 
 ## Log
 
@@ -36,3 +51,7 @@ on one sample theme.
   5.85:1; illustration SVG 17.8, 19.3, and 21.2 KB. The worker recommends 01, or 01's header scene with 03's screens
   for dividers and footers. Costs: the header grows from 64 to about 200 px; estimated 5-8 h per theme for
   paper-cut, less for riso. Waiting for the owner's choice (I2).
+- L3 — Owner chose `01-papel-recortado.html` through the canvas handoff (S4); the parent recommended the mix 01 + 03,
+  and the owner chose 01 alone. Correction: there are 22 guest themes, not 28. I3 split into I3a (system,
+  Dinosaurios, placement), I3b-I3d (themes per occasion, parallel workers after I3a), and I3e (integration). Canvas
+  handoff reported `in_progress`.
