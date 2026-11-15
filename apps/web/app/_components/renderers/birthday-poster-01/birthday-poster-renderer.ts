@@ -14,6 +14,7 @@ import { BIRTHDAY_THEME } from "../../../../lib/renderers/birthday-themes.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { Motif } from "../birthday/motif.ts";
 import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthday/theme.ts";
+import { DecorationZone } from "../illustrations/decoration.ts";
 
 /*
  * The `birthday-poster-01` invitation — «Cartel de fiesta» (T6b; S2, S7, S8), following
@@ -21,6 +22,10 @@ import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthd
  * polaroid of the celebrant overlapping it, the details as an admission ticket with a time stub, and the
  * message as a speech bubble. A server component with no client script: `.ts` + `createElement` because
  * `node --test` strips types but does not compile JSX.
+ *
+ * Decoration (I3a; S4): the accent band opens with the theme's paper-cut diorama, a torn strip separates the
+ * message from what precedes it, and a footer strip closes the page; a theme without an illustration keeps the
+ * motif strip this layout drew before, in the band's empty top row.
  */
 
 export interface BirthdayPosterRendererProps {
@@ -90,16 +95,17 @@ export function BirthdayPosterRenderer({
         style: { borderRadius: "0 0 50% 50% / 0 0 2.25rem 2.25rem" },
       },
       // The band's motif is its own row above the hero text: the band's bottom is covered by the polaroid,
-      // and an overlay would put decoration behind the name.
-      h(
-        "div",
-        {
-          "aria-hidden": "true",
-          "data-decoration": "",
+      // and an overlay would put decoration behind the name. The theme illustration takes that row as a
+      // full-width diorama on the band's accent, exactly as the artboard draws it.
+      h(DecorationZone, {
+        theme: themeKey,
+        part: "scene",
+        illustrationClassName: "pointer-events-none block",
+        fallback: {
+          node: h(Motif, { motif: theme.motif, tone: "accent" }),
           className: "pointer-events-none flex h-16 justify-center px-6 pt-4",
         },
-        h(Motif, { motif: theme.motif, tone: "accent" }),
-      ),
+      }),
       h(
         "section",
         {
@@ -247,6 +253,11 @@ export function BirthdayPosterRenderer({
         ),
       ),
       featuresBlock,
+      h(DecorationZone, {
+        theme: themeKey,
+        part: "divider",
+        illustrationClassName: "pointer-events-none -mx-5 block",
+      }),
       h(
         "section",
         { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
@@ -278,5 +289,10 @@ export function BirthdayPosterRenderer({
         ),
       ),
     ),
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "footer",
+      illustrationClassName: "pointer-events-none block",
+    }),
   );
 }

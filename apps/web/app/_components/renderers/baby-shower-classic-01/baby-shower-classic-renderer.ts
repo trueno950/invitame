@@ -8,14 +8,9 @@ import {
 import { BABY_SHOWER_THEME } from "../../../../lib/renderers/baby-shower-themes.ts";
 import { formatLongDate } from "../../../../lib/renderers/invitation-fields.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
+import { DecorationZone } from "../illustrations/decoration.ts";
 import { CelebrationMotif } from "../themed/celebration-motif.ts";
-import {
-  BACKGROUND_LAYER,
-  DECORATION_STRIP,
-  INVITATION_ROOT,
-  themeStyle,
-  titleStyle,
-} from "../themed/theme.ts";
+import { BACKGROUND_LAYER, INVITATION_ROOT, themeStyle, titleStyle } from "../themed/theme.ts";
 
 /*
  * The `baby-shower-classic-01` invitation — «Clásica» (T7c; S13), following the full-page form of
@@ -25,6 +20,10 @@ import {
  * `node --test` strips types but does not compile JSX. Every color comes from the theme through CSS
  * variables on the root, and every title uses the theme's display font at the single weight it is loaded
  * with, never a synthetic bold.
+ *
+ * Decoration (I3a; S4): the theme opens the page as a paper-cut diorama above the band, cuts a torn strip
+ * before the message, and closes it with a footer strip; a theme without an illustration keeps the motif
+ * strip this layout drew before, in the same place.
  */
 
 export interface BabyShowerClassicRendererProps {
@@ -105,16 +104,17 @@ export function BabyShowerClassicRenderer({
       "data-invitation-background": "",
       className: BACKGROUND_LAYER,
     }),
-    // The motif is decoration: it sits in its own strip above the band, where no text can fall on it.
-    h(
-      "div",
-      {
-        "aria-hidden": "true",
-        "data-decoration": "",
-        className: DECORATION_STRIP,
+    // The motif is decoration: it sits in its own strip above the band, where no text can fall on it. The
+    // theme illustration takes that place as a full-width diorama.
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "scene",
+      illustrationClassName: "pointer-events-none block",
+      fallback: {
+        node: h(CelebrationMotif, { motif: theme.motif, tone: "paper" }),
+        className: "pointer-events-none flex h-20 justify-center",
       },
-      h(CelebrationMotif, { motif: theme.motif, tone: "paper" }),
-    ),
+    }),
     h(
       "section",
       {
@@ -206,6 +206,11 @@ export function BabyShowerClassicRenderer({
             ),
           ),
         ),
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "divider",
+      illustrationClassName: "pointer-events-none -mx-5 block",
+    }),
     h(
       "section",
       { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
@@ -231,5 +236,10 @@ export function BabyShowerClassicRenderer({
         data.rsvpContact,
       ),
     ),
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "footer",
+      illustrationClassName: "pointer-events-none -mx-5 -mb-6 block",
+    }),
   );
 }

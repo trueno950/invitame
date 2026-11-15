@@ -14,6 +14,7 @@ import { BIRTHDAY_THEME } from "../../../../lib/renderers/birthday-themes.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { Motif } from "../birthday/motif.ts";
 import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthday/theme.ts";
+import { DecorationZone } from "../illustrations/decoration.ts";
 
 /*
  * The `birthday-map-01` invitation — «Mapa de aventura» (T6b; S2, S7, S8), following
@@ -21,6 +22,10 @@ import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthd
  * is the destination, «La ruta de la fiesta» as numbered stops, and the message as the treasure at the end of
  * the trail. A server component with no client script: `.ts` + `createElement` because `node --test` strips
  * types but does not compile JSX. Every color comes from the theme through CSS variables on the root.
+ *
+ * Decoration (I3a; S4): the theme opens the page as a paper-cut diorama above the hero, cuts a torn strip
+ * between the route and what follows, and closes it with a footer strip; a theme without an illustration keeps
+ * the motif strip this layout drew before, in the same place.
  */
 
 export interface BirthdayMapRendererProps {
@@ -181,16 +186,17 @@ export function BirthdayMapRenderer({
       "data-invitation-background": "",
       className: "pointer-events-none fixed inset-0 -z-10 bg-(--inv-background)",
     }),
-    // The motif is decoration: it sits in its own strip above the hero, where no text can fall on it.
-    h(
-      "div",
-      {
-        "aria-hidden": "true",
-        "data-decoration": "",
+    // The motif is decoration: it sits in its own strip above the hero, where no text can fall on it. The
+    // theme illustration takes that place as a full-bleed diorama, bled over the article's own padding.
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "scene",
+      illustrationClassName: "pointer-events-none -mx-5 -mt-7 block",
+      fallback: {
+        node: h(Motif, { motif: theme.motif, tone: "paper" }),
         className: "pointer-events-none flex h-24 justify-center",
       },
-      h(Motif, { motif: theme.motif, tone: "paper" }),
-    ),
+    }),
     h(
       "section",
       {
@@ -288,6 +294,11 @@ export function BirthdayMapRenderer({
       ),
     ),
     featuresBlock,
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "divider",
+      illustrationClassName: "pointer-events-none -mx-5 block",
+    }),
     h(
       "section",
       { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
@@ -326,5 +337,10 @@ export function BirthdayMapRenderer({
         ),
       ),
     ),
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "footer",
+      illustrationClassName: "pointer-events-none -mx-5 block",
+    }),
   );
 }

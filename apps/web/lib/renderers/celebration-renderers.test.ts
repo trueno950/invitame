@@ -8,6 +8,7 @@ import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BabyShowerClassicRenderer } from "../../app/_components/renderers/baby-shower-classic-01/baby-shower-classic-renderer.ts";
 import { BaptismClassicRenderer } from "../../app/_components/renderers/baptism-classic-01/baptism-classic-renderer.ts";
+import { themeIllustration } from "../../app/_components/renderers/illustrations/registry.ts";
 import { CelebrationMotif } from "../../app/_components/renderers/themed/celebration-motif.ts";
 import { THEME_VARIABLES } from "../../app/_components/renderers/themed/theme.ts";
 import { BABY_SHOWER_THEME, BABY_SHOWER_THEMES } from "./baby-shower-themes.ts";
@@ -256,14 +257,18 @@ describe("celebration layouts", () => {
       }
     });
 
-    it(`${layout.key} draws a decorative motif that carries no meaning`, () => {
+    it(`${layout.key} draws a decorative motif or illustration that carries no meaning`, () => {
       for (const theme of layout.themes) {
         const html = render(layout, theme);
 
+        // A theme with a paper-cut illustration draws that instead of its motif strip (I3a; S4); either way
+        // the decoration is one `aria-hidden` SVG.
         assert.match(
           html,
-          /<svg[^>]*aria-hidden="true"[^>]*data-motif="[a-z-]+"/,
-          `${theme} motif is hidden from assistive technology`,
+          themeIllustration(theme) === undefined
+            ? /<svg[^>]*aria-hidden="true"[^>]*data-motif="[a-z-]+"/
+            : /<svg[^>]*aria-hidden="true"[^>]*data-illustration="scene"/,
+          `${theme} decoration is hidden from assistive technology`,
         );
       }
     });
@@ -436,26 +441,46 @@ describe("celebration layout defects pinned before the browser check", () => {
       }
     });
 
-    it(`${layout.key} never distorts a motif`, () => {
+    it(`${layout.key} never distorts its decoration`, () => {
       for (const theme of layout.themes) {
-        const motif = tagWith(render(layout, theme), "data-motif");
+        const html = render(layout, theme);
+        const illustrations = [...html.matchAll(/<svg[^>]*data-illustration="[a-z]+"[^>]*>/g)].map(
+          (match) => match[0],
+        );
+        const decorations =
+          illustrations.length > 0 ? illustrations : [tagWith(html, "data-motif")];
 
-        assert.match(motif, /preserveAspectRatio="xMidYMid meet"/, `${theme} keeps its aspect`);
-        assert.doesNotMatch(motif, /preserveAspectRatio="none"/, `${theme} is not stretched`);
+        for (const decoration of decorations) {
+          assert.match(
+            decoration,
+            /preserveAspectRatio="xMidYMid (?:meet|slice)"/,
+            `${theme} decoration keeps its aspect`,
+          );
+          assert.doesNotMatch(
+            decoration,
+            /preserveAspectRatio="none"/,
+            `${theme} decoration is not stretched`,
+          );
+        }
       }
     });
 
-    it(`${layout.key} keeps its motif out of the text sections`, () => {
+    it(`${layout.key} keeps every decoration zone out of the text sections`, () => {
       for (const theme of layout.themes) {
         const html = render(layout, theme);
-        const index = html.indexOf("data-decoration");
+        const zones = [...html.matchAll(/<div[^>]*data-decoration[^>]*>[\s\S]*?<\/div>/g)];
 
-        assert.ok(index >= 0, `${theme} decoration strip`);
-        for (const [start, end] of sectionRanges(html)) {
-          assert.ok(
-            index < start || index >= end,
-            `${theme} decoration sits outside the section at ${start}`,
-          );
+        assert.ok(zones.length >= 1, `${theme} decoration zones`);
+        for (const zone of zones) {
+          const index = zone.index ?? 0;
+
+          for (const [start, end] of sectionRanges(html)) {
+            assert.ok(
+              index < start || index >= end,
+              `${theme} decoration sits outside the section at ${start}`,
+            );
+          }
+          assert.equal(textOf(zone[0]), "", `${theme} decoration carries no text`);
         }
         assert.equal(textOf(decorationBlock(html)), "", `${theme} decoration carries no text`);
       }

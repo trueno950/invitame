@@ -254,7 +254,7 @@ and `TemplateVersion`.
 | `rescue-team` | Equipo de rescate | Luckiest Guy | Huellas y estrellas |
 | `spider-hero` | Héroe arácnido | Bangers | Telarañas |
 | `classic-mouse` | Ratón clásico | Chewy | Lunares |
-| `dinosaurs` | Dinosaurios | Lilita One | Montañas y huevos |
+| `dinosaurs` | Dinosaurios | Lilita One | Montañas y huevos — paper-cut illustration |
 | `under-the-sea` | Bajo el mar | Pacifico | Burbujas y olas |
 | `fairytale-princess` | Princesa de cuento | Great Vibes | Coronas y estrellas |
 | `blocks-and-pixels` | Bloques y píxeles | Press Start 2P | Bloques |
@@ -262,7 +262,8 @@ and `TemplateVersion`.
 - Guardrail (S5): a palette may be inspired by a popular character or brand and a font may be the official one only
   when its license allows commercial use. No theme carries character artwork, a logo, or a protected name — not in
   its key, its catalog name, or its marketing. The motifs are original shapes drawn in
-  `app/_components/renderers/birthday/motif.ts`.
+  `app/_components/renderers/birthday/motif.ts`; the paper-cut illustrations below are original drawings too, and
+  the dinosaur is a generic long-necked friend, never character artwork.
 - Configuration: exactly `{ "componentKey": <layout key>, "theme": <theme key> }`, both required; an extra key,
   another layout's key, an unknown theme, and a wrongly typed value are refused by the API before publication and by
   the web parser again (`lib/renderers/birthday-themes.ts`), so a drifted snapshot never renders. The content is the
@@ -283,10 +284,48 @@ and `TemplateVersion`.
   behind the invitation's content and above the site's paper wash, and it covers the whole viewport on a long page.
 - Rendering: server components with no client script, mobile-first at 390 px, a real `<img>` for `mainPhoto` with its
   alt text, and headings tied to their sections.
-- Motifs: the theme motif is decoration, so it never sits under text. Each layout puts it in its own fixed-height
-  strip at an edge — above the map hero, in the poster band's empty bottom area, and at the foot of the story's page
-  sheet — with `preserveAspectRatio="xMidYMid meet"`, so the shapes keep their proportions in any box instead of
-  stretching to it. Every motif is one `aria-hidden` SVG, and its element groups carry unique React keys.
+- Decoration (T6b, T7c, I3a; S4, S5): the theme motif or illustration is decoration, so it never sits under text.
+  Each layout puts it in its own zone — a `div` marked `data-decoration` and `aria-hidden`, outside every
+  `data-section` — and a layout has up to three of them: the header scene, a strip between sections, and a footer
+  strip. Zones hold `preserveAspectRatio="xMidYMid meet"` (motif, divider, footer) or `slice` (header scene), so
+  shapes keep their proportions in any box instead of stretching. Every motif's element groups carry unique React
+  keys. `DecorationZone` (`app/_components/renderers/illustrations/decoration.ts`) is the only place a layout draws
+  decoration, so the rule is written once.
+
+## Paper-cut theme illustrations
+
+Status: **current** (I3a; S1-S4). The owner chose the «Papel recortado» artboard,
+`design/theme-illustrations/01-papel-recortado.html`, from the three hand-built SVG samples (L3) and asked for the
+real stack to implement it. A theme with an illustration replaces its motif strip in all five themed layouts, so
+existing invitations change look (pre-launch, accepted); a theme without one keeps exactly the motif strip it drew
+before, byte for byte, which `theme-illustrations.test.ts` compares against the motif component rendered in the same
+test.
+
+- Shape of an illustration (`app/_components/renderers/illustrations/types.ts`): `ThemeIllustration` names the theme
+  key and three `IllustrationDrawing` parts — `scene` (header diorama, `390 × 200`, `xMidYMid slice`), `divider`
+  (`390 × 56`, `meet`), and `footer` (`390 × 62`, `meet`). Each part gives its `viewBox` and a `draw(id)` function;
+  `id(name)` answers an id unique to that render, so two invitations on one page never share a `<filter>`, a
+  `<clipPath>`, or a reusable sheet (`frame.ts` owns the `aria-hidden` SVG and the `useId` prefix).
+- Shared primitives (`primitives.ts`), the technique the artboard documents: `cutSheets` draws every element as its
+  own cut sheet — a 3–4 px offset ink shadow, the fill, and an optional white cut hairline — from shapes defined once
+  in `<defs>`; `tornEdge` draws the irregular torn line with notches of different depth; `grain` multiplies one
+  `feTurbulence` over the scene; `THEME_PAINTS` is the only palette a drawing can name, the eight theme variables.
+  Tints are `opacity` on a theme color, never a color of their own.
+- Registry (`illustrations/registry.ts`): an allow-listed map keyed by theme key, with one file per occasion so three
+  workers can add themes without touching each other — `registry-birthday.ts`, `registry-baby-shower.ts`,
+  `registry-baptism.ts`. Adding a theme is one drawing file `<theme-key>.ts` next to the registry plus one line in its
+  occasion's registry; the occurrence test fails if a theme drawing is not registered, or a registered theme has no
+  file. `themeIllustration` answers `undefined` for a theme without a drawing (including `constructor` and
+  `__proto__`, through `Object.hasOwn`), and the layout then keeps its motif strip.
+- Budget: one theme's three parts stay under 25 KB of markup (the Dinosaurios set is about 17 KB), checked by the test
+  suite per theme, so a heavy drawing cannot creep into every guest page.
+- Placement in the five layouts, chosen per layout from the Cartel artboard: `birthday-poster-01` opens its accent
+  band with the scene and bleeds the divider and the footer full width; `birthday-map-01` bleeds the scene over the
+  top of the page and keeps the strips in the column; `birthday-story-01` opens the page sheet with the scene,
+  clipped to the sheet's rounded top, and closes it with the footer; `baby-shower-classic-01` and
+  `baptism-classic-01` put the scene in the strip above the accent band and the divider before the message.
+- Current coverage: `dinosaurs` is drawn (I3a). I3b–I3d add the other seven birthday themes and the baby shower and
+  baptism themes; until then those themes keep their motif strip.
 - Choosing (T9, T10b; S9, S10): the owner of a new invitation picks the design, then the theme, then the package,
   one step at a time, following `design/template-chooser-v2/02-paso-a-paso-escritorio.html` and its
   narrow-screen artboard. Each step is a server URL of the same page with no client script:
