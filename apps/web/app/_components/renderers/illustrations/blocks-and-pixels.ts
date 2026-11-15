@@ -11,16 +11,17 @@ import {
 import type { IllustrationId, ThemeIllustration } from "./types.ts";
 
 /*
- * «Bloques y píxeles» in paper cut-out (I3b; S1-S4), after the technique of `dinosaurs.ts` and the owner's
- * artboard `design/theme-illustrations/01-papel-recortado.html`: the paper-cut technique drawn on a square grid
- * for the header — a band of sky with clouds made of squares, three ranges of stepped hills, square trees, and
- * gems standing on the ground — a torn divider that carries a stepped band, a tree and a gem between two
- * sections, and a footer strip of ground, gems and trees.
+ * «Bloques y píxeles» in paper cut-out (I3b, I4c; S1-S5), after the technique of `dinosaurs.ts` and the owner's
+ * artboard `design/theme-illustrations/01-papel-recortado.html`. The owner asked for richer birthday scenes
+ * (S5, L6), so the header is now a pixel valley in three depth planes on a six-pixel grid: a square sun with
+ * stepped rays and three floating clouds, three stepped mountain ranges with lit top rows, a pixel waterfall
+ * that leaves a ledge of the middle range and a river that winds through the valley to the frame, a small cave
+ * with its gems, four kinds of square tree, pixel flowers, and a foreground of terraced hills on both sides.
+ * Every shape is cut on the same grid, so the drawing is one landscape and not a set of stamps.
  *
- * Original work: this is a voxel landscape of our own — stepped terraces, square-topped trees and cut gems. No
- * block here has a face, no dirt-and-grass block texture is drawn, and no character, icon, or name of any game
- * franchise appears. Every color is a theme variable of `blocks-and-pixels`, so the whole drawing re-colours
- * with its palette; tints are `opacity` on a theme color and nothing else.
+ * Original work: this is a voxel landscape of our own. No block has a face, no grass block is drawn as a brown
+ * cube under a green band, and no character, icon, or name of any game franchise appears. Every color is a theme
+ * variable of `blocks-and-pixels`, so the whole drawing re-colours with its palette.
  */
 
 const h = createElement;
@@ -30,6 +31,9 @@ const SCENE_HEIGHT = 200;
 const DIVIDER_HEIGHT = 56;
 const FOOTER_HEIGHT = 62;
 
+/** The drawing grid: every edge of every shape lands on a multiple of it. */
+const UNIT = 6;
+
 /** One placed stamp of a reusable shape: where it sits, how far it turns, how big it is. */
 interface Place {
   readonly x: number;
@@ -38,350 +42,786 @@ interface Place {
   readonly scale: number;
 }
 
-/** The sky: one flat block of it, cut square at both ends like everything else here. */
-const SKY = "M-8 12H396V96H-8Z";
+/** One peak of a stepped mountain range: its middle, its height, and how wide it spreads. */
+interface Peak {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+}
 
-/** Two clouds, each a stack of squares the size of the grid. */
-const CLOUD_NEAR = "M56 52H80V44H104V52H120V68H56ZM64 68H112V76H64Z";
-const CLOUD_FAR = "M248 34H268V26H292V34H304V46H248ZM256 46H296V54H256Z";
+/** One column of a stepped silhouette: where it starts and how high it is. */
+interface Column {
+  readonly x: number;
+  readonly top: number;
+}
 
-/** The four ranges of stepped hills: the deepened ridge behind, pale behind it, green in the middle, ground in front. */
-const HILLS_DEEP =
-  "M-8 148V120H20V112H52V106H84V112H116V106H148V112H180V106H212V112H244V106H276V112H308V106H340V112H372V120H396V148Z";
+/** The grid columns of a silhouette, each one quantized to the drawing grid. */
+function columns(peaks: readonly Peak[], base: number): Column[] {
+  const list: Column[] = [];
 
-const HILLS_BACK =
-  "M-8 140V132H24V124H56V116H88V124H120V116H152V124H184V132H216V124H248V116H280V124H312V132H344V124H376V132H396V140Z";
+  for (let x = -UNIT; x <= SCENE_WIDTH + UNIT; x += UNIT) {
+    let top = base;
 
-const HILLS_MID =
-  "M-8 200V164H32V156H72V148H112V156H152V148H192V156H232V164H272V156H312V148H352V156H396V200Z";
+    for (const peak of peaks) {
+      const reach = Math.abs(x - peak.x);
+      if (reach > peak.width) {
+        continue;
+      }
+      const rise = Math.round(((base - peak.y) * (peak.width - reach)) / peak.width);
+      top = Math.min(top, Math.round((base - rise) / UNIT) * UNIT);
+    }
+    list.push({ x, top });
+  }
+  return list;
+}
 
-/** The lit top of each terrace: the light that makes a stepped hill read as paper and not as a bar. */
-const TERRACE_LIGHT =
-  "M-8 132H24V124H56V116H88V124H120V116H152V124H184V132H216V124H248V116H280V124H312V132H344V124H376V132H396V134H-8Z";
+/** The staircase of a mountain range: one vertical face and one flat top per column. */
+function rangePath(peaks: readonly Peak[], base: number): string {
+  const list = columns(peaks, base);
+  let d = `M${list[0]?.x ?? -UNIT} ${base}`;
 
-/** Trees: a trunk of two blocks and a canopy of three, its top face the palest of the papers. */
-const TREE_TRUNK = "M-4 0H4V18H-4Z";
-const TREE_CANOPY = "M-14-30H14V-2H-14ZM-6-38H6V-30H-6Z";
-const TREE_CANOPY_TOP = "M-14-30H14V-24H-14ZM-6-38H6V-33H-6Z";
+  for (const column of list) {
+    d += `V${column.top}H${column.x + UNIT}`;
+  }
+  return `${d}V${base}Z`;
+}
 
-/** A gem: the diamond, its lit facet, and the sparkle that comes off its corner. */
-const GEM = "M0-11L9 0L0 11L-9 0Z";
-const GEM_FACET = "M0-11L9 0L0 0Z";
-const GEM_SPARK = "M0-4L1-1L4 0L1 1L0 4L-1 1L-4 0L-1-1Z";
+/** The lit top row of a range, cut as one strip of blocks, the stepped shading of the light. */
+function rangeLight(peaks: readonly Peak[], base: number): string {
+  return columns(peaks, base)
+    .filter((column) => column.top < base)
+    .map((column) => `M${column.x} ${column.top}h${UNIT}v${UNIT}h-${UNIT}Z`)
+    .join("");
+}
 
-const TREES: readonly Place[] = [
-  { x: 88, y: 152, rotate: 0, scale: 1 },
-  { x: 330, y: 154, rotate: 0, scale: 0.82 },
+/** The four square trees of the valley: a column of blocks on a block trunk. */
+type TreeKind = "tall" | "round" | "small" | "pine";
+
+/** One row of a canopy, from the left edge to the right one, at a height above the base. */
+function row(x: number, y: number, height: number): string {
+  return `M${x} ${y}h${height}v${UNIT}h-${height}Z`;
+}
+
+/** The trunk of a tree: one block wide, and as tall as its kind. */
+function trunkPath(kind: TreeKind, x: number, y: number): string {
+  const height = kind === "small" ? UNIT : UNIT * 2;
+  return row(x - UNIT / 2, y - height, UNIT).replace(`h${UNIT}v${UNIT}`, `h${UNIT}v${height}`);
+}
+
+/** The canopy of a tree: one block wider at every row, and the block that crowns it. */
+function canopyPath(kind: TreeKind, x: number, y: number): string {
+  if (kind === "tall") {
+    return row(x - UNIT * 2, y - UNIT * 5, UNIT * 4) + row(x - UNIT, y - UNIT * 6, UNIT * 2);
+  }
+  if (kind === "round") {
+    return row(x - UNIT * 2, y - UNIT * 4, UNIT * 4) + row(x - UNIT, y - UNIT * 5, UNIT * 2);
+  }
+  if (kind === "pine") {
+    return (
+      row(x - UNIT * 2, y - UNIT * 2, UNIT * 4) +
+      row(x - UNIT * 1.5, y - UNIT * 3, UNIT * 3) +
+      row(x - UNIT, y - UNIT * 4, UNIT * 2) +
+      row(x - UNIT / 2, y - UNIT * 5, UNIT)
+    );
+  }
+  return row(x - UNIT, y - UNIT * 3, UNIT * 2) + row(x - UNIT / 2, y - UNIT * 4, UNIT);
+}
+
+/** The lit block of the canopy: the paper's light falls on its top left corner. */
+function canopyLight(kind: TreeKind, x: number, y: number): string {
+  if (kind === "tall") {
+    return row(x - UNIT * 2, y - UNIT * 5, UNIT * 2);
+  }
+  if (kind === "round") {
+    return row(x - UNIT * 2, y - UNIT * 4, UNIT * 1.5);
+  }
+  if (kind === "pine") {
+    return row(x - UNIT * 1.5, y - UNIT * 3, UNIT);
+  }
+  return row(x - UNIT, y - UNIT * 3, UNIT);
+}
+
+/** The stem of a pixel flower: two blocks standing on the ground. */
+function stemPath(x: number, y: number): string {
+  return `M${x - UNIT / 2} ${y - UNIT * 2}h${UNIT}v${UNIT * 2}h-${UNIT}Z`;
+}
+
+/** The head of a pixel flower: a plus of five blocks, in the color of its stamp. */
+function headPath(x: number, y: number): string {
+  return (
+    `M${x - UNIT / 2} ${y - UNIT * 4.5}h${UNIT}v-${UNIT}h${UNIT}v-${UNIT}h${UNIT}v${UNIT}h${UNIT}v${UNIT}h-${UNIT}` +
+    `v${UNIT}h-${UNIT}v${UNIT}h-${UNIT}Z`
+  );
+}
+
+/** A gem: the diamond of four stepped faces, and the sparkle above it. */
+function gemPath(x: number, y: number): string {
+  return `M${x} ${y - UNIT * 2}l${UNIT} ${UNIT}-${UNIT} ${UNIT}-${UNIT}-${UNIT}Z`;
+}
+
+/** The three ranges of the valley, the pool, and the river that runs out of it. */
+const RANGE_FAR: readonly Peak[] = [
+  { x: 34, y: 78, width: 52 },
+  { x: 126, y: 66, width: 58 },
+  { x: 228, y: 84, width: 46 },
+  { x: 300, y: 66, width: 52 },
+  { x: 372, y: 90, width: 40 },
 ];
 
+const RANGE_MID: readonly Peak[] = [
+  { x: 24, y: 108, width: 44 },
+  { x: 106, y: 90, width: 52 },
+  { x: 200, y: 102, width: 40 },
+  { x: 288, y: 88, width: 52 },
+  { x: 372, y: 104, width: 40 },
+];
+
+const HILL_LEFT: readonly Peak[] = [
+  { x: -6, y: 130, width: 50 },
+  { x: 76, y: 142, width: 52 },
+];
+
+const HILL_RIGHT: readonly Peak[] = [
+  { x: 310, y: 128, width: 54 },
+  { x: 392, y: 140, width: 52 },
+];
+
+/** The waterfall leaves the middle range at this ledge, and falls into the pool below it. */
+const FALL_X = 192;
+const FALL_TOP = 120;
+const FALL_BOTTOM = 158;
+
+const POOL = "M162 158H246V176H162Z";
+const RIVER = "M168 176H232V184H240V192H252V200H212V192H204V184H186V176Z";
+const RIVER_LIGHT =
+  "M186 164H228V170H186ZM192 178H222V182H192ZM212 186H228V190H212ZM220 194H240V198H220Z";
+
+const SUN = "M312 18H330V36H312Z";
+const SUN_RAYS =
+  "M318 6H324V12H318ZM318 42H324V48H318ZM300 24H306V30H300ZM336 24H342V30H336Z" +
+  "M306 12H312V18H306ZM330 42H336V48H330ZM306 42H312V48H306ZM330 12H336V18H330Z";
+
+const CLOUDS: readonly Place[] = [
+  { x: 54, y: 26, rotate: 0, scale: 1 },
+  { x: 180, y: 40, rotate: 0, scale: 0.8 },
+  { x: 246, y: 20, rotate: 0, scale: 0.6 },
+];
+
+/** The gems: two inside the cave, two on the terraces and one on the river bank. */
 const GEMS: readonly Place[] = [
-  { x: 128, y: 178, rotate: 0, scale: 0.85 },
-  { x: 212, y: 192, rotate: 0, scale: 1.1 },
-  { x: 262, y: 180, rotate: 0, scale: 0.7 },
-  { x: 356, y: 190, rotate: 0, scale: 0.9 },
+  { x: 46, y: 172, rotate: 0, scale: 0.8 },
+  { x: 66, y: 168, rotate: 0, scale: 0.6 },
+  { x: 118, y: 168, rotate: 0, scale: 0.9 },
+  { x: 282, y: 172, rotate: 0, scale: 0.85 },
+  { x: 330, y: 164, rotate: 0, scale: 0.7 },
 ];
 
-/** The gem stamp: the diamond, its lit facet, and the sparkle above it. */
-function gemDefinition(id: IllustrationId): ReactElement {
+const FLOWERS: readonly Place[] = [
+  { x: 92, y: 166, rotate: 0, scale: 1 },
+  { x: 136, y: 178, rotate: 0, scale: 0.9 },
+  { x: 270, y: 162, rotate: 0, scale: 1 },
+  { x: 302, y: 178, rotate: 0, scale: 0.85 },
+  { x: 364, y: 168, rotate: 0, scale: 0.95 },
+];
+
+/** The trees: a tall one and a round one on the left hill, a pine and a round one on the right. */
+const TREES: readonly { readonly kind: TreeKind; readonly place: Place }[] = [
+  { kind: "tall", place: { x: 34, y: 152, rotate: 0, scale: 1.5 } },
+  { kind: "round", place: { x: 76, y: 158, rotate: 0, scale: 1.4 } },
+  { kind: "small", place: { x: 106, y: 176, rotate: 0, scale: 1.2 } },
+  { kind: "pine", place: { x: 298, y: 154, rotate: 0, scale: 1.5 } },
+  { kind: "round", place: { x: 340, y: 158, rotate: 0, scale: 1.35 } },
+  { kind: "small", place: { x: 366, y: 174, rotate: 0, scale: 1.2 } },
+];
+
+/** The gem stamp, the flower stamp and the tree stamps, each cut once and placed many times. */
+function stampDefinitions(id: IllustrationId): ReactElement {
   return h(
     "defs",
-    { key: "gem-definition" },
+    { key: "stamp-definitions" },
     h(
       "g",
-      { id: id("gem") },
-      h("path", { key: "stone", d: GEM }),
+      { key: "gem", id: id("gem") },
+      h("path", { key: "stone", d: gemPath(0, 0) }),
       h("path", {
         key: "facet",
-        d: GEM_FACET,
+        d: "M0-10L4-6L0-2L-4-6Z",
         fill: "var(--inv-surface)",
-        opacity: 0.5,
+        opacity: 0.55,
       }),
-      h("path", {
+      h("rect", {
         key: "spark",
-        d: GEM_SPARK,
+        x: -1.5,
+        y: -18,
+        width: 3,
+        height: 6,
         fill: "var(--inv-surface)",
-        opacity: 0.85,
-        transform: "translate(0 -17)",
+        opacity: 0.8,
       }),
     ),
-  );
-}
-
-/** The tree stamp: the trunk, the canopy, and the paler face of the canopy. */
-function treeDefinition(id: IllustrationId): ReactElement {
-  return h(
-    "defs",
-    { key: "tree-definition" },
     h(
       "g",
-      { id: id("tree") },
-      h("path", { key: "trunk", d: TREE_TRUNK, fill: "var(--inv-decoration-one)" }),
-      h("path", { key: "canopy", d: TREE_CANOPY, fill: "var(--inv-accent)" }),
-      h("path", {
-        key: "canopy-top",
-        d: TREE_CANOPY_TOP,
-        fill: "var(--inv-soft)",
-        opacity: 0.6,
+      { key: "flower", id: id("flower") },
+      h("path", { key: "stem", d: stemPath(0, 0), fill: "var(--inv-accent)" }),
+      h("path", { key: "head", d: headPath(0, 0) }),
+      h("rect", {
+        key: "heart",
+        x: -3,
+        y: -21,
+        width: 6,
+        height: 6,
+        fill: "var(--inv-decoration-one)",
       }),
+    ),
+    ...(["tall", "round", "small", "pine"] as const).map((kind) =>
+      h(
+        "g",
+        { key: `tree-${kind}`, id: id(`tree-${kind}`) },
+        h("path", { key: "trunk", d: trunkPath(kind, 0, 0), fill: "var(--inv-decoration-one)" }),
+        h("path", { key: "canopy", d: canopyPath(kind, 0, 0) }),
+        h("path", {
+          key: "light",
+          d: canopyLight(kind, 0, 0),
+          fill: "var(--inv-surface)",
+          opacity: 0.45,
+        }),
+        h("path", {
+          key: "shade",
+          d: canopyPath(kind, 0, 0),
+          fill: "var(--inv-ink)",
+          opacity: 0.14,
+          transform: `translate(${UNIT} ${UNIT})`,
+        }),
+      ),
     ),
   );
 }
 
-/** Gems standing on the ground, each one a little off true so the row is not a ruler. */
-function gems(
+/** One stamp, placed many times in one array: the keys are the array's own indexes. */
+function stamps(
   key: string,
   id: IllustrationId,
+  name: string,
   places: readonly Place[],
   paint: ThemePaint,
-  opacity: number,
+  opacity = 1,
 ): ReactElement {
   return h(
     "g",
     { key, fill: paint, opacity },
-    places.map((place) =>
+    places.map((item, index) =>
       h("use", {
-        key: `${key}-${place.x}-${place.y}`,
-        href: `#${id("gem")}`,
-        transform: `translate(${place.x} ${place.y}) rotate(${place.rotate}) scale(${place.scale})`,
+        key: `${key}-${index}`,
+        href: `#${id(name)}`,
+        transform: `translate(${item.x} ${item.y}) scale(${item.scale})`,
       }),
     ),
   );
 }
 
-/** Trees, standing on the terrace they belong to. */
-function trees(
-  key: string,
-  id: IllustrationId,
-  places: readonly Place[],
-  opacity: number,
-): ReactElement {
+/** A stepped cloud: three blocks of two heights, with a pale under-row. */
+function cloud(key: string, place: Place, paint: ThemePaint, opacity = 1): ReactElement {
+  const { x, y, scale } = place;
+
   return h(
     "g",
-    { key, opacity },
-    places.map((place) =>
-      h("use", {
-        key: `${key}-${place.x}-${place.y}`,
-        href: `#${id("tree")}`,
-        transform: `translate(${place.x} ${place.y}) scale(${place.scale})`,
-      }),
-    ),
+    { key, transform: `translate(${x} ${y}) scale(${scale})`, fill: paint, opacity },
+    h("path", {
+      key: "body",
+      d: "M0 0H24V-6H42V0H54V6H48V12H0V6Z",
+    }),
+    h("rect", {
+      key: "shade",
+      x: 6,
+      y: 6,
+      width: 42,
+      height: 3,
+      fill: "var(--inv-soft)",
+      opacity: 0.8,
+    }),
   );
 }
 
-/** The header diorama: sky, clouds, four stepped hills, trees, and the gems on the ground. */
-function scene(id: IllustrationId): ReactElement[] {
-  const tear = tornEdge(SCENE_WIDTH, 12, 2.4, SCENE_HEIGHT + 8);
-  const sheet: CutSheet = { name: "sheet", d: tear.sheet, fill: "var(--inv-soft)", shadow: false };
-  const sky: CutSheet = { name: "sky", d: SKY, fill: "var(--inv-decoration-two)", shadow: false };
-  const cloudNear: CutSheet = { name: "cloud-near", d: CLOUD_NEAR, fill: "var(--inv-surface)" };
-  const cloudFar: CutSheet = { name: "cloud-far", d: CLOUD_FAR, fill: "var(--inv-surface)" };
-  const hillsDeep: CutSheet = { name: "hills-deep", d: HILLS_DEEP, fill: "var(--inv-accent)" };
-  const hillsBack: CutSheet = { name: "hills-back", d: HILLS_BACK, fill: "var(--inv-accent)" };
-  const hillsMid: CutSheet = { name: "hills-mid", d: HILLS_MID, fill: "var(--inv-soft)" };
-
+/** The cave: a stepped opening in the left hill, with its floor, its shadow and the gems inside it. */
+function cave(id: IllustrationId, x: number, y: number): ReactElement[] {
   return [
-    sheetDefinitions(id, [sheet, sky, cloudNear, cloudFar, hillsDeep, hillsBack, hillsMid]),
-    gemDefinition(id),
-    treeDefinition(id),
-    ...cutSheets(id, [sheet]),
-    ...cutSheets(id, [sky]),
-    // The sky is tinted so it stays the pale paper of the theme and not a blue wall.
-    h("use", {
-      key: "sky-veil",
-      href: `#${id(sky.name)}`,
-      fill: "var(--inv-surface)",
+    h("path", {
+      key: "cave-frame",
+      d: `M${x - 24} ${y}H${x + 24}V${y - 12}H${x + 18}V${y - 18}H${x + 12}V${y - 24}H${x - 12}V${y - 18}H${x - 18}V${y - 12}H${x - 24}Z`,
+      fill: "var(--inv-ink)",
       opacity: 0.55,
     }),
-    ...cutSheets(id, [cloudFar, cloudNear]),
-    // The deepest range sits behind the others, darkened with one ink veil so the four terraces read as depth
-    // and the drawing no longer looks flat.
-    ...cutSheets(id, [hillsDeep]),
-    h("use", {
-      key: "deep-veil",
-      href: `#${id(hillsDeep.name)}`,
+    h("path", {
+      key: "cave-mouth",
+      d: `M${x - 18} ${y}H${x + 18}V${y - 12}H${x + 12}V${y - 18}H${x - 12}V${y - 12}H${x - 18}Z`,
       fill: "var(--inv-ink)",
-      opacity: 0.28,
+      opacity: 0.75,
     }),
-    // The far ridge is the dark green of the theme; the terrace in front of it is the pale paper the trees and
-    // the light stand on, so the two are never the same sheet.
-    ...cutSheets(id, [hillsBack]),
-    h("path", { key: "ridge-light", d: TERRACE_LIGHT, fill: "var(--inv-soft)", opacity: 0.5 }),
-    ...cutSheets(id, [hillsMid]),
+    h("rect", {
+      key: "cave-glow",
+      x: x - 6,
+      y: y - 6,
+      width: 12,
+      height: 6,
+      fill: "var(--inv-decoration-two)",
+      opacity: 0.5,
+    }),
     h("use", {
-      key: "terrace-veil",
-      href: `#${id(hillsMid.name)}`,
+      key: "cave-gem-one",
+      href: `#${id("gem")}`,
+      fill: "var(--inv-decoration-two)",
+      transform: `translate(${x - 8} ${y - 2}) scale(0.7)`,
+    }),
+    h("use", {
+      key: "cave-gem-two",
+      href: `#${id("gem")}`,
+      fill: "var(--inv-surface)",
+      transform: `translate(${x + 8} ${y - 2}) scale(0.55)`,
+    }),
+  ];
+}
+
+/** The header diorama: sky, sun, clouds, three ranges, the waterfall and the river, and the terraces. */
+function scene(id: IllustrationId): ReactElement[] {
+  const sheets: CutSheet[] = [];
+  const body: ReactElement[] = [];
+  const collect = (sheet: CutSheet): ReactElement[] => {
+    sheets.push(sheet);
+    return cutSheets(id, [sheet]);
+  };
+
+  const tear = tornEdge(SCENE_WIDTH, 6, 2.4, SCENE_HEIGHT + 8);
+
+  body.push(
+    ...collect({ name: "sheet", d: tear.sheet, fill: "var(--inv-soft)", shadow: false }),
+    // Plane one: the sky, its sun and its clouds.
+    h("rect", {
+      key: "sky",
+      x: -4,
+      y: 0,
+      width: 398,
+      height: 150,
+      fill: "var(--inv-decoration-two)",
+      opacity: 0.5,
+    }),
+    h("rect", {
+      key: "sky-veil",
+      x: -4,
+      y: 0,
+      width: 398,
+      height: 150,
+      fill: "var(--inv-surface)",
+      opacity: 0.4,
+    }),
+    ...collect({ name: "sun", d: SUN, fill: "var(--inv-surface)", shadow: false }),
+    h("path", { key: "sun-rays", d: SUN_RAYS, fill: "var(--inv-decoration-two)", opacity: 0.7 }),
+    h("path", {
+      key: "sun-ring",
+      d: "M306 12H336V18H306ZM306 36H336V42H306ZM306 18H312V36H306ZM330 18H336V36H330Z",
+      fill: "var(--inv-decoration-two)",
+      opacity: 0.25,
+    }),
+    ...CLOUDS.map((place, index) =>
+      cloud(`cloud-${index}`, place, "var(--inv-surface)", 0.9 - index * 0.1),
+    ),
+    // Plane one: the far range, pale and low.
+    ...collect({
+      name: "range-far",
+      d: rangePath(RANGE_FAR, 150),
+      fill: "var(--inv-accent)",
+      shadow: false,
+    }),
+    h("use", {
+      key: "range-far-veil",
+      href: `#${id("range-far")}`,
+      fill: "var(--inv-surface)",
+      opacity: 0.45,
+    }),
+    h("path", {
+      key: "range-far-light",
+      d: rangeLight(RANGE_FAR, 150),
+      fill: "var(--inv-soft)",
+      opacity: 0.45,
+    }),
+    // Plane two: the middle range, with its lit tops and its shadowed right faces.
+    ...collect({ name: "range-mid", d: rangePath(RANGE_MID, 176), fill: "var(--inv-accent)" }),
+    h("use", {
+      key: "range-mid-veil",
+      href: `#${id("range-mid")}`,
       fill: "var(--inv-surface)",
       opacity: 0.3,
     }),
-    trees("trees-terrace", id, TREES, 1),
     h("path", {
-      key: "terrace-line",
-      d: "M-8 180H32V172H72V164H112V172H152V164H192V172H232V180H272V172H312V164H352V172H396",
-      fill: "none",
-      stroke: "var(--inv-accent)",
-      strokeWidth: 1.6,
-      opacity: 0.35,
+      key: "range-mid-light",
+      d: rangeLight(RANGE_MID, 176),
+      fill: "var(--inv-soft)",
+      opacity: 0.55,
     }),
-    gems("gems-ground", id, GEMS, "var(--inv-decoration-two)", 1),
-    // The lit top faces of a few steps, so each terrace has a light block and the ground is not one flat sheet.
+    // The waterfall: it leaves a pond on the shoulder of the middle range, and drops into the pool.
+    h("path", {
+      key: "ledge-pond",
+      d: `M${FALL_X - 18} ${FALL_TOP - 8}H${FALL_X + 18}V${FALL_TOP}H${FALL_X - 18}Z`,
+      fill: "var(--inv-decoration-two)",
+      opacity: 0.9,
+    }),
+    h("path", {
+      key: "ledge-light",
+      d: `M${FALL_X - 12} ${FALL_TOP - 6}h12v3h-12ZM${FALL_X + 3} ${FALL_TOP - 6}h9v3h-9Z`,
+      fill: "var(--inv-surface)",
+      opacity: 0.8,
+    }),
+    h("path", {
+      key: "fall-banks",
+      d: `M${FALL_X - 12} ${FALL_TOP}H${FALL_X + 12}V${FALL_BOTTOM}H${FALL_X - 12}Z`,
+      fill: "var(--inv-ink)",
+      opacity: 0.18,
+    }),
+    h("path", {
+      key: "fall",
+      d: `M${FALL_X - 9} ${FALL_TOP}H${FALL_X + 9}V${FALL_BOTTOM}H${FALL_X - 9}Z`,
+      fill: "var(--inv-decoration-two)",
+      opacity: 0.95,
+    }),
+    h("path", {
+      key: "fall-light",
+      d: `M${FALL_X - 6} ${FALL_TOP + 6}h6v12h-6ZM${FALL_X + 3} ${FALL_TOP + 24}h6v18h-6ZM${FALL_X - 6} ${FALL_TOP + 36}h6v12h-6Z`,
+      fill: "var(--inv-surface)",
+      opacity: 0.85,
+    }),
+    // Plane three: the pool, the river, and the mist of the falling water.
+    ...collect({ name: "pool", d: POOL, fill: "var(--inv-decoration-two)" }),
+    h("use", {
+      key: "pool-veil",
+      href: `#${id("pool")}`,
+      fill: "var(--inv-surface)",
+      opacity: 0.3,
+    }),
+    ...collect({ name: "river", d: RIVER, fill: "var(--inv-decoration-two)" }),
+    h("use", {
+      key: "river-veil",
+      href: `#${id("river")}`,
+      fill: "var(--inv-surface)",
+      opacity: 0.3,
+    }),
+    h("path", { key: "water-light", d: RIVER_LIGHT, fill: "var(--inv-surface)", opacity: 0.75 }),
     h(
       "g",
-      { key: "lit-blocks", fill: "var(--inv-surface)", opacity: 0.55 },
-      [
-        { x: 60, y: 160 },
-        { x: 148, y: 152 },
-        { x: 226, y: 158 },
-        { x: 300, y: 150 },
-        { x: 128, y: 176 },
-        { x: 318, y: 174 },
-      ].map((block) =>
-        h("rect", {
-          key: `lit-${block.x}`,
-          x: block.x,
-          y: block.y,
-          width: 6,
-          height: 6,
-        }),
+      { key: "mist", fill: "var(--inv-surface)", opacity: 0.55 },
+      [168, 180, 192, 204, 216].map((x, index) =>
+        h("rect", { key: `mist-${index}`, x, y: 152 + (index % 2) * 6, width: 6, height: 6 }),
       ),
     ),
-    // Small blocks of light on the ground, the pixel version of confetti.
+    // Plane four: the two terraced hills that frame the river, and their trees, flowers and gems.
+    ...collect({ name: "hill-left", d: rangePath(HILL_LEFT, 200), fill: "var(--inv-accent)" }),
+    h("use", {
+      key: "hill-left-veil",
+      href: `#${id("hill-left")}`,
+      fill: "var(--inv-surface)",
+      opacity: 0.18,
+    }),
+    h("path", {
+      key: "hill-left-light",
+      d: rangeLight(HILL_LEFT, 200),
+      fill: "var(--inv-soft)",
+      opacity: 0.6,
+    }),
+    ...collect({ name: "hill-right", d: rangePath(HILL_RIGHT, 200), fill: "var(--inv-accent)" }),
+    h("use", {
+      key: "hill-right-veil",
+      href: `#${id("hill-right")}`,
+      fill: "var(--inv-surface)",
+      opacity: 0.18,
+    }),
+    h("path", {
+      key: "hill-right-light",
+      d: rangeLight(HILL_RIGHT, 200),
+      fill: "var(--inv-soft)",
+      opacity: 0.6,
+    }),
+    // The terraced front edge: one lit row of blocks along the bottom of both hills.
+    h("path", {
+      key: "terrace-edge",
+      d:
+        "M-6 182H12V176H30V170H48V176H72V182H96V188H120V194H150V200H-6Z" +
+        "M396 182H378V176H360V170H342V176H318V182H294V188H270V194H240V200H396Z",
+      fill: "var(--inv-soft)",
+      opacity: 0.45,
+    }),
+    ...cave(id, 52, 184),
+    ...TREES.map((tree, index) =>
+      h("use", {
+        key: `tree-${index}`,
+        href: `#${id(`tree-${tree.kind}`)}`,
+        fill: "var(--inv-accent)",
+        transform: `translate(${tree.place.x} ${tree.place.y}) scale(${tree.place.scale})`,
+      }),
+    ),
+    stamps("flowers", id, "flower", FLOWERS, "var(--inv-decoration-two)"),
+    stamps("gems", id, "gem", GEMS, "var(--inv-decoration-two)"),
+    // The near plane: the river mouth, and the blocks of light that the water throws on the bank.
     h(
       "g",
-      { key: "blocks-of-light", fill: "var(--inv-decoration-one)", opacity: 0.7 },
-      [96, 176, 286, 336].map((x, index) =>
-        h("rect", {
-          key: `block-${x}`,
-          x,
-          y: index % 2 === 0 ? 190 : 194,
-          width: 6,
-          height: 6,
-        }),
+      { key: "bank-stones", fill: "var(--inv-ink)", opacity: 0.15 },
+      [
+        { x: 156, y: 190 },
+        { x: 240, y: 194 },
+        { x: 168, y: 200 },
+      ].map((stone, index) =>
+        h("rect", { key: `stone-${index}`, x: stone.x, y: stone.y, width: 12, height: 6 }),
+      ),
+    ),
+    h(
+      "g",
+      { key: "light-blocks", fill: "var(--inv-surface)", opacity: 0.6 },
+      [
+        { x: 12, y: 158 },
+        { x: 96, y: 160 },
+        { x: 126, y: 186 },
+        { x: 282, y: 156 },
+        { x: 312, y: 184 },
+        { x: 366, y: 160 },
+      ].map((block, index) =>
+        h("rect", { key: `light-${index}`, x: block.x, y: block.y, width: 6, height: 6 }),
       ),
     ),
     ...grain(id, SCENE_WIDTH, SCENE_HEIGHT),
-  ];
+  );
+
+  return [sheetDefinitions(id, sheets), stampDefinitions(id), ...body];
 }
 
-/** The divider: a torn band of stepped ground with a tree, a gem, and its blocks of light. */
+/** The divider: a stepped ridge over a pond, with a pine, a round tree and the gems of the valley. */
 function divider(id: IllustrationId): ReactElement[] {
-  const top = tornEdge(SCENE_WIDTH, 22, 3, DIVIDER_HEIGHT + 8);
-  const under = tornEdge(SCENE_WIDTH, 38, 5.2, DIVIDER_HEIGHT + 8);
-  const sheets: readonly CutSheet[] = [
-    { name: "strip", d: top.sheet, fill: "var(--inv-soft)", shadow: false },
-    { name: "strip-under", d: under.sheet, fill: "var(--inv-accent)", shadow: false },
+  const sheets: CutSheet[] = [];
+  const body: ReactElement[] = [];
+  const collect = (sheet: CutSheet): ReactElement[] => {
+    sheets.push(sheet);
+    return cutSheets(id, [sheet]);
+  };
+
+  const top = tornEdge(SCENE_WIDTH, 4, 3, DIVIDER_HEIGHT + 8);
+  const ridge: readonly Peak[] = [
+    { x: -6, y: 26, width: 48 },
+    { x: 66, y: 18, width: 48 },
+    { x: 156, y: 24, width: 44 },
+    { x: 246, y: 16, width: 48 },
+    { x: 336, y: 22, width: 48 },
+    { x: 396, y: 26, width: 36 },
   ];
 
-  return [
-    sheetDefinitions(id, sheets),
-    gemDefinition(id),
-    treeDefinition(id),
-    ...cutSheets(id, [sheets[0] as CutSheet]),
-    h("use", {
-      key: "strip-under-tint",
-      href: `#${id("strip-under")}`,
-      fill: "var(--inv-accent)",
-      opacity: 0.32,
+  body.push(
+    ...collect({ name: "strip", d: top.sheet, fill: "var(--inv-soft)", shadow: false }),
+    h("rect", {
+      key: "divider-sky",
+      x: -4,
+      y: 0,
+      width: 398,
+      height: 40,
+      fill: "var(--inv-decoration-two)",
+      opacity: 0.45,
     }),
-    // A small stepped ridge standing on the band, so the divider is a horizon and not a stripe.
+    h("rect", {
+      key: "divider-sky-veil",
+      x: -4,
+      y: 0,
+      width: 398,
+      height: 40,
+      fill: "var(--inv-surface)",
+      opacity: 0.4,
+    }),
+    cloud("divider-cloud", { x: 288, y: 4, rotate: 0, scale: 0.6 }, "var(--inv-surface)", 0.9),
+    cloud(
+      "divider-cloud-small",
+      { x: 128, y: 8, rotate: 0, scale: 0.4 },
+      "var(--inv-surface)",
+      0.7,
+    ),
+    ...collect({ name: "ridge", d: rangePath(ridge, 52), fill: "var(--inv-accent)" }),
     h("path", {
-      key: "divider-steps",
-      d: "M-8 46V40H32V34H72V40H112V34H152V40H192V46H232V40H272V34H312V40H352V34H396V46Z",
-      fill: "var(--inv-accent)",
-      opacity: 0.85,
+      key: "ridge-light",
+      d: rangeLight(ridge, 52),
+      fill: "var(--inv-soft)",
+      opacity: 0.6,
     }),
-    trees(
-      "divider-trees",
-      id,
-      [
-        { x: 72, y: 34, rotate: 0, scale: 0.72 },
-        { x: 300, y: 34, rotate: 0, scale: 0.6 },
-      ],
-      0.95,
-    ),
-    gems(
-      "divider-gems",
-      id,
-      [
-        { x: 150, y: 44, rotate: 0, scale: 0.7 },
-        { x: 196, y: 50, rotate: 0, scale: 0.85 },
-        { x: 226, y: 42, rotate: 0, scale: 0.55 },
-      ],
-      "var(--inv-decoration-two)",
-      0.95,
-    ),
-    h(
-      "g",
-      { key: "divider-blocks", fill: "var(--inv-decoration-one)", opacity: 0.75 },
-      [40, 128, 268, 356].map((x) =>
-        h("rect", { key: `divider-block-${x}`, x, y: 48, width: 6, height: 6 }),
-      ),
-    ),
-  ];
-}
-
-/** The footer: a torn band of ground with trees at both ends, gems, and blocks of light. */
-function footer(id: IllustrationId): ReactElement[] {
-  const top = tornEdge(SCENE_WIDTH, 10, 6.6, FOOTER_HEIGHT + 8);
-  const wash = tornEdge(SCENE_WIDTH, 34, 2.8, FOOTER_HEIGHT + 8);
-  const sheets: readonly CutSheet[] = [
-    { name: "strip", d: top.sheet, fill: "var(--inv-soft)", shadow: false },
-    { name: "wash", d: wash.sheet, fill: "var(--inv-accent)", shadow: false },
-  ];
-
-  return [
-    sheetDefinitions(id, sheets),
-    gemDefinition(id),
-    treeDefinition(id),
-    ...cutSheets(id, [sheets[0] as CutSheet]),
-    h("use", {
-      key: "wash-tint",
-      href: `#${id("wash")}`,
-      fill: "var(--inv-accent)",
-      opacity: 0.3,
+    // A pond in the valley, with the light that the water throws on its surface.
+    h("path", {
+      key: "divider-pond",
+      d: "M168 44H222V52H234V56H162V50H168Z",
+      fill: "var(--inv-decoration-two)",
+      opacity: 0.9,
     }),
     h("path", {
-      key: "footer-steps",
-      d: "M-8 44V38H48V34H96V38H144V34H192V38H240V34H288V38H336V34H396V44Z",
-      fill: "var(--inv-accent)",
+      key: "divider-pond-light",
+      d: "M174 46h24v3h-24ZM168 51h12v3h-12Z",
+      fill: "var(--inv-surface)",
       opacity: 0.8,
     }),
-    trees(
-      "footer-trees",
+    h("use", {
+      key: "divider-pine",
+      href: `#${id("tree-pine")}`,
+      fill: "var(--inv-accent)",
+      transform: "translate(66 46) scale(1.3)",
+    }),
+    h("use", {
+      key: "divider-round",
+      href: `#${id("tree-round")}`,
+      fill: "var(--inv-accent)",
+      transform: "translate(320 44) scale(1.2)",
+    }),
+    stamps(
+      "divider-flowers",
       id,
+      "flower",
       [
-        { x: 60, y: 42, rotate: 0, scale: 0.62 },
-        { x: 330, y: 44, rotate: 0, scale: 0.55 },
-      ],
-      1,
-    ),
-    gems(
-      "footer-gems",
-      id,
-      [
-        { x: 148, y: 44, rotate: 0, scale: 0.7 },
-        { x: 196, y: 48, rotate: 0, scale: 0.9 },
-        { x: 244, y: 44, rotate: 0, scale: 0.7 },
+        { x: 120, y: 48, rotate: 0, scale: 0.8 },
+        { x: 268, y: 50, rotate: 0, scale: 0.7 },
+        { x: 356, y: 46, rotate: 0, scale: 0.75 },
       ],
       "var(--inv-decoration-two)",
-      0.95,
+    ),
+    stamps(
+      "divider-gems",
+      id,
+      "gem",
+      [
+        { x: 150, y: 52, rotate: 0, scale: 0.8 },
+        { x: 246, y: 52, rotate: 0, scale: 0.7 },
+        { x: 382, y: 54, rotate: 0, scale: 0.6 },
+      ],
+      "var(--inv-decoration-two)",
     ),
     h(
       "g",
-      { key: "footer-blocks", fill: "var(--inv-decoration-one)", opacity: 0.8 },
-      [108, 176, 216, 284].map((x, index) =>
-        h("rect", {
-          key: `footer-block-${x}`,
-          x,
-          y: index % 2 === 0 ? 54 : 58,
-          width: 6,
-          height: 6,
-        }),
+      { key: "divider-light", fill: "var(--inv-surface)", opacity: 0.55 },
+      [
+        { x: 36, y: 40 },
+        { x: 214, y: 34 },
+        { x: 300, y: 38 },
+      ].map((block, index) =>
+        h("rect", { key: `divider-light-${index}`, x: block.x, y: block.y, width: 6, height: 6 }),
       ),
     ),
-  ];
+  );
+
+  return [sheetDefinitions(id, sheets), stampDefinitions(id), ...body];
 }
 
-/** «Bloques y píxeles» in paper cut-out: the stepped diorama, the block divider, and the gem footer. */
+/** The footer: terraced ground with a cave, a pine, gems, flowers and the river leaving the page. */
+function footer(id: IllustrationId): ReactElement[] {
+  const sheets: CutSheet[] = [];
+  const body: ReactElement[] = [];
+  const collect = (sheet: CutSheet): ReactElement[] => {
+    sheets.push(sheet);
+    return cutSheets(id, [sheet]);
+  };
+
+  const top = tornEdge(SCENE_WIDTH, 6, 6.6, FOOTER_HEIGHT + 8);
+  const terrace: readonly Peak[] = [
+    { x: -6, y: 14, width: 56 },
+    { x: 96, y: 20, width: 60 },
+    { x: 200, y: 26, width: 54 },
+    { x: 300, y: 16, width: 60 },
+    { x: 392, y: 22, width: 50 },
+  ];
+
+  body.push(
+    ...collect({ name: "strip", d: top.sheet, fill: "var(--inv-soft)", shadow: false }),
+    h("rect", {
+      key: "footer-sky",
+      x: -4,
+      y: 0,
+      width: 398,
+      height: 40,
+      fill: "var(--inv-decoration-two)",
+      opacity: 0.4,
+    }),
+    h("rect", {
+      key: "footer-sky-veil",
+      x: -4,
+      y: 0,
+      width: 398,
+      height: 40,
+      fill: "var(--inv-surface)",
+      opacity: 0.45,
+    }),
+    cloud("footer-cloud", { x: 60, y: 6, rotate: 0, scale: 0.7 }, "var(--inv-surface)", 0.85),
+    cloud(
+      "footer-cloud-right",
+      { x: 272, y: 10, rotate: 0, scale: 0.55 },
+      "var(--inv-surface)",
+      0.7,
+    ),
+    ...collect({ name: "terrace", d: rangePath(terrace, 62), fill: "var(--inv-accent)" }),
+    h("path", {
+      key: "terrace-light",
+      d: rangeLight(terrace, 62),
+      fill: "var(--inv-soft)",
+      opacity: 0.85,
+    }),
+    h(
+      "g",
+      { key: "footer-river", fill: "var(--inv-decoration-two)" },
+      h("path", { key: "river", d: "M174 30H216V40H228V50H240V62H180V50H168V40H174Z" }),
+    ),
+    h("path", {
+      key: "footer-river-light",
+      d: "M186 34h12v6h-12ZM192 46h12v6h-12ZM198 54h12v6h-12Z",
+      fill: "var(--inv-surface)",
+      opacity: 0.75,
+    }),
+    ...cave(id, 96, 44),
+    h("use", {
+      key: "footer-pine",
+      href: `#${id("tree-pine")}`,
+      fill: "var(--inv-accent)",
+      transform: "translate(302 44)",
+    }),
+    h("use", {
+      key: "footer-small",
+      href: `#${id("tree-small")}`,
+      fill: "var(--inv-accent)",
+      transform: "translate(348 46)",
+    }),
+    stamps(
+      "footer-flowers",
+      id,
+      "flower",
+      [
+        { x: 40, y: 44, rotate: 0, scale: 1 },
+        { x: 140, y: 40, rotate: 0, scale: 1 },
+        { x: 260, y: 42, rotate: 0, scale: 1 },
+        { x: 380, y: 40, rotate: 0, scale: 1 },
+      ],
+      "var(--inv-decoration-two)",
+    ),
+    stamps(
+      "footer-gems",
+      id,
+      "gem",
+      [
+        { x: 66, y: 50, rotate: 0, scale: 0.7 },
+        { x: 318, y: 50, rotate: 0, scale: 0.8 },
+        { x: 360, y: 52, rotate: 0, scale: 0.6 },
+      ],
+      "var(--inv-decoration-two)",
+    ),
+    h(
+      "g",
+      { key: "footer-light", fill: "var(--inv-surface)", opacity: 0.55 },
+      [
+        { x: 24, y: 26 },
+        { x: 156, y: 34 },
+        { x: 286, y: 30 },
+      ].map((block, index) =>
+        h("rect", { key: `footer-light-${index}`, x: block.x, y: block.y, width: 6, height: 6 }),
+      ),
+    ),
+  );
+
+  return [sheetDefinitions(id, sheets), stampDefinitions(id), ...body];
+}
+
+/** «Bloques y píxeles» in paper cut-out: the stepped valley, the ridge divider, and the cave footer. */
 export const BLOCKS_AND_PIXELS_ILLUSTRATION: ThemeIllustration = {
   theme: "blocks-and-pixels",
   scene: {

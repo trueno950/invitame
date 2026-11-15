@@ -322,8 +322,8 @@ real layout.
   file. `themeIllustration` answers `undefined` for a theme without a drawing (including `constructor` and
   `__proto__`, through `Object.hasOwn`), and the layout then keeps its motif strip.
 - Budget: one theme's three parts stay under 40 KB of markup, checked by the test suite per theme, so a heavy drawing
-  cannot creep into every guest page. Today the lightest is `blocks-and-pixels` at about 9 KB and the heaviest
-  `dove-olive` at about 24 KB.
+  cannot creep into every guest page. Today the lightest is `little-moon` at about 11 KB and the heaviest
+  `classic-mouse` at about 39 KB, after the richer birthday and baby shower scenes (L6).
 - Placement in the five layouts, chosen per layout from the Cartel artboard: `birthday-poster-01` opens its accent
   band with the scene and bleeds the divider and the footer full width; `birthday-map-01` bleeds the scene over the
   top of the page and keeps the strips in the column; `birthday-story-01` opens the page sheet with the scene,

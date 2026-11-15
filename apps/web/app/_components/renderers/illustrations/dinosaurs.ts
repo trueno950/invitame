@@ -11,17 +11,19 @@ import {
 import type { IllustrationId, ThemeIllustration } from "./types.ts";
 
 /*
- * «Dinosaurios» in paper cut-out (I3a; S1-S4, style 01 of `design/theme-illustrations/01-papel-recortado.html`):
- * a layered diorama for the header — a torn sheet of soft paper, far hills, a volcano, the friendly dinosaur
- * with its four plates, clouds, the sun, the ground with a trail of footprints, and fronds at both edges — a
- * torn divider that carries the footprint trail between two sections, and a footer strip.
+ * «Dinosaurios» in paper cut-out (I4b; S3, S5), after the technique of `design/theme-illustrations/
+ * 01-papel-recortado.html`: a layered diorama for the header — a torn sheet of soft paper, far hills, a
+ * volcano with its plume and embers, two palms framing the edges and party bunting strung between them, three
+ * distant flying reptiles, a cycad layer, the friendly dinosaur with a spotted hide and its plates, a baby
+ * dinosaur beside a nest of spotted eggs, rocks, the ground with a trail of footprints, and fronds at both
+ * edges — a torn divider that carries the footprint trail, a nest and a sprout between two sections, and a
+ * footer strip with the nest and the trail running out of the page.
  *
- * Original work: the shapes are our own splines and the dinosaur is a generic long-necked friend, never
- * character artwork, a logo, or a protected name (S5). Every color is a theme variable of `dinosaurs`, so the
- * whole drawing re-colours with its palette; tints are `opacity` on a theme color and nothing else.
- *
- * The artboard's volcano read as a lump behind the near hill, so it is redrawn here: a proper cone with a
- * crater notch, a lava tongue down its front, a lit ridge, and its own plume of paper smoke above the rim.
+ * Original work: every shape is our own spline, and the dinosaurs are generic long-necked friends — never
+ * character artwork, a logo, or a protected name (S3). The palms, the nest, the bunting and the flying reptiles
+ * are generic prehistoric props. Every color is a theme variable of `dinosaurs`, so the whole drawing
+ * re-colours with its palette; tints are `opacity` on a theme color, and the only fill that is not a plain
+ * theme color is a pattern built from theme colors, referenced by an id the frame makes unique.
  */
 
 const h = createElement;
@@ -30,6 +32,14 @@ const SCENE_WIDTH = 390;
 const SCENE_HEIGHT = 200;
 const DIVIDER_HEIGHT = 56;
 const FOOTER_HEIGHT = 62;
+
+/** One placed stamp: where it sits, how far it turns, how big it is. */
+interface Place {
+  readonly x: number;
+  readonly y: number;
+  readonly rotate: number;
+  readonly scale: number;
+}
 
 /** The dinosaur's silhouette: one long spline from muzzle to tail, drawn once and filled as a cut sheet. */
 const DINOSAUR =
@@ -53,6 +63,14 @@ const PLATES: readonly { readonly name: string; readonly d: string; readonly til
   { name: "plate-far", d: "M284 107L288 97L291 102L295 108Z", tilt: "rotate(5 289 106)" },
 ];
 
+/** The lit inner facet of each plate, so a plate is two pieces of paper and not one triangle. */
+const PLATE_FACETS =
+  "M242 100L246 100L244 104ZM258 92L263 96L259 99ZM274 95L278 97L275 100ZM288 100L291 102L289 105Z";
+
+/** The baby dinosaur, drawn from the same silhouette and placed at a child's scale. */
+const BABY_SCALE = 0.42;
+const BABY_PLACE = "translate(31 102)";
+
 /** The far ridge behind everything, and the two near hills the dinosaur stands between. */
 const HILL_FAR =
   "M-8 152C-0.8 143.3 24.4 142.6 40 142C55.6 141.4 79.5 145.9 96 148C112.5 150.1 132.9 156 150 156C167.1 156 192 " +
@@ -75,6 +93,7 @@ const GROUND =
   "218.7 170.7 228 171C237.3 171.3 248.7 166 258 166C267.3 166 280.7 171.3 290 171C299.3 170.7 311 164.3 320 164C329 " +
   "163.7 341.3 168.8 350 169C358.7 169.2 371.1 164.7 378 165C384.9 165.3 393.3 170.1 396 171L396 202L-8 202Z";
 
+/** The four paper plants at the bottom corners, drawn as torn, pointed leaves. */
 const FRONDS = [
   {
     name: "frond-short-left",
@@ -115,20 +134,22 @@ const FRONDS = [
   },
 ] as const;
 
-/** The sun: a hand-cut disc, not a perfect circle, at the top right of the diorama. */
+/** The sun: a hand-cut disc between the bunting and the right palm. */
 const SUN =
-  "M322 28C325.5 27.6 333.2 28.9 336 31C338.8 33.1 342.5 40.3 343 44C343.5 47.7 342.3 56.2 340 59C337.7 61.8 329.9 " +
-  "64.7 326 65C322.1 65.3 313.9 63.3 311 61C308.1 58.7 304.1 51.6 304 48C303.9 44.4 307.6 36.7 310 34C312.4 31.3 " +
-  "318.5 28.4 322 28Z";
+  "M204 14C214 13.6 223 20.6 224.5 31C226 41.4 217 50 206 50.4C195 50.8 186 43 185.5 32C185 21 194 14.4 204 14Z";
 
-/** Two paper clouds above the far hills, the lower one larger. */
-const CLOUD_LOW =
-  "M38 86C37.2 84.3 39.4 78 41 76C42.6 74 47.3 71.3 50 71C52.7 70.7 59 72.5 61 74C63 75.5 65.3 80.1 65 82C64.7 83.9 " +
-  "61.4 87.1 59 88C56.6 88.9 49.8 89.3 47 89C44.2 88.7 38.8 87.7 38 86Z";
+/** Two paper clouds, each built from a cut disc and a torn cap. */
+const CLOUD_NEAR =
+  "M302 30C300.8 26.4 305 21.4 309.4 20C313.8 18.6 320.4 19.4 322.6 22.4C324.8 25.4 324 30 321 32.4C318 " +
+  "34.8 311 35.2 307.4 33.6C304.6 32.4 302.6 31.6 302 30Z";
 
-const CLOUD_HIGH =
-  "M58 68C57.7 66 60.9 59.7 63 58C65.1 56.3 71.2 54.7 74 55C76.8 55.3 82.5 58.1 84 60C85.5 61.9 86.1 67.1 85 69C83.9 " +
-  "70.9 78.7 73.5 76 74C73.3 74.5 67.4 73.8 65 73C62.6 72.2 58.3 70 58 68Z";
+const CLOUD_FAR =
+  "M121 52C119.4 47.6 124.4 41.4 129.6 39.6C134.8 37.8 143 38.8 145.4 42.4C147.8 46 146.6 51.6 143.2 " +
+  "54.4C139.8 57.2 131 57.8 126.6 56C123.2 54.6 121.6 53.6 121 52Z";
+
+/** A distant flying reptile: two long wings and a small crested head, seen only as a silhouette. */
+const FLYING_REPTILE = "M-17 3C-11 -4 -4 -6 0 -1C4 -6 11 -4 17 3C10 0 4 2 0 4C-4 2 -10 0 -17 3Z";
+const FLYING_REPTILE_HEAD = "M0 4L-3 8L2 7L4 4Z";
 
 /** The volcano: two crater rims with a dip between them, and a wide skirt down to the hills. */
 const VOLCANO =
@@ -140,6 +161,69 @@ const LAVA = "M44 108L49 119L45.5 117L42 125L38.5 115L41 108Z";
 
 /** The lit ridge of the cone, a hairline the eye follows up to the rim. */
 const VOLCANO_RIDGE = "M47 112C44 123 39 135 32 146";
+
+/** The plume: five puffs rising off the rim, the far ones smaller and paler. */
+const PLUME: readonly {
+  readonly key: string;
+  readonly cx: number;
+  readonly cy: number;
+  readonly r: number;
+  readonly o: number;
+}[] = [
+  { key: "puff-near", cx: 47, cy: 99, r: 6.4, o: 0.62 },
+  { key: "puff-left", cx: 39, cy: 89, r: 5.6, o: 0.56 },
+  { key: "puff-right", cx: 52, cy: 81, r: 6.8, o: 0.52 },
+  { key: "puff-high", cx: 43, cy: 70, r: 5.4, o: 0.42 },
+  { key: "puff-top", cx: 50, cy: 59, r: 4.6, o: 0.32 },
+];
+
+/** A palm leaf: the blade, and the midrib that folds it. */
+const PALM_FROND = "M0 0C11 -9 26 -12 41 -8C28 1 13 5 0 0Z";
+const PALM_MIDRIB = "M2 -0.4C13 -4 26 -6 39 -7";
+
+/** The two trunks, one leaning in from each edge, and the rings that age them. */
+const PALM_TRUNK_LEFT =
+  "M14 176C18 148 22 118 32 94C37 82 42 72 48 66L62 74C54 82 48 94 44 108C36 132 32 154 31 176Z";
+const PALM_TRUNK_RIGHT =
+  "M376 176C372 148 368 118 358 94C353 82 348 72 344 66L330 74C338 82 344 94 348 108C356 132 360 154 361 176Z";
+
+/** The trunk sheets are defined with the scene sheets, so one definition serves both palms. */
+const PALM_TRUNKS: readonly CutSheet[] = [
+  {
+    name: "palm-trunk-left",
+    d: PALM_TRUNK_LEFT,
+    fill: "var(--inv-decoration-two)",
+    outline: true,
+  },
+  {
+    name: "palm-trunk-right",
+    d: PALM_TRUNK_RIGHT,
+    fill: "var(--inv-decoration-two)",
+    outline: true,
+  },
+];
+const PALM_RINGS =
+  "M18 160C24 158 28 158 33 160M20 146C26 144 30 144 35 146M23 132C29 130 33 130 38 132" +
+  "M357 160C362 158 366 158 372 160M355 146C360 144 364 144 370 146M352 132C357 130 361 130 366 132";
+
+/** The crown's fronds: nine angles from the left to the right of the trunk. */
+const CROWN_ANGLES: readonly number[] = [-150, -115, -80, -45, -8, 30, 70, 110];
+
+/** A rock: the shape and the lit facet the low sun catches. */
+const ROCK = "M0 0L7 -13L19 -16L31 -5L33 0Z";
+const ROCK_FACET = "M7 -13L19 -16L20 -7L9 -5Z";
+
+/** The nest: a bowl of twigs, and the woven line across it. */
+const NEST = "M-36 0C-34 -13 -20 -22 0 -22C20 -22 34 -13 36 0Z";
+const NEST_WEAVE =
+  "M-33 -3C-22 -11 22 -11 33 -3M-27 -10C-16 -16 16 -16 27 -10M-14 -17C-5 -19 5 -19 14 -17";
+
+/** The eggs in the nest: three ellipses, each turned a little, filled with the spotted pattern. */
+const NEST_EGGS: readonly Place[] = [
+  { x: -17, y: -13, rotate: -8, scale: 1 },
+  { x: -3, y: -16, rotate: 3, scale: 1.06 },
+  { x: 11, y: -13, rotate: -3, scale: 0.96 },
+];
 
 /** Where a footprint lands: at four angles and two sizes, so the trail reads as a walk, not a stamp. */
 interface Footprint {
@@ -174,27 +258,100 @@ const FOOTER_TRAIL: readonly Footprint[] = [
   { x: 238, y: 44, rotate: 7, scale: 1 },
 ];
 
-/** The four-toe print, defined once and placed along a trail. */
-function footprints(
-  id: IllustrationId,
-  prints: readonly Footprint[],
-  paint: ThemePaint,
-  opacity: number,
-): ReactElement {
+/** The new-born prints at the nest: two small prints, the baby's own. */
+const NEST_PRINTS: readonly Footprint[] = [
+  { x: 104, y: 180, rotate: -10, scale: 0.6 },
+  { x: 118, y: 186, rotate: 8, scale: 0.55 },
+];
+
+/** Party confetti: small cut squares and dots scattered over the ground, in three paints. */
+const CONFETTI: readonly {
+  readonly x: number;
+  readonly y: number;
+  readonly rotate: number;
+  readonly paint: ThemePaint;
+}[] = [
+  { x: 140, y: 60, rotate: 18, paint: "var(--inv-decoration-one)" },
+  { x: 118, y: 78, rotate: -24, paint: "var(--inv-surface)" },
+  { x: 176, y: 50, rotate: 40, paint: "var(--inv-decoration-two)" },
+  { x: 296, y: 66, rotate: -16, paint: "var(--inv-decoration-one)" },
+  { x: 320, y: 82, rotate: 28, paint: "var(--inv-surface)" },
+  { x: 344, y: 112, rotate: -8, paint: "var(--inv-decoration-two)" },
+  { x: 84, y: 112, rotate: 12, paint: "var(--inv-decoration-one)" },
+  { x: 236, y: 74, rotate: -30, paint: "var(--inv-decoration-two)" },
+];
+
+/**
+ * The two patterns of the scene: the dinosaur's spots, and the spots on the eggs. Both are built only from
+ * theme colors, both are painted as the fill of a theme-colored sheet, and both get their id from the frame.
+ */
+function patternDefinitions(id: IllustrationId): ReactElement {
   return h(
-    "g",
-    { key: "footprint-trail", fill: paint, opacity },
-    prints.map((print) =>
-      h("use", {
-        key: `${print.x}-${print.y}`,
-        href: `#${id("foot")}`,
-        transform: `translate(${print.x} ${print.y}) rotate(${print.rotate}) scale(${print.scale})`,
+    "defs",
+    { key: "pattern-definitions" },
+    h(
+      "pattern",
+      {
+        key: "dino-spots",
+        id: id("dino-spots"),
+        width: 18,
+        height: 15,
+        patternUnits: "userSpaceOnUse",
+        patternTransform: "rotate(9)",
+      },
+      h("circle", {
+        key: "spot-far",
+        cx: 4,
+        cy: 4,
+        r: 2.6,
+        fill: "var(--inv-decoration-two)",
+        opacity: 0.8,
+      }),
+      h("circle", {
+        key: "spot-near",
+        cx: 13,
+        cy: 10,
+        r: 1.6,
+        fill: "var(--inv-surface)",
+        opacity: 0.65,
+      }),
+    ),
+    h(
+      "pattern",
+      {
+        key: "egg-spots",
+        id: id("egg-spots"),
+        width: 9,
+        height: 9,
+        patternUnits: "userSpaceOnUse",
+      },
+      h("rect", {
+        key: "egg-base",
+        width: 9,
+        height: 9,
+        fill: "var(--inv-surface)",
+      }),
+      h("circle", {
+        key: "egg-spot-a",
+        cx: 2.6,
+        cy: 2.6,
+        r: 1.3,
+        fill: "var(--inv-decoration-one)",
+        opacity: 0.9,
+      }),
+      h("circle", {
+        key: "egg-spot-b",
+        cx: 6.4,
+        cy: 6.4,
+        r: 0.9,
+        fill: "var(--inv-accent)",
+        opacity: 0.7,
       }),
     ),
   );
 }
 
-/** The footprint shape itself: one heel pad and three toes, with the outer toes splayed. Defined, never drawn. */
+/** The four-toe print, defined once and placed along a trail. */
 function footprintDefinition(id: IllustrationId): ReactElement {
   return h(
     "defs",
@@ -224,19 +381,296 @@ function footprintDefinition(id: IllustrationId): ReactElement {
   );
 }
 
-/** The header diorama: the torn sheet and everything that stands on it, back to front. */
+/** The palm leaf, the flying reptile, and the confetti stamp, each defined once and placed many times. */
+function sceneDefinitions(id: IllustrationId): ReactElement {
+  return h(
+    "defs",
+    { key: "scene-definitions" },
+    h("path", { key: "frond", id: id("palm-frond"), d: PALM_FROND }),
+    h("path", { key: "midrib", id: id("palm-midrib"), d: PALM_MIDRIB }),
+    h(
+      "g",
+      { key: "reptile", id: id("reptile") },
+      h("path", { key: "wings", d: FLYING_REPTILE }),
+      h("path", { key: "head", d: FLYING_REPTILE_HEAD }),
+    ),
+    h("path", { key: "confetti-square", id: id("confetti"), d: "M-2-2H2V2H-2Z" }),
+  );
+}
+
+/** The four-toe prints along a trail. */
+function footprints(
+  key: string,
+  id: IllustrationId,
+  prints: readonly Footprint[],
+  paint: ThemePaint,
+  opacity: number,
+): ReactElement {
+  return h(
+    "g",
+    { key, fill: paint, opacity },
+    prints.map((print) =>
+      h("use", {
+        key: `${print.x}-${print.y}`,
+        href: `#${id("foot")}`,
+        transform: `translate(${print.x} ${print.y}) rotate(${print.rotate}) scale(${print.scale})`,
+      }),
+    ),
+  );
+}
+
+/** The flying reptiles, small and half transparent, so they read as far away. */
+function flyingReptiles(id: IllustrationId, places: readonly Place[]): ReactElement {
+  return h(
+    "g",
+    { key: "flying-reptiles", fill: "var(--inv-ink)", opacity: 0.34 },
+    places.map((place) =>
+      h("use", {
+        key: `reptile-${place.x}-${place.y}`,
+        href: `#${id("reptile")}`,
+        transform: `translate(${place.x} ${place.y}) rotate(${place.rotate}) scale(${place.scale})`,
+      }),
+    ),
+  );
+}
+
+/**
+ * One palm: a shadowed trunk, then the crown. The crown is drawn twice — once as one ink silhouette shifted
+ * by the paper shadow, once in its own colors — so ten leaves do not cost ten shadows in the markup.
+ */
+function palm(id: IllustrationId, side: "left" | "right"): ReactElement[] {
+  const trunk = PALM_TRUNKS[side === "left" ? 0 : 1] as CutSheet;
+  const crownX = side === "left" ? 52 : 346;
+  const crownY = side === "left" ? 64 : 62;
+  const flip = side === "left" ? 1 : -1;
+  const at = `translate(${crownX} ${crownY}) scale(${flip} 1)`;
+
+  const leaves = (key: string, extra: Record<string, unknown>): ReactElement =>
+    h(
+      "g",
+      { key, transform: at, ...extra },
+      CROWN_ANGLES.map((angle, index) =>
+        h("use", {
+          key: `leaf-${index}`,
+          href: `#${id("palm-frond")}`,
+          transform: `rotate(${angle}) scale(${0.6 + (index % 3) * 0.05})`,
+        }),
+      ),
+    );
+
+  return [
+    ...cutSheets(id, [trunk]),
+    h("path", {
+      key: `rings-${side}`,
+      d: PALM_RINGS,
+      fill: "none",
+      stroke: "var(--inv-ink)",
+      strokeWidth: 1.1,
+      strokeLinecap: "round",
+      opacity: 0.28,
+    }),
+    h(
+      "g",
+      {
+        key: `crown-shadow-${side}`,
+        fill: "var(--inv-ink)",
+        opacity: 0.12,
+        transform: `translate(1.1 3.4) ${at}`,
+      },
+      CROWN_ANGLES.map((angle, index) =>
+        h("use", {
+          key: `shadow-leaf-${index}`,
+          href: `#${id("palm-frond")}`,
+          transform: `rotate(${angle}) scale(${0.6 + (index % 3) * 0.05})`,
+        }),
+      ),
+    ),
+    leaves(`crown-${side}`, { fill: "var(--inv-decoration-two)" }),
+    h(
+      "g",
+      {
+        key: `crown-lift-${side}`,
+        transform: at,
+        fill: "none",
+        stroke: "var(--inv-accent)",
+        strokeWidth: 1,
+        opacity: 0.4,
+        strokeLinecap: "round",
+      },
+      CROWN_ANGLES.filter((_, index) => index % 2 === 0).map((angle, index) =>
+        h("use", {
+          key: `midrib-${index}`,
+          href: `#${id("palm-midrib")}`,
+          transform: `rotate(${angle}) scale(${0.6 + (index % 3) * 0.05})`,
+        }),
+      ),
+    ),
+  ];
+}
+
+/** A clump of cycad leaves standing in the grass: the same leaves, short and splayed. */
+function cycad(id: IllustrationId, key: string, x: number, y: number, scale: number): ReactElement {
+  const angles = [-148, -104, -58, -8, 46, 106];
+
+  return h(
+    "g",
+    {
+      key,
+      transform: `translate(${x} ${y}) scale(${scale})`,
+      fill: "var(--inv-accent)",
+      opacity: 0.85,
+    },
+    angles.map((angle, index) =>
+      h("use", {
+        key: `cycad-leaf-${index}`,
+        href: `#${id("palm-frond")}`,
+        transform: `rotate(${angle}) scale(${0.44 + (index % 3) * 0.06})`,
+      }),
+    ),
+  );
+}
+
+/** The nest with its spotted eggs; one helper for the scene, the divider, and the footer. */
+function nestWithEggs(
+  id: IllustrationId,
+  key: string,
+  x: number,
+  y: number,
+  scale: number,
+  eggs: readonly Place[],
+): ReactElement {
+  return h(
+    "g",
+    { key, transform: `translate(${x} ${y}) scale(${scale})` },
+    eggs.map((egg, index) =>
+      h("ellipse", {
+        key: `egg-${index}`,
+        cx: egg.x,
+        cy: egg.y,
+        rx: 7 * egg.scale,
+        ry: 9 * egg.scale,
+        transform: `rotate(${egg.rotate} ${egg.x} ${egg.y})`,
+        style: { fill: `url(#${id("egg-spots")})` },
+        stroke: "var(--inv-ink)",
+        strokeWidth: 0.8,
+        strokeOpacity: 0.25,
+      }),
+    ),
+    h("path", { key: "nest", d: NEST, fill: "var(--inv-ink)" }),
+    h("path", {
+      key: "nest-weave",
+      d: NEST_WEAVE,
+      fill: "none",
+      stroke: "var(--inv-ink)",
+      strokeWidth: 1.1,
+      strokeLinecap: "round",
+      opacity: 0.34,
+    }),
+  );
+}
+
+/** Three rocks in the grass, the two smaller ones behind the larger one. */
+function rocks(key: string, places: readonly Place[], paint: ThemePaint): ReactElement {
+  return h(
+    "g",
+    { key },
+    places.map((place) =>
+      h(
+        "g",
+        {
+          key: `rock-${place.x}-${place.y}`,
+          transform: `translate(${place.x} ${place.y}) rotate(${place.rotate}) scale(${place.scale})`,
+        },
+        h("path", { key: "rock", d: ROCK, fill: paint }),
+        h("path", { key: "facet", d: ROCK_FACET, fill: "var(--inv-surface)", opacity: 0.34 }),
+      ),
+    ),
+  );
+}
+
+/** The confetti, cut squares turned at different angles over the air of the scene. */
+function confetti(key: string, id: IllustrationId, places: typeof CONFETTI): ReactElement {
+  return h(
+    "g",
+    { key },
+    places.map((piece) =>
+      h("use", {
+        key: `confetti-${piece.x}-${piece.y}`,
+        href: `#${id("confetti")}`,
+        fill: piece.paint,
+        opacity: 0.85,
+        transform: `translate(${piece.x} ${piece.y}) rotate(${piece.rotate})`,
+      }),
+    ),
+  );
+}
+
+/** The party bunting: a string between the two palms, and nine pennants hanging from it. */
+function bunting(): ReactElement[] {
+  const start = { x: 52, y: 38 };
+  const control = { x: 200, y: 66 };
+  const end = { x: 346, y: 38 };
+  const paints: readonly ThemePaint[] = [
+    "var(--inv-decoration-one)",
+    "var(--inv-surface)",
+    "var(--inv-accent)",
+    "var(--inv-decoration-two)",
+  ];
+  const pennants: ReactElement[] = [];
+
+  // The string, as one curve from palm to palm.
+  const string = `M${start.x} ${start.y}Q${control.x} ${control.y} ${end.x} ${end.y}`;
+
+  for (let index = 1; index <= 9; index += 1) {
+    const t = index / 10;
+    const inverse = 1 - t;
+    const x = inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x;
+    const y = inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y;
+    const paint = paints[index % paints.length] as ThemePaint;
+
+    pennants.push(
+      h("path", {
+        key: `pennant-${index}`,
+        d: `M${x.toFixed(1)} ${y.toFixed(1)}L${(x + 8).toFixed(1)} ${y.toFixed(1)}L${(x + 4).toFixed(1)} ${(y + 10).toFixed(1)}Z`,
+        fill: paint,
+        opacity: 0.95,
+      }),
+    );
+  }
+
+  return [
+    h("path", {
+      key: "bunting-string",
+      d: string,
+      fill: "none",
+      stroke: "var(--inv-ink)",
+      strokeWidth: 1.1,
+      opacity: 0.55,
+      strokeLinecap: "round",
+    }),
+    h("g", { key: "bunting-pennants" }, pennants),
+  ];
+}
+
+/** The header diorama: torn sheet, sky, volcano, plants, the two dinosaurs, and the party. */
 function scene(id: IllustrationId): ReactElement[] {
   const tear = tornEdge(SCENE_WIDTH, 12, 1.7, SCENE_HEIGHT + 8);
   const sheet: CutSheet = { name: "sheet", d: tear.sheet, fill: "var(--inv-soft)", shadow: false };
-  const sun: CutSheet = { name: "sun", d: SUN, fill: "var(--inv-surface)" };
+  const sun: CutSheet = { name: "sun", d: SUN, fill: "var(--inv-decoration-one)" };
   const hillFar: CutSheet = { name: "hill-far", d: HILL_FAR, fill: "var(--inv-decoration-two)" };
-  const cloudLow: CutSheet = { name: "cloud-low", d: CLOUD_LOW, fill: "var(--inv-surface)" };
-  const cloudHigh: CutSheet = { name: "cloud-high", d: CLOUD_HIGH, fill: "var(--inv-surface)" };
+  const cloudNear: CutSheet = { name: "cloud-near", d: CLOUD_NEAR, fill: "var(--inv-surface)" };
+  const cloudFar: CutSheet = {
+    name: "cloud-far",
+    d: CLOUD_FAR,
+    fill: "var(--inv-surface)",
+    transform: "translate(34 -14)",
+  };
   const volcano: CutSheet = {
     name: "volcano",
     d: VOLCANO,
     fill: "var(--inv-ink)",
     outline: true,
+    transform: "translate(44 0)",
   };
   const lava: CutSheet = {
     name: "lava",
@@ -267,12 +701,7 @@ function scene(id: IllustrationId): ReactElement[] {
     outline: true,
     transform: plate.tilt,
   }));
-  const ground: CutSheet = {
-    name: "ground",
-    d: GROUND,
-    fill: "var(--inv-accent)",
-    shadow: false,
-  };
+  const ground: CutSheet = { name: "ground", d: GROUND, fill: "var(--inv-accent)", shadow: false };
   const fronds: readonly CutSheet[] = FRONDS.map((frond) => ({
     name: frond.name,
     d: frond.d,
@@ -283,14 +712,15 @@ function scene(id: IllustrationId): ReactElement[] {
     sheet,
     sun,
     hillFar,
-    cloudLow,
-    cloudHigh,
+    cloudNear,
+    cloudFar,
     volcano,
     lava,
     hillLeft,
     hillRight,
     dinosaur,
     ...plates,
+    ...PALM_TRUNKS,
     ground,
     ...fronds,
   ];
@@ -298,6 +728,8 @@ function scene(id: IllustrationId): ReactElement[] {
   return [
     sheetDefinitions(id, sheets),
     footprintDefinition(id),
+    sceneDefinitions(id),
+    patternDefinitions(id),
     // Bottom layer: the torn paper sheet and its lighter tear line.
     ...cutSheets(id, [sheet]),
     h("use", {
@@ -312,32 +744,112 @@ function scene(id: IllustrationId): ReactElement[] {
     h("use", {
       key: "sun-halo",
       href: `#${id(sun.name)}`,
-      fill: "var(--inv-decoration-one)",
-      transform: "translate(6 -6)",
+      fill: "var(--inv-decoration-two)",
+      transform: "translate(5 -5)",
     }),
-    ...cutSheets(id, [sun, hillFar, cloudLow, cloudHigh]),
-    // The volcano: cone, lava tongue, plume above the rim, and the lit ridge on the way up.
-    ...cutSheets(id, [volcano]),
-    h("use", { key: "lava-fill", href: `#${id(lava.name)}`, fill: lava.fill }),
-    h(
-      "g",
-      { key: "plume", fill: "var(--inv-surface)", opacity: 0.62 },
-      h("circle", { key: "puff-near", cx: 47, cy: 97, r: 4.5 }),
-      h("circle", { key: "puff-far", cx: 41, cy: 89, r: 3.2 }),
-    ),
     h("path", {
-      key: "volcano-ridge",
-      d: VOLCANO_RIDGE,
+      key: "sun-rays",
+      d: "M204 11V4M204 53V60M182 32H175M226 32H233M188.4 16.4L183.4 11.4M219.6 16.4L224.6 11.4M188.4 47.6L183.4 52.6M219.6 47.6L224.6 52.6",
       fill: "none",
-      stroke: "var(--inv-surface)",
-      strokeWidth: 1.2,
+      stroke: "var(--inv-decoration-one)",
+      strokeWidth: 1.8,
+      strokeLinecap: "round",
+      opacity: 0.5,
+    }),
+    ...cutSheets(id, [sun]),
+    ...cutSheets(id, [hillFar, cloudNear, cloudFar]),
+    // The far ridge is the paper seen through warm air, so the near hills stand in front of it.
+    h("use", {
+      key: "hill-far-veil",
+      href: `#${id(hillFar.name)}`,
+      fill: "var(--inv-surface)",
       opacity: 0.22,
     }),
-    ...cutSheets(id, [hillLeft, hillRight, dinosaur, ...plates]),
-    // The dinosaur's face: a soft cheek, a white eye with its pupil, a nostril, and a smile.
+    flyingReptiles(id, [
+      { x: 66, y: 46, rotate: -6, scale: 0.56 },
+      { x: 152, y: 24, rotate: 4, scale: 0.4 },
+      { x: 300, y: 68, rotate: -10, scale: 0.46 },
+    ]),
+    // The volcano: cone, lava tongue, plume above the rim, and the lit ridge on the way up.
+    ...cutSheets(id, [volcano]),
+    h(
+      "g",
+      { key: "volcano-detail", transform: "translate(44 0)" },
+      h("use", { key: "lava-fill", href: `#${id(lava.name)}`, fill: lava.fill }),
+      h(
+        "g",
+        { key: "plume", fill: "var(--inv-surface)" },
+        PLUME.map((puff) =>
+          h("circle", { key: puff.key, cx: puff.cx, cy: puff.cy, r: puff.r, opacity: puff.o }),
+        ),
+      ),
+      h(
+        "g",
+        { key: "plume-ash", fill: "var(--inv-ink)", opacity: 0.4 },
+        [
+          { key: "ash-a", cx: 60, cy: 58, r: 1.4 },
+          { key: "ash-b", cx: 37, cy: 60, r: 1.1 },
+          { key: "ash-c", cx: 66, cy: 70, r: 0.9 },
+        ].map((ash) => h("circle", { key: ash.key, cx: ash.cx, cy: ash.cy, r: ash.r })),
+      ),
+      h("circle", {
+        key: "ember",
+        cx: 49,
+        cy: 106,
+        r: 1.8,
+        fill: "var(--inv-decoration-one)",
+        opacity: 0.9,
+      }),
+      h("path", {
+        key: "volcano-ridge",
+        d: VOLCANO_RIDGE,
+        fill: "none",
+        stroke: "var(--inv-surface)",
+        strokeWidth: 1.2,
+        opacity: 0.22,
+      }),
+    ),
+    ...cutSheets(id, [hillLeft, hillRight]),
+    // The mid-ground plants: cycads on the far bank, before the animals take the stage.
+    cycad(id, "cycad-far-left", 118, 152, 1),
+    // The party: bunting between the palms, behind the dinosaur so the pennants never cross its face.
+    ...bunting(),
+    confetti("confetti-scene", id, CONFETTI),
+    // The big friend: spotted hide, plates, belly light, toes, and a face.
+    ...cutSheets(id, [dinosaur, ...plates]),
+    h("use", {
+      key: "dinosaur-spots",
+      href: `#${id("dinosaur")}`,
+      style: { fill: `url(#${id("dino-spots")})` },
+    }),
+    h("path", { key: "plate-facets", d: PLATE_FACETS, fill: "var(--inv-surface)", opacity: 0.36 }),
+    h(
+      "g",
+      {
+        key: "dinosaur-scales",
+        fill: "none",
+        stroke: "var(--inv-surface)",
+        strokeWidth: 1.2,
+        strokeLinecap: "round",
+        opacity: 0.3,
+      },
+      h("path", { key: "scale-a", d: "M214 98C222 104 232 109 244 113" }),
+      h("path", { key: "scale-b", d: "M228 108C238 116 250 122 264 126" }),
+      h("path", { key: "scale-c", d: "M244 119C254 126 268 131 280 133" }),
+    ),
+    h("path", {
+      key: "back-light",
+      d: "M196 74C210 69 226 73 238 82",
+      fill: "none",
+      stroke: "var(--inv-surface)",
+      strokeWidth: 1.6,
+      strokeLinecap: "round",
+      opacity: 0.3,
+    }),
     h("circle", { key: "cheek", cx: 173, cy: 86, r: 5, fill: "var(--inv-soft)", opacity: 0.5 }),
     h("circle", { key: "eye", cx: 188, cy: 78, r: 7, fill: "var(--inv-surface)" }),
     h("circle", { key: "pupil", cx: 186.2, cy: 78.6, r: 3.2, fill: "var(--inv-ink)" }),
+    h("circle", { key: "glint", cx: 187.4, cy: 77.3, r: 1.1, fill: "var(--inv-surface)" }),
     h("circle", { key: "nostril", cx: 160, cy: 84, r: 1.5, fill: "var(--inv-ink)" }),
     h("path", {
       key: "smile",
@@ -347,14 +859,70 @@ function scene(id: IllustrationId): ReactElement[] {
       strokeWidth: 1.9,
       strokeLinecap: "round",
     }),
+    h(
+      "g",
+      {
+        key: "toes",
+        fill: "none",
+        stroke: "var(--inv-ink)",
+        strokeWidth: 1.4,
+        strokeLinecap: "round",
+        opacity: 0.65,
+      },
+      h("path", { key: "toe-a", d: "M233 164v5M238 164v5M243 164v5" }),
+      h("path", { key: "toe-b", d: "M291 164v5M296 164v5M301 164v5" }),
+    ),
+    // The baby, turned toward the nest; the same hide pattern at a child's scale.
+    h(
+      "g",
+      { key: "baby", transform: `${BABY_PLACE} scale(${BABY_SCALE})` },
+      h("use", { key: "baby-hide", href: `#${id("dinosaur")}`, fill: "var(--inv-decoration-one)" }),
+      h("use", {
+        key: "baby-spots",
+        href: `#${id("dinosaur")}`,
+        style: { fill: `url(#${id("dino-spots")})` },
+      }),
+      h("path", {
+        key: "baby-plate",
+        d: "M252 105L258 90L263 99L267 105Z",
+        fill: "var(--inv-decoration-two)",
+        opacity: 0.95,
+      }),
+      h("circle", { key: "baby-eye", cx: 188, cy: 78, r: 7, fill: "var(--inv-surface)" }),
+      h("circle", { key: "baby-pupil", cx: 186, cy: 79, r: 3.4, fill: "var(--inv-ink)" }),
+      h("path", {
+        key: "baby-smile",
+        d: "M161 87c4 3.6 9.5 4.2 14 2.6",
+        fill: "none",
+        stroke: "var(--inv-ink)",
+        strokeWidth: 2.4,
+        strokeLinecap: "round",
+      }),
+    ),
     ...cutSheets(id, [ground]),
-    footprints(id, SCENE_TRAIL, "var(--inv-surface)", 0.92),
     ...cutSheets(id, fronds),
+    // The nest, its eggs, and the baby's first prints.
+    nestWithEggs(id, "nest", 70, 180, 1.15, NEST_EGGS),
+    footprints("nest-prints", id, NEST_PRINTS, "var(--inv-surface)", 0.7),
+    rocks(
+      "rocks-scene",
+      [
+        { x: 146, y: 178, rotate: -3, scale: 0.72 },
+        { x: 166, y: 180, rotate: 6, scale: 0.9 },
+        { x: 300, y: 178, rotate: -4, scale: 0.62 },
+      ],
+      "var(--inv-ink)",
+    ),
+    cycad(id, "cycad-near-left", 112, 178, 0.8),
+    // The palms at both edges, the framing pieces of the foreground.
+    ...palm(id, "left"),
+    ...palm(id, "right"),
+    footprints("scene-trail", id, SCENE_TRAIL, "var(--inv-surface)", 0.92),
     ...grain(id, SCENE_WIDTH, SCENE_HEIGHT),
   ];
 }
 
-/** The divider: a torn strip of paper carrying the footprint trail from one section to the next. */
+/** The divider: a torn strip carrying the trail, a nest, a cycad, and the confetti onwards. */
 function divider(id: IllustrationId): ReactElement[] {
   const top = tornEdge(SCENE_WIDTH, 34, 3.1, DIVIDER_HEIGHT + 8);
   const under = tornEdge(SCENE_WIDTH, 44, 5.4, DIVIDER_HEIGHT + 8);
@@ -366,6 +934,8 @@ function divider(id: IllustrationId): ReactElement[] {
   return [
     sheetDefinitions(id, sheets),
     footprintDefinition(id),
+    sceneDefinitions(id),
+    patternDefinitions(id),
     ...cutSheets(id, [sheets[0] as CutSheet]),
     // The lower strip, tinted with the accent instead of drawn in a second color.
     h("use", {
@@ -374,7 +944,8 @@ function divider(id: IllustrationId): ReactElement[] {
       fill: "var(--inv-accent)",
       opacity: 0.28,
     }),
-    // Grass blades at the right end, drawn with the accent so the strip is not one flat band.
+    // A cycad sprouting at the left end, and grass blades at the right.
+    cycad(id, "divider-cycad", 26, 52, 0.62),
     h("path", {
       key: "blade-a",
       d: "M330 46C324 38 316 32 306 28 316 27 326 32 332 38 336 41 334 45 330 46Z",
@@ -393,11 +964,30 @@ function divider(id: IllustrationId): ReactElement[] {
       fill: "var(--inv-accent)",
       opacity: 0.35,
     }),
-    footprints(id, DIVIDER_TRAIL, "var(--inv-accent)", 0.5),
+    nestWithEggs(id, "divider-nest", 282, 56, 0.72, NEST_EGGS.slice(0, 2)),
+    rocks(
+      "divider-rocks",
+      [
+        { x: 250, y: 55, rotate: -4, scale: 0.5 },
+        { x: 332, y: 55, rotate: 5, scale: 0.42 },
+      ],
+      "var(--inv-ink)",
+    ),
+    footprints("divider-trail", id, DIVIDER_TRAIL, "var(--inv-accent)", 0.5),
+    confetti(
+      "divider-confetti",
+      id,
+      CONFETTI.slice(0, 5).map((piece) => ({
+        ...piece,
+        x: piece.x,
+        y: 20 + (piece.y % 22),
+        paint: "var(--inv-accent)" as ThemePaint,
+      })),
+    ),
   ];
 }
 
-/** The footer: a torn strip with frond tips at both ends and the trail running out of the page. */
+/** The footer: the trail runs out of the page past the nest, with frond tips at both ends. */
 function footer(id: IllustrationId): ReactElement[] {
   const top = tornEdge(SCENE_WIDTH, 11, 7.6, FOOTER_HEIGHT + 8);
   const wash = tornEdge(SCENE_WIDTH, 45, 2.3, FOOTER_HEIGHT + 8);
@@ -409,6 +999,8 @@ function footer(id: IllustrationId): ReactElement[] {
   return [
     sheetDefinitions(id, sheets),
     footprintDefinition(id),
+    sceneDefinitions(id),
+    patternDefinitions(id),
     ...cutSheets(id, [sheets[0] as CutSheet]),
     // The accent wash under the strip, a tint of the theme accent rather than a second color.
     h("use", {
@@ -441,11 +1033,29 @@ function footer(id: IllustrationId): ReactElement[] {
       fill: "var(--inv-accent)",
       opacity: 0.28,
     }),
-    footprints(id, FOOTER_TRAIL, "var(--inv-surface)", 0.85),
+    cycad(id, "footer-cycad-left", 96, 58, 0.5),
+    nestWithEggs(id, "footer-nest", 195, 58, 0.62, NEST_EGGS.slice(1, 3)),
+    rocks(
+      "footer-rocks",
+      [
+        { x: 150, y: 58, rotate: -3, scale: 0.4 },
+        { x: 240, y: 59, rotate: 5, scale: 0.36 },
+      ],
+      "var(--inv-ink)",
+    ),
+    footprints("footer-trail", id, FOOTER_TRAIL, "var(--inv-surface)", 0.85),
+    confetti(
+      "footer-confetti",
+      id,
+      CONFETTI.slice(2, 6).map((piece) => ({
+        ...piece,
+        y: 14 + (piece.y % 24),
+      })),
+    ),
   ];
 }
 
-/** «Dinosaurios» in paper cut-out: the header diorama, the footprint divider, and the footer trail. */
+/** «Dinosaurios» in paper cut-out: the family diorama, the nest divider, and the footer trail. */
 export const DINOSAURS_ILLUSTRATION: ThemeIllustration = {
   theme: "dinosaurs",
   scene: {
