@@ -39,6 +39,7 @@ const PUBLIC: PublicInvitation = {
     whatsapp: { phone: "+525512345678" },
     music: { url: PLAYLIST, provider: "spotify" },
     giftRegistry: true,
+    rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
   },
 };
 
@@ -80,6 +81,7 @@ describe("publicFeatureBlock", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     } as unknown as PublicInvitation;
 
@@ -111,6 +113,7 @@ describe("publicFeatureBlock", () => {
         whatsapp: null,
         music: null,
         giftRegistry: true,
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     });
 
@@ -147,6 +150,7 @@ describe("publicFeatureBlock", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     });
 

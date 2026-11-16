@@ -5,6 +5,8 @@ import { getWebServerConfig } from "../../../../lib/server/config.ts";
 import {
   createPublicInvitationsClient,
   type PublicInvitationsClient,
+  type PublicRsvpSubmission,
+  type PublicRsvpSubmitResult,
 } from "../../../../lib/server/public-invitations-api.ts";
 import { errorClass } from "../../../../lib/server/server-log.ts";
 
@@ -26,6 +28,7 @@ export const PUBLIC_INVITATION_LOG_EVENT = {
   READ_FAILED: "public_invitation_read_failed",
   RENDERER_UNKNOWN: "public_invitation_renderer_unknown",
   RENDERER_PROPS_REFUSED: "public_invitation_renderer_props_refused",
+  RSVP_SUBMIT_FAILED: "public_rsvp_submit_failed",
 } as const;
 
 export type PublicInvitationLogEvent =
@@ -75,6 +78,25 @@ export async function readPublicInvitation(
     return await publicInvitationsClient().getBySlug(slug);
   } catch (error) {
     logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.READ_FAILED, { error });
+    throw error;
+  }
+}
+
+/**
+ * One guest's open RSVP answer through the anonymous client (M6 G3; S4). A failure this deployment could not map is
+ * logged once as its class and kind and rethrown, so the action can answer the guest one sentence instead of an
+ * error page. Nothing logged names a guest, a phone, a message, or your invitation's content: this is an
+ * operational line, not an audit trail.
+ */
+export async function submitPublicRsvp(
+  slug: string,
+  submission: PublicRsvpSubmission,
+  options?: { clientAddress?: string },
+): Promise<PublicRsvpSubmitResult> {
+  try {
+    return await publicInvitationsClient().submitRsvp(slug, submission, options);
+  } catch (error) {
+    logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.RSVP_SUBMIT_FAILED, { error });
     throw error;
   }
 }

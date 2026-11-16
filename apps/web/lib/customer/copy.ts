@@ -275,6 +275,7 @@ export const INVITATION_NOTICE_CODES = [
   "published",
   "unpublished",
   "features-saved",
+  "rsvp-saved",
 ] as const;
 export type InvitationNoticeCode = (typeof INVITATION_NOTICE_CODES)[number];
 
@@ -286,6 +287,7 @@ export const INVITATION_NOTICE_COPY: Record<InvitationNoticeCode, string> = {
   published: "Listo, publicamos tu invitación.",
   unpublished: "Listo, tu invitación volvió a borrador.",
   "features-saved": "Listo, guardamos las funcionalidades.",
+  "rsvp-saved": "Listo, guardamos la configuración de asistencia.",
 };
 
 /**
@@ -321,6 +323,8 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "content-unavailable":
     "No pudimos comprobar la plantilla de esta invitación. Inténtalo de nuevo en unos minutos.",
   "features-invalid": "Revisa las funcionalidades: hay un dato que no pudimos guardar.",
+  "rsvp-settings-invalid":
+    "Revisa la configuración de asistencia: hay un dato que no pudimos guardar.",
   unavailable: "No pudimos completar la acción. Inténtalo de nuevo en unos minutos.",
 };
 
@@ -377,6 +381,50 @@ export const FEATURE_COPY = {
 } as const;
 
 /**
+ * The creator's «Asistencia» section and its responses page (M6 G3; S1, S4). The section configures when answers
+ * close and how many people one may name; the page lists every answer with its totals and the CSV download.
+ */
+export const RSVP_COPY = {
+  sectionTitle: "Asistencia",
+  sectionHint:
+    "Decide hasta cuándo aceptas respuestas y cuántas personas puede confirmar cada invitado. Los invitados no ven a los demás.",
+  deadlineLabel: "Fecha y hora límite (opcional)",
+  deadlineHint:
+    "Después de esta fecha y hora la invitación deja de recibir respuestas. Se lee en la zona horaria de la invitación.",
+  partyLimitLabel: "Personas por respuesta",
+  partyLimitHint: "Cada invitado puede confirmar de 1 a este número de personas.",
+  save: "Guardar asistencia",
+  archivedNote:
+    "Esta invitación está archivada: puedes consultar la configuración de asistencia, pero ya no editarla.",
+  unavailable:
+    "No pudimos leer la configuración de asistencia. Inténtalo de nuevo en unos minutos.",
+  responsesLink: "Ver respuestas",
+  responsesTitle: "Respuestas de asistencia | InvitaMe",
+  responsesEyebrow: "Tu invitación",
+  responsesHeading: "Respuestas de asistencia",
+  responsesIntro:
+    "Aquí están las respuestas que recibió tu invitación, de la más reciente a la más antigua.",
+  totalsHeading: "Totales",
+  totalAttending: "Personas que asisten",
+  totalDeclined: "No asistirán",
+  totalResponses: "Respuestas",
+  emptyNote:
+    "Todavía no hay respuestas. Cuando alguien confirme desde la invitación, aparecerá aquí.",
+  download: "Descargar CSV",
+  columnName: "Nombre",
+  columnAnswer: "¿Asiste?",
+  columnParty: "Personas",
+  columnPhone: "Teléfono",
+  columnMessage: "Mensaje",
+  columnAnsweredAt: "Respondió",
+  attendingYes: "Sí",
+  attendingNo: "No",
+  updatedNote: "Actualizada",
+  deadlineNone: "Sin fecha límite",
+  backToInvitation: "Volver a la invitación",
+} as const;
+
+/**
  * The Spanish label of each zone the creator may pick (S4). Each one names the place and keeps the IANA id in
  * parentheses, because several zones serve neighboring cities and the id is what the invitation stores.
  */
@@ -412,6 +460,16 @@ export const FEATURE_ISSUE_COPY = {
 } as const;
 
 /**
+ * Why the API refused an RSVP settings save, in Spanish (M6 G3; S4). The API answers deterministic English issues;
+ * the action maps each one to a code in its own query and these sentences turn it back.
+ */
+export const RSVP_SETTINGS_ISSUE_COPY = {
+  deadline: "Escribe una fecha y hora válidas para cerrar la confirmación, o deja el campo vacío.",
+  party: "Elige un número de personas entre 1 y 10.",
+  other: "Hay un dato de la asistencia que no pudimos guardar. Revísalo y vuelve a intentarlo.",
+} as const;
+
+/**
  * The guest's page of a published invitation (M5 T5; S1, S5, A3, A5). A guest is not a customer here: the
  * page shows the invitation and nothing about the owner's account, and it asks search engines to stay away.
  */
@@ -429,4 +487,44 @@ export const PUBLIC_INVITATION_COPY = {
   home: "Ir al inicio",
   /** The discreet footer credit that links back to the site (S1). */
   madeWith: "Hecha con InvitaMe",
+} as const;
+
+/**
+ * The guest's open RSVP block (M6 G3; S1, S4). A guest types a name, says whether they will come, and may name how
+ * many people, a phone, and a message. The block is one themed card of the features block, it posts without any
+ * client script, and it never promises delivery or a personal link.
+ */
+export const RSVP_FORM_COPY = {
+  title: "Confirma tu asistencia",
+  hint: "Cuéntanos si podrás acompañarnos.",
+  nameLabel: "Tu nombre",
+  namePlaceholder: "Nombre y apellido",
+  attendingLegend: "¿Asistirás?",
+  attendingYes: "Sí, asistiré",
+  attendingNo: "No podré asistir",
+  partyLabel: "Número de personas",
+  partyHint: "Cuántas personas vienen contigo, incluido tú. Si no asistirás, no hace falta elegir.",
+  phoneLabel: "Teléfono (opcional)",
+  phoneHint: "Solo lo usará quien organiza, por si necesita contactarte.",
+  messageLabel: "Mensaje (opcional)",
+  messageHint: "Puedes escribir hasta 280 caracteres.",
+  submit: "Enviar respuesta",
+  /** The one field no person sees: a bot fills it, and the API then answers success without storing anything. */
+  honeypotLabel: "No llenes este campo",
+  deadlineNote: (deadline: string) => `Confirma antes del ${deadline}.`,
+  closedNote: (deadline: string) => `La confirmación de asistencia cerró el ${deadline}.`,
+  /** The same news when the stored deadline cannot be read on this runtime's clock. */
+  closedGeneric: "La confirmación de asistencia ya cerró.",
+} as const;
+
+/**
+ * What the guest page says after an answer, read from its own query (M6 G3; S4). Each code is one Spanish
+ * sentence, so no API text ever reaches a guest; a code the page does not know shows nothing.
+ */
+export const RSVP_NOTICE_COPY = {
+  received: "¡Gracias! Recibimos tu respuesta.",
+  invalid: "Revisa los datos de tu respuesta e inténtalo de nuevo.",
+  closed: "La confirmación de asistencia ya cerró.",
+  limited: "Recibimos muchos intentos desde tu conexión. Espera unos minutos e inténtalo de nuevo.",
+  unavailable: "No pudimos guardar tu respuesta. Inténtalo de nuevo en unos minutos.",
 } as const;

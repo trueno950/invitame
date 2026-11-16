@@ -951,6 +951,18 @@ function stub(answers: Answers = {}): Stub {
       calls.push("packages");
       return answers.packages?.() ?? unexpected("packages");
     },
+    readRsvp: () => {
+      calls.push("readRsvp");
+      return unexpected("readRsvp");
+    },
+    updateRsvpSettings: () => {
+      calls.push("updateRsvpSettings");
+      return unexpected("updateRsvpSettings");
+    },
+    rsvpCsv: () => {
+      calls.push("rsvpCsv");
+      return unexpected("rsvpCsv");
+    },
   };
   return { api, calls };
 }

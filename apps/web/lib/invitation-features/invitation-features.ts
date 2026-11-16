@@ -19,6 +19,28 @@ export interface WhatsAppContact {
   readonly phone: string;
 }
 
+/** The server action an RSVP form posts to (M6 G3; S4); it is a server function, never a client script. */
+export type RsvpFormAction = (formData: FormData) => Promise<void>;
+
+/**
+ * The open RSVP form of a guest page (M6 G3; S4), as the shared features block renders it. The API owns the
+ * decision: the page only builds this view when the invitation accepts open answers, and the block shows the
+ * form while `closed` is false and a note once the deadline has passed. `action` is the server action the form
+ * posts to; it is absent only in a render that does not submit anything (tests, previews), never on the public
+ * page.
+ */
+export interface RsvpBlockView {
+  /** The invitation's public slug, the only value that names it to the API. */
+  readonly slug: string;
+  /** The party any answer may name: the creator's limit, from 1 to 10. */
+  readonly partyLimit: number;
+  /** The deadline as an ISO instant, or null when the invitation accepts answers until it is unpublished. */
+  readonly deadline: string | null;
+  /** Whether the deadline has already passed, so the block shows the closing note instead of the form. */
+  readonly closed: boolean;
+  readonly action?: RsvpFormAction;
+}
+
 /** The features of one invitation, as the public read returns them. */
 export interface InvitationFeatures {
   /** The invitation's IANA time zone: every wall clock of the page is read in it. */
@@ -35,6 +57,8 @@ export interface InvitationFeatures {
    * says the package grants it, the layout says whether there is something to show.
    */
   readonly giftRegistry: boolean;
+  /** The open RSVP form of the guest page, or absent when the invitation has no open RSVP (G3; S4). */
+  readonly rsvp?: RsvpBlockView;
 }
 
 /** An E.164 number: a `+`, a first digit from 1 to 9, and 7 to 14 digits after it. */
@@ -58,6 +82,8 @@ export const INVITATION_FEATURE_KEYS = [
   "MUSIC",
   "GIFT_REGISTRY",
   "RSVP",
+  "GUEST_LIST",
+  "QR_PASS",
   "CALENDAR",
 ] as const;
 
@@ -82,7 +108,8 @@ export function hasAnyFeature(features: InvitationFeatures): boolean {
     features.map ||
     features.calendar ||
     features.whatsapp !== null ||
-    features.music !== null
+    features.music !== null ||
+    features.rsvp !== undefined
   );
 }
 

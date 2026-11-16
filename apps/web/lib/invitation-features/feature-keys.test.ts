@@ -6,16 +6,28 @@ import { INVITATION_FEATURE_KEYS, isInvitationFeatureKey } from "./invitation-fe
 // The web mirrors the API's gated keys (invitation-features S7, m6 S4) so an owned invitation's
 // `availableFeatures` reads strictly; a key the API gates but the mirror lacks would refuse the whole body.
 describe("implemented feature keys", () => {
-  it("mirrors every key the API gates, including RSVP", () => {
+  it("mirrors every key the API gates, including the guest list and its QR pass", () => {
     assert.deepEqual(
       [...INVITATION_FEATURE_KEYS],
-      ["COUNTDOWN", "MAP", "WHATSAPP", "MUSIC", "GIFT_REGISTRY", "RSVP", "CALENDAR"],
+      [
+        "COUNTDOWN",
+        "MAP",
+        "WHATSAPP",
+        "MUSIC",
+        "GIFT_REGISTRY",
+        "RSVP",
+        "GUEST_LIST",
+        "QR_PASS",
+        "CALENDAR",
+      ],
     );
-    assert.equal(isInvitationFeatureKey("RSVP"), true);
+    for (const key of ["RSVP", "GUEST_LIST", "QR_PASS"]) {
+      assert.equal(isInvitationFeatureKey(key), true, key);
+    }
   });
 
   it("still refuses a key the API does not gate", () => {
-    assert.equal(isInvitationFeatureKey("GUEST_LIST"), false);
+    assert.equal(isInvitationFeatureKey("PHOTO_BOOTH"), false);
     assert.equal(isInvitationFeatureKey("rsvp"), false);
   });
 });

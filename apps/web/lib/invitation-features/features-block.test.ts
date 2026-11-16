@@ -8,7 +8,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { InvitationFeaturesBlock } from "../../app/_components/invitation-features/invitation-features-block.ts";
 import type { EventFacts } from "./event-facts.ts";
-import type { InvitationFeatures } from "./invitation-features.ts";
+import type { InvitationFeatures, RsvpBlockView } from "./invitation-features.ts";
 
 // The shared themed features block of the guest page (S3, S4): countdown, «Cómo llegar», «Agregar al
 // calendario», and «Escribir por WhatsApp», each rendered only when the API says the invitation has it. It is
@@ -486,3 +486,157 @@ function rendererSources(): Array<{ file: string; source: string }> {
     .map((entry) => join(entry.parentPath, entry.name))
     .map((file) => ({ file, source: readFileSync(file, "utf8") }));
 }
+
+describe("«Confirma tu asistencia» in the features block (M6 G3; S4)", () => {
+  /** One open RSVP block, as the guest page builds it; a test that ignores the action leaves it out. */
+  const RSVP: RsvpBlockView = {
+    slug: "invitacion-k7m2qx",
+    partyLimit: 4,
+    deadline: "2026-12-01T18:00:00.000Z",
+    closed: false,
+  };
+
+  function rsvpFeatures(overrides: Partial<RsvpBlockView> = {}): InvitationFeatures {
+    return featuresOf({ rsvp: { ...RSVP, ...overrides } });
+  }
+
+  /**
+   * One attribute of a static tag. React 19 keeps the camelCase spelling of a few attributes (`maxLength`,
+   * `autoComplete`) in static markup, and HTML attribute names are case-insensitive, so the reader is too.
+   */
+  function attributeAnyCase(tag: string, name: string): string | undefined {
+    return new RegExp(`\\s${name}="([^"]*)"`, "i").exec(tag)?.[1];
+  }
+
+  /** The controls of one rendered form, by name. */
+  function controlTags(html: string): string[] {
+    return html.match(/<(?:input|select|textarea)\b[^>]*>/g) ?? [];
+  }
+
+  it("offers the form in its own themed card, and renders the block for an RSVP-only invitation", () => {
+    const html = render(rsvpFeatures());
+
+    assert.match(html, /<section[^>]*data-section="features"/);
+    assert.match(html, /data-feature="rsvp"/);
+    assert.match(html, /<h3[^>]*>Confirma tu asistencia<\/h3>/);
+    assert.match(html, /<form[^>]*data-rsvp-form/);
+    assert.match(html, /<input[^>]*type="hidden"[^>]*name="slug"[^>]*value="invitacion-k7m2qx"/);
+    // An invitation whose only gated feature is the RSVP still shows the block: it is not an empty render.
+    assert.notEqual(render(featuresOf({ rsvp: RSVP })), "");
+  });
+
+  it("renders nothing at all when the invitation has no RSVP and no other feature", () => {
+    assert.equal(render(ALL_OFF), "");
+    assert.doesNotMatch(render(featuresOf({ countdown: true })), /data-feature="rsvp"/);
+  });
+
+  it("asks the name, the answer, the party size, and the two optional fields", () => {
+    const html = render(rsvpFeatures());
+
+    for (const text of [
+      "Tu nombre",
+      "¿Asistirás?",
+      "Sí, asistiré",
+      "No podré asistir",
+      "Número de personas",
+      "Teléfono (opcional)",
+      "Mensaje (opcional)",
+      "Enviar respuesta",
+    ]) {
+      assert.ok(html.includes(text), text);
+    }
+    const names = controlTags(html).map((tag) => attributeOf(tag, "name"));
+    assert.deepEqual(names, [
+      "slug",
+      "honeypot",
+      "name",
+      "attending",
+      "attending",
+      "partySize",
+      "phone",
+      "message",
+    ]);
+    assert.equal(attributeOf(controlTags(html)[3] ?? "", "value"), "si");
+    assert.equal(attributeOf(controlTags(html)[4] ?? "", "value"), "no");
+    assert.equal(attributeAnyCase(controlTags(html)[7] ?? "", "maxlength"), "280");
+  });
+
+  it("offers the party size from 1 to the invitation's own limit", () => {
+    for (const partyLimit of [1, 4, 10]) {
+      const html = render(rsvpFeatures({ partyLimit }));
+      const select = /<select\b[^>]*name="partySize"[^>]*>[\s\S]*?<\/select>/.exec(html)?.[0] ?? "";
+
+      assert.notEqual(select, "", String(partyLimit));
+      assert.deepEqual(
+        [...select.matchAll(/<option[^>]*value="(\d+)"/g)].map((match) => Number(match[1])),
+        Array.from({ length: partyLimit }, (_unused, index) => index + 1),
+        String(partyLimit),
+      );
+    }
+  });
+
+  it("gives every field an accessible label", () => {
+    const html = render(rsvpFeatures());
+    const ids = new Set(
+      [...html.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map(
+        (match) => match[1],
+      ),
+    );
+    const labelled = [...html.matchAll(/<label[^>]*\bfor="([^"]+)"/g)].map((match) => match[1]);
+
+    assert.ok(labelled.length >= 5);
+    for (const target of labelled) {
+      assert.ok(ids.has(target), target);
+    }
+  });
+
+  it("hides the honeypot off-screen, out of the tab order, and away from autofill", () => {
+    const html = render(rsvpFeatures());
+    const honeypot = controlTags(html).find((tag) => attributeOf(tag, "name") === "honeypot") ?? "";
+
+    assert.equal(attributeOf(honeypot, "type"), "text");
+    assert.equal(attributeOf(honeypot, "tabindex"), "-1");
+    assert.equal(attributeAnyCase(honeypot, "autocomplete"), "off");
+    assert.equal(attributeOf(honeypot, "aria-hidden"), "true");
+    assert.equal(attributeOf(honeypot, "required"), undefined);
+    assert.match(html, /<div[^>]*aria-hidden="true"[^>]*class="[^"]*(?:absolute|-left-\[9999px\])/);
+  });
+
+  it("names the deadline in the invitation's zone when the creator set one", () => {
+    assert.match(render(rsvpFeatures()), /Confirma antes del 1 de diciembre de 2026 a las 12:00/);
+    assert.doesNotMatch(render(rsvpFeatures({ deadline: null })), /Confirma antes del/);
+  });
+
+  it("shows a closed note instead of the form once the deadline has passed", () => {
+    const html = render(rsvpFeatures({ closed: true }));
+
+    assert.doesNotMatch(html, /<form/);
+    assert.doesNotMatch(html, /name="attending"/);
+    // Nothing invites an answer the invitation no longer accepts.
+    assert.doesNotMatch(html, /Cuéntanos si podrás acompañarnos/);
+    assert.match(
+      html,
+      /La confirmación de asistencia cerró el 1 de diciembre de 2026 a las 12:00\./,
+    );
+  });
+
+  it("ships no client script of its own and no inline handler", () => {
+    const html = render(rsvpFeatures({ partyLimit: 10 }));
+
+    assert.doesNotMatch(html, /<script/i);
+    assert.doesNotMatch(html, /\son[a-z]+=/);
+  });
+
+  it("draws the form from the theme's variables and keeps the submit a 44 px target", () => {
+    const html = render(rsvpFeatures());
+    const button = /<button\b[^>]*>[\s\S]*?<\/button>/.exec(html)?.[0] ?? "";
+
+    assert.match(html, /bg-\(--inv-surface\)/);
+    assert.match(html, /text-\(color:--inv-ink\)/);
+    assert.match(html, /text-\(color:--inv-accent\)/);
+    assert.match(html, /border-\(--inv-accent\)/);
+    assert.equal(attributeOf(button, "type"), "submit");
+    assert.ok(classesOf(button).includes("min-h-11"), button);
+    assert.doesNotMatch(html, /style="[^"]*#[0-9a-fA-F]{3,6}/);
+  });
+});

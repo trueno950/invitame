@@ -328,10 +328,10 @@ describe("sendApiRequest without a cookie", () => {
       (status) => status === 404,
     );
 
-    assert.deepEqual(response, {
-      status: 404,
-      text: '{"code":"PUBLIC_INVITATION_NOT_FOUND"}',
-    });
+    // The headers travel with the body, so a route handler can pass a download's own headers through.
+    assert.equal(response.status, 404);
+    assert.equal(response.text, '{"code":"PUBLIC_INVITATION_NOT_FOUND"}');
+    assert.equal(response.headers.get("content-type"), "application/json");
     assert.equal(received[0]?.headers.cookie, undefined);
     assert.equal(received[0]?.headers["x-invitame-proxy-secret"], PROXY_SECRET);
   });

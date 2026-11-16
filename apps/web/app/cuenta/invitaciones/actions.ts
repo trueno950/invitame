@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { saveInvitationFeatures } from "../../../lib/customer/invitation-features.ts";
+import { saveRsvpSettings } from "../../../lib/customer/invitation-rsvp.ts";
 import {
   archiveInvitation,
   createInvitation,
@@ -30,6 +31,11 @@ export async function saveInvitationContentAction(formData: FormData): Promise<v
 /** Saves the invitation's time zone and WhatsApp contact (F3; S3, S4). */
 export async function saveInvitationFeaturesAction(formData: FormData): Promise<void> {
   redirect(await saveInvitationFeatures(invitations, formData));
+}
+
+/** Saves the RSVP deadline and party limit of a draft or published invitation (M6 G3; S4). */
+export async function saveRsvpSettingsAction(formData: FormData): Promise<void> {
+  redirect(await saveRsvpSettings(invitations, formData));
 }
 
 export async function archiveInvitationAction(formData: FormData): Promise<void> {

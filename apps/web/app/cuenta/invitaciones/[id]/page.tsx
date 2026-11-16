@@ -4,6 +4,7 @@ import { connection } from "next/server";
 
 import { INVITATION_COPY, INVITATION_ERROR_COPY } from "../../../../lib/customer/copy.ts";
 import { featureSettingsView } from "../../../../lib/customer/invitation-features.ts";
+import { rsvpSettingsView } from "../../../../lib/customer/invitation-rsvp.ts";
 import {
   contentSections,
   fieldLabel,
@@ -14,6 +15,7 @@ import {
   statusLabel,
 } from "../../../../lib/customer/invitations.ts";
 import { publicInvitationPath } from "../../../../lib/public/invitation-page.ts";
+import type { OwnedInvitation, RsvpRead } from "../../../../lib/server/invitations-api.ts";
 import { isInvitationId } from "../../../../lib/server/invitations-api.ts";
 import { CustomerWorkspaceShell } from "../../../_components/customer-workspace-shell.tsx";
 import {
@@ -27,14 +29,20 @@ import { ContentForm } from "../_components/content-form.tsx";
 import { ContentSummary } from "../_components/content-summary.tsx";
 import { FeaturesForm, FeaturesSummary } from "../_components/features-form.tsx";
 import { Notices } from "../_components/notices.tsx";
+import {
+  RsvpSettingsForm,
+  RsvpSettingsSummary,
+  RsvpSettingsUnavailable,
+} from "../_components/rsvp-settings.tsx";
 import { StatusBadge } from "../_components/status-badge.tsx";
 import { invitations } from "../_lib/api.ts";
-import { attempt, resolveRead } from "../_lib/load.ts";
+import { attempt, type Loaded, resolveRead } from "../_lib/load.ts";
 import {
   archiveInvitationAction,
   publishInvitationAction,
   saveInvitationContentAction,
   saveInvitationFeaturesAction,
+  saveRsvpSettingsAction,
   unpublishInvitationAction,
 } from "../actions.ts";
 
@@ -57,6 +65,34 @@ function PlainShell({ heading, body, path }: { heading: string; body: string; pa
         {INVITATION_COPY.backToList}
       </Link>
     </CustomerWorkspaceShell>
+  );
+}
+
+/**
+ * The «Asistencia» section of the page: the form of a draft whose package includes RSVP, the read-only pair of an
+ * archived one, or the note of a settings read that failed (M6 G3; S4). A missing invitation is not its own case
+ * here: the page itself already answered not-found above.
+ */
+function RsvpSectionBlock({
+  invitation,
+  loaded,
+}: {
+  invitation: OwnedInvitation;
+  loaded: Loaded<RsvpRead>;
+}) {
+  if (loaded.status === "not-found") {
+    return null;
+  }
+  if (loaded.status === "unavailable") {
+    return <RsvpSettingsUnavailable />;
+  }
+
+  const view = rsvpSettingsView(invitation, loaded.value.settings);
+
+  return view.editable ? (
+    <RsvpSettingsForm action={saveRsvpSettingsAction} view={view} />
+  ) : (
+    <RsvpSettingsSummary view={view} />
   );
 }
 
@@ -126,6 +162,11 @@ export default async function InvitationDetailPage({
   const packages =
     packageCatalog === "unavailable" || !packageCatalog.ok ? undefined : packageCatalog.value;
   const features = featureSettingsView(invitation, packages);
+  // The «Asistencia» section is offered only when the package includes RSVP, and it is read after the catalog
+  // because the package decides whether the page offers it at all (M6 G3; S4).
+  const rsvp = features.showRsvp
+    ? resolveRead(await attempt(() => invitations.readRsvp(invitation.id)))
+    : undefined;
   const pinned =
     templates === undefined
       ? undefined
@@ -189,6 +230,8 @@ export default async function InvitationDetailPage({
             ) : (
               <FeaturesSummary view={features} />
             )}
+
+            {rsvp === undefined ? null : <RsvpSectionBlock invitation={invitation} loaded={rsvp} />}
           </div>
 
           <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">

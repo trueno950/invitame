@@ -77,6 +77,12 @@ export const invitations = {
     id: string,
     features: Parameters<InvitationsClient["updateInvitationFeatures"]>[1],
   ) => logged((api) => api.updateInvitationFeatures(id, features)),
+  readRsvp: (id: string) => logged((api) => api.readRsvp(id)),
+  updateRsvpSettings: (
+    id: string,
+    settings: Parameters<InvitationsClient["updateRsvpSettings"]>[1],
+  ) => logged((api) => api.updateRsvpSettings(id, settings)),
+  rsvpCsv: (id: string) => logged((api) => api.rsvpCsv(id)),
   archive: (id: string) => logged((api) => api.archive(id)),
   publish: (id: string) => logged((api) => api.publish(id)),
   unpublish: (id: string) => logged((api) => api.unpublish(id)),

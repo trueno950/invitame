@@ -409,12 +409,12 @@ formal baptism.
 
 ## Guest invitation features
 
-Status: **current** (F2, F3, F6, F7; S3, S4, S7). The API decides which features an invitation shows: the pinned
-package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `WHATSAPP`, `MUSIC`, and
-`GIFT_REGISTRY`, plus add-to-calendar, which is always on and is not a catalog feature; WhatsApp also needs a stored
-phone and music a stored allow-listed playlist link. The web renders one themed **features block** in every layout,
-gates each layout's own gift registry block with the `giftRegistry` flag, and never reads a package or a feature name
-to choose a code path.
+Status: **current** (F2, F3, F6, F7, M6 G3; S3, S4, S7). The API decides which features an invitation shows: the
+pinned package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `WHATSAPP`, `MUSIC`,
+`GIFT_REGISTRY`, `RSVP`, `GUEST_LIST`, and `QR_PASS`, plus add-to-calendar, which is always on and is not a catalog
+feature; WhatsApp also needs a stored phone and music a stored allow-listed playlist link. The web renders one
+themed **features block** in every layout, gates each layout's own gift registry block with the `giftRegistry` flag,
+and never reads a package or a feature name to choose a code path.
 
 - Placement and shape: each layout (`birthday-map-01`, `birthday-poster-01`, `birthday-story-01`,
   `baby-shower-classic-01`, `baptism-classic-01`) places `InvitationFeaturesBlock`
@@ -451,6 +451,20 @@ to choose a code path.
   `features.giftRegistry` is true and the content has a value. A renderer called with no `features` prop — the
   template chooser previews and `lib/renderers/samples.ts` — keeps the content-alone rule it had before this batch.
   The birthday layouts declare no gift registry field, so they never render one.
+- Attendance (M6 G3; S1, S4): when the public read says `features.rsvp.mode` is `open`, the same block ends with
+  «Confirma tu asistencia»: the guest's name, «¿Asistirás?» with sí/no radios, the party size from 1 to the
+  invitation's own limit, an optional phone, an optional message of at most 280 characters, and one reserved field
+  no person sees — positioned off-screen, out of the tab order (`tabindex="-1"`), `autocomplete="off"`, and
+  `aria-hidden`, so a bot fills it and the API answers success without storing anything. The deadline is named in
+  the invitation's own zone («Confirma antes del 5 de diciembre de 2026 a las 18:00»); once it passes, the card
+  keeps its place and shows «La confirmación de asistencia cerró el …» instead of the form. The card is a plain
+  server-rendered form that posts to a server action: no client script, no client validation, and the server action
+  forwards the browser's address from the incoming request headers, which is what the API's per-address rate limit
+  counts. Every answer — stored, updated, or dropped by the honeypot — comes back to the same page, and the notice
+  is one of the page's own Spanish sentences: «¡Gracias! Recibimos tu respuesta.» as a status, or a `role="alert"`
+  sentence for a refused, closed, rate-limited, or failed submission. A repeat from the same normalized name and
+  phone updates that response instead of duplicating it, so a guest who answers again sees one thank-you. A
+  package with the guest list (`guest-list`) shows nothing here: its personal links are the way in (G4).
 - Degradation: an unsupported zone turns off only the countdown and the calendar (the two features that read a
   wall clock); a snapshot whose facts cannot be read turns off the whole block. Neither is a guest-visible error.
 - Creator side: the draft page (`/cuenta/invitaciones/[id]`) has a «Funcionalidades» section after the content
@@ -486,6 +500,17 @@ plain text. The customer «Rosa y vino» theme stays; the invitation pages simpl
   fields from `sm` up; a multi-line field spans both. The side third holds the status badge, the slug as text, what
   is still missing («Faltan: …»), and the archive form, and stays in view (`lg:sticky`). An archived draft and a
   retired version keep the same layout, with the stored content in place of the form.
+- Attendance (M6 G3; S1, S4): below «Funcionalidades», the detail page adds an «Asistencia» section while the
+  package includes RSVP. It writes the deadline with a `datetime-local` field read in the invitation's own zone (the
+  zone is named under the field and travels in a hidden field, so the action reads the same wall clock the creator
+  saw), the party limit as a select from 1 to 10 personas, and saves through a server action with the same
+  notice/error query the other sections use; a refused save lists its Spanish issue sentences under the error. An
+  archived invitation shows the same pair read-only. The section links to
+  `/cuenta/invitaciones/[id]/asistencia`, which lists the answers newest first with the totals (personas que
+  asisten, no asistirán, respuestas), marks an answer that was updated, and keeps the table scrollable in its own
+  box on a phone. «Descargar CSV» goes through a route handler that forwards the owner's session, passes the API's
+  own `text/csv` type and attachment filename through, and answers `Cache-Control: no-store`; an ended session goes
+  to sign-in, a missing or foreign invitation is 404, and an outage is 503 rather than an empty file.
 - Inputs: `contentFields` derives each control from that property of the pinned schema and never from the template
   name. `format: "date"` is an `input type="date"`; `format: "time"`, or a `pattern` that accepts every 24-hour
   time and refuses anything else, is `input type="time"`; `format: "uri"` is `input type="url"` with

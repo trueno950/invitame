@@ -4,6 +4,7 @@ import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import {
   ApiClientError,
   type ApiClientOptions,
+  sendApiDownload,
   sendApiRequest,
   sessionCookieHeader,
 } from "./api-client.ts";
@@ -69,6 +70,53 @@ export interface InvitationFeatureInput {
   playlistUrl: string | null;
 }
 
+// The RSVP routes of the owner (M6 G1, G3; S1, S4). The deadline is an ISO instant or null, the party limit is how
+// many people one answer may name, and the read carries the settings, the responses, and the totals.
+
+/** The creator's settings of one invitation: when answers close, and how many people one may name (S4). */
+export interface RsvpSettings {
+  /** The deadline as an ISO instant, or null when the invitation accepts answers until it is unpublished. */
+  readonly deadline: string | null;
+  readonly partyLimit: number;
+}
+
+/** The party limits the API accepts, mirrored so the creator form never offers a value it refuses (S4). */
+export const RSVP_PARTY_LIMIT_MIN = 1;
+export const RSVP_PARTY_LIMIT_MAX = 10;
+
+/** One response as the owner reads it (S4); the internal dedupe key is never part of this shape. */
+export interface RsvpResponseItem {
+  readonly id: string;
+  readonly name: string;
+  readonly attending: boolean;
+  readonly partySize: number;
+  readonly phone: string | null;
+  readonly message: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** The totals of one invitation's answers: confirmed people, declines, and rows (S1, S4). */
+export interface RsvpTotals {
+  readonly attendingPeople: number;
+  readonly declinedCount: number;
+  readonly responses: number;
+}
+
+/** The owner's read: settings, every response newest first, and the totals of the page (S1, S4). */
+export interface RsvpRead {
+  readonly settings: RsvpSettings;
+  readonly responses: RsvpResponseItem[];
+  readonly totals: RsvpTotals;
+}
+
+/** The owner's CSV download: the file and the headers the API sent it with (S1, S4). */
+export interface RsvpCsv {
+  readonly body: string;
+  readonly contentType: string;
+  readonly contentDisposition: string;
+}
+
 /** One template a creator may start from, with the version the draft will be pinned to (S8). */
 export interface CreatorTemplate {
   id: string;
@@ -111,6 +159,8 @@ export interface CreatorPackage {
  * - `content-invalid`: 400 `INVALID_INVITATION_CONTENT`, the pinned schema refused a value (S7);
  * - `features-invalid`: 400 `INVALID_INVITATION_FEATURES`, the feature data was refused and `issues` names
  *   why (S4);
+ * - `rsvp-settings-invalid`: 400 `INVALID_RSVP_SETTINGS`, the deadline or the party limit was refused and
+ *   `issues` names why (M6 G3; S4);
  * - `validation`: 400 without a known code, the API refused a field of the request;
  * - `not-editable`: 409 `INVITATION_NOT_EDITABLE`, the draft is archived (A3, S7);
  * - `already-archived`: 409 `INVITATION_ALREADY_ARCHIVED`;
@@ -131,6 +181,7 @@ export type InvitationFailure =
   | "package-does-not-fit"
   | "content-invalid"
   | "features-invalid"
+  | "rsvp-settings-invalid"
   | "validation"
   | "not-editable"
   | "already-archived"
@@ -443,6 +494,108 @@ export function parseCreatorPackages(value: unknown): CreatorPackage[] | undefin
   return mapAll(value, parseCreatorPackage);
 }
 
+/** Whether a value is a party limit the API accepts: an integer from 1 to 10 (S4). */
+function isPartyLimit(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= RSVP_PARTY_LIMIT_MIN &&
+    value <= RSVP_PARTY_LIMIT_MAX
+  );
+}
+
+/** A non-negative whole count, as a total or a party size is: `undefined` for anything else. */
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/**
+ * The creator's RSVP settings (M6 G3; S4): a deadline that is an ISO instant or null, and a party limit from 1 to
+ * 10. A body that says anything else is not this contract, so it is refused whole instead of being normalized.
+ */
+export function parseRsvpSettings(value: unknown): RsvpSettings | undefined {
+  const settings = record(value);
+
+  if (settings === undefined) {
+    return undefined;
+  }
+
+  const deadline = settings.deadline;
+  const partyLimit = settings.partyLimit;
+
+  if (!(deadline === null || isTimestamp(deadline)) || !isPartyLimit(partyLimit)) {
+    return undefined;
+  }
+
+  return { deadline, partyLimit };
+}
+
+/**
+ * One response of the owner's read (M6 G3; S4). Only the fields the page renders are kept, so an extra key such as
+ * the internal dedupe key never reaches a page even if a deployment sent one.
+ */
+export function parseRsvpResponseItem(value: unknown): RsvpResponseItem | undefined {
+  const item = record(value);
+
+  if (item === undefined) {
+    return undefined;
+  }
+
+  const { id, name, attending, partySize, phone, message, createdAt, updatedAt } = item;
+
+  if (
+    !isInvitationId(id) ||
+    !isNonEmptyString(name) ||
+    typeof attending !== "boolean" ||
+    !isCount(partySize) ||
+    partySize > RSVP_PARTY_LIMIT_MAX ||
+    !(phone === null || typeof phone === "string") ||
+    !(message === null || typeof message === "string") ||
+    !isTimestamp(createdAt) ||
+    !isTimestamp(updatedAt)
+  ) {
+    return undefined;
+  }
+
+  return { id, name, attending, partySize, phone, message, createdAt, updatedAt };
+}
+
+/** The totals of one invitation's answers, or undefined when a count is not one (S1, S4). */
+function parseRsvpTotals(value: unknown): RsvpTotals | undefined {
+  const totals = record(value);
+
+  if (totals === undefined) {
+    return undefined;
+  }
+
+  const { attendingPeople, declinedCount, responses } = totals;
+
+  if (!isCount(attendingPeople) || !isCount(declinedCount) || !isCount(responses)) {
+    return undefined;
+  }
+
+  return { attendingPeople, declinedCount, responses };
+}
+
+/** The owner's whole read: the settings, every response newest first, and the totals (M6 G3; S1, S4). */
+export function parseRsvpRead(value: unknown): RsvpRead | undefined {
+  const read = record(value);
+
+  if (read === undefined) {
+    return undefined;
+  }
+
+  const settings = parseRsvpSettings(read.settings);
+  const responses = mapAll(read.responses, parseRsvpResponseItem);
+  const totals = parseRsvpTotals(read.totals);
+
+  if (settings === undefined || responses === undefined || totals === undefined) {
+    return undefined;
+  }
+
+  return { settings, responses, totals };
+}
+
 const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVITATION_NOT_FOUND: "not-found",
   INVITATION_TEMPLATE_VERSION_NOT_PUBLISHED: "version-not-published",
@@ -450,6 +603,7 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVITATION_PACKAGE_DOES_NOT_FIT: "package-does-not-fit",
   INVALID_INVITATION_CONTENT: "content-invalid",
   INVALID_INVITATION_FEATURES: "features-invalid",
+  INVALID_RSVP_SETTINGS: "rsvp-settings-invalid",
   INVITATION_NOT_EDITABLE: "not-editable",
   INVITATION_ALREADY_ARCHIVED: "already-archived",
   INVITATION_NOT_PUBLISHABLE: "not-publishable",
@@ -508,7 +662,11 @@ function refusalOf(text: string | undefined): InvitationResult<never> | undefine
   }
 
   const issues =
-    failure === "not-publishable" || failure === "features-invalid" ? issuesOf(body) : undefined;
+    failure === "not-publishable" ||
+    failure === "features-invalid" ||
+    failure === "rsvp-settings-invalid"
+      ? issuesOf(body)
+      : undefined;
   return { ok: false, failure, ...(issues === undefined ? {} : { issues }) };
 }
 
@@ -518,6 +676,10 @@ const readsBody = (status: number): boolean =>
   status === 402 ||
   status === 404 ||
   status === 409;
+
+/** The content type and the attachment filename the RSVP CSV route answers with (M6 G3; S4). */
+const RSVP_CSV_CONTENT_TYPE = "text/csv";
+const RSVP_CSV_DISPOSITION = /^attachment; filename="[A-Za-z0-9._-]{1,80}"$/;
 
 const INVITATIONS = "/invitations";
 
@@ -643,6 +805,73 @@ export function createInvitationsClient(
     /** `GET /catalog/packages`: the ACTIVE packages with price and feature keys (S8). */
     packages: (): Promise<InvitationResult<CreatorPackage[]>> =>
       call("GET", "/catalog/packages", undefined, parseCreatorPackages),
+    /** `GET /invitations/:id/rsvp`: the settings, every response, and the totals (M6 G3; S1, S4). */
+    readRsvp: (id: string): Promise<InvitationResult<RsvpRead>> =>
+      onDraft(id, "/rsvp", (path) => call("GET", path, undefined, parseRsvpRead)),
+    /**
+     * `PUT /invitations/:id/rsvp-settings`: the deadline and the party limit as one pair; `null` clears the
+     * deadline. Called from a server action, because a browser cannot send `PUT` (L8; S4).
+     */
+    updateRsvpSettings: (
+      id: string,
+      settings: RsvpSettings,
+    ): Promise<InvitationResult<RsvpSettings>> =>
+      onDraft(id, "/rsvp-settings", (path) => call("PUT", path, settings, parseRsvpSettings)),
+    /**
+     * `GET /invitations/:id/rsvp.csv`: the same read as a file (M6 G3; S1, S4). The API's own content type and
+     * attachment filename are kept, because the route that answers the browser passes them through.
+     */
+    rsvpCsv: async (id: string): Promise<InvitationResult<RsvpCsv>> => {
+      const path = draftPath(id, "/rsvp.csv");
+
+      if (path === undefined) {
+        return NOT_FOUND;
+      }
+      const cookie = sessionCookieHeader(await readCookieHeader());
+
+      if (cookie === undefined) {
+        return SIGNED_OUT;
+      }
+
+      const answer = await sendApiDownload(options, { cookie, method: "GET", path });
+
+      if (answer.status === 401) {
+        await answer.body?.cancel();
+        return SIGNED_OUT;
+      }
+      if (answer.status === 404) {
+        await answer.body?.cancel();
+        return NOT_FOUND;
+      }
+
+      const contentType = answer.headers.get("content-type") ?? "";
+      const contentDisposition = answer.headers.get("content-disposition") ?? "";
+
+      if (
+        answer.status !== 200 ||
+        !contentType.startsWith(RSVP_CSV_CONTENT_TYPE) ||
+        !RSVP_CSV_DISPOSITION.test(contentDisposition)
+      ) {
+        await answer.body?.cancel();
+        throw new ApiClientError(
+          answer.status >= 500
+            ? "unavailable"
+            : answer.status === 200
+              ? "invalid-response"
+              : "rejected",
+          answer.status,
+        );
+      }
+
+      let body: string;
+      try {
+        body = answer.body === null ? "" : await new Response(answer.body).text();
+      } catch (error) {
+        throw new ApiClientError("unavailable", answer.status, { cause: error });
+      }
+
+      return { ok: true, value: { body, contentType, contentDisposition } };
+    },
   };
 }
 

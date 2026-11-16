@@ -21,6 +21,7 @@ import {
   PUBLISH_ISSUE_COPY,
 } from "./copy.ts";
 import { FEATURE_ERROR_CODE, featureIssueMessages } from "./feature-issues.ts";
+import { RSVP_SETTINGS_ERROR_CODE, rsvpSettingsIssueMessages } from "./rsvp-issue.ts";
 
 /**
  * What the invitation pages under `/cuenta` render and how their forms answer (M4 T5; S1, S6, S7). The API
@@ -585,7 +586,9 @@ export function invitationPageNotices(parameters: SearchParameters): InvitationP
       ? publishIssueMessages(parameters.issues)
       : error === FEATURE_ERROR_CODE
         ? featureIssueMessages(parameters.issues)
-        : [];
+        : error === RSVP_SETTINGS_ERROR_CODE
+          ? rsvpSettingsIssueMessages(parameters.issues)
+          : [];
 
   return {
     ...(lookup(INVITATION_NOTICE_COPY, notice) ? { notice: INVITATION_NOTICE_COPY[notice] } : {}),

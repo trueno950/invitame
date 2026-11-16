@@ -98,6 +98,9 @@ function stub(answers: Answers = {}): Stub {
     unpublish: () => unexpected("unpublish"),
     templates: () => unexpected("templates"),
     packages: () => unexpected("packages"),
+    readRsvp: () => unexpected("readRsvp"),
+    updateRsvpSettings: () => unexpected("updateRsvpSettings"),
+    rsvpCsv: () => unexpected("rsvpCsv"),
   };
   return { api, calls };
 }

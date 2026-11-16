@@ -12,6 +12,8 @@ import {
   parseCreatorTemplates,
   parseInvitationSummaries,
   parseOwnedInvitation,
+  parseRsvpRead,
+  parseRsvpSettings,
 } from "./invitations-api.ts";
 
 // The web server's client of the invitation API (M4 T5; S1, S6, S7). A real local HTTP server stands in
@@ -58,6 +60,39 @@ const FEATURED = {
 };
 /** A published invitation, as `POST /invitations/:id/publish` returns it (M5 T4). */
 const PUBLISHED = { ...OWNED, status: "PUBLISHED", publishedAt: AT };
+
+// The RSVP routes of the owner (M6 G1, G3; S1, S4): the settings pair, one response, the read with its totals,
+// and the CSV download.
+const RSVP_SETTINGS = { deadline: "2026-12-01T18:00:00.000Z", partyLimit: 4 };
+const RSVP_RESPONSE = {
+  id: "7b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e20",
+  name: "Ana Pérez",
+  attending: true,
+  partySize: 2,
+  phone: "+525512345678",
+  message: "Con mucho gusto",
+  createdAt: AT,
+  updatedAt: AT,
+};
+const RSVP_READ = {
+  settings: RSVP_SETTINGS,
+  responses: [RSVP_RESPONSE],
+  totals: { attendingPeople: 2, declinedCount: 0, responses: 1 },
+};
+const RSVP_CSV = 'Nombre,Asiste,Personas\r\n"Ana Pérez",Sí,2\r\n';
+const RSVP_CSV_HEADERS = {
+  "content-type": "text/csv; charset=utf-8",
+  "content-disposition": 'attachment; filename="asistencia-invitacion-k7m2qx.csv"',
+  "cache-control": "no-store",
+};
+
+/** Answers one request with a body that is not JSON, keeping the headers the API set. */
+function answerFile(status: number, headers: Record<string, string>, body: string) {
+  respond = (_request, response) => {
+    response.writeHead(status, headers);
+    response.end(body);
+  };
+}
 
 const TEMPLATE = {
   id: ID,
@@ -240,6 +275,121 @@ describe("requests", () => {
       assert.deepEqual(await api.unpublish(id), { ok: false, failure: "not-found" }, id);
     }
     assert.deepEqual(received, []);
+  });
+});
+
+describe("RSVP routes of the owner (M6 G1, G3; S1, S4)", () => {
+  it("reads the settings, every response newest first, and the totals", async () => {
+    answer(200, RSVP_READ);
+
+    assert.deepEqual(await client().readRsvp(ID), { ok: true, value: RSVP_READ });
+    const request = received[0];
+    assert.equal(request?.method, "GET");
+    assert.equal(request?.url, `/invitations/${ID}/rsvp`);
+    assert.equal(request?.headers.cookie, SESSION_COOKIE);
+    assert.equal(request?.headers["x-invitame-proxy-secret"], PROXY_SECRET);
+    assert.equal(request?.body, "");
+  });
+
+  it("saves the deadline and the party limit as the whole pair, and keeps a null deadline", async () => {
+    answer(200, RSVP_SETTINGS);
+
+    assert.deepEqual(await client().updateRsvpSettings(ID, RSVP_SETTINGS), {
+      ok: true,
+      value: RSVP_SETTINGS,
+    });
+    assert.equal(received[0]?.method, "PUT");
+    assert.equal(received[0]?.url, `/invitations/${ID}/rsvp-settings`);
+    assert.deepEqual(JSON.parse(received[0]?.body ?? "null"), RSVP_SETTINGS);
+
+    received = [];
+    answer(200, { deadline: null, partyLimit: 4 });
+    assert.deepEqual(await client().updateRsvpSettings(ID, { deadline: null, partyLimit: 4 }), {
+      ok: true,
+      value: { deadline: null, partyLimit: 4 },
+    });
+    assert.deepEqual(JSON.parse(received[0]?.body ?? "null"), { deadline: null, partyLimit: 4 });
+  });
+
+  it("maps a refused settings save to its code and issues, and an archived invitation to not-editable", async () => {
+    answer(400, {
+      code: "INVALID_RSVP_SETTINGS",
+      issues: ["partyLimit must be between 1 and 10"],
+    });
+    assert.deepEqual(await client().updateRsvpSettings(ID, { deadline: null, partyLimit: 40 }), {
+      ok: false,
+      failure: "rsvp-settings-invalid",
+      issues: ["partyLimit must be between 1 and 10"],
+    });
+
+    answer(409, { code: "INVITATION_NOT_EDITABLE" });
+    assert.deepEqual(await client().updateRsvpSettings(ID, RSVP_SETTINGS), {
+      ok: false,
+      failure: "not-editable",
+    });
+  });
+
+  it("makes no request for an id that is not a UUID", async () => {
+    const api = client();
+
+    for (const id of ["", "1", "not-a-uuid"]) {
+      assert.deepEqual(await api.readRsvp(id), { ok: false, failure: "not-found" }, id);
+      assert.deepEqual(
+        await api.updateRsvpSettings(id, RSVP_SETTINGS),
+        { ok: false, failure: "not-found" },
+        id,
+      );
+      assert.deepEqual(await api.rsvpCsv(id), { ok: false, failure: "not-found" }, id);
+    }
+    assert.deepEqual(received, []);
+  });
+
+  it("downloads the CSV with the headers the API set", async () => {
+    answerFile(200, RSVP_CSV_HEADERS, RSVP_CSV);
+
+    assert.deepEqual(await client().rsvpCsv(ID), {
+      ok: true,
+      value: {
+        body: RSVP_CSV,
+        contentType: "text/csv; charset=utf-8",
+        contentDisposition: 'attachment; filename="asistencia-invitacion-k7m2qx.csv"',
+      },
+    });
+    assert.equal(received[0]?.method, "GET");
+    assert.equal(received[0]?.url, `/invitations/${ID}/rsvp.csv`);
+    assert.equal(received[0]?.headers.cookie, SESSION_COOKIE);
+  });
+
+  it("maps a missing invitation of the CSV to not-found and fails closed on another body", async () => {
+    answerFile(
+      404,
+      { "content-type": "application/json", "cache-control": "no-store" },
+      '{"code":"INVITATION_NOT_FOUND"}',
+    );
+    assert.deepEqual(await client().rsvpCsv(ID), { ok: false, failure: "not-found" });
+
+    answerFile(401, { "content-type": "application/json" }, '{"message":"Unauthorized"}');
+    assert.deepEqual(await client().rsvpCsv(ID), { ok: false, failure: "signed-out" });
+
+    for (const headers of [
+      { ...RSVP_CSV_HEADERS, "content-type": "application/json" },
+      { ...RSVP_CSV_HEADERS, "content-disposition": "inline" },
+      { ...RSVP_CSV_HEADERS, "content-disposition": undefined },
+      { ...RSVP_CSV_HEADERS, "content-disposition": 'attachment; filename="../../etc/passwd"' },
+    ]) {
+      answerFile(
+        200,
+        Object.fromEntries(
+          Object.entries(headers).filter((entry): entry is [string, string] => Boolean(entry[1])),
+        ),
+        RSVP_CSV,
+      );
+      await assert.rejects(client().rsvpCsv(ID), (error: unknown) => {
+        assert.ok(error instanceof ApiClientError);
+        assert.equal(error.kind, "invalid-response");
+        return true;
+      });
+    }
   });
 });
 
@@ -474,6 +624,25 @@ describe("validators", () => {
     assert.deepEqual(parseOwnedInvitation(FEATURED), FEATURED);
   });
 
+  it("accepts the guest list and the QR pass in an owned invitation's features (M6 G2; S4)", () => {
+    // A Deluxe package gates both keys, so a parser that lacked either would refuse the whole body and the
+    // owner's page would stop loading.
+    const deluxe = {
+      ...OWNED,
+      availableFeatures: [
+        "COUNTDOWN",
+        "MAP",
+        "RSVP",
+        "WHATSAPP",
+        "GUEST_LIST",
+        "QR_PASS",
+        "CALENDAR",
+      ],
+    };
+
+    assert.deepEqual(parseOwnedInvitation(deluxe), deluxe);
+  });
+
   it("refuses a template or a package that breaks the creator catalog contract", () => {
     assert.equal(parseCreatorTemplates([{ ...TEMPLATE, publishedVersion: null }]), undefined);
     assert.equal(parseCreatorTemplates([{ ...TEMPLATE, category: { key: "k" } }]), undefined);
@@ -511,6 +680,67 @@ describe("validators", () => {
       componentKey: "birthday-map-01",
       theme: "dinosaurs",
     });
+  });
+
+  it("reads the RSVP settings and the owner's read strictly (M6 G3; S4)", () => {
+    assert.deepEqual(parseRsvpSettings(RSVP_SETTINGS), RSVP_SETTINGS);
+    assert.deepEqual(parseRsvpSettings({ deadline: null, partyLimit: 10 }), {
+      deadline: null,
+      partyLimit: 10,
+    });
+    assert.deepEqual(parseRsvpRead(RSVP_READ), RSVP_READ);
+
+    for (const value of [
+      null,
+      {},
+      { deadline: null },
+      { deadline: null, partyLimit: 0 },
+      { deadline: null, partyLimit: 11 },
+      { deadline: null, partyLimit: 2.5 },
+      { deadline: "mañana", partyLimit: 4 },
+      { deadline: 7, partyLimit: 4 },
+    ]) {
+      assert.equal(parseRsvpSettings(value), undefined, JSON.stringify(value));
+    }
+
+    for (const value of [
+      null,
+      {},
+      { settings: RSVP_SETTINGS, responses: [], totals: {} },
+      { settings: RSVP_SETTINGS, responses: {}, totals: RSVP_READ.totals },
+      {
+        settings: RSVP_SETTINGS,
+        responses: [{ ...RSVP_RESPONSE, id: "1" }],
+        totals: RSVP_READ.totals,
+      },
+      {
+        settings: RSVP_SETTINGS,
+        responses: [{ ...RSVP_RESPONSE, name: "" }],
+        totals: RSVP_READ.totals,
+      },
+      {
+        settings: RSVP_SETTINGS,
+        responses: [{ ...RSVP_RESPONSE, partySize: 11 }],
+        totals: RSVP_READ.totals,
+      },
+      {
+        settings: RSVP_SETTINGS,
+        responses: [{ ...RSVP_RESPONSE, attending: "sí" }],
+        totals: RSVP_READ.totals,
+      },
+      {
+        settings: RSVP_SETTINGS,
+        responses: [RSVP_RESPONSE],
+        totals: { attendingPeople: -1, declinedCount: 0, responses: 1 },
+      },
+      {
+        settings: RSVP_SETTINGS,
+        responses: [RSVP_RESPONSE],
+        totals: { attendingPeople: 2, declinedCount: 0 },
+      },
+    ]) {
+      assert.equal(parseRsvpRead(value), undefined, JSON.stringify(value));
+    }
   });
 
   it("recognises the canonical UUID shape the API accepts as an id", () => {

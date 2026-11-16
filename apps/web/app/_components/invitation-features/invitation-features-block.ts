@@ -1,14 +1,17 @@
 import { createElement, type ReactElement, useId } from "react";
 
+import { RSVP_FORM_COPY } from "../../../lib/customer/copy.ts";
 import { calendarEventFor, googleCalendarUrl } from "../../../lib/invitation-features/calendar.ts";
 import { countdownParts } from "../../../lib/invitation-features/countdown.ts";
 import type { EventFacts, EventPlace } from "../../../lib/invitation-features/event-facts.ts";
 import {
   hasAnyFeature,
   type InvitationFeatures,
+  type RsvpBlockView,
 } from "../../../lib/invitation-features/invitation-features.ts";
 import { googleMapsUrl, wazeUrl } from "../../../lib/invitation-features/map-links.ts";
 import { MUSIC_SECTION_TITLE, musicButtonLabel } from "../../../lib/invitation-features/music.ts";
+import { formatRsvpDeadline } from "../../../lib/invitation-features/rsvp-deadline.ts";
 import { startInstant } from "../../../lib/invitation-features/start-instant.ts";
 import { whatsappUrl } from "../../../lib/invitation-features/whatsapp.ts";
 import { DISPLAY_FONT } from "../renderers/themed/theme.ts";
@@ -56,6 +59,185 @@ const ACTION =
 /** The counters sit on the softer theme surface so they read as a highlight, not as another card. */
 const COUNTDOWN_CARD = `${CARD} bg-(--inv-soft)`;
 const SURFACE_CARD = `${CARD} bg-(--inv-surface)`;
+
+// The RSVP form (M6 G3; S4): one card of the block, its fields drawn only with the theme's variables, and its
+// submit the same 44 px accent pill as every other action of the block. It needs no client script at all.
+const FORM = "mt-3 flex flex-col gap-3";
+const FIELD_LABEL = "block text-sm font-medium text-(color:--inv-ink)";
+const FIELD =
+  "mt-1.5 block w-full rounded-lg border-[1.5px] border-(--inv-accent) bg-(--inv-surface) px-3 py-2.5 text-base text-(color:--inv-ink) focus:outline-2 focus:outline-offset-2 focus:outline-(--inv-accent)";
+const RADIO_LABEL = "flex min-h-11 items-center gap-2 text-base text-(color:--inv-ink)";
+const RADIO = "size-4 accent-(--inv-accent)";
+const TEXT_AREA = `${FIELD} min-h-24 resize-y`;
+/** A field a person never fills: off the screen, out of the tab order, and never autofilled. */
+const HONEYPOT = "absolute -left-[9999px] h-px w-px overflow-hidden";
+const SUBMIT = `${ACTION} self-start border-0`;
+
+/** The one sentence about the deadline: when answers close, or that they already closed (S4). */
+function deadlineSentence(rsvp: RsvpBlockView, timeZone: string): string | undefined {
+  if (rsvp.deadline === null) {
+    return undefined;
+  }
+  const text = formatRsvpDeadline(rsvp.deadline, timeZone);
+
+  if (text === undefined) {
+    return rsvp.closed ? RSVP_FORM_COPY.closedGeneric : undefined;
+  }
+  return rsvp.closed ? RSVP_FORM_COPY.closedNote(text) : RSVP_FORM_COPY.deadlineNote(text);
+}
+
+/**
+ * The «Confirma tu asistencia» card of one invitation (M6 G3; S1, S4). It shows the form while the invitation
+ * accepts open answers and the closing note once its deadline passed. The honeypot is the one field no person
+ * sees: a bot that fills it makes the API answer success without storing anything, and the guest never learns a
+ * difference. Everything here is server-rendered, so the form works with no JavaScript at all.
+ */
+function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): ReactElement {
+  const sentence = deadlineSentence(rsvp, timeZone);
+
+  return h(
+    "div",
+    { key: "rsvp", "data-feature": "rsvp", className: SURFACE_CARD },
+    h("h3", { className: FEATURE_TITLE }, RSVP_FORM_COPY.title),
+    // The invitation to answer only makes sense while answering is possible.
+    ...(rsvp.closed ? [] : [h("p", { key: "hint", className: HINT }, RSVP_FORM_COPY.hint)]),
+    ...(sentence === undefined ? [] : [h("p", { key: "deadline", className: HINT }, sentence)]),
+    ...(rsvp.closed
+      ? []
+      : [
+          h(
+            "form",
+            { key: "form", "data-rsvp-form": "", action: rsvp.action, className: FORM },
+            h("input", { type: "hidden", name: "slug", value: rsvp.slug }),
+            h(
+              "div",
+              { "aria-hidden": "true", className: HONEYPOT },
+              h("label", { htmlFor: `${idPrefix}-rsvp-honeypot` }, RSVP_FORM_COPY.honeypotLabel),
+              h("input", {
+                id: `${idPrefix}-rsvp-honeypot`,
+                name: "honeypot",
+                type: "text",
+                tabIndex: -1,
+                autoComplete: "off",
+                "aria-hidden": "true",
+              }),
+            ),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-rsvp-name` },
+                RSVP_FORM_COPY.nameLabel,
+              ),
+              h("input", {
+                id: `${idPrefix}-rsvp-name`,
+                name: "name",
+                type: "text",
+                required: true,
+                maxLength: 80,
+                autoComplete: "name",
+                placeholder: RSVP_FORM_COPY.namePlaceholder,
+                className: FIELD,
+              }),
+            ),
+            h(
+              "fieldset",
+              { className: "flex flex-col gap-1" },
+              h("legend", { className: FIELD_LABEL }, RSVP_FORM_COPY.attendingLegend),
+              h(
+                "label",
+                { className: RADIO_LABEL, htmlFor: `${idPrefix}-rsvp-yes` },
+                h("input", {
+                  id: `${idPrefix}-rsvp-yes`,
+                  name: "attending",
+                  type: "radio",
+                  value: "si",
+                  required: true,
+                  className: RADIO,
+                }),
+                RSVP_FORM_COPY.attendingYes,
+              ),
+              h(
+                "label",
+                { className: RADIO_LABEL, htmlFor: `${idPrefix}-rsvp-no` },
+                h("input", {
+                  id: `${idPrefix}-rsvp-no`,
+                  name: "attending",
+                  type: "radio",
+                  value: "no",
+                  className: RADIO,
+                }),
+                RSVP_FORM_COPY.attendingNo,
+              ),
+            ),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-rsvp-party` },
+                RSVP_FORM_COPY.partyLabel,
+              ),
+              h(
+                "select",
+                {
+                  id: `${idPrefix}-rsvp-party`,
+                  name: "partySize",
+                  defaultValue: "1",
+                  className: FIELD,
+                },
+                Array.from({ length: rsvp.partyLimit }, (_unused, index) =>
+                  h("option", { key: index + 1, value: String(index + 1) }, String(index + 1)),
+                ),
+              ),
+              h("p", { className: HINT }, RSVP_FORM_COPY.partyHint),
+            ),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-rsvp-phone` },
+                RSVP_FORM_COPY.phoneLabel,
+              ),
+              h("input", {
+                id: `${idPrefix}-rsvp-phone`,
+                name: "phone",
+                type: "tel",
+                inputMode: "tel",
+                autoComplete: "tel",
+                maxLength: 32,
+                className: FIELD,
+              }),
+              h("p", { className: HINT }, RSVP_FORM_COPY.phoneHint),
+            ),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-rsvp-message` },
+                RSVP_FORM_COPY.messageLabel,
+              ),
+              h("textarea", {
+                id: `${idPrefix}-rsvp-message`,
+                name: "message",
+                maxLength: 280,
+                rows: 3,
+                className: TEXT_AREA,
+              }),
+              h("p", { className: HINT }, RSVP_FORM_COPY.messageHint),
+            ),
+            h(
+              "div",
+              { className: ACTIONS },
+              h("button", { type: "submit", className: SUBMIT }, RSVP_FORM_COPY.submit),
+            ),
+          ),
+        ]),
+  );
+}
 
 /** The two «Cómo llegar» actions of one place, each with the accessible name that names its service. */
 function placeLinks(place: EventPlace): ReactElement {
@@ -224,6 +406,11 @@ export function InvitationFeaturesBlock({
         ),
       ),
     );
+  }
+
+  // Last, after everything a guest might need to decide: the one action of the page (M6 G3; S4).
+  if (features.rsvp !== undefined) {
+    sections.push(rsvpSection(features.rsvp, features.timeZone, idPrefix));
   }
 
   return h(
