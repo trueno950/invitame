@@ -57,6 +57,7 @@ export const INVITATION_FEATURE_KEYS = [
   "WHATSAPP",
   "MUSIC",
   "GIFT_REGISTRY",
+  "RSVP",
   "CALENDAR",
 ] as const;
 
