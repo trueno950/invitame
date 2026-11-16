@@ -221,6 +221,9 @@ describe("ListRenderersUseCase", () => {
       { componentKey: "xv-arch-01" },
       { componentKey: "wedding-arch-01" },
       { componentKey: "baptism-arch-01" },
+      { componentKey: "xv-ornamental-01" },
+      { componentKey: "wedding-ornamental-01" },
+      { componentKey: "baptism-ornamental-01" },
     ]);
   });
 });

@@ -12,6 +12,10 @@ import {
   BAPTISM_CLASSIC_COMPONENT_KEY,
   baptismClassicRenderer,
 } from "./baptism-classic-01.renderer";
+import {
+  BAPTISM_ORNAMENTAL_COMPONENT_KEY,
+  baptismOrnamentalRenderer,
+} from "./baptism-ornamental-01.renderer";
 import { BIRTHDAY_MAP_COMPONENT_KEY, birthdayMapRenderer } from "./birthday-map-01.renderer";
 import {
   BIRTHDAY_POSTER_COMPONENT_KEY,
@@ -20,7 +24,12 @@ import {
 import { BIRTHDAY_STORY_COMPONENT_KEY, birthdayStoryRenderer } from "./birthday-story-01.renderer";
 import type { RendererContract } from "./renderer-contract";
 import { WEDDING_ARCH_COMPONENT_KEY, weddingArchRenderer } from "./wedding-arch-01.renderer";
+import {
+  WEDDING_ORNAMENTAL_COMPONENT_KEY,
+  weddingOrnamentalRenderer,
+} from "./wedding-ornamental-01.renderer";
 import { XV_ARCH_COMPONENT_KEY, xvArchRenderer } from "./xv-arch-01.renderer";
+import { XV_ORNAMENTAL_COMPONENT_KEY, xvOrnamentalRenderer } from "./xv-ornamental-01.renderer";
 
 const RENDERERS: ReadonlyMap<string, RendererContract> = new Map([
   [BIRTHDAY_MAP_COMPONENT_KEY, birthdayMapRenderer],
@@ -31,6 +40,9 @@ const RENDERERS: ReadonlyMap<string, RendererContract> = new Map([
   [XV_ARCH_COMPONENT_KEY, xvArchRenderer],
   [WEDDING_ARCH_COMPONENT_KEY, weddingArchRenderer],
   [BAPTISM_ARCH_COMPONENT_KEY, baptismArchRenderer],
+  [XV_ORNAMENTAL_COMPONENT_KEY, xvOrnamentalRenderer],
+  [WEDDING_ORNAMENTAL_COMPONENT_KEY, weddingOrnamentalRenderer],
+  [BAPTISM_ORNAMENTAL_COMPONENT_KEY, baptismOrnamentalRenderer],
 ]);
 
 export function listRendererKeys(): readonly string[] {

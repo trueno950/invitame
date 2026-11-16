@@ -665,8 +665,11 @@ export type BabyShowerTemplateSeed = ThemedTemplateSeed<BabyShowerTheme>;
 /** A themed baptism template: the «Clásica» layout plus the theme it applies (S13). */
 export type BaptismTemplateSeed = ThemedTemplateSeed<BaptismTheme>;
 
+/** An elegant template of one layout and occasion plus the elegant theme it applies (S4, S5). */
+export type ElegantTemplateSeed = ThemedTemplateSeed<ElegantTheme>;
+
 /** An elegant «Arco y foto» template for one occasion plus the elegant theme it applies (S4). */
-export type ElegantArchTemplateSeed = ThemedTemplateSeed<ElegantTheme>;
+export type ElegantArchTemplateSeed = ElegantTemplateSeed;
 
 /** One row per layout the catalog publishes; its key, Spanish label, and short neutral description (S8). */
 const BIRTHDAY_LAYOUT_SEEDS = [
@@ -807,10 +810,20 @@ const ELEGANT_THEME_NAMES: Readonly<Record<ElegantTheme, string>> = {
   "burgundy-gold": "Borgoña y oro",
 };
 
+/** One elegant layout the catalog publishes: its key prefix, category, renderer, label, schema, and blurb. */
+interface ElegantLayoutSeed {
+  readonly slug: string;
+  readonly categoryKey: string;
+  readonly componentKey: string;
+  readonly label: string;
+  readonly schema: Prisma.InputJsonObject;
+  readonly description: string;
+}
+
 /**
- * One row per elegant layout the catalog publishes: its key prefix, the category it belongs to, its renderer
- * key, its Spanish label, its own content schema, and one short neutral description per occasion (S4). The
- * three layouts are the same visual direction, «Arco y foto», but each occasion keeps its own content schema.
+ * One row per elegant «Arco y foto» layout the catalog publishes: its key prefix, the category it belongs to,
+ * its renderer key, its Spanish label, its own content schema, and one short neutral description per occasion
+ * (S4). The three layouts are the same visual direction, but each occasion keeps its own content schema.
  */
 const ELEGANT_ARCH_LAYOUT_SEEDS = [
   {
@@ -841,15 +854,53 @@ const ELEGANT_ARCH_LAYOUT_SEEDS = [
     description:
       "Una invitación elegante de bautizo con la ceremonia, la recepción y los datos de la familia.",
   },
-] as const;
+] as const satisfies readonly ElegantLayoutSeed[];
 
 /**
- * One published elegant template per occasion and theme (3 layouts x 8 themes), in the theme order the owner
- * chose (S4). Every template takes exactly `{ componentKey, theme }` as configuration and its occasion's
- * content schema. Catalog names stay generic: a theme name never names a character or a brand (S3).
+ * One row per elegant «Ornamental — papelería clásica» layout the catalog publishes (S5): the centered card
+ * with a double rule, textured paper, and a fine-line laurel. Each occasion reuses the content schema of its
+ * «Arco y foto» sibling, so the two elegant layouts of an occasion share one content contract and one form.
  */
-export const ELEGANT_ARCH_TEMPLATE_SEEDS: readonly ElegantArchTemplateSeed[] =
-  ELEGANT_ARCH_LAYOUT_SEEDS.flatMap((layout) =>
+const ELEGANT_ORNAMENTAL_LAYOUT_SEEDS = [
+  {
+    slug: "xv-ornamental",
+    categoryKey: "quinceanera",
+    componentKey: "xv-ornamental-01",
+    label: "Ornamental",
+    schema: XV_ARCH_CONTENT_SCHEMA,
+    description:
+      "Una invitación de XV años con tarjeta centrada, doble filete y un ornamento botánico.",
+  },
+  {
+    slug: "wedding-ornamental",
+    categoryKey: "wedding",
+    componentKey: "wedding-ornamental-01",
+    label: "Ornamental",
+    schema: WEDDING_ARCH_CONTENT_SCHEMA,
+    description:
+      "Una invitación de boda con tarjeta centrada, doble filete y un ornamento botánico.",
+  },
+  {
+    slug: "baptism-ornamental",
+    categoryKey: "baptism",
+    componentKey: "baptism-ornamental-01",
+    label: "Ornamental",
+    schema: BAPTISM_CONTENT_SCHEMA,
+    description:
+      "Una invitación de bautizo con tarjeta centrada, doble filete y un ornamento botánico.",
+  },
+] as const satisfies readonly ElegantLayoutSeed[];
+
+/**
+ * One published template per elegant layout and theme, in the theme order the owner chose (S4, S5). Every
+ * template takes exactly `{ componentKey, theme }` as configuration and its occasion's content schema, so the
+ * two elegant layouts of an occasion differ only in the renderer they name. Catalog names stay generic: a theme
+ * name never names a character or a brand (S3).
+ */
+function elegantTemplateSeeds(
+  layouts: readonly ElegantLayoutSeed[],
+): readonly ElegantTemplateSeed[] {
+  return layouts.flatMap((layout) =>
     ELEGANT_THEMES.map((theme) => ({
       key: `${layout.slug}-${theme}`,
       name: `${layout.label} · ${ELEGANT_THEME_NAMES[theme]}`,
@@ -860,18 +911,59 @@ export const ELEGANT_ARCH_TEMPLATE_SEEDS: readonly ElegantArchTemplateSeed[] =
       theme,
     })),
   );
+}
+
+/** The elegant «Arco y foto» templates (3 layouts x 8 themes), in the owner's theme order (S4). */
+export const ELEGANT_ARCH_TEMPLATE_SEEDS: readonly ElegantTemplateSeed[] =
+  elegantTemplateSeeds(ELEGANT_ARCH_LAYOUT_SEEDS);
+
+/** The elegant «Ornamental» templates (3 layouts x 8 themes), in the owner's theme order (S5). */
+export const ELEGANT_ORNAMENTAL_TEMPLATE_SEEDS: readonly ElegantTemplateSeed[] =
+  elegantTemplateSeeds(ELEGANT_ORNAMENTAL_LAYOUT_SEEDS);
+
+/** The templates of one elegant layout, in the theme order the owner chose. */
+function elegantSeedsOf(
+  seeds: readonly ElegantTemplateSeed[],
+  componentKey: string,
+): readonly ElegantTemplateSeed[] {
+  return seeds.filter((seed) => seed.componentKey === componentKey);
+}
 
 /** The elegant templates of XV años, in the theme order the owner chose (S4). */
-export const XV_ARCH_TEMPLATE_SEEDS: readonly ElegantArchTemplateSeed[] =
-  ELEGANT_ARCH_TEMPLATE_SEEDS.filter((seed) => seed.componentKey === "xv-arch-01");
+export const XV_ARCH_TEMPLATE_SEEDS: readonly ElegantTemplateSeed[] = elegantSeedsOf(
+  ELEGANT_ARCH_TEMPLATE_SEEDS,
+  "xv-arch-01",
+);
 
 /** The elegant templates of weddings, in the theme order the owner chose (S4). */
-export const WEDDING_ARCH_TEMPLATE_SEEDS: readonly ElegantArchTemplateSeed[] =
-  ELEGANT_ARCH_TEMPLATE_SEEDS.filter((seed) => seed.componentKey === "wedding-arch-01");
+export const WEDDING_ARCH_TEMPLATE_SEEDS: readonly ElegantTemplateSeed[] = elegantSeedsOf(
+  ELEGANT_ARCH_TEMPLATE_SEEDS,
+  "wedding-arch-01",
+);
 
 /** The elegant templates of formal baptisms, in the theme order the owner chose (S4). */
-export const BAPTISM_ARCH_TEMPLATE_SEEDS: readonly ElegantArchTemplateSeed[] =
-  ELEGANT_ARCH_TEMPLATE_SEEDS.filter((seed) => seed.componentKey === "baptism-arch-01");
+export const BAPTISM_ARCH_TEMPLATE_SEEDS: readonly ElegantTemplateSeed[] = elegantSeedsOf(
+  ELEGANT_ARCH_TEMPLATE_SEEDS,
+  "baptism-arch-01",
+);
+
+/** The ornamental templates of XV años, in the theme order the owner chose (S5). */
+export const XV_ORNAMENTAL_TEMPLATE_SEEDS: readonly ElegantTemplateSeed[] = elegantSeedsOf(
+  ELEGANT_ORNAMENTAL_TEMPLATE_SEEDS,
+  "xv-ornamental-01",
+);
+
+/** The ornamental templates of weddings, in the theme order the owner chose (S5). */
+export const WEDDING_ORNAMENTAL_TEMPLATE_SEEDS: readonly ElegantTemplateSeed[] = elegantSeedsOf(
+  ELEGANT_ORNAMENTAL_TEMPLATE_SEEDS,
+  "wedding-ornamental-01",
+);
+
+/** The ornamental templates of formal baptisms, in the theme order the owner chose (S5). */
+export const BAPTISM_ORNAMENTAL_TEMPLATE_SEEDS: readonly ElegantTemplateSeed[] = elegantSeedsOf(
+  ELEGANT_ORNAMENTAL_TEMPLATE_SEEDS,
+  "baptism-ornamental-01",
+);
 
 /** How many rows one run created; all zero when the catalog was already seeded. */
 export interface CatalogSeedSummary {
@@ -1035,6 +1127,9 @@ async function seedThemedTemplates(
     { categoryKey: "wedding", seeds: WEDDING_ARCH_TEMPLATE_SEEDS },
     // The formal baptism joins the themed one in the same category (S4, L1).
     { categoryKey: "baptism", seeds: BAPTISM_ARCH_TEMPLATE_SEEDS },
+    { categoryKey: "quinceanera", seeds: XV_ORNAMENTAL_TEMPLATE_SEEDS },
+    { categoryKey: "wedding", seeds: WEDDING_ORNAMENTAL_TEMPLATE_SEEDS },
+    { categoryKey: "baptism", seeds: BAPTISM_ORNAMENTAL_TEMPLATE_SEEDS },
   ] as const;
   let templates = 0;
   let templateVersions = 0;
