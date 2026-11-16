@@ -61,7 +61,7 @@ line.
 | E2 | Owner picks layouts, themes, and content fields | S3, S4 | owner | L3 |
 | E3a | API: three arch renderers, elegant theme allow-list, XV and wedding schemas, seed of 24 templates, tests | S3, S4 | worker | `8335256` |
 | E3b | Web: Bodoni Moda and Italiana fonts | S4 | worker | `16da3cd` |
-| E3c | Web: elegant themes, arch layout for three occasions, ornaments, parsers, registry, event facts, samples, form fields, page title, tests, browser check | S3, S4 | worker | |
+| E3c | Web: elegant themes, arch layout for three occasions, ornaments, parsers, registry, event facts, samples, form fields, page title, tests, browser check | S3, S4 | worker | `e74b975` |
 | E4a | API: three ornamental renderers reusing the elegant themes and schemas, 24 templates, tests | S5 | worker, after E3a | `b839c7b` |
 | E4b | Web: ornamental layout for three occasions (double-rule card, laurel monogram, foil accents, script name, cameo photo), registry, chooser, tests, browser check | S5 | worker, after E3c | |
 | E3d | Integration of both elegant layouts: full checks, seed the dev database, browser review, docs, canvas handoffs | S3-S5 | inline | |
@@ -97,3 +97,11 @@ line.
   schema drift. The seed adds 24 «Ornamental ·» templates through a shared elegant builder; a differential run shows
   the arch seeds are identical. API: 1246/1246 unit tests and 310/310 db-specs pass; tsc, docs, and Biome pass. The
   web registry-sync test fails until E4b registers the keys.
+- L8 — E3c done in `e74b975` (worker `mwirfb6h-z-cqid`). It adds the eight elegant themes, the shared arch layout with
+  measured scrim (7.87-9.80:1), wax seal, family, place, and detail cards, the features block, and eight original
+  fine-line ornaments. It also adds three thin renderers, parsers (the formal baptism shares `parseBaptismContent`;
+  a differential run found identical output on 13 inputs), registry and props checks, event facts, the wedding page
+  title, samples, form labels and sections, and chooser groups. Web: 1120/1121 tests; the only failure is
+  registry-sync, which expects the API's three ornamental keys until E4b lands. tsc and Biome pass. Browser: 33
+  cases at 390 and 1280 px with 0 defects. The parent added the docs paragraph. Known: the formal baptism sample
+  photo is the themed illustration. E4b launched.
