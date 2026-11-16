@@ -48,18 +48,46 @@ export function isInvitationTimeZone(value: unknown): value is InvitationTimeZon
 }
 
 /**
- * The catalog feature keys this batch implements (S4, S7). A package feature outside this list is stored
+ * The catalog feature keys this batch implements (S4, S7, M6 S3). A package feature outside this list is stored
  * catalog data that no current layout renders, so gating drops it instead of letting a key select a component.
+ * `RSVP` joins when the open RSVP form ships (M6 G1); `GUEST_LIST` stays out until G2 implements the guest list,
+ * but it still selects the RSVP mode below, because the mode is an answer about what the guest page shows.
  */
 export const IMPLEMENTED_INVITATION_FEATURES = [
   "COUNTDOWN",
   "MAP",
+  "RSVP",
   "WHATSAPP",
   "MUSIC",
   "GIFT_REGISTRY",
 ] as const;
 
 export type ImplementedInvitationFeature = (typeof IMPLEMENTED_INVITATION_FEATURES)[number];
+
+/** The catalog key that grants confirmation of attendance (M6 S3). */
+export const RSVP_FEATURE_KEY = "RSVP";
+
+/** The catalog key that grants a managed guest list with personal links (M6 S3; G2 implements it). */
+export const GUEST_LIST_FEATURE_KEY = "GUEST_LIST";
+
+/**
+ * How an invitation accepts attendance answers (M6 S4): the open form when the package grants `RSVP` and no guest
+ * list, personal links when it grants `GUEST_LIST` (G2), and nothing otherwise. The names are answers, never code
+ * paths: the key is compared whole and the API decides what each answer does.
+ */
+export type RsvpMode = "open" | "guest-list" | null;
+
+/**
+ * The RSVP mode of an invitation, from the pinned package's catalog keys alone (M6 S4). A guest list wins over
+ * the open form: with personal links there is no public form to submit. Keys are compared whole and
+ * case-sensitively, so a look-alike never selects a mode.
+ */
+export function rsvpModeOf(includedFeatureKeys: readonly string[]): RsvpMode {
+  if (includedFeatureKeys.includes(GUEST_LIST_FEATURE_KEY)) {
+    return "guest-list";
+  }
+  return includedFeatureKeys.includes(RSVP_FEATURE_KEY) ? "open" : null;
+}
 
 /** Add-to-calendar is always available to a guest and is not a catalog feature (S4). */
 export const CALENDAR_FEATURE_KEY = "CALENDAR";
@@ -210,6 +238,10 @@ export function normalizePlaylistUrl(value: unknown): PlaylistUrlNormalization {
   if (musicProviderOf(parsed.href) === null) {
     return { ok: false, issue: PLAYLIST_URL_HOST_ISSUE };
   }
+  // The parser percent-encodes non-ASCII path characters, so the stored value can be wider than the typed one.
+  if ([...parsed.href].length > PLAYLIST_URL_MAX_LENGTH) {
+    return { ok: false, issue: PLAYLIST_URL_LENGTH_ISSUE };
+  }
 
   return { ok: true, url: parsed.href };
 }
@@ -315,6 +347,10 @@ export interface InvitationFeatureGate {
   readonly whatsappPhone: string | null;
   /** The stored playlist link; MUSIC stays off while it is null or names no allow-listed service (S7). */
   readonly playlistUrl: string | null;
+  /** The owner's RSVP deadline, or null for one that never closes (M6 S4). */
+  readonly rsvpDeadline: Date | null;
+  /** The owner's party limit, 1 to 10 (M6 S4). */
+  readonly rsvpPartyLimit: number;
 }
 
 /**
@@ -354,14 +390,25 @@ export interface PublicInvitationFeatures {
   readonly music: { readonly url: string; readonly provider: MusicProvider } | null;
   /** Whether the layouts render their gift registry block (S7); the content decides its value, not the API. */
   readonly giftRegistry: boolean;
+  /**
+   * How the guest page accepts attendance answers (M6 S1, S4): the open form (`open`), personal links
+   * (`guest-list`, G2), or nothing (`null`), together with the creator's deadline and party limit. The mode is
+   * an answer about the page, not a package name, a price, or a feature key list.
+   */
+  readonly rsvp: {
+    readonly mode: RsvpMode;
+    readonly deadline: Date | null;
+    readonly partyLimit: number;
+  };
 }
 
 /**
- * The guest's view of the gated features (S4, S7): the same intersection `availableFeatureKeys` decides, shaped
- * as the booleans the public read returns. WhatsApp answers the stored phone only while the package includes
- * WHATSAPP, and music answers the stored link only while the package includes MUSIC and the link names an
+ * The guest's view of the gated features (S4, S7, M6 S4): the same intersection `availableFeatureKeys` decides,
+ * shaped as the booleans the public read returns. WhatsApp answers the stored phone only while the package
+ * includes WHATSAPP, and music answers the stored link only while the package includes MUSIC and the link names an
  * allow-listed service; a stored value the package does not grant stays private. The gift registry is a boolean
- * because the layout, not the API, knows whether the content has a value to show.
+ * because the layout, not the API, knows whether the content has a value to show. The RSVP mode is decided from
+ * the package's keys directly, because `GUEST_LIST` is not an implemented layout feature yet (M6 G2).
  */
 export function publicInvitationFeatures(gate: InvitationFeatureGate): PublicInvitationFeatures {
   const keys = new Set(availableFeatureKeys(gate));
@@ -376,5 +423,10 @@ export function publicInvitationFeatures(gate: InvitationFeatureGate): PublicInv
     music:
       provider === null || gate.playlistUrl === null ? null : { url: gate.playlistUrl, provider },
     giftRegistry: keys.has("GIFT_REGISTRY"),
+    rsvp: {
+      mode: rsvpModeOf(gate.includedFeatureKeys),
+      deadline: gate.rsvpDeadline,
+      partyLimit: gate.rsvpPartyLimit,
+    },
   };
 }

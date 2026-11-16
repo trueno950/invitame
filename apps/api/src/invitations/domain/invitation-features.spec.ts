@@ -10,6 +10,7 @@ import {
   isInvitationTimeZone,
   musicProviderOf,
   normalizePlaylistUrl,
+  PLAYLIST_URL_LENGTH_ISSUE,
   normalizeWhatsAppPhone,
   PLAYLIST_URL_MAX_LENGTH,
   publicInvitationFeatures,
@@ -176,6 +177,13 @@ describe("WhatsApp phone normalization (S4)", () => {
 });
 
 describe("playlist link normalization (S7)", () => {
+  it("bounds the normalized link, not only the typed one, by the column width", () => {
+    // Accented path characters are percent-encoded by the URL parser, so 480 typed characters grow past 500.
+    const typed = `https://open.spotify.com/${"a".repeat(470)}\u00e9\u00e9\u00e9\u00e9\u00e9`;
+
+    assert.deepEqual(normalizePlaylistUrl(typed), { ok: false, issue: PLAYLIST_URL_LENGTH_ISSUE });
+  });
+
   const ACCEPTED: Array<[string, string, string]> = [
     ["a Spotify playlist", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", "spotify"],
     ["an Apple Music playlist", "https://music.apple.com/mx/playlist/pl.123", "apple_music"],
@@ -355,19 +363,40 @@ describe("feature gating (S4)", () => {
     includedFeatureKeys: readonly string[],
     whatsappPhone: string | null = PHONE,
     playlistUrl: string | null = PLAYLIST,
-  ) => availableFeatureKeys({ includedFeatureKeys, whatsappPhone, playlistUrl });
+  ) =>
+    availableFeatureKeys({
+      includedFeatureKeys,
+      whatsappPhone,
+      playlistUrl,
+      rsvpDeadline: null,
+      rsvpPartyLimit: 4,
+    });
 
-  it("implements exactly COUNTDOWN, MAP, WHATSAPP, MUSIC, and GIFT_REGISTRY, with CALENDAR always added", () => {
+  const featuresOf = (gate: {
+    includedFeatureKeys: readonly string[];
+    whatsappPhone: string | null;
+    playlistUrl: string | null;
+    rsvpDeadline?: Date | null;
+    rsvpPartyLimit?: number;
+  }) =>
+    publicInvitationFeatures({
+      rsvpDeadline: null,
+      rsvpPartyLimit: 4,
+      ...gate,
+    });
+
+  it("implements exactly COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, and GIFT_REGISTRY, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
       "COUNTDOWN",
       "MAP",
+      "RSVP",
       "WHATSAPP",
       "MUSIC",
       "GIFT_REGISTRY",
     ]);
     assert.equal(CALENDAR_FEATURE_KEY, "CALENDAR");
     // A catalog feature this batch does not implement never becomes an available feature.
-    assert.deepEqual(gated(["GALLERY", "RSVP", "GUEST_LIST", "QR_PASS"]), ["CALENDAR"]);
+    assert.deepEqual(gated(["GALLERY", "GUEST_LIST", "QR_PASS"]), ["CALENDAR"]);
   });
 
   it("shows the features each seeded package includes, plus CALENDAR", () => {
@@ -381,6 +410,7 @@ describe("feature gating (S4)", () => {
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.premium), [
       "COUNTDOWN",
       "MAP",
+      "RSVP",
       "WHATSAPP",
       "MUSIC",
       "CALENDAR",
@@ -388,6 +418,7 @@ describe("feature gating (S4)", () => {
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe), [
       "COUNTDOWN",
       "MAP",
+      "RSVP",
       "WHATSAPP",
       "MUSIC",
       "GIFT_REGISTRY",
@@ -400,12 +431,14 @@ describe("feature gating (S4)", () => {
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.premium, null), [
       "COUNTDOWN",
       "MAP",
+      "RSVP",
       "MUSIC",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe, null), [
       "COUNTDOWN",
       "MAP",
+      "RSVP",
       "MUSIC",
       "GIFT_REGISTRY",
       "CALENDAR",
@@ -416,12 +449,14 @@ describe("feature gating (S4)", () => {
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.premium, PHONE, null), [
       "COUNTDOWN",
       "MAP",
+      "RSVP",
       "WHATSAPP",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe, PHONE, null), [
       "COUNTDOWN",
       "MAP",
+      "RSVP",
       "WHATSAPP",
       "GIFT_REGISTRY",
       "CALENDAR",
@@ -431,7 +466,7 @@ describe("feature gating (S4)", () => {
   it("keeps a stored phone out of the guest features when the package lacks WHATSAPP", () => {
     assert.deepEqual(gated(["COUNTDOWN", "MAP"], PHONE, null), ["COUNTDOWN", "MAP", "CALENDAR"]);
     assert.deepEqual(
-      publicInvitationFeatures({
+      featuresOf({
         includedFeatureKeys: ["COUNTDOWN", "MAP"],
         whatsappPhone: PHONE,
         playlistUrl: PLAYLIST,
@@ -443,6 +478,7 @@ describe("feature gating (S4)", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4 },
       },
     );
   });
@@ -460,7 +496,7 @@ describe("feature gating (S4)", () => {
 
   it("maps the gated keys to the guest booleans, the phone, the music link, and the gift registry", () => {
     assert.deepEqual(
-      publicInvitationFeatures({
+      featuresOf({
         includedFeatureKeys: ["COUNTDOWN"],
         whatsappPhone: null,
         playlistUrl: null,
@@ -472,10 +508,11 @@ describe("feature gating (S4)", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4 },
       },
     );
     assert.deepEqual(
-      publicInvitationFeatures({
+      featuresOf({
         includedFeatureKeys: ["MAP", "WHATSAPP"],
         whatsappPhone: PHONE,
         playlistUrl: null,
@@ -487,10 +524,11 @@ describe("feature gating (S4)", () => {
         whatsapp: { phone: PHONE },
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4 },
       },
     );
     assert.deepEqual(
-      publicInvitationFeatures({
+      featuresOf({
         includedFeatureKeys: ["MUSIC", "GIFT_REGISTRY"],
         whatsappPhone: null,
         playlistUrl: PLAYLIST,
@@ -502,7 +540,41 @@ describe("feature gating (S4)", () => {
         whatsapp: null,
         music: { url: PLAYLIST, provider: "spotify" },
         giftRegistry: true,
+        rsvp: { mode: null, deadline: null, partyLimit: 4 },
       },
     );
+  });
+
+  it("answers the RSVP mode the pinned package grants, with the invitation's deadline and party limit (M6 G1)", () => {
+    const deadline = new Date("2026-12-31T23:59:59.000Z");
+
+    // Premium grants RSVP and no guest list: the open form (S3, S4).
+    assert.deepEqual(
+      featuresOf({
+        includedFeatureKeys: ["RSVP"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        rsvpDeadline: deadline,
+        rsvpPartyLimit: 6,
+      }).rsvp,
+      { mode: "open", deadline, partyLimit: 6 },
+    );
+    // Deluxe grants GUEST_LIST: personal links replace the open form, which G2 implements (S3, S4).
+    assert.deepEqual(
+      featuresOf({
+        includedFeatureKeys: ["RSVP", "GUEST_LIST"],
+        whatsappPhone: null,
+        playlistUrl: null,
+      }).rsvp,
+      { mode: "guest-list", deadline: null, partyLimit: 4 },
+    );
+    // A package that grants neither key exposes no RSVP at all, even if a key only looks alike.
+    for (const includedFeatureKeys of [["COUNTDOWN"], ["rsvp"], ["guest_list"]]) {
+      assert.deepEqual(
+        featuresOf({ includedFeatureKeys, whatsappPhone: null, playlistUrl: null }).rsvp.mode,
+        null,
+        includedFeatureKeys.join(","),
+      );
+    }
   });
 });
