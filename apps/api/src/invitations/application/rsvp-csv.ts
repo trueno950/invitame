@@ -1,7 +1,8 @@
+import type { GuestWithResponse } from "./guest.repository";
 import type { RsvpResponseRecord } from "./rsvp.repository";
 
-// The creator's CSV export (M6 G1; S1, S4). It is a pure function so the escaping is proved without a database or
-// an HTTP request. Two rules keep the file safe at the spreadsheet:
+// The creator's CSV export (M6 G1, G2; S1, S4). It is a pure function so the escaping is proved without a database
+// or an HTTP request. Two rules keep the file safe at the spreadsheet:
 //
 // - RFC 4180 structure: CRLF line breaks, a cell quoted when it holds a comma, a quote, or a line break, and a
 //   quote doubled inside a quoted cell;
@@ -9,16 +10,32 @@ import type { RsvpResponseRecord } from "./rsvp.repository";
 //   carriage return) is prefixed with an apostrophe, so it stays text. The apostrophe becomes part of the cell's
 //   content, and a cell that already starts with one is left alone.
 //
-// The header is Spanish because the file is product copy for the creator; the values are the stored ones, and the
-// columns stay in one fixed order.
+// The open form exports one line per response (G1). A guest list exports one line per guest (G2), pending guests
+// included, because the door needs the whole list and not only the answers already received. The header is Spanish
+// because the file is product copy for the creator; the values are the stored ones, and the columns stay in one
+// fixed order.
 
-/** The header of the export, in the order every row follows. */
+/** The header of the response export, in the order every row follows. */
 export const RSVP_CSV_HEADER = [
   "Nombre",
   "Asistencia",
   "Personas",
   "Teléfono",
   "Mensaje",
+  "Primera respuesta",
+  "Última actualización",
+] as const;
+
+/** The header of the guest-list export, in the order every row follows (M6 G2). */
+export const GUEST_CSV_HEADER = [
+  "Nombre",
+  "Lugares",
+  "Asistencia",
+  "Personas",
+  "Teléfono",
+  "Nota",
+  "Mensaje",
+  "Primer check-in",
   "Primera respuesta",
   "Última actualización",
 ] as const;
@@ -57,6 +74,47 @@ export function toRsvpCsv(responses: readonly RsvpResponseRecord[]): string {
 
   for (const response of responses) {
     lines.push(cellsOf(response).map(cell).join(","));
+  }
+  return `${lines.join("\r\n")}\r\n`;
+}
+
+/** The attendance cell of one guest: confirmed, declined, or still unanswered. */
+function guestAttendance(guest: GuestWithResponse): string {
+  if (guest.response === null) {
+    return "Pendiente";
+  }
+  return guest.response.attending ? "Sí" : "No";
+}
+
+/**
+ * The values of one guest, in the guest header's order. A guest who has not answered leaves the answer cells empty;
+ * the last-update cell falls back to the guest's own timestamp, so every line names when it last changed.
+ */
+function guestCellsOf(guest: GuestWithResponse): string[] {
+  return [
+    guest.name,
+    String(guest.seats),
+    guestAttendance(guest),
+    guest.response === null ? "" : String(guest.response.partySize),
+    guest.phone ?? "",
+    guest.note ?? "",
+    guest.response?.message ?? "",
+    guest.checkedInAt?.toISOString() ?? "",
+    guest.response?.createdAt.toISOString() ?? "",
+    (guest.response?.updatedAt ?? guest.updatedAt).toISOString(),
+  ];
+}
+
+/**
+ * The CSV text of a guest list, in the order given (the creator read's newest first), ending every line with CRLF.
+ * A guest who has not answered is exported too, so the file is the list the door needs. An invitation with no
+ * guests exports the header alone.
+ */
+export function toGuestCsv(guests: readonly GuestWithResponse[]): string {
+  const lines = [GUEST_CSV_HEADER.map(cell).join(",")];
+
+  for (const guest of guests) {
+    lines.push(guestCellsOf(guest).map(cell).join(","));
   }
   return `${lines.join("\r\n")}\r\n`;
 }

@@ -16,6 +16,18 @@ import { createConfigModule } from "../../config/config.module";
 import { EmailDeliveryService } from "../../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../../email/infrastructure/system-email-delivery-runtime";
+import {
+  GUEST_REPOSITORY,
+  type GuestCheckIn,
+  type GuestFields,
+  type GuestListReadModel,
+  type GuestRecord,
+  type GuestRepository,
+  type GuestResponseWrite,
+  type GuestWithResponse,
+  type NewGuest,
+} from "../application/guest.repository";
+import { guestTokenHash } from "../application/guest-token";
 import { InvitationSlugTakenError } from "../application/invitation.application.errors";
 import {
   INVITATION_REPOSITORY,
@@ -31,6 +43,7 @@ import {
   INVITATION_CATALOG,
   type InvitationCatalog,
 } from "../application/invitation-catalog";
+import { GuestSeatsBelowConfirmedPartyError } from "../application/invitation-guest.errors";
 import {
   INVITATION_PAYMENT_GATE,
   type InvitationPaymentDecision,
@@ -85,6 +98,8 @@ const MUSIC_PACKAGE_ID = "77777777-7777-4777-8777-777777777777";
 const RSVP_PACKAGE_ID = "88888888-8888-4888-8888-888888888888";
 /** An ACTIVE package with the guest list, which replaces the open form (M6 S4; G2 implements it). */
 const GUEST_LIST_PACKAGE_ID = "99999999-9999-4999-8999-999999999999";
+/** The seeded Deluxe keys (M6 S3): the guest list and its access pass (G2). */
+const QR_PASS_PACKAGE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const PHONE = "+525512345678";
 const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
 const RENDERER = "birthday-poster-01";
@@ -284,6 +299,14 @@ class MemoryInvitationCatalog implements InvitationCatalog {
       GUEST_LIST_PACKAGE_ID,
       { status: "ACTIVE", includedFeatureKeys: ["COUNTDOWN", "RSVP", "GUEST_LIST"] },
     ],
+    // The same keys plus the access pass (M6 G2; S3, S4).
+    [
+      QR_PASS_PACKAGE_ID,
+      {
+        status: "ACTIVE",
+        includedFeatureKeys: ["COUNTDOWN", "RSVP", "GUEST_LIST", "QR_PASS"],
+      },
+    ],
   ]);
 
   /** Every version renders with the allow-listed component unless it says otherwise. */
@@ -461,6 +484,283 @@ class MemoryRsvpRepository implements RsvpRepository {
 }
 
 /**
+ * The guest port in memory (M6 G2; S1, S4). It repeats the adapter's own guards — the owner scope, the editable
+ * statuses, the attending answer a check-in needs, and the seats a confirmed party needs — so a route that skipped
+ * one would be caught here. The plain token never enters this class: it holds the digests, as `Guest.tokenHash` does.
+ */
+class MemoryGuestRepository implements GuestRepository {
+  readonly guests: Array<GuestRecord & { tokenHash: string }> = [];
+  readonly responses: Array<
+    GuestResponseWrite & { guestId: string; createdAt: Date; updatedAt: Date }
+  > = [];
+  private sequence = 0;
+
+  constructor(private readonly invitations: MemoryInvitationRepository) {}
+
+  private editable(ownerId: string, invitationId: string): InvitationRecord | null {
+    const invitation = this.invitations.rows.find(
+      (row) => row.id === invitationId && row.ownerId === ownerId,
+    );
+    if (!invitation) {
+      return null;
+    }
+    if (invitation.status === "ARCHIVED") {
+      throw new InvitationNotEditableError(invitation.status);
+    }
+    return invitation;
+  }
+
+  private of(invitationId: string, guestId: string) {
+    return this.guests.find((row) => row.id === guestId && row.invitationId === invitationId);
+  }
+
+  private withResponse(guest: GuestRecord & { tokenHash: string }): GuestWithResponse {
+    const answer = this.responses.find((row) => row.guestId === guest.id) ?? null;
+    return {
+      id: guest.id,
+      invitationId: guest.invitationId,
+      name: guest.name,
+      seats: guest.seats,
+      phone: guest.phone,
+      note: guest.note,
+      tokenIssuedAt: guest.tokenIssuedAt,
+      checkedInAt: guest.checkedInAt,
+      createdAt: guest.createdAt,
+      updatedAt: guest.updatedAt,
+      response:
+        answer === null
+          ? null
+          : {
+              attending: answer.attending,
+              partySize: answer.partySize,
+              message: answer.message,
+              createdAt: answer.createdAt,
+              updatedAt: answer.updatedAt,
+            },
+    };
+  }
+
+  async create(
+    ownerId: string,
+    invitationId: string,
+    guest: NewGuest,
+    at: Date,
+  ): Promise<GuestRecord | null> {
+    if (this.editable(ownerId, invitationId) === null) {
+      return null;
+    }
+    this.sequence += 1;
+    const created = {
+      id: randomUUID(),
+      invitationId,
+      name: guest.name,
+      seats: guest.seats,
+      phone: guest.phone,
+      note: guest.note,
+      tokenHash: guest.tokenHash,
+      tokenIssuedAt: at,
+      checkedInAt: null,
+      createdAt: new Date(at.getTime() + this.sequence),
+      updatedAt: at,
+    };
+    this.guests.push(created);
+    return this.withResponse(created);
+  }
+
+  async findGuests(ownerId: string, invitationId: string): Promise<GuestListReadModel | null> {
+    const invitation = this.invitations.rows.find(
+      (row) => row.id === invitationId && row.ownerId === ownerId,
+    );
+    if (!invitation) {
+      return null;
+    }
+    return {
+      slug: invitation.slug,
+      guests: this.guests
+        .filter((row) => row.invitationId === invitationId)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map((row) => this.withResponse(row)),
+    };
+  }
+
+  async findGuest(
+    ownerId: string,
+    invitationId: string,
+    guestId: string,
+  ): Promise<GuestWithResponse | null> {
+    const invitation = this.invitations.rows.find(
+      (row) => row.id === invitationId && row.ownerId === ownerId,
+    );
+    if (!invitation) {
+      return null;
+    }
+    const guest = this.of(invitationId, guestId);
+    return guest === undefined ? null : this.withResponse(guest);
+  }
+
+  async update(
+    ownerId: string,
+    invitationId: string,
+    guestId: string,
+    fields: GuestFields,
+    at: Date,
+  ): Promise<GuestRecord | null> {
+    if (this.editable(ownerId, invitationId) === null) {
+      return null;
+    }
+    const guest = this.of(invitationId, guestId);
+    if (guest === undefined) {
+      return null;
+    }
+    const answer = this.responses.find((row) => row.guestId === guestId);
+    if (answer?.attending === true && answer.partySize > fields.seats) {
+      throw new GuestSeatsBelowConfirmedPartyError(answer.partySize);
+    }
+    Object.assign(guest, fields, { updatedAt: at });
+    return this.withResponse(guest);
+  }
+
+  async remove(ownerId: string, invitationId: string, guestId: string): Promise<boolean> {
+    if (this.editable(ownerId, invitationId) === null) {
+      return false;
+    }
+    const index = this.guests.findIndex(
+      (row) => row.id === guestId && row.invitationId === invitationId,
+    );
+    if (index === -1) {
+      return false;
+    }
+    this.guests.splice(index, 1);
+    for (let position = this.responses.length - 1; position >= 0; position -= 1) {
+      if (this.responses[position]?.guestId === guestId) {
+        this.responses.splice(position, 1);
+      }
+    }
+    return true;
+  }
+
+  async rotateToken(
+    ownerId: string,
+    invitationId: string,
+    guestId: string,
+    tokenHash: string,
+    at: Date,
+  ): Promise<GuestRecord | null> {
+    if (this.editable(ownerId, invitationId) === null) {
+      return null;
+    }
+    const guest = this.of(invitationId, guestId);
+    if (guest === undefined) {
+      return null;
+    }
+    guest.tokenHash = tokenHash;
+    guest.tokenIssuedAt = at;
+    guest.updatedAt = at;
+    return this.withResponse(guest);
+  }
+
+  async findByToken(invitationId: string, tokenHash: string): Promise<GuestWithResponse | null> {
+    const guest = this.guests.find(
+      (row) => row.invitationId === invitationId && row.tokenHash === tokenHash,
+    );
+    return guest === undefined ? null : this.withResponse(guest);
+  }
+
+  async upsertResponse(
+    invitationId: string,
+    guestId: string,
+    response: GuestResponseWrite,
+    at: Date,
+  ): Promise<boolean> {
+    const invitation = this.invitations.rows.find((row) => row.id === invitationId);
+    const guest = this.of(invitationId, guestId);
+    if (
+      invitation?.status !== "PUBLISHED" ||
+      guest === undefined ||
+      (invitation.rsvpDeadline !== null && at.getTime() > invitation.rsvpDeadline.getTime())
+    ) {
+      return false;
+    }
+    const existing = this.responses.find((row) => row.guestId === guestId);
+    if (existing !== undefined) {
+      Object.assign(existing, response, { updatedAt: at });
+      return true;
+    }
+    this.responses.push({ guestId, ...response, createdAt: at, updatedAt: at });
+    return true;
+  }
+
+  async checkIn(
+    ownerId: string,
+    invitationId: string,
+    tokenHash: string,
+    at: Date,
+  ): Promise<GuestCheckIn | null> {
+    const invitation = this.invitations.rows.find(
+      (row) => row.id === invitationId && row.ownerId === ownerId,
+    );
+    const guest = this.guests.find(
+      (row) => row.invitationId === invitationId && row.tokenHash === tokenHash,
+    );
+    if (invitation === undefined || guest === undefined || invitation.status === "ARCHIVED") {
+      return null;
+    }
+    const answer = this.responses.find((row) => row.guestId === guest.id);
+    if (answer?.attending !== true) {
+      return null;
+    }
+    guest.checkedInAt ??= at;
+    return {
+      id: guest.id,
+      name: guest.name,
+      seats: guest.seats,
+      partySize: answer.partySize,
+      checkedInAt: guest.checkedInAt,
+    };
+  }
+
+  /** A guest inserted directly, for the reads and the check-in under test. */
+  seedGuest(
+    invitationId: string,
+    overrides: Partial<GuestFields> & { token: string; checkedInAt?: Date | null } = {
+      token: "A".repeat(22),
+    },
+  ): GuestRecord & { tokenHash: string } {
+    this.sequence += 1;
+    const at = new Date(Date.UTC(2026, 10, 19, 10, 0, 0));
+    const created = {
+      id: randomUUID(),
+      invitationId,
+      name: overrides.name ?? "Ana Pérez",
+      seats: overrides.seats ?? 3,
+      phone: overrides.phone ?? PHONE,
+      note: overrides.note ?? "Mesa 4",
+      tokenHash: guestTokenHash(overrides.token),
+      tokenIssuedAt: at,
+      checkedInAt: overrides.checkedInAt ?? null,
+      createdAt: new Date(at.getTime() + this.sequence),
+      updatedAt: at,
+    };
+    this.guests.push(created);
+    return created;
+  }
+
+  /** A stored answer for one guest, for the check-in and the export under test. */
+  seedResponse(guestId: string, overrides: Partial<GuestResponseWrite> = {}): void {
+    const at = new Date(Date.UTC(2026, 10, 20, 10, 0, 0));
+    this.responses.push({
+      guestId,
+      attending: true,
+      partySize: 2,
+      message: "Vamos",
+      createdAt: at,
+      updatedAt: at,
+      ...overrides,
+    });
+  }
+}
+
+/**
  * The RSVP rate limiter in memory (M6 G1; S4): records what it counted and answers whatever a test chose, so the
  * 429 outcome is observable without a database.
  */
@@ -502,6 +802,7 @@ describe("invitations routes: /invitations", () => {
   const catalog = new MemoryInvitationCatalog();
   const paymentGate = new MemoryPaymentGate();
   const rsvpRepository = new MemoryRsvpRepository(repository);
+  const guestRepository = new MemoryGuestRepository(repository);
   const rateLimiter = new MemoryRateLimiter();
   let app: INestApplication;
   let baseUrl: string;
@@ -528,6 +829,7 @@ describe("invitations routes: /invitations", () => {
         // Publication is free in Milestone 5; the publish use case asks this gate (S6).
         { provide: INVITATION_PAYMENT_GATE, useValue: paymentGate },
         { provide: RSVP_REPOSITORY, useValue: rsvpRepository },
+        { provide: GUEST_REPOSITORY, useValue: guestRepository },
         { provide: RSVP_RATE_LIMITER, useValue: rateLimiter },
       ],
     })
@@ -628,6 +930,27 @@ describe("invitations routes: /invitations", () => {
       ],
       ["rsvp read", "GET", `${PATH}/${UNKNOWN_ID}/rsvp`],
       ["rsvp export", "GET", `${PATH}/${UNKNOWN_ID}/rsvp.csv`],
+      ["guest list", "GET", `${PATH}/${UNKNOWN_ID}/guests`],
+      [
+        "create guest",
+        "POST",
+        `${PATH}/${UNKNOWN_ID}/guests`,
+        { name: "Ana", seats: 2, phone: null, note: null },
+      ],
+      [
+        "edit guest",
+        "PUT",
+        `${PATH}/${UNKNOWN_ID}/guests/${UNKNOWN_ID}`,
+        { name: "Ana", seats: 2, phone: null, note: null },
+      ],
+      ["remove guest", "DELETE", `${PATH}/${UNKNOWN_ID}/guests/${UNKNOWN_ID}`],
+      ["rotate guest token", "POST", `${PATH}/${UNKNOWN_ID}/guests/${UNKNOWN_ID}/token`],
+      [
+        "guest check-in",
+        "POST",
+        `${PATH}/${UNKNOWN_ID}/guests/check-in`,
+        { token: "A".repeat(22) },
+      ],
     ];
 
     it("answers 401 without a valid session, before validating the body, and stores nothing", async () => {
@@ -867,6 +1190,12 @@ describe("invitations routes: /invitations", () => {
         ["PUT", `${PATH}/1/rsvp-settings`, { deadline: null, partyLimit: 4 }],
         ["GET", `${PATH}/1/rsvp`],
         ["GET", `${PATH}/1/rsvp.csv`],
+        ["GET", `${PATH}/1/guests`],
+        ["POST", `${PATH}/1/guests`, { name: "Ana", seats: 1, phone: null, note: null }],
+        ["PUT", `${PATH}/1/guests/1`, { name: "Ana", seats: 1, phone: null, note: null }],
+        ["DELETE", `${PATH}/1/guests/1`],
+        ["POST", `${PATH}/1/guests/1/token`],
+        ["POST", `${PATH}/1/guests/check-in`, { token: "A".repeat(22) }],
       ];
 
       for (const [method, path, body] of probes) {
@@ -1513,7 +1842,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
-        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       assert.equal(new Date(String(body.publishedAt)).toISOString(), body.publishedAt);
       for (const key of PRIVATE_KEYS) {
@@ -1650,7 +1979,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: null,
         giftRegistry: false,
-        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       // No package key list, name, or id reaches a guest; only the gated result does (S4, A7).
       const text = JSON.stringify(body);
@@ -1680,7 +2009,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: { url: PLAYLIST, provider: "spotify" },
         giftRegistry: true,
-        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       assert.equal(JSON.stringify(body).includes(MUSIC_PACKAGE_ID), false);
     });
@@ -1719,7 +2048,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
-        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
     });
 
@@ -1743,6 +2072,7 @@ describe("invitations routes: /invitations", () => {
         mode: "open",
         deadline: deadline.toISOString(),
         partyLimit: 6,
+        qrPass: false,
       });
       assert.equal(JSON.stringify(openBody).includes("RSVP"), false, "the key list stays private");
 
@@ -1753,6 +2083,7 @@ describe("invitations routes: /invitations", () => {
         mode: "guest-list",
         deadline: null,
         partyLimit: 4,
+        qrPass: false,
       });
     });
 
@@ -2389,6 +2720,687 @@ describe("invitations routes: /invitations", () => {
       ]) {
         assert.equal(text.includes(leaked), false, leaked);
       }
+    });
+  });
+
+  /** The guests the shared memory port holds for one invitation, so the assertions are not suite-wide. */
+  const guestsOf = (invitationId: string) =>
+    guestRepository.guests.filter((row) => row.invitationId === invitationId);
+  /** The stored answers of one guest. */
+  const responsesOf = (guestId: string) =>
+    guestRepository.responses.filter((row) => row.guestId === guestId);
+
+  describe("guest list creator routes (M6 G2; S1, S3, S4)", () => {
+    /** A published invitation of the given package, created through the owner routes. */
+    async function owned(cookie: string, packageId: string = QR_PASS_PACKAGE_ID) {
+      const created = (await (
+        await send("POST", PATH, cookie, { templateVersionId: PUBLISHED_VERSION_ID, packageId })
+      ).json()) as Row & { id: string; slug: string };
+      await send("PUT", `${PATH}/${created.id}/content`, cookie, { content: { title: "Ana" } });
+      assert.equal((await send("POST", `${PATH}/${created.id}/publish`, cookie)).status, 200);
+      return created;
+    }
+
+    const GUEST = { name: "  Ana   Pérez ", seats: 3, phone: "55 1234 5678", note: " Mesa 4 " };
+
+    async function addGuest(cookie: string, id: string, body: unknown = GUEST) {
+      const response = await send("POST", `${PATH}/${id}/guests`, cookie, body);
+      assert.equal(response.status, 201, JSON.stringify(await response.clone().text()));
+      return (await response.json()) as Row & { token: string; guest: Row & { id: string } };
+    }
+
+    it("creates a guest, answers the plain token once, and never returns it from the read", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+
+      const response = await send("POST", `${PATH}/${created.id}/guests`, cookie, GUEST);
+
+      assert.equal(response.status, 201);
+      const body = (await response.json()) as Row & { token: string; guest: Row };
+      assert.equal(typeof body.token, "string");
+      assert.equal((body.token as string).length, 22);
+      assert.deepEqual(Object.keys(body.guest).sort(), [
+        "checkedInAt",
+        "createdAt",
+        "id",
+        "name",
+        "note",
+        "phone",
+        "response",
+        "seats",
+        "tokenIssuedAt",
+        "updatedAt",
+      ]);
+      assert.equal(body.guest.name, "Ana Pérez");
+      assert.equal(body.guest.seats, 3);
+      assert.equal(body.guest.phone, "+525512345678");
+      assert.equal(body.guest.note, "Mesa 4");
+      assert.equal(body.guest.response, null);
+      assert.equal(body.guest.checkedInAt, null);
+
+      const read = await send("GET", `${PATH}/${created.id}/guests`, cookie);
+      assert.equal(read.status, 200);
+      const list = (await read.json()) as Row;
+      assert.deepEqual(Object.keys(list).sort(), ["guests", "totals"]);
+      assert.deepEqual(list.totals, {
+        guests: 1,
+        seats: 3,
+        attendingGuests: 0,
+        attendingPeople: 0,
+        declinedCount: 0,
+        pendingCount: 1,
+        checkedInCount: 0,
+      });
+      const text = JSON.stringify(list);
+      assert.equal(text.includes(body.token), false, "the plain token is answered once");
+      for (const internal of ["tokenHash", "dedupeKey", "invitationId", "ownerId"]) {
+        assert.equal(text.includes(internal), false, internal);
+      }
+    });
+
+    it("answers 400 INVALID_GUEST with the domain issues and stores nothing", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+
+      const refused: Array<[Record<string, unknown>, string[]]> = [
+        [{ ...GUEST, name: "" }, ["name must be between 1 and 80 characters"]],
+        [{ ...GUEST, seats: 0 }, ["seats must be between 1 and 10"]],
+        [{ ...GUEST, seats: 11 }, ["seats must be between 1 and 10"]],
+        [{ ...GUEST, seats: 2.5 }, ["seats must be an integer"]],
+        [
+          { ...GUEST, phone: "12345" },
+          [
+            "phone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
+          ],
+        ],
+        [{ ...GUEST, note: "n".repeat(201) }, ["note must be at most 200 characters"]],
+        [
+          { name: "", seats: 0, phone: "12345", note: "n".repeat(201) },
+          [
+            "name must be between 1 and 80 characters",
+            "seats must be between 1 and 10",
+            "phone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
+            "note must be at most 200 characters",
+          ],
+        ],
+      ];
+
+      for (const [body, issues] of refused) {
+        const response = await send("POST", `${PATH}/${created.id}/guests`, cookie, body);
+        assert.equal(response.status, 400, JSON.stringify(body));
+        assert.deepEqual(await response.json(), { code: "INVALID_GUEST", issues });
+      }
+      assert.equal(guestsOf(created.id).length, 0);
+    });
+
+    it("answers 400 for a body with an unknown field or without a field", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+
+      for (const body of [
+        { ...GUEST, ownerId: UNKNOWN_ID },
+        { ...GUEST, token: "A".repeat(22) },
+        { name: "Ana" },
+        {},
+        "not-json",
+      ]) {
+        const response = await send("POST", `${PATH}/${created.id}/guests`, cookie, body);
+        assert.equal(response.status, 400, JSON.stringify(body));
+      }
+      assert.equal(guestsOf(created.id).length, 0);
+    });
+
+    it("answers 409 GUEST_LIST_NOT_AVAILABLE for a package without the guest list", async () => {
+      const { cookie } = await signedInCustomer();
+      const premium = await owned(cookie, RSVP_PACKAGE_ID);
+
+      for (const [method, path, body] of [
+        ["GET", `${PATH}/${premium.id}/guests`, undefined],
+        ["POST", `${PATH}/${premium.id}/guests`, GUEST],
+        ["PUT", `${PATH}/${premium.id}/guests/${UNKNOWN_ID}`, GUEST],
+        ["DELETE", `${PATH}/${premium.id}/guests/${UNKNOWN_ID}`, undefined],
+        ["POST", `${PATH}/${premium.id}/guests/${UNKNOWN_ID}/token`, undefined],
+      ] as const) {
+        const response = await send(method, path, cookie, body);
+        assert.equal(response.status, 409, `${method} ${path}`);
+        assert.deepEqual(await response.json(), { code: "GUEST_LIST_NOT_AVAILABLE" });
+      }
+      assert.equal(guestsOf(premium.id).length, 0);
+    });
+
+    it("answers 409 INVITATION_NOT_EDITABLE for an archived invitation and keeps the list readable", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+      const guest = await addGuest(cookie, created.id);
+      assert.equal((await send("POST", `${PATH}/${created.id}/archive`, cookie)).status, 200);
+
+      for (const [method, path, body] of [
+        ["POST", `${PATH}/${created.id}/guests`, GUEST],
+        ["PUT", `${PATH}/${created.id}/guests/${guest.guest.id}`, GUEST],
+        ["DELETE", `${PATH}/${created.id}/guests/${guest.guest.id}`, undefined],
+        ["POST", `${PATH}/${created.id}/guests/${guest.guest.id}/token`, undefined],
+        ["POST", `${PATH}/${created.id}/guests/check-in`, { token: guest.token }],
+      ] as const) {
+        const response = await send(method, path, cookie, body);
+        assert.equal(response.status, 409, `${method} ${path}`);
+        assert.deepEqual(await response.json(), { code: "INVITATION_NOT_EDITABLE" });
+      }
+      const read = await send("GET", `${PATH}/${created.id}/guests`, cookie);
+      assert.equal(read.status, 200);
+      const kept = (await read.json()) as Row & { guests: Row[] };
+      assert.equal(kept.guests.length, 1);
+    });
+
+    it("reads the guests with their answers, the check-in state, and the totals", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+      const first = await addGuest(cookie, created.id, { ...GUEST, name: "Ana" });
+      const second = await addGuest(cookie, created.id, {
+        ...GUEST,
+        name: "Beto",
+        seats: 2,
+        phone: null,
+        note: null,
+      });
+      guestRepository.seedResponse(first.guest.id, { attending: true, partySize: 3 });
+      guestRepository.seedResponse(second.guest.id, {
+        attending: false,
+        partySize: 0,
+        message: null,
+      });
+      const checkedIn = guestRepository.guests.find((row) => row.id === first.guest.id);
+      assert.ok(checkedIn);
+      checkedIn.checkedInAt = new Date("2026-11-20T20:00:00.000Z");
+
+      const response = await send("GET", `${PATH}/${created.id}/guests`, cookie);
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(body.totals, {
+        guests: 2,
+        seats: 5,
+        attendingGuests: 1,
+        attendingPeople: 3,
+        declinedCount: 1,
+        pendingCount: 0,
+        checkedInCount: 1,
+      });
+      const guests = body.guests as Row[];
+      assert.deepEqual(
+        guests.map((guest) => guest.name),
+        ["Beto", "Ana"],
+      );
+      assert.deepEqual(Object.keys(guests[1]?.response as Row).sort(), [
+        "attending",
+        "createdAt",
+        "message",
+        "partySize",
+        "updatedAt",
+      ]);
+      assert.equal(guests[1]?.checkedInAt, "2026-11-20T20:00:00.000Z");
+      assert.equal(guests[0]?.response !== null, true);
+    });
+
+    it("edits a guest, refuses a seat count below the confirmed party, and answers 404 for a stranger", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+      const guest = await addGuest(cookie, created.id, { ...GUEST, seats: 3 });
+
+      const edited = await send("PUT", `${PATH}/${created.id}/guests/${guest.guest.id}`, cookie, {
+        name: "Ana María",
+        seats: 5,
+        phone: null,
+        note: null,
+      });
+      assert.equal(edited.status, 200);
+      const body = (await edited.json()) as Row;
+      assert.equal(body.name, "Ana María");
+      assert.equal(body.seats, 5);
+      assert.equal(body.phone, null);
+      assert.equal(body.note, null);
+
+      guestRepository.seedResponse(guest.guest.id, { attending: true, partySize: 4 });
+      const refused = await send("PUT", `${PATH}/${created.id}/guests/${guest.guest.id}`, cookie, {
+        name: "Ana María",
+        seats: 2,
+        phone: null,
+        note: null,
+      });
+      assert.equal(refused.status, 409);
+      assert.deepEqual(await refused.json(), { code: "GUEST_SEATS_BELOW_RESPONSE", partySize: 4 });
+      assert.equal(guestRepository.guests.find((row) => row.id === guest.guest.id)?.seats, 5);
+
+      const other = await signedInCustomer();
+      for (const id of [created.id, UNKNOWN_ID]) {
+        const stranger = await send("PUT", `${PATH}/${id}/guests/${guest.guest.id}`, other.cookie, {
+          name: "Intruso",
+          seats: 1,
+          phone: null,
+          note: null,
+        });
+        assert.equal(stranger.status, 404, id);
+        assert.deepEqual(await stranger.json(), { code: "INVITATION_NOT_FOUND" });
+      }
+    });
+
+    it("removes a guest together with their answer and answers 404 for an unknown one", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+      const guest = await addGuest(cookie, created.id);
+      guestRepository.seedResponse(guest.guest.id);
+
+      const response = await send(
+        "DELETE",
+        `${PATH}/${created.id}/guests/${guest.guest.id}`,
+        cookie,
+      );
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { status: "deleted" });
+      assert.equal(guestsOf(created.id).length, 0);
+      assert.equal(responsesOf(guest.guest.id).length, 0);
+
+      const again = await send("DELETE", `${PATH}/${created.id}/guests/${guest.guest.id}`, cookie);
+      assert.equal(again.status, 404);
+      assert.deepEqual(await again.json(), { code: "GUEST_NOT_FOUND" });
+    });
+
+    it("rotates the personal token, so the previous link stops resolving", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+      const guest = await addGuest(cookie, created.id);
+
+      const rotated = await send(
+        "POST",
+        `${PATH}/${created.id}/guests/${guest.guest.id}/token`,
+        cookie,
+      );
+
+      assert.equal(rotated.status, 200);
+      const body = (await rotated.json()) as Row & { token: string };
+      assert.equal((body.token as string).length, 22);
+      assert.notEqual(body.token, guest.token);
+      assert.equal(JSON.stringify(body.guest).includes(body.token), false);
+
+      const oldLink = await send(
+        "GET",
+        `/public/invitations/${created.slug}/guests/${guest.token}`,
+      );
+      assert.equal(oldLink.status, 404);
+      const newLink = await send("GET", `/public/invitations/${created.slug}/guests/${body.token}`);
+      assert.equal(newLink.status, 200);
+    });
+
+    it("checks a confirmed guest in once and answers the party of the first check-in", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+      const guest = await addGuest(cookie, created.id, { ...GUEST, seats: 3 });
+      guestRepository.seedResponse(guest.guest.id, { attending: true, partySize: 2 });
+
+      const first = await send("POST", `${PATH}/${created.id}/guests/check-in`, cookie, {
+        token: guest.token,
+      });
+
+      assert.equal(first.status, 200);
+      const body = (await first.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), [
+        "attendingPartySize",
+        "checkedInAt",
+        "guestId",
+        "name",
+        "seats",
+      ]);
+      assert.equal(body.guestId, guest.guest.id);
+      assert.equal(body.name, "Ana Pérez");
+      assert.equal(body.seats, 3);
+      assert.equal(body.attendingPartySize, 2);
+      const checkedInAt = body.checkedInAt;
+
+      const second = await send("POST", `${PATH}/${created.id}/guests/check-in`, cookie, {
+        token: guest.token,
+      });
+      assert.equal(second.status, 200);
+      assert.equal(((await second.json()) as Row).checkedInAt, checkedInAt);
+      assert.equal(
+        guestRepository.guests.find((row) => row.id === guest.guest.id)?.checkedInAt?.toISOString(),
+        checkedInAt,
+      );
+    });
+
+    it("refuses a check-in of an unconfirmed guest, an unknown token, and a package without the QR pass", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+      const guest = await addGuest(cookie, created.id);
+
+      const unconfirmed = await send("POST", `${PATH}/${created.id}/guests/check-in`, cookie, {
+        token: guest.token,
+      });
+      assert.equal(unconfirmed.status, 409);
+      assert.deepEqual(await unconfirmed.json(), { code: "GUEST_NOT_CONFIRMED" });
+
+      const unknown = await send("POST", `${PATH}/${created.id}/guests/check-in`, cookie, {
+        token: "Z".repeat(22),
+      });
+      assert.equal(unknown.status, 404);
+      assert.deepEqual(await unknown.json(), { code: "GUEST_NOT_FOUND" });
+
+      const malformed = await send("POST", `${PATH}/${created.id}/guests/check-in`, cookie, {
+        token: "not-a-token",
+      });
+      assert.equal(malformed.status, 404);
+      assert.deepEqual(await malformed.json(), { code: "GUEST_NOT_FOUND" });
+
+      const noQr = await owned(cookie, GUEST_LIST_PACKAGE_ID);
+      const plain = await addGuest(cookie, noQr.id);
+      guestRepository.seedResponse(plain.guest.id);
+      const refused = await send("POST", `${PATH}/${noQr.id}/guests/check-in`, cookie, {
+        token: plain.token,
+      });
+      assert.equal(refused.status, 409);
+      assert.deepEqual(await refused.json(), { code: "QR_PASS_NOT_AVAILABLE" });
+
+      const other = await signedInCustomer();
+      const stranger = await send("POST", `${PATH}/${created.id}/guests/check-in`, other.cookie, {
+        token: guest.token,
+      });
+      assert.equal(stranger.status, 404);
+      assert.deepEqual(await stranger.json(), { code: "INVITATION_NOT_FOUND" });
+    });
+
+    it("exports the guest list in guest-list mode and keeps the open form's export otherwise", async () => {
+      const { cookie } = await signedInCustomer();
+      const guestList = await owned(cookie);
+      const guest = await addGuest(cookie, guestList.id, { ...GUEST, name: "Ana", seats: 3 });
+      await addGuest(cookie, guestList.id, {
+        ...GUEST,
+        name: "Beto",
+        seats: 1,
+        phone: null,
+        note: null,
+      });
+      guestRepository.seedResponse(guest.guest.id, { attending: true, partySize: 2 });
+
+      const response = await send("GET", `${PATH}/${guestList.id}/rsvp.csv`, cookie);
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("content-type"), "text/csv; charset=utf-8");
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.equal(
+        response.headers.get("content-disposition"),
+        `attachment; filename="asistencia-${guestList.slug}.csv"`,
+      );
+      const lines = (await response.text()).split("\r\n");
+      assert.equal(
+        lines[0],
+        "Nombre,Lugares,Asistencia,Personas,Teléfono,Nota,Mensaje,Primer check-in,Primera respuesta,Última actualización",
+      );
+      const beto = guestsOf(guestList.id).find((row) => row.name === "Beto");
+      assert.deepEqual(lines.slice(1, 3).sort(), [
+        "Ana,3,Sí,2,'+525512345678,Mesa 4,Vamos,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+        `Beto,1,Pendiente,,,,,,,${beto?.updatedAt.toISOString()}`,
+      ]);
+
+      // The open form keeps its own export (M6 G1 preserved).
+      const premium = await owned(cookie, RSVP_PACKAGE_ID);
+      rsvpRepository.seedResponse(premium.id, { name: "Abierta" });
+      const open = await send("GET", `${PATH}/${premium.id}/rsvp.csv`, cookie);
+      assert.equal(
+        (await open.text()).split("\r\n")[0],
+        "Nombre,Asistencia,Personas,Teléfono,Mensaje,Primera respuesta,Última actualización",
+      );
+    });
+  });
+
+  describe("public guest routes (M6 G2; S1, S4)", () => {
+    const PUBLIC_PATH = "/public/invitations";
+
+    /** A published invitation of the given package, created through the owner routes. */
+    async function published(packageId: string = QR_PASS_PACKAGE_ID) {
+      const { cookie } = await signedInCustomer();
+      const created = (await (
+        await send("POST", PATH, cookie, { templateVersionId: PUBLISHED_VERSION_ID, packageId })
+      ).json()) as Row & { id: string; slug: string };
+      await send("PUT", `${PATH}/${created.id}/content`, cookie, { content: { title: "Ana" } });
+      assert.equal((await send("POST", `${PATH}/${created.id}/publish`, cookie)).status, 200);
+      const guest = guestRepository.seedGuest(created.id, {
+        token: "A".repeat(22),
+        name: "Ana",
+        seats: 3,
+        note: "Mesa 4",
+      });
+      return { cookie, created, guest };
+    }
+
+    const guestPath = (slug: string, token: string) => `${PUBLIC_PATH}/${slug}/guests/${token}`;
+
+    it("answers the published page plus this guest, and nothing about another guest", async () => {
+      const { created, guest } = await published();
+      guestRepository.seedGuest(created.id, { token: "B".repeat(22), name: "Beto" });
+      guestRepository.seedResponse(guest.id, {
+        attending: true,
+        partySize: 2,
+        message: "Vamos",
+      });
+
+      const response = await send("GET", guestPath(created.slug, "A".repeat(22)));
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), [
+        "componentKey",
+        "configuration",
+        "content",
+        "features",
+        "guest",
+        "publishedAt",
+        "slug",
+        "timeZone",
+      ]);
+      assert.deepEqual(body.guest, {
+        name: "Ana",
+        seats: 3,
+        response: { attending: true, partySize: 2, message: "Vamos" },
+        qrPass: true,
+      });
+      assert.deepEqual((body.features as Row).rsvp, {
+        mode: "guest-list",
+        deadline: null,
+        partyLimit: 4,
+        qrPass: true,
+      });
+      const text = JSON.stringify(body);
+      for (const secret of ["Beto", "A".repeat(22), guest.tokenHash, created.id, "tokenHash"]) {
+        assert.equal(text.includes(secret), false, secret);
+      }
+    });
+
+    it("offers the QR pass only to a confirmed guest whose package grants it", async () => {
+      const noQr = await published(GUEST_LIST_PACKAGE_ID);
+      guestRepository.seedResponse(noQr.guest.id);
+      const page = (await (
+        await send("GET", guestPath(noQr.created.slug, "A".repeat(22)))
+      ).json()) as Row;
+      assert.equal((page.guest as Row).qrPass, false);
+      assert.equal(((page.features as Row).rsvp as Row).qrPass, false);
+
+      const deluxe = await published();
+      const pending = (await (
+        await send("GET", guestPath(deluxe.created.slug, "A".repeat(22)))
+      ).json()) as Row;
+      assert.equal((pending.guest as Row).qrPass, false, "no answer yet");
+      guestRepository.seedResponse(deluxe.guest.id, { attending: false, partySize: 0 });
+      const declined = (await (
+        await send("GET", guestPath(deluxe.created.slug, "A".repeat(22)))
+      ).json()) as Row;
+      assert.equal((declined.guest as Row).qrPass, false, "declined");
+    });
+
+    it("answers the same invisible 404 for a revoked, unknown, foreign, or malformed token and an invisible slug", async () => {
+      const first = await published();
+      const second = await published();
+      const otherToken = "B".repeat(22);
+      guestRepository.seedGuest(second.created.id, { token: otherToken, name: "Otra" });
+      await send(
+        "POST",
+        `${PATH}/${first.created.id}/guests/${first.guest.id}/token`,
+        first.cookie,
+      );
+      const draft = (await (
+        await send("POST", PATH, first.cookie, {
+          templateVersionId: PUBLISHED_VERSION_ID,
+          packageId: QR_PASS_PACKAGE_ID,
+        })
+      ).json()) as Row & { id: string; slug: string };
+
+      const probes = [
+        guestPath(first.created.slug, "A".repeat(22)),
+        guestPath(first.created.slug, otherToken),
+        guestPath(first.created.slug, "Z".repeat(22)),
+        guestPath(first.created.slug, "not-a-token"),
+        guestPath("invitacion-never01", "A".repeat(22)),
+        guestPath(String(draft.slug), "A".repeat(22)),
+      ];
+
+      for (const path of probes) {
+        const response = await send("GET", path);
+        assert.equal(response.status, 404, path);
+        assert.deepEqual(await response.json(), { code: "PUBLIC_INVITATION_NOT_FOUND" });
+        assert.equal(response.headers.get("cache-control"), "no-store");
+      }
+    });
+
+    it("stores the guest's answer and answers the same minimal 202 for a change of mind", async () => {
+      const { created, guest } = await published();
+      const path = `${guestPath(created.slug, "A".repeat(22))}/rsvp`;
+
+      const response = await send("POST", path, undefined, {
+        attending: true,
+        partySize: 3,
+        message: "  Vamos ",
+      });
+
+      assert.equal(response.status, 202);
+      assert.deepEqual(await response.json(), { status: "received" });
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.equal(responsesOf(guest.id).length, 1);
+      assert.equal(responsesOf(guest.id)[0]?.partySize, 3);
+      assert.equal(responsesOf(guest.id)[0]?.message, "Vamos");
+
+      const retry = await send("POST", path, undefined, {
+        attending: false,
+        partySize: 0,
+        message: null,
+      });
+      assert.equal(retry.status, 202);
+      assert.deepEqual(await retry.json(), { status: "received" });
+      assert.equal(responsesOf(guest.id).length, 1);
+      assert.equal(responsesOf(guest.id)[0]?.attending, false);
+    });
+
+    it("answers 400 INVALID_RSVP with the issues and 400 for an unknown field", async () => {
+      const { created, guest } = await published();
+      const path = `${guestPath(created.slug, "A".repeat(22))}/rsvp`;
+
+      for (const [body, issues] of [
+        [
+          { attending: true, partySize: 4, message: null },
+          ["partySize must be between 1 and 3 when attending"],
+        ],
+        [
+          { attending: false, partySize: 1, message: null },
+          ["partySize must be 0 when not attending"],
+        ],
+        [
+          { attending: true, partySize: 1, message: "x".repeat(281) },
+          ["message must be at most 280 characters"],
+        ],
+      ] as const) {
+        const response = await send("POST", path, undefined, body);
+        assert.equal(response.status, 400, JSON.stringify(body));
+        assert.deepEqual(await response.json(), { code: "INVALID_RSVP", issues });
+      }
+      for (const body of [
+        { attending: true, partySize: 1, name: "Otra" },
+        { attending: true, partySize: 1, phone: "5512345678" },
+        { attending: "yes", partySize: 1 },
+        { name: "Ana" },
+        "not-json",
+      ]) {
+        const response = await send("POST", path, undefined, body);
+        assert.equal(response.status, 400, JSON.stringify(body));
+      }
+      assert.equal(
+        guestRepository.responses.some((row) => row.guestId === guest.id),
+        false,
+      );
+    });
+
+    it("answers 409 RSVP_NOT_OPEN for an invitation without a guest list and for a passed deadline, and 429 over the cap", async () => {
+      const open = await published(RSVP_PACKAGE_ID);
+      const openGuest = guestRepository.seedGuest(open.created.id, { token: "C".repeat(22) });
+      assert.ok(openGuest);
+      const openResponse = await send(
+        "POST",
+        `${guestPath(open.created.slug, "C".repeat(22))}/rsvp`,
+        undefined,
+        {
+          attending: true,
+          partySize: 1,
+          message: null,
+        },
+      );
+      assert.equal(openResponse.status, 409);
+      assert.deepEqual(await openResponse.json(), { code: "RSVP_NOT_OPEN" });
+
+      const closed = await published();
+      await send("PUT", `${PATH}/${closed.created.id}/rsvp-settings`, closed.cookie, {
+        deadline: "2020-01-01T00:00:00.000Z",
+        partyLimit: 4,
+      });
+      const closedResponse = await send(
+        "POST",
+        `${guestPath(closed.created.slug, "A".repeat(22))}/rsvp`,
+        undefined,
+        { attending: true, partySize: 1, message: null },
+      );
+      assert.equal(closedResponse.status, 409);
+      assert.deepEqual(await closedResponse.json(), { code: "RSVP_NOT_OPEN" });
+
+      const limited = await published();
+      rateLimiter.allow = false;
+      try {
+        const response = await send(
+          "POST",
+          `${guestPath(limited.created.slug, "A".repeat(22))}/rsvp`,
+          undefined,
+          { attending: true, partySize: 1, message: null },
+        );
+        assert.equal(response.status, 429);
+        assert.deepEqual(await response.json(), { code: "RSVP_RATE_LIMITED" });
+      } finally {
+        rateLimiter.allow = true;
+      }
+      const refusals = [openGuest.id, closed.guest.id, limited.guest.id];
+      assert.equal(
+        guestRepository.responses.some((row) => refusals.includes(row.guestId)),
+        false,
+        "no submission was stored",
+      );
+    });
+
+    it("serves the same answer with a forged cookie, never reading a session", async () => {
+      const { created } = await published();
+
+      const response = await send(
+        "POST",
+        `${guestPath(created.slug, "A".repeat(22))}/rsvp`,
+        `${SESSION_COOKIE}=forged.value`,
+        { attending: true, partySize: 1, message: null },
+      );
+
+      assert.equal(response.status, 202);
+      assert.deepEqual(await response.json(), { status: "received" });
     });
   });
 });

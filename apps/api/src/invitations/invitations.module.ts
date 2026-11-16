@@ -6,6 +6,7 @@ import {
 } from "../catalog/application/public/catalog-public-reader";
 import { CatalogModule } from "../catalog/catalog.module";
 import { PrismaService } from "../database/prisma.service";
+import { GUEST_REPOSITORY, type GuestRepository } from "./application/guest.repository";
 import {
   INVITATION_REPOSITORY,
   type InvitationRepository,
@@ -23,6 +24,17 @@ import {
 } from "./application/invitation.use-cases";
 import { INVITATION_CATALOG, type InvitationCatalog } from "./application/invitation-catalog";
 import {
+  CheckInGuestUseCase,
+  CreateGuestUseCase,
+  DeleteGuestUseCase,
+  GetAttendanceExportUseCase,
+  GetPublicGuestUseCase,
+  ListGuestsUseCase,
+  RotateGuestTokenUseCase,
+  SubmitGuestRsvpUseCase,
+  UpdateGuestUseCase,
+} from "./application/invitation-guest.use-cases";
+import {
   INVITATION_PAYMENT_GATE,
   type InvitationPaymentGate,
 } from "./application/invitation-payment-gate";
@@ -35,6 +47,7 @@ import { RSVP_REPOSITORY, type RsvpRepository } from "./application/rsvp.reposit
 import { RSVP_RATE_LIMITER, type RsvpRateLimiter } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
 import { NoPaymentRequiredGate } from "./infrastructure/no-payment-required";
+import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
@@ -111,6 +124,90 @@ export const INVITATION_USE_CASES: Provider[] = [
     ) => new SubmitPublicRsvpUseCase(invitations, catalog, rsvp, rateLimiter),
     inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, RSVP_REPOSITORY, RSVP_RATE_LIMITER],
   },
+  // The guest list (M6 G2): every use case needs the invitation port, the catalog gate, and the guest port.
+  {
+    provide: ListGuestsUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      guests: GuestRepository,
+    ) => new ListGuestsUseCase(invitations, catalog, guests),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, GUEST_REPOSITORY],
+  },
+  {
+    provide: CreateGuestUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      guests: GuestRepository,
+    ) => new CreateGuestUseCase(invitations, catalog, guests),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, GUEST_REPOSITORY],
+  },
+  {
+    provide: UpdateGuestUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      guests: GuestRepository,
+    ) => new UpdateGuestUseCase(invitations, catalog, guests),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, GUEST_REPOSITORY],
+  },
+  {
+    provide: DeleteGuestUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      guests: GuestRepository,
+    ) => new DeleteGuestUseCase(invitations, catalog, guests),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, GUEST_REPOSITORY],
+  },
+  {
+    provide: RotateGuestTokenUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      guests: GuestRepository,
+    ) => new RotateGuestTokenUseCase(invitations, catalog, guests),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, GUEST_REPOSITORY],
+  },
+  {
+    provide: GetPublicGuestUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      guests: GuestRepository,
+      publicInvitations: GetPublicInvitationUseCase,
+    ) => new GetPublicGuestUseCase(invitations, guests, publicInvitations),
+    inject: [INVITATION_REPOSITORY, GUEST_REPOSITORY, GetPublicInvitationUseCase],
+  },
+  {
+    provide: SubmitGuestRsvpUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      guests: GuestRepository,
+      rateLimiter: RsvpRateLimiter,
+    ) => new SubmitGuestRsvpUseCase(invitations, catalog, guests, rateLimiter),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, GUEST_REPOSITORY, RSVP_RATE_LIMITER],
+  },
+  {
+    provide: CheckInGuestUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      guests: GuestRepository,
+    ) => new CheckInGuestUseCase(invitations, catalog, guests),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, GUEST_REPOSITORY],
+  },
+  {
+    provide: GetAttendanceExportUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      guests: GuestRepository,
+      rsvp: RsvpRepository,
+    ) => new GetAttendanceExportUseCase(invitations, catalog, guests, rsvp),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, GUEST_REPOSITORY, RSVP_REPOSITORY],
+  },
 ];
 
 /**
@@ -155,6 +252,11 @@ export const INVITATION_USE_CASES: Provider[] = [
       provide: RSVP_RATE_LIMITER,
       // The same `RateLimit` table Better Auth uses; only the key prefix and the window are RSVP's.
       useFactory: (prisma: PrismaService) => new PrismaRsvpRateLimiter(prisma),
+      inject: [PrismaService],
+    },
+    {
+      provide: GUEST_REPOSITORY,
+      useFactory: (prisma: PrismaService) => new PrismaGuestRepository(prisma),
       inject: [PrismaService],
     },
   ],

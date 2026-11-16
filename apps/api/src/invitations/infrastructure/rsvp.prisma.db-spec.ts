@@ -210,27 +210,29 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
       assert.equal((await stored(invitation.id)).rsvpPartyLimit, 4);
     });
 
-    it("keeps no guest column yet: the guest table arrives with the guest list (M6 G2)", async () => {
-      const columns = await prisma.$queryRaw<Array<{ column_name: string }>>`
-        SELECT column_name
+    it("gains the nullable guest reference the guest list added (M6 G2)", async () => {
+      // The open form's answers existed before the guest list, so the column is nullable and no row was rewritten.
+      const columns = await prisma.$queryRaw<Array<{ column_name: string; is_nullable: string }>>`
+        SELECT column_name, is_nullable
         FROM information_schema.columns
         WHERE table_name = 'RsvpResponse'
         ORDER BY column_name
       `;
 
       assert.deepEqual(
-        columns.map((column) => column.column_name),
+        columns.map((column) => [column.column_name, column.is_nullable]),
         [
-          "attending",
-          "createdAt",
-          "dedupeKey",
-          "id",
-          "invitationId",
-          "message",
-          "name",
-          "partySize",
-          "phone",
-          "updatedAt",
+          ["attending", "NO"],
+          ["createdAt", "NO"],
+          ["dedupeKey", "NO"],
+          ["guestId", "YES"],
+          ["id", "NO"],
+          ["invitationId", "NO"],
+          ["message", "YES"],
+          ["name", "NO"],
+          ["partySize", "NO"],
+          ["phone", "YES"],
+          ["updatedAt", "NO"],
         ],
       );
     });
@@ -570,6 +572,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         mode: "open",
         deadline: new Date("2026-12-31T23:59:59.000Z"),
         partyLimit: 6,
+        // This package grants no guest list, so it offers no access pass (M6 G2).
+        qrPass: false,
       });
       // No guest answer, no owner, no id: the page a guest receives carries the settings only (S4, A7).
       const text = JSON.stringify(page);

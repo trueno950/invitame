@@ -14,7 +14,6 @@ import {
 } from "../application/invitation-rsvp.errors";
 import type { RsvpRead } from "../application/invitation-rsvp.use-cases";
 import type { RsvpResponseRecord } from "../application/rsvp.repository";
-import { toRsvpCsv } from "../application/rsvp-csv";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
 import { mapInvitationError } from "./invitation.response";
 
@@ -85,15 +84,6 @@ export function toRsvpReadResponse(read: RsvpRead): RsvpReadResponse {
     settings: toRsvpSettingsResponse(read.settings),
     responses: read.responses.map(toRsvpResponseItem),
     totals: { ...read.totals },
-  };
-}
-
-/** The CSV file of a creator's read: the attachment filename and the text (S1, S4). */
-export function rsvpCsvAttachment(read: RsvpRead): { filename: string; body: string } {
-  return {
-    // The slug is already a safe filename: lower-case letters, digits, and single dashes (S5).
-    filename: `asistencia-${read.slug}.csv`,
-    body: toRsvpCsv(read.responses),
   };
 }
 

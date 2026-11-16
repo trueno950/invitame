@@ -1335,7 +1335,7 @@ describe("GetPublicInvitationUseCase", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
-        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     });
     // Nothing outside the allow-list leaks: no owner, package, price, id, or status (A7).
@@ -1445,6 +1445,8 @@ describe("GetPublicInvitationUseCase", () => {
             mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
             deadline: null,
             partyLimit: 4,
+            // Deluxe also grants the guest list's access pass (M6 G2).
+            qrPass: packageKey === "deluxe",
           },
         },
         packageKey,
@@ -1474,6 +1476,8 @@ describe("GetPublicInvitationUseCase", () => {
             mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
             deadline: null,
             partyLimit: 4,
+            // Deluxe also grants the guest list's access pass (M6 G2).
+            qrPass: packageKey === "deluxe",
           },
         },
         packageKey,
@@ -1513,7 +1517,7 @@ describe("GetPublicInvitationUseCase", () => {
       whatsapp: null,
       music: { url: PLAYLIST, provider: "spotify" },
       giftRegistry: false,
-      rsvp: { mode: null, deadline: null, partyLimit: 4 },
+      rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
     });
     assert.equal(JSON.stringify(page).includes(PHONE), false);
   });

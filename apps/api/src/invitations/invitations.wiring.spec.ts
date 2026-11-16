@@ -13,6 +13,7 @@ import { createApp } from "../app.setup";
 import { CATALOG_PUBLIC_READER } from "../catalog/application/public/catalog-public-reader";
 import { createConfigModule } from "../config/config.module";
 import { PrismaService } from "../database/prisma.service";
+import { GUEST_REPOSITORY } from "./application/guest.repository";
 import { INVITATION_REPOSITORY } from "./application/invitation.repository";
 import {
   ArchiveInvitationUseCase,
@@ -26,6 +27,17 @@ import {
   UpdateInvitationFeaturesUseCase,
 } from "./application/invitation.use-cases";
 import { INVITATION_CATALOG } from "./application/invitation-catalog";
+import {
+  CheckInGuestUseCase,
+  CreateGuestUseCase,
+  DeleteGuestUseCase,
+  GetAttendanceExportUseCase,
+  GetPublicGuestUseCase,
+  ListGuestsUseCase,
+  RotateGuestTokenUseCase,
+  SubmitGuestRsvpUseCase,
+  UpdateGuestUseCase,
+} from "./application/invitation-guest.use-cases";
 import { INVITATION_PAYMENT_GATE } from "./application/invitation-payment-gate";
 import {
   GetRsvpResponsesUseCase,
@@ -36,6 +48,7 @@ import { RSVP_REPOSITORY } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
 import { NoPaymentRequiredGate } from "./infrastructure/no-payment-required";
+import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
@@ -93,6 +106,15 @@ describe("InvitationsModule wiring", () => {
         UpdateRsvpSettingsUseCase,
         GetRsvpResponsesUseCase,
         SubmitPublicRsvpUseCase,
+        ListGuestsUseCase,
+        CreateGuestUseCase,
+        UpdateGuestUseCase,
+        DeleteGuestUseCase,
+        RotateGuestTokenUseCase,
+        GetPublicGuestUseCase,
+        SubmitGuestRsvpUseCase,
+        CheckInGuestUseCase,
+        GetAttendanceExportUseCase,
       ]) {
         assert.ok(context.get(useCase) instanceof useCase, useCase.name);
       }
@@ -123,6 +145,8 @@ describe("InvitationsModule wiring", () => {
       // RSVP data and its rate limit have their own adapters, both on the shared Prisma client (M6 G1; S4).
       assert.ok(context.get(RSVP_REPOSITORY, { strict: false }) instanceof PrismaRsvpRepository);
       assert.ok(context.get(RSVP_RATE_LIMITER, { strict: false }) instanceof PrismaRsvpRateLimiter);
+      // The guest list has its own adapter on the same Prisma client (M6 G2; S1, S4).
+      assert.ok(context.get(GUEST_REPOSITORY, { strict: false }) instanceof PrismaGuestRepository);
     } finally {
       await context.close();
     }
@@ -180,6 +204,16 @@ describe("AppModule invitation wiring", () => {
       ["PUT", `/invitations/${id}/rsvp-settings`, { deadline: null, partyLimit: 4 }],
       ["GET", `/invitations/${id}/rsvp`],
       ["GET", `/invitations/${id}/rsvp.csv`],
+      ["GET", `/invitations/${id}/guests`],
+      ["POST", `/invitations/${id}/guests`, { name: "Ana", seats: 2, phone: null, note: null }],
+      [
+        "PUT",
+        `/invitations/${id}/guests/${id}`,
+        { name: "Ana", seats: 2, phone: null, note: null },
+      ],
+      ["DELETE", `/invitations/${id}/guests/${id}`],
+      ["POST", `/invitations/${id}/guests/${id}/token`],
+      ["POST", `/invitations/${id}/guests/check-in`, { token: "A".repeat(22) }],
     ];
 
     for (const [method, path, body] of routes) {
@@ -204,6 +238,8 @@ describe("AppModule invitation wiring", () => {
     const routes: Array<[string, string]> = [
       ["GET", "/public/invitations/invitacion-abcdef"],
       ["POST", "/public/invitations/invitacion-abcdef/rsvp"],
+      ["GET", "/public/invitations/invitacion-abcdef/guests/AAAAAAAAAAAAAAAAAAAAAA"],
+      ["POST", "/public/invitations/invitacion-abcdef/guests/AAAAAAAAAAAAAAAAAAAAAA/rsvp"],
     ];
 
     for (const [method, path] of routes) {

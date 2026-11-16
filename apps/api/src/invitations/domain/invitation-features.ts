@@ -50,8 +50,9 @@ export function isInvitationTimeZone(value: unknown): value is InvitationTimeZon
 /**
  * The catalog feature keys this batch implements (S4, S7, M6 S3). A package feature outside this list is stored
  * catalog data that no current layout renders, so gating drops it instead of letting a key select a component.
- * `RSVP` joins when the open RSVP form ships (M6 G1); `GUEST_LIST` stays out until G2 implements the guest list,
- * but it still selects the RSVP mode below, because the mode is an answer about what the guest page shows.
+ * `RSVP` and `GUEST_LIST` arrived with Milestone 6 (`GUEST_LIST` is the personal-link guest list, M6 G2), and
+ * `QR_PASS` is the guest list's access pass for the door, also M6 G2. The order is the order the owner's feature
+ * list follows.
  */
 export const IMPLEMENTED_INVITATION_FEATURES = [
   "COUNTDOWN",
@@ -60,6 +61,8 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   "WHATSAPP",
   "MUSIC",
   "GIFT_REGISTRY",
+  "GUEST_LIST",
+  "QR_PASS",
 ] as const;
 
 export type ImplementedInvitationFeature = (typeof IMPLEMENTED_INVITATION_FEATURES)[number];
@@ -69,6 +72,9 @@ export const RSVP_FEATURE_KEY = "RSVP";
 
 /** The catalog key that grants a managed guest list with personal links (M6 S3; G2 implements it). */
 export const GUEST_LIST_FEATURE_KEY = "GUEST_LIST";
+
+/** The catalog key that grants the guest list its access QR and the owner's check-in (M6 S3; G2). */
+export const QR_PASS_FEATURE_KEY = "QR_PASS";
 
 /**
  * How an invitation accepts attendance answers (M6 S4): the open form when the package grants `RSVP` and no guest
@@ -392,13 +398,20 @@ export interface PublicInvitationFeatures {
   readonly giftRegistry: boolean;
   /**
    * How the guest page accepts attendance answers (M6 S1, S4): the open form (`open`), personal links
-   * (`guest-list`, G2), or nothing (`null`), together with the creator's deadline and party limit. The mode is
-   * an answer about the page, not a package name, a price, or a feature key list.
+   * (`guest-list`, G2), or nothing (`null`), together with the creator's deadline and party limit and whether the
+   * guest-list access pass is granted. The mode is an answer about the page, not a package name, a price, or a
+   * feature key list.
    */
   readonly rsvp: {
     readonly mode: RsvpMode;
     readonly deadline: Date | null;
     readonly partyLimit: number;
+    /**
+     * Whether a confirmed guest's personal page may show the access QR (M6 G2; S4). It is true only while the
+     * package grants `QR_PASS` and the package grants the guest list together with it, because the pass belongs
+     * to a personal link: without one there is no guest to admit.
+     */
+    readonly qrPass: boolean;
   };
 }
 
@@ -408,11 +421,13 @@ export interface PublicInvitationFeatures {
  * includes WHATSAPP, and music answers the stored link only while the package includes MUSIC and the link names an
  * allow-listed service; a stored value the package does not grant stays private. The gift registry is a boolean
  * because the layout, not the API, knows whether the content has a value to show. The RSVP mode is decided from
- * the package's keys directly, because `GUEST_LIST` is not an implemented layout feature yet (M6 G2).
+ * the package's keys directly, together with the deadline, the party limit, and whether the guest-list access
+ * pass is granted (M6 G2).
  */
 export function publicInvitationFeatures(gate: InvitationFeatureGate): PublicInvitationFeatures {
   const keys = new Set(availableFeatureKeys(gate));
   const provider = keys.has("MUSIC") ? musicProviderOf(gate.playlistUrl) : null;
+  const mode = rsvpModeOf(gate.includedFeatureKeys);
 
   return {
     countdown: keys.has("COUNTDOWN"),
@@ -424,9 +439,11 @@ export function publicInvitationFeatures(gate: InvitationFeatureGate): PublicInv
       provider === null || gate.playlistUrl === null ? null : { url: gate.playlistUrl, provider },
     giftRegistry: keys.has("GIFT_REGISTRY"),
     rsvp: {
-      mode: rsvpModeOf(gate.includedFeatureKeys),
+      mode,
       deadline: gate.rsvpDeadline,
       partyLimit: gate.rsvpPartyLimit,
+      // The pass belongs to the guest list: a package that grants QR_PASS without GUEST_LIST offers no QR (G2).
+      qrPass: mode === "guest-list" && keys.has(QR_PASS_FEATURE_KEY),
     },
   };
 }

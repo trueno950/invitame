@@ -385,7 +385,7 @@ describe("feature gating (S4)", () => {
       ...gate,
     });
 
-  it("implements exactly COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, and GIFT_REGISTRY, with CALENDAR always added", () => {
+  it("implements exactly COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, GUEST_LIST, and QR_PASS, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
       "COUNTDOWN",
       "MAP",
@@ -393,10 +393,14 @@ describe("feature gating (S4)", () => {
       "WHATSAPP",
       "MUSIC",
       "GIFT_REGISTRY",
+      "GUEST_LIST",
+      "QR_PASS",
     ]);
     assert.equal(CALENDAR_FEATURE_KEY, "CALENDAR");
     // A catalog feature this batch does not implement never becomes an available feature.
-    assert.deepEqual(gated(["GALLERY", "GUEST_LIST", "QR_PASS"]), ["CALENDAR"]);
+    assert.deepEqual(gated(["GALLERY"]), ["CALENDAR"]);
+    // The guest list and its QR pass are implemented by M6 G2 (S3, S4).
+    assert.deepEqual(gated(["GUEST_LIST", "QR_PASS"]), ["GUEST_LIST", "QR_PASS", "CALENDAR"]);
   });
 
   it("shows the features each seeded package includes, plus CALENDAR", () => {
@@ -422,6 +426,8 @@ describe("feature gating (S4)", () => {
       "WHATSAPP",
       "MUSIC",
       "GIFT_REGISTRY",
+      "GUEST_LIST",
+      "QR_PASS",
       "CALENDAR",
     ]);
   });
@@ -441,6 +447,8 @@ describe("feature gating (S4)", () => {
       "RSVP",
       "MUSIC",
       "GIFT_REGISTRY",
+      "GUEST_LIST",
+      "QR_PASS",
       "CALENDAR",
     ]);
   });
@@ -459,6 +467,8 @@ describe("feature gating (S4)", () => {
       "RSVP",
       "WHATSAPP",
       "GIFT_REGISTRY",
+      "GUEST_LIST",
+      "QR_PASS",
       "CALENDAR",
     ]);
   });
@@ -478,7 +488,7 @@ describe("feature gating (S4)", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
-        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     );
   });
@@ -508,7 +518,7 @@ describe("feature gating (S4)", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
-        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     );
     assert.deepEqual(
@@ -524,7 +534,7 @@ describe("feature gating (S4)", () => {
         whatsapp: { phone: PHONE },
         music: null,
         giftRegistry: false,
-        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     );
     assert.deepEqual(
@@ -540,7 +550,7 @@ describe("feature gating (S4)", () => {
         whatsapp: null,
         music: { url: PLAYLIST, provider: "spotify" },
         giftRegistry: true,
-        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     );
   });
@@ -557,7 +567,7 @@ describe("feature gating (S4)", () => {
         rsvpDeadline: deadline,
         rsvpPartyLimit: 6,
       }).rsvp,
-      { mode: "open", deadline, partyLimit: 6 },
+      { mode: "open", deadline, partyLimit: 6, qrPass: false },
     );
     // Deluxe grants GUEST_LIST: personal links replace the open form, which G2 implements (S3, S4).
     assert.deepEqual(
@@ -566,7 +576,7 @@ describe("feature gating (S4)", () => {
         whatsappPhone: null,
         playlistUrl: null,
       }).rsvp,
-      { mode: "guest-list", deadline: null, partyLimit: 4 },
+      { mode: "guest-list", deadline: null, partyLimit: 4, qrPass: false },
     );
     // A package that grants neither key exposes no RSVP at all, even if a key only looks alike.
     for (const includedFeatureKeys of [["COUNTDOWN"], ["rsvp"], ["guest_list"]]) {
@@ -576,5 +586,20 @@ describe("feature gating (S4)", () => {
         includedFeatureKeys.join(","),
       );
     }
+  });
+
+  it("answers the QR pass only for a guest list whose package grants QR_PASS (M6 G2; S3, S4)", () => {
+    const qrPassOf = (includedFeatureKeys: readonly string[]) =>
+      featuresOf({ includedFeatureKeys, whatsappPhone: null, playlistUrl: null }).rsvp.qrPass;
+
+    // Deluxe: the guest list and the QR pass together.
+    assert.equal(qrPassOf(["RSVP", "GUEST_LIST", "QR_PASS"]), true);
+    // The QR pass is an access pass for a guest list: without one, it is not offered.
+    assert.equal(qrPassOf(["QR_PASS"]), false);
+    assert.equal(qrPassOf(["RSVP", "QR_PASS"]), false);
+    // A guest list without QR_PASS has personal links and no QR.
+    assert.equal(qrPassOf(["RSVP", "GUEST_LIST"]), false);
+    // A look-alike key never selects the pass.
+    assert.equal(qrPassOf(["RSVP", "GUEST_LIST", "qr_pass"]), false);
   });
 });

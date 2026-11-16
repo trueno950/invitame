@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Inject,
@@ -23,6 +24,15 @@ import {
   UpdateInvitationFeaturesUseCase,
 } from "../application/invitation.use-cases";
 import {
+  CheckInGuestUseCase,
+  CreateGuestUseCase,
+  DeleteGuestUseCase,
+  GetAttendanceExportUseCase,
+  ListGuestsUseCase,
+  RotateGuestTokenUseCase,
+  UpdateGuestUseCase,
+} from "../application/invitation-guest.use-cases";
+import {
   GetRsvpResponsesUseCase,
   UpdateRsvpSettingsUseCase,
 } from "../application/invitation-rsvp.use-cases";
@@ -32,6 +42,8 @@ import {
   UpdateInvitationContentDto,
   UpdateInvitationFeaturesDto,
 } from "./dto/invitation.dtos";
+// biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
+import { CheckInGuestDto, CreateGuestDto, UpdateGuestDto } from "./dto/invitation-guest.dtos";
 // The global ValidationPipe reads these classes from emitted metadata, so they are value imports.
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import { UpdateRsvpSettingsDto } from "./dto/invitation-rsvp.dtos";
@@ -45,12 +57,24 @@ import {
   toOwnedInvitationResponse,
 } from "./invitation.response";
 import {
+  type DeletedGuestResponse,
+  type GuestCheckInResponse,
+  type GuestListResponse,
+  type GuestResponseItem,
+  type GuestWithTokenResponse,
+  mapGuestError,
+  orDeletedGuestResponse,
+  orGuestCheckInResponse,
+  orGuestListNotFound,
+  orGuestResponseItem,
+  orGuestWithTokenResponse,
+} from "./invitation-guest.response";
+import {
   mapRsvpError,
   orRsvpReadNotFound,
   orRsvpSettingsNotFound,
   type RsvpReadResponse,
   type RsvpSettingsResponse,
-  rsvpCsvAttachment,
   rsvpInvitationNotFound,
 } from "./invitation-rsvp.response";
 
@@ -86,6 +110,14 @@ export class InvitationsController {
     private readonly updateRsvpSettings: UpdateRsvpSettingsUseCase,
     @Inject(GetRsvpResponsesUseCase)
     private readonly getRsvpResponses: GetRsvpResponsesUseCase,
+    @Inject(ListGuestsUseCase) private readonly listGuests: ListGuestsUseCase,
+    @Inject(CreateGuestUseCase) private readonly createGuest: CreateGuestUseCase,
+    @Inject(UpdateGuestUseCase) private readonly updateGuest: UpdateGuestUseCase,
+    @Inject(DeleteGuestUseCase) private readonly deleteGuest: DeleteGuestUseCase,
+    @Inject(RotateGuestTokenUseCase) private readonly rotateGuestToken: RotateGuestTokenUseCase,
+    @Inject(CheckInGuestUseCase) private readonly checkInGuest: CheckInGuestUseCase,
+    @Inject(GetAttendanceExportUseCase)
+    private readonly exportAttendance: GetAttendanceExportUseCase,
   ) {}
 
   /** Creates a free DRAFT pinned to a PUBLISHED version: 201 with the owned invitation (S1, S6, S7). */
@@ -266,9 +298,11 @@ export class InvitationsController {
   }
 
   /**
-   * The same read as a CSV download (M6 G1; S1, S4). The file is an attachment, is never cached, and is
+   * The same read as a CSV download (M6 G1, G2; S1, S4). The file is an attachment, is never cached, and is
    * spreadsheet-safe: every cell is quoted when it must be, quotes are doubled, and a cell a spreadsheet would run
-   * as a formula is prefixed with an apostrophe. Owner-only, with the same 404 as the JSON read (A4).
+   * as a formula is prefixed with an apostrophe. Owner-only, with the same 404 as the JSON read (A4). In guest-list
+   * mode the file is the guest list, pending guests and check-in times included; otherwise it is the open form's
+   * responses, unchanged from G1.
    */
   @Get(":id/rsvp.csv")
   async exportRsvp(
@@ -278,16 +312,152 @@ export class InvitationsController {
   ): Promise<string> {
     // The header is set before the read, so it is on the 404 too.
     reply.setHeader("Cache-Control", "no-store");
-    const read = await this.getRsvpResponses.execute(userId, id);
-    if (read === null) {
+    const exported = await this.exportAttendance.execute(userId, id);
+    if (exported === null) {
       // The same 404 every owner route answers, so a foreign invitation is indistinguishable from an unknown one.
       rsvpInvitationNotFound();
     }
-    const attachment = rsvpCsvAttachment(read);
     reply.setHeader("Content-Type", "text/csv; charset=utf-8");
-    reply.setHeader("Content-Disposition", `attachment; filename="${attachment.filename}"`);
+    reply.setHeader("Content-Disposition", `attachment; filename="${exported.filename}"`);
 
-    return attachment.body;
+    return exported.body;
+  }
+
+  /**
+   * The guest list of one owned invitation with its totals (M6 G2; S1, S4): guests, seats, confirmed people,
+   * declines, pending guests, and check-ins, each guest with their answer and check-in state and never their token.
+   * Owner-only; another customer's id answers 404 `INVITATION_NOT_FOUND` like an unknown one (A4); an archived
+   * invitation stays readable (A2); a package that does not grant `GUEST_LIST` is 409 `GUEST_LIST_NOT_AVAILABLE`.
+   */
+  @Get(":id/guests")
+  async readGuests(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+  ): Promise<GuestListResponse> {
+    try {
+      return orGuestListNotFound(await this.listGuests.execute(userId, id));
+    } catch (error) {
+      return mapGuestError(error);
+    }
+  }
+
+  /**
+   * Adds one guest to a DRAFT or a PUBLISHED invitation (M6 G2; S4): 201 with the guest and the personal token, which
+   * is answered exactly once. A refused guest is 400 `INVALID_GUEST` with the issues, an archived invitation is 409
+   * `INVITATION_NOT_EDITABLE`, a package without the guest list is 409 `GUEST_LIST_NOT_AVAILABLE`, and a foreign
+   * invitation is 404 (A4).
+   */
+  @Post(":id/guests")
+  async createGuestFor(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Body() body: CreateGuestDto,
+  ): Promise<GuestWithTokenResponse> {
+    try {
+      return orGuestWithTokenResponse(
+        await this.createGuest.execute({
+          ownerId: userId,
+          id,
+          name: body.name,
+          seats: body.seats,
+          phone: body.phone,
+          note: body.note,
+        }),
+      );
+    } catch (error) {
+      return mapGuestError(error);
+    }
+  }
+
+  /**
+   * Replaces one guest's name, seats, phone, and note (M6 G2; S4). `PUT` and not `PATCH`: the whole guest is
+   * replaced, and `null` clears the phone or the note. The token and the check-in state are untouched; a seat count
+   * that could not hold the party the guest already confirmed is 409 `GUEST_SEATS_BELOW_RESPONSE` with that party.
+   */
+  @Put(":id/guests/:guestId")
+  async replaceGuest(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Param("guestId", INVITATION_ID) guestId: string,
+    @Body() body: UpdateGuestDto,
+  ): Promise<GuestResponseItem> {
+    try {
+      return orGuestResponseItem(
+        await this.updateGuest.execute({
+          ownerId: userId,
+          id,
+          guestId,
+          name: body.name,
+          seats: body.seats,
+          phone: body.phone,
+          note: body.note,
+        }),
+      );
+    } catch (error) {
+      return mapGuestError(error);
+    }
+  }
+
+  /**
+   * Removes one guest together with the answer they gave (M6 G2; S4), in one statement: a response never outlives the
+   * guest it answers for. 200 with `{ status: "deleted" }`, because no new resource is created; a guest that is not
+   * part of this invitation is 404 `GUEST_NOT_FOUND`, and an archived invitation is 409 (A2, A4).
+   */
+  @Delete(":id/guests/:guestId")
+  @HttpCode(200)
+  async removeGuest(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Param("guestId", INVITATION_ID) guestId: string,
+  ): Promise<DeletedGuestResponse> {
+    try {
+      return orDeletedGuestResponse(await this.deleteGuest.execute(userId, id, guestId));
+    } catch (error) {
+      return mapGuestError(error);
+    }
+  }
+
+  /**
+   * Replaces one guest's personal token (M6 G2; S4): 200 with the guest and the new token, answered once, so the
+   * owner can revoke a link that leaked. The previous link stops resolving at the same instant; the answer and the
+   * check-in state stay. Owner-only, with the same 404 and 409 answers as an edit (A2, A4).
+   */
+  @Post(":id/guests/:guestId/token")
+  @HttpCode(200)
+  async rotateGuestTokenFor(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Param("guestId", INVITATION_ID) guestId: string,
+  ): Promise<GuestWithTokenResponse> {
+    try {
+      return orGuestWithTokenResponse(await this.rotateGuestToken.execute(userId, id, guestId));
+    } catch (error) {
+      return mapGuestError(error);
+    }
+  }
+
+  /**
+   * Checks one guest in at the door (M6 G2; S4): the token arrives in the body from the QR URL the guest's personal
+   * page shows, and the owner comes from the session. 200 with the guest, the seats, the confirmed party, and the
+   * first check-in instant; the first instant is kept, so showing the same QR twice is idempotent. A guest who has
+   * not confirmed is 409 `GUEST_NOT_CONFIRMED`, a token that names no guest of this invitation is 404
+   * `GUEST_NOT_FOUND` like an unknown one (no oracle), a package without `QR_PASS` is 409 `QR_PASS_NOT_AVAILABLE`,
+   * and an archived invitation is 409 (A2).
+   */
+  @Post(":id/guests/check-in")
+  @HttpCode(200)
+  async checkInGuestAt(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Body() body: CheckInGuestDto,
+  ): Promise<GuestCheckInResponse> {
+    try {
+      return orGuestCheckInResponse(
+        await this.checkInGuest.execute({ ownerId: userId, id, token: body.token }),
+      );
+    } catch (error) {
+      return mapGuestError(error);
+    }
   }
 }
 
