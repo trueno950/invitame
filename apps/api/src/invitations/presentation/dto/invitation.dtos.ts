@@ -22,7 +22,7 @@ class IsProvidedConstraint implements ValidatorConstraintInterface {
 }
 
 /** `@IsProvided()`: the property is present, and any value it carries — including `null` — is accepted. */
-function IsProvided(): PropertyDecorator {
+export function IsProvided(): PropertyDecorator {
   return Validate(IsProvidedConstraint);
 }
 

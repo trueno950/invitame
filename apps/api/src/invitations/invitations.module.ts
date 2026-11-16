@@ -26,9 +26,18 @@ import {
   INVITATION_PAYMENT_GATE,
   type InvitationPaymentGate,
 } from "./application/invitation-payment-gate";
+import {
+  GetRsvpResponsesUseCase,
+  SubmitPublicRsvpUseCase,
+  UpdateRsvpSettingsUseCase,
+} from "./application/invitation-rsvp.use-cases";
+import { RSVP_REPOSITORY, type RsvpRepository } from "./application/rsvp.repository";
+import { RSVP_RATE_LIMITER, type RsvpRateLimiter } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
 import { NoPaymentRequiredGate } from "./infrastructure/no-payment-required";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
+import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
+import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
 import { InvitationsController } from "./presentation/invitations.controller";
 import { PublicInvitationsController } from "./presentation/public-invitations.controller";
 
@@ -80,18 +89,42 @@ export const INVITATION_USE_CASES: Provider[] = [
     ) => new PublishInvitationUseCase(invitations, catalog, payments),
     inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, INVITATION_PAYMENT_GATE],
   },
+  {
+    provide: UpdateRsvpSettingsUseCase,
+    useFactory: (invitations: InvitationRepository, rsvp: RsvpRepository) =>
+      new UpdateRsvpSettingsUseCase(invitations, rsvp),
+    inject: [INVITATION_REPOSITORY, RSVP_REPOSITORY],
+  },
+  {
+    provide: GetRsvpResponsesUseCase,
+    useFactory: (invitations: InvitationRepository, rsvp: RsvpRepository) =>
+      new GetRsvpResponsesUseCase(invitations, rsvp),
+    inject: [INVITATION_REPOSITORY, RSVP_REPOSITORY],
+  },
+  {
+    provide: SubmitPublicRsvpUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      rsvp: RsvpRepository,
+      rateLimiter: RsvpRateLimiter,
+    ) => new SubmitPublicRsvpUseCase(invitations, catalog, rsvp, rateLimiter),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, RSVP_REPOSITORY, RSVP_RATE_LIMITER],
+  },
 ];
 
 /**
  * Invitations: creating, listing, reading, editing, archiving, publishing, and unpublishing a customer's own
- * invitations, and the ownerless public read of a published slug (M4 T3, T4, M5 T3, T4). The owner routes live
- * at `/invitations` behind the global guard; the public read is `/public/invitations/:slug` and carries
- * `@Public()`, so the guard never reads a session for a guest. This module binds the Prisma adapter to
- * `INVITATION_REPOSITORY`, the catalog's exported `CATALOG_PUBLIC_READER` to `INVITATION_CATALOG` through
- * `CatalogInvitationReader`, and the always-free payment gate to `INVITATION_PAYMENT_GATE`, so the invitations
- * module never imports a catalog repository or queries a catalog table. The owner routes read the owner only from
- * the session (S9); ownership itself is enforced by the repository queries (A4). Milestone 7 replaces only the
- * payment provider (S6).
+ * invitations, the ownerless public read of a published slug, and the open RSVP of a published invitation
+ * (M4 T3, T4, M5 T3, T4, M6 G1). The owner routes live at `/invitations` behind the global guard; the public read
+ * and the public submission live under `/public/invitations/...` and carry `@Public()`, so the guard never reads a
+ * session for a guest. This module binds the Prisma adapter to `INVITATION_REPOSITORY`, the catalog's exported
+ * `CATALOG_PUBLIC_READER` to `INVITATION_CATALOG` through `CatalogInvitationReader`, the always-free payment gate
+ * to `INVITATION_PAYMENT_GATE`, the RSVP data adapter to `RSVP_REPOSITORY`, and the RSVP rate limiter — the
+ * authentication flow's own `RateLimit` table — to `RSVP_RATE_LIMITER`, so the invitations module never imports a
+ * catalog repository or queries a catalog table. The owner routes read the owner only from the session (S9);
+ * ownership itself is enforced by the repository queries (A4). Milestone 7 replaces only the payment provider (S6);
+ * Milestone 6 G2 adds the guest list behind the same ports.
  */
 @Module({
   imports: [CatalogModule],
@@ -112,6 +145,17 @@ export const INVITATION_USE_CASES: Provider[] = [
     {
       provide: INVITATION_PAYMENT_GATE,
       useFactory: () => new NoPaymentRequiredGate(),
+    },
+    {
+      provide: RSVP_REPOSITORY,
+      useFactory: (prisma: PrismaService) => new PrismaRsvpRepository(prisma),
+      inject: [PrismaService],
+    },
+    {
+      provide: RSVP_RATE_LIMITER,
+      // The same `RateLimit` table Better Auth uses; only the key prefix and the window are RSVP's.
+      useFactory: (prisma: PrismaService) => new PrismaRsvpRateLimiter(prisma),
+      inject: [PrismaService],
     },
   ],
 })

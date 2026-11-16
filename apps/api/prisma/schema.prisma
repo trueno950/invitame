@@ -265,6 +265,11 @@ model Invitation {
   // The IANA zone the guest's countdown and calendar links use. The allow-list lives in the API domain
   // (`domain/invitation-features.ts`, S4); the database checks the shape and the default.
   timeZone          String           @default("America/Mexico_City") @db.VarChar(64)
+  // RSVP settings (M6 G1; S4): an optional deadline and a party limit of 1 to 10. The deadline is nullable, so
+  // every row that existed before the migration keeps accepting responses; the limit defaults to 4 and migration
+  // 20261117120000_add_rsvp_responses adds the CHECK constraint Prisma cannot express.
+  rsvpDeadline      DateTime?        @db.Timestamptz(6)
+  rsvpPartyLimit    Int              @default(4)
   archivedAt        DateTime?        @db.Timestamptz(6)
   // Set exactly while the status is PUBLISHED: unpublishing and archiving clear it (S7, A2).
   publishedAt       DateTime?        @db.Timestamptz(6)
@@ -277,6 +282,7 @@ model Invitation {
   templateVersion TemplateVersion           @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
   package         Package                   @relation(fields: [packageId], references: [id], onDelete: Restrict)
   featureSettings InvitationFeatureSettings?
+  rsvpResponses   RsvpResponse[]
 
   @@index([ownerId])
 }
@@ -301,4 +307,35 @@ model InvitationFeatureSettings {
   updatedAt     DateTime @updatedAt @db.Timestamptz(6)
 
   invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+}
+
+// One guest's attendance answer to one invitation (M6 G1; S1, S4). The row is tied to the invitation, which is
+// never hard-deleted here (archiving is its only terminal lifecycle write), so the reference is ON DELETE RESTRICT.
+// `dedupeKey` is the normalized name and normalized phone: the unique index on `(invitationId, dedupeKey)` is what
+// makes a retry an update instead of a duplicate and what lets two concurrent identical submissions end in one
+// row. A guest list column is deliberately absent in this task: G2 adds the guest table and its nullable reference.
+// The response carries bounded values only — a name of 1 to 80 characters, an attending flag, a party size of 0 to
+// 10 (0 exactly when declined), an optional E.164 phone, an optional message of at most 280 characters, and the
+// timestamps — and no free-form JSONB.
+// Migration 20261117120000_add_rsvp_responses adds what Prisma cannot express: the CHECK constraints
+// "RsvpResponse_name_length", "RsvpResponse_partySize_range", "RsvpResponse_partySize_matches_attending",
+// "RsvpResponse_phone_format", and "RsvpResponse_message_length", plus "Invitation_rsvpPartyLimit_range".
+model RsvpResponse {
+  id           String   @id @default(uuid()) @db.Uuid
+  invitationId String   @db.Uuid
+  // The dedupe-normalized name and the normalized phone, separated by `|` (at most 97 characters).
+  dedupeKey    String   @db.VarChar(200)
+  name         String   @db.VarChar(80)
+  attending    Boolean
+  // 0 when the guest declined; otherwise 1 to the invitation's `rsvpPartyLimit` (the domain checks the limit).
+  partySize    Int
+  // E.164 or NULL; the domain normalizes a Mexican ten-digit number to `+52…` like the WhatsApp contact does.
+  phone        String?  @db.VarChar(16)
+  message      String?  @db.VarChar(280)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+
+  @@unique([invitationId, dedupeKey])
 }

@@ -1,25 +1,40 @@
 import {
+  Body,
   type CallHandler,
   Controller,
   type ExecutionContext,
   Get,
+  HttpCode,
   Inject,
   Injectable,
   Logger,
   type NestInterceptor,
   Param,
+  Post,
+  Req,
   UseInterceptors,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { Observable } from "rxjs";
 
 import { Public } from "../../auth/access-control/access-control";
+import type { RuntimeEnvironment } from "../../config/environment";
 import { PublicInvitationNotRenderableError } from "../application/invitation.application.errors";
 import { GetPublicInvitationUseCase } from "../application/invitation.use-cases";
+import { SubmitPublicRsvpUseCase } from "../application/invitation-rsvp.use-cases";
+import { type ClientAddressRequest, clientAddressOf } from "./client-address";
+// biome-ignore lint/style/useImportType: the pipe needs the class at runtime.
+import { SubmitRsvpDto } from "./dto/invitation-rsvp.dtos";
 import {
   type PublicInvitationResponse,
   publicInvitationNotFound,
   toPublicInvitationResponse,
 } from "./invitation.response";
+import {
+  mapRsvpError,
+  RSVP_ACCEPTED_RESPONSE,
+  type RsvpAcceptedResponse,
+} from "./invitation-rsvp.response";
 
 /**
  * Marks every answer of the public page as uncacheable (A6). The page is rendered per request, so nothing may
@@ -59,6 +74,10 @@ export class PublicInvitationsController {
   constructor(
     @Inject(GetPublicInvitationUseCase)
     private readonly getPublic: GetPublicInvitationUseCase,
+    @Inject(SubmitPublicRsvpUseCase)
+    private readonly submitRsvp: SubmitPublicRsvpUseCase,
+    @Inject(ConfigService)
+    private readonly config: ConfigService<RuntimeEnvironment, true>,
   ) {}
 
   /** A published invitation as its guest renders it, or the one guest-facing 404 (A3, A7). */
@@ -82,5 +101,49 @@ export class PublicInvitationsController {
 
       return publicInvitationNotFound();
     }
+  }
+
+  /**
+   * One guest's open RSVP submission (M6 G1; S1, S4). `@Public()` for the same reason the read is: a guest has no
+   * session, so the guard never reads one. The slug is the only input that names the invitation. Every accepted
+   * attempt — stored, updated, or dropped because the honeypot was filled — answers the same 202 with the same
+   * minimal body, so a bot cannot tell a recorded response from a discarded one and no guest ever reads another
+   * guest's data. A slug the page itself would not render is the same 404 as the read; a published invitation that
+   * does not accept responses is 409 `RSVP_NOT_OPEN`; an address over its cap is 429 `RSVP_RATE_LIMITED`; and a
+   * payload the domain refuses is 400 `INVALID_RSVP` with its issues.
+   */
+  @Post(":slug/rsvp")
+  @HttpCode(202)
+  async submit(
+    @Param("slug") slug: string,
+    @Body() body: SubmitRsvpDto,
+    @Req() request: ClientAddressRequest,
+  ): Promise<RsvpAcceptedResponse> {
+    try {
+      const answered = await this.submitRsvp.execute({
+        slug,
+        name: body.name,
+        attending: body.attending,
+        partySize: body.partySize,
+        phone: body.phone,
+        message: body.message,
+        honeypot: body.honeypot,
+        clientAddress: clientAddressOf(request, this.clientIpHeader()),
+      });
+
+      // An invisible slug is the same 404 the read above answers; every accepted attempt — stored, updated, or
+      // dropped by the honeypot — answers the same 202 with the same body.
+      return answered ? RSVP_ACCEPTED_RESPONSE : publicInvitationNotFound();
+    } catch (error) {
+      return mapRsvpError(error);
+    }
+  }
+
+  /**
+   * The lower-case header that names the client address for the per-address rate limit: the same validated header
+   * Better Auth's rate limits read, so the deployment configures it once.
+   */
+  private clientIpHeader(): string {
+    return this.config.get("AUTH_CLIENT_IP", { infer: true }).header;
   }
 }

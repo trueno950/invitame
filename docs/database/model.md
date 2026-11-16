@@ -11,8 +11,12 @@ rewrites no row and deletes nothing. The invitation-features batch (F1) adds the
 `20261113164740_add_invitation_features` migration: the `Invitation.timeZone` column and the one-to-one
 `InvitationFeatureSettings` table. Its second batch (F6) adds the additive
 `20261116170553_add_invitation_feature_playlist_url` migration: one nullable `InvitationFeatureSettings.playlistUrl`
-column, so no row is rewritten and no default is needed. Future payment, media, guest, RSVP, and analytics design is
-documented separately in [`future-model.md`](future-model.md); that document does not add tables.
+column, so no row is rewritten and no default is needed. Milestone 6 adds the additive
+`20261117120000_add_rsvp_responses` migration: the nullable `Invitation.rsvpDeadline` and the
+`Invitation.rsvpPartyLimit` (default 4) columns, and the `RsvpResponse` table that holds one guest's attendance
+answer. Every column added is nullable or has a default, so no row is rewritten and nothing is deleted. Future
+payment, media, guest-list, and analytics design is documented separately in
+[`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
 | --- | --- |
@@ -29,7 +33,8 @@ documented separately in [`future-model.md`](future-model.md); that document doe
 | `PackagePrice` | Append-only price history of a package: integer `amountMinor` in the smallest currency unit plus an ISO `currency`; the row with no `retiredAt` is the current price |
 | `Template` | Mutable template master metadata and category relation |
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
-| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the unused-nullable expiry `expiresAt`, JSONB `content`, the archive marker, and the IANA `timeZone` |
+| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the unused-nullable expiry `expiresAt`, JSONB `content`, the archive marker, the IANA `timeZone`, and the RSVP settings `rsvpDeadline` and `rsvpPartyLimit` |
+| `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the display `name`, `attending`, `partySize`, an optional E.164 `phone`, an optional `message`, and timestamps |
 | `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), and timestamps |
 
 ## Invariants
@@ -82,9 +87,9 @@ documented separately in [`future-model.md`](future-model.md); that document doe
   draft row reads `NULL`.
 - The public read by slug needs no extra index: `Invitation_slug_key` is already unique, so `WHERE slug = $1` reads at
   most one row through it and the status is filtered on that row. No partial index on published rows is added.
-- The columns the application may update are `status`, `content`, `publishedAt`, `archivedAt`, `timeZone`, and
-  `updatedAt`; publish and unpublish write `publishedAt`, nothing writes `expiresAt`, and the pinned fields can never
-  change.
+- The columns the application may update are `status`, `content`, `publishedAt`, `archivedAt`, `timeZone`,
+  `rsvpDeadline`, `rsvpPartyLimit`, and `updatedAt`; publish and unpublish write `publishedAt`, only the RSVP
+  settings route writes the two RSVP columns, nothing writes `expiresAt`, and the pinned fields can never change.
 
 ## Invitation feature data
 
@@ -126,6 +131,45 @@ normalization, the playlist link allow-list, and the gating — lives in
   `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "playlistUrl";`. Only the playlist links are lost; invitations,
   their content, their phone, and their lifecycle state are untouched. Never edit the applied migration file.
 
+## RSVP data
+
+Current status: the `Invitation.rsvpDeadline` and `Invitation.rsvpPartyLimit` columns and the `RsvpResponse` table
+exist and the API reads and writes them (M6 G1; S1, S3, S4). The rules — the name normalization and the dedupe key,
+the settings bounds, the response bounds against the invitation's party limit, and the gating mode — live in
+`apps/api/src/invitations/domain/invitation-rsvp.ts` and `domain/invitation-features.ts`.
+
+- `Invitation.rsvpDeadline` is a nullable `TIMESTAMPTZ(6)` with no default: `NULL` means RSVP never closes, so every
+  row that existed before the migration keeps accepting answers. `Invitation.rsvpPartyLimit` is `INTEGER NOT NULL
+  DEFAULT 4`, and `Invitation_rsvpPartyLimit_range` checks `1 <= rsvpPartyLimit <= 10`.
+- `RsvpResponse.invitationId` references `Invitation` with `ON DELETE RESTRICT`, like the invitation's own three
+  references and its feature settings: an invitation is never hard-deleted here — archiving is its only terminal
+  lifecycle write — so deleting an invitation that still carries responses is refused. Recovery and test cleanup
+  remove the responses first.
+- `RsvpResponse_dedupeKey`: `dedupeKey` is `VARCHAR(200)` and holds the dedupe-normalized name (whitespace collapsed,
+  accents stripped, case folded) and the normalized phone, separated by `|`; the widest possible value is 97
+  characters. The unique index `RsvpResponse_invitationId_dedupeKey_key` on `(invitationId, dedupeKey)` is what makes
+  a retry update that response instead of duplicating it, and what makes two concurrent identical submissions end in
+  one row. The displayed `name` keeps the guest's spelling of the latest submission; the key never stores it.
+- `RsvpResponse` carries bounded values only, never free-form JSONB: `name` is 1 to 80 characters
+  (`RsvpResponse_name_length`), `partySize` is 0 to 10 (`RsvpResponse_partySize_range`), a declined response names
+  no people and an attending one names at least one (`RsvpResponse_partySize_matches_attending`), `phone` is E.164 or
+  `NULL` exactly like the WhatsApp contact (`RsvpResponse_phone_format`, `^\+[1-9][0-9]{7,14}$`), and `message` is 1
+  to 280 characters or `NULL` (`RsvpResponse_message_length`). The per-invitation party limit is checked by the
+  domain, because a CHECK cannot read another table.
+- The public submission is one statement: `INSERT … SELECT` from the invitation guarded by `status = 'PUBLISHED'`
+  and the deadline, with `ON CONFLICT (invitationId, dedupeKey) DO UPDATE`. A response that races an unpublish or a
+  deadline that just passed is refused by the database, not by an earlier read.
+- The per-address rate limit uses the existing `RateLimit` table (Better Auth's persistent store) under the key
+  `rsvp|<invitationId>|<sha256(client address)>` — 10 submissions per hour per address per invitation. The client
+  address itself is never stored, and the prefix cannot collide with Better Auth's `<ip>|<path>` keys. Better Auth's
+  pruning reads `lastRequest` as the window start, so an RSVP row survives until its hour has ended.
+- No `guestId` exists yet: the guest table arrives with the guest list (M6 G2), which adds a nullable reference then.
+- Rollback / recovery of `20261117120000_add_rsvp_responses`: the change is additive, so recovery is redeploying the
+  previous migration set or dropping the objects by hand —
+  `DROP TABLE "RsvpResponse";` then `ALTER TABLE "Invitation" DROP COLUMN "rsvpPartyLimit";` and
+  `ALTER TABLE "Invitation" DROP COLUMN "rsvpDeadline";`. Only RSVP data is lost; invitations, their content, their
+  feature data, and their lifecycle state are untouched. Never edit the applied migration file.
+
 ## Identity tables
 
 Current status: the API uses these tables at runtime. Better Auth, mounted at `/api/auth` with its Prisma adapter
@@ -166,6 +210,7 @@ catalog keys, lifecycle statuses, and fields used for querying remain normalized
 
 ## Deliberately absent
 
-There are no payment, RSVP, guest, analytics, or media tables in the current schema. The `Invitation` table stores
-authoring and publication state only — status, the publication marker, and the not-yet-used expiry. Publication
-through the API, guests, and payments are later milestones.
+There is no payment, guest-list, analytics, or media table in the current schema, and no `Guest` table yet. The
+`Invitation` table stores authoring, publication, and RSVP settings only — status, the publication marker, the
+not-yet-used expiry, the deadline, and the party limit — and `RsvpResponse` stores the answers. Guest-list tokens,
+check-in state, payments, and media are later milestones.

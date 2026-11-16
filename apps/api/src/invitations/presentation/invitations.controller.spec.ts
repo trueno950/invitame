@@ -37,6 +37,14 @@ import {
   type InvitationPaymentGate,
 } from "../application/invitation-payment-gate";
 import {
+  RSVP_REPOSITORY,
+  type RsvpReadModel,
+  type RsvpRepository,
+  type RsvpResponseRecord,
+  type RsvpResponseWrite,
+} from "../application/rsvp.repository";
+import { RSVP_RATE_LIMITER, type RsvpRateLimiter } from "../application/rsvp-rate-limiter";
+import {
   InvitationAlreadyArchivedError,
   InvitationAlreadyPublishedError,
   InvitationNotEditableError,
@@ -44,6 +52,7 @@ import {
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
+import type { RsvpSettings } from "../domain/invitation-rsvp";
 import { INVITATION_USE_CASES } from "../invitations.module";
 import { InvitationsController } from "./invitations.controller";
 import { PublicInvitationsController } from "./public-invitations.controller";
@@ -72,6 +81,10 @@ const UNRENDERABLE_VERSION_ID = "55555555-5555-4555-8555-555555555555";
 const FEATURE_PACKAGE_ID = "66666666-6666-4666-8666-666666666666";
 /** An ACTIVE package with the batch-2 features: music and the gift registry (S7). */
 const MUSIC_PACKAGE_ID = "77777777-7777-4777-8777-777777777777";
+/** An ACTIVE package with RSVP and no guest list: the open form (M6 S4). */
+const RSVP_PACKAGE_ID = "88888888-8888-4888-8888-888888888888";
+/** An ACTIVE package with the guest list, which replaces the open form (M6 S4; G2 implements it). */
+const GUEST_LIST_PACKAGE_ID = "99999999-9999-4999-8999-999999999999";
 const PHONE = "+525512345678";
 const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
 const RENDERER = "birthday-poster-01";
@@ -106,10 +119,12 @@ class MemoryInvitationRepository implements InvitationRepository {
       ...input,
       content: structuredClone(input.content),
       status: "DRAFT",
-      // The database default every new row reads (S4).
+      // The database defaults every new row reads (S4, M6 G1).
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl: null,
+      rsvpDeadline: null,
+      rsvpPartyLimit: 4,
       archivedAt: null,
       publishedAt: null,
       expiresAt: null,
@@ -262,6 +277,13 @@ class MemoryInvitationCatalog implements InvitationCatalog {
         includedFeatureKeys: ["COUNTDOWN", "MUSIC", "MAP", "WHATSAPP", "GIFT_REGISTRY"],
       },
     ],
+    // The seeded Premium keys (M6 S3): RSVP without a guest list.
+    [RSVP_PACKAGE_ID, { status: "ACTIVE", includedFeatureKeys: ["COUNTDOWN", "RSVP"] }],
+    // The seeded Deluxe keys (M6 S3): the guest list replaces the open form.
+    [
+      GUEST_LIST_PACKAGE_ID,
+      { status: "ACTIVE", includedFeatureKeys: ["COUNTDOWN", "RSVP", "GUEST_LIST"] },
+    ],
   ]);
 
   /** Every version renders with the allow-listed component unless it says otherwise. */
@@ -328,6 +350,130 @@ class MemoryPaymentGate implements InvitationPaymentGate {
   }
 }
 
+/**
+ * The RSVP port in memory (M6 G1; S1, S4). It repeats the adapter's own guards — the owner scope, an editable
+ * status, and a still-published invitation — so a route that skipped them would be caught here.
+ */
+class MemoryRsvpRepository implements RsvpRepository {
+  readonly responses: RsvpResponseRecord[] = [];
+  /** The settings of every invitation, written through `PUT /invitations/:id/rsvp-settings`. */
+  readonly settings = new Map<string, RsvpSettings>();
+  private sequence = 0;
+
+  constructor(private readonly invitations: MemoryInvitationRepository) {}
+
+  theSettings(invitationId: string): RsvpSettings {
+    const invitation = this.invitations.rows.find((row) => row.id === invitationId);
+    return {
+      deadline: invitation?.rsvpDeadline ?? null,
+      partyLimit: invitation?.rsvpPartyLimit ?? 4,
+    };
+  }
+
+  async saveSettings(
+    ownerId: string,
+    id: string,
+    settings: RsvpSettings,
+  ): Promise<RsvpSettings | null> {
+    const invitation = this.invitations.rows.find(
+      (row) => row.id === id && row.ownerId === ownerId,
+    );
+    if (!invitation) {
+      return null;
+    }
+    if (invitation.status === "ARCHIVED") {
+      throw new InvitationNotEditableError(invitation.status);
+    }
+    invitation.rsvpDeadline = settings.deadline;
+    invitation.rsvpPartyLimit = settings.partyLimit;
+    this.settings.set(id, settings);
+    return settings;
+  }
+
+  async findResponses(ownerId: string, id: string): Promise<RsvpReadModel | null> {
+    const invitation = this.invitations.rows.find(
+      (row) => row.id === id && row.ownerId === ownerId,
+    );
+    if (!invitation) {
+      return null;
+    }
+    return {
+      slug: invitation.slug,
+      settings: this.theSettings(id),
+      responses: this.responses
+        .filter((response) => response.invitationId === id)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()),
+    };
+  }
+
+  async upsertResponse(
+    invitationId: string,
+    response: RsvpResponseWrite,
+    at: Date,
+  ): Promise<boolean> {
+    const invitation = this.invitations.rows.find((row) => row.id === invitationId);
+    if (
+      invitation?.status !== "PUBLISHED" ||
+      (invitation.rsvpDeadline !== null && at.getTime() > invitation.rsvpDeadline.getTime())
+    ) {
+      return false;
+    }
+    const existing = this.responses.find(
+      (stored) => stored.invitationId === invitationId && stored.dedupeKey === response.dedupeKey,
+    );
+    if (existing) {
+      Object.assign(existing, response, { updatedAt: at });
+      return true;
+    }
+    this.sequence += 1;
+    this.responses.push({
+      id: randomUUID(),
+      invitationId,
+      ...response,
+      createdAt: new Date(at.getTime() + this.sequence),
+      updatedAt: at,
+    });
+    return true;
+  }
+
+  /** A response inserted directly, for the creator read and the export under test. */
+  seedResponse(
+    invitationId: string,
+    overrides: Partial<RsvpResponseWrite> & { createdAt?: Date; updatedAt?: Date } = {},
+  ): RsvpResponseRecord {
+    const at = overrides.createdAt ?? new Date(Date.UTC(2026, 10, 19, 10, 0, 0));
+    const stored: RsvpResponseRecord = {
+      id: randomUUID(),
+      invitationId,
+      name: "Ana Pérez",
+      dedupeKey: "ana perez|+525512345678",
+      attending: true,
+      partySize: 2,
+      phone: "+525512345678",
+      message: null,
+      createdAt: at,
+      updatedAt: overrides.updatedAt ?? at,
+      ...overrides,
+    };
+    this.responses.push(stored);
+    return stored;
+  }
+}
+
+/**
+ * The RSVP rate limiter in memory (M6 G1; S4): records what it counted and answers whatever a test chose, so the
+ * 429 outcome is observable without a database.
+ */
+class MemoryRateLimiter implements RsvpRateLimiter {
+  allow = true;
+  readonly consumed: Array<{ invitationId: string; clientAddress: string }> = [];
+
+  async consume(invitationId: string, clientAddress: string): Promise<boolean> {
+    this.consumed.push({ invitationId, clientAddress });
+    return this.allow;
+  }
+}
+
 describe("invitations routes: /invitations", () => {
   const database: Record<string, Row[]> = {
     user: [],
@@ -355,6 +501,8 @@ describe("invitations routes: /invitations", () => {
   const repository = new MemoryInvitationRepository();
   const catalog = new MemoryInvitationCatalog();
   const paymentGate = new MemoryPaymentGate();
+  const rsvpRepository = new MemoryRsvpRepository(repository);
+  const rateLimiter = new MemoryRateLimiter();
   let app: INestApplication;
   let baseUrl: string;
   let userCounter = 0;
@@ -379,6 +527,8 @@ describe("invitations routes: /invitations", () => {
         { provide: INVITATION_CATALOG, useValue: catalog },
         // Publication is free in Milestone 5; the publish use case asks this gate (S6).
         { provide: INVITATION_PAYMENT_GATE, useValue: paymentGate },
+        { provide: RSVP_REPOSITORY, useValue: rsvpRepository },
+        { provide: RSVP_RATE_LIMITER, useValue: rateLimiter },
       ],
     })
     class InvitationsTestModule {}
@@ -408,10 +558,16 @@ describe("invitations routes: /invitations", () => {
     };
   }
 
-  function send(method: string, path: string, cookie?: string, body?: unknown): Promise<Response> {
+  function send(
+    method: string,
+    path: string,
+    cookie?: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<Response> {
     return fetch(`${baseUrl}${path}`, {
       method,
-      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}), ...headers },
       ...(body === undefined
         ? {}
         : { body: typeof body === "string" ? body : JSON.stringify(body) }),
@@ -464,6 +620,14 @@ describe("invitations routes: /invitations", () => {
       ["archive", "POST", `${PATH}/${UNKNOWN_ID}/archive`],
       ["publish", "POST", `${PATH}/${UNKNOWN_ID}/publish`],
       ["unpublish", "POST", `${PATH}/${UNKNOWN_ID}/unpublish`],
+      [
+        "rsvp settings",
+        "PUT",
+        `${PATH}/${UNKNOWN_ID}/rsvp-settings`,
+        { deadline: null, partyLimit: 4 },
+      ],
+      ["rsvp read", "GET", `${PATH}/${UNKNOWN_ID}/rsvp`],
+      ["rsvp export", "GET", `${PATH}/${UNKNOWN_ID}/rsvp.csv`],
     ];
 
     it("answers 401 without a valid session, before validating the body, and stores nothing", async () => {
@@ -700,6 +864,9 @@ describe("invitations routes: /invitations", () => {
         ["POST", `${PATH}/1/archive`],
         ["POST", `${PATH}/1/publish`],
         ["POST", `${PATH}/1/unpublish`],
+        ["PUT", `${PATH}/1/rsvp-settings`, { deadline: null, partyLimit: 4 }],
+        ["GET", `${PATH}/1/rsvp`],
+        ["GET", `${PATH}/1/rsvp.csv`],
       ];
 
       for (const [method, path, body] of probes) {
@@ -1297,6 +1464,8 @@ describe("invitations routes: /invitations", () => {
       timeZone?: string;
       whatsappPhone?: string | null;
       playlistUrl?: string | null;
+      rsvpDeadline?: Date | null;
+      rsvpPartyLimit?: number;
     }): InvitationRecord {
       const at = new Date(Date.UTC(2026, 9, 12, 9, 0, 0));
       const row: InvitationRecord = {
@@ -1310,6 +1479,8 @@ describe("invitations routes: /invitations", () => {
         timeZone: overrides.timeZone ?? "America/Mexico_City",
         whatsappPhone: overrides.whatsappPhone ?? null,
         playlistUrl: overrides.playlistUrl ?? null,
+        rsvpDeadline: overrides.rsvpDeadline ?? null,
+        rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
         archivedAt: overrides.status === "ARCHIVED" ? at : null,
         publishedAt: overrides.status === "PUBLISHED" ? at : null,
         expiresAt: overrides.expiresAt ?? null,
@@ -1342,6 +1513,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4 },
       });
       assert.equal(new Date(String(body.publishedAt)).toISOString(), body.publishedAt);
       for (const key of PRIVATE_KEYS) {
@@ -1478,6 +1650,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4 },
       });
       // No package key list, name, or id reaches a guest; only the gated result does (S4, A7).
       const text = JSON.stringify(body);
@@ -1507,6 +1680,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: { url: PLAYLIST, provider: "spotify" },
         giftRegistry: true,
+        rsvp: { mode: null, deadline: null, partyLimit: 4 },
       });
       assert.equal(JSON.stringify(body).includes(MUSIC_PACKAGE_ID), false);
     });
@@ -1545,6 +1719,40 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4 },
+      });
+    });
+
+    it("answers the RSVP mode the pinned package grants, with the deadline and the party limit (M6 G1)", async () => {
+      const deadline = new Date("2026-12-31T23:59:59.000Z");
+      const open = seed({
+        slug: "invitacion-rsvp01",
+        status: "PUBLISHED",
+        packageId: RSVP_PACKAGE_ID,
+        rsvpDeadline: deadline,
+        rsvpPartyLimit: 6,
+      });
+      const guestList = seed({
+        slug: "invitacion-rsvp02",
+        status: "PUBLISHED",
+        packageId: GUEST_LIST_PACKAGE_ID,
+      });
+
+      const openBody = (await (await send("GET", `${PUBLIC_PATH}/${open.slug}`)).json()) as Row;
+      assert.deepEqual((openBody.features as Row).rsvp, {
+        mode: "open",
+        deadline: deadline.toISOString(),
+        partyLimit: 6,
+      });
+      assert.equal(JSON.stringify(openBody).includes("RSVP"), false, "the key list stays private");
+
+      const guestListBody = (await (
+        await send("GET", `${PUBLIC_PATH}/${guestList.slug}`)
+      ).json()) as Row;
+      assert.deepEqual((guestListBody.features as Row).rsvp, {
+        mode: "guest-list",
+        deadline: null,
+        partyLimit: 4,
       });
     });
 
@@ -1565,6 +1773,622 @@ describe("invitations routes: /invitations", () => {
 
       assert.equal((await send("POST", `${PATH}/${draft.id}/publish`, cookie)).status, 200);
       assert.equal((await send("GET", `${PUBLIC_PATH}/${draft.slug}`)).status, 200);
+    });
+  });
+
+  describe("RSVP creator routes (M6 G1; S1, S4)", () => {
+    /** A DRAFT pinned to the given package, with content that publishes, as the owner routes leave it. */
+    async function draft(cookie: string, packageId: string) {
+      const response = await send("POST", PATH, cookie, {
+        templateVersionId: PUBLISHED_VERSION_ID,
+        packageId,
+      });
+      assert.equal(response.status, 201);
+      const created = (await response.json()) as Row & { id: string; slug: string };
+      assert.equal(
+        (await send("PUT", `${PATH}/${created.id}/content`, cookie, { content: { title: "Ana" } }))
+          .status,
+        200,
+      );
+      return created;
+    }
+
+    describe("PUT /invitations/:id/rsvp-settings", () => {
+      it("stores the deadline and the party limit and answers them", async () => {
+        const { cookie } = await signedInCustomer();
+        const created = await draft(cookie, RSVP_PACKAGE_ID);
+
+        const response = await send("PUT", `${PATH}/${created.id}/rsvp-settings`, cookie, {
+          deadline: "2026-12-31T23:59:59.000Z",
+          partyLimit: 6,
+        });
+
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), {
+          deadline: "2026-12-31T23:59:59.000Z",
+          partyLimit: 6,
+        });
+        const stored = repository.rows.find((row) => row.id === created.id);
+        assert.equal(stored?.rsvpPartyLimit, 6);
+        assert.equal(stored?.rsvpDeadline?.toISOString(), "2026-12-31T23:59:59.000Z");
+      });
+
+      it("clears the deadline with null", async () => {
+        const { cookie } = await signedInCustomer();
+        const created = await draft(cookie, RSVP_PACKAGE_ID);
+        await send("PUT", `${PATH}/${created.id}/rsvp-settings`, cookie, {
+          deadline: "2026-12-31T23:59:59.000Z",
+          partyLimit: 6,
+        });
+
+        const response = await send("PUT", `${PATH}/${created.id}/rsvp-settings`, cookie, {
+          deadline: null,
+          partyLimit: 4,
+        });
+
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), { deadline: null, partyLimit: 4 });
+        assert.equal(repository.rows.find((row) => row.id === created.id)?.rsvpDeadline, null);
+      });
+
+      it("answers 400 INVALID_RSVP_SETTINGS with its issues and stores nothing", async () => {
+        const { cookie } = await signedInCustomer();
+        const created = await draft(cookie, RSVP_PACKAGE_ID);
+        const before = structuredClone(repository.rows.find((row) => row.id === created.id));
+
+        const refused: Array<[string, Record<string, unknown>, string[]]> = [
+          [
+            "a deadline that is not an instant",
+            { deadline: "2026-12-31", partyLimit: 4 },
+            ["deadline must be an ISO 8601 instant with an offset, or null"],
+          ],
+          [
+            "a party limit of 0",
+            { deadline: null, partyLimit: 0 },
+            ["partyLimit must be between 1 and 10"],
+          ],
+          [
+            "a party limit of 11",
+            { deadline: null, partyLimit: 11 },
+            ["partyLimit must be between 1 and 10"],
+          ],
+          [
+            "a party limit that is not an integer",
+            { deadline: null, partyLimit: 4.5 },
+            ["partyLimit must be an integer"],
+          ],
+          [
+            "both values wrong, the deadline first",
+            { deadline: "someday", partyLimit: 11 },
+            [
+              "deadline must be an ISO 8601 instant with an offset, or null",
+              "partyLimit must be between 1 and 10",
+            ],
+          ],
+        ];
+
+        for (const [label, body, issues] of refused) {
+          const response = await send("PUT", `${PATH}/${created.id}/rsvp-settings`, cookie, body);
+
+          assert.equal(response.status, 400, label);
+          assert.deepEqual(await response.json(), { code: "INVALID_RSVP_SETTINGS", issues });
+        }
+        assert.deepEqual(
+          repository.rows.find((row) => row.id === created.id),
+          before,
+        );
+      });
+
+      it("answers 400 for a body without a field or with an unknown field", async () => {
+        const { cookie } = await signedInCustomer();
+        const created = await draft(cookie, RSVP_PACKAGE_ID);
+        const before = structuredClone(repository.rows.find((row) => row.id === created.id));
+
+        for (const body of [
+          {},
+          { deadline: null },
+          { partyLimit: 4 },
+          { deadline: null, partyLimit: 4, whatsappPhone: null },
+          "not-json",
+        ]) {
+          const response = await send("PUT", `${PATH}/${created.id}/rsvp-settings`, cookie, body);
+          assert.equal(response.status, 400, JSON.stringify(body));
+        }
+        assert.deepEqual(
+          repository.rows.find((row) => row.id === created.id),
+          before,
+        );
+      });
+
+      it("answers 409 INVITATION_NOT_EDITABLE for an archived invitation and keeps its settings", async () => {
+        const { cookie } = await signedInCustomer();
+        const created = await draft(cookie, RSVP_PACKAGE_ID);
+        assert.equal((await send("POST", `${PATH}/${created.id}/archive`, cookie)).status, 200);
+
+        const response = await send("PUT", `${PATH}/${created.id}/rsvp-settings`, cookie, {
+          deadline: null,
+          partyLimit: 9,
+        });
+
+        assert.equal(response.status, 409);
+        assert.deepEqual(await response.json(), { code: "INVITATION_NOT_EDITABLE" });
+        assert.equal(repository.rows.find((row) => row.id === created.id)?.rsvpPartyLimit, 4);
+      });
+
+      it("answers 404 for another customer's invitation and for an unknown id", async () => {
+        const owner = await signedInCustomer();
+        const other = await signedInCustomer();
+        const created = await draft(owner.cookie, RSVP_PACKAGE_ID);
+
+        for (const id of [created.id, UNKNOWN_ID]) {
+          const response = await send("PUT", `${PATH}/${id}/rsvp-settings`, other.cookie, {
+            deadline: null,
+            partyLimit: 9,
+          });
+
+          assert.equal(response.status, 404, id);
+          assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+        }
+        assert.equal(repository.rows.find((row) => row.id === created.id)?.rsvpPartyLimit, 4);
+      });
+    });
+
+    describe("GET /invitations/:id/rsvp", () => {
+      it("answers the settings, the responses newest first, and the totals", async () => {
+        const { cookie } = await signedInCustomer();
+        const created = await draft(cookie, RSVP_PACKAGE_ID);
+        await send("PUT", `${PATH}/${created.id}/rsvp-settings`, cookie, {
+          deadline: "2026-12-31T23:59:59.000Z",
+          partyLimit: 6,
+        });
+        const older = rsvpRepository.seedResponse(created.id, {
+          name: "Vieja",
+          attending: true,
+          partySize: 3,
+          createdAt: new Date("2026-11-18T10:00:00.000Z"),
+        });
+        const newer = rsvpRepository.seedResponse(created.id, {
+          name: "Nueva",
+          attending: false,
+          partySize: 0,
+          phone: null,
+          createdAt: new Date("2026-11-19T10:00:00.000Z"),
+        });
+
+        const response = await send("GET", `${PATH}/${created.id}/rsvp`, cookie);
+
+        assert.equal(response.status, 200);
+        const body = (await response.json()) as Row;
+        assert.deepEqual(Object.keys(body).sort(), ["responses", "settings", "totals"]);
+        assert.deepEqual(body.settings, {
+          deadline: "2026-12-31T23:59:59.000Z",
+          partyLimit: 6,
+        });
+        assert.deepEqual(
+          (body.responses as Row[]).map((item) => item.id),
+          [newer.id, older.id],
+        );
+        assert.deepEqual(Object.keys((body.responses as Row[])[0] ?? {}).sort(), [
+          "attending",
+          "createdAt",
+          "id",
+          "message",
+          "name",
+          "partySize",
+          "phone",
+          "updatedAt",
+        ]);
+        assert.deepEqual(body.totals, { attendingPeople: 3, declinedCount: 1, responses: 2 });
+        // Nothing internal travels: no dedupe key, no invitation id, no owner id.
+        const text = JSON.stringify(body);
+        for (const internal of ["dedupeKey", created.id, "invitationId", "ownerId"]) {
+          assert.equal(text.includes(internal), false, internal);
+        }
+      });
+
+      it("answers an empty read to an owner without responses", async () => {
+        const { cookie } = await signedInCustomer();
+        const created = await draft(cookie, RSVP_PACKAGE_ID);
+
+        const response = await send("GET", `${PATH}/${created.id}/rsvp`, cookie);
+
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), {
+          settings: { deadline: null, partyLimit: 4 },
+          responses: [],
+          totals: { attendingPeople: 0, declinedCount: 0, responses: 0 },
+        });
+      });
+
+      it("answers 404 for another customer's invitation and for an unknown id", async () => {
+        const owner = await signedInCustomer();
+        const other = await signedInCustomer();
+        const created = await draft(owner.cookie, RSVP_PACKAGE_ID);
+        rsvpRepository.seedResponse(created.id);
+
+        for (const id of [created.id, UNKNOWN_ID]) {
+          const response = await send("GET", `${PATH}/${id}/rsvp`, other.cookie);
+
+          assert.equal(response.status, 404, id);
+          assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+        }
+      });
+
+      it("keeps two creators apart: each reads only the responses of their own invitation", async () => {
+        const first = await signedInCustomer();
+        const second = await signedInCustomer();
+        const firstInvitation = await draft(first.cookie, RSVP_PACKAGE_ID);
+        const secondInvitation = await draft(second.cookie, RSVP_PACKAGE_ID);
+        rsvpRepository.seedResponse(firstInvitation.id, { name: "De la primera" });
+        rsvpRepository.seedResponse(secondInvitation.id, { name: "De la segunda" });
+
+        const read = (await (
+          await send("GET", `${PATH}/${firstInvitation.id}/rsvp`, first.cookie)
+        ).json()) as Row;
+
+        assert.deepEqual(
+          (read.responses as Row[]).map((item) => item.name),
+          ["De la primera"],
+        );
+        assert.equal(JSON.stringify(read).includes("De la segunda"), false);
+      });
+    });
+
+    describe("GET /invitations/:id/rsvp.csv", () => {
+      it("answers an attachment with no-store and one escaped line per response, newest first", async () => {
+        const { cookie } = await signedInCustomer();
+        const created = await draft(cookie, RSVP_PACKAGE_ID);
+        rsvpRepository.seedResponse(created.id, {
+          name: "Vieja, Ana",
+          partySize: 1,
+          createdAt: new Date("2026-11-18T10:00:00.000Z"),
+        });
+        rsvpRepository.seedResponse(created.id, {
+          name: "=Nueva",
+          attending: false,
+          partySize: 0,
+          phone: null,
+          message: 'Dijo: "sí"',
+          createdAt: new Date("2026-11-19T10:00:00.000Z"),
+        });
+
+        const response = await send("GET", `${PATH}/${created.id}/rsvp.csv`, cookie);
+
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("content-type"), "text/csv; charset=utf-8");
+        assert.equal(
+          response.headers.get("content-disposition"),
+          `attachment; filename="asistencia-${created.slug}.csv"`,
+        );
+        assert.equal(response.headers.get("cache-control"), "no-store");
+        const lines = (await response.text()).split("\r\n");
+        assert.equal(
+          lines[0],
+          "Nombre,Asistencia,Personas,Teléfono,Mensaje,Primera respuesta,Última actualización",
+        );
+        assert.equal(
+          lines[1],
+          `'=Nueva,No,0,,"Dijo: ""sí""",2026-11-19T10:00:00.000Z,2026-11-19T10:00:00.000Z`,
+        );
+        assert.equal(
+          lines[2],
+          '"Vieja, Ana",Sí,1,\'+525512345678,,2026-11-18T10:00:00.000Z,2026-11-18T10:00:00.000Z',
+        );
+      });
+
+      it("answers only the header for an invitation without responses", async () => {
+        const { cookie } = await signedInCustomer();
+        const created = await draft(cookie, RSVP_PACKAGE_ID);
+
+        const response = await send("GET", `${PATH}/${created.id}/rsvp.csv`, cookie);
+
+        assert.equal(response.status, 200);
+        assert.deepEqual((await response.text()).split("\r\n"), [
+          "Nombre,Asistencia,Personas,Teléfono,Mensaje,Primera respuesta,Última actualización",
+          "",
+        ]);
+      });
+
+      it("answers 404 for another customer's invitation and for an unknown id", async () => {
+        const owner = await signedInCustomer();
+        const other = await signedInCustomer();
+        const created = await draft(owner.cookie, RSVP_PACKAGE_ID);
+        rsvpRepository.seedResponse(created.id);
+
+        for (const id of [created.id, UNKNOWN_ID]) {
+          const response = await send("GET", `${PATH}/${id}/rsvp.csv`, other.cookie);
+
+          assert.equal(response.status, 404, id);
+          assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+          assert.equal(response.headers.get("cache-control"), "no-store");
+        }
+      });
+    });
+  });
+
+  describe("POST /public/invitations/:slug/rsvp (M6 G1; S1, S4)", () => {
+    const ATTEMPT = {
+      name: "  Ana   Pérez ",
+      attending: true,
+      partySize: 2,
+      phone: "55 1234 5678",
+      message: "  ¡Con gusto! ",
+      honeypot: "",
+    };
+
+    /** A published invitation of the given package, created through the owner routes. */
+    async function published(packageId: string = RSVP_PACKAGE_ID) {
+      const { cookie } = await signedInCustomer();
+      const created = (await (
+        await send("POST", PATH, cookie, {
+          templateVersionId: PUBLISHED_VERSION_ID,
+          packageId,
+        })
+      ).json()) as Row & { id: string; slug: string };
+      await send("PUT", `${PATH}/${created.id}/content`, cookie, { content: { title: "Ana" } });
+      assert.equal((await send("POST", `${PATH}/${created.id}/publish`, cookie)).status, 200);
+      return { cookie, created };
+    }
+
+    const submit = (slug: string, body: unknown, headers: Record<string, string> = {}) =>
+      send("POST", `/public/invitations/${slug}/rsvp`, undefined, body, headers);
+
+    it("stores the response and answers the same minimal 202 as a retry", async () => {
+      const { created } = await published();
+
+      const response = await submit(created.slug, ATTEMPT);
+
+      assert.equal(response.status, 202);
+      assert.deepEqual(await response.json(), { status: "received" });
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      const stored = rsvpRepository.responses.filter((item) => item.invitationId === created.id);
+      assert.equal(stored.length, 1);
+      assert.equal(stored[0]?.name, "Ana Pérez");
+      assert.equal(stored[0]?.dedupeKey, "ana perez|+525512345678");
+      assert.equal(stored[0]?.phone, "+525512345678");
+      assert.equal(stored[0]?.message, "¡Con gusto!");
+
+      // A retry with the same normalized name and phone updates the row and answers the same 202.
+      const retry = await submit(created.slug, { ...ATTEMPT, name: "ANA PEREZ", partySize: 4 });
+      assert.equal(retry.status, 202);
+      assert.deepEqual(await retry.json(), { status: "received" });
+      const afterRetry = rsvpRepository.responses.filter(
+        (item) => item.invitationId === created.id,
+      );
+      assert.equal(afterRetry.length, 1);
+      assert.equal(afterRetry[0]?.partySize, 4);
+      assert.equal(afterRetry[0]?.id, stored[0]?.id);
+    });
+
+    it("answers the same 202 without storing when the honeypot is filled", async () => {
+      const { created } = await published();
+
+      const response = await submit(created.slug, {
+        ...ATTEMPT,
+        name: "",
+        honeypot: "https://spam.example",
+      });
+
+      assert.equal(response.status, 202);
+      assert.deepEqual(await response.json(), { status: "received" });
+      assert.equal(
+        rsvpRepository.responses.some((item) => item.invitationId === created.id),
+        false,
+      );
+    });
+
+    it("answers 400 INVALID_RSVP with the domain issues and stores nothing", async () => {
+      const { cookie, created } = await published();
+      await send("PUT", `${PATH}/${created.id}/rsvp-settings`, cookie, {
+        deadline: null,
+        partyLimit: 2,
+      });
+
+      const refused: Array<[string, Record<string, unknown>, string[]]> = [
+        ["an empty name", { ...ATTEMPT, name: "" }, ["name must be between 1 and 80 characters"]],
+        [
+          "a party above the invitation's limit",
+          { ...ATTEMPT, partySize: 3 },
+          ["partySize must be between 1 and 2 when attending"],
+        ],
+        [
+          "a declined response that still names people",
+          { ...ATTEMPT, attending: false, partySize: 2 },
+          ["partySize must be 0 when not attending"],
+        ],
+        [
+          "a phone it cannot normalize",
+          { ...ATTEMPT, phone: "12345" },
+          [
+            "phone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
+          ],
+        ],
+        [
+          "a message above the limit",
+          { ...ATTEMPT, message: "x".repeat(281) },
+          ["message must be at most 280 characters"],
+        ],
+      ];
+
+      for (const [label, body, issues] of refused) {
+        const response = await submit(created.slug, body);
+
+        assert.equal(response.status, 400, label);
+        assert.deepEqual(await response.json(), { code: "INVALID_RSVP", issues });
+      }
+      assert.equal(
+        rsvpRepository.responses.some((item) => item.invitationId === created.id),
+        false,
+      );
+    });
+
+    it("answers 400 for an unknown field or a value the DTO refuses, and stores nothing", async () => {
+      const { created } = await published();
+
+      for (const body of [
+        { ...ATTEMPT, ownerId: UNKNOWN_ID },
+        { ...ATTEMPT, attending: "yes" },
+        { ...ATTEMPT, partySize: "2" },
+        { name: "Ana" },
+        "not-json",
+      ]) {
+        const response = await submit(created.slug, body);
+        assert.equal(response.status, 400, JSON.stringify(body));
+      }
+      assert.equal(
+        rsvpRepository.responses.some((item) => item.invitationId === created.id),
+        false,
+      );
+    });
+
+    it("answers the public 404 for a malformed, unknown, draft, or archived slug, without a session", async () => {
+      const { cookie } = await signedInCustomer();
+      const draftInvitation = (await (
+        await send("POST", PATH, cookie, {
+          templateVersionId: PUBLISHED_VERSION_ID,
+          packageId: RSVP_PACKAGE_ID,
+        })
+      ).json()) as Row & { id: string; slug: string };
+      const archived = await published();
+      assert.equal(
+        (await send("POST", `${PATH}/${archived.created.id}/archive`, archived.cookie)).status,
+        200,
+      );
+
+      for (const slug of [
+        "Invitacion-Malformed",
+        "invitacion-never0",
+        draftInvitation.slug,
+        archived.created.slug,
+      ]) {
+        const response = await submit(slug, ATTEMPT);
+
+        assert.equal(response.status, 404, slug);
+        assert.deepEqual(await response.json(), { code: "PUBLIC_INVITATION_NOT_FOUND" });
+        assert.equal(response.headers.get("cache-control"), "no-store");
+      }
+    });
+
+    it("answers 409 RSVP_NOT_OPEN for a guest list, a package without RSVP, and a deadline that passed", async () => {
+      const guestList = await published(GUEST_LIST_PACKAGE_ID);
+      assert.equal((await submit(guestList.created.slug, ATTEMPT)).status, 409);
+      assert.deepEqual(await (await submit(guestList.created.slug, ATTEMPT)).json(), {
+        code: "RSVP_NOT_OPEN",
+      });
+
+      const basic = await published(ACTIVE_PACKAGE_ID);
+      const basicResponse = await submit(basic.created.slug, ATTEMPT);
+      assert.equal(basicResponse.status, 409);
+      assert.deepEqual(await basicResponse.json(), { code: "RSVP_NOT_OPEN" });
+
+      const closed = await published();
+      assert.equal(
+        (
+          await send("PUT", `${PATH}/${closed.created.id}/rsvp-settings`, closed.cookie, {
+            deadline: "2020-01-01T00:00:00.000Z",
+            partyLimit: 4,
+          })
+        ).status,
+        200,
+      );
+      const closedResponse = await submit(closed.created.slug, ATTEMPT);
+      assert.equal(closedResponse.status, 409);
+      assert.deepEqual(await closedResponse.json(), { code: "RSVP_NOT_OPEN" });
+
+      for (const invitation of [guestList, basic, closed]) {
+        assert.equal(
+          rsvpRepository.responses.some((item) => item.invitationId === invitation.created.id),
+          false,
+        );
+      }
+    });
+
+    it("answers 429 RSVP_RATE_LIMITED when the address is over the cap, and stores nothing", async () => {
+      const { created } = await published();
+      rateLimiter.allow = false;
+
+      try {
+        const response = await submit(created.slug, ATTEMPT);
+
+        assert.equal(response.status, 429);
+        assert.deepEqual(await response.json(), { code: "RSVP_RATE_LIMITED" });
+        assert.equal(
+          rsvpRepository.responses.some((item) => item.invitationId === created.id),
+          false,
+        );
+      } finally {
+        rateLimiter.allow = true;
+      }
+    });
+
+    it("counts each client address separately, from the configured header", async () => {
+      const { created } = await published();
+      rateLimiter.consumed.length = 0;
+
+      await submit(created.slug, ATTEMPT, { "x-forwarded-for": "198.18.0.21" });
+      await submit(
+        created.slug,
+        { ...ATTEMPT, name: "Otra" },
+        {
+          "x-forwarded-for": "198.18.0.21, 10.0.0.1",
+        },
+      );
+      await submit(
+        created.slug,
+        { ...ATTEMPT, name: "Tercera" },
+        {
+          "x-forwarded-for": "198.18.0.22",
+        },
+      );
+
+      assert.deepEqual(
+        rateLimiter.consumed.map((item) => item.clientAddress),
+        ["198.18.0.21", "198.18.0.21", "198.18.0.22"],
+      );
+      for (const item of rateLimiter.consumed) {
+        assert.equal(item.invitationId, created.id);
+      }
+    });
+
+    it("serves the same answer with a forged cookie, never reading a session", async () => {
+      const { created } = await published();
+
+      const response = await send(
+        "POST",
+        `/public/invitations/${created.slug}/rsvp`,
+        `${SESSION_COOKIE}=forged.value`,
+        { ...ATTEMPT, name: "Con cookie" },
+      );
+
+      assert.equal(response.status, 202);
+      assert.deepEqual(await response.json(), { status: "received" });
+    });
+
+    it("never returns another guest's data or any administrative field", async () => {
+      const { created } = await published();
+      await submit(created.slug, ATTEMPT);
+      const first = rsvpRepository.responses[0] as RsvpResponseRecord;
+
+      const response = await submit(created.slug, {
+        ...ATTEMPT,
+        name: "Otra Persona",
+        phone: null,
+      });
+
+      assert.equal(response.status, 202);
+      const text = await response.text();
+      assert.deepEqual(JSON.parse(text), { status: "received" });
+      for (const leaked of [
+        "Ana",
+        "+525512345678",
+        first.id,
+        created.id,
+        created.slug,
+        "ownerId",
+        "dedupeKey",
+      ]) {
+        assert.equal(text.includes(leaked), false, leaked);
+      }
     });
   });
 });

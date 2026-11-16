@@ -173,6 +173,8 @@ function toOwnedInvitation(
       includedFeatureKeys,
       whatsappPhone: record.whatsappPhone,
       playlistUrl: record.playlistUrl,
+      rsvpDeadline: record.rsvpDeadline,
+      rsvpPartyLimit: record.rsvpPartyLimit,
     }),
   };
 }
@@ -579,6 +581,8 @@ export class GetPublicInvitationUseCase {
         includedFeatureKeys,
         whatsappPhone: published.whatsappPhone,
         playlistUrl: published.playlistUrl,
+        rsvpDeadline: published.rsvpDeadline,
+        rsvpPartyLimit: published.rsvpPartyLimit,
       }),
     };
   }
