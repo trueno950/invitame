@@ -13,15 +13,15 @@ import type { PublicInvitation } from "../server/public-invitations-api.ts";
 import { publicInvitationPath } from "./invitation-page.ts";
 
 /**
- * The guest page's use of the features the API gated (F3; S4). The public read is the only input: the gated
- * booleans, the stored zone, and the layout's own content, which already carries the celebration's title,
- * its start, and its places. This module turns that into the props of `InvitationFeaturesBlock` and into the
- * `.ics` file the route handler under `/i/<slug>/calendario.ics` answers.
+ * The guest page's use of the features the API gated (F3, F6, F7; S4, S7). The public read is the only input: the
+ * gated booleans, the stored zone and link, and the layout's own content, which already carries the celebration's
+ * title, its start, its places, and its gift registry text. This module turns that into the props of
+ * `InvitationFeaturesBlock` and into the `.ics` file the route handler under `/i/<slug>/calendario.ics` answers.
  *
  * Two degradations keep a guest's page safe, and both are per feature rather than one failure:
  *
  * - a zone this runtime cannot format turns off only the countdown and the calendar, because those are the
- *   two features that read a wall clock; the map and WhatsApp need no zone and stay;
+ *   two features that read a wall clock; the map, WhatsApp, and music need no zone and stay;
  * - a snapshot whose facts cannot be read turns off every feature, because the block names the celebration
  *   in all four of them. In practice the page has already refused such a snapshot before rendering, so this
  *   is the second line of defense and never a path a guest reaches.
@@ -72,9 +72,11 @@ function factsOf(invitation: PublicInvitation): EventFacts | undefined {
 }
 
 /**
- * The features block of one published invitation, or undefined when there is nothing to show. Undefined is
- * the same value the layouts read as "no features", so an invitation without features renders exactly the
- * markup it rendered before the block existed (S4).
+ * The features block of one published invitation, or undefined when the page has nothing to give the renderer.
+ * Undefined is the same value the layouts read as "no features", so an invitation without features renders
+ * exactly the markup it rendered before the block existed (S4). A gift registry that is gated on but has no other
+ * feature still returns a block, because the layout reads `features.giftRegistry`: the block itself renders
+ * nothing when it has no section (F7; S7).
  */
 export function publicFeatureBlock(invitation: PublicInvitation): PublicFeatureBlock | undefined {
   const facts = factsOf(invitation);
@@ -90,9 +92,11 @@ export function publicFeatureBlock(invitation: PublicInvitation): PublicFeatureB
     map: invitation.features.map,
     calendar: invitation.features.calendar && zoned,
     whatsapp: invitation.features.whatsapp,
+    music: invitation.features.music,
+    giftRegistry: invitation.features.giftRegistry,
   };
 
-  return hasAnyFeature(features)
+  return hasAnyFeature(features) || features.giftRegistry
     ? { features, facts, calendarHref: invitationCalendarPath(invitation.slug) }
     : undefined;
 }

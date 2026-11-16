@@ -1,6 +1,9 @@
 import { createElement, type ReactElement, useId } from "react";
 import { babyShowerEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
-import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
+import {
+  type InvitationFeatures,
+  showsGiftRegistry,
+} from "../../../../lib/invitation-features/invitation-features.ts";
 import {
   parseBabyShowerClassicConfiguration,
   parseBabyShowerClassicContent,
@@ -74,6 +77,11 @@ export function BabyShowerClassicRenderer({
   const { theme: themeKey } = parseBabyShowerClassicConfiguration(configuration);
   const data = parseBabyShowerClassicContent(content);
   const theme = BABY_SHOWER_THEME[themeKey];
+  // The gift registry is rendered only when the API gated it on and the content carries a value (F7; S7);
+  // with no features at all this is a preview, and the content alone decides, as it did before this batch.
+  const giftRegistry = showsGiftRegistry(features, data.giftRegistry)
+    ? data.giftRegistry
+    : undefined;
   const idPrefix = useId();
   const headline = data.babyName ?? data.hosts;
   const photoAlt = `Foto de ${headline}`;
@@ -171,13 +179,13 @@ export function BabyShowerClassicRenderer({
         data.genderReveal === true
           ? labelRow("gender-reveal", "Revelación de género", "¡Habrá revelación!", true)
           : null,
-        data.giftRegistry === undefined
+        giftRegistry === undefined
           ? null
           : h(
               "div",
               { key: "gift-registry", className: ROW_SOFT },
               h("span", { className: ROW_LABEL }, "Mesa de regalos"),
-              h("span", { className: `${ROW_VALUE} text-(color:--inv-accent)` }, data.giftRegistry),
+              h("span", { className: `${ROW_VALUE} text-(color:--inv-accent)` }, giftRegistry),
             ),
       ),
     ),

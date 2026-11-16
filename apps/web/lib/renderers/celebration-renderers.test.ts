@@ -11,6 +11,7 @@ import { BaptismClassicRenderer } from "../../app/_components/renderers/baptism-
 import { themeIllustration } from "../../app/_components/renderers/illustrations/registry.ts";
 import { CelebrationMotif } from "../../app/_components/renderers/themed/celebration-motif.ts";
 import { THEME_VARIABLES } from "../../app/_components/renderers/themed/theme.ts";
+import type { InvitationFeatures } from "../invitation-features/invitation-features.ts";
 import { BABY_SHOWER_THEME, BABY_SHOWER_THEMES } from "./baby-shower-themes.ts";
 import { BAPTISM_THEME, BAPTISM_THEMES } from "./baptism-themes.ts";
 import { THEME_COLOR_ROLES } from "./theme-tokens.ts";
@@ -59,7 +60,12 @@ interface ThemeData {
 
 interface LayoutCase {
   readonly key: string;
-  readonly Renderer: (props: { configuration: unknown; content: unknown }) => ReactElement;
+  readonly Renderer: (props: {
+    configuration: unknown;
+    content: unknown;
+    features?: InvitationFeatures;
+    calendarHref?: string;
+  }) => ReactElement;
   readonly themes: readonly string[];
   readonly themeRecord: Readonly<Record<string, unknown>>;
   readonly full: Record<string, unknown>;
@@ -525,4 +531,60 @@ describe("celebration layout defects pinned before the browser check", () => {
       }
     }
   });
+});
+
+describe("gift registry gating in the celebration layouts (F7; S7)", () => {
+  const GATE_OFF: InvitationFeatures = {
+    timeZone: "America/Mexico_City",
+    countdown: false,
+    map: false,
+    calendar: false,
+    whatsapp: null,
+    music: null,
+    giftRegistry: false,
+  };
+  const GATE_ON: InvitationFeatures = { ...GATE_OFF, giftRegistry: true };
+  /** The code of each layout's own gift registry value, so the check cannot match the label alone. */
+  const GIFT_CODE: Readonly<Record<string, RegExp>> = {
+    "baby-shower-classic-01": /5123 4471/,
+    "baptism-classic-01": /7781 2205/,
+  };
+
+  function renderGated(
+    layout: LayoutCase,
+    features: InvitationFeatures,
+    content: Record<string, unknown> = layout.full,
+  ): string {
+    return renderToStaticMarkup(
+      createElement(layout.Renderer, {
+        configuration: { componentKey: layout.key, theme: layout.themes[0] },
+        content,
+        features,
+      }),
+    );
+  }
+
+  for (const layout of LAYOUTS) {
+    const code = GIFT_CODE[layout.key] as RegExp;
+
+    it(`${layout.key} renders its gift registry only when the gate is on`, () => {
+      assert.match(renderGated(layout, GATE_ON), code);
+      const gatedOff = renderGated(layout, GATE_OFF);
+
+      assert.doesNotMatch(gatedOff, code);
+      assert.doesNotMatch(gatedOff, /Mesa de regalos/);
+    });
+
+    it(`${layout.key} keeps today's rendering when no features prop is given`, () => {
+      // The chooser previews and the samples render a layout with no features at all (F7).
+      assert.match(render(layout, layout.themes[0]), code);
+    });
+
+    it(`${layout.key} renders no gift registry when the content has no value, whatever the gate says`, () => {
+      const withoutGift: Record<string, unknown> = { ...layout.full };
+      delete withoutGift.giftRegistry;
+
+      assert.doesNotMatch(renderGated(layout, GATE_ON, withoutGift), /Mesa de regalos/);
+    });
+  }
 });

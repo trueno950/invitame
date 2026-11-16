@@ -1,7 +1,10 @@
 import { createElement, type ReactElement } from "react";
 
 import { xvOrnamentalEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
-import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
+import {
+  type InvitationFeatures,
+  showsGiftRegistry,
+} from "../../../../lib/invitation-features/invitation-features.ts";
 import { ELEGANT_THEME } from "../../../../lib/renderers/elegant-themes.ts";
 import { nameLines } from "../../../../lib/renderers/invitation-fields.ts";
 import {
@@ -59,11 +62,17 @@ export function XVOrnamentalRenderer({
       : [{ key: "chambelanes", label: "Chambelanes", values: nameLines(data.chambelanes) }]),
   ];
 
+  // The gift registry is rendered only when the API gated it on and the content carries a value (F7; S7);
+  // with no features at all this is a preview, and the content alone decides, as it did before this batch.
+  const giftRegistry = showsGiftRegistry(features, data.giftRegistry)
+    ? data.giftRegistry
+    : undefined;
+
   const details: ArchDetail[] = [
     { key: "dress-code", label: "Vestimenta", value: data.dressCode },
-    ...(data.giftRegistry === undefined
+    ...(giftRegistry === undefined
       ? []
-      : [{ key: "gift-registry", label: "Mesa de regalos", value: data.giftRegistry }]),
+      : [{ key: "gift-registry", label: "Mesa de regalos", value: giftRegistry }]),
   ];
 
   return h(OrnamentalLayout, {

@@ -5,15 +5,18 @@ import type { FeatureSettingsView } from "../../../../lib/customer/invitation-fe
 import { fieldHint, fieldLabel, primaryButton, textField } from "../../../_components/ui.ts";
 
 /**
- * The «Funcionalidades» section of a draft (F3; S3, S4). It renders on the server, so it works without
- * JavaScript and a save is a normal form post to a server action. The section is one form: the time zone
- * select with its Spanish labels, the WhatsApp field only when the package includes WhatsApp (and a hidden
- * field with the stored value otherwise, so saving the zone never clears a phone), and the automatic features
- * the guests will see. An archived invitation shows the same data read-only, like the content summary.
+ * The «Funcionalidades» section of a draft (F3, F6, F7; S3, S4, S7). It renders on the server, so it works
+ * without JavaScript and a save is a normal form post to a server action. The section is one form: the time zone
+ * select with its Spanish labels, the WhatsApp field only when the package includes WhatsApp, the playlist field
+ * only when the package includes MUSIC (and, in either case, a hidden field with the stored value otherwise, so
+ * saving another field never clears it), the gift registry note of a package that does not grant it, and the
+ * automatic features the guests will see. An archived invitation shows the same data read-only, like the content
+ * summary.
  */
 
 const PHONE_INPUT_ID = "features-whatsapp-phone";
 const TIME_ZONE_INPUT_ID = "features-time-zone";
+const PLAYLIST_INPUT_ID = "features-playlist-url";
 
 /** The shell of the section, so the editable and the read-only states read the same. */
 function FeatureSection({ children }: { children: ReactNode }) {
@@ -44,6 +47,17 @@ function AutomaticFeatures({ view }: { view: FeatureSettingsView }) {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * The gift registry is a content field, and its block only renders when the package grants it (F7; S7). The
+ * field stays where the content form puts it; this note says why its block may not show, naming the packages that
+ * include it when the catalog can be read.
+ */
+function GiftRegistryNote({ view }: { view: FeatureSettingsView }) {
+  return view.giftRegistryNote === "" ? null : (
+    <p className="text-sm leading-6 text-muted">{view.giftRegistryNote}</p>
   );
 }
 
@@ -102,9 +116,33 @@ export function FeaturesForm({
           </div>
         ) : (
           // The package does not include WhatsApp: the field is not offered, and the stored number travels
-          // unchanged so saving the time zone never clears it.
+          // unchanged so saving another field never clears it.
           <input name="whatsappPhone" type="hidden" value={view.whatsappPhone} />
         )}
+
+        {view.showMusic ? (
+          <div>
+            <label className={fieldLabel} htmlFor={PLAYLIST_INPUT_ID}>
+              {FEATURE_COPY.playlistLabel}
+            </label>
+            <input
+              autoComplete="url"
+              className={textField}
+              defaultValue={view.playlistUrl}
+              id={PLAYLIST_INPUT_ID}
+              inputMode="url"
+              name="playlistUrl"
+              placeholder={FEATURE_COPY.playlistPlaceholder}
+              type="url"
+            />
+            <p className={fieldHint}>{FEATURE_COPY.playlistHint}</p>
+          </div>
+        ) : (
+          // The package does not include MUSIC: the field is not offered, and the stored link travels unchanged.
+          <input name="playlistUrl" type="hidden" value={view.playlistUrl} />
+        )}
+
+        <GiftRegistryNote view={view} />
 
         <AutomaticFeatures view={view} />
 

@@ -13,6 +13,7 @@ import { BirthdayPosterRenderer } from "../../app/_components/renderers/birthday
 import { BirthdayStoryRenderer } from "../../app/_components/renderers/birthday-story-01/birthday-story-renderer.ts";
 import { themeIllustration } from "../../app/_components/renderers/illustrations/registry.ts";
 import { ILLUSTRATION_PARTS } from "../../app/_components/renderers/illustrations/types.ts";
+import type { InvitationFeatures } from "../invitation-features/invitation-features.ts";
 import { BIRTHDAY_THEME, BIRTHDAY_THEMES, THEME_COLOR_ROLES } from "./birthday-themes.ts";
 
 // The three themed birthday layouts (T6b; S2, S3, S5, S7, S8): each is a server component with no client
@@ -510,4 +511,34 @@ describe("themed layout defects found by the browser check", () => {
     assert.equal([...html.matchAll(/data-bubble-tail/g)].length, 1, "one bubble tail");
     assert.equal([...html.matchAll(/data-ticket-notch/g)].length, 2, "two ticket notches");
   });
+});
+
+describe("the birthday layouts and the gift registry (F7; S7)", () => {
+  // The gate the API sends for a birthday invitation. A birthday layout declares no gift registry field, so a
+  // content key of that name is dropped by its parser and nothing renders: the block stays an occasion of the
+  // baby shower, baptism, XV años, and wedding layouts.
+  const GATE_ON: InvitationFeatures = {
+    timeZone: "America/Mexico_City",
+    countdown: false,
+    map: false,
+    calendar: false,
+    whatsapp: null,
+    music: null,
+    giftRegistry: true,
+  };
+
+  for (const layout of LAYOUTS) {
+    it(`${layout.key} renders no gift registry, even gated on and with a stored value`, () => {
+      const html = renderToStaticMarkup(
+        createElement(layout.Renderer, {
+          configuration: { componentKey: layout.key, theme: BIRTHDAY_THEMES[0] },
+          content: { ...CONTENT, giftRegistry: "Mesa de regalos · Código 5123 4471" },
+          features: GATE_ON,
+        }),
+      );
+
+      assert.doesNotMatch(html, /Mesa de regalos/);
+      assert.doesNotMatch(html, /5123 4471/);
+    });
+  }
 });

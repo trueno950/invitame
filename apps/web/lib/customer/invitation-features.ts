@@ -20,11 +20,12 @@ import {
 } from "./invitations.ts";
 
 /**
- * The creator's «Funcionalidades» section (F3; S3, S4). The feature data belongs to the invitation, not to
- * the template: this module builds the time zone select with Spanish labels, decides whether the WhatsApp
- * field is shown from the package's own included feature keys (never from `availableFeatures`, which hides
- * WhatsApp while no phone is stored), lists the automatic features the guests will see, and turns one
- * submitted form into the API call and the redirect that follows it.
+ * The creator's «Funcionalidades» section (F3, F6, F7; S3, S4, S7). The feature data belongs to the invitation,
+ * not to the template: this module builds the time zone select with Spanish labels, decides whether the WhatsApp
+ * and playlist fields are shown from the package's own included feature keys (never from `availableFeatures`,
+ * which hides WhatsApp while no phone is stored and music while no link is stored), explains the gift registry of
+ * a package that does not grant it, lists the automatic features the guests will see, and turns one submitted
+ * form into the API call and the redirect that follows it.
  */
 
 /** One option of the time zone select: the stored IANA id and the Spanish label of the place. */
@@ -51,9 +52,11 @@ const AUTOMATIC_FEATURES = [
   { key: "CALENDAR", label: FEATURE_COPY.automaticCalendar },
 ] as const;
 
-/** The feature key that needs a stored phone, and the one that is not a catalog feature. */
+/** The feature keys that need a stored value, the ones that are not catalog features, and the gift registry. */
 const WHATSAPP_FEATURE_KEY = "WHATSAPP";
 const CALENDAR_FEATURE_KEY = "CALENDAR";
+const MUSIC_FEATURE_KEY = "MUSIC";
+const GIFT_REGISTRY_FEATURE_KEY = "GIFT_REGISTRY";
 
 /** Everything the section renders for one draft. */
 export interface FeatureSettingsView {
@@ -68,13 +71,23 @@ export interface FeatureSettingsView {
   readonly whatsappPhone: string;
   /** Whether the package includes WhatsApp, which is the only reason the phone field is shown (S4). */
   readonly showWhatsapp: boolean;
+  /** The stored playlist link, or "" when the invitation has none (S7). */
+  readonly playlistUrl: string;
+  /** Whether the package includes MUSIC, which is the only reason the link field is shown (S7). */
+  readonly showMusic: boolean;
+  /**
+   * Why the gift registry block does not show, naming the packages that include it, or "" when this package
+   * grants it or when the catalog could not be read and no package can be named (F7; S7).
+   */
+  readonly giftRegistryNote: string;
   /** The automatic features the guests will see, with their Spanish labels. */
   readonly automaticFeatures: readonly string[];
 }
 
 /**
  * The included feature keys of the invitation's own package, or none when the catalog cannot answer for it.
- * A missing package fails closed: no WhatsApp field, and only the always-available calendar is promised.
+ * A missing package fails closed: no WhatsApp or playlist field, and only the always-available calendar is
+ * promised.
  */
 function includedFeatureKeys(
   invitation: OwnedInvitation,
@@ -83,9 +96,44 @@ function includedFeatureKeys(
   return packages?.find((item) => item.id === invitation.packageId)?.includedFeatureKeys ?? [];
 }
 
+/** «A», «A y B», «A, B y C»: the names of the packages a note lists, as Spanish joins them. */
+function joinPackageNames(names: readonly string[]): string {
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
+
+/**
+ * The note of the gift registry when the invitation's own package does not grant it (F7; S7): the packages that
+ * do are named, in the catalog's order. A catalog that could not be read names none, so the page promises
+ * nothing instead of guessing.
+ */
+function giftRegistryNote(
+  packages: readonly CreatorPackage[] | undefined,
+  included: ReadonlySet<string>,
+): string {
+  if (included.has(GIFT_REGISTRY_FEATURE_KEY)) {
+    return "";
+  }
+  if (packages === undefined) {
+    return "";
+  }
+
+  const names = packages
+    .filter((item) => item.includedFeatureKeys.includes(GIFT_REGISTRY_FEATURE_KEY))
+    .map((item) => item.name);
+
+  if (names.length === 0) {
+    return FEATURE_COPY.giftRegistryNoteAny;
+  }
+  return names.length === 1
+    ? FEATURE_COPY.giftRegistryNoteOne(names[0] as string)
+    : FEATURE_COPY.giftRegistryNoteMany(joinPackageNames(names));
+}
+
 /**
  * The section of one invitation. `packages` is the creator catalog read the page already has; when it could
- * not be read, `undefined` hides the WhatsApp field rather than offering a field the package may not grant.
+ * not be read, `undefined` hides the fields the package may not grant rather than offering them.
  */
 export function featureSettingsView(
   invitation: OwnedInvitation,
@@ -103,6 +151,9 @@ export function featureSettingsView(
     timeZones,
     whatsappPhone: invitation.featureSettings.whatsappPhone ?? "",
     showWhatsapp: included.has(WHATSAPP_FEATURE_KEY),
+    playlistUrl: invitation.featureSettings.playlistUrl ?? "",
+    showMusic: included.has(MUSIC_FEATURE_KEY),
+    giftRegistryNote: giftRegistryNote(packages, included),
     automaticFeatures: AUTOMATIC_FEATURES.filter(
       (feature) => feature.key === CALENDAR_FEATURE_KEY || included.has(feature.key),
     ).map((feature) => feature.label),
@@ -112,18 +163,22 @@ export function featureSettingsView(
 /** The most characters a submitted phone may carry, so a hostile form cannot grow the request. */
 const MAX_PHONE_TEXT_LENGTH = 32;
 
+/** The contract's own bound on a playlist link, mirrored so an oversized paste never reaches the API (S7). */
+const MAX_PLAYLIST_TEXT_LENGTH = 500;
+
 export type FeatureSettingsParse =
   | {
       readonly ok: true;
       readonly timeZone: InvitationTimeZone;
       readonly whatsappPhone: string | null;
+      readonly playlistUrl: string | null;
     }
   | { readonly ok: false; readonly issues: readonly FeatureIssueCode[] };
 
 /**
  * The feature data a submitted form asks to save. The zone must be one the API accepts, so nothing is sent
- * when it is not; a blank phone means "no phone", which is how the creator clears it (S4). The phone text
- * travels as typed, because the API owns normalization and answers its own issue when it refuses.
+ * when it is not; a blank phone or link means "none", which is how the creator clears it (S4, S7). The phone
+ * and the link travel as typed, because the API owns normalization and answers its own issue when it refuses.
  */
 export function parseFeatureSettingsForm(form: FormData): FeatureSettingsParse {
   const submittedZone = form.get("timeZone");
@@ -132,6 +187,7 @@ export function parseFeatureSettingsForm(form: FormData): FeatureSettingsParse {
       ? submittedZone
       : undefined;
   const submittedPhone = form.get("whatsappPhone");
+  const submittedPlaylist = form.get("playlistUrl");
   const issues: FeatureIssueCode[] = [];
 
   if (zone === undefined) {
@@ -150,17 +206,29 @@ export function parseFeatureSettingsForm(form: FormData): FeatureSettingsParse {
     issues.push("phone");
   }
 
+  let playlistUrl: string | null = null;
+
+  if (typeof submittedPlaylist === "string") {
+    const trimmed = submittedPlaylist.trim();
+    if ([...trimmed].length > MAX_PLAYLIST_TEXT_LENGTH) {
+      issues.push("playlist");
+    }
+    playlistUrl = trimmed === "" ? null : trimmed;
+  } else if (submittedPlaylist !== null) {
+    issues.push("playlist");
+  }
+
   if (issues.length > 0 || zone === undefined) {
     return { ok: false, issues };
   }
-  return { ok: true, timeZone: zone, whatsappPhone };
+  return { ok: true, timeZone: zone, whatsappPhone, playlistUrl };
 }
 
 /**
- * Saves the invitation's feature data through `PUT /invitations/:id/features` (S3, S4). The API authorizes
- * the invitation, validates the zone and the phone, and refuses an archived draft; this function only maps
- * each outcome to the page's query. An id that names nothing sends nothing, and a refusal that names issues
- * comes back as Spanish sentences through `featureIssueCodes`.
+ * Saves the invitation's feature data through `PUT /invitations/:id/features` (S3, S4, S7). The API authorizes
+ * the invitation, validates the zone, the phone, and the playlist link, and refuses an archived draft; this
+ * function only maps each outcome to the page's query. An id that names nothing sends nothing, and a refusal that
+ * names issues comes back as Spanish sentences through `featureIssueCodes`.
  */
 export async function saveInvitationFeatures(
   api: InvitationsClient,
@@ -183,6 +251,7 @@ export async function saveInvitationFeatures(
     api.updateInvitationFeatures(id, {
       timeZone: parsed.timeZone,
       whatsappPhone: parsed.whatsappPhone,
+      playlistUrl: parsed.playlistUrl,
     }),
   );
 

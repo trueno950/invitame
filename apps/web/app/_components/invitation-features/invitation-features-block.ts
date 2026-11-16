@@ -8,16 +8,18 @@ import {
   type InvitationFeatures,
 } from "../../../lib/invitation-features/invitation-features.ts";
 import { googleMapsUrl, wazeUrl } from "../../../lib/invitation-features/map-links.ts";
+import { MUSIC_SECTION_TITLE, musicButtonLabel } from "../../../lib/invitation-features/music.ts";
 import { startInstant } from "../../../lib/invitation-features/start-instant.ts";
 import { whatsappUrl } from "../../../lib/invitation-features/whatsapp.ts";
 import { DISPLAY_FONT } from "../renderers/themed/theme.ts";
 import { CountdownIsland } from "./countdown-island.ts";
 
 /**
- * The features block of a guest invitation (S3, S4): the countdown, «Cómo llegar», «Agregar al calendario»,
- * and «Escribir por WhatsApp», each shown only when the API gated it for this invitation. One block serves
- * every layout, so the five designs show the same behavior, and every color comes from the theme through the
- * CSS variables the layout already sets on its root — the block carries no palette of its own.
+ * The features block of a guest invitation (S3, S4, S7): the countdown, «Cómo llegar», «Agregar al calendario»,
+ * «Escribir por WhatsApp», and «Escucha nuestra playlist», each shown only when the API gated it for this
+ * invitation. One block serves every layout, so the designs show the same behavior, and every color comes from
+ * the theme through the CSS variables the layout already sets on its root — the block carries no palette of its
+ * own. The gift registry is not here: each layout draws its own block, gated by `features.giftRegistry` (F7).
  *
  * It is a server component (`.ts` + `createElement`, because `node --test` strips types but does not compile
  * JSX) and the countdown is its only client island. `now` exists for tests and for a caller that already
@@ -191,6 +193,33 @@ export function InvitationFeaturesBlock({
               className: ACTION,
             },
             "Escribir por WhatsApp",
+          ),
+        ),
+      ),
+    );
+  }
+
+  if (features.music !== null) {
+    // One external link that names the service, never an embedded player: the guest page loads no third-party
+    // script and the playlists a guest already owns keep their own session (S7).
+    sections.push(
+      h(
+        "div",
+        { key: "music", "data-feature": "music", className: SURFACE_CARD },
+        h("h3", { className: FEATURE_TITLE }, MUSIC_SECTION_TITLE),
+        h("p", { className: HINT }, "La música que elegimos para esta celebración."),
+        h(
+          "div",
+          { className: ACTIONS },
+          h(
+            "a",
+            {
+              href: features.music.url,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              className: ACTION,
+            },
+            musicButtonLabel(features.music.provider),
           ),
         ),
       ),

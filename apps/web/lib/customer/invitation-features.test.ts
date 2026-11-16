@@ -7,7 +7,12 @@ import type {
   InvitationsClient,
   OwnedInvitation,
 } from "../server/invitations-api.ts";
-import { FEATURE_ISSUE_COPY, INVITATION_ERROR_COPY, INVITATION_NOTICE_COPY } from "./copy.ts";
+import {
+  FEATURE_COPY,
+  FEATURE_ISSUE_COPY,
+  INVITATION_ERROR_COPY,
+  INVITATION_NOTICE_COPY,
+} from "./copy.ts";
 import { featureIssueCodes, featureIssueMessages, featureIssuesTarget } from "./feature-issues.ts";
 import {
   featureSettingsView,
@@ -26,6 +31,7 @@ const ID = "0b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e10";
 const VERSION_ID = "4b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e14";
 const PACKAGE_ID = "5b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e15";
 const AT = "2026-11-11T12:00:00.000Z";
+const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
 
 const OWNED: OwnedInvitation = {
   id: ID,
@@ -40,15 +46,20 @@ const OWNED: OwnedInvitation = {
   content: { celebrantName: "Ana" },
   missingRequiredFields: [],
   timeZone: "America/Tijuana",
-  featureSettings: { whatsappPhone: "+525512345678" },
+  featureSettings: { whatsappPhone: "+525512345678", playlistUrl: PLAYLIST },
   availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "CALENDAR"],
 };
 
-function creatorPackage(id: string, includedFeatureKeys: string[], key = "basic"): CreatorPackage {
+function creatorPackage(
+  id: string,
+  includedFeatureKeys: string[],
+  key = "basic",
+  name = "Basic",
+): CreatorPackage {
   return {
     id,
     key,
-    name: "Basic",
+    name,
     description: null,
     currentPrice: { amountMinor: 150000, currency: "MXN" },
     includedFeatureKeys,
@@ -101,6 +112,14 @@ function formData(entries: Record<string, string>): FormData {
 
 const DETAIL = `/cuenta/invitaciones/${ID}`;
 
+describe("the feature section's Spanish copy (S7)", () => {
+  it("names the two batch-2 fields in Spanish", () => {
+    assert.equal(FEATURE_COPY.playlistLabel, "Enlace de tu playlist");
+    assert.match(FEATURE_COPY.playlistHint, /Spotify/);
+    assert.match(FEATURE_ISSUE_COPY.playlist, /https/);
+  });
+});
+
 describe("time zone choices", () => {
   it("offers the eleven zones with a Spanish label that names the place and the zone", () => {
     assert.deepEqual(
@@ -144,6 +163,8 @@ describe("featureSettingsView", () => {
     assert.equal(view.timeZone, "America/Tijuana");
     assert.equal(view.whatsappPhone, "+525512345678");
     assert.equal(view.showWhatsapp, true);
+    assert.equal(view.playlistUrl, PLAYLIST);
+    assert.equal(view.showMusic, false);
     assert.deepEqual(view.timeZones, TIME_ZONE_CHOICES);
     assert.deepEqual(view.automaticFeatures, [
       "Cuenta regresiva hasta el inicio",
@@ -182,6 +203,66 @@ describe("featureSettingsView", () => {
     assert.deepEqual(view.timeZones.at(-1), { value: "Europe/Madrid", label: "Europe/Madrid" });
   });
 
+  it("shows the playlist field only for a package that includes MUSIC, and keeps the stored link", () => {
+    const premium = featureSettingsView({ ...OWNED, packageId: PACKAGE_ID }, [
+      creatorPackage(PACKAGE_ID, ["COUNTDOWN", "MUSIC"], "premium", "Premium"),
+    ]);
+
+    assert.equal(premium.showMusic, true);
+    assert.equal(premium.playlistUrl, PLAYLIST);
+    // The stored link stays in the view even when the package does not grant music, so a save keeps it.
+    const basic = featureSettingsView(OWNED, [BASIC]);
+    assert.equal(basic.showMusic, false);
+    assert.equal(basic.playlistUrl, PLAYLIST);
+  });
+
+  it("lists the packages that include the gift registry when this one does not (S7)", () => {
+    // Each catalog package has its own id, and the invitation's own package is the first of them.
+    const own = creatorPackage(PACKAGE_ID, ["COUNTDOWN", "MAP", "WHATSAPP"], "basic", "Basic");
+    const premium = creatorPackage(
+      "6b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e16",
+      ["COUNTDOWN", "MUSIC"],
+      "premium",
+      "Premium",
+    );
+    const deluxe = creatorPackage(
+      "7b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e17",
+      ["COUNTDOWN", "MUSIC", "GIFT_REGISTRY"],
+      "deluxe",
+      "Deluxe",
+    );
+    const premiumPlus = creatorPackage(
+      "8b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e18",
+      ["COUNTDOWN", "MUSIC", "GIFT_REGISTRY"],
+      "premium_plus",
+      "Premium Plus",
+    );
+
+    // A package that grants the gift registry needs no note.
+    assert.equal(
+      featureSettingsView({ ...OWNED, packageId: deluxe.id }, [own, premium, deluxe])
+        .giftRegistryNote,
+      "",
+    );
+    assert.equal(
+      featureSettingsView({ ...OWNED, packageId: own.id }, [own, premium, deluxe]).giftRegistryNote,
+      "La mesa de regalos se muestra con el paquete Deluxe.",
+    );
+    // Two packages that include it are both named, in the catalog's order.
+    assert.equal(
+      featureSettingsView({ ...OWNED, packageId: own.id }, [own, premium, deluxe, premiumPlus])
+        .giftRegistryNote,
+      "La mesa de regalos se muestra con los paquetes Deluxe y Premium Plus.",
+    );
+    // A catalog in which no package includes it still says why the block does not show.
+    assert.equal(
+      featureSettingsView({ ...OWNED, packageId: own.id }, [own, premium]).giftRegistryNote,
+      "La mesa de regalos se muestra con un paquete que la incluya.",
+    );
+    // A catalog that could not be read names no package at all: nothing is promised.
+    assert.equal(featureSettingsView(OWNED, undefined).giftRegistryNote, "");
+  });
+
   it("keeps an archived invitation readable and refuses an invalid one read-only", () => {
     const archived = featureSettingsView({ ...OWNED, status: "ARCHIVED" }, [BASIC]);
     assert.equal(archived.editable, false);
@@ -193,32 +274,67 @@ describe("featureSettingsView", () => {
 });
 
 describe("parseFeatureSettingsForm", () => {
-  it("reads the submitted zone and trims a blank phone into null", () => {
+  it("reads the submitted zone and trims a blank phone and link into null", () => {
     assert.deepEqual(
-      parseFeatureSettingsForm(formData({ timeZone: "America/Merida", whatsappPhone: "  " })),
-      { ok: true, timeZone: "America/Merida", whatsappPhone: null },
+      parseFeatureSettingsForm(
+        formData({ timeZone: "America/Merida", whatsappPhone: "  ", playlistUrl: " " }),
+      ),
+      { ok: true, timeZone: "America/Merida", whatsappPhone: null, playlistUrl: null },
     );
     assert.deepEqual(
       parseFeatureSettingsForm(
-        formData({ timeZone: "America/Merida", whatsappPhone: "55 1234 5678" }),
+        formData({
+          timeZone: "America/Merida",
+          whatsappPhone: "55 1234 5678",
+          playlistUrl: ` ${PLAYLIST} `,
+        }),
       ),
-      { ok: true, timeZone: "America/Merida", whatsappPhone: "55 1234 5678" },
+      {
+        ok: true,
+        timeZone: "America/Merida",
+        whatsappPhone: "55 1234 5678",
+        playlistUrl: PLAYLIST,
+      },
     );
   });
 
-  it("refuses a zone outside the list and a phone that cannot be one", () => {
+  it("refuses a zone outside the list, a phone that cannot be one, and a link that is too long", () => {
     assert.deepEqual(parseFeatureSettingsForm(formData({ whatsappPhone: "" })), {
       ok: false,
       issues: ["timezone"],
     });
     assert.deepEqual(
-      parseFeatureSettingsForm(formData({ timeZone: "Europe/Madrid", whatsappPhone: "" })),
+      parseFeatureSettingsForm(
+        formData({ timeZone: "Europe/Madrid", whatsappPhone: "", playlistUrl: "" }),
+      ),
       { ok: false, issues: ["timezone"] },
     );
     const tooLong = "5".repeat(40);
     assert.deepEqual(
-      parseFeatureSettingsForm(formData({ timeZone: "America/Merida", whatsappPhone: tooLong })),
+      parseFeatureSettingsForm(
+        formData({ timeZone: "America/Merida", whatsappPhone: tooLong, playlistUrl: "" }),
+      ),
       { ok: false, issues: ["phone"] },
+    );
+    assert.deepEqual(
+      parseFeatureSettingsForm(
+        formData({
+          timeZone: "America/Merida",
+          whatsappPhone: "",
+          playlistUrl: `https://open.spotify.com/${"a".repeat(500)}`,
+        }),
+      ),
+      { ok: false, issues: ["playlist"] },
+    );
+    assert.deepEqual(
+      parseFeatureSettingsForm(
+        formData({
+          timeZone: "America/Merida",
+          whatsappPhone: "5".repeat(40),
+          playlistUrl: "x".repeat(501),
+        }),
+      ),
+      { ok: false, issues: ["phone", "playlist"] },
     );
   });
 });
@@ -233,6 +349,16 @@ describe("feature issues", () => {
       ["timezone", "phone"],
     );
     assert.deepEqual(featureIssueCodes(["whatsappPhone must be a string or null"]), ["phone-type"]);
+    // Every playlist issue the API can name maps to the one Spanish sentence of the field (S7).
+    for (const issue of [
+      "playlistUrl must be a string or null",
+      "playlistUrl must be an https link",
+      "playlistUrl must link to Spotify, Apple Music, YouTube, Deezer, or SoundCloud",
+      "playlistUrl must be at most 500 characters",
+    ]) {
+      assert.deepEqual(featureIssueCodes([issue]), ["playlist"], issue);
+    }
+    assert.deepEqual(featureIssueMessages("playlist"), [FEATURE_ISSUE_COPY.playlist]);
     assert.deepEqual(featureIssueCodes(["something else"]), ["other"]);
     assert.deepEqual(featureIssueCodes([]), ["other"]);
     // A repeated issue is named once, and the list never grows past one code per issue it knows.
@@ -310,6 +436,7 @@ describe("saveInvitationFeatures", () => {
       `updateInvitationFeatures:${ID}:${JSON.stringify({
         timeZone: "America/Merida",
         whatsappPhone: "55 1234 5678",
+        playlistUrl: null,
       })}`,
     ]);
   });
@@ -318,7 +445,7 @@ describe("saveInvitationFeatures", () => {
     const { api, calls } = stub({
       updateInvitationFeatures: async () => ({
         ok: true,
-        value: { ...OWNED, featureSettings: { whatsappPhone: null } },
+        value: { ...OWNED, featureSettings: { whatsappPhone: null, playlistUrl: null } },
       }),
     });
 
@@ -328,6 +455,7 @@ describe("saveInvitationFeatures", () => {
       `updateInvitationFeatures:${ID}:${JSON.stringify({
         timeZone: "America/Merida",
         whatsappPhone: null,
+        playlistUrl: null,
       })}`,
     ]);
   });

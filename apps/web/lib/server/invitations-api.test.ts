@@ -42,7 +42,7 @@ const OWNED = {
   content: { celebrantName: "Ana", age: 7 },
   missingRequiredFields: ["date", "time"],
   timeZone: "America/Mexico_City",
-  featureSettings: { whatsappPhone: null },
+  featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
 };
 
@@ -50,8 +50,11 @@ const OWNED = {
 const FEATURED = {
   ...OWNED,
   timeZone: "America/Tijuana",
-  featureSettings: { whatsappPhone: "+525512345678" },
-  availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "CALENDAR"],
+  featureSettings: {
+    whatsappPhone: "+525512345678",
+    playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+  },
+  availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "MUSIC", "GIFT_REGISTRY", "CALENDAR"],
 };
 /** A published invitation, as `POST /invitations/:id/publish` returns it (M5 T4). */
 const PUBLISHED = { ...OWNED, status: "PUBLISHED", publishedAt: AT };
@@ -166,10 +169,15 @@ describe("requests", () => {
           api.updateInvitationFeatures(ID, {
             timeZone: "America/Tijuana",
             whatsappPhone: "+525512345678",
+            playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
           }),
         "PUT",
         `/invitations/${ID}/features`,
-        { timeZone: "America/Tijuana", whatsappPhone: "+525512345678" },
+        {
+          timeZone: "America/Tijuana",
+          whatsappPhone: "+525512345678",
+          playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+        },
         FEATURED,
       ],
       [() => api.archive(ID), "POST", `/invitations/${ID}/archive`, undefined, SUMMARY],
@@ -222,6 +230,7 @@ describe("requests", () => {
         await api.updateInvitationFeatures(id, {
           timeZone: "America/Tijuana",
           whatsappPhone: null,
+          playlistUrl: null,
         }),
         { ok: false, failure: "not-found" },
         id,
@@ -288,6 +297,7 @@ describe("errors", () => {
       await client().updateInvitationFeatures(ID, {
         timeZone: "Europe/Madrid",
         whatsappPhone: "12",
+        playlistUrl: null,
       }),
       { ok: false, failure: "features-invalid", issues },
     );
@@ -297,6 +307,7 @@ describe("errors", () => {
       await client().updateInvitationFeatures(ID, {
         timeZone: "Europe/Madrid",
         whatsappPhone: null,
+        playlistUrl: null,
       }),
       { ok: false, failure: "features-invalid" },
     );
@@ -435,9 +446,22 @@ describe("validators", () => {
       { ...OWNED, timeZone: 7 },
       { ...OWNED, featureSettings: undefined },
       { ...OWNED, featureSettings: {} },
-      { ...OWNED, featureSettings: { whatsappPhone: 7 } },
+      { ...OWNED, featureSettings: { whatsappPhone: 7, playlistUrl: null } },
       // The API stores E.164, so a national number is not a stored phone this client reads.
-      { ...OWNED, featureSettings: { whatsappPhone: "5512345678" } },
+      { ...OWNED, featureSettings: { whatsappPhone: "5512345678", playlistUrl: null } },
+      // The stored link is an https URL of bounded length or null (S7).
+      { ...OWNED, featureSettings: { whatsappPhone: null, playlistUrl: 7 } },
+      {
+        ...OWNED,
+        featureSettings: { whatsappPhone: null, playlistUrl: "http://open.spotify.com/x" },
+      },
+      {
+        ...OWNED,
+        featureSettings: {
+          whatsappPhone: null,
+          playlistUrl: `https://open.spotify.com/${"a".repeat(500)}`,
+        },
+      },
       { ...OWNED, availableFeatures: undefined },
       { ...OWNED, availableFeatures: "CALENDAR" },
       { ...OWNED, availableFeatures: ["CALENDAR", "PLAYLIST"] },

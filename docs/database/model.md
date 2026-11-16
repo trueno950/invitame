@@ -9,8 +9,10 @@ Milestone 5 adds the additive `20261112040547_add_invitation_publication` migrat
 `InvitationStatus`, adds the nullable `publishedAt` and `expiresAt` columns, and adds the publication check; it
 rewrites no row and deletes nothing. The invitation-features batch (F1) adds the additive
 `20261113164740_add_invitation_features` migration: the `Invitation.timeZone` column and the one-to-one
-`InvitationFeatureSettings` table. Future payment, media, guest, RSVP, and analytics design is documented
-separately in [`future-model.md`](future-model.md); that document does not add tables.
+`InvitationFeatureSettings` table. Its second batch (F6) adds the additive
+`20261116170553_add_invitation_feature_playlist_url` migration: one nullable `InvitationFeatureSettings.playlistUrl`
+column, so no row is rewritten and no default is needed. Future payment, media, guest, RSVP, and analytics design is
+documented separately in [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
 | --- | --- |
@@ -28,7 +30,7 @@ separately in [`future-model.md`](future-model.md); that document does not add t
 | `Template` | Mutable template master metadata and category relation |
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
 | `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the unused-nullable expiry `expiresAt`, JSONB `content`, the archive marker, and the IANA `timeZone` |
-| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`) and timestamps |
+| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), and timestamps |
 
 ## Invariants
 
@@ -87,8 +89,9 @@ separately in [`future-model.md`](future-model.md); that document does not add t
 ## Invitation feature data
 
 Current status: the `Invitation.timeZone` column and the `InvitationFeatureSettings` table exist and the API reads
-and writes them (F1, S3, S4). The conditional shape of the feature rules — the zone allow-list, the phone
-normalization, and the gating — lives in `apps/api/src/invitations/domain/invitation-features.ts`.
+and writes them (F1, F6, F7; S3, S4, S7). The conditional shape of the feature rules — the zone allow-list, the phone
+normalization, the playlist link allow-list, and the gating — lives in
+`apps/api/src/invitations/domain/invitation-features.ts`.
 
 - `Invitation.timeZone` is `VARCHAR(64) NOT NULL DEFAULT 'America/Mexico_City'`. Every row that existed before the
   migration reads the default, so the migration needs no backfill and rewrites nothing. The allow-list (the eleven
@@ -102,15 +105,26 @@ normalization, and the gating — lives in `apps/api/src/invitations/domain/invi
   `InvitationFeatureSettings_whatsappPhone_format` (`^\+[1-9][0-9]{7,14}$`) accepts only E.164. The domain normalizes
   a Mexican ten-digit number to `+52` and an international `+` number as typed, so a stored value always satisfies
   the check. The phone is never logged.
+- `InvitationFeatureSettings.playlistUrl` is `VARCHAR(500)` and nullable: `NULL` means no playlist link stored, and
+  `InvitationFeatureSettings_playlistUrl_https` (`"playlistUrl" IS NULL OR starts_with("playlistUrl", 'https://')`)
+  accepts only an `https` link. The domain accepts only an allow-listed music host (`open.spotify.com`,
+  `music.apple.com`, `music.youtube.com`, `www.youtube.com`, `youtube.com`, `youtu.be`, `www.deezer.com`,
+  `deezer.com`, `soundcloud.com`), trims the surrounding spaces, and stores the `URL` parser's normalization. Like the
+  phone, the database checks the shape and the domain owns the allow-list.
 - The feature data belongs to the invitation, not to its template: the template version stays pinned and changing the
-  template never touches these rows. A stored phone is kept even when the pinned package does not include
-  `WHATSAPP`; the gate, not the write, decides whether a guest sees the WhatsApp button, so an upgrade later does not
-  require the number again.
+  template never touches these rows. A stored phone or link is kept even when the pinned package does not include
+  `WHATSAPP` or `MUSIC`; the gate, not the write, decides whether a guest sees those buttons, so an upgrade later does
+  not require the value again. The gift registry is different: its text is an ordinary `Invitation.content` field, and
+  only the gate (`GIFT_REGISTRY`) decides whether a layout renders it (F7).
 - Rollback / recovery of `20261113164740_add_invitation_features`: the change is additive, so recovery is either
   redeploying the previous migration set or dropping the two objects by hand —
   `DROP TABLE "InvitationFeatureSettings";` then `ALTER TABLE "Invitation" DROP COLUMN "timeZone";`. Either way only
   feature data is lost; invitations, their content, and their lifecycle state are untouched. Never edit the applied
   migration file.
+- Rollback / recovery of `20261116170553_add_invitation_feature_playlist_url`: additive, so recovery is redeploying the
+  previous migration set or dropping the column by hand with
+  `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "playlistUrl";`. Only the playlist links are lost; invitations,
+  their content, their phone, and their lifecycle state are untouched. Never edit the applied migration file.
 
 ## Identity tables
 

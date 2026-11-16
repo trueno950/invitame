@@ -15,7 +15,13 @@ import { FEATURE_ISSUE_COPY } from "./copy.ts";
 export const FEATURE_ERROR_CODE = "features-invalid";
 
 /** The small codes one refusal can carry; `other` covers every issue this module does not know. */
-export const FEATURE_ISSUE_CODES = ["timezone", "phone", "phone-type", "other"] as const;
+export const FEATURE_ISSUE_CODES = [
+  "timezone",
+  "phone",
+  "phone-type",
+  "playlist",
+  "other",
+] as const;
 export type FeatureIssueCode = (typeof FEATURE_ISSUE_CODES)[number];
 
 /**
@@ -27,11 +33,22 @@ const TIME_ZONE_ISSUE = "timeZone must be one of the supported time zones";
 const PHONE_SHAPE_ISSUE =
   "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +";
 const PHONE_TYPE_ISSUE = "whatsappPhone must be a string or null";
+const PLAYLIST_TYPE_ISSUE = "playlistUrl must be a string or null";
+const PLAYLIST_SCHEME_ISSUE = "playlistUrl must be an https link";
+const PLAYLIST_HOST_ISSUE =
+  "playlistUrl must link to Spotify, Apple Music, YouTube, Deezer, or SoundCloud";
+const PLAYLIST_LENGTH_ISSUE = "playlistUrl must be at most 500 characters";
 
 const CODE_BY_ISSUE: Readonly<Record<string, FeatureIssueCode>> = {
   [TIME_ZONE_ISSUE]: "timezone",
   [PHONE_SHAPE_ISSUE]: "phone",
   [PHONE_TYPE_ISSUE]: "phone-type",
+  // Every refusal of the playlist field is one sentence for the customer: the field, not the reason, is what
+  // they have to change (F6; S7).
+  [PLAYLIST_TYPE_ISSUE]: "playlist",
+  [PLAYLIST_SCHEME_ISSUE]: "playlist",
+  [PLAYLIST_HOST_ISSUE]: "playlist",
+  [PLAYLIST_LENGTH_ISSUE]: "playlist",
 };
 
 /** One code per distinct issue, and `other` when the refusal named none this module knows. */
@@ -55,7 +72,7 @@ export function featureIssuesTarget(path: string, codes: readonly FeatureIssueCo
   return `${path}?error=${FEATURE_ERROR_CODE}&issues=${codes.join(",")}`;
 }
 
-const ISSUE_CODE = /^(?:timezone|phone|phone-type|other)$/;
+const ISSUE_CODE = /^(?:timezone|phone|phone-type|playlist|other)$/;
 
 /** The Spanish sentence of one code; nothing at all for a code this page does not know. */
 function issueMessage(code: string): string | undefined {

@@ -222,7 +222,7 @@ const OWNED: OwnedInvitation = {
   content: { celebrantName: "Ana" },
   missingRequiredFields: ["age", "date", "time", "location", "address", "mainPhoto", "message"],
   timeZone: "America/Mexico_City",
-  featureSettings: { whatsappPhone: null },
+  featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
 };
 

@@ -14,6 +14,8 @@ import {
 // path, and the file the route handler answers. An unsupported zone or a snapshot whose facts cannot be read
 // degrades the features it affects instead of failing the page.
 
+const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
+
 const PUBLIC: PublicInvitation = {
   slug: "invitacion-k7m2qx",
   componentKey: "birthday-poster-01",
@@ -35,6 +37,8 @@ const PUBLIC: PublicInvitation = {
     map: true,
     calendar: true,
     whatsapp: { phone: "+525512345678" },
+    music: { url: PLAYLIST, provider: "spotify" },
+    giftRegistry: true,
   },
 };
 
@@ -56,6 +60,8 @@ describe("publicFeatureBlock", () => {
         map: true,
         calendar: true,
         whatsapp: { phone: "+525512345678" },
+        music: { url: PLAYLIST, provider: "spotify" },
+        giftRegistry: true,
       },
       facts: FACTS,
       calendarHref: "/i/invitacion-k7m2qx/calendario.ics",
@@ -67,7 +73,14 @@ describe("publicFeatureBlock", () => {
     // line of defense: were such a body ever to reach the page, no block would render.
     const gatedNothing = {
       ...PUBLIC,
-      features: { countdown: false, map: false, calendar: false, whatsapp: null },
+      features: {
+        countdown: false,
+        map: false,
+        calendar: false,
+        whatsapp: null,
+        music: null,
+        giftRegistry: false,
+      },
     } as unknown as PublicInvitation;
 
     assert.equal(publicFeatureBlock(gatedNothing), undefined);
@@ -82,8 +95,35 @@ describe("publicFeatureBlock", () => {
       map: true,
       calendar: false,
       whatsapp: { phone: "+525512345678" },
+      music: { url: PLAYLIST, provider: "spotify" },
+      giftRegistry: true,
     });
     assert.equal(block?.calendarHref, "/i/invitacion-k7m2qx/calendario.ics");
+  });
+
+  it("still hands the gate to the layouts when only the gift registry is on (S7)", () => {
+    const block = publicFeatureBlock({
+      ...PUBLIC,
+      features: {
+        countdown: false,
+        map: false,
+        calendar: true,
+        whatsapp: null,
+        music: null,
+        giftRegistry: true,
+      },
+    });
+
+    // The block itself renders nothing, but the layout must still learn that its gift registry is gated.
+    assert.deepEqual(block?.features, {
+      timeZone: "America/Mexico_City",
+      countdown: false,
+      map: false,
+      calendar: true,
+      whatsapp: null,
+      music: null,
+      giftRegistry: true,
+    });
   });
 
   it("passes no block when the layout's own facts cannot be read", () => {
@@ -100,7 +140,14 @@ describe("publicFeatureBlock", () => {
     const block = publicFeatureBlock({
       ...PUBLIC,
       timeZone: "Mars/Olympus",
-      features: { countdown: true, map: true, calendar: true, whatsapp: null },
+      features: {
+        countdown: true,
+        map: true,
+        calendar: true,
+        whatsapp: null,
+        music: null,
+        giftRegistry: false,
+      },
     });
 
     assert.deepEqual(block?.features, {
@@ -109,6 +156,8 @@ describe("publicFeatureBlock", () => {
       map: true,
       calendar: false,
       whatsapp: null,
+      music: null,
+      giftRegistry: false,
     });
   });
 });
