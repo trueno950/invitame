@@ -51,11 +51,14 @@ export class UpdateInvitationContentDto {
 }
 
 /**
- * `PUT /invitations/:id/features` body (F1; S4). Both fields are required and both are validated by the domain,
- * which owns the time zone allow-list and the phone rules; only their presence is checked here, so a value the
- * domain refuses reaches the client as 400 `INVALID_INVITATION_FEATURES` with its issues. `whatsappPhone` accepts
- * null or an empty string to clear the stored phone. `PUT` not `PATCH`: the whole feature data is replaced, and
- * the web client sends it from a server action, like a content save.
+ * `PUT /invitations/:id/features` body (F1, F6; S4, S7). Every field is required and every value is validated by
+ * the domain, which owns the time zone allow-list, the phone rules, and the playlist host allow-list; only their
+ * presence is checked here, so a value the domain refuses reaches the client as 400
+ * `INVALID_INVITATION_FEATURES` with its issues. `whatsappPhone` and `playlistUrl` accept null or an empty string
+ * to clear the stored value. `playlistUrl` is required like the other two because this is a `PUT`: the whole
+ * feature data is replaced, so a body that omits it is refused by the global pipe (400) instead of clearing a
+ * link the client never mentioned. `PUT` not `PATCH`, and the web client sends it from a server action, like a
+ * content save.
  */
 export class UpdateInvitationFeaturesDto {
   @IsProvided()
@@ -63,4 +66,7 @@ export class UpdateInvitationFeaturesDto {
 
   @IsProvided()
   whatsappPhone!: unknown;
+
+  @IsProvided()
+  playlistUrl!: unknown;
 }

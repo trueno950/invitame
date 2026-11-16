@@ -142,13 +142,17 @@ describe("Prisma invitation repository on PostgreSQL", () => {
 
   const stored = (id: string) => prisma.invitation.findUniqueOrThrow({ where: { id } });
 
-  /** The stored row as the repository reports it: the port flattens the one-to-one feature settings row (F1). */
+  /** The stored row as the repository reports it: the port flattens the one-to-one feature settings row (F1, F6). */
   async function storedRecord(id: string) {
     const row = await stored(id);
     const settings = await prisma.invitationFeatureSettings.findUnique({
       where: { invitationId: id },
     });
-    return { ...row, whatsappPhone: settings?.whatsappPhone ?? null };
+    return {
+      ...row,
+      whatsappPhone: settings?.whatsappPhone ?? null,
+      playlistUrl: settings?.playlistUrl ?? null,
+    };
   }
 
   /** The instant every publication fixture writes, so `publishedAt` is compared exactly (S7). */
