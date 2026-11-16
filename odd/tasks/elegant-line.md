@@ -42,6 +42,17 @@ line.
   - **Features.** Each layout places the shared features block and exposes event facts (ceremony and reception as
     the two places); the page title names the celebrant or the couple.
 
+- S5 — Owner request through the design canvas (L4), verbatim: "Implement the design artboard
+  design/elegant-line/02-ornamental.html" — «Ornamental — papelería clásica», tradeoff: "Es la dirección que más se
+  parece a una invitación impresa de lujo: tarjeta centrada con doble filete sobre papel texturizado, laurel dibujado
+  en SVG original, acentos de foil y el nombre en script. El costo es que el ornamento ocupa la cabecera y todo el
+  contenido queda en una columna centrada y estrecha, con la foto reducida a un camafeo en lugar de protagonista."
+  Handoff instruction: "Implement it in the project's real stack. Use the artboard as the visual spec: map its parts
+  to the project's existing components and styles, and do not copy the artboard HTML verbatim." Parent decisions
+  within S5 (L4; owner may overturn): a second elegant layout next to «Arco y foto», with the same eight themes, the
+  same content schemas, and the same features block, shipped as `xv-ornamental-01`, `wedding-ornamental-01`, and
+  `baptism-ornamental-01` with 24 more templates named `Ornamental · <theme name>`.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -51,7 +62,9 @@ line.
 | E3a | API: three arch renderers, elegant theme allow-list, XV and wedding schemas, seed of 24 templates, tests | S3, S4 | worker | |
 | E3b | Web: Bodoni Moda and Italiana fonts | S4 | worker | |
 | E3c | Web: elegant themes, arch layout for three occasions, ornaments, parsers, registry, event facts, samples, form fields, page title, tests, browser check | S3, S4 | worker | |
-| E3d | Integration: full checks, seed the dev database, browser review, docs, canvas handoff | S3, S4 | inline | |
+| E4a | API: three ornamental renderers reusing the elegant themes and schemas, 24 templates, tests | S5 | worker, after E3a | |
+| E4b | Web: ornamental layout for three occasions (double-rule card, laurel monogram, foil accents, script name, cameo photo), registry, chooser, tests, browser check | S5 | worker, after E3c | |
+| E3d | Integration of both elegant layouts: full checks, seed the dev database, browser review, docs, canvas handoffs | S3-S5 | inline | |
 
 ## Log
 
@@ -67,3 +80,6 @@ line.
   second XV and wedding option. Waiting for E2.
 - L3 — Owner choices (S4): only «Arco y foto», all eight themes, the proposed fields, and the two new fonts. The parent
   fixed the contract in S4 and launched E3a-E3c in parallel with disjoint surfaces.
+- L4 — Owner also asked, through the canvas handoff, to implement `02-ornamental.html` (S5). It is queued as E4a and E4b
+  so that it does not collide with the running Arco y foto workers (E3a and E3c edit the same registries, seed, and
+  chooser); it starts when they land. Canvas handoff reported `in_progress`.
