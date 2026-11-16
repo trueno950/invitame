@@ -60,7 +60,7 @@ line.
 | E1 | Elegant directions under `design/elegant-line/`: three layout directions and a theme board, plus «Datos que pide esta ocasión» for XV años and weddings | S1-S3 | worker | |
 | E2 | Owner picks layouts, themes, and content fields | S3, S4 | owner | L3 |
 | E3a | API: three arch renderers, elegant theme allow-list, XV and wedding schemas, seed of 24 templates, tests | S3, S4 | worker | |
-| E3b | Web: Bodoni Moda and Italiana fonts | S4 | worker | |
+| E3b | Web: Bodoni Moda and Italiana fonts | S4 | worker | `16da3cd` |
 | E3c | Web: elegant themes, arch layout for three occasions, ornaments, parsers, registry, event facts, samples, form fields, page title, tests, browser check | S3, S4 | worker | |
 | E4a | API: three ornamental renderers reusing the elegant themes and schemas, 24 templates, tests | S5 | worker, after E3a | |
 | E4b | Web: ornamental layout for three occasions (double-rule card, laurel monogram, foil accents, script name, cameo photo), registry, chooser, tests, browser check | S5 | worker, after E3c | |
@@ -83,3 +83,6 @@ line.
 - L4 — Owner also asked, through the canvas handoff, to implement `02-ornamental.html` (S5). It is queued as E4a and E4b
   so that it does not collide with the running Arco y foto workers (E3a and E3c edit the same registries, seed, and
   chooser); it starts when they land. Canvas handoff reported `in_progress`.
+- L5 — E3b done in `16da3cd` (worker `mwirfays-y-pv6o`): Bodoni Moda 500 and Italiana 400, latin woff2, OFL 1.1 copied
+  byte-for-byte from google/fonts, `preload: false`, `--font-bodoni-moda` and `--font-italiana`. The fonts test went
+  RED (2 failures) and then GREEN. Web: 1030/1030 tests; tsc, docs, and Biome pass.
