@@ -16,13 +16,42 @@ line.
   mobile-first at 390 px; decoration never behind text; invitations already pinned to a version render unchanged
   unless the owner accepts otherwise.
 
+- S4 — Owner choices (L3), verbatim answers: layouts → "03 · Arco y foto (Recomendado)" only; themes → "Los 8
+  (Recomendado)"; fields → "Sí, como están (Recomendado)" (the proposal in `design/elegant-line/05-datos-por-ocasion.html`);
+  fonts → "Sí, agrégalas (Recomendado)" (Bodoni Moda and Italiana, SIL OFL). Parent decisions within S4 (L3; owner
+  may overturn):
+  - **Layouts.** One visual layout, «Arco y foto», shipped as three allow-listed renderers because each occasion has
+    its own content schema: `xv-arch-01` (category `quinceanera`), `wedding-arch-01` (`wedding`), `baptism-arch-01`
+    (`baptism`, the formal baptism next to the themed one). Configuration is exactly `{componentKey, theme}`.
+  - **Themes.** Eight keys in the board's order, shared by the three layouts and kept in
+    `apps/api/src/catalog/domain/renderers/elegant-themes.ts` as `export const ELEGANT_THEMES = [ ... ] as const;`:
+    `blush-gold` (Rosa empolvado y oro), `ivory-black` (Marfil y negro), `midnight-gold` (Azul medianoche y oro),
+    `olive-cream` (Verde olivo y crema), `champagne` (Champaña), `lavender-silver` (Lavanda y plata),
+    `terracotta-sage` (Terracota y salvia), `burgundy-gold` (Borgoña y oro). Colors, display fonts, and ornament
+    descriptions exactly as on the board; ornaments are original fine-line SVG (not paper-cut).
+  - **Content.** XV años (`xv-arch-01`) required: `celebrantName`, `date`, `parents`, `honorSponsors`,
+    `ceremonyPlace`, `ceremonyAddress`, `ceremonyTime`, `receptionPlace`, `receptionAddress`, `receptionTime`,
+    `dressCode`, `message`, `rsvpContact`; optional: `chambelanes`, `giftRegistry`, `mainPhoto`. Wedding
+    (`wedding-arch-01`) required: `coupleNameOne`, `coupleNameTwo`, `date`, the three `ceremony*`, the three
+    `reception*`, `dressCode`, `message`, `rsvpContact`; optional: `firstFamilyParents`, `secondFamilyParents`,
+    `weddingSponsors`, `giftRegistry`, `mainPhoto`, `hashtag`. Formal baptism (`baptism-arch-01`) reuses the themed
+    baptism schema exactly. Lists (sponsors, chambelanes, parents) are bounded text, one name per line. Without a
+    photo, the arch shows a theme-colored wash with the theme's ornament and keeps the name at AA contrast.
+  - **Catalog.** 24 templates (3 layouts × 8 themes), key `<occasion>-arch-<theme>`, Spanish name
+    `Arco y foto · <theme name>`, neutral descriptions, PUBLISHED version 1 created only when new.
+  - **Features.** Each layout places the shared features block and exposes event facts (ceremony and reception as
+    the two places); the page title names the celebrant or the couple.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
 | E1 | Elegant directions under `design/elegant-line/`: three layout directions and a theme board, plus «Datos que pide esta ocasión» for XV años and weddings | S1-S3 | worker | |
-| E2 | Owner picks layouts, themes, and content fields | S3 | owner | |
-| E3 | Implementation: API contracts, categories, seed, fonts, web layouts, themes, form, tests, browser check | S1-S3 | pending E2 | |
+| E2 | Owner picks layouts, themes, and content fields | S3, S4 | owner | L3 |
+| E3a | API: three arch renderers, elegant theme allow-list, XV and wedding schemas, seed of 24 templates, tests | S3, S4 | worker | |
+| E3b | Web: Bodoni Moda and Italiana fonts | S4 | worker | |
+| E3c | Web: elegant themes, arch layout for three occasions, ornaments, parsers, registry, event facts, samples, form fields, page title, tests, browser check | S3, S4 | worker | |
+| E3d | Integration: full checks, seed the dev database, browser review, docs, canvas handoff | S3, S4 | inline | |
 
 ## Log
 
@@ -36,3 +65,5 @@ line.
   palette containment, focus, 46 px or larger targets, and 320 px reflow all pass; no external URLs. Proposed new
   OFL fonts: Bodoni Moda and Italiana. Worker recommendation: 03 as the flagship, 02 for the formal baptism, 01 as a
   second XV and wedding option. Waiting for E2.
+- L3 — Owner choices (S4): only «Arco y foto», all eight themes, the proposed fields, and the two new fonts. The parent
+  fixed the contract in S4 and launched E3a-E3c in parallel with disjoint surfaces.
