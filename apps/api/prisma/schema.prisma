@@ -251,6 +251,9 @@ model TemplateVersion {
 // "Invitation_archivedAt_matches_status", and the "Invitation_pinned_fields_immutable" trigger.
 // Migration 2026111*_add_invitation_publication adds "Invitation_publishedAt_matches_status" and keeps the
 // archive check, which stays correct for three statuses.
+// Migration 2026111*_add_invitation_features adds "timeZone" (NOT NULL with the default every existing row
+// reads) and the one-to-one InvitationFeatureSettings table, plus the checks Prisma cannot express:
+// "Invitation_timeZone_format" and "InvitationFeatureSettings_whatsappPhone_format".
 model Invitation {
   id                String           @id @default(uuid()) @db.Uuid
   ownerId           String           @db.Uuid
@@ -259,6 +262,9 @@ model Invitation {
   slug              String           @unique @db.VarChar(60)
   status            InvitationStatus @default(DRAFT)
   content           Json             @db.JsonB @default("{}")
+  // The IANA zone the guest's countdown and calendar links use. The allow-list lives in the API domain
+  // (`domain/invitation-features.ts`, S4); the database checks the shape and the default.
+  timeZone          String           @default("America/Mexico_City") @db.VarChar(64)
   archivedAt        DateTime?        @db.Timestamptz(6)
   // Set exactly while the status is PUBLISHED: unpublishing and archiving clear it (S7, A2).
   publishedAt       DateTime?        @db.Timestamptz(6)
@@ -267,9 +273,26 @@ model Invitation {
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
 
-  owner           User            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  templateVersion TemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
-  package         Package         @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  owner           User                      @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  templateVersion TemplateVersion           @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  package         Package                   @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  featureSettings InvitationFeatureSettings?
 
   @@index([ownerId])
+}
+
+// Feature data of one invitation, stored apart from the template (F1; S3, S4): changing the template never
+// touches it. The invitation id is the primary key, so an invitation has at most one row, and the foreign key
+// is ON DELETE RESTRICT because an invitation is never hard-deleted here — archiving is the only terminal
+// lifecycle write — matching every other invitation reference.
+// Migration 2026111*_add_invitation_features adds what Prisma cannot express: the
+// "InvitationFeatureSettings_whatsappPhone_format" check (NULL or an E.164 number, `^\+[1-9][0-9]{7,14}$`).
+model InvitationFeatureSettings {
+  invitationId  String   @id @db.Uuid
+  // E.164: `+` and eight to fifteen digits. Null while the owner has not set one (S4).
+  whatsappPhone String?  @db.VarChar(16)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
 }

@@ -1,8 +1,14 @@
+import { InvitationNotPublishableError } from "../domain/invitation.errors";
 import {
   type JsonObject,
   missingRequiredFields,
   validateDraftContent,
 } from "../domain/invitation-content";
+import {
+  availableFeatureKeys,
+  publicInvitationFeatures,
+  validateInvitationFeatureSettings,
+} from "../domain/invitation-features";
 import {
   archive,
   assertEditable,
@@ -15,11 +21,11 @@ import {
   isReservedSlug,
   isValidInvitationSlug,
 } from "../domain/invitation-slug";
-import { InvitationNotPublishableError } from "../domain/invitation.errors";
 import { packageFitsTemplateVersion } from "../domain/package-fit";
 import { publicationIssues } from "../domain/publication-readiness";
 import {
   InvalidInvitationContentError,
+  InvalidInvitationFeaturesError,
   InvitationPackageDoesNotFitError,
   InvitationPackageNotFoundError,
   InvitationPaymentRequiredError,
@@ -71,6 +77,18 @@ export interface UpdateContentInput {
   content: unknown;
 }
 
+/**
+ * The values of a feature update (F1; S4): the zone the owner chose and the phone they typed. Both are
+ * unvalidated request values — the domain validates them before anything is stored — and the owner comes from
+ * the session (S9).
+ */
+export interface UpdateFeaturesInput {
+  ownerId: string;
+  id: string;
+  timeZone: unknown;
+  whatsappPhone: unknown;
+}
+
 /** A row of "Mis invitaciones": the editor loads one invitation when it opens it. */
 export interface InvitationSummary {
   id: string;
@@ -90,13 +108,22 @@ export interface InvitationSummary {
 }
 
 /**
- * One invitation as its owner edits it: the stored fields, the bounded content, and the required fields the
- * draft does not provide yet (S7). The owner id is deliberately absent: it came from the session and never
- * belongs in a response.
+ * One invitation as its owner edits it: the stored fields, the bounded content, the feature data, the gated
+ * features the guest will see, and the required fields the draft does not provide yet (F1; S4, S7). The owner id
+ * is deliberately absent: it came from the session and never belongs in a response.
  */
 export interface OwnedInvitation extends InvitationSummary {
   content: JsonObject;
   missingRequiredFields: string[];
+  /** The stored IANA zone (S4). */
+  timeZone: string;
+  /** The stored feature data; `whatsappPhone` is E.164 or null (S4). */
+  featureSettings: { whatsappPhone: string | null };
+  /**
+   * The gated keys of the features this invitation will show, `CALENDAR` included (S4). The package's keys are
+   * read at request time, because the gate is about what the catalog grants now.
+   */
+  availableFeatures: string[];
 }
 
 const INVITATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -123,13 +150,36 @@ function toSummary(record: InvitationRecord): InvitationSummary {
   };
 }
 
-/** The owner's view of one invitation, with the schema of the version it is pinned to. */
-function toOwnedInvitation(record: InvitationRecord, schema: unknown): OwnedInvitation {
+/** The owner's view of one invitation, with the schema of the version it is pinned to and the gated features. */
+function toOwnedInvitation(
+  record: InvitationRecord,
+  schema: unknown,
+  includedFeatureKeys: readonly string[],
+): OwnedInvitation {
   return {
     ...toSummary(record),
     content: record.content,
     missingRequiredFields: missingRequiredFields(schema, record.content),
+    timeZone: record.timeZone,
+    featureSettings: { whatsappPhone: record.whatsappPhone },
+    availableFeatures: availableFeatureKeys({
+      includedFeatureKeys,
+      whatsappPhone: record.whatsappPhone,
+    }),
   };
+}
+
+/**
+ * The feature keys the pinned package includes right now, or none when the catalog can no longer answer for it.
+ * A missing package fails closed: the gate then offers only `CALENDAR`, never a feature nobody verified (S4).
+ */
+async function includedFeatureKeysOf(
+  catalog: InvitationCatalog,
+  packageId: string,
+): Promise<readonly string[]> {
+  const entitlements = await catalog.findPackageEntitlements(packageId);
+
+  return entitlements?.includedFeatureKeys ?? [];
 }
 
 /**
@@ -184,7 +234,7 @@ export class CreateInvitationDraftUseCase {
       content: {},
     });
 
-    return toOwnedInvitation(created, version.schema);
+    return toOwnedInvitation(created, version.schema, entitlements.includedFeatureKeys);
   }
 
   /**
@@ -252,8 +302,9 @@ export class GetOwnInvitationUseCase {
     }
 
     const snapshot = await this.catalog.findVersionSchema(stored.templateVersionId);
+    const includedFeatureKeys = await includedFeatureKeysOf(this.catalog, stored.packageId);
 
-    return toOwnedInvitation(stored, snapshot?.schema ?? null);
+    return toOwnedInvitation(stored, snapshot?.schema ?? null, includedFeatureKeys);
   }
 }
 
@@ -292,7 +343,61 @@ export class UpdateInvitationContentUseCase {
       return null;
     }
 
-    return toOwnedInvitation(updated, snapshot?.schema ?? null);
+    const includedFeatureKeys = await includedFeatureKeysOf(this.catalog, updated.packageId);
+
+    return toOwnedInvitation(updated, snapshot?.schema ?? null, includedFeatureKeys);
+  }
+}
+
+/**
+ * Stores the feature data of a DRAFT or a PUBLISHED invitation (F1; S4): the time zone the owner chose and the
+ * WhatsApp phone, which normalizes to E.164 and is cleared by null or an empty value. Only the owner may write:
+ * another customer's id answers null and changes nothing (A4). An archived invitation is refused
+ * (`InvitationNotEditableError`) before its request values are looked at, exactly like a content save (A2, S7).
+ * A phone is stored even when the pinned package does not include WHATSAPP; the gate, not the write, decides
+ * whether a guest sees it, so an upgrade later does not need the number typed again. The zone and the phone are
+ * written in one transaction, so a refused request stores neither.
+ */
+export class UpdateInvitationFeaturesUseCase {
+  constructor(
+    private readonly invitations: InvitationRepository,
+    private readonly catalog: InvitationCatalog,
+  ) {}
+
+  async execute(input: UpdateFeaturesInput): Promise<OwnedInvitation | null> {
+    if (!isInvitationId(input.id)) {
+      return null;
+    }
+    const stored = await this.invitations.findOwned(input.ownerId, input.id);
+    if (stored === null) {
+      return null;
+    }
+    // A read-only invitation is refused before its request values are even looked at (S7, A2).
+    assertEditable(stored.status);
+
+    const validation = validateInvitationFeatureSettings({
+      timeZone: input.timeZone,
+      whatsappPhone: input.whatsappPhone,
+    });
+    if (!validation.ok) {
+      throw new InvalidInvitationFeaturesError(validation.issues);
+    }
+
+    const updated = await this.invitations.updateFeatures(
+      input.ownerId,
+      input.id,
+      validation.value,
+    );
+    if (updated === null) {
+      return null;
+    }
+
+    const [snapshot, includedFeatureKeys] = await Promise.all([
+      this.catalog.findVersionSchema(updated.templateVersionId),
+      includedFeatureKeysOf(this.catalog, updated.packageId),
+    ]);
+
+    return toOwnedInvitation(updated, snapshot?.schema ?? null, includedFeatureKeys);
   }
 }
 
@@ -385,7 +490,11 @@ export class PublishInvitationUseCase {
       return null;
     }
 
-    return toOwnedInvitation(published, snapshot?.schema ?? null);
+    return toOwnedInvitation(
+      published,
+      snapshot?.schema ?? null,
+      entitlements?.includedFeatureKeys ?? [],
+    );
   }
 }
 
@@ -446,12 +555,20 @@ export class GetPublicInvitationUseCase {
       throw new PublicInvitationNotRenderableError(render?.componentKey ?? null);
     }
 
+    // The gate reads the pinned package's keys at request time and fails closed when it cannot (S4).
+    const includedFeatureKeys = await includedFeatureKeysOf(this.catalog, published.packageId);
+
     return {
       slug: published.slug,
       componentKey: render.componentKey,
       configuration: render.configuration,
       content: projectPublicContent(render.schema, published.content),
       publishedAt: published.publishedAt,
+      timeZone: published.timeZone,
+      features: publicInvitationFeatures({
+        includedFeatureKeys,
+        whatsappPhone: published.whatsappPhone,
+      }),
     };
   }
 }

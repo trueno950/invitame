@@ -1,5 +1,6 @@
 import { createElement, type ReactElement, useId } from "react";
-
+import { baptismEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
+import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
 import {
   parseBaptismClassicConfiguration,
   parseBaptismClassicContent,
@@ -7,6 +8,7 @@ import {
 import { BAPTISM_THEME } from "../../../../lib/renderers/baptism-themes.ts";
 import { formatLongDate } from "../../../../lib/renderers/invitation-fields.ts";
 import type { InvitationTheme } from "../../../../lib/renderers/theme-tokens.ts";
+import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { CelebrationMotif } from "../themed/celebration-motif.ts";
 import {
   BACKGROUND_LAYER,
@@ -32,6 +34,10 @@ export interface BaptismClassicRendererProps {
   readonly configuration: unknown;
   /** The invitation data that fits the version's schema; parsed here, so an invalid one throws. */
   readonly content: unknown;
+  /** The features the API gated for this invitation; absent when it has none, which renders nothing. */
+  readonly features?: InvitationFeatures;
+  /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
+  readonly calendarHref?: string;
 }
 
 const h = createElement;
@@ -83,11 +89,23 @@ function placeCard(
 export function BaptismClassicRenderer({
   configuration,
   content,
+  features,
+  calendarHref,
 }: BaptismClassicRendererProps): ReactElement {
   const { theme: themeKey } = parseBaptismClassicConfiguration(configuration);
   const data = parseBaptismClassicContent(content);
   const theme = BAPTISM_THEME[themeKey];
   const idPrefix = useId();
+
+  // After both place cards and before the photo: the ceremony, the reception, and how to reach them (S4).
+  const featuresBlock =
+    features === undefined
+      ? null
+      : h(InvitationFeaturesBlock, {
+          features,
+          facts: baptismEventFacts(data),
+          ...(calendarHref === undefined ? {} : { calendarHref }),
+        });
 
   return h(
     "article",
@@ -189,6 +207,7 @@ export function BaptismClassicRenderer({
       data.receptionAddress,
       data.receptionTime,
     ),
+    featuresBlock,
     data.mainPhoto === undefined
       ? null
       : h(

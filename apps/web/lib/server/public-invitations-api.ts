@@ -1,3 +1,5 @@
+import { isE164Phone } from "../invitation-features/invitation-features.ts";
+import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import { ApiClientError, type ApiClientOptions, sendApiRequest } from "./api-client.ts";
 import { isInvitationSlug } from "./invitations-api.ts";
 
@@ -15,6 +17,15 @@ import { isInvitationSlug } from "./invitations-api.ts";
  * cookie-free wiring that imports it lives in `app/i/[slug]/_lib/public-api.ts` and is `server-only`.
  */
 
+/** The features the API gated for one invitation, as a guest page reads them (S4). */
+export interface PublicInvitationFeatures {
+  readonly countdown: boolean;
+  readonly map: boolean;
+  /** Add-to-calendar is always on for a published invitation, so the read always says `true` (S4). */
+  readonly calendar: true;
+  readonly whatsapp: { readonly phone: string } | null;
+}
+
 /** The guest's page of a published invitation: the projection of A7, and nothing else. */
 export interface PublicInvitation {
   slug: string;
@@ -24,6 +35,10 @@ export interface PublicInvitation {
   /** The pinned schema's declared content properties, parsed by the renderer. */
   content: Record<string, unknown>;
   publishedAt: string | null;
+  /** The invitation's stored IANA zone, which every wall clock of the page is read in (S4). */
+  timeZone: string;
+  /** The gated guest features; nothing about the package itself is here (S4). */
+  features: PublicInvitationFeatures;
 }
 
 export type PublicInvitationResult =
@@ -45,9 +60,46 @@ function isTimestamp(value: unknown): value is string {
 const MAX_COMPONENT_KEY_LENGTH = 120;
 
 /**
+ * The gated features of a guest page (S4). The read always says `calendar: true`, because add-to-calendar is
+ * not a catalog feature; a body that says otherwise is not this contract, so it is refused instead of being
+ * normalized. `whatsapp` is the stored E.164 contact or null.
+ */
+function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefined {
+  const features = record(value);
+
+  if (
+    features === undefined ||
+    typeof features.countdown !== "boolean" ||
+    typeof features.map !== "boolean" ||
+    features.calendar !== true
+  ) {
+    return undefined;
+  }
+
+  const whatsapp = features.whatsapp;
+
+  if (whatsapp === null) {
+    return { countdown: features.countdown, map: features.map, calendar: true, whatsapp: null };
+  }
+
+  const phone = record(whatsapp)?.phone;
+
+  if (typeof phone !== "string" || !isE164Phone(phone)) {
+    return undefined;
+  }
+
+  return {
+    countdown: features.countdown,
+    map: features.map,
+    calendar: true,
+    whatsapp: { phone },
+  };
+}
+
+/**
  * The public invitation of a success body, or `undefined` when it breaks the documented contract. Only
- * the five fields of the projection are kept: a body that grows an owner, a package, a price, a status,
- * or an id never reaches the page.
+ * the fields of the projection are kept: a body that grows an owner, a package, a price, a status, or an id
+ * never reaches the page.
  */
 export function parsePublicInvitation(value: unknown): PublicInvitation | undefined {
   const invitation = record(value);
@@ -59,6 +111,7 @@ export function parsePublicInvitation(value: unknown): PublicInvitation | undefi
   const configuration = record(invitation.configuration);
   const content = record(invitation.content);
   const componentKey = invitation.componentKey;
+  const features = parsePublicFeatures(invitation.features);
 
   if (
     !isInvitationSlug(invitation.slug) ||
@@ -67,6 +120,8 @@ export function parsePublicInvitation(value: unknown): PublicInvitation | undefi
     componentKey.length > MAX_COMPONENT_KEY_LENGTH ||
     configuration === undefined ||
     content === undefined ||
+    features === undefined ||
+    !isInvitationTimeZone(invitation.timeZone) ||
     !(invitation.publishedAt === null || isTimestamp(invitation.publishedAt))
   ) {
     return undefined;
@@ -78,6 +133,8 @@ export function parsePublicInvitation(value: unknown): PublicInvitation | undefi
     configuration,
     content,
     publishedAt: invitation.publishedAt,
+    timeZone: invitation.timeZone,
+    features,
   };
 }
 

@@ -1,3 +1,5 @@
+import { isE164Phone, isInvitationFeatureKey } from "../invitation-features/invitation-features.ts";
+import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import {
   ApiClientError,
   type ApiClientOptions,
@@ -43,6 +45,22 @@ export interface InvitationSummary {
 export interface OwnedInvitation extends InvitationSummary {
   content: Record<string, unknown>;
   missingRequiredFields: string[];
+  /** The stored IANA zone the guest's countdown and calendar use (S4). */
+  timeZone: string;
+  /** The stored feature data; a phone is E.164, or null when the invitation has none (S4). */
+  featureSettings: { whatsappPhone: string | null };
+  /**
+   * The gated feature keys the guest page will show, `CALENDAR` included (S4). The package's other keys are
+   * never here, and a key this deployment does not implement is refused by the parser.
+   */
+  availableFeatures: string[];
+}
+
+/** The feature data a creator saves: `PUT /invitations/:id/features` (F1, F3; S3, S4). */
+export interface InvitationFeatureInput {
+  timeZone: string;
+  /** The text the creator typed, or null/empty to clear it; the API normalizes it to E.164. */
+  whatsappPhone: string | null;
 }
 
 /** One template a creator may start from, with the version the draft will be pinned to (S8). */
@@ -85,6 +103,8 @@ export interface CreatorPackage {
  * - `package-does-not-fit`: 400 `INVITATION_PACKAGE_DOES_NOT_FIT`, the chosen package lacks a renderer
  *   feature (S6, A1);
  * - `content-invalid`: 400 `INVALID_INVITATION_CONTENT`, the pinned schema refused a value (S7);
+ * - `features-invalid`: 400 `INVALID_INVITATION_FEATURES`, the feature data was refused and `issues` names
+ *   why (S4);
  * - `validation`: 400 without a known code, the API refused a field of the request;
  * - `not-editable`: 409 `INVITATION_NOT_EDITABLE`, the draft is archived (A3, S7);
  * - `already-archived`: 409 `INVITATION_ALREADY_ARCHIVED`;
@@ -104,6 +124,7 @@ export type InvitationFailure =
   | "package-not-found"
   | "package-does-not-fit"
   | "content-invalid"
+  | "features-invalid"
   | "validation"
   | "not-editable"
   | "already-archived"
@@ -241,6 +262,38 @@ function parseNames(value: unknown): string[] | undefined {
     : undefined;
 }
 
+/**
+ * A list of allow-listed names, refused whole when any entry is not one: a value this deployment does not
+ * implement never reaches a page.
+ */
+function parseAllowedNames(
+  value: unknown,
+  allowed: (item: unknown) => boolean,
+): string[] | undefined {
+  const names = parseNames(value);
+
+  return names === undefined || !names.every((name) => allowed(name)) ? undefined : names;
+}
+
+/**
+ * The stored feature data of a draft (S4): a phone that is E.164 or null. The API stores nothing else, so
+ * another shape means the response is not the contract this client reads and the whole body is refused.
+ */
+function parseFeatureSettings(value: unknown): { whatsappPhone: string | null } | undefined {
+  const settings = record(value);
+
+  if (settings === undefined) {
+    return undefined;
+  }
+
+  const phone = settings.whatsappPhone;
+
+  if (phone === null) {
+    return { whatsappPhone: null };
+  }
+  return typeof phone === "string" && isE164Phone(phone) ? { whatsappPhone: phone } : undefined;
+}
+
 /** The price in force, `null` when the package has none, or `undefined` when the value is unreadable. */
 function parseCurrentPrice(value: unknown): CreatorPackage["currentPrice"] | undefined {
   if (value === null) {
@@ -268,12 +321,27 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
 
   const content = parseContent(owned.content);
   const missing = parseNames(owned.missingRequiredFields);
+  const featureSettings = parseFeatureSettings(owned.featureSettings);
+  const availableFeatures = parseAllowedNames(owned.availableFeatures, isInvitationFeatureKey);
 
-  if (content === undefined || missing === undefined) {
+  if (
+    content === undefined ||
+    missing === undefined ||
+    featureSettings === undefined ||
+    availableFeatures === undefined ||
+    !isInvitationTimeZone(owned.timeZone)
+  ) {
     return undefined;
   }
 
-  return { ...summary, content, missingRequiredFields: missing };
+  return {
+    ...summary,
+    content,
+    missingRequiredFields: missing,
+    timeZone: owned.timeZone,
+    featureSettings,
+    availableFeatures,
+  };
 }
 
 export function parseCreatorTemplate(value: unknown): CreatorTemplate | undefined {
@@ -360,6 +428,7 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVITATION_PACKAGE_NOT_FOUND: "package-not-found",
   INVITATION_PACKAGE_DOES_NOT_FIT: "package-does-not-fit",
   INVALID_INVITATION_CONTENT: "content-invalid",
+  INVALID_INVITATION_FEATURES: "features-invalid",
   INVITATION_NOT_EDITABLE: "not-editable",
   INVITATION_ALREADY_ARCHIVED: "already-archived",
   INVITATION_NOT_PUBLISHABLE: "not-publishable",
@@ -396,7 +465,8 @@ function issuesOf(body: unknown): string[] | undefined {
 
 /**
  * The refusal of a failure body: only a `code` from the fixed set is read, never the message. The body
- * of a 409 `INVITATION_NOT_PUBLISHABLE` also carries the readiness `issues` the page maps to Spanish.
+ * of a 409 `INVITATION_NOT_PUBLISHABLE` also carries the readiness `issues` the page maps to Spanish, and
+ * the body of a 400 `INVALID_INVITATION_FEATURES` carries the feature issues it does the same way.
  */
 function refusalOf(text: string | undefined): InvitationResult<never> | undefined {
   let body: unknown;
@@ -416,7 +486,8 @@ function refusalOf(text: string | undefined): InvitationResult<never> | undefine
     return undefined;
   }
 
-  const issues = failure === "not-publishable" ? issuesOf(body) : undefined;
+  const issues =
+    failure === "not-publishable" || failure === "features-invalid" ? issuesOf(body) : undefined;
   return { ok: false, failure, ...(issues === undefined ? {} : { issues }) };
 }
 
@@ -527,6 +598,15 @@ export function createInvitationsClient(
       content: Record<string, unknown>,
     ): Promise<InvitationResult<OwnedInvitation>> =>
       onDraft(id, "/content", (path) => call("PUT", path, { content }, parseOwnedInvitation)),
+    /**
+     * `PUT /invitations/:id/features`: the invitation's time zone and WhatsApp contact; called from a server
+     * action (F3; S3, S4). Both fields are always sent, because the API replaces the pair.
+     */
+    updateInvitationFeatures: (
+      id: string,
+      features: InvitationFeatureInput,
+    ): Promise<InvitationResult<OwnedInvitation>> =>
+      onDraft(id, "/features", (path) => call("PUT", path, features, parseOwnedInvitation)),
     /** `POST /invitations/:id/archive`: the draft becomes read-only and stays stored (S7, A3). */
     archive: (id: string): Promise<InvitationResult<InvitationSummary>> =>
       onDraft(id, "/archive", (path) => call("POST", path, undefined, parseInvitationSummary)),

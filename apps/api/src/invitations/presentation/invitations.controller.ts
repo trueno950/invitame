@@ -19,9 +19,14 @@ import {
   PublishInvitationUseCase,
   UnpublishInvitationUseCase,
   UpdateInvitationContentUseCase,
+  UpdateInvitationFeaturesUseCase,
 } from "../application/invitation.use-cases";
 // biome-ignore lint/style/useImportType: the global ValidationPipe reads these classes from emitted metadata.
-import { CreateInvitationDto, UpdateInvitationContentDto } from "./dto/invitation.dtos";
+import {
+  CreateInvitationDto,
+  UpdateInvitationContentDto,
+  UpdateInvitationFeaturesDto,
+} from "./dto/invitation.dtos";
 import {
   type InvitationSummaryResponse,
   mapInvitationError,
@@ -54,6 +59,8 @@ export class InvitationsController {
     @Inject(GetOwnInvitationUseCase) private readonly getOwn: GetOwnInvitationUseCase,
     @Inject(UpdateInvitationContentUseCase)
     private readonly updateContent: UpdateInvitationContentUseCase,
+    @Inject(UpdateInvitationFeaturesUseCase)
+    private readonly updateFeatures: UpdateInvitationFeaturesUseCase,
     @Inject(ArchiveInvitationUseCase) private readonly archiveInvitation: ArchiveInvitationUseCase,
     @Inject(PublishInvitationUseCase) private readonly publishInvitation: PublishInvitationUseCase,
     @Inject(UnpublishInvitationUseCase)
@@ -107,6 +114,31 @@ export class InvitationsController {
     try {
       return orOwnedInvitationNotFound(
         await this.updateContent.execute({ ownerId: userId, id, content: body.content }),
+      );
+    } catch (error) {
+      return mapInvitationError(error);
+    }
+  }
+
+  /**
+   * Replaces the feature data of a DRAFT or a PUBLISHED invitation (F1; S4): the time zone and the WhatsApp
+   * phone. Creator-owned and refused for an archived invitation exactly like a content save; `null` or an empty
+   * `whatsappPhone` clears the stored phone. `PUT` and not `PATCH`: the whole feature data is replaced.
+   */
+  @Put(":id/features")
+  async replaceFeatures(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Body() body: UpdateInvitationFeaturesDto,
+  ): Promise<OwnedInvitationResponse> {
+    try {
+      return orOwnedInvitationNotFound(
+        await this.updateFeatures.execute({
+          ownerId: userId,
+          id,
+          timeZone: body.timeZone,
+          whatsappPhone: body.whatsappPhone,
+        }),
       );
     } catch (error) {
       return mapInvitationError(error);

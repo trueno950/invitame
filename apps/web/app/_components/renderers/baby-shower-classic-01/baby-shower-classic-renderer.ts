@@ -1,11 +1,13 @@
 import { createElement, type ReactElement, useId } from "react";
-
+import { babyShowerEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
+import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
 import {
   parseBabyShowerClassicConfiguration,
   parseBabyShowerClassicContent,
 } from "../../../../lib/renderers/baby-shower-classic-01.ts";
 import { BABY_SHOWER_THEME } from "../../../../lib/renderers/baby-shower-themes.ts";
 import { formatLongDate } from "../../../../lib/renderers/invitation-fields.ts";
+import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { CelebrationMotif } from "../themed/celebration-motif.ts";
 import {
   BACKGROUND_LAYER,
@@ -30,6 +32,10 @@ export interface BabyShowerClassicRendererProps {
   readonly configuration: unknown;
   /** The invitation data that fits the version's schema; parsed here, so an invalid one throws. */
   readonly content: unknown;
+  /** The features the API gated for this invitation; absent when it has none, which renders nothing. */
+  readonly features?: InvitationFeatures;
+  /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
+  readonly calendarHref?: string;
 }
 
 const h = createElement;
@@ -63,6 +69,8 @@ function labelRow(
 export function BabyShowerClassicRenderer({
   configuration,
   content,
+  features,
+  calendarHref,
 }: BabyShowerClassicRendererProps): ReactElement {
   const { theme: themeKey } = parseBabyShowerClassicConfiguration(configuration);
   const data = parseBabyShowerClassicContent(content);
@@ -70,6 +78,16 @@ export function BabyShowerClassicRenderer({
   const idPrefix = useId();
   const headline = data.babyName ?? data.hosts;
   const photoAlt = `Foto de ${headline}`;
+
+  // After the details and before the photo: the information rows, then what a guest can act on (S4).
+  const featuresBlock =
+    features === undefined
+      ? null
+      : h(InvitationFeaturesBlock, {
+          features,
+          facts: babyShowerEventFacts(data),
+          ...(calendarHref === undefined ? {} : { calendarHref }),
+        });
 
   return h(
     "article",
@@ -163,6 +181,7 @@ export function BabyShowerClassicRenderer({
             ),
       ),
     ),
+    featuresBlock,
     data.mainPhoto === undefined
       ? null
       : h(

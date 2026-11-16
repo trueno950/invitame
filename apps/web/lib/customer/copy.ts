@@ -1,3 +1,4 @@
+import type { InvitationTimeZone } from "../invitation-features/time-zones.ts";
 import type { InvitationFailure } from "../server/invitations-api.ts";
 
 /**
@@ -262,6 +263,7 @@ export const INVITATION_NOTICE_CODES = [
   "archived",
   "published",
   "unpublished",
+  "features-saved",
 ] as const;
 export type InvitationNoticeCode = (typeof INVITATION_NOTICE_CODES)[number];
 
@@ -272,6 +274,7 @@ export const INVITATION_NOTICE_COPY: Record<InvitationNoticeCode, string> = {
   archived: "Listo, archivamos tu invitación.",
   published: "Listo, publicamos tu invitación.",
   unpublished: "Listo, tu invitación volvió a borrador.",
+  "features-saved": "Listo, guardamos las funcionalidades.",
 };
 
 /**
@@ -306,6 +309,7 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "content-invalid": "Revisa los datos: hay un campo que no cumple el formato de la plantilla.",
   "content-unavailable":
     "No pudimos comprobar la plantilla de esta invitación. Inténtalo de nuevo en unos minutos.",
+  "features-invalid": "Revisa las funcionalidades: hay un dato que no pudimos guardar.",
   unavailable: "No pudimos completar la acción. Inténtalo de nuevo en unos minutos.",
 };
 
@@ -320,6 +324,68 @@ export const PUBLISH_ISSUE_COPY = {
     "El paquete que elegiste ya no incluye lo que necesita esta plantilla. Elige otro paquete.",
   version: "La versión de la plantilla de esta invitación ya no está publicada.",
   other: "Hay un dato que no cumple lo que pide la plantilla. Revísalo y vuelve a intentarlo.",
+} as const;
+
+/**
+ * The «Funcionalidades» section of a draft (F3; S3, S4). The data lives per invitation, not per template: the
+ * creator picks the time zone every guest clock is read in, may add a WhatsApp contact, and sees the automatic
+ * features their package turns on. Only the WhatsApp field depends on the package; the time zone is always
+ * theirs to choose, and the calendar is always offered to a guest.
+ */
+export const FEATURE_COPY = {
+  sectionTitle: "Funcionalidades",
+  sectionHint:
+    "Estas funciones se guardan con la invitación, no con la plantilla: puedes cambiar de plantilla sin perderlas.",
+  timeZoneLabel: "Zona horaria",
+  timeZoneHint:
+    "La cuenta regresiva y el botón del calendario usan esta zona horaria. Elige la del lugar de la celebración.",
+  whatsappLabel: "Número de WhatsApp",
+  whatsappPlaceholder: "55 1234 5678",
+  whatsappHint:
+    "Escribe 10 dígitos o un número internacional que empiece con +. Lo verán tus invitados solo si tu paquete incluye WhatsApp.",
+  automaticHeading: "Lo que verán tus invitados",
+  automaticHint:
+    "Estas funciones se activan solas según el paquete que elegiste; no necesitas configurarlas.",
+  automaticCountdown: "Cuenta regresiva hasta el inicio",
+  automaticMap: "Mapa con enlaces a Google Maps y Waze",
+  automaticCalendar: "Botón para agregar al calendario",
+  automaticNone: "Tu paquete no incluye funciones automáticas por ahora.",
+  save: "Guardar funcionalidades",
+  archivedNote:
+    "Esta invitación está archivada: puedes consultar sus funcionalidades, pero ya no editarlas.",
+} as const;
+
+/**
+ * The Spanish label of each zone the creator may pick (S4). Each one names the place and keeps the IANA id in
+ * parentheses, because several zones serve neighboring cities and the id is what the invitation stores.
+ */
+export const INVITATION_TIME_ZONE_LABELS: Readonly<Record<InvitationTimeZone, string>> = {
+  "America/Mexico_City": "Ciudad de México y centro del país",
+  "America/Cancun": "Cancún y Quintana Roo",
+  "America/Mazatlan": "Mazatlán, Sinaloa y Nayarit",
+  "America/Hermosillo": "Hermosillo, Sonora",
+  "America/Chihuahua": "Chihuahua",
+  "America/Tijuana": "Tijuana y Baja California",
+  "America/Matamoros": "Matamoros, Tamaulipas",
+  "America/Monterrey": "Monterrey",
+  "America/Merida": "Mérida",
+  "America/Ojinaga": "Ojinaga",
+  "America/Bahia_Banderas": "Bahía de Banderas",
+};
+
+/**
+ * Why the API refused a feature save, in Spanish (F3; S4). The API answers deterministic English issues such as
+ * `timeZone must be one of the supported time zones`; the action maps each one to a code in its own query and
+ * these sentences turn it back, so no English text ever reaches the customer. An issue this module does not
+ * recognize is `other`.
+ */
+export const FEATURE_ISSUE_COPY = {
+  timezone: "Elige una zona horaria de la lista.",
+  phone:
+    "Escribe un número de 10 dígitos o un número internacional que empiece con + y tenga entre 8 y 15 dígitos.",
+  "phone-type": "El número de WhatsApp no tiene un formato válido.",
+  other:
+    "Hay un dato de las funcionalidades que no pudimos guardar. Revísalo y vuelve a intentarlo.",
 } as const;
 
 /**

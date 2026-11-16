@@ -317,6 +317,48 @@ and `TemplateVersion`.
   without a sample, an unregistered key) only loses its miniature. `samples.test.ts` proves the birthday sample
   passes every registered renderer's own props parser, for every theme.
 
+## Guest invitation features
+
+Status: **current** (F2, F3; S3, S4). The API decides which features an invitation shows: the pinned package's
+feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, and `WHATSAPP`, plus add-to-calendar,
+which is always on and is not a catalog feature; WhatsApp also needs a stored phone. The web renders one themed
+**features block** in every layout and never reads a package or a feature name to choose a code path.
+
+- Placement and shape: each layout (`birthday-map-01`, `birthday-poster-01`, `birthday-story-01`,
+  `baby-shower-classic-01`, `baptism-classic-01`) places `InvitationFeaturesBlock`
+  (`app/_components/invitation-features/`) after its own details, before its closing message. One block serves the
+  five designs, so every invitation behaves the same. With no feature data the renderer receives no `features`
+  prop and renders exactly the markup it rendered before the block existed.
+- Theme: the block carries no palette. Every color comes from the CSS variables the layout already sets on its
+  root (`--inv-surface`, `--inv-soft`, `--inv-ink`, `--inv-accent`, `--inv-on-accent`) and the display font from
+  `--inv-display`, so the block looks native in each of the eight birthday themes, the eight baby shower themes,
+  and the six baptism themes. Counters sit on the softer surface, the cards on `surface`, and every action is a
+  44 px pill on `accent` with `on-accent` as its text color, which is the pair a themed palette pins at 4.5:1.
+- Countdown: days, hours, and minutes to the event start, computed in the invitation's IANA zone
+  (`lib/invitation-features/start-instant.ts`, `countdown.ts`). It is rendered on the server at request time, so it
+  reads without JavaScript, and `CountdownIsland` is the block's only client component: it ticks once a minute,
+  says «¡Hoy es el día!» on the event's day, «¡Es hoy!» from the start for the four hours the calendar event lasts,
+  and «La celebración ya pasó» after that, and has no animation, so reduced motion needs no special case.
+- Map: «Cómo llegar» per place, with two buttons to Google Maps and Waze. The links come from the layout's own
+  address fields (`lib/invitation-features/map-links.ts`): no embedded map, no API key, and a baptism shows its
+  ceremony and its reception.
+- Calendar: a Google Calendar link and a `.ics` download
+  (`/i/<slug>/calendario.ics`, `lib/invitation-features/calendar.ts`) for a four-hour event at the start time in
+  the invitation's zone. The file follows RFC 5545 literally — UTC timestamps, escaped text, lines folded at 75
+  octets, CRLF, and a slug-based UID so a re-download updates the same event — and its route answers
+  `text/calendar; charset=utf-8`, `attachment; filename="invitacion.ics"`, and `Cache-Control: no-store`.
+- WhatsApp: one button to `wa.me/<digits>` with a neutral prefilled Spanish greeting that names the celebration.
+  The number is the creator's stored E.164 contact; it is never logged, and a phone stored without the WhatsApp
+  package key is never shown.
+- Degradation: an unsupported zone turns off only the countdown and the calendar (the two features that read a
+  wall clock); a snapshot whose facts cannot be read turns off the whole block. Neither is a guest-visible error.
+- Creator side: the draft page (`/cuenta/invitaciones/[id]`) has a «Funcionalidades» section after the content
+  form. It offers the time zone select with Spanish place labels only («Ciudad de México y centro del país»,
+  «Cancún y Quintana Roo», ...), shows the WhatsApp field only while the pinned package
+  includes WhatsApp (and carries a stored number in a hidden field otherwise, so saving the zone never clears it),
+  lists the automatic features the guests will see, and saves through a server action that mirrors the content
+  form's notice/error redirects. An archived invitation shows the section read-only.
+
 ## Customer workspace
 
 Status: **current** (M4 T8; S11, S12). The owner tried the invitation pages and found the same problem as in the

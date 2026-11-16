@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { InvitationSlugTakenError } from "../application/invitation.application.errors";
 import type {
+  InvitationFeatureSettingsWrite,
   InvitationRecord,
   InvitationRepository,
   NewInvitation,
@@ -22,11 +23,14 @@ const INVITATION_SELECT = {
   slug: true,
   status: true,
   content: true,
+  timeZone: true,
   archivedAt: true,
   publishedAt: true,
   expiresAt: true,
   createdAt: true,
   updatedAt: true,
+  // The one-to-one feature data travels with the row, so an owned or public read stays one query (S4).
+  featureSettings: { select: { whatsappPhone: true } },
 } satisfies Prisma.InvitationSelect;
 
 type InvitationRow = Prisma.InvitationGetPayload<{ select: typeof INVITATION_SELECT }>;
@@ -38,10 +42,23 @@ function isJsonObject(value: unknown): value is JsonObject {
 
 function toRecord(row: InvitationRow): InvitationRecord {
   return {
-    ...row,
+    id: row.id,
+    ownerId: row.ownerId,
+    templateVersionId: row.templateVersionId,
+    packageId: row.packageId,
+    slug: row.slug,
+    status: row.status,
     // The column is NOT NULL and carries the `Invitation_content_object` check, so this fallback is
     // unreachable; it keeps the port's "content is an object" contract true without a cast.
     content: isJsonObject(row.content) ? row.content : {},
+    timeZone: row.timeZone,
+    // No settings row yet means no feature data: the phone is null, never an empty string.
+    whatsappPhone: row.featureSettings?.whatsappPhone ?? null,
+    archivedAt: row.archivedAt,
+    publishedAt: row.publishedAt,
+    expiresAt: row.expiresAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -131,6 +148,50 @@ export class PrismaInvitationRepository implements InvitationRepository {
         // The row stopped being editable after the read: the only other status is ARCHIVED.
         throw new InvitationNotEditableError("ARCHIVED");
       }
+
+      return toRecord(
+        await tx.invitation.findUniqueOrThrow({ where: { id }, select: INVITATION_SELECT }),
+      );
+    });
+  }
+
+  /**
+   * Stores the feature data of a DRAFT or a PUBLISHED invitation in one transaction: the zone on the invitation
+   * and the phone in its one-to-one settings row, which is created on first write and never deleted. The write's
+   * `WHERE` names the owner and both editable statuses, so an archived invitation is refused even by a concurrent
+   * archive (S4, A2), and another owner's id matches nothing (A4).
+   */
+  async updateFeatures(
+    ownerId: string,
+    id: string,
+    features: InvitationFeatureSettingsWrite,
+  ): Promise<InvitationRecord | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const stored = await tx.invitation.findFirst({
+        where: { id, ownerId },
+        select: INVITATION_SELECT,
+      });
+      if (stored === null) {
+        return null;
+      }
+      // State the rule now so the caller gets the real reason, and again inside the write below.
+      assertEditable(toRecord(stored).status);
+
+      const changed = await tx.invitation.updateMany({
+        where: { id, ownerId, status: { in: ["DRAFT", "PUBLISHED"] } },
+        data: { timeZone: features.timeZone },
+      });
+      if (changed.count !== 1) {
+        // The row stopped being editable after the read: the only other status is ARCHIVED.
+        throw new InvitationNotEditableError("ARCHIVED");
+      }
+
+      // One row per invitation at most, created on the first write; clearing the phone writes NULL and keeps it.
+      await tx.invitationFeatureSettings.upsert({
+        where: { invitationId: id },
+        create: { invitationId: id, whatsappPhone: features.whatsappPhone },
+        update: { whatsappPhone: features.whatsappPhone },
+      });
 
       return toRecord(
         await tx.invitation.findUniqueOrThrow({ where: { id }, select: INVITATION_SELECT }),

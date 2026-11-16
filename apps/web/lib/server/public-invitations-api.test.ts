@@ -33,6 +33,13 @@ const PUBLIC: PublicInvitation = {
     message: "Ven a celebrar conmigo.",
   },
   publishedAt: AT,
+  timeZone: "America/Mexico_City",
+  features: {
+    countdown: true,
+    map: true,
+    calendar: true,
+    whatsapp: { phone: "+525512345678" },
+  },
 };
 
 interface Received {
@@ -205,5 +212,40 @@ describe("parsePublicInvitation", () => {
     for (const value of broken) {
       assert.equal(parsePublicInvitation(value), undefined, JSON.stringify(value));
     }
+  });
+
+  it("reads the stored zone and the gated features, and refuses any other shape (S4)", () => {
+    const broken: unknown[] = [
+      { ...PUBLIC, timeZone: undefined },
+      { ...PUBLIC, timeZone: "Europe/Madrid" },
+      { ...PUBLIC, timeZone: 7 },
+      { ...PUBLIC, features: undefined },
+      { ...PUBLIC, features: null },
+      { ...PUBLIC, features: { ...PUBLIC.features, countdown: "yes" } },
+      { ...PUBLIC, features: { ...PUBLIC.features, map: 1 } },
+      // Add-to-calendar is always available to a guest, so anything but `true` is not this contract.
+      { ...PUBLIC, features: { ...PUBLIC.features, calendar: false } },
+      { ...PUBLIC, features: { ...PUBLIC.features, calendar: "true" } },
+      { ...PUBLIC, features: { ...PUBLIC.features, whatsapp: undefined } },
+      { ...PUBLIC, features: { ...PUBLIC.features, whatsapp: {} } },
+      { ...PUBLIC, features: { ...PUBLIC.features, whatsapp: "+525512345678" } },
+      // A stored phone is E.164: a national number is not one a guest page reads.
+      { ...PUBLIC, features: { ...PUBLIC.features, whatsapp: { phone: "5512345678" } } },
+      { ...PUBLIC, features: { ...PUBLIC.features, whatsapp: { phone: 7 } } },
+    ];
+
+    for (const value of broken) {
+      assert.equal(parsePublicInvitation(value), undefined, JSON.stringify(value));
+    }
+    assert.deepEqual(
+      parsePublicInvitation({
+        ...PUBLIC,
+        features: { countdown: false, map: false, calendar: true, whatsapp: null },
+      }),
+      {
+        ...PUBLIC,
+        features: { countdown: false, map: false, calendar: true, whatsapp: null },
+      },
+    );
   });
 });

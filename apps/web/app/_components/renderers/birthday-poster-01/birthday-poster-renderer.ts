@@ -1,5 +1,6 @@
 import { createElement, type ReactElement, useId } from "react";
-
+import { birthdayPosterEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
+import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
 import {
   formatAgeLabel,
   formatAgeUnit,
@@ -10,6 +11,7 @@ import {
   parseBirthdayPosterContent,
 } from "../../../../lib/renderers/birthday-poster-01.ts";
 import { BIRTHDAY_THEME } from "../../../../lib/renderers/birthday-themes.ts";
+import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { Motif } from "../birthday/motif.ts";
 import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthday/theme.ts";
 
@@ -26,6 +28,10 @@ export interface BirthdayPosterRendererProps {
   readonly configuration: unknown;
   /** The invitation data that fits the version's schema; parsed here, so an invalid one throws. */
   readonly content: unknown;
+  /** The features the API gated for this invitation; absent when it has none, which renders nothing. */
+  readonly features?: InvitationFeatures;
+  /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
+  readonly calendarHref?: string;
 }
 
 const h = createElement;
@@ -43,11 +49,23 @@ const TICKET_NOTCHES = ["-top-2", "-bottom-2"] as const;
 export function BirthdayPosterRenderer({
   configuration,
   content,
+  features,
+  calendarHref,
 }: BirthdayPosterRendererProps): ReactElement {
   const { theme: themeKey } = parseBirthdayPosterConfiguration(configuration);
   const data = parseBirthdayPosterContent(content);
   const theme = BIRTHDAY_THEME[themeKey];
   const idPrefix = useId();
+
+  // After the admission ticket and before the message: the details, then what a guest can act on (S4).
+  const featuresBlock =
+    features === undefined
+      ? null
+      : h(InvitationFeaturesBlock, {
+          features,
+          facts: birthdayPosterEventFacts(data),
+          ...(calendarHref === undefined ? {} : { calendarHref }),
+        });
 
   return h(
     "article",
@@ -228,6 +246,7 @@ export function BirthdayPosterRenderer({
           ),
         ),
       ),
+      featuresBlock,
       h(
         "section",
         { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },

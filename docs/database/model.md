@@ -7,7 +7,9 @@ migrations: `20261109120000_add_template_version_publication_rules` and `2026110
 Milestone 4 adds the additive `20261111214752_add_invitations` migration, which creates the `Invitation` table.
 Milestone 5 adds the additive `20261112040547_add_invitation_publication` migration, which appends `PUBLISHED` to
 `InvitationStatus`, adds the nullable `publishedAt` and `expiresAt` columns, and adds the publication check; it
-rewrites no row and deletes nothing. Future payment, media, guest, RSVP, and analytics design is documented
+rewrites no row and deletes nothing. The invitation-features batch (F1) adds the additive
+`20261113164740_add_invitation_features` migration: the `Invitation.timeZone` column and the one-to-one
+`InvitationFeatureSettings` table. Future payment, media, guest, RSVP, and analytics design is documented
 separately in [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -25,7 +27,8 @@ separately in [`future-model.md`](future-model.md); that document does not add t
 | `PackagePrice` | Append-only price history of a package: integer `amountMinor` in the smallest currency unit plus an ISO `currency`; the row with no `retiredAt` is the current price |
 | `Template` | Mutable template master metadata and category relation |
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
-| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the unused-nullable expiry `expiresAt`, JSONB `content`, and the archive marker |
+| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the unused-nullable expiry `expiresAt`, JSONB `content`, the archive marker, and the IANA `timeZone` |
+| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`) and timestamps |
 
 ## Invariants
 
@@ -77,8 +80,37 @@ separately in [`future-model.md`](future-model.md); that document does not add t
   draft row reads `NULL`.
 - The public read by slug needs no extra index: `Invitation_slug_key` is already unique, so `WHERE slug = $1` reads at
   most one row through it and the status is filtered on that row. No partial index on published rows is added.
-- The columns the application may update are `status`, `content`, `publishedAt`, `archivedAt`, and `updatedAt`;
-  publish and unpublish write `publishedAt`, nothing writes `expiresAt`, and the pinned fields can never change.
+- The columns the application may update are `status`, `content`, `publishedAt`, `archivedAt`, `timeZone`, and
+  `updatedAt`; publish and unpublish write `publishedAt`, nothing writes `expiresAt`, and the pinned fields can never
+  change.
+
+## Invitation feature data
+
+Current status: the `Invitation.timeZone` column and the `InvitationFeatureSettings` table exist and the API reads
+and writes them (F1, S3, S4). The conditional shape of the feature rules — the zone allow-list, the phone
+normalization, and the gating — lives in `apps/api/src/invitations/domain/invitation-features.ts`.
+
+- `Invitation.timeZone` is `VARCHAR(64) NOT NULL DEFAULT 'America/Mexico_City'`. Every row that existed before the
+  migration reads the default, so the migration needs no backfill and rewrites nothing. The allow-list (the eleven
+  Mexico zones S4 names) is the API's, exactly as the allowed currencies are; the database checks only that the value
+  is zone-shaped, through `Invitation_timeZone_format` (`^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)+$`).
+- `InvitationFeatureSettings.invitationId` is both the primary key and the foreign key, so an invitation has at most
+  one settings row. The reference is `ON DELETE RESTRICT`, like the invitation's own three references, because an
+  invitation is never hard-deleted here — archiving is its only terminal lifecycle write. Deleting an invitation that
+  still carries feature settings is refused; recovery and test cleanup remove the settings row first.
+- `InvitationFeatureSettings.whatsappPhone` is `VARCHAR(16)` and nullable: `NULL` means no phone stored, and
+  `InvitationFeatureSettings_whatsappPhone_format` (`^\+[1-9][0-9]{7,14}$`) accepts only E.164. The domain normalizes
+  a Mexican ten-digit number to `+52` and an international `+` number as typed, so a stored value always satisfies
+  the check. The phone is never logged.
+- The feature data belongs to the invitation, not to its template: the template version stays pinned and changing the
+  template never touches these rows. A stored phone is kept even when the pinned package does not include
+  `WHATSAPP`; the gate, not the write, decides whether a guest sees the WhatsApp button, so an upgrade later does not
+  require the number again.
+- Rollback / recovery of `20261113164740_add_invitation_features`: the change is additive, so recovery is either
+  redeploying the previous migration set or dropping the two objects by hand —
+  `DROP TABLE "InvitationFeatureSettings";` then `ALTER TABLE "Invitation" DROP COLUMN "timeZone";`. Either way only
+  feature data is lost; invitations, their content, and their lifecycle state are untouched. Never edit the applied
+  migration file.
 
 ## Identity tables
 

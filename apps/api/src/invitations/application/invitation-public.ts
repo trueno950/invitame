@@ -1,4 +1,5 @@
 import type { JsonObject } from "../domain/invitation-content";
+import type { PublicInvitationFeatures } from "../domain/invitation-features";
 
 // The public projection of a published invitation (M5 T3; S2, S3, A7). A guest page receives exactly the
 // allow-listed renderer identity, its configuration, the content keys the pinned schema declares, the slug, and
@@ -19,6 +20,14 @@ export interface PublicInvitation {
    * date for this published row; it stays nullable here so the type never claims a value the read did not see.
    */
   publishedAt: Date | null;
+  /** The IANA zone the guest's countdown and calendar links use (F1; S4). */
+  timeZone: string;
+  /**
+   * The gated features the guest page renders (F1; S4): the pinned package's keys intersected with the API's
+   * implemented allow-list plus the always-available calendar, with WhatsApp only while a phone is stored.
+   * Nothing about the package itself — its keys, id, or name — is here.
+   */
+  features: PublicInvitationFeatures;
 }
 
 /** A JSON object read from a `Json` column; arrays, null, and primitives are not objects. */

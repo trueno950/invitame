@@ -11,6 +11,16 @@ export interface InvitationRecord {
   slug: string;
   status: InvitationStatus;
   content: JsonObject;
+  /**
+   * The IANA zone the guest's countdown and calendar use (F1; S4). The column is NOT NULL with a default, so
+   * every stored invitation has one; the allow-list is the domain's, not the column's.
+   */
+  timeZone: string;
+  /**
+   * The stored WhatsApp phone in E.164, or null when the invitation has none (F1; S4). It travels flattened from
+   * the one-to-one `InvitationFeatureSettings` row, so a caller never needs a second read.
+   */
+  whatsappPhone: string | null;
   archivedAt: Date | null;
   /**
    * When the invitation was published; the database `Invitation_publishedAt_matches_status` check keeps it
@@ -24,6 +34,15 @@ export interface InvitationRecord {
   expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * The feature data one write stores (F1; S4): an allow-listed zone and an E.164 phone or null. The application
+ * validates both before the port is asked; the port only persists them.
+ */
+export interface InvitationFeatureSettingsWrite {
+  timeZone: string;
+  whatsappPhone: string | null;
 }
 
 /** A new DRAFT: the owner from the session, the pinned snapshot, the chosen package, and a generated slug. */
@@ -64,6 +83,18 @@ export interface InvitationRepository {
    * no longer editable; null, changing nothing, when no row has this id or another owner has it (A4).
    */
   updateContent(ownerId: string, id: string, content: JsonObject): Promise<InvitationRecord | null>;
+
+  /**
+   * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone in
+   * its one-to-one settings row — in one transaction whose `WHERE` names the owner and both editable statuses,
+   * so a published invitation changes live (S7), an archived one is refused with `InvitationNotEditableError`
+   * even by a concurrent archive (A2), and another owner's id answers null, changing nothing (A4).
+   */
+  updateFeatures(
+    ownerId: string,
+    id: string,
+    features: InvitationFeatureSettingsWrite,
+  ): Promise<InvitationRecord | null>;
 
   /**
    * Sets `status` to ARCHIVED and `archivedAt` to the same instant in one statement, scoped by owner and by the
