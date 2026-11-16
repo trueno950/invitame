@@ -62,7 +62,7 @@ line.
 | E3a | API: three arch renderers, elegant theme allow-list, XV and wedding schemas, seed of 24 templates, tests | S3, S4 | worker | `8335256` |
 | E3b | Web: Bodoni Moda and Italiana fonts | S4 | worker | `16da3cd` |
 | E3c | Web: elegant themes, arch layout for three occasions, ornaments, parsers, registry, event facts, samples, form fields, page title, tests, browser check | S3, S4 | worker | |
-| E4a | API: three ornamental renderers reusing the elegant themes and schemas, 24 templates, tests | S5 | worker, after E3a | |
+| E4a | API: three ornamental renderers reusing the elegant themes and schemas, 24 templates, tests | S5 | worker, after E3a | `b839c7b` |
 | E4b | Web: ornamental layout for three occasions (double-rule card, laurel monogram, foil accents, script name, cameo photo), registry, chooser, tests, browser check | S5 | worker, after E3c | |
 | E3d | Integration of both elegant layouts: full checks, seed the dev database, browser review, docs, canvas handoffs | S3-S5 | inline | |
 
@@ -92,3 +92,8 @@ line.
   templates in `quinceanera`, `wedding`, and `baptism`. API: 1219/1219 unit tests and 309/309 db-specs pass; tsc,
   docs, and Biome pass. Open: `hashtag` has only a 60-character bound. E4a launched now that the API registry and
   seed have landed.
+- L7 — E4a done in `b839c7b` (worker `mwiruvha-10-c1gf`). It adds `xv-ornamental-01`, `wedding-ornamental-01`, and
+  `baptism-ornamental-01`, which import their arch siblings' content fields; a sibling-equality test guards against
+  schema drift. The seed adds 24 «Ornamental ·» templates through a shared elegant builder; a differential run shows
+  the arch seeds are identical. API: 1246/1246 unit tests and 310/310 db-specs pass; tsc, docs, and Biome pass. The
+  web registry-sync test fails until E4b registers the keys.
