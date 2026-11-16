@@ -63,8 +63,8 @@ line.
 | E3b | Web: Bodoni Moda and Italiana fonts | S4 | worker | `16da3cd` |
 | E3c | Web: elegant themes, arch layout for three occasions, ornaments, parsers, registry, event facts, samples, form fields, page title, tests, browser check | S3, S4 | worker | `e74b975` |
 | E4a | API: three ornamental renderers reusing the elegant themes and schemas, 24 templates, tests | S5 | worker, after E3a | `b839c7b` |
-| E4b | Web: ornamental layout for three occasions (double-rule card, laurel monogram, foil accents, script name, cameo photo), registry, chooser, tests, browser check | S5 | worker, after E3c | |
-| E3d | Integration of both elegant layouts: full checks, seed the dev database, browser review, docs, canvas handoffs | S3-S5 | inline | |
+| E4b | Web: ornamental layout for three occasions (double-rule card, laurel monogram, foil accents, script name, cameo photo), registry, chooser, tests, browser check | S5 | worker, after E3c | `3ba539b` |
+| E3d | Integration of both elegant layouts: full checks, seed the dev database, browser review, docs, canvas handoffs | S3-S5 | inline | `3ba539b` |
 
 ## Log
 
@@ -105,3 +105,11 @@ line.
   registry-sync, which expects the API's three ornamental keys until E4b lands. tsc and Biome pass. Browser: 33
   cases at 390 and 1280 px with 0 defects. The parent added the docs paragraph. Known: the formal baptism sample
   photo is the themed illustration. E4b launched.
+- L9 — E4b done in `3ba539b` (worker `mwisjbf8-11-pzdx`). It adds the shared ornamental layout and three thin
+  renderers over the arch siblings' parsers (a differential found 0 differences in 52 comparisons), plus original
+  laurel, sprig, and foil art, registry, props checks, event facts, chooser groups, and `ORNAMENTAL_NAME_FONT`
+  (Great Vibes). Browser: 33 cases with 0 defects; minimum contrast 5.31:1. E3d (parent): docs section «Elegant
+  layouts» rewritten; dev database seeded with 8 PUBLISHED versions for each of the six elegant keys. Checks: web
+  1178/1178, API 1246/1246, both typechecks, docs. Canvas handoffs `03-arco-y-foto.html` and `02-ornamental.html`
+  reported implemented. Known: the formal baptism sample photo is the themed illustration; `hashtag` has only a
+  60-character bound.
