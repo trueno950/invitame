@@ -70,9 +70,9 @@ The invitation display fonts are not utilities, because the face depends on the 
 (`--font-cinzel-decorative`, `--font-luckiest-guy`, `--font-bangers`, `--font-chewy`, `--font-lilita-one`,
 `--font-pacifico`, `--font-press-start-2p`, `--font-baloo-2`, `--font-quicksand`, `--font-fredoka`,
 `--font-playfair-display`, `--font-josefin-sans`, `--font-fraunces`, `--font-caveat`, `--font-nunito`,
-`--font-lora`, and the already-loaded `--font-great-vibes`) and the renderer points `--inv-display` at the one
-its theme names. All sixteen are declared with `preload: false`, because a guest page renders one theme and
-must not download sixteen faces. They are used for names and titles only; body text stays Jost 400/500, so no
+`--font-lora`, `--font-bodoni-moda`, `--font-italiana`, and the already-loaded `--font-great-vibes`) and the renderer
+points `--inv-display` at the one its theme names. All eighteen are declared with `preload: false`, because a guest
+page renders one theme and must not download eighteen faces. They are used for names and titles only; body text stays Jost 400/500, so no
 Jost 600/700 file was added and emphasis inside a layout uses Jost 500 (the variable file does draw 100–900, so
 a real bold is a deliberate, documented change later, never a silent one).
 
@@ -107,15 +107,23 @@ for it, copied byte for byte: `OFL.txt` for the SIL Open Font License 1.1 famili
 | `caveat/` | `caveat-latin-normal.woff2` | `700` | `OFL.txt` |
 | `nunito/` | `nunito-latin-normal.woff2` | `700` | `OFL.txt` |
 | `lora/` | `lora-latin-normal.woff2` | `700` | `OFL.txt` |
+| `bodoni-moda/` | `bodoni-moda-latin-normal.woff2` | `500` | `OFL.txt` |
+| `italiana/` | `italiana-latin-normal.woff2` | `400` | `OFL.txt` |
 
-The last nine rows are the display faces of the baby shower and themed baptism boards in
+The nine rows from `baloo-2/` to `lora/` are the display faces of the baby shower and themed baptism boards in
 `design/celebration-themes/` (T7b; S13): Baloo 2, Quicksand, Fredoka, Playfair Display, Josefin Sans, Fraunces,
 Caveat, Nunito, and Lora. All nine families ship the SIL Open Font License 1.1 (`ofl/<family>/OFL.txt`). Their
 fallbacks are the board's stacks, so the serif faces (Playfair Display, Fraunces, Lora) pair with Times New Roman
 and the rest with Arial.
 
+The last two rows are the elegant line's title faces from the theme board in `design/elegant-line/` (E3b; S4):
+Bodoni Moda at 500 and Italiana at its only weight, 400. Both ship the SIL Open Font License 1.1
+(`ofl/bodonimoda/OFL.txt` and `ofl/italiana/OFL.txt`), both are serif display faces, so both use the Times New
+Roman fallback.
+
 The fallback faces keep the fonts `next/font/google` used: `adjustFontFallback: "Times New Roman"` for Cormorant
-Garamond, Cinzel Decorative, Playfair Display, Fraunces, and Lora, and `"Arial"` for the other families.
+Garamond, Cinzel Decorative, Playfair Display, Fraunces, Lora, Bodoni Moda, and Italiana, and `"Arial"` for the
+other families.
 `next/font/local` computes the fallback metrics
 from the files, so the ascent and descent match the old ones and `size-adjust` differs by up to about five points
 (Great Vibes); it affects only the fallback shown before a font loads. `apps/web/app/fonts/.gitattributes` marks the
@@ -137,8 +145,8 @@ To add or update a font, a weight, or a style:
 4. Run `pnpm --filter @invitame/web test` and `pnpm build`, and compare the pages before and after.
 
 A theme display font is a title face only: one file, the single weight suited to display titles (`600` or `700` for
-the nine faces added by T7b), `preload: false`, and the theme board's fallback stack behind it where the theme
-declaration points `--inv-display`.
+the nine faces added by T7b, `500` for Bodoni Moda and `400` for Italiana in E3b), `preload: false`, and the theme
+declaration points `--inv-display` at it with the theme board's fallback stack behind that variable.
 
 ## Ornaments
 
