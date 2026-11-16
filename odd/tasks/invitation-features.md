@@ -52,6 +52,25 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
   pasó»; (2) «¿Los dejo así o los cambio?» about «Todo lo que necesitas» and the WhatsApp greeting — kept as they
   are; (3) «¿Lo quito y dejo solo el nombre del lugar?» — the time zone labels drop the IANA id.
 
+- S6 — Owner (L9), verbatim: "si dale, tienes mi autorizacion de hacer merge y autorizo cada revison no te detengas
+  hasta el final para la revision visual", answering «¿Empezamos con el punto 1 (música y mesa de regalos) o
+  prefieres ir directo a confirmación de asistencia?» after the proposed order: 1) music and gift registry, 2) RSVP,
+  guest list, and QR pass (Milestone 6), 3) photo upload and gallery (Milestone 8), 4) payments (Milestone 7).
+- S7 — Batch 2 contract, decided by the parent within S6 (L9; the owner may overturn):
+  - **Music.** Additive migration: `InvitationFeatureSettings.playlistUrl` (nullable). Accept only `https` links on an
+    allow-listed host — `open.spotify.com`, `music.apple.com`, `music.youtube.com`, `www.youtube.com`, `youtube.com`,
+    `youtu.be`, `www.deezer.com`, `deezer.com`, `soundcloud.com` — at most 500 characters; store it normalized; empty or
+    null clears it. Gating adds `MUSIC` to the implemented allow-list: the guest page shows it only when the package
+    includes MUSIC and a link is stored. The public read gains `features.music: { url, provider } | null`
+    (provider is the allow-listed service key). The features block shows «Escucha nuestra playlist» with a button
+    naming the service; no embedded player, no third-party script. The creator «Funcionalidades» section gains the
+    link field when the package includes MUSIC.
+  - **Gift registry.** The `giftRegistry` content field stays where layouts already declare it. Gating adds
+    `GIFT_REGISTRY` to the implemented allow-list; the public read gains `features.giftRegistry: boolean`, and layouts
+    render their gift registry block only when it is true and the content has a value. The creator form keeps the
+    field and notes «Se muestra con el paquete Deluxe» (or the package names that include it) when the package lacks
+    it. Birthday layouts keep no gift registry.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -60,6 +79,8 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
 | F2 | Web: event facts per layout, features block, countdown island, map/WhatsApp/calendar links, ICS builder, placement in the five layouts | S3, S4 | worker | `d350dd0` |
 | F3 | Web: public page wiring, `.ics` route, creator «Funcionalidades» section, API client, browser check | S3, S4 | worker | `aa246d4` |
 | F5 | Countdown «¡Es hoy!» during the event; zone labels without IANA ids; keep the provisional copy | S5 | inline | `c779bcd` |
+| F6 | Music: migration, playlist link validation, gating, public read, features block button, creator field | S6, S7 | worker | |
+| F7 | Gift registry gating: public read flag, layouts render only when gated, creator note | S6, S7 | worker | |
 | F4 | Independent verification of the migration and the gating | S4 | verify | `617c2b5` |
 
 ## Log
@@ -111,3 +132,8 @@ package includes: map links, a live countdown, WhatsApp, and add-to-calendar, wi
   A new status `live` covers the start through the four-hour `CALENDAR_EVENT_HOURS`. Labels are now only the place
   name. Web: 884/884 tests; tsc, docs, and Biome pass. Not checked in a browser: the change is copy and status logic
   pinned by markup tests.
+- L9 — Owner chose to continue with the remaining features in the proposed order and authorized merging and every
+  review, asking not to stop until the final visual review (S6). The parent fixed the batch-2 contract S7 and opened
+  `feat/invitation-features-2` from `feat/elegant-line`. Merge plan: open one PR per stacked branch
+  (`feat/catalog-designs`, `feat/invitation-features`, `feat/theme-illustrations`, `feat/elegant-line`) into `master`
+  in order, and merge each after its CI passes. Full local gates are running first.
