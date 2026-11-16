@@ -59,7 +59,7 @@ line.
 | --- | --- | --- | --- | --- |
 | E1 | Elegant directions under `design/elegant-line/`: three layout directions and a theme board, plus «Datos que pide esta ocasión» for XV años and weddings | S1-S3 | worker | |
 | E2 | Owner picks layouts, themes, and content fields | S3, S4 | owner | L3 |
-| E3a | API: three arch renderers, elegant theme allow-list, XV and wedding schemas, seed of 24 templates, tests | S3, S4 | worker | |
+| E3a | API: three arch renderers, elegant theme allow-list, XV and wedding schemas, seed of 24 templates, tests | S3, S4 | worker | `8335256` |
 | E3b | Web: Bodoni Moda and Italiana fonts | S4 | worker | `16da3cd` |
 | E3c | Web: elegant themes, arch layout for three occasions, ornaments, parsers, registry, event facts, samples, form fields, page title, tests, browser check | S3, S4 | worker | |
 | E4a | API: three ornamental renderers reusing the elegant themes and schemas, 24 templates, tests | S5 | worker, after E3a | |
@@ -86,3 +86,9 @@ line.
 - L5 — E3b done in `16da3cd` (worker `mwirfays-y-pv6o`): Bodoni Moda 500 and Italiana 400, latin woff2, OFL 1.1 copied
   byte-for-byte from google/fonts, `preload: false`, `--font-bodoni-moda` and `--font-italiana`. The fonts test went
   RED (2 failures) and then GREEN. Web: 1030/1030 tests; tsc, docs, and Biome pass.
+- L6 — E3a done in `8335256` (worker `mwirfasw-x-nnl3`). It adds `ELEGANT_THEMES` (8 keys), `xv-arch-01`
+  (13 required and 3 optional fields), `wedding-arch-01` (12 required and 6 optional), and `baptism-arch-01`, which
+  imports `BAPTISM_CONTENT_FIELDS` so it cannot drift from the themed baptism. The seed adds 24 «Arco y foto ·»
+  templates in `quinceanera`, `wedding`, and `baptism`. API: 1219/1219 unit tests and 309/309 db-specs pass; tsc,
+  docs, and Biome pass. Open: `hashtag` has only a 60-character bound. E4a launched now that the API registry and
+  seed have landed.
