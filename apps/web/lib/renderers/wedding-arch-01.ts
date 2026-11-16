@@ -11,6 +11,9 @@ import { parseThemedConfiguration } from "./theme-tokens.ts";
  * The content the owner approved (S4): twelve required fields and six optional ones. A family or a list of
  * sponsors is a bounded text — one name per line — and an optional field that is empty renders nothing at
  * all, so a wedding that announces no family shows no family card.
+ *
+ * The content parser is the one the ornamented layout of the same occasion reads too (E4b; S5): the
+ * `componentKey` it names in a refusal defaults to this layout, and the ornamental sibling passes its own.
  */
 export const WEDDING_ARCH_COMPONENT_KEY = "wedding-arch-01";
 
@@ -56,8 +59,11 @@ export interface WeddingArchContent {
 }
 
 /** The typed content of a stored version, or a `RendererPropsError` naming every defect. */
-export function parseWeddingArchContent(value: unknown): WeddingArchContent {
-  const reader = contentReader(WEDDING_ARCH_COMPONENT_KEY, value);
+export function parseWeddingArchContent(
+  value: unknown,
+  componentKey: string = WEDDING_ARCH_COMPONENT_KEY,
+): WeddingArchContent {
+  const reader = contentReader(componentKey, value);
 
   const coupleNameOne = reader.text("coupleNameOne");
   const coupleNameTwo = reader.text("coupleNameTwo");

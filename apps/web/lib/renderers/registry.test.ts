@@ -10,8 +10,8 @@ import { findRenderer, listRendererKeys } from "./registry.ts";
 
 // The themed layouts are the whole list (T6b, T7c; S7, S8, S13), each its own reviewed component that takes
 // an allow-listed theme: the three children's birthday layouts, the baby shower layout, the themed baptism
-// layout, and the three arch layouts of the elegant line (E3c; S4). The single `birthday-adventure-01`
-// renderer was deleted (S11).
+// layout, and the three arch and three ornamental layouts of the elegant line (E3c, E4b; S4, S5). The single
+// `birthday-adventure-01` renderer was deleted (S11).
 const THEMED_KEYS = [
   "birthday-map-01",
   "birthday-poster-01",
@@ -21,10 +21,13 @@ const THEMED_KEYS = [
   "xv-arch-01",
   "wedding-arch-01",
   "baptism-arch-01",
+  "xv-ornamental-01",
+  "wedding-ornamental-01",
+  "baptism-ornamental-01",
 ] as const;
 
 describe("web renderer registry", () => {
-  it("lists exactly the eight themed layouts, in registration order", () => {
+  it("lists exactly the eleven themed layouts, in registration order", () => {
     assert.deepEqual(listRendererKeys(), [...THEMED_KEYS]);
     for (const key of THEMED_KEYS) {
       assert.equal(typeof findRenderer(key), "function", key);

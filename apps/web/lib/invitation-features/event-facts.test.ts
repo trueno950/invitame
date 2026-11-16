@@ -5,13 +5,16 @@ import {
   babyShowerEventFacts,
   baptismArchEventFacts,
   baptismEventFacts,
+  baptismOrnamentalEventFacts,
   birthdayMapEventFacts,
   birthdayPosterEventFacts,
   birthdayStoryEventFacts,
   EVENT_FACTS,
   eventFactsFor,
   weddingArchEventFacts,
+  weddingOrnamentalEventFacts,
   xvArchEventFacts,
+  xvOrnamentalEventFacts,
 } from "./event-facts.ts";
 
 // The event facts of a layout (S4): the celebration title, when it starts, and the places a guest can be
@@ -186,6 +189,17 @@ describe("event facts per layout", () => {
     assert.deepEqual(baptismArchEventFacts(BAPTISM), baptismEventFacts(BAPTISM));
   });
 
+  it("gives each ornamental layout exactly the facts of its arch sibling", () => {
+    // E4b (S5): a second visual direction over the same content contracts, so a guest feature (countdown,
+    // map, calendar, WhatsApp) behaves the same whichever elegant layout the invitation renders.
+    assert.deepEqual(xvOrnamentalEventFacts(XV), xvArchEventFacts(XV));
+    assert.deepEqual(weddingOrnamentalEventFacts(WEDDING), weddingArchEventFacts(WEDDING));
+    assert.deepEqual(baptismOrnamentalEventFacts(BAPTISM), baptismArchEventFacts(BAPTISM));
+    assert.equal(xvOrnamentalEventFacts(XV).title, "XV años de Valentina Ramírez");
+    assert.equal(weddingOrnamentalEventFacts(WEDDING).title, "Boda de Ana Sofía y Daniel");
+    assert.equal(baptismOrnamentalEventFacts(BAPTISM).title, "Bautizo de Emilia");
+  });
+
   it("is pure: the same content answers the same facts and stays unchanged", () => {
     const content = structuredClone(BAPTISM);
     const first = baptismEventFacts(content);
@@ -207,6 +221,9 @@ describe("event facts per layout", () => {
         "xv-arch-01",
         "wedding-arch-01",
         "baptism-arch-01",
+        "xv-ornamental-01",
+        "wedding-ornamental-01",
+        "baptism-ornamental-01",
       ],
     );
     assert.deepEqual(eventFactsFor("birthday-map-01", BIRTHDAY), birthdayMapEventFacts(BIRTHDAY));
@@ -214,6 +231,15 @@ describe("event facts per layout", () => {
     assert.deepEqual(eventFactsFor("xv-arch-01", XV), xvArchEventFacts(XV));
     assert.deepEqual(eventFactsFor("wedding-arch-01", WEDDING), weddingArchEventFacts(WEDDING));
     assert.deepEqual(eventFactsFor("baptism-arch-01", BAPTISM), baptismArchEventFacts(BAPTISM));
+    assert.deepEqual(eventFactsFor("xv-ornamental-01", XV), xvArchEventFacts(XV));
+    assert.deepEqual(
+      eventFactsFor("wedding-ornamental-01", WEDDING),
+      weddingArchEventFacts(WEDDING),
+    );
+    assert.deepEqual(
+      eventFactsFor("baptism-ornamental-01", BAPTISM),
+      baptismArchEventFacts(BAPTISM),
+    );
     assert.equal(eventFactsFor("formal-classic-01", BAPTISM), undefined);
     assert.equal(eventFactsFor("__proto__", BAPTISM), undefined);
     assert.equal(eventFactsFor("constructor", BAPTISM), undefined);
@@ -236,6 +262,14 @@ describe("event facts per layout", () => {
     assert.throws(() => weddingArchEventFacts({ ...WEDDING, coupleNameTwo: "" }), {
       name: "RendererPropsError",
       message: /wedding-arch-01/,
+    });
+    assert.throws(() => xvOrnamentalEventFacts({ ...XV, ceremonyTime: "25:00" }), {
+      name: "RendererPropsError",
+      message: /xv-ornamental-01/,
+    });
+    assert.throws(() => baptismOrnamentalEventFacts({ ...BAPTISM, date: "2027-02-30" }), {
+      name: "RendererPropsError",
+      message: /baptism-ornamental-01/,
     });
   });
 });

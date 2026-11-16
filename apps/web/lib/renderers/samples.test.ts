@@ -67,6 +67,26 @@ const LAYOUT_SAMPLES = [
     themes: ELEGANT_THEMES,
     image: "/samples/baptism-emilia.svg",
   },
+  // The ornamental layouts of the elegant line (E4b; S5) read the same content as their arch siblings, so
+  // they preview the same sample of the same category.
+  {
+    componentKey: "xv-ornamental-01",
+    category: "quinceanera",
+    themes: ELEGANT_THEMES,
+    image: "/samples/quinceanera-valentina.svg",
+  },
+  {
+    componentKey: "wedding-ornamental-01",
+    category: "wedding",
+    themes: ELEGANT_THEMES,
+    image: "/samples/wedding-ana-sofia-daniel.svg",
+  },
+  {
+    componentKey: "baptism-ornamental-01",
+    category: "baptism",
+    themes: ELEGANT_THEMES,
+    image: "/samples/baptism-emilia.svg",
+  },
 ] as const;
 
 /** A configuration one themed layout accepts, for each layout the web knows. */
@@ -213,7 +233,7 @@ describe("chooser sample content", () => {
     }
     assert.equal(
       LAYOUT_SAMPLES.reduce((total, layout) => total + layout.themes.length, 0),
-      62,
+      86,
     );
   });
 

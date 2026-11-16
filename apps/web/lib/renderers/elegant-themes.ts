@@ -205,6 +205,44 @@ export function isElegantTheme(value: unknown): value is ElegantThemeKey {
   return isAllowedTheme(ELEGANT_THEMES, value);
 }
 
+/** One licensed display family, as `app/layout.tsx` exposes it and as the board falls back. */
+export interface ThemeFont {
+  readonly fontVariable: string;
+  readonly fontFallback: string;
+}
+
+/** Great Vibes, the one script face the elegant line licenses (S4): SIL OFL, latin, single weight 400. */
+const GREAT_VIBES: ThemeFont = {
+  fontVariable: "--font-great-vibes",
+  fontFallback: '"Snell Roundhand", "Apple Chancery", cursive',
+};
+
+/**
+ * The face the ornamental layout sets the celebrant's name in (E4b; S5), decided per theme so the script
+ * name stays legible. The ornamental direction shows the name as a signature, which only a script face can
+ * do, and Great Vibes is the only script the elegant line licenses — so it is the script of every theme:
+ *
+ * - `blush-gold` (Playfair Display), `ivory-black` (Bodoni Moda), `olive-cream` (Lora), `champagne`
+ *   (Cormorant Garamond), `lavender-silver` (Italiana) and `terracotta-sage` (Josefin Sans) are text and
+ *   display faces: set in them the name would read as another heading, not as a signature.
+ * - `midnight-gold` (Cinzel Decorative) is an all-caps display face: a name set in it reads as a label.
+ * - `burgundy-gold` already sets its display font in Great Vibes, so the script name simply is the theme's
+ *   own face and the two decisions agree.
+ *
+ * The record is keyed by the allow-listed theme, so a ninth theme has to state its choice, and the layout
+ * never guesses one. Only names and signatures use it — never body text (S8).
+ */
+export const ORNAMENTAL_NAME_FONT: Readonly<Record<ElegantThemeKey, ThemeFont>> = {
+  "blush-gold": GREAT_VIBES,
+  "ivory-black": GREAT_VIBES,
+  "midnight-gold": GREAT_VIBES,
+  "olive-cream": GREAT_VIBES,
+  champagne: GREAT_VIBES,
+  "lavender-silver": GREAT_VIBES,
+  "terracotta-sage": GREAT_VIBES,
+  "burgundy-gold": GREAT_VIBES,
+};
+
 /** The red, green, and blue channels of a `#rrggbb` theme color. */
 function channels(hex: string): [number, number, number] {
   const digits = hex.replace("#", "");

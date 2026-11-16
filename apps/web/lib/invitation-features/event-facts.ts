@@ -7,12 +7,15 @@ import {
   type BaptismContent,
   parseBaptismClassicContent,
 } from "../renderers/baptism-classic-01.ts";
+import { parseBaptismOrnamentalContent } from "../renderers/baptism-ornamental-01.ts";
 import type { BirthdayContent } from "../renderers/birthday-content.ts";
 import { parseBirthdayMapContent } from "../renderers/birthday-map-01.ts";
 import { parseBirthdayPosterContent } from "../renderers/birthday-poster-01.ts";
 import { parseBirthdayStoryContent } from "../renderers/birthday-story-01.ts";
 import { parseWeddingArchContent, type WeddingArchContent } from "../renderers/wedding-arch-01.ts";
+import { parseWeddingOrnamentalContent } from "../renderers/wedding-ornamental-01.ts";
 import { parseXVArchContent, type XVArchContent } from "../renderers/xv-arch-01.ts";
+import { parseXVOrnamentalContent } from "../renderers/xv-ornamental-01.ts";
 
 /**
  * The event facts of a layout (S4): the celebration's title, when it starts, and the places a guest can be
@@ -158,6 +161,24 @@ export function baptismArchEventFacts(content: unknown): EventFacts {
   return baptismFacts(parseBaptismArchContent(content));
 }
 
+// The ornamental layouts of the elegant line (E4b; S5) read the same content as their arch siblings, so
+// they answer the same facts through the same mapping — only the parser names the layout it refuses.
+
+/** The facts of a stored `xv-ornamental-01` invitation: the arch layout's facts, read through its parser. */
+export function xvOrnamentalEventFacts(content: unknown): EventFacts {
+  return xvArchFacts(parseXVOrnamentalContent(content));
+}
+
+/** The facts of a stored `wedding-ornamental-01` invitation, the same as the arch layout's. */
+export function weddingOrnamentalEventFacts(content: unknown): EventFacts {
+  return weddingArchFacts(parseWeddingOrnamentalContent(content));
+}
+
+/** The facts of a stored `baptism-ornamental-01` invitation, the same as the themed baptism's. */
+export function baptismOrnamentalEventFacts(content: unknown): EventFacts {
+  return baptismFacts(parseBaptismOrnamentalContent(content));
+}
+
 /** The allow-listed facts functions, keyed by the `componentKey` they belong to. */
 export const EVENT_FACTS: ReadonlyMap<string, EventFactsOf> = new Map<string, EventFactsOf>([
   ["birthday-map-01", birthdayMapEventFacts],
@@ -168,6 +189,9 @@ export const EVENT_FACTS: ReadonlyMap<string, EventFactsOf> = new Map<string, Ev
   ["xv-arch-01", xvArchEventFacts],
   ["wedding-arch-01", weddingArchEventFacts],
   ["baptism-arch-01", baptismArchEventFacts],
+  ["xv-ornamental-01", xvOrnamentalEventFacts],
+  ["wedding-ornamental-01", weddingOrnamentalEventFacts],
+  ["baptism-ornamental-01", baptismOrnamentalEventFacts],
 ]);
 
 /** The facts of a stored invitation, or undefined for a key this map does not allow. */

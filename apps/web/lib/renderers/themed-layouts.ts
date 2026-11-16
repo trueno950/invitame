@@ -85,6 +85,32 @@ export const THEMED_LAYOUTS: readonly ThemedLayoutDefinition[] = [
     themes: ELEGANT_THEMES,
     theme: ELEGANT_THEME,
   },
+  // The second visual direction of the same formal line (E4b; S5), «Ornamental»: a stationery card with a
+  // double rule, a laurel monogram, foil hairlines, and the name in script. Same eight themes, same content.
+  {
+    componentKey: "xv-ornamental-01",
+    title: "Ornamental",
+    description:
+      "Una tarjeta centrada con doble filete, monograma de laurel y el nombre en script, con la foto en camafeo.",
+    themes: ELEGANT_THEMES,
+    theme: ELEGANT_THEME,
+  },
+  {
+    componentKey: "wedding-ornamental-01",
+    title: "Ornamental",
+    description:
+      "Papelería clásica para la boda: doble filete, laurel y los dos nombres en script.",
+    themes: ELEGANT_THEMES,
+    theme: ELEGANT_THEME,
+  },
+  {
+    componentKey: "baptism-ornamental-01",
+    title: "Ornamental",
+    description:
+      "Una tarjeta de papelería fina para el bautizo, con monograma de laurel y foto en camafeo.",
+    themes: ELEGANT_THEMES,
+    theme: ELEGANT_THEME,
+  },
 ];
 
 /** The layout a `componentKey` names, or undefined for a key without themes. Compared by equality only. */

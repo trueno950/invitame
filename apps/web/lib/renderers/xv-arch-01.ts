@@ -12,6 +12,9 @@ import { parseThemedConfiguration } from "./theme-tokens.ts";
  * bounded text — one name per line — and an optional field that is empty renders nothing at all. The
  * layout is coded once and the theme supplies the palette, the display font, and the ornament, so one
  * renderer serves all eight themes.
+ *
+ * The content parser is the one the ornamented layout of the same occasion reads too (E4b; S5): the
+ * `componentKey` it names in a refusal defaults to this layout, and the ornamental sibling passes its own.
  */
 export const XV_ARCH_COMPONENT_KEY = "xv-arch-01";
 
@@ -54,8 +57,11 @@ export interface XVArchContent {
 }
 
 /** The typed content of a stored version, or a `RendererPropsError` naming every defect. */
-export function parseXVArchContent(value: unknown): XVArchContent {
-  const reader = contentReader(XV_ARCH_COMPONENT_KEY, value);
+export function parseXVArchContent(
+  value: unknown,
+  componentKey: string = XV_ARCH_COMPONENT_KEY,
+): XVArchContent {
+  const reader = contentReader(componentKey, value);
 
   const celebrantName = reader.text("celebrantName");
   const date = reader.formatted("date", isCalendarDate, "a calendar date as YYYY-MM-DD");

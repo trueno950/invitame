@@ -377,22 +377,35 @@ real layout.
 
 ## Elegant layouts
 
-Status: **current** for «Arco y foto» (E3c; `odd/tasks/elegant-line.md` S4); «Ornamental» is planned (E4b, S5).
+Status: **current** for «Arco y foto» (E3c) and «Ornamental» (E4b; `odd/tasks/elegant-line.md` S4, S5).
 
-The elegant line adds «Arco y foto» to the catalog for XV años, weddings, and formal baptism. It is one shared server
-component (`app/_components/renderers/elegant-arch/arch-layout.ts`) with three thin renderers, `xv-arch-01`,
-`wedding-arch-01`, and `baptism-arch-01`, each keeping its own content schema and parser; the formal baptism reuses
-the themed baptism schema exactly, so no published invitation is migrated. The arch opens the invitation with the
-photo, or with a theme-colored wash and the theme's ornament when there is none, and the name sits on the theme's
-ink at 80 % over the photo, measuring 7.87-9.80:1 against the worst-case white pixel in the eight themes. Each theme
-in `lib/renderers/elegant-themes.ts` is seven colors, one licensed display font at a single weight, and one original
-fine-line ornament drawn only through theme variables; every text pair keeps 4.5:1. The three keys are registered in
-the web registry and the public props checks and expose event facts (ceremony and reception places, with «Boda de
-<uno> y <dos>» as the wedding title). In the chooser they group as three «Arco y foto» designs with eight theme
-switches, so baptism now offers «Clásica» and «Arco y foto»; a wedding page is titled with the couple's two names.
-XV años and wedding fields have Spanish labels and short editor sections; lists are multi-line text with one name per
-line, times are time inputs, and optional fields say «(opcional)». There is no client script, and decoration never
-sits behind text.
+The elegant line offers two visual directions over one content contract per occasion for XV años, weddings, and
+formal baptism.
+
+- «Arco y foto» (`xv-arch-01`, `wedding-arch-01`, `baptism-arch-01`) is one shared server component,
+  `app/_components/renderers/elegant-arch/arch-layout.ts`, with three thin renderers that keep their own content
+  schema and parser; the formal baptism reuses the themed baptism schema exactly. It opens with the photo in an arch,
+  or with a theme-colored wash and the theme's ornament when there is none, and the name sits on the theme's ink at
+  80 % over the photo, measuring 7.87-9.80:1 against the worst-case white pixel.
+- «Ornamental» (`xv-ornamental-01`, `wedding-ornamental-01`, `baptism-ornamental-01`) is one shared component,
+  `app/_components/renderers/elegant-ornamental/ornamental-layout.ts`, with three thin renderers: a centered
+  stationery card with a double hairline rule over paper textured only with theme colors, an original laurel
+  monogram (sprays beside an opaque medallion) above the name, foil-like gradient hairlines, the day in the theme's
+  display face, and the photo as an oval cameo (or an oval wash with the theme's ornament), then the family and
+  sponsors, both places, dress code and gift registry, the shared features block, the message, and the RSVP in one
+  centered column. It reads its arch sibling's parser instead of declaring a second schema, so one invitation could
+  render in either direction and the creator form does not change. `ORNAMENTAL_NAME_FONT` sets every ornamental name
+  in Great Vibes, the only licensed script face.
+- Both directions share the eight themes of `lib/renderers/elegant-themes.ts`: seven colors, one licensed display
+  font at a single weight, and one original fine-line ornament drawn only through theme variables; every text pair
+  keeps 4.5:1.
+- The six keys are registered in the web registry and the public props checks, expose ceremony and reception as
+  event facts (with «Boda de <uno> y <dos>» as the wedding title), and preview their category's fixed sample. In the
+  chooser, XV años and weddings group «Arco y foto» and «Ornamental»; baptism groups «Clásica», «Arco y foto», and
+  «Ornamental», each with its theme switches.
+- XV años and wedding fields have Spanish labels and short editor sections; lists are multi-line text with one name
+  per line, times are time inputs, and optional fields say «(opcional)». There is no client script, and decoration
+  never sits behind text.
 
 ## Guest invitation features
 

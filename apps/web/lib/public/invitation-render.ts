@@ -14,6 +14,11 @@ import {
   parseBaptismClassicContent,
 } from "../renderers/baptism-classic-01.ts";
 import {
+  BAPTISM_ORNAMENTAL_COMPONENT_KEY,
+  parseBaptismOrnamentalConfiguration,
+  parseBaptismOrnamentalContent,
+} from "../renderers/baptism-ornamental-01.ts";
+import {
   BIRTHDAY_MAP_COMPONENT_KEY,
   parseBirthdayMapConfiguration,
   parseBirthdayMapContent,
@@ -36,10 +41,20 @@ import {
   WEDDING_ARCH_COMPONENT_KEY,
 } from "../renderers/wedding-arch-01.ts";
 import {
+  parseWeddingOrnamentalConfiguration,
+  parseWeddingOrnamentalContent,
+  WEDDING_ORNAMENTAL_COMPONENT_KEY,
+} from "../renderers/wedding-ornamental-01.ts";
+import {
   parseXVArchConfiguration,
   parseXVArchContent,
   XV_ARCH_COMPONENT_KEY,
 } from "../renderers/xv-arch-01.ts";
+import {
+  parseXVOrnamentalConfiguration,
+  parseXVOrnamentalContent,
+  XV_ORNAMENTAL_COMPONENT_KEY,
+} from "../renderers/xv-ornamental-01.ts";
 
 /**
  * Whether a registered renderer will accept the stored props of an invitation (M5 T5; A3). A renderer
@@ -112,6 +127,27 @@ const PROPS_CHECKS: ReadonlyMap<string, PropsCheck> = new Map<string, PropsCheck
     (props) => {
       parseBaptismArchConfiguration(props.configuration);
       parseBaptismArchContent(props.content);
+    },
+  ],
+  [
+    XV_ORNAMENTAL_COMPONENT_KEY,
+    (props) => {
+      parseXVOrnamentalConfiguration(props.configuration);
+      parseXVOrnamentalContent(props.content);
+    },
+  ],
+  [
+    WEDDING_ORNAMENTAL_COMPONENT_KEY,
+    (props) => {
+      parseWeddingOrnamentalConfiguration(props.configuration);
+      parseWeddingOrnamentalContent(props.content);
+    },
+  ],
+  [
+    BAPTISM_ORNAMENTAL_COMPONENT_KEY,
+    (props) => {
+      parseBaptismOrnamentalConfiguration(props.configuration);
+      parseBaptismOrnamentalContent(props.content);
     },
   ],
 ]);

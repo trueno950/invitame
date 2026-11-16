@@ -287,28 +287,57 @@ const BABY_SHOWER_SEEDED: CreatorTemplate[] = BABY_SHOWER_THEMES.map((theme) =>
 const QUINCEANERA_CATEGORY = { key: "quinceanera", name: "XV años" };
 const WEDDING_CATEGORY = { key: "wedding", name: "Boda" };
 
-/** The 24 elegant templates: three arch layouts times eight themes (E3c; S4). */
+/** The elegant layouts of one occasion: «Arco y foto» or «Ornamental» (E3c, E4b; S4, S5). */
+type ElegantKey =
+  | "xv-arch-01"
+  | "wedding-arch-01"
+  | "baptism-arch-01"
+  | "xv-ornamental-01"
+  | "wedding-ornamental-01"
+  | "baptism-ornamental-01";
+
+/** One elegant layout's eight seeded templates, named `<dirección> · <tema>` as the seed names them. */
 function elegantSeed(
-  componentKey: "xv-arch-01" | "wedding-arch-01" | "baptism-arch-01",
+  componentKey: ElegantKey,
+  layoutName: string,
   category: { key: string; name: string },
 ): CreatorTemplate[] {
   return ELEGANT_THEMES.map((theme) =>
     template(`${componentKey}-${theme}`, componentKey, {
-      name: `Arco y foto · ${ELEGANT_THEME[theme].displayName}`,
+      name: `${layoutName} · ${ELEGANT_THEME[theme].displayName}`,
       category,
       configuration: { componentKey, theme },
     }),
   );
 }
 
+/** The six elegant layouts: two visual directions for each of the three formal occasions. */
+const ELEGANT_LAYOUTS: ReadonlyArray<{
+  componentKey: ElegantKey;
+  title: string;
+  category: { key: string; name: string };
+}> = [
+  { componentKey: "xv-arch-01", title: "Arco y foto", category: QUINCEANERA_CATEGORY },
+  { componentKey: "xv-ornamental-01", title: "Ornamental", category: QUINCEANERA_CATEGORY },
+  { componentKey: "wedding-arch-01", title: "Arco y foto", category: WEDDING_CATEGORY },
+  { componentKey: "wedding-ornamental-01", title: "Ornamental", category: WEDDING_CATEGORY },
+  { componentKey: "baptism-arch-01", title: "Arco y foto", category: BAPTISM_CATEGORY },
+  { componentKey: "baptism-ornamental-01", title: "Ornamental", category: BAPTISM_CATEGORY },
+];
+
+/** The themed baptism templates, next to the two elegant directions of the same category. */
+const BAPTISM_CLASSIC_SEED: CreatorTemplate[] = BAPTISM_THEMES.map((theme) =>
+  template(`baptism-classic-01-${theme}`, "baptism-classic-01", {
+    name: `Clásica · ${BAPTISM_THEME[theme].displayName}`,
+    category: BAPTISM_CATEGORY,
+    configuration: { componentKey: "baptism-classic-01", theme },
+  }),
+);
+
 describe("elegant occasion cards", () => {
-  it("groups each arch layout into one card titled «Arco y foto» with its eight themes", () => {
-    for (const [componentKey, seed, category] of [
-      ["xv-arch-01", elegantSeed("xv-arch-01", QUINCEANERA_CATEGORY), QUINCEANERA_CATEGORY],
-      ["wedding-arch-01", elegantSeed("wedding-arch-01", WEDDING_CATEGORY), WEDDING_CATEGORY],
-      ["baptism-arch-01", elegantSeed("baptism-arch-01", BAPTISM_CATEGORY), BAPTISM_CATEGORY],
-    ] as const) {
-      const cards = templateChoiceCards(seed, ORIGIN);
+  it("groups each elegant layout into one card with its eight themes", () => {
+    for (const { componentKey, title, category } of ELEGANT_LAYOUTS) {
+      const cards = templateChoiceCards(elegantSeed(componentKey, title, category), ORIGIN);
 
       assert.equal(cards.length, 1, componentKey);
       const [card] = cards;
@@ -318,9 +347,11 @@ describe("elegant occasion cards", () => {
         continue;
       }
       assert.equal(card.componentKey, componentKey);
-      assert.equal(card.title, "Arco y foto");
+      assert.equal(card.title, title);
       assert.notEqual(card.description.length, 0);
+      assert.notEqual(card.description, "Arco y foto", "the description is not the title");
       assert.deepEqual(card.category, category);
+      assert.match(card.groupId, /^[\w-]+$/, `${componentKey} group id is CSS-safe`);
       assert.deepEqual(
         card.options.map((option) => option.label),
         ELEGANT_THEMES.map((theme) => ELEGANT_THEME[theme].displayName),
@@ -332,16 +363,44 @@ describe("elegant occasion cards", () => {
     }
   });
 
-  it("shows two baptism designs: the themed Clásica and the elegant Arco y foto", () => {
+  it("offers both elegant directions of an occasion as two designs", () => {
+    const pairs = [
+      [ELEGANT_LAYOUTS[0], ELEGANT_LAYOUTS[1]],
+      [ELEGANT_LAYOUTS[2], ELEGANT_LAYOUTS[3]],
+    ] as const;
+
+    for (const pair of pairs) {
+      const [first, second] = pair;
+
+      assert.ok(first !== undefined && second !== undefined, "a pair of the same occasion");
+      const cards = templateChoiceCards(
+        [
+          ...elegantSeed(first.componentKey, first.title, first.category),
+          ...elegantSeed(second.componentKey, second.title, second.category),
+        ],
+        ORIGIN,
+      );
+
+      assert.deepEqual(
+        cards.map((card) => [
+          card.kind,
+          card.kind === "layout" ? card.componentKey : "",
+          card.kind === "layout" ? card.title : "",
+          card.category.key,
+        ]),
+        [
+          ["layout", first.componentKey, first.title, first.category.key],
+          ["layout", second.componentKey, second.title, second.category.key],
+        ],
+      );
+    }
+  });
+
+  it("shows three baptism designs: the themed Clásica and both elegant directions", () => {
     const seeds = [
-      ...BAPTISM_THEMES.map((theme) =>
-        template(`baptism-classic-01-${theme}`, "baptism-classic-01", {
-          name: `Clásica · ${BAPTISM_THEME[theme].displayName}`,
-          category: BAPTISM_CATEGORY,
-          configuration: { componentKey: "baptism-classic-01", theme },
-        }),
-      ),
-      ...elegantSeed("baptism-arch-01", BAPTISM_CATEGORY),
+      ...BAPTISM_CLASSIC_SEED,
+      ...elegantSeed("baptism-arch-01", "Arco y foto", BAPTISM_CATEGORY),
+      ...elegantSeed("baptism-ornamental-01", "Ornamental", BAPTISM_CATEGORY),
     ];
 
     const cards = templateChoiceCards(seeds, ORIGIN);
@@ -355,11 +414,12 @@ describe("elegant occasion cards", () => {
       [
         ["layout", "baptism-classic-01", "Clásica"],
         ["layout", "baptism-arch-01", "Arco y foto"],
+        ["layout", "baptism-ornamental-01", "Ornamental"],
       ],
     );
     assert.deepEqual(
       cards.map((card) => (card.kind === "layout" ? card.options.length : 0)),
-      [BAPTISM_THEMES.length, ELEGANT_THEMES.length],
+      [BAPTISM_THEMES.length, ELEGANT_THEMES.length, ELEGANT_THEMES.length],
     );
   });
 });
