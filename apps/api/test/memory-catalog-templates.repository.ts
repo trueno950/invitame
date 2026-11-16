@@ -39,8 +39,11 @@ interface StoredVersion extends TemplateVersionRecord {
   templateId: string;
 }
 
-/** A schema and configuration the `birthday-adventure-01` renderer accepts (a copy of the seeded pair). */
-export function birthdayAdventureVersionInput(): NewTemplateVersion {
+/**
+ * A schema and configuration a themed birthday layout accepts (a copy of one seeded pair), so a suite that only
+ * needs "some version the registry accepts" does not name a renderer that was deleted (S11).
+ */
+export function themedVersionInput(): NewTemplateVersion {
   const text = (title: string, maxLength: number) => ({
     type: "string",
     title,
@@ -48,7 +51,7 @@ export function birthdayAdventureVersionInput(): NewTemplateVersion {
     maxLength,
   });
   return {
-    componentKey: "birthday-adventure-01",
+    componentKey: "birthday-poster-01",
     schema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       type: "object",
@@ -75,11 +78,8 @@ export function birthdayAdventureVersionInput(): NewTemplateVersion {
       },
     },
     configuration: {
-      componentKey: "birthday-adventure-01",
-      layout: "adventure",
-      palette: "sunset",
-      typography: "rounded",
-      sectionOrder: ["hero", "details", "message"],
+      componentKey: "birthday-poster-01",
+      theme: "dinosaurs",
     },
   };
 }

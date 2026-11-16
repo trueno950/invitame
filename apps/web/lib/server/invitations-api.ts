@@ -52,7 +52,18 @@ export interface CreatorTemplate {
   name: string;
   description: string | null;
   category: { key: string; name: string };
-  publishedVersion: { id: string; version: number; componentKey: string; schema: unknown };
+  publishedVersion: {
+    id: string;
+    version: number;
+    componentKey: string;
+    schema: unknown;
+    /**
+     * The version's stored configuration snapshot (S9). The chooser previews the template with it and
+     * reads a theme from here, never from the catalog name; a snapshot a renderer refuses is that
+     * renderer's answer, so this client keeps it unread rather than validating it again.
+     */
+    configuration: unknown;
+  };
 }
 
 /** One package a creator may choose, with its price in force and the feature keys it includes (S8). */
@@ -299,8 +310,11 @@ export function parseCreatorTemplate(value: unknown): CreatorTemplate | undefine
       id: version.id,
       version: version.version,
       componentKey: version.componentKey,
-      // The schema stays unread here: the pages read it with `contentFields`, which fails closed.
+      // The schema and the configuration stay unread here: the pages read the schema with
+      // `contentFields` and the configuration through the renderer's own parser, both of which fail
+      // closed (S8, S9).
       schema: version.schema,
+      configuration: version.configuration,
     },
   };
 }

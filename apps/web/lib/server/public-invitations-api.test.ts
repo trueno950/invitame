@@ -7,8 +7,8 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { ApiClientError } from "./api-client.ts";
 import {
   createPublicInvitationsClient,
-  parsePublicInvitation,
   type PublicInvitation,
+  parsePublicInvitation,
 } from "./public-invitations-api.ts";
 
 // The web server's client of the public invitation read (M5 T5; S1, S5, A3, A7). A guest is anonymous:
@@ -20,14 +20,8 @@ const AT = "2026-11-12T15:30:00.000Z";
 
 const PUBLIC: PublicInvitation = {
   slug: "invitacion-k7m2qx",
-  componentKey: "birthday-adventure-01",
-  configuration: {
-    componentKey: "birthday-adventure-01",
-    layout: "adventure",
-    palette: "sunset",
-    typography: "rounded",
-    sectionOrder: ["hero", "details", "message"],
-  },
+  componentKey: "birthday-poster-01",
+  configuration: { componentKey: "birthday-poster-01", theme: "dinosaurs" },
   content: {
     celebrantName: "Ana",
     age: 7,

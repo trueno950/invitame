@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Ilustración de baby shower con globos y estrellas">
+  <rect width="800" height="600" fill="#fdf6ec"/>
+  <circle cx="400" cy="300" r="210" fill="#f7e3c3"/>
+  <path d="M120 470q50-60 120-60t120 60z" fill="#e0a83c" opacity=".55"/>
+  <path d="M440 470q50-60 120-60t120 60z" fill="#b3763a" opacity=".45"/>
+  <g fill="#8a5a12">
+    <circle cx="400" cy="330" r="96"/>
+    <circle cx="316" cy="238" r="36"/>
+    <circle cx="484" cy="238" r="36"/>
+  </g>
+  <ellipse cx="400" cy="356" rx="54" ry="40" fill="#fdf6ec" opacity=".8"/>
+  <g fill="#fdf6ec">
+    <circle cx="362" cy="302" r="10"/>
+    <circle cx="438" cy="302" r="10"/>
+    <circle cx="400" cy="344" r="12"/>
+  </g>
+  <g fill="#e0a83c">
+    <path d="M170 170l9 24 24 9-24 9-9 24-9-24-24-9 24-9z"/>
+    <path d="M636 210l7 18 18 7-18 7-7 18-7-18-18-7 18-7z"/>
+    <path d="M216 388l6 16 16 6-16 6-6 16-6-16-16-6 16-6z"/>
+  </g>
+  <g fill="none" stroke="#8a5a12" stroke-width="5" stroke-linecap="round" opacity=".45">
+    <path d="M614 402q-34-40-84-46"/>
+    <path d="M96 300q40-26 88-20"/>
+  </g>
+</svg>

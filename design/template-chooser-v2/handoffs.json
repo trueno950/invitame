@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "chosen": "02-paso-a-paso-escritorio.html",
+  "handoffs": {
+    "02-paso-a-paso-escritorio.html": {
+      "status": "implemented",
+      "queued": false,
+      "sentAt": "2026-11-13T00:39:37.938Z",
+      "startedAt": "2026-11-13T00:40:02.418Z",
+      "implementedAt": "2026-11-13T01:03:40.786Z",
+      "feature": "odd/tasks/catalog-designs.md",
+      "note": "Three server-rendered steps (design, theme, package), no client script; real renderers as miniatures; Birthday Adventure kept as a fourth design. Web 691/691 tests.",
+      "previewUrl": "http://localhost:3000/cuenta/invitaciones/nueva"
+    }
+  }
+}

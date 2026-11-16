@@ -55,6 +55,7 @@ interface TemplateRow {
     status: "DRAFT" | "PUBLISHED" | "RETIRED";
     componentKey: string;
     schema: unknown;
+    configuration?: unknown;
   }>;
 }
 
@@ -70,7 +71,7 @@ interface PackageRow {
 }
 
 /** The renderer keys the in-code registry knows; a published version with another key cannot be rendered. */
-const KNOWN_RENDERER_KEYS = ["birthday-adventure-01", "wedding-story-01"];
+const KNOWN_RENDERER_KEYS = ["birthday-poster-01", "wedding-story-01", "birthday-map-01"];
 
 /**
  * The catalog's public contract in memory. The two `list` methods mirror the queries of
@@ -150,6 +151,7 @@ class MemoryCatalogPublicReader implements CatalogPublicReader {
               version: published.version,
               componentKey: published.componentKey,
               schema: published.schema,
+              configuration: published.configuration,
             },
           },
         ];
@@ -239,15 +241,19 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
         id: randomUUID(),
         version: 1,
         status: "RETIRED",
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         schema: { type: "object", required: [], properties: {} },
       },
       {
         id: randomUUID(),
         version: 2,
         status: "PUBLISHED",
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         schema: { type: "object", required: ["title"], properties: { title: { type: "string" } } },
+        configuration: {
+          componentKey: "birthday-poster-01",
+          theme: "dinosaurs",
+        },
       },
     ],
   });
@@ -262,6 +268,22 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
         status: "PUBLISHED",
         componentKey: "wedding-story-01",
         schema: { type: "object", required: [], properties: {} },
+      },
+    ],
+  });
+  // A themed layout: the chooser groups it by `componentKey` and labels each switch with its own
+  // `configuration.theme` (S9), so both must reach the web unchanged.
+  const mapTheme = template({
+    key: "gg-map-dinosaurs",
+    name: "Mapa · Dinosaurios",
+    versions: [
+      {
+        id: randomUUID(),
+        version: 1,
+        status: "PUBLISHED",
+        componentKey: "birthday-map-01",
+        schema: { type: "object", required: [], properties: {} },
+        configuration: { componentKey: "birthday-map-01", theme: "dinosaurs" },
       },
     ],
   });
@@ -290,7 +312,7 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
             id: randomUUID(),
             version: 1,
             status: "PUBLISHED",
-            componentKey: "birthday-adventure-01",
+            componentKey: "birthday-poster-01",
             schema: {},
           },
         ],
@@ -303,7 +325,7 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
             id: randomUUID(),
             version: 1,
             status: "DRAFT",
-            componentKey: "birthday-adventure-01",
+            componentKey: "birthday-poster-01",
             schema: {},
           },
         ],
@@ -317,12 +339,13 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
             id: randomUUID(),
             version: 1,
             status: "PUBLISHED",
-            componentKey: "birthday-adventure-01",
+            componentKey: "birthday-poster-01",
             schema: {},
           },
         ],
       }),
       wedding,
+      mapTheme,
     ],
     [
       packageRow({
@@ -424,8 +447,25 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
       const body = (await response.json()) as Row[];
       assert.deepEqual(
         body.map((item) => item.key),
-        ["aa-birthday", "ff-wedding"],
+        ["aa-birthday", "ff-wedding", "gg-map-dinosaurs"],
       );
+    });
+
+    it("answers the published version's configuration so the chooser can preview it (S9)", async () => {
+      const cookie = await signedIn();
+
+      const body = (await (await get(TEMPLATES_PATH, cookie)).json()) as Row[];
+      const themed = body.find((item) => item.key === "gg-map-dinosaurs");
+
+      // The stored snapshot travels as stored: the web reads the theme from it and never from the name.
+      assert.deepEqual((themed?.publishedVersion ?? {}) as Row, {
+        id: mapTheme.versions[0]?.id,
+        version: 1,
+        componentKey: "birthday-map-01",
+        schema: { type: "object", required: [], properties: {} },
+        configuration: { componentKey: "birthday-map-01", theme: "dinosaurs" },
+      });
+      assert.equal(themed?.name, "Mapa · Dinosaurios");
     });
 
     it("answers each template with its category and published version only", async () => {
@@ -445,16 +485,21 @@ describe("creator catalog: GET /catalog/templates and GET /catalog/packages", ()
       assert.deepEqual(listed?.category, { key: "birthday", name: "Cumpleaños" });
       assert.deepEqual(Object.keys((listed?.publishedVersion ?? {}) as Row).sort(), [
         "componentKey",
+        "configuration",
         "id",
         "schema",
         "version",
       ]);
-      // The PUBLISHED version, never the retired one.
+      // The PUBLISHED version, never the retired one, with the snapshot the chooser previews (S9).
       assert.deepEqual(listed?.publishedVersion, {
         id: birthday.versions[1]?.id,
         version: 2,
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         schema: { type: "object", required: ["title"], properties: { title: { type: "string" } } },
+        configuration: {
+          componentKey: "birthday-poster-01",
+          theme: "dinosaurs",
+        },
       });
       assert.equal(listed?.description, "Una aventura");
       assert.equal(listed?.id, birthday.id);

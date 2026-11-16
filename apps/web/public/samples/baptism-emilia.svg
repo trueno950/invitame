@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Ilustración de bautizo con paloma, vela y rama de olivo">
+  <rect width="800" height="600" fill="#f6f6ee"/>
+  <circle cx="400" cy="290" r="200" fill="#e3e6d3"/>
+  <g fill="#a9b389" opacity=".7">
+    <ellipse cx="180" cy="150" rx="96" ry="40"/>
+    <ellipse cx="236" cy="108" rx="56" ry="28"/>
+  </g>
+  <g fill="#4b6134">
+    <ellipse cx="392" cy="330" rx="92" ry="44" transform="rotate(-8 392 330)"/>
+    <ellipse cx="318" cy="276" rx="66" ry="26" transform="rotate(-32 318 276)"/>
+    <circle cx="292" cy="306" r="30"/>
+  </g>
+  <path d="M282 306l-30-6 24 20z" fill="#d7c9a3"/>
+  <g fill="none" stroke="#f6f6ee" stroke-width="6" stroke-linecap="round" opacity=".55">
+    <path d="M356 334q34-14 66 2"/>
+  </g>
+  <g fill="none" stroke="#4b6134" stroke-width="7" stroke-linecap="round">
+    <path d="M250 486q92-42 190-14"/>
+    <path d="M560 470v-92"/>
+  </g>
+  <g fill="#a9b389">
+    <ellipse cx="322" cy="466" rx="34" ry="14" transform="rotate(-24 322 466)"/>
+    <ellipse cx="378" cy="452" rx="32" ry="13" transform="rotate(-12 378 452)"/>
+    <ellipse cx="430" cy="456" rx="28" ry="12" transform="rotate(8 430 456)"/>
+  </g>
+  <path d="M560 378c26-18 44-46 44-72 0-22-16-38-36-38-18 0-32 12-36 30-4-18-18-30-36-30-20 0-36 16-36 38 0 26 18 54 44 72z" fill="#c9a24e"/>
+  <circle cx="560" cy="308" r="14" fill="#f6f6ee"/>
+  <g fill="#d7c9a3">
+    <path d="M676 190l7 18 18 7-18 7-7 18-7-18-18-7 18-7z"/>
+    <path d="M156 388l5 14 14 5-14 5-5 14-5-14-14-5 14-5z"/>
+  </g>
+</svg>

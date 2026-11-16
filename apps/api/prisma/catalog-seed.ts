@@ -1,9 +1,20 @@
-import { PackageStatus, TemplateStatus, TemplateVersionStatus } from "@prisma/client";
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { PackageStatus, TemplateStatus, TemplateVersionStatus } from "@prisma/client";
+import {
+  BABY_SHOWER_THEMES,
+  type BabyShowerTheme,
+} from "../src/catalog/domain/renderers/baby-shower-themes";
+import { BAPTISM_THEMES, type BaptismTheme } from "../src/catalog/domain/renderers/baptism-themes";
+import {
+  BIRTHDAY_THEMES,
+  type BirthdayTheme,
+} from "../src/catalog/domain/renderers/birthday-themes";
 
 // Seeds the base catalog (M3 T2; S7). It only creates what is missing: a row whose key (or composite
 // key) already exists is never updated, reactivated, or deleted, because an administrator may have
 // changed it on purpose. Prices are not seeded: amounts are set through the admin API (L4).
+// The layouts and themes come from the renderer allow-lists (S2, S8, S13): one template per layout and
+// theme, each with a PUBLISHED version 1 only when this run creates the template.
 
 const CATEGORY_SEEDS = [
   {
@@ -25,6 +36,11 @@ const CATEGORY_SEEDS = [
     key: "baby-shower",
     name: "Baby shower",
     description: "Bienvenidas para nuevas familias.",
+  },
+  {
+    key: "baptism",
+    name: "Bautizos",
+    description: "Ceremonias de bautizo para compartir en familia.",
   },
   {
     key: "graduation",
@@ -122,9 +138,11 @@ const PACKAGE_SEEDS = [
   },
 ] as const;
 
-const BIRTHDAY_ADVENTURE_COMPONENT_KEY = "birthday-adventure-01";
-
-export const BIRTHDAY_ADVENTURE_SCHEMA = {
+/**
+ * The content schema every birthday layout shares: the eight invitation fields with the same types, limits,
+ * and required list, so the creator form is the same for all of them (S8).
+ */
+export const BIRTHDAY_CONTENT_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
@@ -178,13 +196,341 @@ export const BIRTHDAY_ADVENTURE_SCHEMA = {
   },
 } satisfies Prisma.InputJsonObject;
 
-export const BIRTHDAY_ADVENTURE_CONFIGURATION = {
-  componentKey: BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-  layout: "adventure",
-  palette: "sunset",
-  typography: "rounded",
-  sectionOrder: ["hero", "details", "message"],
+/**
+ * The content schema of the `baby-shower-classic-01` layout (S13): a baby shower announces no age, so the
+ * hosts, the date and time, the place, the message, and who confirms attendance are required, while the
+ * baby's name, the gender reveal, the gift registry, and the main photo are optional. Every required string
+ * is bounded like the birthday fields; an optional string declares no `minLength`, so an empty value is valid
+ * and renders nothing, except `mainPhoto`, which declares `format: "uri"` and must be omitted instead of
+ * sent empty.
+ */
+export const BABY_SHOWER_CONTENT_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  additionalProperties: false,
+  required: ["hosts", "date", "time", "location", "address", "message", "rsvpContact"],
+  properties: {
+    hosts: {
+      type: "string",
+      title: "Anfitrionas o anfitriones",
+      minLength: 1,
+      maxLength: 120,
+    },
+    date: {
+      type: "string",
+      title: "Fecha",
+      format: "date",
+    },
+    time: {
+      type: "string",
+      title: "Hora",
+      pattern: "^([01]\\d|2[0-3]):[0-5]\\d$",
+    },
+    location: {
+      type: "string",
+      title: "Lugar",
+      minLength: 1,
+      maxLength: 120,
+    },
+    address: {
+      type: "string",
+      title: "Dirección",
+      minLength: 1,
+      maxLength: 200,
+    },
+    message: {
+      type: "string",
+      title: "Mensaje",
+      minLength: 1,
+      maxLength: 500,
+    },
+    rsvpContact: {
+      type: "string",
+      title: "Confirmar asistencia",
+      minLength: 1,
+      maxLength: 120,
+    },
+    babyName: {
+      type: "string",
+      title: "Nombre del bebé",
+      maxLength: 80,
+    },
+    genderReveal: {
+      type: "boolean",
+      title: "Revelación de género",
+    },
+    // A gift registry is short free text or a URL: “Tienda, código y enlace” on the board, so it is a
+    // bounded string instead of `format: "uri"`, which would refuse a store name and a code.
+    giftRegistry: {
+      type: "string",
+      title: "Mesa de regalos",
+      maxLength: 200,
+    },
+    mainPhoto: {
+      type: "string",
+      title: "Foto principal",
+      format: "uri",
+    },
+  },
 } satisfies Prisma.InputJsonObject;
+
+/**
+ * The content schema of the `baptism-classic-01` layout (S13): a baptism announces a person instead of an
+ * age and usually happens in two places, so the ceremony and the reception are separate required blocks of
+ * place, address, and time, together with the parents, the godparents, the message, and who confirms
+ * attendance. The main photo and the gift registry are optional, bounded the same way as the baby shower ones.
+ */
+export const BAPTISM_CONTENT_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "celebrantName",
+    "date",
+    "parents",
+    "godparents",
+    "ceremonyPlace",
+    "ceremonyAddress",
+    "ceremonyTime",
+    "receptionPlace",
+    "receptionAddress",
+    "receptionTime",
+    "message",
+    "rsvpContact",
+  ],
+  properties: {
+    celebrantName: {
+      type: "string",
+      title: "Nombre de la persona bautizada",
+      minLength: 1,
+      maxLength: 80,
+    },
+    date: {
+      type: "string",
+      title: "Fecha",
+      format: "date",
+    },
+    parents: {
+      type: "string",
+      title: "Padres",
+      minLength: 1,
+      maxLength: 160,
+    },
+    godparents: {
+      type: "string",
+      title: "Padrinos",
+      minLength: 1,
+      maxLength: 160,
+    },
+    ceremonyPlace: {
+      type: "string",
+      title: "Lugar de la ceremonia",
+      minLength: 1,
+      maxLength: 120,
+    },
+    ceremonyAddress: {
+      type: "string",
+      title: "Dirección de la ceremonia",
+      minLength: 1,
+      maxLength: 200,
+    },
+    ceremonyTime: {
+      type: "string",
+      title: "Hora de la ceremonia",
+      pattern: "^([01]\\d|2[0-3]):[0-5]\\d$",
+    },
+    receptionPlace: {
+      type: "string",
+      title: "Lugar de la recepción",
+      minLength: 1,
+      maxLength: 120,
+    },
+    receptionAddress: {
+      type: "string",
+      title: "Dirección de la recepción",
+      minLength: 1,
+      maxLength: 200,
+    },
+    receptionTime: {
+      type: "string",
+      title: "Hora de la recepción",
+      pattern: "^([01]\\d|2[0-3]):[0-5]\\d$",
+    },
+    message: {
+      type: "string",
+      title: "Mensaje",
+      minLength: 1,
+      maxLength: 500,
+    },
+    rsvpContact: {
+      type: "string",
+      title: "Confirmar asistencia",
+      minLength: 1,
+      maxLength: 120,
+    },
+    mainPhoto: {
+      type: "string",
+      title: "Foto principal",
+      format: "uri",
+    },
+    giftRegistry: {
+      type: "string",
+      title: "Mesa de regalos",
+      maxLength: 200,
+    },
+  },
+} satisfies Prisma.InputJsonObject;
+
+/** One seeded template and the version 1 it receives when this run creates the template. */
+export interface CatalogTemplateSeed {
+  readonly key: string;
+  readonly name: string;
+  readonly description: string;
+  readonly componentKey: string;
+  readonly schema: Prisma.InputJsonObject;
+  readonly configuration: Prisma.InputJsonObject;
+}
+
+/** A themed template: one layout key plus the theme it applies (S2, S8, S13). */
+export interface ThemedTemplateSeed<TTheme extends string> extends CatalogTemplateSeed {
+  readonly theme: TTheme;
+}
+
+/** A birthday layout template: one layout key plus the theme it applies (S2, S8). */
+export type BirthdayLayoutTemplateSeed = ThemedTemplateSeed<BirthdayTheme>;
+
+/** A baby shower template: the «Clásica» layout plus the theme it applies (S13). */
+export type BabyShowerTemplateSeed = ThemedTemplateSeed<BabyShowerTheme>;
+
+/** A themed baptism template: the «Clásica» layout plus the theme it applies (S13). */
+export type BaptismTemplateSeed = ThemedTemplateSeed<BaptismTheme>;
+
+/** One row per layout the catalog publishes; its key, Spanish label, and short neutral description (S8). */
+const BIRTHDAY_LAYOUT_SEEDS = [
+  {
+    slug: "map",
+    componentKey: "birthday-map-01",
+    label: "Mapa",
+    description:
+      "Un mapa con los detalles de la fiesta para invitaciones de cumpleaños infantiles.",
+  },
+  {
+    slug: "poster",
+    componentKey: "birthday-poster-01",
+    label: "Cartel",
+    description: "Un cartel festivo que pone los datos del cumpleaños en primer plano.",
+  },
+  {
+    slug: "story",
+    componentKey: "birthday-story-01",
+    label: "Cuento",
+    description: "Un cuento ilustrado que narra la fiesta de cumpleaños paso a paso.",
+  },
+] as const;
+
+/** The Spanish display name of each theme; the keys and their order come from the renderer allow-list. */
+const BIRTHDAY_THEME_NAMES: Readonly<Record<BirthdayTheme, string>> = {
+  "ice-kingdom": "Reino de hielo",
+  "rescue-team": "Equipo de rescate",
+  "spider-hero": "Héroe arácnido",
+  "classic-mouse": "Ratón clásico",
+  dinosaurs: "Dinosaurios",
+  "under-the-sea": "Bajo el mar",
+  "fairytale-princess": "Princesa de cuento",
+  "blocks-and-pixels": "Bloques y píxeles",
+};
+
+/**
+ * One published birthday layout template per layout and theme (3 layouts x 8 themes), in the theme order
+ * the owner chose (S8). Every template shares the birthday content schema and takes exactly
+ * `{ componentKey, theme }` as configuration. Catalog names stay generic: a theme name never names a
+ * character or a brand (S5).
+ */
+export const BIRTHDAY_LAYOUT_TEMPLATE_SEEDS: readonly BirthdayLayoutTemplateSeed[] =
+  BIRTHDAY_LAYOUT_SEEDS.flatMap((layout) =>
+    BIRTHDAY_THEMES.map((theme) => ({
+      key: `birthday-${layout.slug}-${theme}`,
+      name: `${layout.label} · ${BIRTHDAY_THEME_NAMES[theme]}`,
+      description: layout.description,
+      componentKey: layout.componentKey,
+      schema: BIRTHDAY_CONTENT_SCHEMA,
+      configuration: { componentKey: layout.componentKey, theme },
+      theme,
+    })),
+  );
+
+/** The Spanish display name of each baby shower theme; keys and order come from its renderer allow-list. */
+const BABY_SHOWER_THEME_NAMES: Readonly<Record<BabyShowerTheme, string>> = {
+  "teddy-honey": "Osito y miel",
+  "clouds-stars": "Nubes y estrellas",
+  "baby-safari": "Safari bebé",
+  "hot-air-balloons": "Globos aerostáticos",
+  "boho-rainbow": "Arcoíris boho",
+  "little-moon": "Lunita",
+  "woodland-friends": "Amigos del bosque",
+  "sweet-bunny": "Conejito dulce",
+};
+
+/** The Spanish display name of each themed baptism theme; keys and order come from its renderer allow-list. */
+const BAPTISM_THEME_NAMES: Readonly<Record<BaptismTheme, string>> = {
+  "dove-olive": "Paloma y olivo",
+  "little-angels": "Angelitos",
+  "sky-clouds": "Cielo y nubes",
+  "soft-floral": "Floral suave",
+  "little-lamb": "Corderito",
+  "star-light": "Luz de estrella",
+};
+
+/**
+ * The «Clásica» baby shower layout (S13): its renderer key, its Spanish label, and one short neutral
+ * description. Like the birthday seeds, the description names no character, brand, or protected name (S5).
+ */
+const BABY_SHOWER_CLASSIC_SEED = {
+  key: "baby-shower-classic-01",
+  label: "Clásica",
+  description:
+    "Una invitación clásica de baby shower con las anfitrionas, los datos del evento y la mesa de regalos.",
+} as const;
+
+/** The «Clásica» themed baptism layout (S13), with the same neutral naming rule as the birthday seeds. */
+const BAPTISM_CLASSIC_SEED = {
+  key: "baptism-classic-01",
+  label: "Clásica",
+  description:
+    "Una invitación clásica de bautizo con la ceremonia, la recepción y los datos de la familia.",
+} as const;
+
+/**
+ * One published baby shower template per theme, in the theme order the owner chose (S13). Every template
+ * shares the baby shower content schema and takes exactly `{ componentKey, theme }` as configuration.
+ */
+export const BABY_SHOWER_TEMPLATE_SEEDS: readonly BabyShowerTemplateSeed[] = BABY_SHOWER_THEMES.map(
+  (theme) => ({
+    key: `baby-shower-classic-${theme}`,
+    name: `${BABY_SHOWER_CLASSIC_SEED.label} · ${BABY_SHOWER_THEME_NAMES[theme]}`,
+    description: BABY_SHOWER_CLASSIC_SEED.description,
+    componentKey: BABY_SHOWER_CLASSIC_SEED.key,
+    schema: BABY_SHOWER_CONTENT_SCHEMA,
+    configuration: { componentKey: BABY_SHOWER_CLASSIC_SEED.key, theme },
+    theme,
+  }),
+);
+
+/**
+ * One published themed baptism template per theme, in the theme order the owner chose (S13). Every template
+ * shares the baptism content schema and takes exactly `{ componentKey, theme }` as configuration.
+ */
+export const BAPTISM_TEMPLATE_SEEDS: readonly BaptismTemplateSeed[] = BAPTISM_THEMES.map(
+  (theme) => ({
+    key: `baptism-classic-${theme}`,
+    name: `${BAPTISM_CLASSIC_SEED.label} · ${BAPTISM_THEME_NAMES[theme]}`,
+    description: BAPTISM_CLASSIC_SEED.description,
+    componentKey: BAPTISM_CLASSIC_SEED.key,
+    schema: BAPTISM_CONTENT_SCHEMA,
+    configuration: { componentKey: BAPTISM_CLASSIC_SEED.key, theme },
+    theme,
+  }),
+);
 
 /** How many rows one run created; all zero when the catalog was already seeded. */
 export interface CatalogSeedSummary {
@@ -277,56 +623,94 @@ async function seedPackages(
   return { packages, packageFeatures };
 }
 
-async function seedBirthdayAdventure(
+/**
+ * Creates each missing template and, only for a template this run created, its PUBLISHED version 1. Like a
+ * package's feature links, version 1 belongs to a template this run created: an existing template's
+ * versions are the administrator's, and it may already have another published version.
+ */
+async function seedTemplates(
+  transaction: Transaction,
+  categoryId: string,
+  seeds: readonly CatalogTemplateSeed[],
+): Promise<{ templates: number; templateVersions: number }> {
+  let templates = 0;
+  let templateVersions = 0;
+
+  for (const seed of seeds) {
+    const { count } = await transaction.template.createMany({
+      data: [
+        {
+          categoryId,
+          key: seed.key,
+          name: seed.name,
+          description: seed.description,
+          status: TemplateStatus.PUBLISHED,
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    if (count === 0) {
+      continue;
+    }
+
+    const template = await transaction.template.findUniqueOrThrow({
+      where: { key: seed.key },
+      select: { id: true },
+    });
+    const versions = await transaction.templateVersion.createMany({
+      data: [
+        {
+          templateId: template.id,
+          version: 1,
+          status: TemplateVersionStatus.PUBLISHED,
+          componentKey: seed.componentKey,
+          schema: seed.schema,
+          configuration: seed.configuration,
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    templates += count;
+    templateVersions += versions.count;
+  }
+
+  return { templates, templateVersions };
+}
+
+/**
+ * Creates the layout-and-theme templates of every catalog category (S8, S13). Each category is seeded from
+ * the allow-lists of the renderers it publishes, so a theme reviewed for one occasion never lands in another.
+ */
+async function seedThemedTemplates(
   transaction: Transaction,
 ): Promise<{ templates: number; templateVersions: number }> {
-  const category = await transaction.category.findUnique({
-    where: { key: "birthday" },
-    select: { id: true },
-  });
+  const families = [
+    { categoryKey: "birthday", seeds: BIRTHDAY_LAYOUT_TEMPLATE_SEEDS },
+    { categoryKey: "baby-shower", seeds: BABY_SHOWER_TEMPLATE_SEEDS },
+    { categoryKey: "baptism", seeds: BAPTISM_TEMPLATE_SEEDS },
+  ] as const;
+  let templates = 0;
+  let templateVersions = 0;
 
-  if (!category) {
-    throw new Error("Missing seeded record for key: birthday.");
+  for (const family of families) {
+    const category = await transaction.category.findUnique({
+      where: { key: family.categoryKey },
+      select: { id: true },
+    });
+
+    if (!category) {
+      throw new Error(`Missing seeded record for key: ${family.categoryKey}.`);
+    }
+
+    const created = await seedTemplates(transaction, category.id, family.seeds);
+
+    templates += created.templates;
+    templateVersions += created.templateVersions;
   }
 
-  const templates = await transaction.template.createMany({
-    data: [
-      {
-        categoryId: category.id,
-        key: "birthday-adventure",
-        name: "Birthday Adventure",
-        description: "Una aventura colorida para celebrar un cumpleaños.",
-        status: TemplateStatus.PUBLISHED,
-      },
-    ],
-    skipDuplicates: true,
-  });
-
-  // Like a package's feature links, version 1 belongs to a template this run created: an existing
-  // template's versions are the administrator's, and it may already have another published version.
-  if (templates.count === 0) {
-    return { templates: 0, templateVersions: 0 };
-  }
-
-  const template = await transaction.template.findUniqueOrThrow({
-    where: { key: "birthday-adventure" },
-    select: { id: true },
-  });
-  const templateVersions = await transaction.templateVersion.createMany({
-    data: [
-      {
-        templateId: template.id,
-        version: 1,
-        status: TemplateVersionStatus.PUBLISHED,
-        componentKey: BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-        schema: BIRTHDAY_ADVENTURE_SCHEMA,
-        configuration: BIRTHDAY_ADVENTURE_CONFIGURATION,
-      },
-    ],
-    skipDuplicates: true,
-  });
-
-  return { templates: templates.count, templateVersions: templateVersions.count };
+  return { templates, templateVersions };
 }
 
 /** Inserts the base catalog records that do not exist yet, in one transaction. */
@@ -335,7 +719,7 @@ export async function seedCatalog(prisma: PrismaClient): Promise<CatalogSeedSumm
     const categories = await seedCategories(transaction);
     const features = await seedFeatures(transaction);
     const { packages, packageFeatures } = await seedPackages(transaction);
-    const { templates, templateVersions } = await seedBirthdayAdventure(transaction);
+    const { templates, templateVersions } = await seedThemedTemplates(transaction);
 
     return { categories, features, packages, packageFeatures, templates, templateVersions };
   });

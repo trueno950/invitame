@@ -91,7 +91,7 @@ export const INVITATION_STATUS_LABELS = {
 } as const;
 
 /**
- * The Spanish label of each data field of the pinned `birthday-adventure-01` template (M4 T5). Keyed by
+ * The Spanish label of each data field of the pinned birthday templates (M4 T5). Keyed by
  * the property name the schema declares, because the schema's own `title` is technical catalog data; an
  * unlabelled property of another renderer falls back to its name.
  */
@@ -104,6 +104,20 @@ export const INVITATION_FIELD_LABELS: Readonly<Record<string, string>> = {
   address: "Dirección",
   mainPhoto: "Foto principal (URL)",
   message: "Mensaje",
+  // Baby shower and themed baptism (T7c; S13): every new field of the two occasions.
+  hosts: "Anfitriones",
+  babyName: "Nombre del bebé (opcional)",
+  genderReveal: "Revelación de género",
+  giftRegistry: "Mesa de regalos",
+  rsvpContact: "Confirmación de asistencia",
+  parents: "Padres",
+  godparents: "Padrinos",
+  ceremonyPlace: "Lugar de la ceremonia",
+  ceremonyAddress: "Dirección de la ceremonia",
+  ceremonyTime: "Hora de la ceremonia",
+  receptionPlace: "Lugar de la recepción",
+  receptionAddress: "Dirección de la recepción",
+  receptionTime: "Hora de la recepción",
 };
 
 /** Copy of the three invitation pages under `/cuenta` (M4 T5; S1, S6, S7). */
@@ -127,6 +141,9 @@ export const INVITATION_COPY = {
   sectionCelebrant: "Festejado",
   sectionWhen: "Cuándo",
   sectionWhere: "Dónde",
+  /** The ceremony and the reception are two places of a baptism, each with its own address and time. */
+  sectionCeremony: "Ceremonia",
+  sectionReception: "Recepción",
   sectionContent: "Contenido",
   sectionOther: "Otros datos",
   detailAsideHeading: "Resumen",
@@ -182,8 +199,55 @@ export const INVITATION_COPY = {
   createEyebrow: "Nueva invitación",
   createHeading: "Crea tu invitación",
   createIntro:
-    "Elige una plantilla y un paquete. Crear y editar el borrador es gratis; el cobro del paquete se hace al publicar.",
+    "Primero el diseño, después el tema y al final el paquete. Crear y editar el borrador es gratis; el cobro del paquete se hace al publicar.",
   templateLabel: "Plantilla",
+  /** The three steps of the chooser, in the order the stepper shows them (T10b; S10). */
+  stepDesign: "Diseño",
+  stepTheme: "Tema",
+  stepPackage: "Paquete",
+  stepsLabel: "Pasos",
+  stepOf: (step: number) => `Paso ${step} de 3`,
+  /** What the stepper says besides the name of a step, for screen readers only. */
+  stepDone: "completado",
+  stepCurrent: "paso actual",
+  stepDesignHeading: "Elige el diseño",
+  stepThemeHeading: "Elige el tema",
+  stepPackageHeading: "Elige el paquete",
+  /** The note of a step whose choice is already made, as the artboard writes it. */
+  chosenNote: (label: string) => `Elegido: ${label}`,
+  designStepHint: "Toca un diseño para verlo en sus temas, con datos de ejemplo.",
+  /** How many styles one design offers, so a design with one style is not a surprise. */
+  styleCount: (count: number) => (count === 1 ? "1 estilo" : `${count} temas`),
+  singleStyle: "Estilo único",
+  singleStyleNote:
+    "Este diseño tiene un solo estilo, así que ya está elegido. Puedes verlo en grande y continuar.",
+  /** The occasion the whole flow belongs to: a catalog category that publishes templates. */
+  occasionLabel: "Ocasión",
+  /** The stage of step 2: the real renderer with the fixed sample content (S9). */
+  stageTitle: "Así se ve tu invitación",
+  themeNote:
+    "El tema cambia los colores, la tipografía y los adornos; la estructura del diseño no cambia.",
+  packageNote: "El cobro se hace al publicar. Puedes cambiarlo después.",
+  continueStep: "Continuar",
+  backStep: "Atrás",
+  /** Shown instead of the stage when a renderer refuses its sample: no miniature, no error page. */
+  sampleMissing: "No pudimos cargar la vista previa de este diseño. Puedes seguir con tu elección.",
+  /** The switches of a layout card: one per published theme, named as the theme board names it. */
+  themeLabel: "Tema",
+  /** The link that opens the full sample invitation of the selected theme (S9). */
+  viewFull: "Ver completa",
+  /** What a preview is, so nobody mistakes the sample for their own invitation (S9). */
+  sampleNote: "Datos de ejemplo",
+  previewPageTitle: "Vista previa | InvitaMe",
+  previewEyebrow: "Vista previa",
+  previewIntro:
+    "Así se ve la invitación con datos de ejemplo. Si te gusta, elige esta plantilla y escribe los tuyos.",
+  previewHeading: (name: string) => `Vista previa de «${name}»`,
+  previewChoose: "Elegir esta plantilla",
+  previewBack: "Volver a elegir el tema",
+  previewNotFoundHeading: "No encontramos esa plantilla",
+  previewNotFoundBody: "Puede que ya no esté publicada. Vuelve a elegir una plantilla.",
+  previewUnavailableHeading: "No pudimos cargar la vista previa",
   packageLabel: "Paquete",
   createSubmit: "Crear borrador",
   priceMissing: "sin precio",

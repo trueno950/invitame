@@ -65,7 +65,7 @@ describe("invitation publication schema (real PostgreSQL)", () => {
         templateId,
         version,
         status,
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         schema: { fields: ["title"] },
         configuration: { theme: "light" },
       },

@@ -1,0 +1,213 @@
+import { createElement, type ReactElement, useId } from "react";
+
+import { formatLongDate } from "../../../../lib/renderers/birthday-content.ts";
+import {
+  parseBirthdayStoryConfiguration,
+  parseBirthdayStoryContent,
+} from "../../../../lib/renderers/birthday-story-01.ts";
+import { BIRTHDAY_THEME } from "../../../../lib/renderers/birthday-themes.ts";
+import { Motif } from "../birthday/motif.ts";
+import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthday/theme.ts";
+
+/*
+ * The `birthday-story-01` invitation — «Cuento ilustrado» (T6b; S2, S7, S8), following
+ * `design/birthday-adventure-v2/03-cuento-ilustrado.html`: one book page with the photo in an arch, the
+ * celebrant introduced as the hero of a story, and the details and the message as numbered chapters. A
+ * server component with no client script: `.ts` + `createElement` because `node --test` strips types but
+ * does not compile JSX.
+ */
+
+export interface BirthdayStoryRendererProps {
+  /** The `TemplateVersion.configuration` snapshot; parsed here, so an invalid one throws. */
+  readonly configuration: unknown;
+  /** The invitation data that fits the version's schema; parsed here, so an invalid one throws. */
+  readonly content: unknown;
+}
+
+const h = createElement;
+
+const CHAPTER = "text-xs font-medium uppercase tracking-[0.16em] text-(color:--inv-accent)";
+const CHAPTER_TITLE = "mt-1 text-2xl font-medium leading-tight text-(color:--inv-ink)";
+const WHEN_LABEL = "block text-[0.7rem] uppercase tracking-[0.12em]";
+
+/** The chapter marker: a hairline with a small star in the middle, hidden from assistive technology. */
+function Divider(): ReactElement {
+  return h(
+    "svg",
+    {
+      "aria-hidden": "true",
+      focusable: "false",
+      viewBox: "0 0 120 16",
+      className: "mx-auto my-6 block w-32",
+    },
+    h("path", {
+      d: "M2 8h44M74 8h44",
+      stroke: "var(--inv-accent)",
+      strokeWidth: 1.5,
+      strokeLinecap: "round",
+    }),
+    h("path", {
+      d: "M60 1l3 5 6 1-4.5 4 1 6-5.5-3-5.5 3 1-6L51 7l6-1z",
+      fill: "var(--inv-accent)",
+    }),
+  );
+}
+
+export function BirthdayStoryRenderer({
+  configuration,
+  content,
+}: BirthdayStoryRendererProps): ReactElement {
+  const { theme: themeKey } = parseBirthdayStoryConfiguration(configuration);
+  const data = parseBirthdayStoryContent(content);
+  const theme = BIRTHDAY_THEME[themeKey];
+  const idPrefix = useId();
+
+  return h(
+    "article",
+    {
+      "aria-label": `Invitación de cumpleaños de ${data.celebrantName}`,
+      "data-component-key": "birthday-story-01",
+      "data-theme": themeKey,
+      className: `${INVITATION_ROOT} px-4 py-6`,
+      style: themeStyle(theme),
+    },
+    // The theme background must paint the page, not only a centred column: the guest `<main>` is `isolate`,
+    // so a viewport-sized layer at `-z-10` stays behind this invitation's content and above the site paper.
+    h("div", {
+      "aria-hidden": "true",
+      "data-invitation-background": "",
+      className: "pointer-events-none fixed inset-0 -z-10 bg-(--inv-background)",
+    }),
+    h(
+      "div",
+      {
+        className: "relative bg-(--inv-surface) px-6 pt-10 pb-8 shadow-xl",
+        style: { borderRadius: "0.375rem 0.375rem 1.75rem 1.75rem" },
+      },
+      // The scalloped top edge of the artboard's book page: half-circles of the page color above the sheet.
+      h("div", {
+        "aria-hidden": "true",
+        className: "pointer-events-none absolute inset-x-0 -top-3 h-3.5",
+        style: {
+          background:
+            "radial-gradient(circle at 12px 14px, var(--inv-surface) 12px, transparent 12.5px) 0 0 / 24px 14px repeat-x",
+        },
+      }),
+      h(
+        "section",
+        {
+          "data-section": "hero",
+          "aria-labelledby": `${idPrefix}-hero`,
+          className: "text-center",
+        },
+        h(
+          "div",
+          { className: "relative" },
+          h(
+            "div",
+            {
+              className:
+                "mx-auto h-64 w-52 overflow-hidden rounded-t-[6.5rem] rounded-b-lg border-[6px] border-(--inv-soft)",
+            },
+            h("img", {
+              src: data.mainPhoto,
+              alt: `Foto de ${data.celebrantName}`,
+              decoding: "async",
+              className: "size-full object-cover",
+            }),
+          ),
+          h(
+            "p",
+            { className: "mt-5 text-lg italic text-(color:--inv-ink)" },
+            "Había una vez alguien muy especial llamado",
+          ),
+          h(
+            "h1",
+            {
+              id: `${idPrefix}-hero`,
+              className: "my-1 break-words text-(color:--inv-accent)",
+              style: titleStyle(theme),
+            },
+            data.celebrantName,
+          ),
+          h(
+            "p",
+            { className: "mx-auto max-w-[30ch] text-base text-(color:--inv-ink)" },
+            "y en este capítulo de su historia cumple ",
+            h("b", { className: "text-(color:--inv-accent)" }, `${data.age} años`),
+            ". ¡Queremos que seas parte del cuento!",
+          ),
+        ),
+      ),
+      h(Divider),
+      h(
+        "section",
+        { "data-section": "details", "aria-labelledby": `${idPrefix}-details` },
+        h("h2", { id: `${idPrefix}-details`, className: CHAPTER }, "Capítulo 1 · Detalles"),
+        h("h3", { className: CHAPTER_TITLE, style: DISPLAY_FONT }, "El gran día"),
+        h(
+          "div",
+          { className: "mt-3 flex gap-3" },
+          h(
+            "div",
+            { className: "flex-1 rounded-2xl bg-(--inv-soft) px-4 py-3" },
+            h("small", { className: WHEN_LABEL }, "Fecha"),
+            h(
+              "b",
+              { className: "text-base font-medium leading-snug" },
+              h("time", { dateTime: data.date }, formatLongDate(data.date)),
+            ),
+          ),
+          h(
+            "div",
+            { className: "w-28 shrink-0 rounded-2xl bg-(--inv-soft) px-4 py-3" },
+            h("small", { className: WHEN_LABEL }, "Hora"),
+            h(
+              "b",
+              { className: "text-base font-medium leading-snug" },
+              h("time", { dateTime: data.time }, `${data.time} h`),
+            ),
+          ),
+        ),
+      ),
+      h(
+        "section",
+        { "data-section": "place", "aria-labelledby": `${idPrefix}-place`, className: "mt-7" },
+        h("h2", { id: `${idPrefix}-place`, className: CHAPTER }, "Capítulo 2 · Lugar"),
+        h("h3", { className: CHAPTER_TITLE, style: DISPLAY_FONT }, data.location),
+        h("p", { className: "mt-1 text-base text-(color:--inv-ink)" }, data.address),
+      ),
+      h(
+        "section",
+        { "data-section": "message", "aria-labelledby": `${idPrefix}-message`, className: "mt-7" },
+        h("h2", { id: `${idPrefix}-message`, className: CHAPTER }, "Capítulo 3 · Mensaje"),
+        h(
+          "p",
+          {
+            className:
+              "mt-2 border-l-[3px] border-(--inv-accent) pl-4 text-xl italic leading-relaxed text-(color:--inv-ink)",
+          },
+          data.message,
+        ),
+      ),
+      h(
+        "p",
+        {
+          className: "mt-8 text-center text-xl italic text-(color:--inv-ink)",
+          style: DISPLAY_FONT,
+        },
+        "…y la fiesta continúa contigo.",
+      ),
+      // Decoration stays inside the page sheet and below every line of text.
+      h(
+        "div",
+        {
+          "aria-hidden": "true",
+          "data-decoration": "",
+          className: "pointer-events-none mt-6 flex h-20 justify-center",
+        },
+        h(Motif, { motif: theme.motif, tone: "paper" }),
+      ),
+    ),
+  );
+}

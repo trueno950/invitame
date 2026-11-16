@@ -86,10 +86,10 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
             templateId: template.id,
             version: version.version ?? index + 1,
             status: version.status,
-            componentKey: version.componentKey ?? "birthday-adventure-01",
+            componentKey: version.componentKey ?? "birthday-poster-01",
             schema: version.schema ?? { type: "object", required: [], properties: {} },
             configuration: version.configuration ?? {
-              componentKey: version.componentKey ?? "birthday-adventure-01",
+              componentKey: version.componentKey ?? "birthday-poster-01",
             },
           },
         }),
@@ -157,7 +157,7 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
         required: ["celebrantName"],
         properties: { celebrantName: { type: "string", maxLength: 80 } },
       };
-      const configuration = { componentKey: "birthday-adventure-01", theme: "festive" };
+      const configuration = { componentKey: "birthday-poster-01", theme: "dinosaurs" };
       const retired = await newTemplate({
         key: "aa-retired-render",
         status: "ARCHIVED",
@@ -166,13 +166,13 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
       const versionId = retired.versions[0]?.id ?? "";
 
       assert.deepEqual(await reader.findVersionRenderData(versionId), {
-        componentKey: "birthday-adventure-01",
+        componentKey: "birthday-poster-01",
         configuration,
         schema,
       });
       assert.equal(await reader.findVersionRenderData(randomUUID()), null);
       // The registry is the API's in-code allow-list, never a database value (A3).
-      assert.equal(reader.isRendererRegistered("birthday-adventure-01"), true);
+      assert.equal(reader.isRendererRegistered("birthday-poster-01"), true);
       assert.equal(reader.isRendererRegistered("retired-renderer-99"), false);
     });
   });
@@ -187,11 +187,13 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
           {
             status: "PUBLISHED",
             version: 2,
+            componentKey: "birthday-map-01",
             schema: {
               type: "object",
               required: ["title"],
               properties: { title: { type: "string" } },
             },
+            configuration: { componentKey: "birthday-map-01", theme: "dinosaurs" },
           },
         ],
       });
@@ -229,12 +231,14 @@ describe("PrismaCatalogPublicReader creator reads on PostgreSQL", () => {
         publishedVersion: {
           id: published.versions[1]?.id,
           version: 2,
-          componentKey: "birthday-adventure-01",
+          componentKey: "birthday-map-01",
           schema: {
             type: "object",
             required: ["title"],
             properties: { title: { type: "string" } },
           },
+          // The stored snapshot, as the chooser previews it (S9).
+          configuration: { componentKey: "birthday-map-01", theme: "dinosaurs" },
         },
       });
       assert.equal(listed[1]?.id, second.template.id);

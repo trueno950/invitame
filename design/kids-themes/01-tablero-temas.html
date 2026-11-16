@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Temas infantiles — tablero de selección</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fafafa; color: #18181b; font-family: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif; line-height: 1.5; }
+  header { padding: 40px 56px 8px; }
+  h1 { margin: 0; font-size: 34px; }
+  header p { margin: 6px 0 0; color: #52525b; max-width: 92ch; }
+  main { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; padding: 28px 56px 56px; }
+  .card { background: #ffffff; border: 1px solid #e4e4e7; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
+  .preview { background: var(--bg); padding: 14px; }
+  .band { position: relative; overflow: hidden; background: var(--accent); color: #ffffff; text-align: center; border-radius: 14px; padding: 20px 12px 22px; }
+  .band svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .band > p { position: relative; margin: 0; }
+  .kicker { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+  .name { font-family: var(--font); font-size: 40px; line-height: 1.05; margin-top: 4px !important; }
+  .age { font-size: 14px; }
+  .details { margin-top: 10px; background: var(--surface); border-radius: 12px; padding: 10px 12px; color: var(--ink); font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+  .details b { color: var(--accent); }
+  .msg { margin-top: 8px; background: var(--soft); border-radius: 12px; padding: 8px 12px; color: var(--ink); font-size: 13px; }
+  .info { padding: 14px 16px 16px; display: grid; gap: 8px; font-size: 14px; }
+  .info h2 { margin: 0; font-size: 19px; }
+  .swatches { display: flex; gap: 4px; }
+  .swatches span { flex: 1; height: 22px; border-radius: 6px; border: 1px solid #e4e4e7; }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+  dt { color: #52525b; }
+  dd { margin: 0; }
+  footer { padding: 0 56px 40px; color: #52525b; font-size: 14px; max-width: 120ch; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Temas infantiles — primera propuesta</h1>
+  <p>Cada tema es una paleta inspirada en un estilo popular, una tipografía con licencia comercial e ilustraciones propias, sin personajes, logos ni nombres protegidos. Cualquier tema se puede aplicar a cualquiera de las tres estructuras (Mapa, Cartel y Cuento); aquí se muestra sobre el Cartel. Todos los pares de texto pasan 4.5:1.</p>
+</header>
+<main id="themes"></main>
+<footer>Las tipografías se muestran con equivalentes del sistema; la fuente final de cada tema se carga con su licencia al implementarlo. Las ilustraciones de esta vista son marcadores simples, no el arte final.</footer>
+<script>
+  const motifs = {
+    flakes: '<g stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".45">' + [[24,24],[250,30],[40,110],[262,104]].map(([x,y]) => `<path d="M${x-8} ${y}h16M${x} ${y-8}v16M${x-6} ${y-6}l12 12M${x+6} ${y-6}l-12 12"/>`).join("") + '</g>',
+    paws: '<g fill="#ffffff" opacity=".35">' + [[30,30],[250,100]].map(([x,y]) => `<circle cx="${x}" cy="${y+6}" r="7"/><circle cx="${x-8}" cy="${y-4}" r="3"/><circle cx="${x}" cy="${y-8}" r="3"/><circle cx="${x+8}" cy="${y-4}" r="3"/>`).join("") + '</g><g fill="var(--d2)"><path d="M250 18l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/><path d="M36 96l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></g>',
+    web: '<g fill="none" stroke="#ffffff" stroke-width="1.5" opacity=".35"><path d="M0 0l70 70M0 40l60 30M40 0l30 60"/><path d="M14 0q6 14-14 14M30 0q10 30-30 30M50 0q14 50-50 50"/><path d="M280 140l-70-70M280 100l-60-30M240 140l-30-60"/><path d="M266 140q-6-14 14-14M250 140q-10-30 30-30"/></g>',
+    dots: '<g fill="var(--d1)" opacity=".9">' + [[20,20],[60,110],[240,24],[262,90],[200,120],[90,14]].map(([x,y]) => `<circle cx="${x}" cy="${y}" r="7"/>`).join("") + '</g>',
+    dino: '<g fill="var(--d1)" opacity=".85"><path d="M0 140l18-26 18 26 18-26 18 26 18-26 18 26z"/><path d="M190 140l18-26 18 26 18-26 18 26 18-26 18 26z"/></g><g fill="#ffffff" opacity=".35"><ellipse cx="34" cy="30" rx="7" ry="10"/><ellipse cx="250" cy="40" rx="7" ry="10"/></g>',
+    bubbles: '<g fill="none" stroke="#ffffff" stroke-width="2" opacity=".5">' + [[22,30,8],[36,58,5],[250,24,10],[262,56,6],[240,112,7]].map(([x,y,r]) => `<circle cx="${x}" cy="${y}" r="${r}"/>`).join("") + '</g><g fill="var(--d2)" opacity=".8"><path d="M0 140q20-24 40 0q20-24 40 0z"/><path d="M200 140q20-24 40 0q20-24 40 0z"/></g>',
+    crown: '<g fill="var(--d2)"><path d="M18 34l6-14 8 9 8-9 6 14z"/><path d="M244 120l6-14 8 9 8-9 6 14z"/></g><g fill="#ffffff" opacity=".5"><path d="M250 22l2 5 5 1-4 3 1 5-4-2-4 2 1-5-4-3 5-1z"/><path d="M40 104l2 5 5 1-4 3 1 5-4-2-4 2 1-5-4-3 5-1z"/></g>',
+    blocks: '<g opacity=".85">' + [[0,112,"var(--d1)"],[24,112,"var(--d2)"],[0,88,"var(--d2)"],[256,0,"var(--d1)"],[232,0,"var(--d2)"],[256,24,"var(--d2)"]].map(([x,y,c]) => `<rect x="${x}" y="${y}" width="24" height="24" fill="${c}" stroke="#ffffff" stroke-opacity=".4"/>`).join("") + '</g>',
+  };
+  const themes = [
+    { name: "Reino de hielo", motif: "flakes", font: '"Cinzel Decorative", Copperplate, "Trajan Pro", serif', fontName: "Cinzel Decorative (OFL)", art: "Copos, cristales y auroras", c: ["#eef5fc","#ffffff","#d9e8f7","#162544","#2c5aa0","#b9a8e3","#8fd0f2"], min: "5.47" },
+    { name: "Equipo de rescate", motif: "paws", font: '"Luckiest Guy", "Arial Black", Impact, sans-serif', fontName: "Luckiest Guy (Apache 2.0)", art: "Huellas, estrellas y señales", c: ["#fff8e7","#ffffff","#ffe8ad","#14213d","#b5121b","#1f5fbf","#f6c312"], min: "5.67" },
+    { name: "Héroe arácnido", motif: "web", font: 'Bangers, Impact, "Arial Black", sans-serif', fontName: "Bangers (OFL)", art: "Telarañas y ciudad de noche", c: ["#f3f5fb","#ffffff","#dde5f5","#0f172a","#b91c1c","#1d4ed8","#0f172a"], min: "5.11" },
+    { name: "Ratón clásico", motif: "dots", font: 'Chewy, "Marker Felt", "Comic Sans MS", cursive', fontName: "Chewy (Apache 2.0)", art: "Lunares, moños y globos", c: ["#fff9ec","#ffffff","#fde9b4","#1a1a1a","#b5121b","#f5c400","#1a1a1a"], min: "5.70" },
+    { name: "Dinosaurios", motif: "dino", font: '"Lilita One", "Arial Rounded MT Bold", "Arial Black", sans-serif', fontName: "Lilita One (OFL)", art: "Huellas, hojas y volcanes", c: ["#f1f6e8","#ffffff","#ddebc6","#1f2d16","#3b6a1c","#e07a1f","#a3c06b"], min: "5.14" },
+    { name: "Bajo el mar", motif: "bubbles", font: 'Pacifico, "Snell Roundhand", "Brush Script MT", cursive', fontName: "Pacifico (OFL)", art: "Burbujas, conchas y escamas", c: ["#eafaf7","#ffffff","#c9eee8","#0d3340","#0f6d66","#8a6bd1","#f2a7c3"], min: "4.96" },
+    { name: "Princesa de cuento", motif: "crown", font: '"Great Vibes", "Snell Roundhand", "Apple Chancery", cursive', fontName: "Great Vibes (OFL, ya cargada)", art: "Coronas, estrellas y castillo", c: ["#fff3f7","#ffffff","#fadbe7","#3a1230","#a32b65","#e9b6d2","#d4af37"], min: "5.29" },
+    { name: "Bloques y píxeles", motif: "blocks", font: '"Press Start 2P", "Courier New", monospace', fontName: "Press Start 2P (OFL), solo títulos", art: "Bloques, nubes cuadradas y gemas", c: ["#f0f4ea","#ffffff","#d8e6c6","#1f2a1a","#3a6f27","#8b5a2b","#6fb3d2"], min: "4.61" },
+  ];
+  const vars = ["--bg","--surface","--soft","--ink","--accent","--d1","--d2"];
+  const roles = ["fondo","superficie","suave","texto","acento","decoración 1","decoración 2"];
+  document.getElementById("themes").innerHTML = themes.map(t => `
+    <article class="card" style="${vars.map((v, i) => `${v}:${t.c[i]}`).join(";")};--font:${t.font.replace(/"/g, "'")}" aria-labelledby="t-${t.motif}">
+      <div class="preview">
+        <div class="band">
+          <svg viewBox="0 0 280 140" preserveAspectRatio="none" aria-hidden="true">${motifs[t.motif]}</svg>
+          <p class="kicker">¡Es mi fiesta!</p>
+          <p class="name">Mateo</p>
+          <p class="age">cumple 7 años</p>
+        </div>
+        <div class="details"><span><b>Sábado 5 de dic.</b></span><span>16:30 h · Jardín Los Arcos</span></div>
+        <p class="msg">¡Ven a celebrar conmigo! Habrá juegos y pastel.</p>
+      </div>
+      <div class="info">
+        <h2 id="t-${t.motif}">${t.name}</h2>
+        <div class="swatches" role="img" aria-label="Paleta: ${t.c.map((c, i) => `${roles[i]} ${c}`).join(", ")}">${t.c.map(c => `<span style="background:${c}"></span>`).join("")}</div>
+        <dl>
+          <dt>Tipografía</dt><dd>${t.fontName}</dd>
+          <dt>Ilustraciones</dt><dd>${t.art}</dd>
+          <dt>Contraste mín.</dt><dd>${t.min}:1</dd>
+        </dl>
+      </div>
+    </article>`).join("");
+</script>
+</body>
+</html>

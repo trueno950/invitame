@@ -1,0 +1,284 @@
+# Catalog design track
+
+Branch `feat/catalog-designs` from `master` at `6a6d19c`. Grow the catalog from one design (`birthday-adventure-01`)
+to several templates per occasion, each a layout plus a theme; every layout and theme is chosen visually by the
+owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
+
+## Specs
+
+- S1 — ROADMAP outcome (rewritten after L5): "Grow the catalog from one design to several templates per occasion,
+  with each layout and theme chosen visually by the owner before it is implemented."
+- S2 — ROADMAP key scope (rewritten after L5): "a template is a **layout** plus a **theme**: the layout is an
+  allow-listed renderer (page structure, coded once); the theme is an allow-listed set of palette, licensed fonts, and
+  original illustrations that the layout applies; each combination is its own catalog template and `TemplateVersion`";
+  "themed layouts and themes for children's birthdays first, starting from the directions in
+  `design/birthday-adventure-v2/`, then baby showers and themed baptisms"; "elegant layouts and themes for XV años,
+  weddings, and formal baptisms"; "mobile-first, accessible guest rendering".
+- S3 — ROADMAP exit criteria (rewritten after L5): "Children's birthdays, baby showers, baptisms, XV años, and weddings
+  each have at least one published template." "Every layout and theme was chosen by the owner from visual directions
+  before code was written." "Invitations pinned to an earlier version render unchanged after a layout or theme is
+  improved; whether an improvement ships as a new `componentKey` or as a versioned renderer is decided in its slice."
+  "Every theme follows the theme guardrail and passes contrast and mobile layout checks."
+- S4 — ROADMAP non-goals (rewritten after L5): "No customer-side visual editor, per-customer custom designs, character
+  artwork, logos, brand names, or design that depends on media uploads before Milestone 8."
+- S5 — ROADMAP theme guardrail (rewritten after L5): "a themed design may take its color palette from a popular
+  character or brand, and its fonts may be the official ones only when their license allows commercial use;
+  otherwise a similar font with a commercial license is used. A design never includes character artwork, logos, or a
+  protected name, in the template, its catalog name, or its marketing. Illustrations are original work."
+- S6 — Owner, verbatim (L5): "la idea es tener varias plantillas para cumplenos [...] me gustaria usar paleta de
+  colores tematicos por ejemplo de personajes o marcas obviamente si usar los logos pero si sus fontstyles esto para
+  invitaciones de ninos, baby shower que son tematicas la mayoria de las veces ya para mas formales esos si son
+  elegantes como 15 anos o bodas, lo mismo aplica para bautizos a veces es formal otras de tematicas"; "b porque
+  estamos usando la paleta de colores nada mas no la marca en si y sus fontstyles si hay disponibles sino parecidos".
+- S7 — Owner choice for the first birthday templates (L7), answering "¿Qué estructuras programamos primero: Mapa,
+  Cartel, Cuento o las tres?", "¿Con qué temas arrancamos?", and "¿Confirmas que cada estructura nueva sea un diseño
+  aparte y que el actual (`birthday-adventure-01`) quede intacto?": "1.- los 3, 2. los 8 3.- si". So: the three
+  layouts in `design/birthday-adventure-v2/` (01 Mapa, 02 Cartel, 03 Cuento), the eight themes in
+  `design/kids-themes/01-tablero-temas.html`, each layout a new allow-listed `componentKey`, and
+  `birthday-adventure-01` unchanged.
+- S8 — Implementation contract for T6, decided by the parent within S2, S5, and S7 (L8); workers treat it as spec:
+  - **Keys.** Layouts: `birthday-map-01` (Mapa, `01-mapa-aventura.html`), `birthday-poster-01` (Cartel,
+    `02-cartel-fiesta.html`), `birthday-story-01` (Cuento, `03-cuento-ilustrado.html`). Themes, in this order:
+    `ice-kingdom` (Reino de hielo), `rescue-team` (Equipo de rescate), `spider-hero` (Héroe arácnido), `classic-mouse`
+    (Ratón clásico), `dinosaurs` (Dinosaurios), `under-the-sea` (Bajo el mar), `fairytale-princess` (Princesa de
+    cuento), `blocks-and-pixels` (Bloques y píxeles). `birthday-adventure-01` and its files, tests, seed row, and
+    behavior stay unchanged.
+  - **Content.** Each new layout uses exactly the eight `birthday-adventure-01` fields with the same types, limits, and
+    required list (`celebrantName`, `age`, `date`, `time`, `location`, `address`, `mainPhoto`, `message`), so the
+    creator form needs no change.
+  - **Configuration.** Exactly `{ "componentKey": <layout key>, "theme": <theme key> }`; both required, unknown keys,
+    other types, and unknown themes rejected, on the API and in the web parsers. Section order is fixed by each layout.
+  - **Theme tokens** (web), seven colors in the order background, surface, soft, ink, accent, decoration 1,
+    decoration 2, exactly as in `design/kids-themes/01-tablero-temas.html`, plus a display font and a motif.
+    `ink` and `accent` reach 4.5:1 on background, surface, and soft, and white on `accent` reaches 4.5:1; a test pins
+    it. Decoration colors never carry text.
+  - **Fonts.** Display fonts per theme: Cinzel Decorative, Luckiest Guy, Bangers, Chewy, Lilita One, Pacifico, Great
+    Vibes (already loaded), Press Start 2P (titles only). Each new family is a self-hosted latin `woff2` under
+    `apps/web/app/fonts/<family>/` with its license file copied byte-for-byte from google/fonts (`OFL.txt`, or
+    `LICENSE.txt` for Apache 2.0 families), loaded with `next/font/local` and `preload: false`. Body text stays Jost
+    400/500; Great Vibes and Press Start 2P are used for names and titles only.
+  - **Rendering.** Server components without client script, following each artboard's structure, with the theme
+    applied through CSS variables, original decorative SVG motifs (`aria-hidden`), a real `<img>` for `mainPhoto`
+    with alt text, mobile-first at 390 px, and the same failure behavior as `birthday-adventure-01` (props checked by
+    `PROPS_CHECKS`; invalid props never render).
+  - **Seed.** 24 templates in category `birthday`, key `birthday-<map|poster|story>-<theme key>`, Spanish name
+    `<Mapa|Cartel|Cuento> · <theme display name>`, a short neutral Spanish description, each with a PUBLISHED version
+    1 created only when that template is created by the run; re-running the seed creates nothing. No catalog name or
+    description uses a protected name (S5).
+
+- S9 — Template preview when choosing (L11). Owner, verbatim: "funciona pero una mejora quepodriamos hacer al momento de
+  elegir la plantilla un preview porque asi el usuario solo ve las opciones". Owner choice for "¿Cómo quieres que el
+  cliente vea las plantillas antes de elegir?": "Agrupado por diseño + temas (Recomendado)" — "Una tarjeta por diseño
+  (Mapa, Cartel, Cuento) con su miniatura real; botones de tema cambian la miniatura; «Ver completa» abre la
+  invitación de ejemplo a pantalla de celular." Preview shown: "Menos tarjetas (4 en vez de 25)". Parent decisions
+  within S9 (L11): previews render the real allow-listed renderer with fixed sample content, never a stored
+  screenshot; grouping uses the version's `componentKey` and its `configuration.theme`, never catalog names;
+  a template whose renderer has no themes (`birthday-adventure-01`, other categories) keeps its own card with its own
+  live thumbnail; switching themes needs no client JavaScript if plain form controls can do it; «Ver completa» is a
+  signed-in creator page that shows the sample invitation at phone width and leads back to choosing that template.
+
+- S10 — Chooser refinement chosen by the owner through the design canvas (L15): implement
+  `design/template-chooser-v2/02-paso-a-paso-escritorio.html` «Paso a paso — escritorio», verbatim tradeoff: "Los tres
+  diseños en fila con vistas de 190 px, el tema en ocho miniaturas comparables de un vistazo al lado de la invitación
+  de ejemplo, y el paquete en tres tarjetas. La comparación de temas es la mejor de las tres direcciones. Ocupa 1.830
+  px porque el paso 2 necesita su vista grande, y el paso 1 ya cumplido sigue ocupando espacio en lugar de plegarse.
+  JavaScript del cliente: ninguno si cada paso es una URL del servidor; para plegar pasos cumplidos y avanzar sin
+  recargar hace falta script. En Next.js el paso 2 vuelve a renderizar el diseño elegido en ocho temas en el servidor
+  (ocho instancias del renderer por petición)." Handoff instruction: "Implement it in the project's real stack. Use
+  the artboard as the visual spec: map its parts to the project's existing components and styles, and do not copy
+  the artboard HTML verbatim. Take colors, typography, spacing, radius and shadows from design/system.md, the
+  project's token source." Parent decisions within S10 (L15; the owner may overturn): each step is a server URL with
+  no client script; narrow screens follow `02-paso-a-paso-movil.html`; Birthday Adventure stays visible as a fourth
+  design with a single style (the owner did not answer the removal question, and removing it is a catalog decision);
+  occasions shown are only the catalog categories that have published templates, never hard-coded names.
+
+- S11 — Remove Birthday Adventure (L17). Owner, verbatim: "borralo si lo retiras no tiene caso conservarlo". This
+  supersedes S7/S8's "`birthday-adventure-01` and its files, tests, seed row, and behavior stay unchanged" and the
+  L15 decision to keep it as a fourth design: the renderer `birthday-adventure-01`, its API contract, web component,
+  parsers, palettes, props check, seed template, tests, and docs are deleted; fixtures that used it as a generic
+  example move to a themed layout; the dev and test databases lose its rows (pre-launch, no production data).
+- S12 — Failed create keeps the selection (L17). Owner, verbatim: "y por lodel la correcion si hazlo". When creating
+  the draft fails, the creator lands back on step 3 with the occasion, design, theme, and package kept and the
+  existing error message shown, instead of step 1 with the selection lost.
+
+- S13 — Baby shower and themed baptism (L19). Owner answers, verbatim: "1 si 2 si 3 si 4 si", approving: (1) the 8
+  baby shower and 6 themed baptism themes in `design/celebration-themes/`; (2) baptism content with ceremony and
+  reception as two places, each with address and time, plus parents, godparents, and an RSVP contact; (3) baby
+  shower content with hosts, optional baby name, optional gender reveal, gift registry, and an RSVP contact; (4) the
+  formal baptism stays in the elegant line with XV años and weddings (T8). Parent decisions within S13 (L19; owner may
+  overturn):
+  - **Layouts.** One layout per occasion first, the full-page form of the board's approved preview (accent band with
+    name and date, information rows, place cards), with the same quality rules as the birthday layouts (theme
+    background layer, `--inv-on-accent`, motif strips never behind text, real `<img>` with alt text, 390 px first,
+    no client script): `baby-shower-classic-01` («Clásica») and `baptism-classic-01` («Clásica»). Configuration is
+    exactly `{componentKey, theme}`.
+  - **Themes.** Baby shower: `teddy-honey`, `clouds-stars`, `baby-safari`, `hot-air-balloons`, `boho-rainbow`,
+    `little-moon`, `woodland-friends`, `sweet-bunny`. Baptism: `dove-olive`, `little-angels`, `sky-clouds`,
+    `soft-floral`, `little-lamb`, `star-light`. Colors, fonts, and motifs exactly as on the boards; contrast pinned by
+    tests like the birthday themes.
+  - **Content.** Baby shower required: `hosts`, `date`, `time`, `location`, `address`, `message`, `rsvpContact`;
+    optional: `babyName`, `genderReveal` (boolean), `giftRegistry`, `mainPhoto`. Baptism required:
+    `celebrantName`, `date`, `parents`, `godparents`, `ceremonyPlace`, `ceremonyAddress`, `ceremonyTime`,
+    `receptionPlace`, `receptionAddress`, `receptionTime`, `message`, `rsvpContact`; optional: `mainPhoto`,
+    `giftRegistry`. Every string bounded like the birthday fields; optional fields render nothing when empty.
+  - **Catalog.** Baby shower templates go in the existing category for new families; baptism gets a new category
+    if none exists (seed create-only). Template key `<occasion>-classic-<theme>`, Spanish name `Clásica · <theme
+    name>`, no protected names.
+  - **Fonts.** Baloo 2, Quicksand, Fredoka, Playfair Display, Josefin Sans, Fraunces, Caveat, Nunito, and Lora are
+    self-hosted latin woff2 files with licenses byte-identical to google/fonts, following the T6b procedure.
+
+## Tasks
+
+| ID | Task | Specs | Route | Commit |
+| --- | --- | --- | --- | --- |
+| T1 | Add the catalog design track to `ROADMAP.md` | S1-S5 | inline | `db6c5f1` |
+| T2 | Visual directions for the children's birthday layouts under `design/birthday-adventure-v2/` | S1-S5 | inline | `db6c5f1` |
+| T3 | Rewrite the track and guardrail for layouts plus themes, more occasions, and palette-inspired themes (L5) | S1-S6 | inline | `fee7417` |
+| T4 | Children's theme board: palette-inspired themes with contrast-checked palettes and font suggestions | S2, S5, S6 | inline | `fee7417` |
+| T5 | Owner picks the birthday layouts (01-03) and the first themes; confirm new `componentKey` per layout | S3, S7 | owner | L7 |
+| T6a | API: three renderer contracts, shared theme allow-list, registry, seed for 24 templates, tests, `docs/architecture/overview.md` | S2, S3, S5, S7, S8 | worker | `00cb26a` |
+| T6b | Web: theme tokens and fonts, three layout renderers, parsers, registries, tests, `docs/design/theme.md` | S2, S3, S5, S7, S8 | worker | `2e9c69d`, `71e4830` |
+| T6c | Integration check: key and theme lists in sync, full unit suites, typecheck, lint, 390 px screenshots | S3, S8 | inline | `71e4830` |
+| T9 | Template chooser with live previews grouped by layout, theme switch, and a full sample preview page | S9 | worker | `e3c0284`, `ba3debb` |
+| T10 | Chooser refinement: three visual directions under `design/template-chooser-v2/` | S9 | worker | `e915ab7`, `dfea662` |
+| T10b | Implement the «Paso a paso» chooser (02) in Next.js: step URLs, design row, theme miniatures beside the sample, package cards | S9, S10 | worker | `acec85d` |
+| T11 | Delete Birthday Adventure everywhere: API, web, seed, tests, docs, dev/test database rows | S11 | worker | `280bb9c` |
+| T12 | Failed create returns to step 3 with the selection and the error | S12 | worker | `4f8c9a1` |
+| T7 | Baby shower and themed baptism theme boards | S2-S6 | worker | `aa2af15` |
+| T7a | API: optional schema fields, baby shower and baptism contracts, themes, category, seed | S13 | worker | `7f38b01` |
+| T7b | Web: nine display fonts | S13 | worker | `4250615` |
+| T7c | Web: two layouts, 14 themes, samples, creator form labels and field kinds | S13 | worker | `abc2494`, `87d7e9b` |
+| T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
+
+## Log
+
+- L1 — User (2026-11-12): "tenemos tareas para mejorar los disenos en el roadmap?" Answer: no; the roadmap only
+  states the intent and has one design. Proposed a catalog design track. User: "si agrega al roadmap y luego continua
+  con lo que sigue".
+- L2 — Ordering decided by the parent within L1: the track runs in parallel with Milestones 6 to 9 and must be complete
+  before Milestone 10. The owner may overturn it.
+- L3 — Design system synced to `design/system.md` and `design/system.html` from `apps/web/app/globals.css`,
+  `docs/design/theme.md`, and the `birthday-adventure-01` palettes. Directions written to `design/birthday-adventure-v2/`:
+  `01-mapa-aventura.html`, `02-cartel-fiesta.html`, `03-cuento-ilustrado.html`. All three keep the eight current
+  content fields and the five-variable palette contract (sunset, ocean, forest), so the chosen one can ship as a new
+  `componentKey` without a schema change. Renderer map (explore `mwdzwovk-1-5423`): the registry maps one
+  `componentKey` to one component with no version argument, so editing `birthday-adventure-01` would restyle every
+  invitation pinned to it; parsers reject unknown configuration keys. Recommendation for T3: new key
+  `birthday-adventure-02` plus a new template version. The directions use Jost weights 700/800, which
+  `apps/web/app/layout.tsx` does not load (400/500 only); direction 03 also uses Cormorant Garamond, already loaded.
+  Checked at 390 px in headless Chromium: no horizontal overflow.
+- L4 — Slice 1 closes with T1-T2 (`db6c5f1`, `b53800b`, about 670 lines, almost all self-contained design artboards
+  under `design/`). T4 (the birthday renderer) starts slice 2 after the owner's choice in T3.
+- L5 — Owner (2026-11-12): "la idea es tener varias plantillas para cumplenos no se como lo tienes planeado y me
+  gustaria usar paleta de colores tematicos por ejemplo de personajes o marcas obviamente si usar los logos pero si sus
+  fontstyles esto para invitaciones de ninos, baby shower que son tematicas la mayoria de las veces ya para mas formales
+  esos si son elegantes como 15 anos o bodas, lo mismo aplica para bautizos a veces es formal otras de tematicas". The
+  parent recommended generic original themes (option A) and named the intellectual-property risk; the owner chose
+  option B: "b porque estamos usando la paleta de colores nada mas no la marca en si y sus fontstyles si hay disponibles
+  sino parecidos". The parent proposed the layout-plus-theme model; the three birthday directions become candidate
+  layouts rather than competing options. The guardrail now allows palette inspiration and commercially licensed or
+  similar fonts, and still forbids character artwork, logos, and protected names in templates, catalog names, and
+  marketing. Theme names stay generic in the repository.
+- L6 — T3-T4 in `fee7417`: ROADMAP rewritten for layouts plus themes, five occasions, and the theme guardrail;
+  `design/kids-themes/01-tablero-temas.html` shows eight themes (Reino de hielo, Equipo de rescate, Héroe arácnido,
+  Ratón clásico, Dinosaurios, Bajo el mar, Princesa de cuento, Bloques y píxeles) on the Cartel layout. Every
+  palette's ink and accent reach at least 4.61:1 on background, surface, and soft, and white on accent at least 6.03:1
+  (computed with the WCAG formula). Font licenses named on the board are to be confirmed when each font is added.
+  Slice 1 ends here (about 810 lines, mostly design artboards); T6 starts slice 2.
+- L7 — Owner (2026-11-12), verbatim: "1.- los 3, 2. los 8 3.- si". T5 closed; T6 starts slice 2. Implementation map
+  requested from explore task `mwe1zdea-2-xfjf`.
+- L8 — Implementation map from explore `mwe1zdea-2-xfjf`: renderer keys live in the API registry map and five API tests,
+  and in the web registry, `PROPS_CHECKS`, and their tests; `registry-sync.test.ts` reads the API registry source as
+  text; the creator form is schema-driven; there is no template-package link; `apps/web/lib/theme/fonts.test.ts`
+  pins the exact font folder set and OFL licenses; tests run with `node --test` (API through `@swc-node/register`),
+  and the seed db-spec needs a local Postgres. The parent fixed the S8 contract and split T6 into an API worker and a
+  web worker with disjoint edit surfaces.
+- L9 — T6a done in `00cb26a` (API: 1096 unit tests pass, tsc clean; the seed db-spec was not run because no database
+  or Docker is available here). T6b passed 617 web tests, but the 390 px browser check (worker `mwe2z0ui-5-8byk`,
+  27 renders) found defects: theme background never painted, `text-white` not emitted (ink on accent 2.2-2.8:1),
+  duplicate React keys in the rescue-team motif, stretched motifs, motifs behind text, a clipped ticket time in
+  blocks-and-pixels, and a long polaroid caption overlapping the photo. Fixes sent back to the web worker
+  (`mwe3p3pm-6-a0t8`); T6b stays open until a second browser check passes.
+- L10 — T6b and T6c done. Fonts in `2e9c69d` (seven self-hosted latin woff2 families, licenses byte-identical to
+  google/fonts: OFL for Cinzel Decorative, Bangers, Lilita One, Pacifico, Press Start 2P; Apache 2.0 for Luckiest
+  Guy and Chewy). Layouts in `71e4830`. Owner, verbatim: "como que no hay docker? ni db creala entonces". Docker was
+  running; the shell's redirected HOME hid its socket. Evidence: web 638/638 tests, API 1096/1096 unit tests, API
+  292/292 db-specs on `invitame_test` after `prisma migrate deploy`, both typechecks clean, docs check and Biome on the
+  changed files clean. The dev database `invitame` was seeded: eight PUBLISHED versions each for `birthday-map-01`,
+  `birthday-poster-01`, and `birthday-story-01`. Browser check at 390 px, round 2 (worker `mwe45ppc-7-jxzs`, 27 pages):
+  the seven round-1 defects and three fidelity gaps pass, with 0 console errors, no overflow, contrast on accent
+  surfaces 4.61-6.82:1, and no decoration over text. Round 3 (parent) fixed the one new defect, a poster motif hidden
+  behind the polaroid: the motif is now in flow above the hero, with 0 hidden shapes, 0 text overlaps, and 0 console
+  errors on all eight themes. Slice 2 ends here; T7 starts slice 3.
+- L11 — Owner tested the 24 templates on the local app ("funciona") and asked for a preview when choosing; chose the
+  grouped layout cards with theme switches (S9). Added T9 ahead of T7.
+- L12 — T9 done in `e3c0284` (API: creator catalog answers the published version's `configuration`) and `ba3debb`
+  (web chooser). Worker `mwe6d2mp-8-6ois`: web 668/668, API 1097/1097 unit and 292/292 db-specs on `invitame_test`,
+  both typechecks, docs check, and Biome on the changed files pass. In the browser at 390 and 1280 px: 4 cards, 25
+  radios, a theme switch changes the miniature, the «Ver completa» link, and the submitted version id; drafts are
+  created from a chosen theme; the preview page requires sign-in and shows «No encontramos esa plantilla» for
+  unknown ids. Not run: the Playwright e2e specs. The chooser server-renders all 25 miniatures (about 515 KB of HTML),
+  which needs a reviewed strategy if the catalog grows much.
+- L13 — Owner on the T9 chooser, verbatim: "me gusto pero podrias mejorar aun mas". The parent reads it as a request
+  for a better chooser and, following S3's rule that visuals are chosen before code, prepares three directions under
+  `design/template-chooser-v2/` (T10) for the owner to pick from.
+- L14 — T10 directions written by worker `mwe7nql2-9-n6a3` to `design/template-chooser-v2/`: 01 «Galería con filtros»,
+  02 «Paso a paso», and 03 «Vista dividida», each at 390 and 1280 px. All six render with no overflow or console
+  errors, pass the contrast and accessibility probes, and use no external URLs. The worker recommends 01. Waiting for
+  the owner's choice; Birthday Adventure is not shown in the directions, which is an open question for the owner.
+- L15 — Owner chose direction 02 through the design canvas handoff: "Implement the design artboard
+  design/template-chooser-v2/02-paso-a-paso-escritorio.html" (S10). The question about removing Birthday Adventure
+  stays unanswered; the parent keeps it visible as a fourth design. T10b opened; canvas handoff reported
+  `in_progress`. This handoff commits nothing by itself; T10b work-unit commits follow ODD.
+- L16 — T10b done in `acec85d` (worker `mwe92vm4-a-9lkp`). Every step is a server URL
+  (`?paso=1|2|3&ocasion&diseno&tema&paquete`) with no client script. Step 1 shows four designs with real-renderer
+  miniatures, Birthday Adventure included; step 2 shows the chosen design in its themes beside a 390 px sample;
+  step 3 shows the packages and the unchanged create form, which posts the version id and the package. Stale or
+  unknown params fall back to the nearest valid step. Evidence: web 691/691 tests, tsc, docs check, and Biome on the
+  changed files pass. In the browser at 1280 and 390 px every step plus the preview shows no overflow and no console
+  errors, and one draft was created end to end. Not run: the updated Playwright e2e specs. Kept on purpose versus
+  the artboard: one step per page, real renderers instead of drawings, and four designs. Known gap: a failed create
+  still returns to step 1 without the selection, because the create command was left unchanged. Canvas handoff
+  reported implemented with preview http://localhost:3000/cuenta/invitaciones/nueva.
+- L17 — Owner, verbatim: "borralo si lo retiras no tiene caso conservarlo, y por lodel la correcion si hazlo luego
+  continua con lo tro del tablero". The parent had recommended retiring Birthday Adventure without deleting it; the
+  owner chose deletion. Before the change, the dev database had 40 `birthday-adventure-01` versions and 1 invitation
+  pinned to one of them, the test database had 1 version, and 65 repository files referenced it. T11 and T12 go to
+  one worker in sequence; the T7 theme board goes to a parallel design worker.
+- L18 — T7 boards written by worker `mwea2erh-c-pmwa` to `design/celebration-themes/`: `01-baby-shower.html`, eight
+  themes (Osito y miel, Nubes y estrellas, Safari bebé, Globos aerostáticos, Arcoíris boho, Lunita, Amigos del bosque,
+  Conejito dulce), and `02-bautizo-tematico.html`, six themes (Paloma y olivo, Angelitos, Cielo y nubes, Floral suave,
+  Corderito, Luz de estrella), each with a «Datos que pide esta ocasión» proposal. Every palette pairs at
+  4.70:1 or more (WCAG formula); both boards render at 1440 px with no overflow or console errors. Waiting for the
+  owner's theme choice and approval of the proposed content fields. The baptism proposal splits the place into
+  ceremony and reception blocks, which needs a new schema per layout.
+- L19 — Owner approved the boards, the content fields, and the elegant formal baptism ("1 si 2 si 3 si 4 si"). The
+  parent fixed S13 and split the work into T7a-T7c. They start after T11 and T12 finish, because they edit the same
+  registries, seed, and tests.
+- L20 — T11 committed in `280bb9c` and T12 in `4f8c9a1` (worker `mwea2erb-b-z70t`). The parent deleted the database
+  rows in one transaction per database. Dev: 1 invitation, 40 versions, and 38 templates deleted, leaving 25
+  templates. Test: 1 version and 1 template deleted. Independent verify `mweayl5j-d-fu1c` returned S11 met and S12
+  met with no blockers: web 675, API 1092 unit and 291 db-specs pass, both typechecks and the docs check pass, and
+  the probes showed no open redirect or CR/LF injection in the carried selection. Its advisories: a stale
+  adventure-shaped configuration in `creator-catalog.controller.spec.ts`; no fixture exercising a single-style card
+  miniature; five suggested regression tests, which go to T7a (API: D, E) and T7c (web: A, B, C); and an old dev-only
+  `retired-renderer-99` row, left as is. T7a-T7c launched in parallel with disjoint edit surfaces.
+- L21 — T7a in `7f38b01`: API with optional renderer fields (`presence: "optional"`), the two layouts, theme
+  allow-lists, the «Bautizos» category, and 14 seeded templates; 1129 unit tests and 293 db-specs pass. T7b in
+  `4250615`: nine OFL fonts, licenses byte-identical to google/fonts. T7c in `abc2494`: the web layouts, 14 themes,
+  samples, and form fields; birthday markup is byte-identical to the base commit across all 24 renders. The parent
+  fixed Biome formatting in three new renderer files and added the T7c docs paragraph to `docs/design/theme.md`.
+  The dev database was seeded and now holds 8 baby shower and 6 baptism PUBLISHED versions. Browser verify
+  `mwec4dx6-h-dohz` found S13 met at 390 and 1280 px with no blockers: the occasions come from the catalog, the
+  steps work, drafts are saved and published, empty optional fields render nothing, there is no overflow, there are
+  no console errors, fonts load, and contrast holds (lowest 4.71:1). Its advisory A1, a baby shower page titled only
+  «Invitación», was fixed test-first in `87d7e9b`, so the title now names the baby. Not adopted: the verifier's
+  proposed Playwright spec, because the e2e suite needs a production build that was not run here. Full checks
+  after integration: web 757/757 tests, API 1129/1129, both typechecks, docs, Biome, and `git diff --check`.
+- L22 — Independent verify `mwecofg6-i-u4tf` of the shared renderer-contract change in `7f38b01` (high-risk item 3)
+  returned PASS with no blockers. A differential run of 141 checks against `7f38b01^` showed no differences in the
+  birthday contracts. The optional rule refuses optional fields listed in `required`, missing declarations, wrong
+  types, and prototype-named keys exactly as before. Absent optional fields never block publication, and an empty
+  optional photo is refused by the API and omitted by the form. API: 1129 unit tests and 293 db-specs pass. Its
+  suggested extra regression specs mostly duplicate `celebration-layouts.spec.ts` and were not added. Scratch copies
+  removed.

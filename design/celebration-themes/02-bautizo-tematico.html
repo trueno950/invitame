@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Temas de bautizo — tablero de selección</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fafafa; color: #18181b; font-family: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif; line-height: 1.5; }
+  header { padding: 40px 56px 8px; }
+  .eyebrow { margin: 0 0 10px; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #52525b; }
+  h1 { margin: 0; font-size: 34px; line-height: 1.15; }
+  header p.lead { margin: 8px 0 0; color: #52525b; max-width: 96ch; }
+  main { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 28px 56px 40px; }
+  .card { background: #ffffff; border: 1px solid #e4e4e7; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
+  .preview { background: var(--bg); padding: 16px; display: grid; gap: 9px; align-content: start; }
+  .band { position: relative; overflow: hidden; background: var(--accent); color: #ffffff; text-align: center; border-radius: 14px; padding: 20px 76px 22px; }
+  .art { position: absolute; width: 64px; height: 53px; opacity: .95; }
+  .art svg { display: block; width: 100%; height: 100%; }
+  .art--tl { top: 6px; left: 6px; }
+  .art--br { right: 6px; bottom: 6px; }
+  .band > p { position: relative; margin: 0; }
+  .kicker { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; }
+  .name { font-family: var(--font); font-size: 38px; line-height: 1.06; margin-top: 4px !important; overflow-wrap: anywhere; }
+  .bandsub { font-size: 12.5px; }
+  .row { background: var(--surface); border-radius: 10px; padding: 9px 11px; color: var(--ink); font-size: 13px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .row.soft { background: var(--soft); }
+  .row b { color: var(--accent); font-weight: 600; }
+  .row .when { white-space: nowrap; }
+  .row .label { display: block; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  .row .value { font-size: 13px; }
+  .info { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 10px; flex: 1; font-size: 14px; }
+  .info h2 { margin: 0; font-size: 19px; }
+  .contrast { margin: auto 0 0; padding-top: 9px; border-top: 1px solid #e4e4e7; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; color: #52525b; }
+  .contrast b { color: #18181b; }
+  .swatches { display: flex; gap: 4px; }
+  .swatches span { flex: 1; height: 22px; border-radius: 6px; border: 1px solid #e4e4e7; }
+  .swatch-note { margin: -4px 0 0; font-size: 10px; color: #52525b; display: grid; line-height: 1.4; }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+  dt { color: #52525b; }
+  dd { margin: 0; }
+  .facts { margin: 0 56px 40px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 18px; padding: 28px 32px 30px; }
+  .facts h2 { margin: 0; font-size: 24px; }
+  .badge { display: inline-block; margin: 8px 0 0; padding: 3px 10px; border-radius: 999px; background: #fffbeb; border: 1px solid #e4e4e7; color: #92400e; font-size: 12px; letter-spacing: .04em; }
+  .facts p.note { margin: 12px 0 0; color: #3f3f46; max-width: 100ch; font-size: 14.5px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 44px; margin-top: 22px; }
+  .cols h3 { margin: 0 0 10px; font-size: 15px; }
+  .cols ul { margin: 0; padding-left: 18px; display: grid; gap: 9px; color: #3f3f46; font-size: 14px; }
+  .cols b { color: #18181b; }
+  .cols .hint { color: #52525b; }
+  footer { padding: 0 56px 40px; color: #52525b; font-size: 14px; max-width: 120ch; display: grid; gap: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Tablero de temas · propuesta</p>
+  <h1>Bautizo temático — seis temas</h1>
+  <p class="lead">La versión temática del bautizo, para las familias que quieren algo cálido y no una invitación formal. Cada tema es una paleta, una tipografía con licencia comercial (OFL) e ilustraciones originales inspiradas en la simbología bautismal: paloma, olivo, alas, nubes, flores, lana y luz. Nada de dibujos de personajes, logos ni nombres protegidos. Aquí se muestran sobre una invitación vertical con el contenido real de un bautizo: padres, padrinos, ceremonia en la iglesia y recepción en otro lugar. Todos los pares de texto de cada tema pasan 4.5:1, calculado con la fórmula WCAG.</p>
+</header>
+<main id="themes"></main>
+
+<section class="facts" aria-labelledby="campos-bautizo">
+  <h2 id="campos-bautizo">Datos que pide esta ocasión</h2>
+  <span class="badge">Propuesta para revisar · todavía no cambia el formulario</span>
+  <p class="note">Un bautizo no se parece a un cumpleaños: no hay edad que anunciar y casi siempre hay dos lugares con horas distintas. Hoy el formulario guarda un solo lugar y una sola hora, así que ese es el cambio más grande de la lista.</p>
+  <div class="cols">
+    <div>
+      <h3>Ya existe hoy</h3>
+      <ul>
+        <li><b>Nombre</b> del niño o la niña.</li>
+        <li><b>Fecha y hora</b> de la ceremonia.</li>
+        <li><b>Lugar y dirección</b>, con enlace al mapa. <span class="hint">Hoy es un solo lugar.</span></li>
+        <li><b>Foto principal</b> del bebé.</li>
+        <li><b>Mensaje o nota</b> de la familia.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Nuevo propuesto</h3>
+      <ul>
+        <li><b>Padres</b>: nombres, para anunciar a quién pertenece la celebración.</li>
+        <li><b>Padrinos</b>: nombres. Es el dato que la familia pregunta primero.</li>
+        <li><b>Ceremonia</b>: iglesia o parroquia, dirección y hora, en su propio bloque.</li>
+        <li><b>Recepción</b>: lugar, dirección y hora, en un bloque aparte del anterior.</li>
+        <li><b>Confirmar asistencia</b> por teléfono o nombre de la persona de contacto.</li>
+        <li><b>Mesa de regalos</b>: opcional y apagada por defecto, porque en bautizo no siempre aplica.</li>
+        <li><b>Edad</b>: se oculta. No se pide y no se muestra.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Detalle técnico para quien implemente: <code>celebrantName</code>, <code>date</code>, <code>mainPhoto</code> y <code>message</code> se reutilizan tal cual; <code>location</code>, <code>address</code> y <code>time</code> dejan de ser un valor único y pasan a dos bloques (ceremonia y recepción), cada uno con lugar, dirección y hora. <code>age</code> no aplica. Padres, padrinos y confirmación son campos nuevos de texto corto.</p>
+</section>
+
+<footer>
+  <span>Las previsualizaciones usan pilas de fuentes del sistema como equivalente; la fuente final de cada tema se carga con su licencia al implementarlo. Las ilustraciones del tablero son marcadores geométricos simples, no el arte final.</span>
+  <span>Contraste calculado con la fórmula WCAG 2.x sobre fondo, superficie y suave para texto y acento, y blanco sobre acento. El mínimo impreso es el par más bajo de cada paleta.</span>
+</footer>
+
+<script>
+  const motifs = {
+    paloma: {
+      tl: '<g fill="var(--d1)" opacity=".85"><ellipse cx="22" cy="36" rx="13" ry="5.5" transform="rotate(-30 22 36)"/><ellipse cx="38" cy="20" rx="13" ry="5.5" transform="rotate(30 38 20)"/><ellipse cx="16" cy="52" rx="11" ry="4.8" transform="rotate(-30 16 52)"/></g><g fill="none" stroke="#ffffff" stroke-opacity=".4" stroke-width="1.6" stroke-linecap="round"><path d="M8 58q10-22 32-40"/></g>',
+      br: '<g fill="var(--d1)"><ellipse cx="34" cy="34" rx="14" ry="9" transform="rotate(-10 34 34)"/><circle cx="22" cy="24" r="6"/><path d="M16 24l-6-1 5 4z"/><path d="M46 28l14-6 4 9-4 9-14-6z"/></g><g fill="none" stroke="#ffffff" stroke-opacity=".5" stroke-width="1.8" stroke-linecap="round"><path d="M28 34q8-4 15 1"/></g>',
+    },
+    alas: {
+      tl: '<g fill="none" stroke="var(--d1)" stroke-width="2.2" stroke-linecap="round"><path d="M34 32q-16-10-25 3 9 12 25 6"/><path d="M34 32q16-10 25 3-9 12-25 6"/></g><circle cx="34" cy="24" r="6" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="1.6"/>',
+      br: '<circle cx="26" cy="22" r="11" fill="none" stroke="var(--d1)" stroke-width="2.2"/><g fill="var(--d1)"><path d="M50 30l1.8 4.8 4.8 .7-3.6 3.4 .9 4.8-4-2.4-4 2.4 .9-4.8-3.6-3.4 4.8-.7z"/><path d="M46 46l1.3 3.4 3.4 .5-2.6 2.4 .7 3.4-2.8-1.7-2.8 1.7 .7-3.4-2.6-2.4 3.4-.5z"/></g>',
+    },
+    cielo: {
+      tl: '<g fill="#ffffff" opacity=".35"><ellipse cx="24" cy="34" rx="19" ry="9.5"/><ellipse cx="37" cy="26" rx="12" ry="7.5"/></g>',
+      br: '<g fill="none" stroke="var(--d1)" stroke-width="2" stroke-linecap="round" opacity=".9"><circle cx="40" cy="30" r="9"/><path d="M40 12v6M40 42v6M22 30h6M52 30h6M28 18l4 4M52 18l-4 4M28 42l4-4M52 42l-4-4"/></g>',
+    },
+    floral: {
+      tl: '<g fill="var(--d1)" transform="translate(30 26)"><circle cx="0" cy="-12" r="7.5"/><circle cx="12" cy="-4" r="7.5"/><circle cx="8" cy="10" r="7.5"/><circle cx="-8" cy="10" r="7.5"/><circle cx="-12" cy="-4" r="7.5"/><circle cx="0" cy="0" r="4.5" fill="#ffffff" fill-opacity=".65"/></g>',
+      br: '<g fill="var(--d1)" transform="translate(44 32) scale(.62)"><circle cx="0" cy="-12" r="7.5"/><circle cx="12" cy="-4" r="7.5"/><circle cx="8" cy="10" r="7.5"/><circle cx="-8" cy="10" r="7.5"/><circle cx="-12" cy="-4" r="7.5"/><circle cx="0" cy="0" r="4.5" fill="#ffffff" fill-opacity=".6"/></g><g fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="1.6" stroke-linecap="round"><path d="M22 58q4-14 0-24"/></g>',
+    },
+    corderito: {
+      tl: '<g fill="none" stroke="var(--d1)" stroke-width="2" stroke-linecap="round"><path d="M12 40a24 24 0 0 1 48 0"/><path d="M12 40h48"/><path d="M36 40q-2-14-10-21M36 40q0-16 0-23M36 40q2-14 10-21"/><path d="M23 40q0-9-4-13M49 40q0-9 4-13"/></g><g fill="var(--d1)" opacity=".8"><circle cx="36" cy="48" r="2.8"/><circle cx="26" cy="50" r="2.1"/><circle cx="46" cy="50" r="2.1"/></g>',
+      br: '<g fill="none" stroke="var(--d1)" stroke-width="2"><circle cx="26" cy="24" r="8"/><circle cx="38" cy="16" r="8"/><circle cx="50" cy="24" r="8"/><circle cx="26" cy="38" r="8"/><circle cx="38" cy="46" r="8"/><circle cx="50" cy="38" r="8"/></g>',
+    },
+    estrella: {
+      tl: '<g fill="var(--d1)" opacity=".9"><path d="M22 8l2.6 6.6 6.6 1-5 4.6 1.3 6.6-5.5-3.3-5.5 3.3 1.3-6.6-5-4.6 6.6-1z"/><circle cx="42" cy="20" r="2.6"/><circle cx="30" cy="34" r="2"/></g>',
+      br: '<g fill="var(--d1)"><path d="M40 24l4 10.4 11.2 1-8.5 7.3 2.6 11.1-9.3-5.7-9.3 5.7 2.6-11.1-8.5-7.3 11.2-1z"/></g><g stroke="var(--d1)" stroke-width="1.8" stroke-linecap="round" opacity=".6"><path d="M40 6v7M62 34h7M11 34h7"/></g>',
+    },
+  };
+  const themes = [
+    { name: "Paloma y olivo", motif: "paloma", font: '"Cormorant Garamond", "Iowan Old Style", Georgia, serif', fontName: "Cormorant Garamond (OFL, ya cargada)", art: "Paloma y rama de olivo", insp: "Simbología bautismal clásica", c: ["#f6f6ee","#ffffff","#e3e6d3","#26301f","#4b6134","#a9b389","#d7c9a3"], min: "5.40" },
+    { name: "Angelitos", motif: "alas", font: '"Great Vibes", "Snell Roundhand", "Apple Chancery", cursive', fontName: "Great Vibes (OFL, ya cargada), solo nombres", art: "Alas, aro de luz y destellos", insp: "Estampa de angelitos de primera comunión", c: ["#f2f7fd","#ffffff","#dbe8f7","#1f2d47","#3f6291","#e2c47a","#b9d3ef"], min: "5.02" },
+    { name: "Cielo y nubes", motif: "cielo", font: '"Nunito", "Avenir Next", "Segoe UI", sans-serif', fontName: "Nunito (OFL)", art: "Nubes suaves y sol de trazos", insp: "Bautizo al aire libre", c: ["#eff8fb","#ffffff","#d3ecf2","#16323d","#1f6a7a","#9ccfdd","#f3e2b6"], min: "5.01" },
+    { name: "Floral suave", motif: "floral", font: '"Lora", "Iowan Old Style", Georgia, serif', fontName: "Lora (OFL)", art: "Flores de pétalos redondos", insp: "Ramos de temporada", c: ["#fbf3f5","#ffffff","#f2dde3","#3d2530","#8e4258","#a8b99c","#e5bfc9"], min: "5.29" },
+    { name: "Corderito", motif: "corderito", font: '"Quicksand", "Avenir Next", "Segoe UI", sans-serif', fontName: "Quicksand (OFL)", art: "Rizos de lana y concha bautismal", insp: "Estampa de corderito", c: ["#faf6ee","#ffffff","#ece2cf","#332a1e","#6b5a33","#b8c8a6","#dcc0a0"], min: "5.21" },
+    { name: "Luz de estrella", motif: "estrella", font: '"Cinzel Decorative", Copperplate, "Trajan Pro", serif', fontName: "Cinzel Decorative (OFL)", art: "Estrella de ocho puntas y rayos", insp: "Ceremonia de noche con velas", c: ["#eef3f6","#ffffff","#d8e4ea","#142a36","#1f4f63","#c9a24e","#8fb0c4"], min: "6.88" },
+  ];
+  const vars = ["--bg","--surface","--soft","--ink","--accent","--d1","--d2"];
+  const roles = ["fondo","superficie","suave","texto","acento","decoración 1","decoración 2"];
+  document.getElementById("themes").innerHTML = themes.map((t, i) => `
+    <article class="card" style="${vars.map((v, k) => `${v}:${t.c[k]}`).join(";")};--font:${t.font.replace(/"/g, "'")}" aria-labelledby="tema-${i}">
+      <div class="preview">
+        <div class="band">
+          <span class="art art--tl" aria-hidden="true"><svg viewBox="0 0 72 60">${motifs[t.motif].tl}</svg></span>
+          <span class="art art--br" aria-hidden="true"><svg viewBox="0 0 72 60">${motifs[t.motif].br}</svg></span>
+          <p class="kicker">Bautizo de</p>
+          <p class="name">Emilia</p>
+          <p class="bandsub">Domingo 13 de abril</p>
+        </div>
+        <div class="row soft"><span><b>Padres</b></span><span>Diego y Valentina Ortiz</span></div>
+        <div class="row soft"><span><b>Padrinos</b></span><span>Andrés Ortiz y Camila Reyes</span></div>
+        <div class="row"><span><span class="label">Ceremonia</span><span class="value">Parroquia San Miguel</span></span><span class="when">11:00 h</span></div>
+        <div class="row"><span><span class="label">Recepción</span><span class="value">Casa de los abuelos</span></span><span class="when">13:30 h</span></div>
+      </div>
+      <div class="info">
+        <h2 id="tema-${i}">${t.name}</h2>
+        <div class="swatches" role="img" aria-label="Paleta: ${t.c.map((c, k) => `${roles[k]} ${c}`).join(", ")}">${t.c.map(c => `<span style="background:${c}"></span>`).join("")}</div>
+        <p class="swatch-note"><span>1 fondo · 2 superficie · 3 suave · 4 texto</span><span>5 acento · 6 decoración 1 · 7 decoración 2</span></p>
+        <dl>
+          <dt>Tipografía</dt><dd>${t.fontName}</dd>
+          <dt>Ilustraciones</dt><dd>${t.art}</dd>
+          <dt>Inspiración</dt><dd>${t.insp}</dd>
+        </dl>
+        <p class="contrast"><span>Contraste mínimo</span><b>${t.min}:1</b></p>
+      </div>
+    </article>`).join("");
+</script>
+</body>
+</html>

@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-
+import { BIRTHDAY_THEMES } from "./birthday-themes";
 import {
   findRenderer,
   listRendererKeys,
   validateTemplateVersionContract,
 } from "./renderer-registry";
 
-// The renderer allow-list (M3 T5; S2, S3, S6). Expected messages are literals on purpose. The fixtures are
-// a copy of the seeded `birthday-adventure-01` pair; they do not import `prisma/seed.ts`.
+// The renderer allow-list (M3 T5; S2, S3, S6, S11). Expected messages are literals on purpose. The fixtures
+// are a copy of one seeded themed layout pair; they do not import `prisma/seed.ts`.
 
-const KEY = "birthday-adventure-01";
+const KEY = "birthday-poster-01";
+const THEME_ISSUE =
+  "configuration.theme must be one of: ice-kingdom, rescue-team, spider-hero, classic-mouse, dinosaurs, under-the-sea, fairytale-princess, blocks-and-pixels";
 
 type SchemaFixture = Record<string, unknown>;
 
@@ -63,10 +65,7 @@ function seededSchema(): SchemaFixture {
 function seededConfiguration(): Record<string, unknown> {
   return {
     componentKey: KEY,
-    layout: "adventure",
-    palette: "sunset",
-    typography: "rounded",
-    sectionOrder: ["hero", "details", "message"],
+    theme: "dinosaurs",
   };
 }
 
@@ -101,9 +100,40 @@ function issuesOf(result: ReturnType<typeof validate>): string[] {
 }
 
 describe("renderer registry", () => {
-  it("lists birthday-adventure-01 as the only renderer", () => {
-    assert.deepEqual(listRendererKeys(), [KEY]);
-    assert.equal(findRenderer(KEY)?.componentKey, KEY);
+  it("lists exactly the five registered renderers", () => {
+    assert.deepEqual(listRendererKeys(), [
+      "birthday-map-01",
+      "birthday-poster-01",
+      "birthday-story-01",
+      "baby-shower-classic-01",
+      "baptism-classic-01",
+    ]);
+    for (const key of listRendererKeys()) {
+      assert.equal(findRenderer(key)?.componentKey, key);
+    }
+  });
+
+  it("refuses the removed birthday-adventure-01 renderer and its legacy configuration (S11)", () => {
+    const legacy = {
+      componentKey: "birthday-adventure-01",
+      layout: "adventure",
+      palette: "ocean",
+      typography: "rounded",
+      sectionOrder: ["hero", "details", "message"],
+    };
+
+    assert.equal(findRenderer("birthday-adventure-01"), undefined);
+    assert.deepEqual(
+      validateTemplateVersionContract({
+        componentKey: "birthday-adventure-01",
+        schema: seededSchema(),
+        configuration: legacy,
+      }),
+      {
+        ok: false,
+        issues: ['componentKey "birthday-adventure-01" is not a registered renderer'],
+      },
+    );
   });
 
   it("treats prototype keys and unknown keys as not registered", () => {
@@ -114,7 +144,7 @@ describe("renderer registry", () => {
       "hasOwnProperty",
       "unknown",
       "",
-      "BIRTHDAY-ADVENTURE-01",
+      "BIRTHDAY-POSTER-01",
     ]) {
       assert.equal(findRenderer(key), undefined, JSON.stringify(key));
     }
@@ -135,8 +165,10 @@ describe("renderer feature requirements (S6, A1)", () => {
     }
   });
 
-  it("requires no feature key for birthday-adventure-01", () => {
-    assert.deepEqual(findRenderer(KEY)?.requiredFeatureKeys, []);
+  it("requires no feature key for any seeded renderer", () => {
+    for (const key of listRendererKeys()) {
+      assert.deepEqual(findRenderer(key)?.requiredFeatureKeys, [], key);
+    }
   });
 });
 
@@ -182,93 +214,38 @@ describe("validateTemplateVersionContract", () => {
         c.componentKey = "other";
       });
       assert.deepEqual(issuesOf(validate({ configuration })), [
-        'configuration.componentKey must equal "birthday-adventure-01"',
+        'configuration.componentKey must equal "birthday-poster-01"',
       ]);
     });
 
-    it("refuses a layout other than adventure", () => {
-      const configuration = withConfiguration((c) => {
-        c.layout = "grid";
-      });
-      assert.deepEqual(issuesOf(validate({ configuration })), [
-        'configuration.layout must be "adventure"',
-      ]);
-    });
-
-    it("accepts every allowed palette and refuses others", () => {
-      for (const palette of ["sunset", "ocean", "forest"]) {
+    it("accepts every allowed theme and refuses others", () => {
+      for (const theme of BIRTHDAY_THEMES) {
         const configuration = withConfiguration((c) => {
-          c.palette = palette;
+          c.theme = theme;
         });
-        assert.deepEqual(validate({ configuration }), { ok: true }, palette);
+        assert.deepEqual(validate({ configuration }), { ok: true }, theme);
       }
-      for (const palette of ["neon", "", 1, null, "__proto__"]) {
+      for (const theme of ["neon", "", "Ice-Kingdom", 1, null, "__proto__"]) {
         const configuration = withConfiguration((c) => {
-          c.palette = palette;
+          c.theme = theme;
         });
-        assert.deepEqual(issuesOf(validate({ configuration })), [
-          "configuration.palette must be one of: sunset, ocean, forest",
-        ]);
-      }
-    });
-
-    it("refuses a typography other than rounded", () => {
-      const configuration = withConfiguration((c) => {
-        c.typography = "serif";
-      });
-      assert.deepEqual(issuesOf(validate({ configuration })), [
-        'configuration.typography must be "rounded"',
-      ]);
-    });
-
-    it("accepts reordered and shortened section lists that include hero", () => {
-      for (const sectionOrder of [["message", "hero", "details"], ["hero"], ["details", "hero"]]) {
-        const configuration = withConfiguration((c) => {
-          c.sectionOrder = sectionOrder;
-        });
-        assert.deepEqual(validate({ configuration }), { ok: true }, sectionOrder.join());
-      }
-    });
-
-    it("refuses an invalid sectionOrder", () => {
-      const cases: [unknown, string[]][] = [
-        [[], ["configuration.sectionOrder must be a non-empty array"]],
-        ["hero", ["configuration.sectionOrder must be a non-empty array"]],
-        [null, ["configuration.sectionOrder must be a non-empty array"]],
-        [["hero", "hero"], ["configuration.sectionOrder must not contain duplicates"]],
-        [["details", "message"], ['configuration.sectionOrder must include "hero"']],
-        [
-          ["hero", "footer"],
-          ["configuration.sectionOrder[1] must be one of: hero, details, message"],
-        ],
-        [["hero", 3], ["configuration.sectionOrder[1] must be one of: hero, details, message"]],
-      ];
-
-      for (const [sectionOrder, expected] of cases) {
-        const configuration = withConfiguration((c) => {
-          c.sectionOrder = sectionOrder;
-        });
-        assert.deepEqual(
-          issuesOf(validate({ configuration })),
-          expected,
-          JSON.stringify(sectionOrder),
-        );
+        assert.deepEqual(issuesOf(validate({ configuration })), [THEME_ISSUE], String(theme));
       }
     });
 
     it("refuses missing and extra configuration keys", () => {
       const missing = withConfiguration((c) => {
-        delete c.palette;
+        delete c.theme;
       });
       assert.deepEqual(issuesOf(validate({ configuration: missing })), [
-        "configuration.palette is required",
+        "configuration.theme is required",
       ]);
 
       const extra = withConfiguration((c) => {
         c.script = "alert(1)";
       });
       assert.deepEqual(issuesOf(validate({ configuration: extra })), [
-        "configuration.script is not allowed; allowed keys: componentKey, layout, palette, typography, sectionOrder",
+        "configuration.script is not allowed; allowed keys: componentKey, theme",
       ]);
     });
 
@@ -276,10 +253,7 @@ describe("validateTemplateVersionContract", () => {
       const issues = issuesOf(validate({ configuration: {} }));
       assert.deepEqual(issues, [
         "configuration.componentKey is required",
-        "configuration.layout is required",
-        "configuration.palette is required",
-        "configuration.typography is required",
-        "configuration.sectionOrder is required",
+        "configuration.theme is required",
       ]);
     });
   });

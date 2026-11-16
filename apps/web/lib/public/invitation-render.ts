@@ -1,10 +1,30 @@
 import {
-  BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-  parseBirthdayAdventureConfiguration,
-  parseBirthdayAdventureContent,
-  RendererPropsError,
-} from "../renderers/birthday-adventure-01.ts";
+  BABY_SHOWER_CLASSIC_COMPONENT_KEY,
+  parseBabyShowerClassicConfiguration,
+  parseBabyShowerClassicContent,
+} from "../renderers/baby-shower-classic-01.ts";
+import {
+  BAPTISM_CLASSIC_COMPONENT_KEY,
+  parseBaptismClassicConfiguration,
+  parseBaptismClassicContent,
+} from "../renderers/baptism-classic-01.ts";
+import {
+  BIRTHDAY_MAP_COMPONENT_KEY,
+  parseBirthdayMapConfiguration,
+  parseBirthdayMapContent,
+} from "../renderers/birthday-map-01.ts";
+import {
+  BIRTHDAY_POSTER_COMPONENT_KEY,
+  parseBirthdayPosterConfiguration,
+  parseBirthdayPosterContent,
+} from "../renderers/birthday-poster-01.ts";
+import {
+  BIRTHDAY_STORY_COMPONENT_KEY,
+  parseBirthdayStoryConfiguration,
+  parseBirthdayStoryContent,
+} from "../renderers/birthday-story-01.ts";
 import type { RendererProps } from "../renderers/registry.ts";
+import { RendererPropsError } from "../renderers/renderer-props-error.ts";
 
 /**
  * Whether a registered renderer will accept the stored props of an invitation (M5 T5; A3). A renderer
@@ -24,10 +44,38 @@ type PropsCheck = (props: RendererProps) => void;
 
 const PROPS_CHECKS: ReadonlyMap<string, PropsCheck> = new Map<string, PropsCheck>([
   [
-    BIRTHDAY_ADVENTURE_COMPONENT_KEY,
+    BIRTHDAY_MAP_COMPONENT_KEY,
     (props) => {
-      parseBirthdayAdventureConfiguration(props.configuration);
-      parseBirthdayAdventureContent(props.content);
+      parseBirthdayMapConfiguration(props.configuration);
+      parseBirthdayMapContent(props.content);
+    },
+  ],
+  [
+    BIRTHDAY_POSTER_COMPONENT_KEY,
+    (props) => {
+      parseBirthdayPosterConfiguration(props.configuration);
+      parseBirthdayPosterContent(props.content);
+    },
+  ],
+  [
+    BIRTHDAY_STORY_COMPONENT_KEY,
+    (props) => {
+      parseBirthdayStoryConfiguration(props.configuration);
+      parseBirthdayStoryContent(props.content);
+    },
+  ],
+  [
+    BABY_SHOWER_CLASSIC_COMPONENT_KEY,
+    (props) => {
+      parseBabyShowerClassicConfiguration(props.configuration);
+      parseBabyShowerClassicContent(props.content);
+    },
+  ],
+  [
+    BAPTISM_CLASSIC_COMPONENT_KEY,
+    (props) => {
+      parseBaptismClassicConfiguration(props.configuration);
+      parseBaptismClassicContent(props.content);
     },
   ],
 ]);
@@ -40,7 +88,8 @@ export function propsCheckKeys(): readonly string[] {
 /**
  * Whether the props of `componentKey` satisfy its renderer's contract. A refused snapshot is `false`; any
  * other error is a real bug in the check itself and is rethrown unchanged, so it is not mistaken for a
- * guest's missing page.
+ * guest's missing page. Every layout shares the one `RendererPropsError`, so a drifted snapshot is refused
+ * the same way whichever theme it names.
  */
 export function rendererAcceptsProps(componentKey: string, props: RendererProps): boolean {
   const check = PROPS_CHECKS.get(componentKey);

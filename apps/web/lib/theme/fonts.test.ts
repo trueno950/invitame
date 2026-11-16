@@ -121,6 +121,59 @@ function covers([low, high]: [number, number], [declaredLow, declaredHigh]: [num
   return low <= declaredLow && declaredHigh <= high;
 }
 
+/**
+ * Each family folder with the license file google/fonts ships for it: `OFL.txt` for the SIL Open Font
+ * License 1.1 families and `LICENSE.txt` for the Apache License 2.0 ones (T6b, T7b; S5, S8, S13).
+ */
+const FAMILY_LICENSES: ReadonlyArray<{
+  folder: string;
+  license: "OFL.txt" | "LICENSE.txt";
+  text: RegExp;
+}> = [
+  { folder: "baloo-2", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "bangers", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "caveat", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "chewy", license: "LICENSE.txt", text: /Apache License/ },
+  { folder: "cinzel-decorative", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "cormorant-garamond", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "fredoka", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "fraunces", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "great-vibes", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "josefin-sans", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "jost", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "lilita-one", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "lora", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "luckiest-guy", license: "LICENSE.txt", text: /Apache License/ },
+  { folder: "nunito", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "pacifico", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "playfair-display", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "press-start-2p", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "quicksand", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+];
+
+/**
+ * The guest theme display fonts (S8, S13): Latin woff2 files loaded without preloading. The nine faces of
+ * T7b are the baby shower and themed baptism titles of `design/celebration-themes/`.
+ */
+const THEME_FONT_VARIABLES = [
+  "--font-baloo-2",
+  "--font-bangers",
+  "--font-caveat",
+  "--font-chewy",
+  "--font-cinzel-decorative",
+  "--font-fredoka",
+  "--font-fraunces",
+  "--font-josefin-sans",
+  "--font-lilita-one",
+  "--font-lora",
+  "--font-luckiest-guy",
+  "--font-nunito",
+  "--font-pacifico",
+  "--font-playfair-display",
+  "--font-press-start-2p",
+  "--font-quicksand",
+] as const;
+
 describe("theme font loading (S43)", () => {
   test("the import guard recognizes every form of the Google font loader import", () => {
     for (const statement of [
@@ -152,6 +205,17 @@ describe("theme font loading (S43)", () => {
     }
   });
 
+  test("the layout loads every guest theme display font without preloading it", () => {
+    for (const variable of THEME_FONT_VARIABLES) {
+      assert.ok(layoutSource.includes(`variable: "${variable}"`), `the layout sets ${variable}`);
+    }
+    assert.equal(
+      [...layoutSource.matchAll(/preload:\s*false/g)].length,
+      THEME_FONT_VARIABLES.length,
+      "each theme display font is not preloaded",
+    );
+  });
+
   test("every font file the layout names is a committed woff2 file next to its license", () => {
     const paths = layoutFontPaths();
     assert.ok(paths.length > 0, "the layout names its font files");
@@ -169,11 +233,19 @@ describe("theme font loading (S43)", () => {
     }
     assert.deepEqual(
       [...families].map((family) => relative(appDirectory, family).split(sep).join("/")).sort(),
-      ["fonts/cormorant-garamond", "fonts/great-vibes", "fonts/jost"],
+      FAMILY_LICENSES.map(({ folder }) => `fonts/${folder}`).sort(),
+      "the family folders are exactly the documented ones",
     );
     for (const family of families) {
-      const license = readFileSync(join(family, "OFL.txt"), "utf8");
-      assert.match(license, /SIL OPEN FONT LICENSE Version 1\.1/);
+      const folder = relative(appDirectory, family)
+        .split(sep)
+        .join("/")
+        .replace(/^fonts\//, "");
+      const expected = FAMILY_LICENSES.find(({ folder: name }) => name === folder);
+
+      assert.ok(expected, `${folder} is a documented family`);
+      const license = readFileSync(join(family, expected.license), "utf8");
+      assert.match(license, expected.text, `${folder} ships its ${expected.license}`);
     }
   });
 

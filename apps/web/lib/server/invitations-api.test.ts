@@ -55,8 +55,9 @@ const TEMPLATE = {
   publishedVersion: {
     id: VERSION_ID,
     version: 2,
-    componentKey: "birthday-adventure-01",
+    componentKey: "birthday-poster-01",
     schema: { type: "object", properties: {} },
+    configuration: { componentKey: "birthday-poster-01", theme: "dinosaurs" },
   },
 };
 
@@ -389,6 +390,26 @@ describe("validators", () => {
     assert.deepEqual(parseCreatorPackages([{ ...PACKAGE, currentPrice: null }]), [
       { ...PACKAGE, currentPrice: null },
     ]);
+  });
+
+  it("keeps the published version's configuration, which the chooser previews (S9)", () => {
+    // The configuration is read as stored: the web reads a theme from it and never from a catalog name, and
+    // an unreadable snapshot is the renderer's refusal, not a reason to drop the template here.
+    const [parsed] =
+      parseCreatorTemplates([
+        {
+          ...TEMPLATE,
+          publishedVersion: {
+            ...TEMPLATE.publishedVersion,
+            configuration: { componentKey: "birthday-map-01", theme: "dinosaurs" },
+          },
+        },
+      ]) ?? [];
+
+    assert.deepEqual(parsed?.publishedVersion.configuration, {
+      componentKey: "birthday-map-01",
+      theme: "dinosaurs",
+    });
   });
 
   it("recognises the canonical UUID shape the API accepts as an id", () => {

@@ -8,8 +8,8 @@ import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 
 import {
-  birthdayAdventureVersionInput,
   MemoryCatalogTemplateRepository,
+  themedVersionInput,
 } from "../../../../test/memory-catalog-templates.repository";
 import { createApp } from "../../../app.setup";
 import { AccessControlModule } from "../../../auth/access-control/access-control.module";
@@ -162,7 +162,7 @@ describe("admin catalog templates and versions", () => {
       ["create", "POST", PATH, { key: "denied", name: "Otro", categoryId: UNKNOWN_ID }],
       ["update", "PATCH", `${PATH}/${UNKNOWN_ID}`, { name: "Otro" }],
       ["versions", "GET", `${PATH}/${UNKNOWN_ID}/versions`],
-      ["create version", "POST", `${PATH}/${UNKNOWN_ID}/versions`, birthdayAdventureVersionInput()],
+      ["create version", "POST", `${PATH}/${UNKNOWN_ID}/versions`, themedVersionInput()],
       ["publish", "POST", `${PATH}/${UNKNOWN_ID}/versions/${UNKNOWN_ID}/publish`],
       ["retire", "POST", `${PATH}/${UNKNOWN_ID}/versions/${UNKNOWN_ID}/retire`],
       ["renderers", "GET", RENDERERS_PATH],
@@ -216,7 +216,7 @@ describe("admin catalog templates and versions", () => {
     it("answers 404 to DELETE, PUT, and PATCH on versions", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const draft = await version(cookie, item.id, birthdayAdventureVersionInput());
+      const draft = await version(cookie, item.id, themedVersionInput());
       const before = snapshotsOf();
 
       for (const [method, target] of [
@@ -224,7 +224,7 @@ describe("admin catalog templates and versions", () => {
         ["DELETE", `${PATH}/${item.id}/versions/${draft.id}`],
         ["PUT", `${PATH}/${item.id}/versions/${draft.id}`],
         ["PATCH", `${PATH}/${item.id}/versions/${draft.id}`],
-        ["PATCH", `${RENDERERS_PATH}/birthday-adventure-01`],
+        ["PATCH", `${RENDERERS_PATH}/birthday-poster-01`],
         ["POST", RENDERERS_PATH],
       ] as const) {
         assert.equal((await send(method, target, cookie, { schema: {} })).status, 404, target);
@@ -241,7 +241,13 @@ describe("admin catalog templates and versions", () => {
       const response = await send("GET", RENDERERS_PATH, cookie);
 
       assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), [{ componentKey: "birthday-adventure-01" }]);
+      assert.deepEqual(await response.json(), [
+        { componentKey: "birthday-map-01" },
+        { componentKey: "birthday-poster-01" },
+        { componentKey: "birthday-story-01" },
+        { componentKey: "baby-shower-classic-01" },
+        { componentKey: "baptism-classic-01" },
+      ]);
     });
   });
 
@@ -251,11 +257,11 @@ describe("admin catalog templates and versions", () => {
       const second = await created(cookie, "list-b");
       const first = await created(cookie, "list-a", { description: "Texto" });
       const draft = repository.seedVersion(first.id, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         status: "RETIRED",
       });
       const published = repository.seedVersion(first.id, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         status: "PUBLISHED",
       });
 
@@ -431,8 +437,8 @@ describe("admin catalog templates and versions", () => {
     it("answers 409 CATALOG_TEMPLATE_NOT_PUBLISHABLE for PUBLISHED without a PUBLISHED version and keeps the row", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      repository.seedVersion(item.id, { ...birthdayAdventureVersionInput(), status: "DRAFT" });
-      repository.seedVersion(item.id, { ...birthdayAdventureVersionInput(), status: "RETIRED" });
+      repository.seedVersion(item.id, { ...themedVersionInput(), status: "DRAFT" });
+      repository.seedVersion(item.id, { ...themedVersionInput(), status: "RETIRED" });
       const before = structuredClone(repository.templates);
 
       const response = await send("PATCH", `${PATH}/${item.id}`, cookie, {
@@ -448,7 +454,7 @@ describe("admin catalog templates and versions", () => {
     it("answers 200 for PUBLISHED when the template has a PUBLISHED version", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const draft = await version(cookie, item.id, birthdayAdventureVersionInput());
+      const draft = await version(cookie, item.id, themedVersionInput());
       assert.equal(
         (await send("POST", `${PATH}/${item.id}/versions/${draft.id}/publish`, cookie)).status,
         200,
@@ -518,7 +524,7 @@ describe("admin catalog templates and versions", () => {
     it("lists the versions newest first with their snapshot", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const input = birthdayAdventureVersionInput();
+      const input = themedVersionInput();
       const first = await version(cookie, item.id, input);
       const second = await version(cookie, item.id, input);
 
@@ -541,7 +547,7 @@ describe("admin catalog templates and versions", () => {
       ]);
       assert.equal(body[0]?.version, 2);
       assert.equal(body[0]?.status, "DRAFT");
-      assert.equal(body[0]?.componentKey, "birthday-adventure-01");
+      assert.equal(body[0]?.componentKey, "birthday-poster-01");
       assert.deepEqual(body[0]?.schema, input.schema);
       assert.deepEqual(body[0]?.configuration, input.configuration);
       assert.equal(new Date(String(body[0]?.createdAt)).toISOString(), body[0]?.createdAt);
@@ -564,7 +570,7 @@ describe("admin catalog templates and versions", () => {
     it("answers 201 with a DRAFT version numbered max + 1 and the snapshot as sent", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const input = birthdayAdventureVersionInput();
+      const input = themedVersionInput();
 
       const first = await send("POST", `${PATH}/${item.id}/versions`, cookie, input);
       const firstBody = (await first.json()) as Row;
@@ -575,7 +581,7 @@ describe("admin catalog templates and versions", () => {
       assert.match(String(firstBody.id), /^[0-9a-f-]{36}$/);
       assert.equal(firstBody.version, 1);
       assert.equal(firstBody.status, "DRAFT");
-      assert.equal(firstBody.componentKey, "birthday-adventure-01");
+      assert.equal(firstBody.componentKey, "birthday-poster-01");
       assert.deepEqual(firstBody.schema, input.schema);
       assert.deepEqual(firstBody.configuration, input.configuration);
       assert.equal(new Date(String(firstBody.createdAt)).toISOString(), firstBody.createdAt);
@@ -588,12 +594,7 @@ describe("admin catalog templates and versions", () => {
       const before = snapshotsOf();
 
       for (const id of [UNKNOWN_ID, "not-a-uuid"]) {
-        const response = await send(
-          "POST",
-          `${PATH}/${id}/versions`,
-          cookie,
-          birthdayAdventureVersionInput(),
-        );
+        const response = await send("POST", `${PATH}/${id}/versions`, cookie, themedVersionInput());
         assert.equal(response.status, 404, id);
       }
       assert.deepEqual(repository.versions, before);
@@ -605,7 +606,7 @@ describe("admin catalog templates and versions", () => {
       const before = snapshotsOf();
 
       const response = await send("POST", `${PATH}/${item.id}/versions`, cookie, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         componentKey: "unknown-renderer",
       });
 
@@ -620,18 +621,20 @@ describe("admin catalog templates and versions", () => {
     it("answers 400 CATALOG_RENDERER_CONTRACT_INVALID with the issues for a configuration the renderer refuses", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const valid = birthdayAdventureVersionInput();
+      const valid = themedVersionInput();
       const before = snapshotsOf();
 
       const response = await send("POST", `${PATH}/${item.id}/versions`, cookie, {
         ...valid,
-        configuration: { ...(valid.configuration as object), palette: "neon" },
+        configuration: { ...(valid.configuration as object), theme: "neon" },
       });
 
       assert.equal(response.status, 400);
       assert.deepEqual(await response.json(), {
         code: "CATALOG_RENDERER_CONTRACT_INVALID",
-        issues: ["configuration.palette must be one of: sunset, ocean, forest"],
+        issues: [
+          "configuration.theme must be one of: ice-kingdom, rescue-team, spider-hero, classic-mouse, dinosaurs, under-the-sea, fairytale-princess, blocks-and-pixels",
+        ],
       });
       assert.deepEqual(repository.versions, before);
     });
@@ -639,7 +642,7 @@ describe("admin catalog templates and versions", () => {
     it("answers 400 CATALOG_RENDERER_CONTRACT_INVALID for a non-string component key or a schema that is not an object", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const valid = birthdayAdventureVersionInput();
+      const valid = themedVersionInput();
       const before = snapshotsOf();
 
       for (const [body, issue] of [
@@ -658,7 +661,7 @@ describe("admin catalog templates and versions", () => {
     it("answers 400 for a schema or a configuration over 64 KiB, and stores nothing", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const valid = birthdayAdventureVersionInput();
+      const valid = themedVersionInput();
       const padding = "a".repeat(65 * 1024);
       const before = snapshotsOf();
 
@@ -675,7 +678,7 @@ describe("admin catalog templates and versions", () => {
     it("accepts a snapshot part just under 64 KiB when the registry contract allows it", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const valid = birthdayAdventureVersionInput();
+      const valid = themedVersionInput();
       const schema = valid.schema as { properties: Record<string, unknown> };
       const bounded = {
         ...valid,
@@ -696,13 +699,13 @@ describe("admin catalog templates and versions", () => {
     const invalid: Array<[string, unknown]> = [
       ["an empty body", {}],
       ["a missing component key", { schema: {}, configuration: {} }],
-      ["a missing schema", { componentKey: "birthday-adventure-01", configuration: {} }],
-      ["a missing configuration", { componentKey: "birthday-adventure-01", schema: {} }],
-      ["a null schema", { componentKey: "birthday-adventure-01", schema: null, configuration: {} }],
+      ["a missing schema", { componentKey: "birthday-poster-01", configuration: {} }],
+      ["a missing configuration", { componentKey: "birthday-poster-01", schema: {} }],
+      ["a null schema", { componentKey: "birthday-poster-01", schema: null, configuration: {} }],
       [
         "an unknown field",
         {
-          componentKey: "birthday-adventure-01",
+          componentKey: "birthday-poster-01",
           schema: {},
           configuration: {},
           status: "PUBLISHED",
@@ -737,7 +740,7 @@ describe("admin catalog templates and versions", () => {
           "POST",
           `${PATH}/${item.id}/versions`,
           cookie,
-          birthdayAdventureVersionInput(),
+          themedVersionInput(),
         );
 
         assert.equal(response.status, 409);
@@ -752,8 +755,8 @@ describe("admin catalog templates and versions", () => {
     it("answers 200 with the PUBLISHED version and retires the previously published one", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const first = await version(cookie, item.id, birthdayAdventureVersionInput());
-      const second = await version(cookie, item.id, birthdayAdventureVersionInput());
+      const first = await version(cookie, item.id, themedVersionInput());
+      const second = await version(cookie, item.id, themedVersionInput());
       const firstPublish = await send(
         "POST",
         `${PATH}/${item.id}/versions/${first.id}/publish`,
@@ -788,11 +791,11 @@ describe("admin catalog templates and versions", () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
       const published = repository.seedVersion(item.id, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         status: "PUBLISHED",
       });
       const retired = repository.seedVersion(item.id, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         status: "RETIRED",
       });
       const before = snapshotsOf();
@@ -815,11 +818,11 @@ describe("admin catalog templates and versions", () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
       const current = repository.seedVersion(item.id, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         status: "PUBLISHED",
       });
       const stale = repository.seedVersion(item.id, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         componentKey: "removed-renderer",
         status: "DRAFT",
       });
@@ -844,7 +847,7 @@ describe("admin catalog templates and versions", () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
       const other = await created(cookie);
-      const foreign = await version(cookie, other.id, birthdayAdventureVersionInput());
+      const foreign = await version(cookie, other.id, themedVersionInput());
       const before = snapshotsOf();
 
       for (const target of [
@@ -862,7 +865,7 @@ describe("admin catalog templates and versions", () => {
     it("answers 409 CATALOG_CONCURRENT_UPDATE when a concurrent publish wins", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const draft = await version(cookie, item.id, birthdayAdventureVersionInput());
+      const draft = await version(cookie, item.id, themedVersionInput());
       const original = repository.publishVersion.bind(repository);
       repository.publishVersion = async () => {
         throw new CatalogConcurrentUpdateError();
@@ -887,7 +890,7 @@ describe("admin catalog templates and versions", () => {
     it("answers 200 with the RETIRED version when the template is not PUBLISHED", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const draft = await version(cookie, item.id, birthdayAdventureVersionInput());
+      const draft = await version(cookie, item.id, themedVersionInput());
       await send("POST", `${PATH}/${item.id}/versions/${draft.id}/publish`, cookie);
 
       const response = await send("POST", `${PATH}/${item.id}/versions/${draft.id}/retire`, cookie);
@@ -901,7 +904,7 @@ describe("admin catalog templates and versions", () => {
     it("answers 409 CATALOG_TEMPLATE_NOT_PUBLISHABLE for the published version of a PUBLISHED template, and works after archiving it", async () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
-      const draft = await version(cookie, item.id, birthdayAdventureVersionInput());
+      const draft = await version(cookie, item.id, themedVersionInput());
       await send("POST", `${PATH}/${item.id}/versions/${draft.id}/publish`, cookie);
       await send("PATCH", `${PATH}/${item.id}`, cookie, { status: "PUBLISHED" });
       const before = snapshotsOf();
@@ -921,11 +924,11 @@ describe("admin catalog templates and versions", () => {
       const cookie = await signedIn("ADMIN");
       const item = await created(cookie);
       const draft = repository.seedVersion(item.id, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         status: "DRAFT",
       });
       const retired = repository.seedVersion(item.id, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         status: "RETIRED",
       });
       const before = snapshotsOf();
@@ -949,7 +952,7 @@ describe("admin catalog templates and versions", () => {
       const item = await created(cookie);
       const other = await created(cookie);
       const foreign = repository.seedVersion(other.id, {
-        ...birthdayAdventureVersionInput(),
+        ...themedVersionInput(),
         status: "PUBLISHED",
       });
       const before = snapshotsOf();

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  birthdayAdventureVersionInput,
   MemoryCatalogTemplateRepository,
+  themedVersionInput,
 } from "../../../../test/memory-catalog-templates.repository";
 import {
   CatalogCategoryNotFoundError,
@@ -191,7 +191,7 @@ describe("UpdateTemplateUseCase", () => {
   it("refuses PUBLISHED without a PUBLISHED version, and accepts it with one (L4)", async () => {
     const { repository, template } = await seeded();
     const useCase = new UpdateTemplateUseCase(repository);
-    repository.seedVersion(template.id, { ...birthdayAdventureVersionInput(), status: "DRAFT" });
+    repository.seedVersion(template.id, { ...themedVersionInput(), status: "DRAFT" });
     const before = structuredClone(repository.templates);
 
     await assert.rejects(
@@ -201,7 +201,7 @@ describe("UpdateTemplateUseCase", () => {
     assert.deepEqual(repository.templates, before);
 
     repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "PUBLISHED",
     });
     const published = await useCase.execute(template.id, { status: "PUBLISHED" });
@@ -213,7 +213,11 @@ describe("UpdateTemplateUseCase", () => {
 describe("ListRenderersUseCase", () => {
   it("lists the registry keys", () => {
     assert.deepEqual(new ListRenderersUseCase().execute(), [
-      { componentKey: "birthday-adventure-01" },
+      { componentKey: "birthday-map-01" },
+      { componentKey: "birthday-poster-01" },
+      { componentKey: "birthday-story-01" },
+      { componentKey: "baby-shower-classic-01" },
+      { componentKey: "baptism-classic-01" },
     ]);
   });
 });
@@ -222,7 +226,7 @@ describe("CreateTemplateVersionUseCase", () => {
   it("stores DRAFT versions numbered max + 1 and keeps the snapshot as given", async () => {
     const { repository, template } = await seeded();
     const useCase = new CreateTemplateVersionUseCase(repository);
-    const input = birthdayAdventureVersionInput();
+    const input = themedVersionInput();
 
     const first = await useCase.execute(template.id, input);
     const second = await useCase.execute(template.id, input);
@@ -237,15 +241,15 @@ describe("CreateTemplateVersionUseCase", () => {
 
   it("numbers after the highest, not after the count", async () => {
     const { repository, template } = await seeded();
-    repository.seedVersion(template.id, { ...birthdayAdventureVersionInput(), status: "RETIRED" });
+    repository.seedVersion(template.id, { ...themedVersionInput(), status: "RETIRED" });
     repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "PUBLISHED",
     });
 
     const created = await new CreateTemplateVersionUseCase(repository).execute(
       template.id,
-      birthdayAdventureVersionInput(),
+      themedVersionInput(),
     );
 
     assert.equal(created?.version, 3);
@@ -255,15 +259,15 @@ describe("CreateTemplateVersionUseCase", () => {
     const { repository } = await seeded();
     const useCase = new CreateTemplateVersionUseCase(repository);
 
-    assert.equal(await useCase.execute(UNKNOWN_ID, birthdayAdventureVersionInput()), null);
-    assert.equal(await useCase.execute("not-a-uuid", birthdayAdventureVersionInput()), null);
+    assert.equal(await useCase.execute(UNKNOWN_ID, themedVersionInput()), null);
+    assert.equal(await useCase.execute("not-a-uuid", themedVersionInput()), null);
     assert.equal(repository.versions.length, 0);
   });
 
   it("refuses an unregistered renderer or a contract violation with the issues and stores nothing", async () => {
     const { repository, template } = await seeded();
     const useCase = new CreateTemplateVersionUseCase(repository);
-    const valid = birthdayAdventureVersionInput();
+    const valid = themedVersionInput();
 
     await assert.rejects(
       useCase.execute(template.id, { ...valid, componentKey: "unknown-renderer" }),
@@ -278,12 +282,12 @@ describe("CreateTemplateVersionUseCase", () => {
     await assert.rejects(
       useCase.execute(template.id, {
         ...valid,
-        configuration: { ...(valid.configuration as object), palette: "neon" },
+        configuration: { ...(valid.configuration as object), theme: "neon" },
       }),
       (error: unknown) => {
         assert.ok(error instanceof CatalogRendererContractInvalidError);
         assert.deepEqual(error.issues, [
-          "configuration.palette must be one of: sunset, ocean, forest",
+          "configuration.theme must be one of: ice-kingdom, rescue-team, spider-hero, classic-mouse, dinosaurs, under-the-sea, fairytale-princess, blocks-and-pixels",
         ]);
         return true;
       },
@@ -295,10 +299,43 @@ describe("CreateTemplateVersionUseCase", () => {
     assert.equal(repository.versions.length, 0);
   });
 
+  it("accepts a layout version whose configuration names an allowed theme", async () => {
+    const { repository, template } = await seeded();
+    const useCase = new CreateTemplateVersionUseCase(repository);
+
+    const created = await useCase.execute(template.id, {
+      componentKey: "birthday-map-01",
+      schema: themedVersionInput().schema,
+      configuration: { componentKey: "birthday-map-01", theme: "ice-kingdom" },
+    });
+
+    assert.equal(created?.componentKey, "birthday-map-01");
+    assert.deepEqual(created?.configuration, {
+      componentKey: "birthday-map-01",
+      theme: "ice-kingdom",
+    });
+
+    await assert.rejects(
+      useCase.execute(template.id, {
+        componentKey: "birthday-map-01",
+        schema: themedVersionInput().schema,
+        configuration: { componentKey: "birthday-map-01", theme: "neon" },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof CatalogRendererContractInvalidError);
+        assert.deepEqual(error.issues, [
+          "configuration.theme must be one of: ice-kingdom, rescue-team, spider-hero, classic-mouse, dinosaurs, under-the-sea, fairytale-princess, blocks-and-pixels",
+        ]);
+        return true;
+      },
+    );
+    assert.equal(repository.versions.length, 1);
+  });
+
   it("refuses a schema or configuration over 64 KiB, or one holding NUL, and stores nothing", async () => {
     const { repository, template } = await seeded();
     const useCase = new CreateTemplateVersionUseCase(repository);
-    const valid = birthdayAdventureVersionInput();
+    const valid = themedVersionInput();
     const big = "a".repeat(MAX_VERSION_JSON_BYTES);
 
     await assert.rejects(
@@ -330,8 +367,8 @@ describe("ListTemplateVersionsUseCase", () => {
   it("lists versions newest first, or null for an unknown template", async () => {
     const { repository, template } = await seeded();
     const create = new CreateTemplateVersionUseCase(repository);
-    await create.execute(template.id, birthdayAdventureVersionInput());
-    await create.execute(template.id, birthdayAdventureVersionInput());
+    await create.execute(template.id, themedVersionInput());
+    await create.execute(template.id, themedVersionInput());
     const list = new ListTemplateVersionsUseCase(repository);
 
     assert.deepEqual(
@@ -347,11 +384,11 @@ describe("PublishTemplateVersionUseCase", () => {
   it("publishes a DRAFT and retires the previously published version", async () => {
     const { repository, template } = await seeded();
     const first = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "PUBLISHED",
     });
     const second = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "DRAFT",
     });
 
@@ -374,11 +411,11 @@ describe("PublishTemplateVersionUseCase", () => {
   it("re-validates the stored snapshot: a renderer removed since creation is refused, nothing changes", async () => {
     const { repository, template } = await seeded();
     const published = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "PUBLISHED",
     });
     const stale = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       componentKey: "removed-renderer",
       status: "DRAFT",
     });
@@ -405,11 +442,11 @@ describe("PublishTemplateVersionUseCase", () => {
     const { repository, template } = await seeded();
     const useCase = new PublishTemplateVersionUseCase(repository);
     const published = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "PUBLISHED",
     });
     const retired = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "RETIRED",
     });
 
@@ -429,7 +466,7 @@ describe("PublishTemplateVersionUseCase", () => {
       categoryId: category.id,
     });
     const foreign = repository.seedVersion(other.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "DRAFT",
     });
     const useCase = new PublishTemplateVersionUseCase(repository);
@@ -447,7 +484,7 @@ describe("RetireTemplateVersionUseCase", () => {
   it("retires the published version of a template that is not PUBLISHED", async () => {
     const { repository, template } = await seeded();
     const version = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "PUBLISHED",
     });
 
@@ -463,7 +500,7 @@ describe("RetireTemplateVersionUseCase", () => {
   it("refuses to retire the published version of a PUBLISHED template (L4), changing nothing", async () => {
     const { repository, template } = await seeded();
     const version = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "PUBLISHED",
     });
     await new UpdateTemplateUseCase(repository).execute(template.id, { status: "PUBLISHED" });
@@ -480,11 +517,11 @@ describe("RetireTemplateVersionUseCase", () => {
     const { repository, template } = await seeded();
     const useCase = new RetireTemplateVersionUseCase(repository);
     const draft = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "DRAFT",
     });
     const retired = repository.seedVersion(template.id, {
-      ...birthdayAdventureVersionInput(),
+      ...themedVersionInput(),
       status: "RETIRED",
     });
 

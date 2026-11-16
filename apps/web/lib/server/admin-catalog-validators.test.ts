@@ -226,9 +226,9 @@ const VERSION = {
   id: ID,
   version: 2,
   status: "PUBLISHED",
-  componentKey: "birthday-adventure-01",
+  componentKey: "birthday-poster-01",
   schema: { fields: [] },
-  configuration: { palette: "ocean" },
+  configuration: { theme: "dinosaurs" },
   createdAt: AT,
 };
 
@@ -330,8 +330,8 @@ describe("parseCatalogTemplateVersion", () => {
 
 describe("parseCatalogRenderers", () => {
   it("accepts the allow-list and keeps only the keys", () => {
-    assert.deepEqual(parseCatalogRenderers([{ componentKey: "birthday-adventure-01", x: 1 }]), [
-      { componentKey: "birthday-adventure-01" },
+    assert.deepEqual(parseCatalogRenderers([{ componentKey: "birthday-poster-01", x: 1 }]), [
+      { componentKey: "birthday-poster-01" },
     ]);
     assert.deepEqual(parseCatalogRenderers([]), []);
   });

@@ -1,0 +1,14 @@
+{
+  "title": "Temas infantiles",
+  "brief": "First set of children's themes: palette inspired by popular styles, commercially licensed fonts, original illustrations; no character artwork, logos, or protected names. Shown on the Cartel layout.",
+  "feature": "odd/tasks/catalog-designs.md",
+  "artboards": [
+    {
+      "file": "01-tablero-temas.html",
+      "title": "Tablero de temas",
+      "tradeoff": "Compares eight themes side by side to pick the first ones; previews use system fonts and placeholder art",
+      "width": 1440,
+      "height": 1360
+    }
+  ]
+}

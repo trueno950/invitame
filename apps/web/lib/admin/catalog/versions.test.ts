@@ -27,9 +27,9 @@ function version(
     id: `0b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e${String(number).padStart(2, "0")}`,
     version: number,
     status,
-    componentKey: "birthday-adventure-01",
+    componentKey: "birthday-poster-01",
     schema: { n: number },
-    configuration: { palette: "ocean" },
+    configuration: { theme: "dinosaurs" },
     createdAt: AT,
     ...extra,
   };
@@ -126,11 +126,11 @@ describe("prefillVersion", () => {
 
 describe("prefillValues", () => {
   it("copies the renderer and the indented snapshot of the source version", () => {
-    const values = prefillValues(version(2, "PUBLISHED"), ["birthday-adventure-01"]);
+    const values = prefillValues(version(2, "PUBLISHED"), ["birthday-poster-01"]);
 
-    assert.equal(values.componentKey, "birthday-adventure-01");
+    assert.equal(values.componentKey, "birthday-poster-01");
     assert.deepEqual(JSON.parse(values.schema), { n: 2 });
-    assert.deepEqual(JSON.parse(values.configuration), { palette: "ocean" });
+    assert.deepEqual(JSON.parse(values.configuration), { theme: "dinosaurs" });
   });
 
   it("falls back to the first renderer when the source's key is no longer listed", () => {

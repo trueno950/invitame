@@ -1,0 +1,21 @@
+{
+  "title": "Baby shower y bautizo temático",
+  "brief": "Tableros de temas para baby shower y bautizo temático: ocho paletas con tipografía e ilustraciones originales para baby shower y seis para bautizo, con las inspiraciones de marca sin nombrar y sin arte de personajes, logos ni nombres protegidos. Cada paleta está verificada con la fórmula WCAG y cada tarjeta muestra su contraste mínimo. Incluye la propuesta de datos que pide cada ocasión.",
+  "feature": "odd/tasks/catalog-designs.md",
+  "artboards": [
+    {
+      "file": "01-baby-shower.html",
+      "title": "Baby shower — ocho temas",
+      "tradeoff": "Los ocho temas en una sola vista de cuatro columnas: comparas paleta, tipografía, ilustración y contraste mínimo de un golpe de vista, con el contenido real de un baby shower (anfitrionas y mesa de regalos) en la miniatura. El costo es que las tarjetas son estrechas: la miniatura reduce el tamaño de los detalles y las ilustraciones del tablero son marcadores geométricos, no el arte final.",
+      "width": 1440,
+      "height": 2175
+    },
+    {
+      "file": "02-bautizo-tematico.html",
+      "title": "Bautizo temático — seis temas",
+      "tradeoff": "Tres columnas para que la miniatura quepa con el contenido completo de un bautizo: padres, padrinos, ceremonia en la iglesia y recepción en otro lugar con sus horas. Compara mejor el contenido que el tema, porque cada tarjeta es más grande y caben menos por fila; el tablero queda más alto que el de baby shower.",
+      "width": 1440,
+      "height": 2258
+    }
+  ]
+}

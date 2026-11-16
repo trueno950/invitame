@@ -15,8 +15,10 @@ verifying the payment (Milestones 4, 5, and 7). The owner curates the catalog an
 over time; each change is a new `TemplateVersion`, so existing invitations keep the version they pinned. Customer
 support, refunds, and moderation of customer-uploaded content remain operational work (Milestone 9).
 
-The first designs target XV años (quinceañera), weddings, and children's birthdays. Every catalog design follows the
-original-design guardrail at the end of this roadmap.
+The first designs target children's birthdays, baby showers, baptisms, XV años (quinceañera), and weddings, in two
+styles: themed (children's birthdays, baby showers, themed baptisms) and elegant (XV años, weddings, formal
+baptisms). The catalog design track below plans that first set. Every catalog design follows the theme guardrail at
+the end of this roadmap.
 
 ## Milestone 1 — Foundation and operating model
 
@@ -83,7 +85,8 @@ No OAuth, social login, custom domains, multi-organization billing, or invitatio
 ## Milestone 3 — Catalog and renderer contracts
 
 **Status:** Implemented (`odd/tasks/m3-catalog.md`): administrator catalog API and pages, MXN package prices,
-version publication rules, and the allow-listed renderer registry with `birthday-adventure-01`. Public catalog
+version publication rules, and the allow-listed renderer registry with `birthday-adventure-01`. That first single
+design was later retired: the catalog design track replaced it with the themed birthday layouts. Public catalog
 reads for creators belong to Milestone 4.
 
 ### Outcome
@@ -167,6 +170,43 @@ Publish a completed invitation through a predictable public URL and render it sa
 ### Deliberate non-goals
 
 No custom domains, arbitrary page builders, search indexing program, or multi-region rendering architecture.
+
+## Catalog design track
+
+**Status:** In progress. It runs in parallel with Milestones 6 to 9 and must be complete before the first release
+(Milestone 10). The catalog currently holds the three themed children's birthday layouts (`birthday-map-01`,
+`birthday-poster-01`, `birthday-story-01`) in eight themes each. The first single design, `birthday-adventure-01`,
+was deleted once those layouts replaced it.
+
+### Outcome
+
+Grow the catalog from one design to several templates per occasion, with each layout and theme chosen visually by the
+owner before it is implemented.
+
+### Key scope
+
+- a template is a **layout** plus a **theme**: the layout is an allow-listed renderer (page structure, coded once);
+  the theme is an allow-listed set of palette, licensed fonts, and original illustrations that the layout applies;
+  each combination is its own catalog template and `TemplateVersion`;
+- themed layouts and themes for children's birthdays first, starting from the directions in
+  `design/birthday-adventure-v2/`, then baby showers and themed baptisms;
+- elegant layouts and themes for XV años, weddings, and formal baptisms;
+- for each layout and theme: visual directions under `design/<slug>/`, the owner's choice, then the renderer or theme
+  code, its validated schema/configuration contract, catalog seed data, and tests; and
+- mobile-first, accessible guest rendering, because invitations are mostly opened from shared links on phones.
+
+### Exit criteria
+
+- Children's birthdays, baby showers, baptisms, XV años, and weddings each have at least one published template.
+- Every layout and theme was chosen by the owner from visual directions before code was written.
+- Invitations pinned to an earlier version render unchanged after a layout or theme is improved; whether an
+  improvement ships as a new `componentKey` or as a versioned renderer is decided in its slice.
+- Every theme follows the theme guardrail and passes contrast and mobile layout checks.
+
+### Deliberate non-goals
+
+No customer-side visual editor, per-customer custom designs, character artwork, logos, brand names, or design that
+depends on media uploads before Milestone 8.
 
 ## Milestone 6 — Guests and RSVP
 
@@ -313,8 +353,10 @@ by this roadmap.
 
 - Catalog names, package names, and feature keys are data, not behavior switches.
 - Future invitations reference immutable `TemplateVersion` snapshots.
-- Catalog designs are original work: no licensed characters, brands, or franchise themes, including in children's
-  designs.
+- Theme guardrail (owner decision, 2026-11-12): a themed design may take its color palette from a popular character or
+  brand, and its fonts may be the official ones only when their license allows commercial use; otherwise a similar
+  font with a commercial license is used. A design never includes character artwork, logos, or a protected name, in
+  the template, its catalog name, or its marketing. Illustrations are original work.
 - Schema changes belong to `apps/api` and require the database quality gates.
 - A milestone is not complete because its folders or documentation exist; observable behavior and exit evidence are
   required.

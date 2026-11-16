@@ -49,11 +49,15 @@ draws the pale pink wash behind the customer pages; the landing draws its own wa
 
 ## Typography
 
-`apps/web/app/layout.tsx` loads three Google Fonts families through `next/font/local` from woff2 files committed in
+`apps/web/app/layout.tsx` loads every family through `next/font/local` from woff2 files committed in
 `apps/web/app/fonts/` (Latin subset, `display: swap`) and sets their variables on `<html>`; the `@theme inline` block
-maps them to utilities. The build fetches no font over the network (S43); a unit test in
-`apps/web/lib/theme/fonts.test.ts` fails if any `apps/web` source imports `next/font/google` again, or if a font
-file the layout names is missing, is not woff2, or has no license next to it.
+maps the three product fonts to utilities. The build fetches no font over the network (S43); a unit test in
+`apps/web/lib/theme/fonts.test.ts` fails if any `apps/web` source imports `next/font/google` again, if a font file
+the layout names is missing, is not woff2, if a file cannot draw the weight the layout declares for it, or if a
+family has no license next to it.
+
+Status: **current** (T6b, T7b; S2, S5, S8, S13). Nineteen families are loaded: three for the product interface
+and the landing, and sixteen display faces for the guest invitation themes.
 
 | Utility | Font | Weights | Use |
 | --- | --- | --- | --- |
@@ -61,25 +65,62 @@ file the layout names is missing, is not woff2, or has no license next to it.
 | `font-script` | Great Vibes | 400 | Names and accents only: the wordmark's "Me", the names on the landing's sample stationery, and «Para cada celebración»; couple and guest names on future invitations. Never body text, labels, buttons, or anything a person must read quickly. |
 | `font-sans` | Jost | 400, 500 | Interface and body text, labels, buttons, fields (the default body font). |
 
+The invitation display fonts are not utilities, because the face depends on the theme of the stored
+`TemplateVersion` and not on the place in the page: each is exposed as a CSS variable on `<html>`
+(`--font-cinzel-decorative`, `--font-luckiest-guy`, `--font-bangers`, `--font-chewy`, `--font-lilita-one`,
+`--font-pacifico`, `--font-press-start-2p`, `--font-baloo-2`, `--font-quicksand`, `--font-fredoka`,
+`--font-playfair-display`, `--font-josefin-sans`, `--font-fraunces`, `--font-caveat`, `--font-nunito`,
+`--font-lora`, and the already-loaded `--font-great-vibes`) and the renderer points `--inv-display` at the one
+its theme names. All sixteen are declared with `preload: false`, because a guest page renders one theme and
+must not download sixteen faces. They are used for names and titles only; body text stays Jost 400/500, so no
+Jost 600/700 file was added and emphasis inside a layout uses Jost 500 (the variable file does draw 100–900, so
+a real bold is a deliberate, documented change later, never a silent one).
+
 Add a weight or the italic only when a page uses it, so the build ships no unused font files.
 
 ### Font files and licenses
 
-Each family has its own folder under `apps/web/app/fonts/` with its woff2 files and its SIL Open Font License 1.1
-(`OFL.txt`, copied byte for byte from `ofl/<family>/OFL.txt` in the [google/fonts](https://github.com/google/fonts)
-repository). The files are the same Latin-subset files `next/font/google` used to download:
+Each family has its own folder under `apps/web/app/fonts/` with its woff2 files and the license google/fonts ships
+for it, copied byte for byte: `OFL.txt` for the SIL Open Font License 1.1 families (`ofl/<family>/OFL.txt`) and
+`LICENSE.txt` for the Apache License 2.0 families (`apache/<family>/LICENSE.txt`) in the
+[google/fonts](https://github.com/google/fonts) repository. The files are the same Latin-subset files
+`next/font/google` used to download.
 
-| Folder | Files | Declared weights |
-| --- | --- | --- |
-| `cormorant-garamond/` | `cormorant-garamond-latin-normal.woff2`, `cormorant-garamond-latin-italic.woff2` (variable) | `500 600` |
-| `great-vibes/` | `great-vibes-latin-normal.woff2` | `400` |
-| `jost/` | `jost-latin-normal.woff2` (variable) | `400 500` |
+| Folder | Files | Declared weights | License |
+| --- | --- | --- | --- |
+| `cormorant-garamond/` | `cormorant-garamond-latin-normal.woff2`, `cormorant-garamond-latin-italic.woff2` (variable) | `500 600` | `OFL.txt` |
+| `great-vibes/` | `great-vibes-latin-normal.woff2` | `400` | `OFL.txt` |
+| `jost/` | `jost-latin-normal.woff2` (variable) | `400 500` | `OFL.txt` |
+| `cinzel-decorative/` | `cinzel-decorative-latin-normal.woff2` | `400` | `OFL.txt` |
+| `luckiest-guy/` | `luckiest-guy-latin-normal.woff2` | `400` | `LICENSE.txt` (Apache 2.0) |
+| `bangers/` | `bangers-latin-normal.woff2` | `400` | `OFL.txt` |
+| `chewy/` | `chewy-latin-normal.woff2` | `400` | `LICENSE.txt` (Apache 2.0) |
+| `lilita-one/` | `lilita-one-latin-normal.woff2` | `400` | `OFL.txt` |
+| `pacifico/` | `pacifico-latin-normal.woff2` | `400` | `OFL.txt` |
+| `press-start-2p/` | `press-start-2p-latin-normal.woff2` | `400` | `OFL.txt` |
+| `baloo-2/` | `baloo-2-latin-normal.woff2` | `700` | `OFL.txt` |
+| `quicksand/` | `quicksand-latin-normal.woff2` | `600` | `OFL.txt` |
+| `fredoka/` | `fredoka-latin-normal.woff2` | `600` | `OFL.txt` |
+| `playfair-display/` | `playfair-display-latin-normal.woff2` | `700` | `OFL.txt` |
+| `josefin-sans/` | `josefin-sans-latin-normal.woff2` | `600` | `OFL.txt` |
+| `fraunces/` | `fraunces-latin-normal.woff2` | `700` | `OFL.txt` |
+| `caveat/` | `caveat-latin-normal.woff2` | `700` | `OFL.txt` |
+| `nunito/` | `nunito-latin-normal.woff2` | `700` | `OFL.txt` |
+| `lora/` | `lora-latin-normal.woff2` | `700` | `OFL.txt` |
+
+The last nine rows are the display faces of the baby shower and themed baptism boards in
+`design/celebration-themes/` (T7b; S13): Baloo 2, Quicksand, Fredoka, Playfair Display, Josefin Sans, Fraunces,
+Caveat, Nunito, and Lora. All nine families ship the SIL Open Font License 1.1 (`ofl/<family>/OFL.txt`). Their
+fallbacks are the board's stacks, so the serif faces (Playfair Display, Fraunces, Lora) pair with Times New Roman
+and the rest with Arial.
 
 The fallback faces keep the fonts `next/font/google` used: `adjustFontFallback: "Times New Roman"` for Cormorant
-Garamond and `"Arial"` for Great Vibes and Jost. `next/font/local` computes the fallback metrics from the files, so
-the ascent and descent match the old ones and `size-adjust` differs by up to about five points (Great Vibes); it
-affects only the fallback shown before a font loads. `apps/web/app/fonts/.gitattributes` marks the woff2 files as
-binary and keeps `git diff --check` from flagging the trailing spaces of the upstream license text.
+Garamond, Cinzel Decorative, Playfair Display, Fraunces, and Lora, and `"Arial"` for the other families.
+`next/font/local` computes the fallback metrics
+from the files, so the ascent and descent match the old ones and `size-adjust` differs by up to about five points
+(Great Vibes); it affects only the fallback shown before a font loads. `apps/web/app/fonts/.gitattributes` marks the
+woff2 files as binary and keeps `git diff --check` from flagging the trailing spaces of the upstream license text,
+for `OFL.txt` and `LICENSE.txt` alike.
 
 To add or update a font, a weight, or a style:
 
@@ -89,9 +130,15 @@ To add or update a font, a weight, or a style:
 2. Treat downloads as untrusted: save each in a new empty temporary directory outside the repository, execute
    nothing from it, check that each font starts with the woff2 signature `wOF2`, and record its source URL, size,
    and SHA-256 in the change description.
-3. Copy the files and the family's `OFL.txt` from google/fonts into `apps/web/app/fonts/<family>/`, add them to
-   the `src` list in `layout.tsx` with their weight and style, and update the table above.
+3. Copy the files and the family's license from google/fonts into `apps/web/app/fonts/<family>/` — `OFL.txt` for
+   an SIL family, `LICENSE.txt` for an Apache 2.0 family; confirm which one the family ships under `ofl/` or
+   `apache/` before copying, and never rename or reflow it. Add the files to the `src` list in `layout.tsx` with
+   their weight and style, and update the table above.
 4. Run `pnpm --filter @invitame/web test` and `pnpm build`, and compare the pages before and after.
+
+A theme display font is a title face only: one file, the single weight suited to display titles (`600` or `700` for
+the nine faces added by T7b), `preload: false`, and the theme board's fallback stack behind it where the theme
+declaration points `--inv-display`.
 
 ## Ornaments
 
@@ -177,6 +224,99 @@ drawn.
 - Focus is a 2 px wine outline: on `focus-visible` for buttons and links, on every focus for text fields.
 - Gold is never used for text that must be read; `ring-gold/*` hairlines are decoration, not component borders.
 
+## Guest invitation themes
+
+Status: **current** (T6b, T7c; S2, S3, S5, S7, S8, S13). A themed template is a **layout** plus a **theme**: the
+layout is an allow-listed renderer that codes the page structure once, and the theme is an allow-listed palette, a
+licensed display font, and an original motif that the layout applies. Each combination is its own catalog template
+and `TemplateVersion`.
+
+- Layouts, from the directions in `design/birthday-adventure-v2/`: `birthday-map-01` (Mapa, `01-mapa-aventura.html`),
+  `birthday-poster-01` (Cartel, `02-cartel-fiesta.html`), and `birthday-story-01` (Cuento, `03-cuento-ilustrado.html`).
+  These three replaced the first single design, `birthday-adventure-01` (its own palette, typography, and section
+  order), which was deleted with its files, tests, seed template, and catalog rows once they shipped (S11).
+- Baby showers and themed baptisms (T7c, S13), from `design/celebration-themes/`, each ship one layout, «Clásica»:
+  `baby-shower-classic-01` with eight themes (Osito y miel, Nubes y estrellas, Safari bebé, Globos aerostáticos,
+  Arcoíris boho, Lunita, Amigos del bosque, Conejito dulce) and `baptism-classic-01` with six (Paloma y olivo,
+  Angelitos, Cielo y nubes, Floral suave, Corderito, Luz de estrella). A theme is a seven-color palette, one licensed
+  display font used at the single weight it is loaded with, and an original geometric motif; every text pair reaches
+  4.5:1, and a test pins the palettes and the weights. The baby shower layout asks for the hosts, date, time, place,
+  address, message, and an RSVP contact, and shows the baby's name, the gender reveal, the gift registry, and a photo
+  only when the invitation has them. The themed baptism layout asks for the child's name and date, the parents, the
+  godparents, the ceremony (place, address, time), the reception (place, address, time), the message, and an RSVP
+  contact, with the photo and the gift registry optional. Both take exactly `{componentKey, theme}` as configuration;
+  the formal baptism stays in the elegant line (T8).
+- Birthday themes, from `design/kids-themes/01-tablero-temas.html`, in this order:
+
+| Key | Catalog name | Display font | Motif |
+| --- | --- | --- | --- |
+| `ice-kingdom` | Reino de hielo | Cinzel Decorative | Copos de nieve |
+| `rescue-team` | Equipo de rescate | Luckiest Guy | Huellas y estrellas |
+| `spider-hero` | Héroe arácnido | Bangers | Telarañas |
+| `classic-mouse` | Ratón clásico | Chewy | Lunares |
+| `dinosaurs` | Dinosaurios | Lilita One | Montañas y huevos |
+| `under-the-sea` | Bajo el mar | Pacifico | Burbujas y olas |
+| `fairytale-princess` | Princesa de cuento | Great Vibes | Coronas y estrellas |
+| `blocks-and-pixels` | Bloques y píxeles | Press Start 2P | Bloques |
+
+- Guardrail (S5): a palette may be inspired by a popular character or brand and a font may be the official one only
+  when its license allows commercial use. No theme carries character artwork, a logo, or a protected name — not in
+  its key, its catalog name, or its marketing. The motifs are original shapes drawn in
+  `app/_components/renderers/birthday/motif.ts`.
+- Configuration: exactly `{ "componentKey": <layout key>, "theme": <theme key> }`, both required; an extra key,
+  another layout's key, an unknown theme, and a wrongly typed value are refused by the API before publication and by
+  the web parser again (`lib/renderers/birthday-themes.ts`), so a drifted snapshot never renders. The content is the
+  same eight fields every birthday layout reads (`lib/renderers/birthday-content.ts`), so the creator form is shared.
+- Colors reach the markup as CSS variables on the invitation root: `--inv-background`, `--inv-surface`, `--inv-soft`,
+  `--inv-ink`, `--inv-accent`, `--inv-decoration-one`, `--inv-decoration-two`, plus `--inv-display` for the font. The
+  root also carries `data-theme` and `data-component-key`. No color is a literal in a component or a stylesheet.
+- `--inv-on-accent` is the theme's contrast partner rather than one of the seven board colors: white, the color of
+  text and decoration on the `accent` surface. It exists because `globals.css` resets `--color-*`, so a
+  Tailwind default-palette utility such as `text-white` compiles to **nothing** and the element silently inherits
+  the ink color (about 2.2:1 on an accent band). `birthday-themed-renderers.test.ts` fails if any themed renderer
+  source uses a default-palette color utility again.
+- Contrast: `ink` and `accent` reach 4.5:1 on `background`, `surface`, and `soft`, and white reaches 4.5:1 on
+  `accent`, for all eight themes; `lib/renderers/birthday-themes.test.ts` pins the palettes to the board and checks
+  every pair with `lib/theme/contrast.ts`. Decoration colors never carry text.
+- Background: the theme `background` paints the page, not only the centred column. Each renderer opens with a
+  `fixed inset-0 -z-10` layer filled with `--inv-background`; the guest `<main>` is `isolate`, so the layer stays
+  behind the invitation's content and above the site's paper wash, and it covers the whole viewport on a long page.
+- Rendering: server components with no client script, mobile-first at 390 px, a real `<img>` for `mainPhoto` with its
+  alt text, and headings tied to their sections.
+- Motifs: the theme motif is decoration, so it never sits under text. Each layout puts it in its own fixed-height
+  strip at an edge — above the map hero, in the poster band's empty bottom area, and at the foot of the story's page
+  sheet — with `preserveAspectRatio="xMidYMid meet"`, so the shapes keep their proportions in any box instead of
+  stretching to it. Every motif is one `aria-hidden` SVG, and its element groups carry unique React keys.
+- Choosing (T9, T10b; S9, S10): the owner of a new invitation picks the design, then the theme, then the package,
+  one step at a time, following `design/template-chooser-v2/02-paso-a-paso-escritorio.html` and its
+  narrow-screen artboard. Each step is a server URL of the same page with no client script:
+  `?paso=1|2|3&ocasion=<category>&diseno=<componentKey>&tema=<versionId>&paquete=<packageId>`. `resolveChooserStep`
+  (`lib/customer/template-steps.ts`) reads every value against the creator catalog — the finer selection wins, so
+  a version decides its design and its occasion — and a missing, unknown, or stale value never renders an error
+  page: it falls back to the nearest step that still holds. Step 1 shows the occasion's designs in one row, each
+  one a link to its theme step with a live miniature of the real renderer; the occasion is a catalog category
+  that publishes templates, so no name is written in code and no occasion is offered empty. Step 2 shows the
+  chosen design in each of its themes as comparable miniatures beside the large sample of the chosen one, and a
+  design with a single style (the templates of other categories) shows that one style and moves on. Step 3 shows
+  the packages and the create form. The stepper marks the done steps as links back to
+  their own URL with the whole selection kept, and the footer bar repeats «Paso N de 3», the selection
+  (design · theme · package), «Atrás», and the step's primary action; on step 3 that action submits the form,
+  which still posts the published version id. A create the API refuses comes back to step 3 with the same
+  `ocasion`, `diseno`, `tema`, and `paquete` in its URL and the message shown (`?paso=3&…&error=<code>`), so the
+  written-out selection is never lost; the theme and the package are rebuilt from the version id and the
+  package id the form posted, the occasion and the design are re-read against the catalog on arrival, and a
+  tampered value only falls back to the nearest step that still holds (S12). Every miniature is the real,
+  allow-listed renderer rendering one
+  fixed sample per category (`lib/renderers/samples.ts`, photo `public/samples/birthday-mateo.svg`, an original
+  illustration), never a stored screenshot, so a catalog edit shows up in the chooser with no asset to refresh.
+  The sample is drawn at 390 px and scaled down inside a frame with `contain: paint`; the scale on the wrapper is
+  also what makes the renderer's `position: fixed` background layer relative to the frame instead of the page.
+  «Ver completa» opens `/cuenta/invitaciones/nueva/vista/<versionId>`, a signed-in page that renders the same
+  sample at phone width and leads back to the theme step with that version still selected.
+- Samples: one fixed sample per category, and a renderer that refuses it (a drifted configuration, a category
+  without a sample, an unregistered key) only loses its miniature. `samples.test.ts` proves the birthday sample
+  passes every registered renderer's own props parser, for every theme.
+
 ## Customer workspace
 
 Status: **current** (M4 T8; S11, S12). The owner tried the invitation pages and found the same problem as in the
@@ -190,9 +330,10 @@ plain text. The customer «Rosa y vino» theme stays; the invitation pages simpl
 - List: the drafts are a card grid (`sm:grid-cols-2 xl:grid-cols-3`) with the status badge, the public slug, the
   creation date, and «Editar»; «Nueva invitación» is the header action, and an empty account sees the empty state
   in one small panel.
-- Create: the template and the package are two radio groups of cards (`fieldset`/`legend` per group, a native radio
-  inside each label), so the whole choice is visible without a select popup, works from the keyboard, and needs no
-  JavaScript. The package card shows its price in force.
+- Create: the chooser is the three-step flow («Paso a paso») described in
+  [Guest invitation themes](#guest-invitation-themes). Every choice is a link to a step URL, so it works from the
+  keyboard and needs no JavaScript; the create form posts the published version id and the chosen package, and the
+  package card shows its price in force.
 - Detail: two columns from `lg` up. The form takes two thirds and its fields are grouped into the short sections
   `contentSections` derives from the property names: «Festejado» (`celebrantName`, `age`), «Cuándo» (`date`,
   `time`), «Dónde» (`location`, `address`), «Contenido» (`mainPhoto`, `message`), and one last «Otros datos» group
@@ -264,6 +405,8 @@ JavaScript.
 | Shared classes and components | `apps/web/app/_components/` |
 | Ornament files | `apps/web/public/ornaments/` |
 | Contrast helper and test, font loading test | `apps/web/lib/theme/` |
+| Invitation theme tokens, shared content parser, layout parsers and registries | `apps/web/lib/renderers/` |
+| Themed invitation components, display-font bridge, and motifs | `apps/web/app/_components/renderers/` |
 | Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/page.tsx` |
 | Customer workspace (invitation pages) | `apps/web/app/cuenta/invitaciones/`, `apps/web/app/_components/customer-workspace-shell.tsx` |
 | Administration classes and frames | `apps/web/app/admin/_components/` |

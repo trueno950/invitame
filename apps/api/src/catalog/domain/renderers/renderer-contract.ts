@@ -29,11 +29,18 @@ const EXTRA_PROPERTY_TYPES = ["string", "integer", "number", "boolean"] as const
 export interface RendererField {
   readonly name: string;
   readonly type: (typeof EXTRA_PROPERTY_TYPES)[number];
+  /**
+   * `optional` declares a field the renderer reads only when the family provides it: it stays in
+   * `properties` with its exact type and must be absent from `required` (S13). An absent value keeps the
+   * original rule — every renderer field is required — so no existing contract changes meaning.
+   */
+  readonly presence?: "optional";
 }
 
 /**
  * Validates a data schema against the fields a renderer reads: a 2020-12 object schema that refuses
- * undeclared data and declares every renderer field in `properties` and `required` with its type.
+ * undeclared data and declares every renderer field in `properties` with its type, listed in `required`
+ * unless the field declares `presence: "optional"`, in which case it must stay out of `required`.
  * Extra properties are allowed only when declared with a primitive type.
  */
 export function validateRendererSchema(
@@ -75,7 +82,11 @@ export function validateRendererSchema(
 
     for (const field of fields) {
       if (!Object.hasOwn(properties, field.name)) {
-        issues.push(`schema.properties.${field.name} is required by the renderer and is missing`);
+        issues.push(
+          field.presence === "optional"
+            ? `schema.properties.${field.name} is declared by the renderer and is missing`
+            : `schema.properties.${field.name} is required by the renderer and is missing`,
+        );
         continue;
       }
       const definition = properties[field.name];
@@ -103,7 +114,13 @@ export function validateRendererSchema(
 
     if (requiredNames) {
       for (const field of fields) {
-        if (!required.includes(field.name)) {
+        const listed = required.includes(field.name);
+
+        if (field.presence === "optional") {
+          if (listed) {
+            issues.push(`schema.required must not include ${JSON.stringify(field.name)}`);
+          }
+        } else if (!listed) {
           issues.push(`schema.required must include ${JSON.stringify(field.name)}`);
         }
       }
@@ -115,6 +132,54 @@ export function validateRendererSchema(
         }
       }
     }
+  }
+
+  return issues;
+}
+
+/** The configuration keys a themed layout accepts, and nothing else (S8, S13). */
+const THEMED_CONFIGURATION_KEYS = ["componentKey", "theme"] as const;
+
+/**
+ * Validates the configuration of a themed layout: exactly `componentKey` and `theme`, both required and read
+ * as own properties, the key equal to the version's, and the theme from that renderer's allow-list. Each
+ * layout passes its own list, so a theme reviewed for one occasion is never accepted by another (S13).
+ */
+export function validateThemedConfiguration(
+  configuration: unknown,
+  componentKey: string,
+  themes: readonly string[],
+): string[] {
+  if (!isJsonObject(configuration)) {
+    return ["configuration must be a JSON object"];
+  }
+
+  const issues: string[] = [];
+
+  for (const key of Object.keys(configuration)) {
+    if (!THEMED_CONFIGURATION_KEYS.some((allowed) => allowed === key)) {
+      issues.push(
+        `configuration.${key} is not allowed; allowed keys: ${THEMED_CONFIGURATION_KEYS.join(", ")}`,
+      );
+    }
+  }
+  for (const key of THEMED_CONFIGURATION_KEYS) {
+    if (!Object.hasOwn(configuration, key)) {
+      issues.push(`configuration.${key} is required`);
+    }
+  }
+
+  if (
+    Object.hasOwn(configuration, "componentKey") &&
+    readOwn(configuration, "componentKey") !== componentKey
+  ) {
+    issues.push(`configuration.componentKey must equal ${JSON.stringify(componentKey)}`);
+  }
+  if (
+    Object.hasOwn(configuration, "theme") &&
+    !themes.some((allowed) => allowed === readOwn(configuration, "theme"))
+  ) {
+    issues.push(`configuration.theme must be one of: ${themes.join(", ")}`);
   }
 
   return issues;

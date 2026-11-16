@@ -71,7 +71,7 @@ describe("AppModule catalog wiring", () => {
       [
         "POST",
         `/admin/catalog/templates/${id}/versions`,
-        { componentKey: "birthday-adventure-01", schema: {}, configuration: {} },
+        { componentKey: "birthday-poster-01", schema: {}, configuration: {} },
       ],
       ["POST", `/admin/catalog/templates/${id}/versions/${id}/publish`],
       ["POST", `/admin/catalog/templates/${id}/versions/${id}/retire`],

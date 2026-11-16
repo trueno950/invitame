@@ -49,21 +49,22 @@ test.describe("public invitation", () => {
   }) => {
     await signIn(page, customerEmail);
 
+    // The chooser's three steps: the design, the theme, then the package and the create form (T10b; S10).
     await page.goto("/cuenta/invitaciones/nueva");
-    const templateRadios = page
-      .getByRole("group", { name: INVITATION_COPY.templateLabel })
-      .getByRole("radio");
+    const designLinks = page
+      .getByRole("list", { name: INVITATION_COPY.templateLabel })
+      .getByRole("link");
     test.skip(
-      (await templateRadios.count()) === 0,
+      (await designLinks.count()) === 0,
       "the e2e database has no published template; seed the catalog with `pnpm db:seed`",
     );
 
-    await templateRadios.first().check();
+    await designLinks.first().click();
     await page
-      .getByRole("group", { name: INVITATION_COPY.packageLabel })
-      .getByRole("radio")
+      .getByRole("list", { name: INVITATION_COPY.themeLabel })
+      .getByRole("link")
       .first()
-      .check();
+      .click();
     await page.getByRole("button", { name: INVITATION_COPY.createSubmit }).click();
     await expect(page).toHaveURL(DRAFT_URL);
 

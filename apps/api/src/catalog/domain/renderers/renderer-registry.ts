@@ -4,13 +4,27 @@
 // means adding reviewed code in this directory, the matching web component in `apps/web`, and a new
 // `TemplateVersion` that references the key; an existing version is never edited (AGENTS.md).
 import {
-  BIRTHDAY_ADVENTURE_COMPONENT_KEY,
-  birthdayAdventureRenderer,
-} from "./birthday-adventure-01.renderer";
+  BABY_SHOWER_CLASSIC_COMPONENT_KEY,
+  babyShowerClassicRenderer,
+} from "./baby-shower-classic-01.renderer";
+import {
+  BAPTISM_CLASSIC_COMPONENT_KEY,
+  baptismClassicRenderer,
+} from "./baptism-classic-01.renderer";
+import { BIRTHDAY_MAP_COMPONENT_KEY, birthdayMapRenderer } from "./birthday-map-01.renderer";
+import {
+  BIRTHDAY_POSTER_COMPONENT_KEY,
+  birthdayPosterRenderer,
+} from "./birthday-poster-01.renderer";
+import { BIRTHDAY_STORY_COMPONENT_KEY, birthdayStoryRenderer } from "./birthday-story-01.renderer";
 import type { RendererContract } from "./renderer-contract";
 
 const RENDERERS: ReadonlyMap<string, RendererContract> = new Map([
-  [BIRTHDAY_ADVENTURE_COMPONENT_KEY, birthdayAdventureRenderer],
+  [BIRTHDAY_MAP_COMPONENT_KEY, birthdayMapRenderer],
+  [BIRTHDAY_POSTER_COMPONENT_KEY, birthdayPosterRenderer],
+  [BIRTHDAY_STORY_COMPONENT_KEY, birthdayStoryRenderer],
+  [BABY_SHOWER_CLASSIC_COMPONENT_KEY, babyShowerClassicRenderer],
+  [BAPTISM_CLASSIC_COMPONENT_KEY, baptismClassicRenderer],
 ]);
 
 export function listRendererKeys(): readonly string[] {
