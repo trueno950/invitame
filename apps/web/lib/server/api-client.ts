@@ -98,7 +98,7 @@ export interface ApiRequest {
    * no session and the page must never forward a browser cookie it did not choose.
    */
   cookie?: string;
-  method: "GET" | "POST" | "PATCH" | "PUT";
+  method: "DELETE" | "GET" | "POST" | "PATCH" | "PUT";
   path: string;
   body?: unknown;
   /**

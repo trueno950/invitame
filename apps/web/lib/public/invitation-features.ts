@@ -5,6 +5,7 @@ import {
 } from "../invitation-features/calendar.ts";
 import { type EventFacts, eventFactsFor } from "../invitation-features/event-facts.ts";
 import {
+  type GuestPageBlockView,
   hasAnyFeature,
   type InvitationFeatures,
   type RsvpBlockView,
@@ -83,6 +84,7 @@ function factsOf(invitation: PublicInvitation): EventFacts | undefined {
 export function publicFeatureBlock(
   invitation: PublicInvitation,
   rsvp?: RsvpBlockView,
+  guest?: GuestPageBlockView,
 ): PublicFeatureBlock | undefined {
   const facts = factsOf(invitation);
 
@@ -100,6 +102,7 @@ export function publicFeatureBlock(
     music: invitation.features.music,
     giftRegistry: invitation.features.giftRegistry,
     ...(rsvp === undefined ? {} : { rsvp }),
+    ...(guest === undefined ? {} : { guest }),
   };
 
   return hasAnyFeature(features) || features.giftRegistry

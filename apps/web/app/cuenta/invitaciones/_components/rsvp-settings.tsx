@@ -40,7 +40,7 @@ function ResponsesLink({ view }: { view: RsvpSettingsView }) {
   return (
     <p className="mt-3">
       <Link className={textButton} href={view.responsesHref}>
-        {RSVP_COPY.responsesLink}
+        {view.responsesLabel}
       </Link>
     </p>
   );

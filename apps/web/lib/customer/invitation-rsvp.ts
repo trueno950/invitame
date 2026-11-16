@@ -18,6 +18,7 @@ import {
   type RsvpRead,
   type RsvpSettings,
 } from "../server/invitations-api.ts";
+import { GUEST_COPY, RSVP_COPY } from "./copy.ts";
 import {
   INVITATION_PATHS,
   invitationErrorTarget,
@@ -37,6 +38,9 @@ import {
  * render, turn one submitted settings form into the API call and the redirect that follows it, and pass the
  * download's own headers through to the browser.
  */
+
+/** The catalog key that decides whether the attendance page lists guests instead of open answers (M6 G4). */
+const GUEST_LIST_FEATURE_KEY = "GUEST_LIST";
 
 /** The owner's RSVP paths, next to the invitation they belong to. */
 export const RSVP_PATHS = {
@@ -67,6 +71,8 @@ export interface RsvpSettingsView {
   readonly timeZone: string;
   /** The page that lists this invitation's answers and offers the CSV. */
   readonly responsesHref: string;
+  /** What that page is called: the answers, or the guest list of a package that grants it (M6 G4; S4). */
+  readonly responsesLabel: string;
 }
 
 /**
@@ -93,6 +99,9 @@ export function rsvpSettingsView(
     partyLimits: RSVP_PARTY_LIMITS,
     timeZone: invitation.timeZone,
     responsesHref: RSVP_PATHS.responses(invitation.id),
+    responsesLabel: invitation.availableFeatures.includes(GUEST_LIST_FEATURE_KEY)
+      ? GUEST_COPY.responsesHeading
+      : RSVP_COPY.responsesLink,
   };
 }
 

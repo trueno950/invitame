@@ -41,6 +41,52 @@ export interface RsvpBlockView {
   readonly action?: RsvpFormAction;
 }
 
+/**
+ * The attendance card of one guest's personal page (M6 G4; S4), as the shared features block renders it. The guest
+ * record already holds the name and the phone the API ignores in the body, so this card never asks for them; the party
+ * it offers stops at the guest's own seats, and a decline names no party at all.
+ */
+export interface GuestRsvpBlockView {
+  /** The invitation's public slug, the only value that names it to the API. */
+  readonly slug: string;
+  /** The guest's opaque personal token, the only value that names the guest. */
+  readonly token: string;
+  /** The seats the creator reserved, which bound every party the card offers. */
+  readonly seats: number;
+  /** Every party the card offers: one per seat, from 1 to the guest's own seats. */
+  readonly partySizes: readonly number[];
+  /** The answer the guest last gave, or null when they have not answered yet. */
+  readonly answer: { readonly attending: boolean; readonly partySize: number } | null;
+  /** The message the guest last left, or "" when they left none. */
+  readonly message: string;
+  /** The creator's deadline as an ISO instant, or null when the invitation has none. */
+  readonly deadline: string | null;
+  /** Whether the deadline already passed, so the card shows the closing note instead of the form. */
+  readonly closed: boolean;
+  readonly action?: RsvpFormAction;
+}
+
+/** The access pass of a confirmed guest (M6 G4; S4): the absolute check-in URL the QR encodes, and nothing else. */
+export interface GuestPassBlockView {
+  readonly checkInUrl: string;
+}
+
+/**
+ * The guest's own block of their personal page: the greeting, the seats they hold, their answer card, and their pass
+ * when the API offers one. It is absent on the public page, which is why a public render keeps exactly the markup it
+ * had before a guest's name was known.
+ */
+export interface GuestPageBlockView {
+  /** «Hola, Ana», from the first name the guest was registered with. */
+  readonly greeting: string;
+  /** «Tienes 4 lugares reservados a tu nombre.», with the singular when it is one. */
+  readonly seats: string;
+  /** The answer card, or absent when the invitation takes no personal answers. */
+  readonly rsvp?: GuestRsvpBlockView;
+  /** The pass, or absent while the guest has not confirmed or the package does not grant it. */
+  readonly pass?: GuestPassBlockView;
+}
+
 /** The features of one invitation, as the public read returns them. */
 export interface InvitationFeatures {
   /** The invitation's IANA time zone: every wall clock of the page is read in it. */
@@ -59,6 +105,8 @@ export interface InvitationFeatures {
   readonly giftRegistry: boolean;
   /** The open RSVP form of the guest page, or absent when the invitation has no open RSVP (G3; S4). */
   readonly rsvp?: RsvpBlockView;
+  /** The personal block of one guest, or absent on a public page (G4; S4). */
+  readonly guest?: GuestPageBlockView;
 }
 
 /** An E.164 number: a `+`, a first digit from 1 to 9, and 7 to 14 digits after it. */
@@ -109,7 +157,8 @@ export function hasAnyFeature(features: InvitationFeatures): boolean {
     features.calendar ||
     features.whatsapp !== null ||
     features.music !== null ||
-    features.rsvp !== undefined
+    features.rsvp !== undefined ||
+    features.guest !== undefined
   );
 }
 

@@ -4,6 +4,9 @@ import { ApiClientError } from "../../../../lib/server/api-client.ts";
 import { getWebServerConfig } from "../../../../lib/server/config.ts";
 import {
   createPublicInvitationsClient,
+  type PublicGuestResult,
+  type PublicGuestRsvpSubmission,
+  type PublicGuestRsvpSubmitResult,
   type PublicInvitationsClient,
   type PublicRsvpSubmission,
   type PublicRsvpSubmitResult,
@@ -29,6 +32,8 @@ export const PUBLIC_INVITATION_LOG_EVENT = {
   RENDERER_UNKNOWN: "public_invitation_renderer_unknown",
   RENDERER_PROPS_REFUSED: "public_invitation_renderer_props_refused",
   RSVP_SUBMIT_FAILED: "public_rsvp_submit_failed",
+  GUEST_READ_FAILED: "public_guest_read_failed",
+  GUEST_RSVP_SUBMIT_FAILED: "public_guest_rsvp_submit_failed",
 } as const;
 
 export type PublicInvitationLogEvent =
@@ -97,6 +102,41 @@ export async function submitPublicRsvp(
     return await publicInvitationsClient().submitRsvp(slug, submission, options);
   } catch (error) {
     logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.RSVP_SUBMIT_FAILED, { error });
+    throw error;
+  }
+}
+
+/**
+ * One guest's personal read through the anonymous client (M6 G4; S4). A failure this deployment could not map is
+ * logged once as its class and kind and rethrown, so the page shows its own friendly 404 or outage notice. Nothing
+ * logged names a guest, a token, a slug, or the invitation's content.
+ */
+export async function readPublicGuestInvitation(
+  slug: string,
+  token: string,
+): Promise<PublicGuestResult> {
+  try {
+    return await publicInvitationsClient().getGuest(slug, token);
+  } catch (error) {
+    logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.GUEST_READ_FAILED, { error });
+    throw error;
+  }
+}
+
+/**
+ * One guest's personal answer through the anonymous client (M6 G4; S4): the same mapping, and the same promise that
+ * nothing logged names the guest or what they wrote.
+ */
+export async function submitPublicGuestRsvp(
+  slug: string,
+  token: string,
+  submission: PublicGuestRsvpSubmission,
+  options?: { clientAddress?: string },
+): Promise<PublicGuestRsvpSubmitResult> {
+  try {
+    return await publicInvitationsClient().submitGuestRsvp(slug, token, submission, options);
+  } catch (error) {
+    logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.GUEST_RSVP_SUBMIT_FAILED, { error });
     throw error;
   }
 }

@@ -1,24 +1,55 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { connection } from "next/server";
 
-import { INVITATION_COPY, RSVP_COPY } from "../../../../../lib/customer/copy.ts";
+import { GUEST_COPY, INVITATION_COPY, RSVP_COPY } from "../../../../../lib/customer/copy.ts";
+import { guestListView, guestSelection } from "../../../../../lib/customer/invitation-guests.ts";
 import {
   type RsvpResponseRow,
   rsvpResponsesView,
+  rsvpSettingsView,
 } from "../../../../../lib/customer/invitation-rsvp.ts";
-import { INVITATION_PATHS } from "../../../../../lib/customer/invitations.ts";
+import {
+  INVITATION_PATHS,
+  invitationPageNotices,
+} from "../../../../../lib/customer/invitations.ts";
 import { isInvitationId } from "../../../../../lib/server/invitations-api.ts";
+import { GUEST_LINK_COOKIE, guestLinks } from "../../../../../lib/server/single-use-flash.ts";
 import { CustomerWorkspaceShell } from "../../../../_components/customer-workspace-shell.tsx";
 import { quietButton, statusNote } from "../../../../_components/ui.ts";
+import {
+  AddGuestForm,
+  EditGuestForm,
+  GuestLinkReveal,
+  GuestListFooter,
+  GuestTable,
+  GuestTotals,
+  RemoveGuestPanel,
+} from "../../_components/guest-list.tsx";
+import { Notices } from "../../_components/notices.tsx";
 import { invitations } from "../../_lib/api.ts";
 import { attempt, resolveRead } from "../../_lib/load.ts";
+import {
+  createGuestAction,
+  removeGuestAction,
+  rotateGuestLinkAction,
+  saveGuestAction,
+} from "../../actions.ts";
 
 /**
- * `/cuenta/invitaciones/[id]/asistencia` (M6 G3; S1, S4): the answers one invitation received, newest first, with
- * the totals of the page and the CSV download of the same rows in the same order. Owner-only: the page never
- * checks ownership itself, it reads the RSVP route with the session cookie and the API answers 404 for an
- * invitation this customer does not own. A guest never reaches this page and never sees another guest's data.
+ * `/cuenta/invitaciones/[id]/asistencia` (M6 G3, G4; S1, S4): who answered, and who is coming. The page has two modes,
+ * and the API decides which one an invitation has:
+ *
+ * - the guest list, when the pinned package grants `GUEST_LIST`: every guest with their seats, their answer, their
+ *   party, and their check-in state, the totals of the list, and the writes that add, edit, remove, and reissue a
+ *   personal link. A personal link is shown once, right after it is created or rotated, and never again (S4).
+ * - the open responses, otherwise: the answers the invitation received, newest first, with the totals of the page and
+ *   the CSV download of the same rows in the same order.
+ *
+ * Owner-only in both modes: the page never checks ownership itself, it reads the RSVP and guest routes with the
+ * session cookie, and the API answers 404 for an invitation this customer does not own. A guest never reaches this
+ * page and never sees another guest's data.
  */
 
 export const metadata: Metadata = {
@@ -92,6 +123,94 @@ function ResponsesTable({ rows }: { rows: readonly RsvpResponseRow[] }) {
   );
 }
 
+/**
+ * The guest-list mode of one invitation (M6 G4; S1, S4). The personal link of the guest the last action created or
+ * rotated is taken out of the one-time store here, as the page renders, so it is shown exactly once; every other
+ * visit renders the list without it.
+ */
+function GuestListMode({
+  id,
+  slug,
+  invitation,
+  list,
+  parameters,
+  settings,
+  flash,
+}: {
+  id: string;
+  slug: string;
+  invitation: Parameters<typeof guestListView>[0];
+  list: Parameters<typeof guestListView>[1];
+  parameters: Record<string, string | string[] | undefined>;
+  settings: { readonly deadlineText: string; readonly partyLimit: number } | undefined;
+  flash: Parameters<typeof GuestLinkReveal>[0]["flash"] | undefined;
+}) {
+  const view = guestListView(invitation, list);
+  const selection = guestSelection(list, parameters);
+  const backHref = `/cuenta/invitaciones/${id}/asistencia`;
+  const notices = invitationPageNotices(parameters);
+
+  return (
+    <CustomerWorkspaceShell
+      actions={
+        <Link className={quietButton} href={INVITATION_PATHS.detail(id)}>
+          {GUEST_COPY.backToInvitation}
+        </Link>
+      }
+      eyebrow={GUEST_COPY.responsesEyebrow}
+      heading={GUEST_COPY.responsesHeading}
+      intro={GUEST_COPY.responsesIntro}
+    >
+      <div className="flex flex-col gap-4">
+        <Notices error={notices.error} issues={notices.issues} notice={notices.notice} />
+        {flash === undefined ? null : <GuestLinkReveal flash={flash} />}
+        <GuestTotals totals={view.totals} />
+        {settings === undefined ? (
+          <p className={statusNote}>{RSVP_COPY.unavailable}</p>
+        ) : (
+          <GuestListFooter
+            csvHref={view.csvHref}
+            deadline={settings.deadlineText === "" ? RSVP_COPY.deadlineNone : settings.deadlineText}
+            partyLimit={settings.partyLimit}
+          />
+        )}
+        {selection.removing === null ? null : (
+          <RemoveGuestPanel
+            action={removeGuestAction}
+            backHref={backHref}
+            guest={selection.removing}
+            invitationId={id}
+          />
+        )}
+        {selection.editing === null ? null : (
+          <EditGuestForm
+            action={saveGuestAction}
+            backHref={backHref}
+            invitationId={id}
+            values={selection.editing}
+          />
+        )}
+        <AddGuestForm
+          action={createGuestAction}
+          editable={view.editable}
+          invitationId={id}
+          slug={slug}
+        />
+        {/* The note about the personal links sits above the table, so the page's closing element is the table card and
+            the decorative corner never overlaps running text. */}
+        <p className="text-sm leading-6 text-muted">{view.note}</p>
+        <GuestTable
+          action={rotateGuestLinkAction}
+          backHref={backHref}
+          invitationId={id}
+          slug={slug}
+          view={view}
+        />
+      </div>
+    </CustomerWorkspaceShell>
+  );
+}
+
 export default async function RsvpResponsesPage({
   params,
   searchParams,
@@ -100,7 +219,7 @@ export default async function RsvpResponsesPage({
   searchParams: SearchParameters;
 }) {
   await connection();
-  const [{ id }] = await Promise.all([params, searchParams]);
+  const [{ id }, parameters, cookieStore] = await Promise.all([params, searchParams, cookies()]);
 
   if (!isInvitationId(id)) {
     return (
@@ -148,6 +267,62 @@ export default async function RsvpResponsesPage({
           {INVITATION_COPY.backToList}
         </Link>
       </CustomerWorkspaceShell>
+    );
+  }
+
+  const settings =
+    rsvp.status === "ok" ? rsvpSettingsView(invitation.value, rsvp.value.settings) : undefined;
+  // The API decides the mode from the pinned package's catalog keys; the guest list replaces the open answers here
+  // exactly like it replaces the open form on the public page (S3, S4).
+  const guestMode = invitation.value.availableFeatures.includes("GUEST_LIST");
+
+  if (guestMode) {
+    const guests = resolveRead(await attempt(() => invitations.guests(id)));
+
+    if (guests.status === "unavailable") {
+      return (
+        <CustomerWorkspaceShell
+          eyebrow={GUEST_COPY.responsesEyebrow}
+          heading={GUEST_COPY.unavailableHeading}
+          intro={GUEST_COPY.unavailableBody}
+        >
+          <Link className={quietButton} href={INVITATION_PATHS.detail(id)}>
+            {GUEST_COPY.backToInvitation}
+          </Link>
+        </CustomerWorkspaceShell>
+      );
+    }
+    if (guests.status === "not-found") {
+      return (
+        <CustomerWorkspaceShell
+          eyebrow={GUEST_COPY.responsesEyebrow}
+          heading={INVITATION_COPY.notFoundHeading}
+          intro={INVITATION_COPY.notFoundBody}
+        >
+          <Link className={quietButton} href={INVITATION_PATHS.list}>
+            {INVITATION_COPY.backToList}
+          </Link>
+        </CustomerWorkspaceShell>
+      );
+    }
+
+    // Read once, here, as the page renders: the store deletes the value, so a reload cannot show the link again.
+    const handle = cookieStore.get(GUEST_LINK_COOKIE)?.value;
+    const flash =
+      handle === undefined
+        ? undefined
+        : guestLinks.take(handle, (entry) => entry.invitationId === id);
+
+    return (
+      <GuestListMode
+        flash={flash}
+        id={id}
+        invitation={invitation.value}
+        list={guests.value}
+        parameters={parameters}
+        settings={settings}
+        slug={invitation.value.slug}
+      />
     );
   }
 

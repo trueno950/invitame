@@ -161,6 +161,15 @@ export interface CreatorPackage {
  *   why (S4);
  * - `rsvp-settings-invalid`: 400 `INVALID_RSVP_SETTINGS`, the deadline or the party limit was refused and
  *   `issues` names why (M6 G3; S4);
+ * - `invalid-guest`: 400 `INVALID_GUEST`, the guest's name, seats, phone, or note was refused and `issues`
+ *   names why (M6 G4; S4);
+ * - `guest-list-unavailable`: 409 `GUEST_LIST_NOT_AVAILABLE`, the package does not grant the guest list (G4);
+ * - `guest-not-found`: 404 `GUEST_NOT_FOUND`, the guest is not part of this invitation (G4);
+ * - `guest-not-confirmed`: 409 `GUEST_NOT_CONFIRMED`, the guest has not confirmed, so there is no party to
+ *   admit (G4);
+ * - `guest-seats-below-response`: 409 `GUEST_SEATS_BELOW_RESPONSE`, the seats would not hold the party the guest
+ *   already confirmed (G4);
+ * - `qr-pass-unavailable`: 409 `QR_PASS_NOT_AVAILABLE`, the package does not grant the access pass (G4);
  * - `validation`: 400 without a known code, the API refused a field of the request;
  * - `not-editable`: 409 `INVITATION_NOT_EDITABLE`, the draft is archived (A3, S7);
  * - `already-archived`: 409 `INVITATION_ALREADY_ARCHIVED`;
@@ -182,6 +191,12 @@ export type InvitationFailure =
   | "content-invalid"
   | "features-invalid"
   | "rsvp-settings-invalid"
+  | "invalid-guest"
+  | "guest-list-unavailable"
+  | "guest-not-found"
+  | "guest-not-confirmed"
+  | "guest-seats-below-response"
+  | "qr-pass-unavailable"
   | "validation"
   | "not-editable"
   | "already-archived"
@@ -596,8 +611,311 @@ export function parseRsvpRead(value: unknown): RsvpRead | undefined {
   return { settings, responses, totals };
 }
 
+// The guest-list routes of the owner (M6 G4; S1, S4). The list is the guests with the answer each one gave and
+// their check-in state, never a personal token or a digest; a creation and a rotation answer the plain personal
+// token exactly once, so only the server action that redirects reads it, and the check-in answers the guest, the
+// seats, the confirmed party, and the first check-in instant. A token is 128 bits as 22 base64url characters, the
+// only shape the API mints, so a value that cannot have been minted names no guest and no request is sent.
+
+/** The widest guest name, in characters: the API's own bound on `Guest.name`. */
+export const GUEST_NAME_MAX_LENGTH = 80;
+/** The seats one guest may be given, mirrored so no page offers what the API refuses (S4). */
+export const GUEST_SEATS_MIN = 1;
+export const GUEST_SEATS_MAX = 10;
+/** The widest guest note, in characters: the API's own bound on `Guest.note`. */
+export const GUEST_NOTE_MAX_LENGTH = 200;
+/** The exact width of a personal guest token: 128 bits, base64url-encoded without padding. */
+export const GUEST_TOKEN_LENGTH = 22;
+
+const GUEST_TOKEN = /^[A-Za-z0-9_-]{22}$/;
+
+/**
+ * Whether the text is one personal guest token (S4): exactly 22 base64url characters. Compared whole and never
+ * trimmed, because a token with whitespace cannot have been minted and must name nothing.
+ */
+export function isGuestToken(value: unknown): value is string {
+  return typeof value === "string" && GUEST_TOKEN.test(value);
+}
+
+/** One guest's answer, as the creator's list renders it (S4); the internal dedupe key is never part of it. */
+export interface GuestResponseSummary {
+  readonly attending: boolean;
+  /** The people who come: 1 to the guest's seats when attending, 0 when not. */
+  readonly partySize: number;
+  readonly message: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** One guest of the creator's list: the stored fields, the answer, and the check-in state, never the token. */
+export interface GuestItem {
+  readonly id: string;
+  readonly name: string;
+  readonly seats: number;
+  readonly phone: string | null;
+  readonly note: string | null;
+  readonly tokenIssuedAt: string;
+  readonly checkedInAt: string | null;
+  readonly response: GuestResponseSummary | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** The totals of one guest list (S1, S4), as the creator's page shows them. */
+export interface GuestTotals {
+  readonly guests: number;
+  readonly seats: number;
+  readonly attendingGuests: number;
+  readonly attendingPeople: number;
+  readonly declinedCount: number;
+  readonly pendingCount: number;
+  readonly checkedInCount: number;
+}
+
+/** The creator's guest list: the guests and the totals of the page (S1, S4). */
+export interface GuestList {
+  readonly guests: GuestItem[];
+  readonly totals: GuestTotals;
+}
+
+/** The answer of a creation or a rotation: the guest plus the plain token, which is shown once (S4). */
+export interface GuestWithToken {
+  readonly guest: GuestItem;
+  readonly token: string;
+}
+
+/** The answer of one check-in (S4): the guest, the seats, the confirmed party, and the first instant. */
+export interface GuestCheckIn {
+  readonly guestId: string;
+  readonly name: string;
+  readonly seats: number;
+  readonly attendingPartySize: number;
+  readonly checkedInAt: string;
+}
+
+/** One guest as the creator's form sends it; `PUT` replaces every field, so a blank phone or note clears it. */
+export interface GuestInput {
+  readonly name: string;
+  readonly seats: number;
+  readonly phone?: string | null;
+  readonly note?: string | null;
+}
+
+/** A whole count, as a total is: `undefined` for anything else. */
+function isWholeCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** A guest's name: the API's own width, in characters, and never empty. */
+function isGuestName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    [...value].length <= GUEST_NAME_MAX_LENGTH
+  );
+}
+
+/** An optional stored text: a string, or null when the creator left it empty. */
+function isOptionalText(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+/** The seats of one guest: an integer from 1 to 10 (S4). */
+function isSeats(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= GUEST_SEATS_MIN &&
+    value <= GUEST_SEATS_MAX
+  );
+}
+
+/**
+ * One guest's answer, refused whole when it names a party the seats could not hold: a confirmed answer names at
+ * least one person, a decline names none, and neither may exceed the guest's seats. `seats` is the guest's own
+ * count, so the answer and the seat count are read together.
+ */
+function parseGuestResponseSummary(
+  value: unknown,
+  seats: number,
+): GuestResponseSummary | undefined {
+  const summary = record(value);
+
+  if (summary === undefined) {
+    return undefined;
+  }
+
+  const { attending, partySize, message, createdAt, updatedAt } = summary;
+
+  if (
+    typeof attending !== "boolean" ||
+    !isWholeCount(partySize) ||
+    partySize > seats ||
+    (attending && partySize < 1) ||
+    (!attending && partySize !== 0) ||
+    !isOptionalText(message) ||
+    !isTimestamp(createdAt) ||
+    !isTimestamp(updatedAt)
+  ) {
+    return undefined;
+  }
+
+  return { attending, partySize, message, createdAt, updatedAt };
+}
+
+/** One guest of the creator's list, or undefined when the body is not the documented shape (S4). */
+export function parseGuestItem(value: unknown): GuestItem | undefined {
+  const guest = record(value);
+
+  if (guest === undefined) {
+    return undefined;
+  }
+
+  const { id, name, seats, phone, note, tokenIssuedAt, checkedInAt, createdAt, updatedAt } = guest;
+
+  if (
+    !isInvitationId(id) ||
+    !isGuestName(name) ||
+    !isSeats(seats) ||
+    !isOptionalText(phone) ||
+    !isOptionalText(note) ||
+    !isTimestamp(tokenIssuedAt) ||
+    !(checkedInAt === null || isTimestamp(checkedInAt)) ||
+    !isTimestamp(createdAt) ||
+    !isTimestamp(updatedAt)
+  ) {
+    return undefined;
+  }
+
+  const response =
+    guest.response === null ? null : parseGuestResponseSummary(guest.response, seats);
+
+  if (response === undefined) {
+    return undefined;
+  }
+
+  return {
+    id,
+    name,
+    seats,
+    phone,
+    note,
+    tokenIssuedAt,
+    checkedInAt,
+    response,
+    createdAt,
+    updatedAt,
+  };
+}
+
+/** The seven totals of one list, or undefined when a count is not one (S1, S4). */
+function parseGuestTotals(value: unknown): GuestTotals | undefined {
+  const totals = record(value);
+
+  if (totals === undefined) {
+    return undefined;
+  }
+
+  const {
+    guests,
+    seats,
+    attendingGuests,
+    attendingPeople,
+    declinedCount,
+    pendingCount,
+    checkedInCount,
+  } = totals;
+
+  if (
+    !isWholeCount(guests) ||
+    !isWholeCount(seats) ||
+    !isWholeCount(attendingGuests) ||
+    !isWholeCount(attendingPeople) ||
+    !isWholeCount(declinedCount) ||
+    !isWholeCount(pendingCount) ||
+    !isWholeCount(checkedInCount)
+  ) {
+    return undefined;
+  }
+
+  return {
+    guests,
+    seats,
+    attendingGuests,
+    attendingPeople,
+    declinedCount,
+    pendingCount,
+    checkedInCount,
+  };
+}
+
+/** The creator's whole list: every guest and the totals of the page (S4). */
+export function parseGuestList(value: unknown): GuestList | undefined {
+  const list = record(value);
+
+  if (list === undefined) {
+    return undefined;
+  }
+
+  const guests = mapAll(list.guests, parseGuestItem);
+  const totals = parseGuestTotals(list.totals);
+
+  return guests === undefined || totals === undefined ? undefined : { guests, totals };
+}
+
+/** A creation or a rotation: the guest and the plain token, which the API answers exactly once (S4). */
+export function parseGuestWithToken(value: unknown): GuestWithToken | undefined {
+  const stored = record(value);
+
+  if (stored === undefined) {
+    return undefined;
+  }
+
+  const guest = parseGuestItem(stored.guest);
+
+  return guest === undefined || !isGuestToken(stored.token)
+    ? undefined
+    : { guest, token: stored.token };
+}
+
+/** The answer of a removal (S4): nothing about the guest that was removed is echoed back. */
+export function parseDeletedGuest(value: unknown): { status: "deleted" } | undefined {
+  return record(value)?.status === "deleted" ? { status: "deleted" } : undefined;
+}
+
+/** The answer of one check-in (S4). */
+export function parseGuestCheckIn(value: unknown): GuestCheckIn | undefined {
+  const stored = record(value);
+
+  if (stored === undefined) {
+    return undefined;
+  }
+
+  const { guestId, name, seats, attendingPartySize, checkedInAt } = stored;
+
+  if (
+    !isInvitationId(guestId) ||
+    !isGuestName(name) ||
+    !isSeats(seats) ||
+    !isWholeCount(attendingPartySize) ||
+    attendingPartySize < 1 ||
+    attendingPartySize > seats ||
+    !isTimestamp(checkedInAt)
+  ) {
+    return undefined;
+  }
+
+  return { guestId, name, seats, attendingPartySize, checkedInAt };
+}
+
 const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVITATION_NOT_FOUND: "not-found",
+  INVALID_GUEST: "invalid-guest",
+  GUEST_LIST_NOT_AVAILABLE: "guest-list-unavailable",
+  GUEST_NOT_FOUND: "guest-not-found",
+  GUEST_NOT_CONFIRMED: "guest-not-confirmed",
+  GUEST_SEATS_BELOW_RESPONSE: "guest-seats-below-response",
+  QR_PASS_NOT_AVAILABLE: "qr-pass-unavailable",
   INVITATION_TEMPLATE_VERSION_NOT_PUBLISHED: "version-not-published",
   INVITATION_PACKAGE_NOT_FOUND: "package-not-found",
   INVITATION_PACKAGE_DOES_NOT_FIT: "package-does-not-fit",
@@ -614,6 +932,8 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
 
 const SIGNED_OUT: InvitationResult<never> = { ok: false, failure: "signed-out" };
 const NOT_FOUND: InvitationResult<never> = { ok: false, failure: "not-found" };
+/** The answer a guest route gives without a request: an id or a token that names no guest of this invitation. */
+const GUEST_NOT_FOUND_RESULT: InvitationResult<never> = { ok: false, failure: "guest-not-found" };
 
 /** The most readiness issues one refusal is read with, so a hostile body cannot grow the list. */
 const MAX_ISSUES = 20;
@@ -664,7 +984,8 @@ function refusalOf(text: string | undefined): InvitationResult<never> | undefine
   const issues =
     failure === "not-publishable" ||
     failure === "features-invalid" ||
-    failure === "rsvp-settings-invalid"
+    failure === "rsvp-settings-invalid" ||
+    failure === "invalid-guest"
       ? issuesOf(body)
       : undefined;
   return { ok: false, failure, ...(issues === undefined ? {} : { issues }) };
@@ -692,7 +1013,7 @@ export function createInvitationsClient(
   readCookieHeader: () => Promise<string | null | undefined>,
 ) {
   async function call<T>(
-    method: "GET" | "POST" | "PUT",
+    method: "DELETE" | "GET" | "POST" | "PUT",
     path: string,
     body: unknown,
     parse: (value: unknown) => T | undefined,
@@ -760,6 +1081,31 @@ export function createInvitationsClient(
     return path === undefined ? NOT_FOUND : send(path);
   }
 
+  /**
+   * The path of one guest route (M6 G4; S4), or undefined when the invitation id or the guest id is not a UUID: an
+   * id that is not one names nothing, so no request is made and the guest never becomes a path segment the API
+   * could read differently.
+   */
+  function guestPath(id: string, guestId?: string, suffix = ""): string | undefined {
+    if (!isInvitationId(id)) {
+      return undefined;
+    }
+    if (guestId === undefined) {
+      return `${INVITATIONS}/${id}/guests${suffix}`;
+    }
+    return isInvitationId(guestId) ? `${INVITATIONS}/${id}/guests/${guestId}${suffix}` : undefined;
+  }
+
+  async function onGuest<T>(
+    id: string,
+    guestId: string,
+    suffix: string,
+    send: (path: string) => Promise<InvitationResult<T>>,
+  ): Promise<InvitationResult<T>> {
+    const path = guestPath(id, guestId, suffix);
+    return path === undefined ? GUEST_NOT_FOUND_RESULT : send(path);
+  }
+
   return {
     /** `GET /invitations`: the session user's drafts, newest first (S1). */
     list: (): Promise<InvitationResult<InvitationSummary[]>> =>
@@ -817,6 +1163,54 @@ export function createInvitationsClient(
       settings: RsvpSettings,
     ): Promise<InvitationResult<RsvpSettings>> =>
       onDraft(id, "/rsvp-settings", (path) => call("PUT", path, settings, parseRsvpSettings)),
+    /**
+     * `GET /invitations/:id/guests`: the guests with their answers, their check-in state, and the totals (M6 G4;
+     * S1, S4). Owner-only; a package without the guest list is `guest-list-unavailable`.
+     */
+    guests: (id: string): Promise<InvitationResult<GuestList>> => {
+      const path = guestPath(id);
+      return path === undefined
+        ? Promise.resolve(NOT_FOUND)
+        : call("GET", path, undefined, parseGuestList);
+    },
+    /**
+     * `POST /invitations/:id/guests`: adds one guest and answers the personal token exactly once (M6 G4; S4). Only
+     * the server action reads it, and it never becomes part of a URL or a log.
+     */
+    createGuest: (id: string, guest: GuestInput): Promise<InvitationResult<GuestWithToken>> => {
+      const path = guestPath(id);
+      return path === undefined
+        ? Promise.resolve(NOT_FOUND)
+        : call("POST", path, guest, parseGuestWithToken);
+    },
+    /** `PUT /invitations/:id/guests/:guestId`: replaces the whole guest; the token and the check-in stay (S4). */
+    updateGuest: (
+      id: string,
+      guestId: string,
+      guest: GuestInput,
+    ): Promise<InvitationResult<GuestItem>> =>
+      onGuest(id, guestId, "", (path) => call("PUT", path, guest, parseGuestItem)),
+    /** `DELETE /invitations/:id/guests/:guestId`: removes the guest together with the answer they gave (S4). */
+    removeGuest: (id: string, guestId: string): Promise<InvitationResult<{ status: "deleted" }>> =>
+      onGuest(id, guestId, "", (path) => call("DELETE", path, undefined, parseDeletedGuest)),
+    /**
+     * `POST /invitations/:id/guests/:guestId/token`: replaces the personal link and answers the new token once, so
+     * the owner can revoke a link that leaked; the previous link stops resolving at the same instant (S4).
+     */
+    rotateGuestToken: (id: string, guestId: string): Promise<InvitationResult<GuestWithToken>> =>
+      onGuest(id, guestId, "/token", (path) => call("POST", path, undefined, parseGuestWithToken)),
+    /**
+     * `POST /invitations/:id/guests/check-in`: marks the guest named by the token present and answers the first
+     * check-in instant, so showing the same QR twice is idempotent (M6 G4; S4). A token that cannot have been minted
+     * names no guest, so no request is made.
+     */
+    checkInGuest: (id: string, token: string): Promise<InvitationResult<GuestCheckIn>> => {
+      const path = guestPath(id, undefined, "/check-in");
+
+      return path === undefined || !isGuestToken(token)
+        ? Promise.resolve(GUEST_NOT_FOUND_RESULT)
+        : call("POST", path, { token }, parseGuestCheckIn);
+    },
     /**
      * `GET /invitations/:id/rsvp.csv`: the same read as a file (M6 G3; S1, S4). The API's own content type and
      * attachment filename are kept, because the route that answers the browser passes them through.

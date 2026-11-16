@@ -963,6 +963,30 @@ function stub(answers: Answers = {}): Stub {
       calls.push("rsvpCsv");
       return unexpected("rsvpCsv");
     },
+    guests: (id) => {
+      calls.push(`guests:${id}`);
+      return unexpected("guests");
+    },
+    createGuest: () => {
+      calls.push("createGuest");
+      return unexpected("createGuest");
+    },
+    updateGuest: () => {
+      calls.push("updateGuest");
+      return unexpected("updateGuest");
+    },
+    removeGuest: () => {
+      calls.push("removeGuest");
+      return unexpected("removeGuest");
+    },
+    rotateGuestToken: () => {
+      calls.push("rotateGuestToken");
+      return unexpected("rotateGuestToken");
+    },
+    checkInGuest: () => {
+      calls.push("checkInGuest");
+      return unexpected("checkInGuest");
+    },
   };
   return { api, calls };
 }

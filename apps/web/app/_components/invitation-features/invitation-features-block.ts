@@ -1,10 +1,12 @@
 import { createElement, type ReactElement, useId } from "react";
 
-import { RSVP_FORM_COPY } from "../../../lib/customer/copy.ts";
+import { GUEST_PAGE_COPY, RSVP_FORM_COPY } from "../../../lib/customer/copy.ts";
 import { calendarEventFor, googleCalendarUrl } from "../../../lib/invitation-features/calendar.ts";
 import { countdownParts } from "../../../lib/invitation-features/countdown.ts";
 import type { EventFacts, EventPlace } from "../../../lib/invitation-features/event-facts.ts";
 import {
+  type GuestPassBlockView,
+  type GuestRsvpBlockView,
   hasAnyFeature,
   type InvitationFeatures,
   type RsvpBlockView,
@@ -14,6 +16,7 @@ import { MUSIC_SECTION_TITLE, musicButtonLabel } from "../../../lib/invitation-f
 import { formatRsvpDeadline } from "../../../lib/invitation-features/rsvp-deadline.ts";
 import { startInstant } from "../../../lib/invitation-features/start-instant.ts";
 import { whatsappUrl } from "../../../lib/invitation-features/whatsapp.ts";
+import { guestPassDataUrl } from "../../../lib/server/guest-pass-qr.ts";
 import { DISPLAY_FONT } from "../renderers/themed/theme.ts";
 import { CountdownIsland } from "./countdown-island.ts";
 
@@ -74,7 +77,10 @@ const HONEYPOT = "absolute -left-[9999px] h-px w-px overflow-hidden";
 const SUBMIT = `${ACTION} self-start border-0`;
 
 /** The one sentence about the deadline: when answers close, or that they already closed (S4). */
-function deadlineSentence(rsvp: RsvpBlockView, timeZone: string): string | undefined {
+function deadlineSentence(
+  rsvp: { readonly deadline: string | null; readonly closed: boolean },
+  timeZone: string,
+): string | undefined {
   if (rsvp.deadline === null) {
     return undefined;
   }
@@ -236,6 +242,156 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
             ),
           ),
         ]),
+  );
+}
+
+/** The answer the guest last gave, as one sentence above their card (G4; S4). */
+function guestAnswerSentence(rsvp: GuestRsvpBlockView): string {
+  if (rsvp.answer === null) {
+    return GUEST_PAGE_COPY.answerPending;
+  }
+  return rsvp.answer.attending
+    ? GUEST_PAGE_COPY.answerCurrentYes(rsvp.answer.partySize)
+    : GUEST_PAGE_COPY.answerCurrentNo;
+}
+
+/**
+ * The attendance card of one guest's personal page (M6 G4; S1, S4). It is the open form's card with two differences
+ * that matter: it never asks for a name or a phone — the guest record already holds them and the API ignores them in
+ * the body — and the party it offers stops at the guest's own seats. There is no honeypot here either: the API counts
+ * this answer against the guest's own link, so there is nothing for a bot to fill. Once the deadline passed, the card
+ * keeps its place and shows the closing note instead of the form, with the answer the guest already gave.
+ */
+function guestRsvpSection(
+  rsvp: GuestRsvpBlockView,
+  timeZone: string,
+  idPrefix: string,
+): ReactElement {
+  const sentence = deadlineSentence(rsvp, timeZone);
+
+  return h(
+    "div",
+    { key: "guest-rsvp", "data-feature": "guest-rsvp", className: SURFACE_CARD },
+    h("h3", { className: FEATURE_TITLE }, GUEST_PAGE_COPY.answerTitle),
+    h("p", { key: "current", className: HINT }, guestAnswerSentence(rsvp)),
+    ...(rsvp.closed ? [] : [h("p", { key: "hint", className: HINT }, GUEST_PAGE_COPY.answerHint)]),
+    ...(sentence === undefined ? [] : [h("p", { key: "deadline", className: HINT }, sentence)]),
+    ...(rsvp.closed
+      ? []
+      : [
+          h(
+            "form",
+            { key: "form", "data-guest-rsvp-form": "", action: rsvp.action, className: FORM },
+            h("input", { type: "hidden", name: "slug", value: rsvp.slug }),
+            h("input", { type: "hidden", name: "token", value: rsvp.token }),
+            h(
+              "fieldset",
+              { className: "flex flex-col gap-1" },
+              h("legend", { className: FIELD_LABEL }, RSVP_FORM_COPY.attendingLegend),
+              h(
+                "label",
+                { className: RADIO_LABEL, htmlFor: `${idPrefix}-guest-yes` },
+                h("input", {
+                  id: `${idPrefix}-guest-yes`,
+                  name: "attending",
+                  type: "radio",
+                  value: "si",
+                  required: true,
+                  defaultChecked: rsvp.answer?.attending === true,
+                  className: RADIO,
+                }),
+                RSVP_FORM_COPY.attendingYes,
+              ),
+              h(
+                "label",
+                { className: RADIO_LABEL, htmlFor: `${idPrefix}-guest-no` },
+                h("input", {
+                  id: `${idPrefix}-guest-no`,
+                  name: "attending",
+                  type: "radio",
+                  value: "no",
+                  defaultChecked: rsvp.answer?.attending === false,
+                  className: RADIO,
+                }),
+                RSVP_FORM_COPY.attendingNo,
+              ),
+            ),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-guest-party` },
+                GUEST_PAGE_COPY.partyLabel,
+              ),
+              h(
+                "select",
+                {
+                  id: `${idPrefix}-guest-party`,
+                  name: "partySize",
+                  defaultValue:
+                    rsvp.answer?.attending === true ? String(rsvp.answer.partySize) : "1",
+                  className: FIELD,
+                },
+                rsvp.partySizes.map((party) =>
+                  h("option", { key: party, value: String(party) }, String(party)),
+                ),
+              ),
+            ),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-guest-message` },
+                GUEST_PAGE_COPY.messageLabel,
+              ),
+              h("textarea", {
+                id: `${idPrefix}-guest-message`,
+                name: "message",
+                maxLength: 280,
+                rows: 3,
+                defaultValue: rsvp.message,
+                className: TEXT_AREA,
+              }),
+              h("p", { className: HINT }, GUEST_PAGE_COPY.messageHint),
+            ),
+            h(
+              "div",
+              { className: ACTIONS },
+              h("button", { type: "submit", className: SUBMIT }, GUEST_PAGE_COPY.submit),
+            ),
+          ),
+        ]),
+  );
+}
+
+/**
+ * The access pass of a confirmed guest (M6 G4; S4): the SVG QR drawn on the server, handed to an `<img>` as a data
+ * URL, so the page injects no markup and the image document cannot run script. A pass whose URL cannot be drawn is
+ * not shown at all, instead of breaking the guest's page.
+ */
+function guestPassSection(pass: GuestPassBlockView): ReactElement | null {
+  let source: string;
+
+  try {
+    source = guestPassDataUrl(pass.checkInUrl);
+  } catch {
+    return null;
+  }
+
+  return h(
+    "div",
+    { key: "pass", "data-feature": "pass", className: SURFACE_CARD },
+    h("h3", { className: FEATURE_TITLE }, GUEST_PAGE_COPY.passTitle),
+    h("p", { className: HINT }, GUEST_PAGE_COPY.passHint),
+    h("img", {
+      src: source,
+      alt: GUEST_PAGE_COPY.passAlt,
+      width: 224,
+      height: 224,
+      className: "mt-3 h-auto w-full max-w-56 rounded-lg",
+    }),
   );
 }
 
@@ -408,9 +564,30 @@ export function InvitationFeaturesBlock({
     );
   }
 
+  // The guest's own block first: their greeting and their seats, before anything else the invitation shows (G4).
+  if (features.guest !== undefined) {
+    sections.push(
+      h(
+        "div",
+        { key: "guest", "data-feature": "guest", className: SURFACE_CARD },
+        h("p", { className: HINT }, features.guest.seats),
+      ),
+    );
+  }
+
   // Last, after everything a guest might need to decide: the one action of the page (M6 G3; S4).
   if (features.rsvp !== undefined) {
     sections.push(rsvpSection(features.rsvp, features.timeZone, idPrefix));
+  }
+  if (features.guest?.rsvp !== undefined) {
+    sections.push(guestRsvpSection(features.guest.rsvp, features.timeZone, idPrefix));
+  }
+  if (features.guest?.pass !== undefined) {
+    const pass = guestPassSection(features.guest.pass);
+
+    if (pass !== null) {
+      sections.push(pass);
+    }
   }
 
   return h(
@@ -423,7 +600,7 @@ export function InvitationFeaturesBlock({
     h(
       "h2",
       { id: `${idPrefix}-features`, className: SECTION_TITLE, style: DISPLAY_FONT },
-      "Todo lo que necesitas",
+      features.guest?.greeting ?? "Todo lo que necesitas",
     ),
     sections,
   );

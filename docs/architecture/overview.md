@@ -697,6 +697,8 @@ Personal guest page (the guest list, when the pinned package grants GUEST_LIST; 
   → qrPass is true only for a confirmed guest of a package that grants QR_PASS
 
 Personal guest answer (M6 G2)
+  → apps/web app/i/[slug]/g/[token]/actions.ts posts the card of the same page; the action forwards the browser's
+    address from the incoming request headers and redirects back to /i/<slug>/g/<token>?rsvp=<code>
   → apps/api POST /public/invitations/:slug/guests/:token/rsvp (@Public, Cache-Control: no-store)
   → 404 for every invisible slug or token case, 409 RSVP_NOT_OPEN when the mode is not `guest-list` or the deadline
     passed, 429 RSVP_RATE_LIMITED over the per-guest cap on the shared RateLimit store, 400 INVALID_RSVP with the
@@ -706,7 +708,13 @@ Personal guest answer (M6 G2)
     repeats the publication status and the deadline, so a race is refused by the database
   → 202 { status: "received" } for a first answer and for a change of mind
 
-Owner check-in (M6 G2; the QR URL /cuenta/invitaciones/<id>/acceso/<token>)
+Owner check-in (M6 G2; the API's own route is /invitations/:id/guests/check-in)
+  → apps/web app/cuenta/acceso/[slug]/[token] is the page a QR opens (M6 G4): the public read carries no invitation
+    id, so the pass encodes /cuenta/acceso/<slug>/<token> and the page resolves the id from the owner's own invitations
+    list before it calls the API; a slug the caller does not own finds no invitation and no request is made
+  → a signed-out visitor is redirected to /cuenta/acceso/<slug>/<token>/ingresar, a route handler that stores the bare
+    check-in path in the one-time hand-off (below) and answers 303 to /ingresar; /cuenta reads that handle once, after
+    the visitor is signed in, and sends them back to the pass
   → apps/api POST /invitations/:id/guests/check-in { token } with the owner's session
   → 404 GUEST_NOT_FOUND for a malformed or unknown token, 409 GUEST_NOT_CONFIRMED without an attending answer,
     409 QR_PASS_NOT_AVAILABLE without the catalog key, 404 INVITATION_NOT_FOUND for a foreign invitation
@@ -714,12 +722,45 @@ Owner check-in (M6 G2; the QR URL /cuenta/invitaciones/<id>/acceso/<token>)
     the first checkedInAt, so the same QR twice is idempotent
   → 200 { guestId, name, seats, attendingPartySize, checkedInAt }
 
+Creator guest list (M6 G4; /cuenta/invitaciones/[id]/asistencia in guest-list mode)
+  → apps/api GET /invitations/:id/guests with the owner's session (guests, answers, check-in state, totals)
+  → apps/api POST /invitations/:id/guests, PUT /invitations/:id/guests/:guestId, DELETE the same path, and
+    POST /invitations/:id/guests/:guestId/token, each from one server action
+  → a creation and a rotation answer the plain personal token once; the action keeps it in this process's one-time
+    store and the attendance page shows it exactly once (below)
+
 Public URL /i/<slug>/calendario.ics
   → apps/web/app/i/[slug]/calendario.ics/route.ts answers the same public read as the page
   → the calendar is built from the invitation's own facts and stored zone (four hours from the start)
   → text/calendar; charset=utf-8, attachment filename="invitacion.ics", Cache-Control: no-store
   → 404 for a slug that is not public and for a calendar that cannot be built
 ```
+
+The personal page and its pass are `noindex, nofollow` in their metadata and rendered per request: the page calls
+`connection()` and exports `dynamic = "force-dynamic"`, `fetch` is never cached (`sendApiRequest` always sends
+`cache: "no-store"`), and React's `cache` only deduplicates the read inside one request. The HTTP response header
+observed in the development server is `Cache-Control: no-cache, must-revalidate`, which is what every dynamic page of
+this app answers; an explicit `no-store` on the document would need a route handler or a `next.config.ts` rule.
+
+The pass's QR is drawn on the server by `qrcode` (MIT, pinned in `apps/web/package.json` at 1.5.4 with
+`@types/qrcode`), which answers the module matrix synchronously without a DOM, a canvas, or an image encoder; the web
+turns that matrix into SVG (`apps/web/lib/server/guest-pass-qr.ts`) and hands it to an `<img>` as a data URL, so no
+page injects raw markup and no guest page loads a script or a third-party request. `lean-qr` stays the browser-side
+encoder of the administrator enrollment QR. The pass encodes the absolute check-in URL built from the request's own
+origin (`requestOrigin`), never a value the browser sends in a path, query, or body, and it carries nothing but the
+token the guest's own URL already holds.
+
+The one-time hand-off (`apps/web/lib/server/single-use-flash.ts`) is how a token answers once without ever becoming a
+URL: the server action stores the personal link in this process's bounded, five-minute store and the browser carries
+only an opaque 22-character handle, in a cookie that is `httpOnly`, `SameSite=Strict`, path-scoped to the one
+attendance page (`/cuenta/invitaciones/<id>/asistencia`) or to `/cuenta`, and `Secure` under https. The page takes the
+value out of the store as it renders, which deletes it, so a reload, a second tab, or a later visit shows nothing
+instead of the link again — Next.js allows no cookie deletion during a server render, which is why the store rather
+than the cookie is what makes the reveal single-use. The after-sign-in return uses the same store with a bare
+`/cuenta/acceso/<slug>/<token>` path, re-validated when it is read, so the return can never leave `/cuenta`. The store
+lives in the web process's memory, which is what the single Node.js web server this repository targets provides; a
+deployment with more than one web replica would need a shared store, and until then the hand-off would degrade to
+showing nothing rather than to showing it twice. Nothing from either hand-off is ever logged.
 
 Feature data is read per request from the invitation and its pinned package and gated in the API: a package key the
 API does not implement never becomes a feature, and WhatsApp needs a stored E.164 phone. The public body carries the
