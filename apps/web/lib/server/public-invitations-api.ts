@@ -1,4 +1,5 @@
 import { isE164Phone } from "../invitation-features/invitation-features.ts";
+import { type MusicProvider, musicServiceOf } from "../invitation-features/music.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import { ApiClientError, type ApiClientOptions, sendApiRequest } from "./api-client.ts";
 import { isInvitationSlug } from "./invitations-api.ts";
@@ -17,13 +18,17 @@ import { isInvitationSlug } from "./invitations-api.ts";
  * cookie-free wiring that imports it lives in `app/i/[slug]/_lib/public-api.ts` and is `server-only`.
  */
 
-/** The features the API gated for one invitation, as a guest page reads them (S4). */
+/** The features the API gated for one invitation, as a guest page reads them (S4, S7). */
 export interface PublicInvitationFeatures {
   readonly countdown: boolean;
   readonly map: boolean;
   /** Add-to-calendar is always on for a published invitation, so the read always says `true` (S4). */
   readonly calendar: true;
   readonly whatsapp: { readonly phone: string } | null;
+  /** The playlist link and the service it names, or null when music is not gated on (S7). */
+  readonly music: { readonly url: string; readonly provider: MusicProvider } | null;
+  /** Whether the layouts render their gift registry block (S7). */
+  readonly giftRegistry: boolean;
 }
 
 /** The guest's page of a published invitation: the projection of A7, and nothing else. */
@@ -60,9 +65,10 @@ function isTimestamp(value: unknown): value is string {
 const MAX_COMPONENT_KEY_LENGTH = 120;
 
 /**
- * The gated features of a guest page (S4). The read always says `calendar: true`, because add-to-calendar is
+ * The gated features of a guest page (S4, S7). The read always says `calendar: true`, because add-to-calendar is
  * not a catalog feature; a body that says otherwise is not this contract, so it is refused instead of being
- * normalized. `whatsapp` is the stored E.164 contact or null.
+ * normalized. `whatsapp` is the stored E.164 contact or null, `music` is an allow-listed `https` link and the
+ * service it names or null, and `giftRegistry` is the boolean the layouts gate their own block with.
  */
 function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefined {
   const features = record(value);
@@ -71,15 +77,29 @@ function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefin
     features === undefined ||
     typeof features.countdown !== "boolean" ||
     typeof features.map !== "boolean" ||
-    features.calendar !== true
+    features.calendar !== true ||
+    typeof features.giftRegistry !== "boolean"
   ) {
     return undefined;
   }
 
+  const music = features.music === null ? null : musicServiceOf(features.music);
+
+  if (music === undefined) {
+    return undefined;
+  }
+
   const whatsapp = features.whatsapp;
+  const base = {
+    countdown: features.countdown,
+    map: features.map,
+    calendar: true,
+    giftRegistry: features.giftRegistry,
+    music,
+  } as const;
 
   if (whatsapp === null) {
-    return { countdown: features.countdown, map: features.map, calendar: true, whatsapp: null };
+    return { ...base, whatsapp: null };
   }
 
   const phone = record(whatsapp)?.phone;
@@ -88,12 +108,7 @@ function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefin
     return undefined;
   }
 
-  return {
-    countdown: features.countdown,
-    map: features.map,
-    calendar: true,
-    whatsapp: { phone },
-  };
+  return { ...base, whatsapp: { phone } };
 }
 
 /**

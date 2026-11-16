@@ -10,6 +10,7 @@ import { BaptismArchRenderer } from "../../app/_components/renderers/baptism-arc
 import { ElegantOrnament } from "../../app/_components/renderers/elegant-arch/elegant-ornament.ts";
 import { WeddingArchRenderer } from "../../app/_components/renderers/wedding-arch-01/wedding-arch-renderer.ts";
 import { XVArchRenderer } from "../../app/_components/renderers/xv-arch-01/xv-arch-renderer.ts";
+import type { InvitationFeatures } from "../invitation-features/invitation-features.ts";
 import {
   ARCH_SCRIM_INK_PERCENT,
   ELEGANT_ORNAMENTS,
@@ -130,7 +131,12 @@ const BAPTISM_MINIMAL = {
 
 interface ArchCase {
   readonly key: string;
-  readonly Renderer: (props: { configuration: unknown; content: unknown }) => ReactElement;
+  readonly Renderer: (props: {
+    configuration: unknown;
+    content: unknown;
+    features?: InvitationFeatures;
+    calendarHref?: string;
+  }) => ReactElement;
   readonly full: Record<string, unknown>;
   readonly minimal: Record<string, unknown>;
   readonly sections: readonly string[];
@@ -612,4 +618,61 @@ describe("elegant layout defects pinned before the browser check", () => {
       }
     }
   });
+});
+
+describe("gift registry gating in the arch layouts (F7; S7)", () => {
+  const GATE_OFF: InvitationFeatures = {
+    timeZone: "America/Mexico_City",
+    countdown: false,
+    map: false,
+    calendar: false,
+    whatsapp: null,
+    music: null,
+    giftRegistry: false,
+  };
+  const GATE_ON: InvitationFeatures = { ...GATE_OFF, giftRegistry: true };
+  /** The code of each layout's own gift registry value, so the check cannot match the label alone. */
+  const GIFT_CODE: Readonly<Record<string, RegExp>> = {
+    "xv-arch-01": /50894421/,
+    "wedding-arch-01": /4471 2205/,
+    "baptism-arch-01": /7781 2205/,
+  };
+
+  function renderGated(
+    layout: ArchCase,
+    features: InvitationFeatures,
+    content: Record<string, unknown> = layout.full,
+  ): string {
+    return renderToStaticMarkup(
+      createElement(layout.Renderer, {
+        configuration: { componentKey: layout.key, theme: ELEGANT_THEMES[0] },
+        content,
+        features,
+      }),
+    );
+  }
+
+  for (const layout of LAYOUTS) {
+    const code = GIFT_CODE[layout.key] as RegExp;
+
+    it(`${layout.key} renders its gift registry only when the gate is on`, () => {
+      assert.match(renderGated(layout, GATE_ON), code);
+      const gatedOff = renderGated(layout, GATE_OFF);
+
+      assert.doesNotMatch(gatedOff, code);
+      assert.doesNotMatch(gatedOff, /Mesa de regalos/);
+    });
+
+    it(`${layout.key} keeps today's rendering when no features prop is given`, () => {
+      // The chooser previews and the samples render a layout with no features at all (F7).
+      assert.match(render(layout, ELEGANT_THEMES[0]), code);
+    });
+
+    it(`${layout.key} renders no gift registry when the content has no value, whatever the gate says`, () => {
+      const withoutGift: Record<string, unknown> = { ...layout.full };
+      delete withoutGift.giftRegistry;
+
+      assert.doesNotMatch(renderGated(layout, GATE_ON, withoutGift), /Mesa de regalos/);
+    });
+  }
 });

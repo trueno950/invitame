@@ -1,7 +1,10 @@
 import { createElement, type ReactElement } from "react";
 
 import { baptismArchEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
-import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
+import {
+  type InvitationFeatures,
+  showsGiftRegistry,
+} from "../../../../lib/invitation-features/invitation-features.ts";
 import {
   parseBaptismArchConfiguration,
   parseBaptismArchContent,
@@ -47,11 +50,16 @@ export function BaptismArchRenderer({
     { key: "godparents", label: "Padrinos", values: nameLines(data.godparents) },
   ];
 
-  // The themed baptism schema has no dress code, so the details card only exists when there are gifts.
+  // The themed baptism schema has no dress code, so the details card only exists when there are gifts — and
+  // only when the API gated them on (F7; S7). With no features at all this is a preview, and the content alone
+  // decides, as it did before this batch.
+  const giftRegistry = showsGiftRegistry(features, data.giftRegistry)
+    ? data.giftRegistry
+    : undefined;
   const details: ArchDetail[] =
-    data.giftRegistry === undefined
+    giftRegistry === undefined
       ? []
-      : [{ key: "gift-registry", label: "Mesa de regalos", value: data.giftRegistry }];
+      : [{ key: "gift-registry", label: "Mesa de regalos", value: giftRegistry }];
 
   return h(ArchLayout, {
     componentKey: "baptism-arch-01",

@@ -23,7 +23,9 @@ const UNKNOWN_ID = "00000000-0000-4000-8000-000000000000";
 
 const PHONE_FORMAT = /InvitationFeatureSettings_whatsappPhone_format/;
 const TIME_ZONE_FORMAT = /Invitation_timeZone_format/;
+const PLAYLIST_URL_HTTPS = /InvitationFeatureSettings_playlistUrl_https/;
 const PHONE = "+525512345678";
+const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
 
 /** The feature keys of every seeded package (prisma/catalog-seed.ts), which is what gating intersects with S4. */
 const SEEDED_PACKAGE_FEATURES = {
@@ -285,6 +287,67 @@ describe("invitation feature data (real PostgreSQL)", () => {
       assert.ok(cleared.updatedAt instanceof Date);
     });
 
+    it("adds a nullable playlistUrl bounded to 500 characters with an https check", async () => {
+      const columns = await prisma.$queryRaw<
+        Array<{
+          is_nullable: string;
+          character_maximum_length: number | null;
+          data_type: string;
+        }>
+      >`
+        SELECT is_nullable, character_maximum_length, data_type
+        FROM information_schema.columns
+        WHERE table_name = 'InvitationFeatureSettings' AND column_name = 'playlistUrl'
+      `;
+
+      assert.equal(columns.length, 1);
+      assert.equal(columns[0]?.is_nullable, "YES");
+      assert.equal(columns[0]?.character_maximum_length, 500);
+      assert.equal(columns[0]?.data_type, "character varying");
+
+      // The domain refuses every non-https link; the column refuses one too, so a stored value is always https.
+      const invitation = await newDraft(SEEDED_PACKAGE_FEATURES.premium);
+      const created = await prisma.invitationFeatureSettings.create({
+        data: { invitationId: invitation.invitation.id, playlistUrl: PLAYLIST },
+      });
+      assert.equal(created.playlistUrl, PLAYLIST);
+
+      for (const bad of [
+        "http://open.spotify.com/playlist/abc",
+        "ftp://open.spotify.com/playlist/abc",
+        "open.spotify.com/playlist/abc",
+        "//open.spotify.com/playlist/abc",
+        "HTTPS://open.spotify.com/playlist/abc",
+        "",
+      ]) {
+        await assert.rejects(
+          prisma.invitationFeatureSettings.update({
+            where: { invitationId: invitation.invitation.id },
+            data: { playlistUrl: bad },
+          }),
+          PLAYLIST_URL_HTTPS,
+          bad,
+        );
+      }
+
+      // 501 characters: too wide for the column as well as outside the contract.
+      const tooLong = `https://open.spotify.com/${"a".repeat(480)}`;
+      await assert.rejects(
+        prisma.invitationFeatureSettings.update({
+          where: { invitationId: invitation.invitation.id },
+          data: { playlistUrl: tooLong },
+        }),
+        /too long|22001|InvitationFeatureSettings_playlistUrl_https/,
+      );
+
+      const cleared = await prisma.invitationFeatureSettings.update({
+        where: { invitationId: invitation.invitation.id },
+        data: { playlistUrl: null },
+      });
+      assert.equal(cleared.playlistUrl, null);
+      assert.equal(cleared.whatsappPhone, null);
+    });
+
     it("refuses to delete an invitation that still carries feature settings", async () => {
       const { invitation, ownerId } = await newDraft(SEEDED_PACKAGE_FEATURES.basic);
       await prisma.invitationFeatureSettings.create({
@@ -315,43 +378,52 @@ describe("invitation feature data (real PostgreSQL)", () => {
       const updated = await repository.updateFeatures(invitation.ownerId, invitation.id, {
         timeZone: "America/Ojinaga",
         whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
       });
 
       assert.equal(updated?.timeZone, "America/Ojinaga");
       assert.equal(updated?.whatsappPhone, PHONE);
+      assert.equal(updated?.playlistUrl, PLAYLIST);
       const row = await stored(invitation.id);
       assert.equal(row.timeZone, "America/Ojinaga");
-      assert.equal(
-        (
-          await prisma.invitationFeatureSettings.findUniqueOrThrow({
-            where: { invitationId: invitation.id },
-          })
-        ).whatsappPhone,
-        PHONE,
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { whatsappPhone: true, playlistUrl: true },
+        }),
+        { whatsappPhone: PHONE, playlistUrl: PLAYLIST },
       );
       assert.equal(
         (await repository.findOwned(invitation.ownerId, invitation.id))?.whatsappPhone,
         PHONE,
       );
+      assert.equal(
+        (await repository.findOwned(invitation.ownerId, invitation.id))?.playlistUrl,
+        PLAYLIST,
+      );
     });
 
-    it("clears the phone and keeps the settings row", async () => {
+    it("clears the phone and the playlist link and keeps the settings row", async () => {
       const { invitation } = await newDraft(SEEDED_PACKAGE_FEATURES.basic);
       await repository.updateFeatures(invitation.ownerId, invitation.id, {
         timeZone: "America/Merida",
         whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
       });
 
       const cleared = await repository.updateFeatures(invitation.ownerId, invitation.id, {
         timeZone: "America/Merida",
         whatsappPhone: null,
+        playlistUrl: null,
       });
 
       assert.equal(cleared?.whatsappPhone, null);
+      assert.equal(cleared?.playlistUrl, null);
       const settings = await prisma.invitationFeatureSettings.findUniqueOrThrow({
         where: { invitationId: invitation.id },
       });
       assert.equal(settings.whatsappPhone, null);
+      assert.equal(settings.playlistUrl, null);
     });
 
     it("refuses an archived invitation and leaves its stored feature data unchanged", async () => {
@@ -359,6 +431,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
       await repository.updateFeatures(invitation.ownerId, invitation.id, {
         timeZone: "America/Cancun",
         whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
       });
       await repository.archive(invitation.ownerId, invitation.id);
 
@@ -366,18 +439,18 @@ describe("invitation feature data (real PostgreSQL)", () => {
         repository.updateFeatures(invitation.ownerId, invitation.id, {
           timeZone: "America/Tijuana",
           whatsappPhone: null,
+          playlistUrl: null,
         }),
         InvitationNotEditableError,
       );
       const row = await stored(invitation.id);
       assert.equal(row.timeZone, "America/Cancun");
-      assert.equal(
-        (
-          await prisma.invitationFeatureSettings.findUniqueOrThrow({
-            where: { invitationId: invitation.id },
-          })
-        ).whatsappPhone,
-        PHONE,
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { whatsappPhone: true, playlistUrl: true },
+        }),
+        { whatsappPhone: PHONE, playlistUrl: PLAYLIST },
       );
     });
 
@@ -390,6 +463,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           await repository.updateFeatures(otherOwner, id, {
             timeZone: "America/Tijuana",
             whatsappPhone: PHONE,
+            playlistUrl: PLAYLIST,
           }),
           null,
         );
@@ -407,7 +481,11 @@ describe("invitation feature data (real PostgreSQL)", () => {
 
     async function publish(
       featureKeys: readonly string[],
-      features: { timeZone: string; whatsappPhone: string | null } | null,
+      features: {
+        timeZone: string;
+        whatsappPhone: string | null;
+        playlistUrl: string | null;
+      } | null,
     ) {
       const draft = await newDraft(featureKeys);
       if (features !== null) {
@@ -427,11 +505,13 @@ describe("invitation feature data (real PostgreSQL)", () => {
         const slug = await publish(featureKeys, {
           timeZone: "America/Tijuana",
           whatsappPhone: PHONE,
+          playlistUrl: PLAYLIST,
         });
 
         const page = await useCase.execute(slug);
 
         assert.equal(page?.timeZone, "America/Tijuana", packageKey);
+        // Basic grants no MUSIC and no GIFT_REGISTRY, Premium grants MUSIC, Deluxe grants both (S7).
         assert.deepEqual(
           page?.features,
           {
@@ -439,16 +519,19 @@ describe("invitation feature data (real PostgreSQL)", () => {
             map: true,
             calendar: true,
             whatsapp: { phone: PHONE },
+            music: packageKey === "basic" ? null : { url: PLAYLIST, provider: "spotify" },
+            giftRegistry: packageKey === "deluxe",
           },
           packageKey,
         );
       }
     });
 
-    it("drops WhatsApp while no phone is stored", async () => {
-      const slug = await publish(SEEDED_PACKAGE_FEATURES.basic, {
+    it("drops WhatsApp while no phone is stored and keeps the music the package grants", async () => {
+      const slug = await publish(SEEDED_PACKAGE_FEATURES.premium, {
         timeZone: "America/Mexico_City",
         whatsappPhone: null,
+        playlistUrl: PLAYLIST,
       });
 
       const page = await useCase.execute(slug);
@@ -458,13 +541,35 @@ describe("invitation feature data (real PostgreSQL)", () => {
         map: true,
         calendar: true,
         whatsapp: null,
+        music: { url: PLAYLIST, provider: "spotify" },
+        giftRegistry: false,
       });
     });
 
-    it("keeps a stored phone private when the package does not include WHATSAPP", async () => {
-      const slug = await publish(["COUNTDOWN", "MUSIC"], {
+    it("drops music while no playlist link is stored, whatever the package includes", async () => {
+      const slug = await publish(SEEDED_PACKAGE_FEATURES.deluxe, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: PHONE,
+        playlistUrl: null,
+      });
+
+      const page = await useCase.execute(slug);
+
+      assert.deepEqual(page?.features, {
+        countdown: true,
+        map: true,
+        calendar: true,
+        whatsapp: { phone: PHONE },
+        music: null,
+        giftRegistry: true,
+      });
+    });
+
+    it("keeps a stored phone and a stored link private when the package grants neither", async () => {
+      const slug = await publish(["COUNTDOWN"], {
         timeZone: "America/Cancun",
         whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
       });
 
       const page = await useCase.execute(slug);
@@ -475,14 +580,18 @@ describe("invitation feature data (real PostgreSQL)", () => {
         map: false,
         calendar: true,
         whatsapp: null,
+        music: null,
+        giftRegistry: false,
       });
       assert.equal(JSON.stringify(page).includes(PHONE), false);
+      assert.equal(JSON.stringify(page).includes(PLAYLIST), false);
     });
 
-    it("answers only countdown, map, calendar, and WhatsApp when the package includes everything", async () => {
+    it("answers only the gated feature keys when the package includes everything", async () => {
       const slug = await publish(SEEDED_PACKAGE_FEATURES.deluxe, {
         timeZone: "America/Mazatlan",
         whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
       });
 
       const page = await useCase.execute(slug);
@@ -491,7 +600,9 @@ describe("invitation feature data (real PostgreSQL)", () => {
       assert.deepEqual(Object.keys(page?.features ?? {}).sort(), [
         "calendar",
         "countdown",
+        "giftRegistry",
         "map",
+        "music",
         "whatsapp",
       ]);
       assert.deepEqual(Object.keys(page ?? {}).sort(), [
@@ -509,6 +620,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
       const slug = await publish(SEEDED_PACKAGE_FEATURES.deluxe, {
         timeZone: "America/Tijuana",
         whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
       });
       const counted = new PrismaClient({
         datasources: { db: { url: requireLocalDatabaseUrl() } },

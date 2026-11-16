@@ -1,7 +1,10 @@
 import { createElement, type ReactElement } from "react";
 
 import { baptismOrnamentalEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
-import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
+import {
+  type InvitationFeatures,
+  showsGiftRegistry,
+} from "../../../../lib/invitation-features/invitation-features.ts";
 import {
   BAPTISM_ORNAMENTAL_COMPONENT_KEY,
   parseBaptismOrnamentalConfiguration,
@@ -50,11 +53,16 @@ export function BaptismOrnamentalRenderer({
     { key: "godparents", label: "Padrinos", values: nameLines(data.godparents) },
   ];
 
-  // The themed baptism schema has no dress code, so the details block only exists when there are gifts.
+  // The themed baptism schema has no dress code, so the details block only exists when there are gifts — and
+  // only when the API gated them on (F7; S7). With no features at all this is a preview, and the content alone
+  // decides, as it did before this batch.
+  const giftRegistry = showsGiftRegistry(features, data.giftRegistry)
+    ? data.giftRegistry
+    : undefined;
   const details: ArchDetail[] =
-    data.giftRegistry === undefined
+    giftRegistry === undefined
       ? []
-      : [{ key: "gift-registry", label: "Mesa de regalos", value: data.giftRegistry }];
+      : [{ key: "gift-registry", label: "Mesa de regalos", value: giftRegistry }];
 
   return h(OrnamentalLayout, {
     componentKey: BAPTISM_ORNAMENTAL_COMPONENT_KEY,

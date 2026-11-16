@@ -78,15 +78,16 @@ export interface UpdateContentInput {
 }
 
 /**
- * The values of a feature update (F1; S4): the zone the owner chose and the phone they typed. Both are
- * unvalidated request values — the domain validates them before anything is stored — and the owner comes from
- * the session (S9).
+ * The values of a feature update (F1, F6; S4, S7): the zone the owner chose, the phone they typed, and the
+ * playlist link they pasted. All three are unvalidated request values — the domain validates them before
+ * anything is stored — and the owner comes from the session (S9).
  */
 export interface UpdateFeaturesInput {
   ownerId: string;
   id: string;
   timeZone: unknown;
   whatsappPhone: unknown;
+  playlistUrl: unknown;
 }
 
 /** A row of "Mis invitaciones": the editor loads one invitation when it opens it. */
@@ -117,8 +118,11 @@ export interface OwnedInvitation extends InvitationSummary {
   missingRequiredFields: string[];
   /** The stored IANA zone (S4). */
   timeZone: string;
-  /** The stored feature data; `whatsappPhone` is E.164 or null (S4). */
-  featureSettings: { whatsappPhone: string | null };
+  /**
+   * The stored feature data; `whatsappPhone` is E.164 or null, and `playlistUrl` is a normalized `https` link on
+   * an allow-listed music host or null (S4, S7).
+   */
+  featureSettings: { whatsappPhone: string | null; playlistUrl: string | null };
   /**
    * The gated keys of the features this invitation will show, `CALENDAR` included (S4). The package's keys are
    * read at request time, because the gate is about what the catalog grants now.
@@ -161,10 +165,14 @@ function toOwnedInvitation(
     content: record.content,
     missingRequiredFields: missingRequiredFields(schema, record.content),
     timeZone: record.timeZone,
-    featureSettings: { whatsappPhone: record.whatsappPhone },
+    featureSettings: {
+      whatsappPhone: record.whatsappPhone,
+      playlistUrl: record.playlistUrl,
+    },
     availableFeatures: availableFeatureKeys({
       includedFeatureKeys,
       whatsappPhone: record.whatsappPhone,
+      playlistUrl: record.playlistUrl,
     }),
   };
 }
@@ -350,13 +358,14 @@ export class UpdateInvitationContentUseCase {
 }
 
 /**
- * Stores the feature data of a DRAFT or a PUBLISHED invitation (F1; S4): the time zone the owner chose and the
- * WhatsApp phone, which normalizes to E.164 and is cleared by null or an empty value. Only the owner may write:
- * another customer's id answers null and changes nothing (A4). An archived invitation is refused
+ * Stores the feature data of a DRAFT or a PUBLISHED invitation (F1, F6; S4, S7): the time zone the owner chose,
+ * the WhatsApp phone, which normalizes to E.164 and is cleared by null or an empty value, and the playlist link,
+ * which must be an `https` link on an allow-listed music host and is cleared the same way. Only the owner may
+ * write: another customer's id answers null and changes nothing (A4). An archived invitation is refused
  * (`InvitationNotEditableError`) before its request values are looked at, exactly like a content save (A2, S7).
- * A phone is stored even when the pinned package does not include WHATSAPP; the gate, not the write, decides
- * whether a guest sees it, so an upgrade later does not need the number typed again. The zone and the phone are
- * written in one transaction, so a refused request stores neither.
+ * A phone or a link is stored even when the pinned package does not include its feature; the gate, not the write,
+ * decides whether a guest sees it, so an upgrade later does not need the data typed again. The zone, the phone,
+ * and the link are written in one transaction, so a refused request stores none of them.
  */
 export class UpdateInvitationFeaturesUseCase {
   constructor(
@@ -378,6 +387,7 @@ export class UpdateInvitationFeaturesUseCase {
     const validation = validateInvitationFeatureSettings({
       timeZone: input.timeZone,
       whatsappPhone: input.whatsappPhone,
+      playlistUrl: input.playlistUrl,
     });
     if (!validation.ok) {
       throw new InvalidInvitationFeaturesError(validation.issues);
@@ -568,6 +578,7 @@ export class GetPublicInvitationUseCase {
       features: publicInvitationFeatures({
         includedFeatureKeys,
         whatsappPhone: published.whatsappPhone,
+        playlistUrl: published.playlistUrl,
       }),
     };
   }

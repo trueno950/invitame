@@ -409,10 +409,12 @@ formal baptism.
 
 ## Guest invitation features
 
-Status: **current** (F2, F3; S3, S4). The API decides which features an invitation shows: the pinned package's
-feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, and `WHATSAPP`, plus add-to-calendar,
-which is always on and is not a catalog feature; WhatsApp also needs a stored phone. The web renders one themed
-**features block** in every layout and never reads a package or a feature name to choose a code path.
+Status: **current** (F2, F3, F6, F7; S3, S4, S7). The API decides which features an invitation shows: the pinned
+package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `WHATSAPP`, `MUSIC`, and
+`GIFT_REGISTRY`, plus add-to-calendar, which is always on and is not a catalog feature; WhatsApp also needs a stored
+phone and music a stored allow-listed playlist link. The web renders one themed **features block** in every layout,
+gates each layout's own gift registry block with the `giftRegistry` flag, and never reads a package or a feature name
+to choose a code path.
 
 - Placement and shape: each layout (`birthday-map-01`, `birthday-poster-01`, `birthday-story-01`,
   `baby-shower-classic-01`, `baptism-classic-01`) places `InvitationFeaturesBlock`
@@ -440,14 +442,25 @@ which is always on and is not a catalog feature; WhatsApp also needs a stored ph
 - WhatsApp: one button to `wa.me/<digits>` with a neutral prefilled Spanish greeting that names the celebration.
   The number is the creator's stored E.164 contact; it is never logged, and a phone stored without the WhatsApp
   package key is never shown.
+- Music (F6; S7): «Escucha nuestra playlist» with one external button that names the service («Abrir en Spotify»,
+  «Abrir en Apple Music», «Abrir en YouTube», «Abrir en Deezer», «Abrir en SoundCloud») for the link the creator
+  stored, with `target="_blank"` and `rel="noopener noreferrer"`. There is no embedded player and no third-party
+  script, so the guest page keeps its own cookies and contrast; a link the API did not accept is never shown.
+- Gift registry (F7; S7): the text stays an ordinary content field of the layouts that declare it (baby shower,
+  baptism, XV años, and wedding), and each of those layouts renders its «Mesa de regalos» block only while
+  `features.giftRegistry` is true and the content has a value. A renderer called with no `features` prop — the
+  template chooser previews and `lib/renderers/samples.ts` — keeps the content-alone rule it had before this batch.
+  The birthday layouts declare no gift registry field, so they never render one.
 - Degradation: an unsupported zone turns off only the countdown and the calendar (the two features that read a
   wall clock); a snapshot whose facts cannot be read turns off the whole block. Neither is a guest-visible error.
 - Creator side: the draft page (`/cuenta/invitaciones/[id]`) has a «Funcionalidades» section after the content
   form. It offers the time zone select with Spanish place labels only («Ciudad de México y centro del país»,
   «Cancún y Quintana Roo», ...), shows the WhatsApp field only while the pinned package
-  includes WhatsApp (and carries a stored number in a hidden field otherwise, so saving the zone never clears it),
-  lists the automatic features the guests will see, and saves through a server action that mirrors the content
-  form's notice/error redirects. An archived invitation shows the section read-only.
+  includes WhatsApp and the «Enlace de tu playlist» field only while it includes MUSIC (and carries a stored value
+  in a hidden field otherwise, so saving another field never clears it), notes «La mesa de regalos se muestra con el
+  paquete Deluxe.» when the package lacks the gift registry, lists the automatic features the guests will see, and
+  saves through a server action that mirrors the content form's notice/error redirects. An archived invitation shows
+  the section read-only.
 
 ## Customer workspace
 

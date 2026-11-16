@@ -21,6 +21,11 @@ export interface InvitationRecord {
    * the one-to-one `InvitationFeatureSettings` row, so a caller never needs a second read.
    */
   whatsappPhone: string | null;
+  /**
+   * The stored playlist link, normalized to an `https` URL on an allow-listed music host, or null when the
+   * invitation has none (F6; S7). It travels flattened with the phone, from the same settings row.
+   */
+  playlistUrl: string | null;
   archivedAt: Date | null;
   /**
    * When the invitation was published; the database `Invitation_publishedAt_matches_status` check keeps it
@@ -37,12 +42,14 @@ export interface InvitationRecord {
 }
 
 /**
- * The feature data one write stores (F1; S4): an allow-listed zone and an E.164 phone or null. The application
- * validates both before the port is asked; the port only persists them.
+ * The feature data one write stores (F1, F6; S4, S7): an allow-listed zone, an E.164 phone or null, and a
+ * normalized playlist link or null. The application validates all three before the port is asked; the port only
+ * persists them.
  */
 export interface InvitationFeatureSettingsWrite {
   timeZone: string;
   whatsappPhone: string | null;
+  playlistUrl: string | null;
 }
 
 /** A new DRAFT: the owner from the session, the pinned snapshot, the chosen package, and a generated slug. */
@@ -85,10 +92,11 @@ export interface InvitationRepository {
   updateContent(ownerId: string, id: string, content: JsonObject): Promise<InvitationRecord | null>;
 
   /**
-   * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone in
-   * its one-to-one settings row — in one transaction whose `WHERE` names the owner and both editable statuses,
-   * so a published invitation changes live (S7), an archived one is refused with `InvitationNotEditableError`
-   * even by a concurrent archive (A2), and another owner's id answers null, changing nothing (A4).
+   * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone and
+   * playlist link in its one-to-one settings row — in one transaction whose `WHERE` names the owner and both
+   * editable statuses, so a published invitation changes live (S7), an archived one is refused with
+   * `InvitationNotEditableError` even by a concurrent archive (A2), and another owner's id answers null,
+   * changing nothing (A4).
    */
   updateFeatures(
     ownerId: string,

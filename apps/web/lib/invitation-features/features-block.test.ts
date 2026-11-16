@@ -25,7 +25,11 @@ const ALL_OFF: InvitationFeatures = {
   map: false,
   calendar: false,
   whatsapp: null,
+  music: null,
+  giftRegistry: false,
 };
+
+const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
 
 const FACTS: EventFacts = {
   title: "Cumpleaños de Mateo",
@@ -95,15 +99,19 @@ describe("features block visibility", () => {
   });
 
   it("renders only the sections of the features the invitation has", () => {
-    for (const feature of ["countdown", "map", "calendar", "whatsapp"] as const) {
+    for (const feature of ["countdown", "map", "calendar", "whatsapp", "music"] as const) {
       const html = render(
         featuresOf(
-          feature === "whatsapp" ? { whatsapp: { phone: "+525512345678" } } : { [feature]: true },
+          feature === "whatsapp"
+            ? { whatsapp: { phone: "+525512345678" } }
+            : feature === "music"
+              ? { music: { url: PLAYLIST, provider: "spotify" } }
+              : { [feature]: true },
         ),
       );
 
       assert.match(html, new RegExp(`data-feature="${feature}"`), feature);
-      for (const other of ["countdown", "map", "calendar", "whatsapp"]) {
+      for (const other of ["countdown", "map", "calendar", "whatsapp", "music"]) {
         if (other !== feature) {
           assert.doesNotMatch(html, new RegExp(`data-feature="${other}"`), `${feature} only`);
         }
@@ -111,35 +119,45 @@ describe("features block visibility", () => {
     }
   });
 
+  it("renders the gift registry nowhere: the layout owns that block (S7)", () => {
+    assert.equal(render(featuresOf({ giftRegistry: true })), "");
+    assert.doesNotMatch(render(featuresOf({ giftRegistry: true, calendar: true })), /regalo/i);
+  });
+
   it("renders exactly the features the invitation has, for every combination of flags", () => {
     for (const countdown of [false, true]) {
       for (const map of [false, true]) {
         for (const calendar of [false, true]) {
           for (const whatsapp of [false, true]) {
-            const features: InvitationFeatures = {
-              timeZone: "America/Mexico_City",
-              countdown,
-              map,
-              calendar,
-              whatsapp: whatsapp ? { phone: "+525512345678" } : null,
-            };
-            const expected = [
-              ...(countdown ? ["countdown"] : []),
-              ...(map ? ["map"] : []),
-              ...(calendar ? ["calendar"] : []),
-              ...(whatsapp ? ["whatsapp"] : []),
-            ];
-            const html = render(features);
+            for (const music of [false, true]) {
+              const features: InvitationFeatures = {
+                timeZone: "America/Mexico_City",
+                countdown,
+                map,
+                calendar,
+                whatsapp: whatsapp ? { phone: "+525512345678" } : null,
+                music: music ? { url: PLAYLIST, provider: "spotify" } : null,
+                giftRegistry: false,
+              };
+              const expected = [
+                ...(countdown ? ["countdown"] : []),
+                ...(map ? ["map"] : []),
+                ...(calendar ? ["calendar"] : []),
+                ...(whatsapp ? ["whatsapp"] : []),
+                ...(music ? ["music"] : []),
+              ];
+              const html = render(features);
 
-            if (expected.length === 0) {
-              assert.equal(html, "");
-              continue;
+              if (expected.length === 0) {
+                assert.equal(html, "");
+                continue;
+              }
+              assert.deepEqual(
+                [...html.matchAll(/data-feature="([^"]+)"/g)].map((match) => match[1]),
+                expected,
+                JSON.stringify(features),
+              );
             }
-            assert.deepEqual(
-              [...html.matchAll(/data-feature="([^"]+)"/g)].map((match) => match[1]),
-              expected,
-              JSON.stringify(features),
-            );
           }
         }
       }
@@ -305,12 +323,61 @@ describe("«Escribir por WhatsApp» in the features block", () => {
   });
 });
 
+describe("«Escucha nuestra playlist» in the features block (F6; S7)", () => {
+  const MUSIC = { url: PLAYLIST, provider: "spotify" } as const;
+
+  it("offers one external button that names the service", () => {
+    const html = render(featuresOf({ music: MUSIC }));
+
+    assert.match(html, /data-feature="music"/);
+    assert.match(html, />Escucha nuestra playlist</);
+    const links = linksOf(html);
+
+    assert.equal(links.length, 1);
+    assert.match(links[0] ?? "", />Abrir en Spotify</);
+    assert.equal(attributeOf(links[0] ?? "", "href"), PLAYLIST);
+    assert.equal(attributeOf(links[0] ?? "", "target"), "_blank");
+    assert.equal(attributeOf(links[0] ?? "", "rel"), "noopener noreferrer");
+  });
+
+  it("names each allow-listed service in its own button", () => {
+    const expected: Array<[string, string]> = [
+      ["spotify", "Abrir en Spotify"],
+      ["apple_music", "Abrir en Apple Music"],
+      ["youtube", "Abrir en YouTube"],
+      ["deezer", "Abrir en Deezer"],
+      ["soundcloud", "Abrir en SoundCloud"],
+    ];
+
+    for (const [provider, label] of expected) {
+      const html = render(
+        featuresOf({ music: { url: PLAYLIST, provider: provider as "spotify" } }),
+      );
+
+      assert.match(html, new RegExp(`>${label}<`), provider);
+    }
+  });
+
+  it("embeds no player and loads no third-party script", () => {
+    const html = render(featuresOf({ music: MUSIC, map: true, calendar: true }));
+
+    assert.doesNotMatch(html, /<iframe/i);
+    assert.doesNotMatch(html, /<script/i);
+    assert.doesNotMatch(html, /spotify\.com\/embed|w\.soundcloud\.com|youtube\.com\/embed/);
+  });
+
+  it("renders no playlist section when the invitation has no link", () => {
+    assert.doesNotMatch(render(featuresOf({ calendar: true })), /playlist/i);
+  });
+});
+
 describe("features block rendering rules", () => {
   const ALL_ON = featuresOf({
     countdown: true,
     map: true,
     calendar: true,
     whatsapp: { phone: "+525512345678" },
+    music: { url: PLAYLIST, provider: "youtube" },
   });
 
   it("escapes the content it renders so it cannot add markup", () => {

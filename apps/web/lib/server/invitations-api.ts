@@ -1,4 +1,5 @@
 import { isE164Phone, isInvitationFeatureKey } from "../invitation-features/invitation-features.ts";
+import { PLAYLIST_URL_MAX_LENGTH } from "../invitation-features/music.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import {
   ApiClientError,
@@ -47,8 +48,11 @@ export interface OwnedInvitation extends InvitationSummary {
   missingRequiredFields: string[];
   /** The stored IANA zone the guest's countdown and calendar use (S4). */
   timeZone: string;
-  /** The stored feature data; a phone is E.164, or null when the invitation has none (S4). */
-  featureSettings: { whatsappPhone: string | null };
+  /**
+   * The stored feature data: a phone is E.164, and the playlist link is an `https` URL on an allow-listed music
+   * host; each is null when the invitation has none (S4, S7).
+   */
+  featureSettings: { whatsappPhone: string | null; playlistUrl: string | null };
   /**
    * The gated feature keys the guest page will show, `CALENDAR` included (S4). The package's other keys are
    * never here, and a key this deployment does not implement is refused by the parser.
@@ -56,11 +60,13 @@ export interface OwnedInvitation extends InvitationSummary {
   availableFeatures: string[];
 }
 
-/** The feature data a creator saves: `PUT /invitations/:id/features` (F1, F3; S3, S4). */
+/** The feature data a creator saves: `PUT /invitations/:id/features` (F1, F3, F6; S3, S4, S7). */
 export interface InvitationFeatureInput {
   timeZone: string;
   /** The text the creator typed, or null/empty to clear it; the API normalizes it to E.164. */
   whatsappPhone: string | null;
+  /** The link the creator pasted, or null/empty to clear it; the API validates and normalizes it (S7). */
+  playlistUrl: string | null;
 }
 
 /** One template a creator may start from, with the version the draft will be pinned to (S8). */
@@ -276,10 +282,13 @@ function parseAllowedNames(
 }
 
 /**
- * The stored feature data of a draft (S4): a phone that is E.164 or null. The API stores nothing else, so
- * another shape means the response is not the contract this client reads and the whole body is refused.
+ * The stored feature data of a draft (S4, S7): a phone that is E.164 or null, and a playlist link that is an
+ * `https` URL of bounded length or null. The API stores nothing else, so another shape means the response is not
+ * the contract this client reads and the whole body is refused.
  */
-function parseFeatureSettings(value: unknown): { whatsappPhone: string | null } | undefined {
+function parseFeatureSettings(
+  value: unknown,
+): { whatsappPhone: string | null; playlistUrl: string | null } | undefined {
   const settings = record(value);
 
   if (settings === undefined) {
@@ -287,11 +296,23 @@ function parseFeatureSettings(value: unknown): { whatsappPhone: string | null } 
   }
 
   const phone = settings.whatsappPhone;
+  const playlist = settings.playlistUrl;
 
-  if (phone === null) {
-    return { whatsappPhone: null };
+  if (!(phone === null || (typeof phone === "string" && isE164Phone(phone)))) {
+    return undefined;
   }
-  return typeof phone === "string" && isE164Phone(phone) ? { whatsappPhone: phone } : undefined;
+  if (
+    !(
+      playlist === null ||
+      (typeof playlist === "string" &&
+        playlist.startsWith("https://") &&
+        playlist.length <= PLAYLIST_URL_MAX_LENGTH)
+    )
+  ) {
+    return undefined;
+  }
+
+  return { whatsappPhone: phone, playlistUrl: playlist };
 }
 
 /** The price in force, `null` when the package has none, or `undefined` when the value is unreadable. */
@@ -599,8 +620,8 @@ export function createInvitationsClient(
     ): Promise<InvitationResult<OwnedInvitation>> =>
       onDraft(id, "/content", (path) => call("PUT", path, { content }, parseOwnedInvitation)),
     /**
-     * `PUT /invitations/:id/features`: the invitation's time zone and WhatsApp contact; called from a server
-     * action (F3; S3, S4). Both fields are always sent, because the API replaces the pair.
+     * `PUT /invitations/:id/features`: the invitation's time zone, WhatsApp contact, and playlist link; called
+     * from a server action (F3, F6; S3, S4, S7). Every field is always sent, because the API replaces all three.
      */
     updateInvitationFeatures: (
       id: string,

@@ -1,6 +1,9 @@
 import { createElement, type ReactElement, useId } from "react";
 import { baptismEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
-import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
+import {
+  type InvitationFeatures,
+  showsGiftRegistry,
+} from "../../../../lib/invitation-features/invitation-features.ts";
 import {
   parseBaptismClassicConfiguration,
   parseBaptismClassicContent,
@@ -99,6 +102,11 @@ export function BaptismClassicRenderer({
   const { theme: themeKey } = parseBaptismClassicConfiguration(configuration);
   const data = parseBaptismClassicContent(content);
   const theme = BAPTISM_THEME[themeKey];
+  // The gift registry is rendered only when the API gated it on and the content carries a value (F7; S7);
+  // with no features at all this is a preview, and the content alone decides, as it did before this batch.
+  const giftRegistry = showsGiftRegistry(features, data.giftRegistry)
+    ? data.giftRegistry
+    : undefined;
   const idPrefix = useId();
 
   // After both place cards and before the photo: the ceremony, the reception, and how to reach them (S4).
@@ -184,13 +192,13 @@ export function BaptismClassicRenderer({
           h("span", { className: ROW_LABEL }, "Padrinos"),
           h("span", { className: ROW_VALUE }, data.godparents),
         ),
-        data.giftRegistry === undefined
+        giftRegistry === undefined
           ? null
           : h(
               "div",
               { className: ROW_SOFT },
               h("span", { className: ROW_LABEL }, "Mesa de regalos"),
-              h("span", { className: `${ROW_VALUE} text-(color:--inv-accent)` }, data.giftRegistry),
+              h("span", { className: `${ROW_VALUE} text-(color:--inv-accent)` }, giftRegistry),
             ),
       ),
     ),

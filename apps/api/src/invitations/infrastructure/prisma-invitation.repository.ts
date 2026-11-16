@@ -30,7 +30,7 @@ const INVITATION_SELECT = {
   createdAt: true,
   updatedAt: true,
   // The one-to-one feature data travels with the row, so an owned or public read stays one query (S4).
-  featureSettings: { select: { whatsappPhone: true } },
+  featureSettings: { select: { whatsappPhone: true, playlistUrl: true } },
 } satisfies Prisma.InvitationSelect;
 
 type InvitationRow = Prisma.InvitationGetPayload<{ select: typeof INVITATION_SELECT }>;
@@ -54,6 +54,7 @@ function toRecord(row: InvitationRow): InvitationRecord {
     timeZone: row.timeZone,
     // No settings row yet means no feature data: the phone is null, never an empty string.
     whatsappPhone: row.featureSettings?.whatsappPhone ?? null,
+    playlistUrl: row.featureSettings?.playlistUrl ?? null,
     archivedAt: row.archivedAt,
     publishedAt: row.publishedAt,
     expiresAt: row.expiresAt,
@@ -157,9 +158,9 @@ export class PrismaInvitationRepository implements InvitationRepository {
 
   /**
    * Stores the feature data of a DRAFT or a PUBLISHED invitation in one transaction: the zone on the invitation
-   * and the phone in its one-to-one settings row, which is created on first write and never deleted. The write's
-   * `WHERE` names the owner and both editable statuses, so an archived invitation is refused even by a concurrent
-   * archive (S4, A2), and another owner's id matches nothing (A4).
+   * and the phone and playlist link in its one-to-one settings row, which is created on first write and never
+   * deleted. The write's `WHERE` names the owner and both editable statuses, so an archived invitation is refused
+   * even by a concurrent archive (S4, S7, A2), and another owner's id matches nothing (A4).
    */
   async updateFeatures(
     ownerId: string,
@@ -186,11 +187,18 @@ export class PrismaInvitationRepository implements InvitationRepository {
         throw new InvitationNotEditableError("ARCHIVED");
       }
 
-      // One row per invitation at most, created on the first write; clearing the phone writes NULL and keeps it.
+      // One row per invitation at most, created on the first write; clearing a value writes NULL and keeps it.
       await tx.invitationFeatureSettings.upsert({
         where: { invitationId: id },
-        create: { invitationId: id, whatsappPhone: features.whatsappPhone },
-        update: { whatsappPhone: features.whatsappPhone },
+        create: {
+          invitationId: id,
+          whatsappPhone: features.whatsappPhone,
+          playlistUrl: features.playlistUrl,
+        },
+        update: {
+          whatsappPhone: features.whatsappPhone,
+          playlistUrl: features.playlistUrl,
+        },
       });
 
       return toRecord(

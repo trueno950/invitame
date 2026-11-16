@@ -68,9 +68,12 @@ const DRAFT_PACKAGE_ID = "33333333-3333-4333-8333-333333333333";
 const DRAFT_VERSION_ID = "44444444-4444-4444-8444-444444444444";
 /** PUBLISHED, but its `componentKey` is outside the API's renderer allow-list (A3). */
 const UNRENDERABLE_VERSION_ID = "55555555-5555-4555-8555-555555555555";
-/** An ACTIVE package that includes the implemented catalog features (F1; S4). */
+/** An ACTIVE package that includes the implemented catalog features (F1, F6, F7; S4, S7). */
 const FEATURE_PACKAGE_ID = "66666666-6666-4666-8666-666666666666";
+/** An ACTIVE package with the batch-2 features: music and the gift registry (S7). */
+const MUSIC_PACKAGE_ID = "77777777-7777-4777-8777-777777777777";
 const PHONE = "+525512345678";
+const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
 const RENDERER = "birthday-poster-01";
 const UNREGISTERED_RENDERER = "unregistered-renderer-99";
 const SCHEMA = {
@@ -106,6 +109,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       // The database default every new row reads (S4).
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
+      playlistUrl: null,
       archivedAt: null,
       publishedAt: null,
       expiresAt: null,
@@ -148,7 +152,7 @@ class MemoryInvitationRepository implements InvitationRepository {
   async updateFeatures(
     ownerId: string,
     id: string,
-    features: { timeZone: string; whatsappPhone: string | null },
+    features: { timeZone: string; whatsappPhone: string | null; playlistUrl: string | null },
   ): Promise<InvitationRecord | null> {
     const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
     if (!row) {
@@ -160,6 +164,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     }
     row.timeZone = features.timeZone;
     row.whatsappPhone = features.whatsappPhone;
+    row.playlistUrl = features.playlistUrl;
     return structuredClone(row);
   }
 
@@ -248,6 +253,14 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     [
       FEATURE_PACKAGE_ID,
       { status: "ACTIVE", includedFeatureKeys: ["COUNTDOWN", "MAP", "WHATSAPP"] },
+    ],
+    // The seeded Deluxe package's batch-2 keys (S7): music and the gift registry.
+    [
+      MUSIC_PACKAGE_ID,
+      {
+        status: "ACTIVE",
+        includedFeatureKeys: ["COUNTDOWN", "MUSIC", "MAP", "WHATSAPP", "GIFT_REGISTRY"],
+      },
     ],
   ]);
 
@@ -498,7 +511,7 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(body.content, {});
       assert.deepEqual(body.missingRequiredFields, ["title"]);
       assert.equal(body.timeZone, "America/Mexico_City");
-      assert.deepEqual(body.featureSettings, { whatsappPhone: null });
+      assert.deepEqual(body.featureSettings, { whatsappPhone: null, playlistUrl: null });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
       for (const field of ["createdAt", "updatedAt"]) {
@@ -661,7 +674,7 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(body.content, {});
       assert.deepEqual(body.missingRequiredFields, ["title"]);
       assert.equal(body.timeZone, "America/Mexico_City");
-      assert.deepEqual(body.featureSettings, { whatsappPhone: null });
+      assert.deepEqual(body.featureSettings, { whatsappPhone: null, playlistUrl: null });
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
     });
 
@@ -778,26 +791,28 @@ describe("invitations routes: /invitations", () => {
   });
 
   describe("PUT /invitations/:id/features", () => {
-    it("stores the zone and the normalized phone and answers the owned invitation (F1; S4)", async () => {
+    it("stores the zone, the normalized phone, and the playlist link and answers the owned invitation (F1, F6; S4, S7)", async () => {
       const { cookie } = await signedInCustomer();
       const draft = await createDraft(cookie);
 
       const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
         timeZone: "America/Tijuana",
         whatsappPhone: "(55) 1234-5678",
+        playlistUrl: PLAYLIST,
       });
 
       assert.equal(response.status, 200);
       const body = (await response.json()) as Row;
       assert.deepEqual(Object.keys(body).sort(), OWNED_KEYS);
       assert.equal(body.timeZone, "America/Tijuana");
-      assert.deepEqual(body.featureSettings, { whatsappPhone: PHONE });
+      assert.deepEqual(body.featureSettings, { whatsappPhone: PHONE, playlistUrl: PLAYLIST });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
       assert.equal(body.ownerId, undefined);
       const stored = repository.rows.find((row) => row.id === draft.id);
       assert.equal(stored?.timeZone, "America/Tijuana");
       assert.equal(stored?.whatsappPhone, PHONE);
+      assert.equal(stored?.playlistUrl, PLAYLIST);
     });
 
     it("clears the stored phone with null and with an empty value (S4)", async () => {
@@ -806,23 +821,51 @@ describe("invitations routes: /invitations", () => {
       await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
         timeZone: "America/Cancun",
         whatsappPhone: PHONE,
+        playlistUrl: null,
       });
 
       for (const whatsappPhone of [null, ""]) {
         const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
           timeZone: "America/Cancun",
           whatsappPhone,
+          playlistUrl: null,
         });
 
         assert.equal(response.status, 200, String(whatsappPhone));
         assert.deepEqual(((await response.json()) as Row).featureSettings, {
           whatsappPhone: null,
+          playlistUrl: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.whatsappPhone, null);
       }
     });
 
-    it("answers 400 INVALID_INVITATION_FEATURES with its issues and stores nothing (S4)", async () => {
+    it("clears the stored playlist link with null and with an empty value (F6; S7)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Cancun",
+        whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
+      });
+
+      for (const playlistUrl of [null, ""]) {
+        const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+          timeZone: "America/Cancun",
+          whatsappPhone: PHONE,
+          playlistUrl,
+        });
+
+        assert.equal(response.status, 200, String(playlistUrl));
+        assert.deepEqual(((await response.json()) as Row).featureSettings, {
+          whatsappPhone: PHONE,
+          playlistUrl: null,
+        });
+        assert.equal(repository.rows.find((row) => row.id === draft.id)?.playlistUrl, null);
+      }
+    });
+
+    it("answers 400 INVALID_INVITATION_FEATURES with its issues and stores nothing (S4, S7)", async () => {
       const { cookie } = await signedInCustomer();
       const draft = await createDraft(cookie);
       const before = structuredClone(repository.rows.find((row) => row.id === draft.id));
@@ -830,27 +873,51 @@ describe("invitations routes: /invitations", () => {
       const refused: Array<[string, Record<string, unknown>, string[]]> = [
         [
           "a zone outside the allow-list",
-          { timeZone: "Europe/Madrid", whatsappPhone: null },
+          { timeZone: "Europe/Madrid", whatsappPhone: null, playlistUrl: null },
           ["timeZone must be one of the supported time zones"],
         ],
         [
           "a phone it cannot normalize",
-          { timeZone: "America/Mexico_City", whatsappPhone: "12345" },
+          { timeZone: "America/Mexico_City", whatsappPhone: "12345", playlistUrl: null },
           [
             "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
           ],
         ],
         [
           "a phone that is not a string",
-          { timeZone: "America/Mexico_City", whatsappPhone: 5512345678 },
+          { timeZone: "America/Mexico_City", whatsappPhone: 5512345678, playlistUrl: null },
           ["whatsappPhone must be a string or null"],
         ],
         [
-          "both values wrong, the zone first",
-          { timeZone: "not-a-zone", whatsappPhone: "12345" },
+          "a link that is not https",
+          {
+            timeZone: "America/Mexico_City",
+            whatsappPhone: null,
+            playlistUrl: "http://open.spotify.com/playlist/abc",
+          },
+          ["playlistUrl must be an https link"],
+        ],
+        [
+          "a link on another host",
+          {
+            timeZone: "America/Mexico_City",
+            whatsappPhone: null,
+            playlistUrl: "https://example.com/playlist/abc",
+          },
+          ["playlistUrl must link to Spotify, Apple Music, YouTube, Deezer, or SoundCloud"],
+        ],
+        [
+          "a link that is not a string",
+          { timeZone: "America/Mexico_City", whatsappPhone: null, playlistUrl: 42 },
+          ["playlistUrl must be a string or null"],
+        ],
+        [
+          "every value wrong, the zone first and the playlist last",
+          { timeZone: "not-a-zone", whatsappPhone: "12345", playlistUrl: "http://x.test" },
           [
             "timeZone must be one of the supported time zones",
             "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
+            "playlistUrl must be an https link",
           ],
         ],
       ];
@@ -867,7 +934,7 @@ describe("invitations routes: /invitations", () => {
       );
     });
 
-    it("answers 400 for a body without both fields or with an unknown field (S4)", async () => {
+    it("answers 400 for a body without a field or with an unknown field (S4, S7)", async () => {
       const { cookie } = await signedInCustomer();
       const draft = await createDraft(cookie);
       const before = structuredClone(repository.rows.find((row) => row.id === draft.id));
@@ -876,7 +943,14 @@ describe("invitations routes: /invitations", () => {
         {},
         { timeZone: "America/Mexico_City" },
         { whatsappPhone: null },
-        { timeZone: "America/Mexico_City", whatsappPhone: null, packageId: UNKNOWN_ID },
+        // The old two-field body: `playlistUrl` is required like the other two, so the global pipe refuses it.
+        { timeZone: "America/Mexico_City", whatsappPhone: null },
+        {
+          timeZone: "America/Mexico_City",
+          whatsappPhone: null,
+          playlistUrl: null,
+          packageId: UNKNOWN_ID,
+        },
         "not-json",
       ]) {
         const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, body);
@@ -889,6 +963,21 @@ describe("invitations routes: /invitations", () => {
       );
     });
 
+    it("names playlistUrl when the body omits it (S7)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+      });
+
+      assert.equal(response.status, 400);
+      const body = await response.json();
+      // The client learns which field it forgot, so the refusal is actionable rather than a bare 400.
+      assert.match(JSON.stringify(body), /playlistUrl/);
+    });
+
     it("answers 409 INVITATION_NOT_EDITABLE for an archived invitation and keeps it unchanged (S7, A2)", async () => {
       const { cookie } = await signedInCustomer();
       const draft = await createDraft(cookie);
@@ -898,6 +987,7 @@ describe("invitations routes: /invitations", () => {
       const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
         timeZone: "America/Tijuana",
         whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
       });
 
       assert.equal(response.status, 409);
@@ -918,6 +1008,7 @@ describe("invitations routes: /invitations", () => {
         const response = await send("PUT", `${PATH}/${id}/features`, other.cookie, {
           timeZone: "America/Tijuana",
           whatsappPhone: PHONE,
+          playlistUrl: PLAYLIST,
         });
 
         assert.equal(response.status, 404, id);
@@ -1205,6 +1296,7 @@ describe("invitations routes: /invitations", () => {
       expiresAt?: Date | null;
       timeZone?: string;
       whatsappPhone?: string | null;
+      playlistUrl?: string | null;
     }): InvitationRecord {
       const at = new Date(Date.UTC(2026, 9, 12, 9, 0, 0));
       const row: InvitationRecord = {
@@ -1217,6 +1309,7 @@ describe("invitations routes: /invitations", () => {
         content: { title: "Cumpleaños de Ana", subtitle: "una nota que el esquema no declara" },
         timeZone: overrides.timeZone ?? "America/Mexico_City",
         whatsappPhone: overrides.whatsappPhone ?? null,
+        playlistUrl: overrides.playlistUrl ?? null,
         archivedAt: overrides.status === "ARCHIVED" ? at : null,
         publishedAt: overrides.status === "PUBLISHED" ? at : null,
         expiresAt: overrides.expiresAt ?? null,
@@ -1247,6 +1340,8 @@ describe("invitations routes: /invitations", () => {
         map: false,
         calendar: true,
         whatsapp: null,
+        music: null,
+        giftRegistry: false,
       });
       assert.equal(new Date(String(body.publishedAt)).toISOString(), body.publishedAt);
       for (const key of PRIVATE_KEYS) {
@@ -1381,12 +1476,56 @@ describe("invitations routes: /invitations", () => {
         map: true,
         calendar: true,
         whatsapp: { phone: PHONE },
+        music: null,
+        giftRegistry: false,
       });
       // No package key list, name, or id reaches a guest; only the gated result does (S4, A7).
       const text = JSON.stringify(body);
       for (const leaked of ["COUNTDOWN", "WHATSAPP", "MAP", FEATURE_PACKAGE_ID]) {
         assert.equal(text.includes(leaked), false, leaked);
       }
+    });
+
+    it("answers the music link and the gift registry only for a package that grants them (F6, F7; S7)", async () => {
+      const row = seed({
+        slug: "invitacion-feat03",
+        status: "PUBLISHED",
+        packageId: MUSIC_PACKAGE_ID,
+        whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
+      });
+
+      const response = await send("GET", `${PUBLIC_PATH}/${row.slug}`);
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), PUBLIC_KEYS);
+      assert.deepEqual(body.features, {
+        countdown: true,
+        map: true,
+        calendar: true,
+        whatsapp: { phone: PHONE },
+        music: { url: PLAYLIST, provider: "spotify" },
+        giftRegistry: true,
+      });
+      assert.equal(JSON.stringify(body).includes(MUSIC_PACKAGE_ID), false);
+    });
+
+    it("keeps a stored link private when the package does not grant music (F6; S7)", async () => {
+      const row = seed({
+        slug: "invitacion-feat04",
+        status: "PUBLISHED",
+        packageId: FEATURE_PACKAGE_ID,
+        playlistUrl: PLAYLIST,
+      });
+
+      const response = await send("GET", `${PUBLIC_PATH}/${row.slug}`);
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual((body.features as Row).music, null);
+      assert.equal(JSON.stringify(body).includes("spotify"), false);
+      assert.equal(JSON.stringify(body).includes(PLAYLIST), false);
     });
 
     it("drops WhatsApp while no phone is stored, whatever the package includes (S4)", async () => {
@@ -1404,6 +1543,8 @@ describe("invitations routes: /invitations", () => {
         map: true,
         calendar: true,
         whatsapp: null,
+        music: null,
+        giftRegistry: false,
       });
     });
 

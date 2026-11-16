@@ -39,6 +39,8 @@ const PUBLIC: PublicInvitation = {
     map: true,
     calendar: true,
     whatsapp: { phone: "+525512345678" },
+    music: { url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", provider: "spotify" },
+    giftRegistry: true,
   },
 };
 
@@ -232,19 +234,73 @@ describe("parsePublicInvitation", () => {
       // A stored phone is E.164: a national number is not one a guest page reads.
       { ...PUBLIC, features: { ...PUBLIC.features, whatsapp: { phone: "5512345678" } } },
       { ...PUBLIC, features: { ...PUBLIC.features, whatsapp: { phone: 7 } } },
+      // The gift registry is a boolean the layouts read (S7).
+      { ...PUBLIC, features: { ...PUBLIC.features, giftRegistry: undefined } },
+      { ...PUBLIC, features: { ...PUBLIC.features, giftRegistry: "true" } },
+      // Music is one allow-listed service with an https link, or null (S7).
+      { ...PUBLIC, features: { ...PUBLIC.features, music: undefined } },
+      { ...PUBLIC, features: { ...PUBLIC.features, music: "https://open.spotify.com/x" } },
+      { ...PUBLIC, features: { ...PUBLIC.features, music: {} } },
+      {
+        ...PUBLIC,
+        features: {
+          ...PUBLIC.features,
+          music: { url: "http://open.spotify.com/x", provider: "spotify" },
+        },
+      },
+      {
+        ...PUBLIC,
+        features: {
+          ...PUBLIC.features,
+          music: { url: "https://open.spotify.com/x", provider: "Spotify" },
+        },
+      },
+      {
+        ...PUBLIC,
+        features: {
+          ...PUBLIC.features,
+          music: {
+            url: `https://open.spotify.com/${"a".repeat(500)}`,
+            provider: "spotify",
+          },
+        },
+      },
     ];
 
     for (const value of broken) {
       assert.equal(parsePublicInvitation(value), undefined, JSON.stringify(value));
     }
+    // Only the documented keys are kept, so a body that grows an extra field inside `features` never reaches
+    // the page: the parse answers the contract's own shape.
     assert.deepEqual(
       parsePublicInvitation({
         ...PUBLIC,
-        features: { countdown: false, map: false, calendar: true, whatsapp: null },
+        features: { ...PUBLIC.features, packageId: "leak" },
+      }),
+      PUBLIC,
+    );
+    assert.deepEqual(
+      parsePublicInvitation({
+        ...PUBLIC,
+        features: {
+          countdown: false,
+          map: false,
+          calendar: true,
+          whatsapp: null,
+          music: null,
+          giftRegistry: false,
+        },
       }),
       {
         ...PUBLIC,
-        features: { countdown: false, map: false, calendar: true, whatsapp: null },
+        features: {
+          countdown: false,
+          map: false,
+          calendar: true,
+          whatsapp: null,
+          music: null,
+          giftRegistry: false,
+        },
       },
     );
   });

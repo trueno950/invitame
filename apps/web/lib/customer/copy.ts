@@ -354,6 +354,10 @@ export const FEATURE_COPY = {
   whatsappPlaceholder: "55 1234 5678",
   whatsappHint:
     "Escribe 10 dígitos o un número internacional que empiece con +. Lo verán tus invitados solo si tu paquete incluye WhatsApp.",
+  playlistLabel: "Enlace de tu playlist",
+  playlistPlaceholder: "https://open.spotify.com/playlist/…",
+  playlistHint:
+    "Pega el enlace de Spotify, Apple Music, YouTube, Deezer o SoundCloud. Debe empezar con https. Tus invitados verán un solo botón que abre la playlist; no incrustamos el reproductor.",
   automaticHeading: "Lo que verán tus invitados",
   automaticHint:
     "Estas funciones se activan solas según el paquete que elegiste; no necesitas configurarlas.",
@@ -361,6 +365,12 @@ export const FEATURE_COPY = {
   automaticMap: "Mapa con enlaces a Google Maps y Waze",
   automaticCalendar: "Botón para agregar al calendario",
   automaticNone: "Tu paquete no incluye funciones automáticas por ahora.",
+  /** The gift registry lives in the invitation content; these name why its block may not show (F7; S7). */
+  giftRegistryNoteOne: (packageName: string) =>
+    `La mesa de regalos se muestra con el paquete ${packageName}.`,
+  giftRegistryNoteMany: (packageNames: string) =>
+    `La mesa de regalos se muestra con los paquetes ${packageNames}.`,
+  giftRegistryNoteAny: "La mesa de regalos se muestra con un paquete que la incluya.",
   save: "Guardar funcionalidades",
   archivedNote:
     "Esta invitación está archivada: puedes consultar sus funcionalidades, pero ya no editarlas.",
@@ -395,6 +405,8 @@ export const FEATURE_ISSUE_COPY = {
   phone:
     "Escribe un número de 10 dígitos o un número internacional que empiece con + y tenga entre 8 y 15 dígitos.",
   "phone-type": "El número de WhatsApp no tiene un formato válido.",
+  playlist:
+    "Pega un enlace que empiece con https de Spotify, Apple Music, YouTube, Deezer o SoundCloud.",
   other:
     "Hay un dato de las funcionalidades que no pudimos guardar. Revísalo y vuelve a intentarlo.",
 } as const;

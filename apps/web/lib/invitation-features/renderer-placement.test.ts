@@ -331,6 +331,9 @@ const FEATURES: InvitationFeatures = {
   map: true,
   calendar: true,
   whatsapp: { phone: "+525512345678" },
+  music: { url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", provider: "spotify" },
+  // On, so the layouts that place a details section for the gift registry keep placing it (F7; S7).
+  giftRegistry: true,
 };
 
 const CALENDAR_HREF = "/i/invitacion/calendario.ics";

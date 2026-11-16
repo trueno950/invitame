@@ -58,8 +58,11 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
   missingRequiredFields: string[];
   /** The stored IANA zone (S4). */
   timeZone: string;
-  /** The stored feature data; `whatsappPhone` is E.164 or null (S4). */
-  featureSettings: { whatsappPhone: string | null };
+  /**
+   * The stored feature data; `whatsappPhone` is E.164 or null, and `playlistUrl` is a normalized `https` link on
+   * an allow-listed music host or null (S4, S7).
+   */
+  featureSettings: { whatsappPhone: string | null; playlistUrl: string | null };
   /** The gated feature keys the guest will see, `CALENDAR` included (S4). */
   availableFeatures: string[];
 }
@@ -82,6 +85,10 @@ export interface PublicInvitationResponse {
     map: boolean;
     calendar: true;
     whatsapp: { phone: string } | null;
+    /** The playlist link and the service it names, or null when the feature is not available (S7). */
+    music: { url: string; provider: string } | null;
+    /** Whether the layouts render their gift registry block (S7). */
+    giftRegistry: boolean;
   };
 }
 
@@ -105,7 +112,10 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
     content: stored.content,
     missingRequiredFields: [...stored.missingRequiredFields],
     timeZone: stored.timeZone,
-    featureSettings: { whatsappPhone: stored.featureSettings.whatsappPhone },
+    featureSettings: {
+      whatsappPhone: stored.featureSettings.whatsappPhone,
+      playlistUrl: stored.featureSettings.playlistUrl,
+    },
     availableFeatures: [...stored.availableFeatures],
   };
 }
@@ -125,6 +135,11 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
       calendar: true,
       whatsapp:
         stored.features.whatsapp === null ? null : { phone: stored.features.whatsapp.phone },
+      music:
+        stored.features.music === null
+          ? null
+          : { url: stored.features.music.url, provider: stored.features.music.provider },
+      giftRegistry: stored.features.giftRegistry,
     },
   };
 }
