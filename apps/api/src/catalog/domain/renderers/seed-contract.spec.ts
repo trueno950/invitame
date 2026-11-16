@@ -3,23 +3,41 @@ import { it } from "node:test";
 
 import {
   BABY_SHOWER_TEMPLATE_SEEDS,
+  BAPTISM_ARCH_TEMPLATE_SEEDS,
   BAPTISM_TEMPLATE_SEEDS,
   BIRTHDAY_LAYOUT_TEMPLATE_SEEDS,
+  ELEGANT_ARCH_TEMPLATE_SEEDS,
+  WEDDING_ARCH_TEMPLATE_SEEDS,
+  XV_ARCH_TEMPLATE_SEEDS,
 } from "../../../../prisma/catalog-seed";
 import { BABY_SHOWER_THEMES } from "./baby-shower-themes";
 import { BAPTISM_THEMES } from "./baptism-themes";
 import { BIRTHDAY_THEMES } from "./birthday-themes";
+import { ELEGANT_THEMES } from "./elegant-themes";
 import { validateTemplateVersionContract } from "./renderer-registry";
 
 // The seed's own constants, not a copy: a drift between a seeded version and the registry fails here. Every
-// template the seed creates — 24 birthday, eight baby shower, and six themed baptism (S8, S13) — must satisfy
-// the renderer contract of the key it names.
+// template the seed creates — 24 birthday, eight baby shower, six themed baptism (S8, S13), and 24 elegant
+// arch templates (S4: three layouts x eight themes) — must satisfy the renderer contract of the key it names.
 
 const SEEDED_TEMPLATE_SEEDS = [
   ...BIRTHDAY_LAYOUT_TEMPLATE_SEEDS,
   ...BABY_SHOWER_TEMPLATE_SEEDS,
   ...BAPTISM_TEMPLATE_SEEDS,
+  ...ELEGANT_ARCH_TEMPLATE_SEEDS,
 ];
+
+/** The Spanish display name of each elegant theme, in the board's order (S4). */
+const ELEGANT_THEME_NAMES: Readonly<Record<string, string>> = {
+  "blush-gold": "Rosa empolvado y oro",
+  "ivory-black": "Marfil y negro",
+  "midnight-gold": "Azul medianoche y oro",
+  "olive-cream": "Verde olivo y crema",
+  champagne: "Champaña",
+  "lavender-silver": "Lavanda y plata",
+  "terracotta-sage": "Terracota y salvia",
+  "burgundy-gold": "Borgoña y oro",
+};
 
 it("every seeded template version satisfies the registry contract", () => {
   for (const seed of SEEDED_TEMPLATE_SEEDS) {
@@ -35,11 +53,15 @@ it("every seeded template version satisfies the registry contract", () => {
   }
 });
 
-it("seeds 38 templates: 24 birthday, eight baby shower, and six themed baptism", () => {
+it("seeds 62 templates: 24 birthday, eight baby shower, six themed baptism, and 24 elegant arch", () => {
   assert.equal(BIRTHDAY_LAYOUT_TEMPLATE_SEEDS.length, 24);
   assert.equal(BABY_SHOWER_TEMPLATE_SEEDS.length, 8);
   assert.equal(BAPTISM_TEMPLATE_SEEDS.length, 6);
-  assert.equal(SEEDED_TEMPLATE_SEEDS.length, 38);
+  assert.equal(XV_ARCH_TEMPLATE_SEEDS.length, 8);
+  assert.equal(WEDDING_ARCH_TEMPLATE_SEEDS.length, 8);
+  assert.equal(BAPTISM_ARCH_TEMPLATE_SEEDS.length, 8);
+  assert.equal(ELEGANT_ARCH_TEMPLATE_SEEDS.length, 24);
+  assert.equal(SEEDED_TEMPLATE_SEEDS.length, 62);
 });
 
 it("seeds one template for every layout and theme, with unique keys", () => {
@@ -80,11 +102,26 @@ it("seeds one template for every layout and theme, with unique keys", () => {
     assert.ok(keys.includes(`baptism-classic-${theme}`), `baptism/${theme}`);
   }
 
+  // The elegant line: one layout per occasion, each with the shared eight-theme allow-list (S4).
+  for (const [layout, slug] of [
+    ["xv-arch-01", "xv-arch"],
+    ["wedding-arch-01", "wedding-arch"],
+    ["baptism-arch-01", "baptism-arch"],
+  ] as const) {
+    assert.deepEqual(themesOf(ELEGANT_ARCH_TEMPLATE_SEEDS, layout), [...ELEGANT_THEMES], layout);
+    for (const theme of ELEGANT_THEMES) {
+      assert.ok(keys.includes(`${slug}-${theme}`), `${slug}/${theme}`);
+    }
+  }
+
   for (const seed of BABY_SHOWER_TEMPLATE_SEEDS) {
     assert.match(seed.key, /^baby-shower-classic-[a-z]+(-[a-z]+)*$/, seed.key);
   }
   for (const seed of BAPTISM_TEMPLATE_SEEDS) {
     assert.match(seed.key, /^baptism-classic-[a-z]+(-[a-z]+)*$/, seed.key);
+  }
+  for (const seed of ELEGANT_ARCH_TEMPLATE_SEEDS) {
+    assert.match(seed.key, /^(xv|wedding|baptism)-arch-[a-z]+(-[a-z]+)*$/, seed.key);
   }
 });
 
@@ -95,11 +132,41 @@ it("names each template with its layout and theme and a short neutral descriptio
   for (const seed of [...BABY_SHOWER_TEMPLATE_SEEDS, ...BAPTISM_TEMPLATE_SEEDS]) {
     assert.match(seed.name, /^Clásica · \S/, seed.key);
   }
+  // Every elegant template carries the Spanish theme name the owner approved, never the key (S4).
+  for (const seed of ELEGANT_ARCH_TEMPLATE_SEEDS) {
+    assert.equal(seed.name, `Arco y foto · ${ELEGANT_THEME_NAMES[seed.theme]}`, seed.key);
+  }
   for (const seed of SEEDED_TEMPLATE_SEEDS) {
     assert.ok(seed.name.length <= 120, seed.key);
     assert.ok(seed.description.length > 0 && seed.description.length <= 1000, seed.key);
     assert.ok(!seed.description.includes("·"), `${seed.key} has one neutral description`);
   }
+});
+
+it("ships one explicit schema per elegant occasion, shared by its eight themes (S4)", () => {
+  for (const seeds of [
+    XV_ARCH_TEMPLATE_SEEDS,
+    WEDDING_ARCH_TEMPLATE_SEEDS,
+    BAPTISM_ARCH_TEMPLATE_SEEDS,
+  ]) {
+    const schemas = new Set(seeds.map((seed) => JSON.stringify(seed.schema)));
+
+    assert.equal(schemas.size, 1, "one schema per occasion");
+  }
+
+  const schemasOf = (seeds: readonly { schema: unknown }[]) =>
+    JSON.stringify(seeds[0]?.schema ?? null);
+
+  assert.notEqual(
+    schemasOf(XV_ARCH_TEMPLATE_SEEDS),
+    schemasOf(WEDDING_ARCH_TEMPLATE_SEEDS),
+    "XV años and weddings have their own content schema",
+  );
+  assert.equal(
+    schemasOf(BAPTISM_ARCH_TEMPLATE_SEEDS),
+    schemasOf(BAPTISM_TEMPLATE_SEEDS),
+    "the formal baptism reuses the themed baptism schema exactly",
+  );
 });
 
 it("validates every seeded template configuration against its renderer", () => {

@@ -100,13 +100,16 @@ function issuesOf(result: ReturnType<typeof validate>): string[] {
 }
 
 describe("renderer registry", () => {
-  it("lists exactly the five registered renderers", () => {
+  it("lists exactly the nine registered renderers", () => {
     assert.deepEqual(listRendererKeys(), [
       "birthday-map-01",
       "birthday-poster-01",
       "birthday-story-01",
       "baby-shower-classic-01",
       "baptism-classic-01",
+      "xv-arch-01",
+      "wedding-arch-01",
+      "baptism-arch-01",
     ]);
     for (const key of listRendererKeys()) {
       assert.equal(findRenderer(key)?.componentKey, key);

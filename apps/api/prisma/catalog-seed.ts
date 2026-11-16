@@ -9,6 +9,7 @@ import {
   BIRTHDAY_THEMES,
   type BirthdayTheme,
 } from "../src/catalog/domain/renderers/birthday-themes";
+import { ELEGANT_THEMES, type ElegantTheme } from "../src/catalog/domain/renderers/elegant-themes";
 
 // Seeds the base catalog (M3 T2; S7). It only creates what is missing: a row whose key (or composite
 // key) already exists is never updated, reactivated, or deleted, because an administrator may have
@@ -381,6 +382,265 @@ export const BAPTISM_CONTENT_SCHEMA = {
   },
 } satisfies Prisma.InputJsonObject;
 
+/**
+ * The content schema of the `xv-arch-01` layout (S4), the elegant «Arco y foto» form for XV años, from
+ * `design/elegant-line/05-datos-por-ocasion.html`. A fifteenth birthday announces the celebrant and never an
+ * age, because the age is always fifteen, and it has the same two-place shape as the themed baptism: the
+ * ceremony and the reception are separate required blocks of place, address, and time. The parents, the honor
+ * sponsors, the dress code, the message, and who confirms attendance are required; the chambelanes, the gift
+ * registry, and the main photo are optional. Lists are one bounded text field with one name per line, because
+ * the renderer contract only declares primitive fields. An optional string declares no `minLength`, so an empty
+ * value is valid and renders nothing, except `mainPhoto`, which declares `format: "uri"` and must be omitted
+ * instead of sent empty.
+ */
+export const XV_ARCH_CONTENT_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "celebrantName",
+    "date",
+    "parents",
+    "honorSponsors",
+    "ceremonyPlace",
+    "ceremonyAddress",
+    "ceremonyTime",
+    "receptionPlace",
+    "receptionAddress",
+    "receptionTime",
+    "dressCode",
+    "message",
+    "rsvpContact",
+  ],
+  properties: {
+    celebrantName: {
+      type: "string",
+      title: "Nombre de la festejada",
+      minLength: 1,
+      maxLength: 80,
+    },
+    date: {
+      type: "string",
+      title: "Fecha",
+      format: "date",
+    },
+    parents: {
+      type: "string",
+      title: "Padres",
+      description: "Un nombre por línea.",
+      minLength: 1,
+      maxLength: 400,
+    },
+    honorSponsors: {
+      type: "string",
+      title: "Padrinos de honor",
+      description: "Un nombre por línea.",
+      minLength: 1,
+      maxLength: 400,
+    },
+    ceremonyPlace: {
+      type: "string",
+      title: "Lugar de la misa",
+      minLength: 1,
+      maxLength: 120,
+    },
+    ceremonyAddress: {
+      type: "string",
+      title: "Dirección de la misa",
+      minLength: 1,
+      maxLength: 200,
+    },
+    ceremonyTime: {
+      type: "string",
+      title: "Hora de la misa",
+      pattern: "^([01]\\d|2[0-3]):[0-5]\\d$",
+    },
+    receptionPlace: {
+      type: "string",
+      title: "Lugar de la recepción",
+      minLength: 1,
+      maxLength: 120,
+    },
+    receptionAddress: {
+      type: "string",
+      title: "Dirección de la recepción",
+      minLength: 1,
+      maxLength: 200,
+    },
+    receptionTime: {
+      type: "string",
+      title: "Hora de la recepción",
+      pattern: "^([01]\\d|2[0-3]):[0-5]\\d$",
+    },
+    dressCode: {
+      type: "string",
+      title: "Código de vestimenta",
+      minLength: 1,
+      maxLength: 120,
+    },
+    message: {
+      type: "string",
+      title: "Mensaje",
+      minLength: 1,
+      maxLength: 500,
+    },
+    rsvpContact: {
+      type: "string",
+      title: "Confirmar asistencia",
+      minLength: 1,
+      maxLength: 120,
+    },
+    chambelanes: {
+      type: "string",
+      title: "Chambelanes",
+      description: "Un nombre por línea.",
+      maxLength: 400,
+    },
+    giftRegistry: {
+      type: "string",
+      title: "Mesa de regalos",
+      maxLength: 200,
+    },
+    mainPhoto: {
+      type: "string",
+      title: "Foto principal",
+      format: "uri",
+    },
+  },
+} satisfies Prisma.InputJsonObject;
+
+/**
+ * The content schema of the `wedding-arch-01` layout (S4), the elegant «Arco y foto» form for weddings, from
+ * `design/elegant-line/05-datos-por-ocasion.html`. A wedding announces the couple in two names and has the
+ * same two-place shape as XV años: the ceremony and the reception are separate required blocks of place,
+ * address, and time. The dress code, the message, and who confirms attendance are required. The two families,
+ * the wedding sponsors, the gift registry, the main photo, and the hashtag are optional, with the same bounds
+ * and the same one-name-per-line rule for the lists as the XV años schema.
+ */
+export const WEDDING_ARCH_CONTENT_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "coupleNameOne",
+    "coupleNameTwo",
+    "date",
+    "ceremonyPlace",
+    "ceremonyAddress",
+    "ceremonyTime",
+    "receptionPlace",
+    "receptionAddress",
+    "receptionTime",
+    "dressCode",
+    "message",
+    "rsvpContact",
+  ],
+  properties: {
+    coupleNameOne: {
+      type: "string",
+      title: "Primer nombre de la pareja",
+      minLength: 1,
+      maxLength: 80,
+    },
+    coupleNameTwo: {
+      type: "string",
+      title: "Segundo nombre de la pareja",
+      minLength: 1,
+      maxLength: 80,
+    },
+    date: {
+      type: "string",
+      title: "Fecha",
+      format: "date",
+    },
+    ceremonyPlace: {
+      type: "string",
+      title: "Lugar de la ceremonia",
+      minLength: 1,
+      maxLength: 120,
+    },
+    ceremonyAddress: {
+      type: "string",
+      title: "Dirección de la ceremonia",
+      minLength: 1,
+      maxLength: 200,
+    },
+    ceremonyTime: {
+      type: "string",
+      title: "Hora de la ceremonia",
+      pattern: "^([01]\\d|2[0-3]):[0-5]\\d$",
+    },
+    receptionPlace: {
+      type: "string",
+      title: "Lugar de la recepción",
+      minLength: 1,
+      maxLength: 120,
+    },
+    receptionAddress: {
+      type: "string",
+      title: "Dirección de la recepción",
+      minLength: 1,
+      maxLength: 200,
+    },
+    receptionTime: {
+      type: "string",
+      title: "Hora de la recepción",
+      pattern: "^([01]\\d|2[0-3]):[0-5]\\d$",
+    },
+    dressCode: {
+      type: "string",
+      title: "Código de vestimenta",
+      minLength: 1,
+      maxLength: 120,
+    },
+    message: {
+      type: "string",
+      title: "Mensaje",
+      minLength: 1,
+      maxLength: 500,
+    },
+    rsvpContact: {
+      type: "string",
+      title: "Confirmar asistencia",
+      minLength: 1,
+      maxLength: 120,
+    },
+    firstFamilyParents: {
+      type: "string",
+      title: "Padres de una parte",
+      description: "Un nombre por línea.",
+      maxLength: 400,
+    },
+    secondFamilyParents: {
+      type: "string",
+      title: "Padres de la otra parte",
+      description: "Un nombre por línea.",
+      maxLength: 400,
+    },
+    weddingSponsors: {
+      type: "string",
+      title: "Padrinos",
+      description: "Un nombre por línea.",
+      maxLength: 400,
+    },
+    giftRegistry: {
+      type: "string",
+      title: "Mesa de regalos",
+      maxLength: 200,
+    },
+    mainPhoto: {
+      type: "string",
+      title: "Foto principal",
+      format: "uri",
+    },
+    hashtag: {
+      type: "string",
+      title: "Hashtag",
+      maxLength: 60,
+    },
+  },
+} satisfies Prisma.InputJsonObject;
+
 /** One seeded template and the version 1 it receives when this run creates the template. */
 export interface CatalogTemplateSeed {
   readonly key: string;
@@ -404,6 +664,9 @@ export type BabyShowerTemplateSeed = ThemedTemplateSeed<BabyShowerTheme>;
 
 /** A themed baptism template: the «Clásica» layout plus the theme it applies (S13). */
 export type BaptismTemplateSeed = ThemedTemplateSeed<BaptismTheme>;
+
+/** An elegant «Arco y foto» template for one occasion plus the elegant theme it applies (S4). */
+export type ElegantArchTemplateSeed = ThemedTemplateSeed<ElegantTheme>;
 
 /** One row per layout the catalog publishes; its key, Spanish label, and short neutral description (S8). */
 const BIRTHDAY_LAYOUT_SEEDS = [
@@ -531,6 +794,84 @@ export const BAPTISM_TEMPLATE_SEEDS: readonly BaptismTemplateSeed[] = BAPTISM_TH
     theme,
   }),
 );
+
+/** The Spanish display name of each elegant theme; keys and order come from its renderer allow-list (S4). */
+const ELEGANT_THEME_NAMES: Readonly<Record<ElegantTheme, string>> = {
+  "blush-gold": "Rosa empolvado y oro",
+  "ivory-black": "Marfil y negro",
+  "midnight-gold": "Azul medianoche y oro",
+  "olive-cream": "Verde olivo y crema",
+  champagne: "Champaña",
+  "lavender-silver": "Lavanda y plata",
+  "terracotta-sage": "Terracota y salvia",
+  "burgundy-gold": "Borgoña y oro",
+};
+
+/**
+ * One row per elegant layout the catalog publishes: its key prefix, the category it belongs to, its renderer
+ * key, its Spanish label, its own content schema, and one short neutral description per occasion (S4). The
+ * three layouts are the same visual direction, «Arco y foto», but each occasion keeps its own content schema.
+ */
+const ELEGANT_ARCH_LAYOUT_SEEDS = [
+  {
+    slug: "xv-arch",
+    categoryKey: "quinceanera",
+    componentKey: "xv-arch-01",
+    label: "Arco y foto",
+    schema: XV_ARCH_CONTENT_SCHEMA,
+    description:
+      "Una invitación elegante de XV años con la misa, la recepción y los padrinos de honor.",
+  },
+  {
+    slug: "wedding-arch",
+    categoryKey: "wedding",
+    componentKey: "wedding-arch-01",
+    label: "Arco y foto",
+    schema: WEDDING_ARCH_CONTENT_SCHEMA,
+    description:
+      "Una invitación elegante de boda con la ceremonia, la recepción y los datos de la pareja.",
+  },
+  {
+    slug: "baptism-arch",
+    categoryKey: "baptism",
+    componentKey: "baptism-arch-01",
+    label: "Arco y foto",
+    // The formal baptism reuses the themed baptism schema exactly (S4), so both share one content contract.
+    schema: BAPTISM_CONTENT_SCHEMA,
+    description:
+      "Una invitación elegante de bautizo con la ceremonia, la recepción y los datos de la familia.",
+  },
+] as const;
+
+/**
+ * One published elegant template per occasion and theme (3 layouts x 8 themes), in the theme order the owner
+ * chose (S4). Every template takes exactly `{ componentKey, theme }` as configuration and its occasion's
+ * content schema. Catalog names stay generic: a theme name never names a character or a brand (S3).
+ */
+export const ELEGANT_ARCH_TEMPLATE_SEEDS: readonly ElegantArchTemplateSeed[] =
+  ELEGANT_ARCH_LAYOUT_SEEDS.flatMap((layout) =>
+    ELEGANT_THEMES.map((theme) => ({
+      key: `${layout.slug}-${theme}`,
+      name: `${layout.label} · ${ELEGANT_THEME_NAMES[theme]}`,
+      description: layout.description,
+      componentKey: layout.componentKey,
+      schema: layout.schema,
+      configuration: { componentKey: layout.componentKey, theme },
+      theme,
+    })),
+  );
+
+/** The elegant templates of XV años, in the theme order the owner chose (S4). */
+export const XV_ARCH_TEMPLATE_SEEDS: readonly ElegantArchTemplateSeed[] =
+  ELEGANT_ARCH_TEMPLATE_SEEDS.filter((seed) => seed.componentKey === "xv-arch-01");
+
+/** The elegant templates of weddings, in the theme order the owner chose (S4). */
+export const WEDDING_ARCH_TEMPLATE_SEEDS: readonly ElegantArchTemplateSeed[] =
+  ELEGANT_ARCH_TEMPLATE_SEEDS.filter((seed) => seed.componentKey === "wedding-arch-01");
+
+/** The elegant templates of formal baptisms, in the theme order the owner chose (S4). */
+export const BAPTISM_ARCH_TEMPLATE_SEEDS: readonly ElegantArchTemplateSeed[] =
+  ELEGANT_ARCH_TEMPLATE_SEEDS.filter((seed) => seed.componentKey === "baptism-arch-01");
 
 /** How many rows one run created; all zero when the catalog was already seeded. */
 export interface CatalogSeedSummary {
@@ -690,6 +1031,10 @@ async function seedThemedTemplates(
     { categoryKey: "birthday", seeds: BIRTHDAY_LAYOUT_TEMPLATE_SEEDS },
     { categoryKey: "baby-shower", seeds: BABY_SHOWER_TEMPLATE_SEEDS },
     { categoryKey: "baptism", seeds: BAPTISM_TEMPLATE_SEEDS },
+    { categoryKey: "quinceanera", seeds: XV_ARCH_TEMPLATE_SEEDS },
+    { categoryKey: "wedding", seeds: WEDDING_ARCH_TEMPLATE_SEEDS },
+    // The formal baptism joins the themed one in the same category (S4, L1).
+    { categoryKey: "baptism", seeds: BAPTISM_ARCH_TEMPLATE_SEEDS },
   ] as const;
   let templates = 0;
   let templateVersions = 0;

@@ -15,7 +15,7 @@ explicitly planned unless marked current.
 | Database | PostgreSQL and Prisma own `User` and the identity tables Better Auth reads and writes (sessions, credential accounts, verification codes, two-factor records, and rate-limit counters) plus the catalog, packages, features, templates, immutable template versions, and `Invitation` drafts pinned to a version; see [`model.md`](../database/model.md). | Guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Catalog | The API `catalog` module (`apps/api/src/catalog`) serves administrator-only endpoints under `/admin/catalog` for categories, features, packages with their features and MXN prices, templates, and template versions (create, publish, retire); the web pages under `/admin/catalogo` call them from the server. See Catalog administration below. Signed-in creators read the published templates and active packages through `GET /catalog/templates` and `GET /catalog/packages`, served from the catalog's public application contract (`CatalogPublicReader`); the template read also answers the published version's own `configuration` snapshot, so the creator chooser can preview each template with the real renderer instead of a stored screenshot. | Anonymous catalog browsing. **Planned.** |
 | Invitations | The API `invitations` module (`apps/api/src/invitations`) lets a signed-in customer create, list, read, edit the content of, edit the feature data of, and archive their own drafts under `/invitations`, and publish (`POST /invitations/:id/publish`) or unpublish them; publication requires every required field, content that still validates, a package that still fits, and a pinned version that is still published, and it asks a payment gate that answers "no payment required" until Milestone 7. A published invitation stays editable live. Each invitation stores an IANA `timeZone` and one optional `InvitationFeatureSettings` row keyed by the invitation, written through `PUT /invitations/:id/features` (creator-owned, validated, refused for an archived invitation like a content save); the domain gates what a guest may see as the pinned package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, and `WHATSAPP`, plus the always-available calendar, with WhatsApp only while a phone is stored. Guests read it through the public, uncacheable `GET /public/invitations/:slug`, which returns only the slug, `componentKey`, configuration, the pinned schema's content, `publishedAt`, `timeZone`, and the gated `features`; nothing about the package travels. The web draft page adds a «Funcionalidades» section (the time zone select, the WhatsApp contact when the pinned package includes it, and the automatic features the guests will see) that saves through a server action like the content form. A draft pins a published `TemplateVersion` and an active package that includes the renderer's required feature keys, gets a generated unique slug, and stores partial content validated against the pinned schema; the owner comes only from the session and another owner's draft answers 404. See `odd/tasks/m4-invitations.md` and `odd/tasks/invitation-features.md`. | Payment, guests, media, expiration rules, and slug regeneration. **Planned.** |
-| Renderer | An allow-listed renderer registry: the API validates each version's `schema` and `configuration` against the renderer contract at creation and publication, and the web maps `componentKey` to a reviewed component; a test keeps both key lists equal. The registered renderers are the three themed birthday layouts `birthday-map-01`, `birthday-poster-01`, and `birthday-story-01` with the shared eight-theme allow-list, the baby shower layout `baby-shower-classic-01` with its eight baby shower themes, and the themed baptism layout `baptism-classic-01` with its six themes; each takes exactly `{ componentKey, theme }`. The earlier single design `birthday-adventure-01` was deleted when the themed layouts replaced it. | Elegant layouts and themes for XV años, weddings, and formal baptisms. **Planned.** |
+| Renderer | An allow-listed renderer registry: the API validates each version's `schema` and `configuration` against the renderer contract at creation and publication, and the web maps `componentKey` to a reviewed component; a test keeps both key lists equal. The registered renderers are the three themed birthday layouts `birthday-map-01`, `birthday-poster-01`, and `birthday-story-01` with the shared eight-theme allow-list, the baby shower layout `baby-shower-classic-01` with its eight baby shower themes, the themed baptism layout `baptism-classic-01` with its six themes, and the three elegant «Arco y foto» layouts `xv-arch-01`, `wedding-arch-01`, and `baptism-arch-01` with the shared eight elegant themes; each takes exactly `{ componentKey, theme }`. The earlier single design `birthday-adventure-01` was deleted when the themed layouts replaced it. | Further layouts and themes per occasion. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
 
 ## Context and runtime map
@@ -711,10 +711,13 @@ application owns a registry similar in concept to:
 "birthday-story-01" → BirthdayStoryRenderer
 "baby-shower-classic-01" → BabyShowerClassicRenderer
 "baptism-classic-01" → BaptismClassicRenderer
+"xv-arch-01" → XvArchRenderer
+"wedding-arch-01" → WeddingArchRenderer
+"baptism-arch-01" → BaptismArchRenderer
 ```
 
 Current: the API registry (`apps/api/src/catalog/domain/renderers/`) owns the allow-list and each renderer's
-contract, and validates a version when it is created and when it is published. These five keys are the whole
+contract, and validates a version when it is created and when it is published. These eight keys are the whole
 current list. The three birthday layouts (`birthday-map-01`, `birthday-poster-01`, `birthday-story-01`) each take
 exactly `{ componentKey, theme }`, where `theme` comes from the shared allow-list in `birthday-themes.ts` and the
 content schema is the shared eight birthday fields, all of them required. The baby shower layout
@@ -722,12 +725,22 @@ content schema is the shared eight birthday fields, all of them required. The ba
 with their own theme allow-lists (`baby-shower-themes.ts`, `baptism-themes.ts`); their content schemas declare
 required fields plus optional ones (`babyName`, `genderReveal`, `giftRegistry`, and `mainPhoto` for a baby shower;
 `mainPhoto` and `giftRegistry` for a baptism), which a renderer declares in its field list so the schema must
-keep them out of `required`. The earlier single design, `birthday-adventure-01` (its own `layout`, `palette`,
-`typography`, and `sectionOrder`), was deleted together with its seed template, files, and tests when the themed
-layouts replaced it (S11).
-Elegant layouts and themes for XV años, weddings, and formal baptisms are planned, not current. The web map
-(`apps/web/lib/renderers/registry.ts`) resolves an allow-listed key to a reviewed component with no dynamic import,
-and `registry-sync.test.ts` fails when the two key lists differ. There is no shared package between the runtimes.
+keep them out of `required`. The elegant «Arco y foto» line (`odd/tasks/elegant-line.md`, S4) adds one visual
+layout per occasion with its own content schema and the shared eight-theme allow-list in `elegant-themes.ts`:
+`xv-arch-01` for `quinceanera` (celebrant, parents, honor sponsors, the ceremony and reception blocks, dress code,
+message, and RSVP required; chambelanes, gift registry, and main photo optional), `wedding-arch-01` for `wedding`
+(the two names, the ceremony and reception blocks, dress code, message, and RSVP required; both families, wedding
+sponsors, gift registry, main photo, and hashtag optional), and `baptism-arch-01` for `baptism`, the formal
+baptism that reuses the themed baptism content fields exactly so no published invitation has to migrate. Each of
+the three takes exactly `{ componentKey, theme }` and requires no catalog feature. The earlier single design,
+`birthday-adventure-01` (its own `layout`, `palette`, `typography`, and `sectionOrder`), was deleted together with
+its seed template, files, and tests when the themed layouts replaced it (S11).
+The web map (`apps/web/lib/renderers/registry.ts`) resolves an allow-listed key to a reviewed component with no
+dynamic import, and `registry-sync.test.ts` fails when the two key lists differ, so the three elegant keys also
+need their reviewed web components and theme tokens before a published template can render.
+
+Not yet shipped on this branch: the web components, theme tokens, ornaments, parsers, event facts, and creator
+form fields of the three elegant arch layouts. The API half above is current.
 
 The registry is an explicit allow-list compiled into the application. The database stores the selected key plus
 validated schema/configuration data. A missing or unknown key is an operational error, not permission to evaluate

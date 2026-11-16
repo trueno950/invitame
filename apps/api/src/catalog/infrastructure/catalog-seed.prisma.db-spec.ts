@@ -5,9 +5,13 @@ import { after, before, describe, it } from "node:test";
 import { PackageStatus, PrismaClient } from "@prisma/client";
 import {
   BABY_SHOWER_TEMPLATE_SEEDS,
+  BAPTISM_ARCH_TEMPLATE_SEEDS,
   BAPTISM_TEMPLATE_SEEDS,
   BIRTHDAY_LAYOUT_TEMPLATE_SEEDS,
+  ELEGANT_ARCH_TEMPLATE_SEEDS,
   seedCatalog,
+  WEDDING_ARCH_TEMPLATE_SEEDS,
+  XV_ARCH_TEMPLATE_SEEDS,
 } from "../../../prisma/catalog-seed";
 import { requireLocalDatabaseUrl } from "../../../test/database";
 import { listRendererKeys } from "../../catalog/domain/renderers/renderer-registry";
@@ -197,6 +201,56 @@ describe("catalog seed (real PostgreSQL)", () => {
     }
   });
 
+  it("seeds the 24 elegant arch templates in their own categories and occasions (S4)", async () => {
+    await seedCatalog(prisma);
+
+    const categories = await Promise.all(
+      ["quinceanera", "wedding", "baptism"].map((key) =>
+        prisma.category.findUniqueOrThrow({ where: { key } }),
+      ),
+    );
+    const categoryIdOf = new Map(categories.map((category) => [category.key, category.id]));
+
+    const templates = await prisma.template.findMany({
+      where: { key: { in: ELEGANT_ARCH_TEMPLATE_SEEDS.map((seed) => seed.key) } },
+      include: { category: true, versions: true },
+    });
+
+    assert.equal(templates.length, 24);
+
+    for (const [seeds, categoryKey] of [
+      [XV_ARCH_TEMPLATE_SEEDS, "quinceanera"],
+      [WEDDING_ARCH_TEMPLATE_SEEDS, "wedding"],
+      [BAPTISM_ARCH_TEMPLATE_SEEDS, "baptism"],
+    ] as const) {
+      assert.equal(seeds.length, 8, categoryKey);
+
+      for (const seed of seeds) {
+        const template = templates.find((row) => row.key === seed.key);
+
+        assert.ok(template, seed.key);
+        assert.equal(template.category.key, categoryKey, seed.key);
+        assert.equal(template.category.id, categoryIdOf.get(categoryKey), seed.key);
+        assert.equal(template.name, seed.name, seed.key);
+        assert.match(template.name, /^Arco y foto · \S/, seed.key);
+        assert.equal(template.description, seed.description, seed.key);
+        assert.equal(template.status, "PUBLISHED", seed.key);
+
+        const versionOne = template.versions.find((version) => version.version === 1);
+        assert.ok(versionOne, seed.key);
+        assert.equal(versionOne.componentKey, seed.componentKey, seed.key);
+        assert.equal(versionOne.status, "PUBLISHED", seed.key);
+        assert.deepEqual(versionOne.schema, seed.schema, seed.key);
+        assert.deepEqual(versionOne.configuration, seed.configuration, seed.key);
+        assert.deepEqual(
+          template.versions.map((version) => version.version),
+          [1],
+          seed.key,
+        );
+      }
+    }
+  });
+
   it("seeds no version for the removed renderer and no unregistered key (S11)", async () => {
     await seedCatalog(prisma);
 
@@ -204,6 +258,7 @@ describe("catalog seed (real PostgreSQL)", () => {
       ...BIRTHDAY_LAYOUT_TEMPLATE_SEEDS,
       ...BABY_SHOWER_TEMPLATE_SEEDS,
       ...BAPTISM_TEMPLATE_SEEDS,
+      ...ELEGANT_ARCH_TEMPLATE_SEEDS,
     ];
     const versions = await prisma.templateVersion.findMany({
       where: { template: { key: { in: seeds.map((seed) => seed.key) } } },

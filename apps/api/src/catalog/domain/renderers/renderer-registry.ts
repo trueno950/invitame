@@ -7,6 +7,7 @@ import {
   BABY_SHOWER_CLASSIC_COMPONENT_KEY,
   babyShowerClassicRenderer,
 } from "./baby-shower-classic-01.renderer";
+import { BAPTISM_ARCH_COMPONENT_KEY, baptismArchRenderer } from "./baptism-arch-01.renderer";
 import {
   BAPTISM_CLASSIC_COMPONENT_KEY,
   baptismClassicRenderer,
@@ -18,6 +19,8 @@ import {
 } from "./birthday-poster-01.renderer";
 import { BIRTHDAY_STORY_COMPONENT_KEY, birthdayStoryRenderer } from "./birthday-story-01.renderer";
 import type { RendererContract } from "./renderer-contract";
+import { WEDDING_ARCH_COMPONENT_KEY, weddingArchRenderer } from "./wedding-arch-01.renderer";
+import { XV_ARCH_COMPONENT_KEY, xvArchRenderer } from "./xv-arch-01.renderer";
 
 const RENDERERS: ReadonlyMap<string, RendererContract> = new Map([
   [BIRTHDAY_MAP_COMPONENT_KEY, birthdayMapRenderer],
@@ -25,6 +28,9 @@ const RENDERERS: ReadonlyMap<string, RendererContract> = new Map([
   [BIRTHDAY_STORY_COMPONENT_KEY, birthdayStoryRenderer],
   [BABY_SHOWER_CLASSIC_COMPONENT_KEY, babyShowerClassicRenderer],
   [BAPTISM_CLASSIC_COMPONENT_KEY, baptismClassicRenderer],
+  [XV_ARCH_COMPONENT_KEY, xvArchRenderer],
+  [WEDDING_ARCH_COMPONENT_KEY, weddingArchRenderer],
+  [BAPTISM_ARCH_COMPONENT_KEY, baptismArchRenderer],
 ]);
 
 export function listRendererKeys(): readonly string[] {
