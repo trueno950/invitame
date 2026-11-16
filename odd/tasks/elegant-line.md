@@ -29,3 +29,10 @@ line.
 - L1 — Owner approved the richer illustrations and asked to continue ("wok dale", S2). Existing catalog categories:
   `quinceanera`, `wedding`, and `baptism` (themed baptism uses `baptism`; the formal baptism joins the same category
   with elegant layouts).
+- L2 — E1 written by worker `mwiq1y32-w-3qyp` to `design/elegant-line/`: `01-editorial.html`, `02-ornamental.html`, and
+  `03-arco-y-foto.html` (XV años for «Valentina Ramírez» at 390 px), `04-tablero-temas-elegantes.html` (eight
+  themes, minimum contrast 5.31-9.80:1), `05-datos-por-ocasion.html` (XV: 16 fields, 13 reused and 3 new; bodas: 18
+  fields, 11 reused and 7 new; formal baptism reuses the baptism schema), and `design.json`. Checks: contrast,
+  palette containment, focus, 46 px or larger targets, and 320 px reflow all pass; no external URLs. Proposed new
+  OFL fonts: Bodoni Moda and Italiana. Worker recommendation: 03 as the flagship, 02 for the formal baptism, 01 as a
+  second XV and wedding option. Waiting for E2.

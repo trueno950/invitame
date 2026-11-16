@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XV años de Valentina — arco y foto</title>
+<style>
+  /*
+   * Directorio 03 — «Arco y foto» (E1; S1-S3). La foto manda: un arco de cuerpo completo abre la
+   * invitación y el nombre se superpone sobre un velo que mantiene el contraste AA; después, cada bloque
+   * vive en su propia tarjeta elegante.
+   * Paleta «Rosa empolvado y oro» del tablero de temas, con los siete roles de la línea temática. Ningún
+   * color sale de la paleta; el blanco es solo el compañero de contraste sobre el acento y sobre el velo.
+   */
+  :root {
+    --bg: #faf0ee;
+    --surface: #fffdfc;
+    --soft: #f3dcdf;
+    --ink: #2b1f22;
+    --accent: #8a3e52;
+    --dec-1: #c99a62;
+    --dec-2: #e3b7be;
+    --on-accent: #ffffff;
+    /* Velo del arco: tinta al 80 %, el valor mínimo que usan los textos superpuestos. */
+    --scrim: color-mix(in srgb, var(--ink) 80%, transparent);
+
+    --display: "Cormorant Garamond", "Didot", "Bodoni 72", "Iowan Old Style", Georgia, serif;
+    --script: "Great Vibes", "Snell Roundhand", "Apple Chancery", cursive;
+    --sans: "Jost", "Avenir Next", "Gill Sans", "Segoe UI", system-ui, sans-serif;
+    --hair: 1px solid var(--dec-2);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .sheet { max-width: 390px; margin: 0 auto; padding-bottom: 26px; }
+
+  /* The arch: a full-bleed photo that ends in a soft scrim, so the name never fights the image. */
+  .arch {
+    position: relative;
+    margin: 0;
+    height: 548px;
+    border-radius: 190px 190px 26px 26px;
+    overflow: hidden;
+    background: var(--soft);
+    isolation: isolate;
+  }
+  .arch > svg.photo { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .arch .veil {
+    position: absolute; inset: 0;
+    background: linear-gradient(
+      to top,
+      var(--scrim) 0%,
+      var(--scrim) 24%,
+      color-mix(in srgb, var(--ink) 58%, transparent) 46%,
+      color-mix(in srgb, var(--ink) 26%, transparent) 64%,
+      color-mix(in srgb, var(--ink) 8%, transparent) 80%,
+      transparent 94%
+    );
+  }
+  .arch .inset {
+    position: absolute; inset: 12px;
+    border: 1px solid color-mix(in srgb, var(--dec-1) 70%, transparent);
+    border-radius: 178px 178px 18px 18px;
+    pointer-events: none;
+  }
+  .arch .lockup {
+    position: absolute; left: 30px; right: 30px; bottom: 56px;
+    text-align: center;
+    color: var(--on-accent);
+  }
+  .arch .kicker {
+    margin: 0;
+    font-size: 9.5px; letter-spacing: .3em; text-transform: uppercase;
+    color: var(--on-accent);
+  }
+  h1 {
+    margin: 10px 0 0;
+    font-family: var(--display);
+    font-size: 58px;
+    font-weight: 400;
+    line-height: .92;
+    letter-spacing: -.01em;
+    color: var(--on-accent);
+  }
+  .arch .surname {
+    margin: 6px 0 0;
+    font-family: var(--script);
+    font-size: 34px;
+    line-height: 1.1;
+    color: var(--on-accent);
+  }
+  .arch .when {
+    margin: 16px 0 0;
+    font-size: 10px; letter-spacing: .24em; text-transform: uppercase;
+    color: var(--on-accent);
+  }
+  .arch .when-city {
+    margin: 5px 0 0;
+    font-size: 9px; letter-spacing: .3em; text-transform: uppercase;
+    color: var(--on-accent);
+    opacity: .92;
+  }
+
+  /* The seal overlaps the arch, as a wax stamp would. */
+  .seal {
+    position: relative;
+    width: 72px; height: 72px;
+    margin: -36px auto 0;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--dec-1), 0 12px 22px -14px color-mix(in srgb, var(--ink) 60%, transparent);
+    display: grid; place-items: center;
+    font-family: var(--display);
+    font-size: 34px;
+    line-height: 1;
+    color: var(--accent);
+    padding-bottom: 4px;
+  }
+  .seal::after {
+    content: "";
+    position: absolute; inset: 5px;
+    border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--dec-2) 90%, transparent);
+  }
+
+  .stack { padding: 0 18px; display: grid; gap: 14px; }
+  .stack > *:first-child { margin-top: 20px; }
+
+  .card {
+    background: var(--surface);
+    border: var(--hair);
+    border-radius: 20px;
+    padding: 22px 20px;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--dec-1) 22%, transparent), 0 18px 34px -30px color-mix(in srgb, var(--ink) 70%, transparent);
+  }
+  .card.soft { background: var(--soft); border-color: color-mix(in srgb, var(--dec-2) 80%, transparent); }
+  .label {
+    margin: 0;
+    font-size: 9px; letter-spacing: .26em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .card h2 {
+    margin: 6px 0 0;
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.25;
+  }
+  .card h2.center { text-align: center; }
+
+  /* Family and godparents: two aligned rows, labels on the left. */
+  .rows { margin: 0; padding: 0; list-style: none; }
+  .rows li {
+    display: grid;
+    grid-template-columns: 74px 1fr;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: var(--hair);
+  }
+  .rows li:first-child { margin-top: 14px; padding-top: 14px; }
+  .rows li:last-child { padding-bottom: 0; }
+  .rows .row-label {
+    font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent);
+    padding-top: 4px;
+  }
+  .rows .row-value {
+    font-family: var(--display);
+    font-size: 17.5px;
+    line-height: 1.4;
+  }
+
+  /* The day: each place gets a fine-line drawing, its label, the address and the hour.
+     The second card steps in, so the pair reads as a composition rather than a stack. */
+  .places { margin: 0; padding: 0; display: grid; gap: 14px; }
+  .places .place:nth-child(2) { margin-left: 16px; }
+  .day-label {
+    display: flex; align-items: center; gap: 12px;
+    margin: 4px 2px -2px;
+    color: var(--accent);
+  }
+  .day-label span {
+    font-size: 9px; letter-spacing: .26em; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .day-label::after { content: ""; flex: 1; height: 1px; background: var(--dec-2); }
+  .place { position: relative; }
+  .place .icon { display: block; width: 34px; height: 34px; margin-bottom: 10px; }
+  .place .icon svg { display: block; width: 100%; height: 100%; }
+  .place h3 {
+    margin: 4px 0 0;
+    font-family: var(--display);
+    font-size: 23px;
+    font-weight: 400;
+    line-height: 1.2;
+  }
+  .place address {
+    font-style: normal;
+    margin-top: 4px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--accent);
+  }
+  .place .hour {
+    display: inline-flex; align-items: center; gap: 7px;
+    margin-top: 12px;
+    padding: 6px 13px;
+    border-radius: 999px;
+    background: var(--soft);
+    color: var(--accent);
+    font-size: 11.5px; letter-spacing: .06em;
+  }
+  .place .hour b { font-weight: 500; }
+  .place .hour svg { width: 13px; height: 13px; }
+
+  /* Two facts side by side, split by a hairline instead of a second card. */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .split > div { padding: 0 14px; }
+  .split > div:first-child { padding-left: 0; }
+  .split > div:last-child { padding-right: 0; border-left: var(--hair); }
+  .split p.value {
+    margin: 5px 0 0;
+    font-family: var(--display);
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  .split p.note { margin: 4px 0 0; font-size: 11.5px; color: var(--accent); }
+
+  .message { text-align: center; }
+  .message p {
+    margin: 8px 0 0;
+    font-family: var(--display);
+    font-style: italic;
+    font-size: 19px;
+    line-height: 1.55;
+  }
+  .message .sign {
+    margin-top: 12px;
+    font-family: var(--script);
+    font-style: normal;
+    font-size: 30px;
+    color: var(--accent);
+  }
+
+  .rsvp { display: grid; gap: 4px; text-align: center; }
+  .rsvp .name { margin: 6px 0 0; font-family: var(--display); font-size: 21px; }
+  .rsvp .phone { margin: 0; font-size: 15px; letter-spacing: .04em; }
+  .rsvp .note { margin: 2px 0 0; font-size: 11.5px; color: var(--accent); }
+
+  /* Features: the softest card, counters on the surface, actions as pills. */
+  .features { padding: 20px 18px 18px; }
+  .countdown {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .countdown div {
+    padding: 11px 0 9px;
+    background: var(--soft);
+    border-radius: 12px;
+    text-align: center;
+  }
+  .countdown b {
+    display: block;
+    font-family: var(--display);
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .countdown small {
+    display: block;
+    margin-top: 4px;
+    font-size: 8.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent);
+  }
+  .actions { margin: 14px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .actions li.full { grid-column: 1 / -1; }
+  .actions a {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 46px;
+    padding: 11px 10px;
+    border: 1px solid var(--dec-2);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    text-decoration: none;
+    text-align: center;
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    line-height: 1.3;
+  }
+  .actions a.stack { flex-direction: column; gap: 1px; }
+  .actions a.stack small {
+    font-size: 8.5px; letter-spacing: .18em; color: var(--accent);
+  }
+  .actions a.primary {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-color: var(--accent);
+  }
+  .actions a:active { background: var(--soft); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .actions a.primary:focus-visible { outline-color: var(--ink); }
+
+  .colophon {
+    padding: 22px 24px 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--accent);
+  }
+  .colophon a { color: var(--ink); text-underline-offset: 3px; }
+
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <article aria-label="Invitación de XV años de Valentina Ramírez">
+
+    <figure class="arch">
+      <svg class="photo" viewBox="0 0 390 548" role="img" aria-label="Imagen de ejemplo: un lavado rosa empolvado con ramas doradas de línea fina, en lugar de la foto de Valentina">
+        <defs>
+          <linearGradient id="ar-sky" x1="0" y1="0" x2="0.18" y2="1">
+            <stop offset="0" stop-color="#fffdfc"/>
+            <stop offset="0.38" stop-color="#f3dcdf"/>
+            <stop offset="0.78" stop-color="#e3b7be"/>
+            <stop offset="1" stop-color="#f3dcdf"/>
+          </linearGradient>
+          <radialGradient id="ar-sun" cx="32%" cy="18%" r="58%">
+            <stop offset="0" stop-color="#c99a62" stop-opacity=".46"/>
+            <stop offset="0.55" stop-color="#c99a62" stop-opacity=".16"/>
+            <stop offset="1" stop-color="#c99a62" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="ar-vignette" cx="50%" cy="40%" r="78%">
+            <stop offset="0.52" stop-color="#2b1f22" stop-opacity="0"/>
+            <stop offset="1" stop-color="#2b1f22" stop-opacity=".18"/>
+          </radialGradient>
+          <filter id="ar-grain" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" result="n"/>
+            <feColorMatrix in="n" type="saturate" values="0" result="g"/>
+            <feComponentTransfer in="g" result="a"><feFuncA type="linear" slope="0.5" intercept="0"/></feComponentTransfer>
+            <feFlood flood-color="#8a3e52" result="f"/>
+            <feComposite in="f" in2="a" operator="in"/>
+          </filter>
+        </defs>
+        <rect width="390" height="548" fill="url(#ar-sky)"/>
+        <rect width="390" height="548" fill="url(#ar-sun)"/>
+        <g fill="none" stroke="#fffdfc" stroke-width="1" opacity=".35">
+          <circle cx="96" cy="212" r="58"/>
+          <circle cx="320" cy="126" r="30"/>
+        </g>
+        <g fill="none" stroke="#c99a62" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.72"><path d="M372 566C318 452 318 350 356 250"/><ellipse cx="364.5" cy="523.3" rx="16.9" ry="6.2" transform="rotate(-74.1 364.5 523.3)"/><ellipse cx="336.4" cy="500.9" rx="16.2" ry="6" transform="rotate(-146.2 336.4 500.9)"/><ellipse cx="346.9" cy="467" rx="15.6" ry="5.8" transform="rotate(-66.2 346.9 467)"/><ellipse cx="324.2" cy="442.6" rx="15" ry="5.5" transform="rotate(-137.9 324.2 442.6)"/><ellipse cx="338.3" cy="412.6" rx="14.3" ry="5.3" transform="rotate(-57.6 338.3 412.6)"/><ellipse cx="321.1" cy="386.4" rx="13.7" ry="5" transform="rotate(-129.2 321.1 386.4)"/><ellipse cx="338" cy="359.8" rx="13" ry="4.8" transform="rotate(-48.8 338 359.8)"/><ellipse cx="326.3" cy="331.8" rx="12.4" ry="4.6" transform="rotate(-120.5 326.3 331.8)"/><ellipse cx="345.4" cy="307.9" rx="11.7" ry="4.3" transform="rotate(-40.4 345.4 307.9)"/><ellipse cx="339.3" cy="278.7" rx="11.1" ry="4.1" transform="rotate(-112.5 339.3 278.7)"/><ellipse cx="360" cy="256.6" rx="10.4" ry="3.9" transform="rotate(-32.8 360 256.6)"/><circle cx="356" cy="250" r="2.1"/><circle cx="329.2" cy="387.1" r="1.5"/></g>
+        <g fill="none" stroke="#c99a62" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"><path d="M20 300C64 250 108 236 146 250"/><ellipse cx="31.9" cy="277.7" rx="11.6" ry="4.3" transform="rotate(-83.2 31.9 277.7)"/><ellipse cx="60.2" cy="271.5" rx="10.8" ry="4" transform="rotate(0 60.2 271.5)"/><ellipse cx="72.7" cy="249.7" rx="10.1" ry="3.7" transform="rotate(-67.3 72.7 249.7)"/><ellipse cx="96.3" cy="253" rx="9.3" ry="3.5" transform="rotate(18.8 96.3 253)"/><ellipse cx="112" cy="239.7" rx="8.6" ry="3.2" transform="rotate(-45.7 112 239.7)"/><ellipse cx="129.7" cy="250.2" rx="7.9" ry="2.9" transform="rotate(42.7 129.7 250.2)"/><ellipse cx="147.8" cy="246" rx="7.1" ry="2.6" transform="rotate(-21 147.8 246)"/><circle cx="146" cy="250" r="2.1"/><circle cx="91.6" cy="248.8" r="1.5"/></g>
+        <g fill="none" stroke="#c99a62" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"><path d="M356 250C378 210 406 196 432 192"/><ellipse cx="370.2" cy="237.8" rx="9.8" ry="3.6" transform="rotate(-19.5 370.2 237.8)"/><ellipse cx="384.2" cy="207.2" rx="8.5" ry="3.2" transform="rotate(-80 384.2 207.2)"/><ellipse cx="412.4" cy="201.5" rx="7.3" ry="2.7" transform="rotate(12.8 412.4 201.5)"/><ellipse cx="432.7" cy="188.2" rx="6" ry="2.2" transform="rotate(-48.5 432.7 188.2)"/><circle cx="432" cy="192" r="2.1"/><circle cx="396.4" cy="204.9" r="1.5"/></g>
+        <rect width="390" height="548" fill="url(#ar-vignette)"/>
+        <rect width="390" height="548" filter="url(#ar-grain)" opacity=".2"/>
+      </svg>
+      <span class="veil" aria-hidden="true"></span>
+      <span class="inset" aria-hidden="true"></span>
+      <div class="lockup">
+        <p class="kicker">Mis XV años</p>
+        <h1>Valentina</h1>
+        <p class="surname">Ramírez</p>
+        <p class="when">Sábado 15 de agosto de 2026</p>
+        <p class="when-city">Ciudad de México</p>
+      </div>
+    </figure>
+
+    <p class="seal" aria-hidden="true">V</p>
+
+    <div class="stack">
+      <section class="card" aria-labelledby="familia">
+        <p class="label">Quienes me acompañan</p>
+        <h2 id="familia" class="visually-hidden">La familia</h2>
+        <ul class="rows">
+          <li>
+            <span class="row-label">Padres</span>
+            <span class="row-value">Miguel Ramírez Alcántara<br>Adriana Solís de Ramírez</span>
+          </li>
+          <li>
+            <span class="row-label">Padrinos<br>de honor</span>
+            <span class="row-value">Joaquín Esquivel del Valle<br>Mariana Robles de Esquivel</span>
+          </li>
+        </ul>
+      </section>
+
+      <p class="day-label"><span>El día</span></p>
+      <div class="places">
+        <section class="card place" aria-labelledby="misa">
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 34 34" fill="none" stroke="#c99a62" stroke-width="1.2" stroke-linecap="round">
+              <path d="M4 31V14L17 4l13 10v17"/>
+              <path d="M10 31V19a7 7 0 0 1 14 0v12"/>
+              <path d="M4 31h26"/>
+              <path d="M17 8v5M15 10.5h4"/>
+            </svg>
+          </span>
+          <p class="label">Misa de acción de gracias</p>
+          <h3 id="misa">Parroquia de San Agustín</h3>
+          <address>Calle de los Fresnos 132<br>San Pedro de los Pinos, Ciudad de México</address>
+          <p class="hour">
+            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="7" cy="7" r="5.6"/><path d="M7 3.6V7l2.4 1.6"/></svg>
+            <b><time datetime="2026-08-15T18:00">18:00</time> h</b>
+          </p>
+        </section>
+
+        <section class="card place" aria-labelledby="recepcion">
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 34 34" fill="none" stroke="#c99a62" stroke-width="1.2" stroke-linecap="round">
+              <path d="M10 4h10l-1.4 10a3.6 3.6 0 0 1-7.2 0z"/>
+              <path d="M15 18v11M11 29h8"/>
+              <path d="M23 8c4 2 6 6 6 10 0 3-2 5-4 5"/>
+              <path d="M25 14c2 1 3 3 3 5"/>
+            </svg>
+          </span>
+          <p class="label">Recepción</p>
+          <h3 id="recepcion">Jardín de los Olivos</h3>
+          <address>Camino Real a Santa Fe 41<br>Santa Fe, Ciudad de México</address>
+          <p class="hour">
+            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="7" cy="7" r="5.6"/><path d="M7 3.6V7l2.4 1.6"/></svg>
+            <b><time datetime="2026-08-15T20:30">20:30</time> h</b>
+          </p>
+        </section>
+      </div>
+
+      <section class="card" aria-labelledby="detalles">
+        <h2 id="detalles" class="visually-hidden">Detalles</h2>
+        <div class="split">
+          <div>
+            <p class="label">Vestimenta</p>
+            <p class="value">Formal · etiqueta</p>
+            <p class="note">El blanco es de la festejada.</p>
+          </div>
+          <div>
+            <p class="label">Mesa de regalos</p>
+            <p class="value">Liverpool 50894421</p>
+            <p class="note">Y la lista «Valentina XV».</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card soft message" aria-labelledby="mensaje">
+        <p class="label">Mensaje</p>
+        <h2 id="mensaje" class="visually-hidden">Mensaje de Valentina</h2>
+        <p>«Hay días que se esperan toda una vida. El 15 de agosto quiero celebrar contigo el comienzo de la mía.»</p>
+        <p class="sign">Valentina</p>
+      </section>
+
+      <section class="card rsvp" aria-labelledby="rsvp">
+        <p class="label">Confirma tu asistencia</p>
+        <h2 id="rsvp" class="visually-hidden">Confirmación</h2>
+        <p class="name">Adriana Solís</p>
+        <p class="phone">55 8120 4471</p>
+        <p class="note">Antes del sábado 1 de agosto.</p>
+      </section>
+
+      <section class="card features" aria-labelledby="celebracion">
+        <p class="label">Para la celebración</p>
+        <h2 id="celebracion" class="visually-hidden">Herramientas de la invitación</h2>
+        <div class="countdown" role="group" aria-label="Cuenta regresiva para el 15 de agosto de 2026">
+          <div><b>78</b><small>Días</small></div>
+          <div><b>06</b><small>Horas</small></div>
+          <div><b>42</b><small>Minutos</small></div>
+        </div>
+        <ul class="actions">
+          <li><a class="stack" href="#como-llegar"><small>Cómo llegar</small>Misa</a></li>
+          <li><a class="stack" href="#como-llegar"><small>Cómo llegar</small>Recepción</a></li>
+          <li class="full"><a href="#calendario">Agregar al calendario</a></li>
+          <li class="full"><a class="primary" href="#whatsapp">Confirmar por WhatsApp</a></li>
+        </ul>
+      </section>
+    </div>
+
+    <footer class="colophon">
+      <p>Invitación de ejemplo para revisar la dirección fotográfica. <a href="#invitame">Hecha con InvitaMe</a>.</p>
+    </footer>
+  </article>
+</main>
+</body>
+</html>

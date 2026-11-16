@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datos que pide esta ocasión — XV años y bodas</title>
+<style>
+  /*
+   * «Datos que pide esta ocasión» de la línea elegante (E1; S1-S3). Propuesta, no formulario implementado:
+   * compara los campos de XV años y de boda contra el esquema que el bautizo temático ya usa, y marca qué se
+   * reutiliza y qué es nuevo. El gris de la hoja y los colores de las etiquetas son andamio del tablero; no
+   * son tokens de ningún tema de invitación.
+   */
+  :root {
+    --sheet: #fafafa;
+    --card: #ffffff;
+    --line: #e4e4e7;
+    --ink: #18181b;
+    --muted: #52525b;
+    --soft-ink: #3f3f46;
+    --sans: "Jost", "Avenir Next", "Gill Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--sheet);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 44px 56px 32px; }
+
+  .page-head { display: grid; gap: 10px; max-width: 108ch; }
+  .eyebrow { margin: 0; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 0; font-size: 34px; line-height: 1.12; letter-spacing: -.01em; font-weight: 500; }
+  .lead { margin: 0; color: var(--soft-ink); }
+  .badge {
+    justify-self: start;
+    margin-top: 4px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid #e9d8a6;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 12.5px;
+  }
+  .legend {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 24px;
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px; color: var(--muted);
+  }
+  .legend div { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; }
+  .legend .tag { margin: 0; }
+
+  .columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 26px; align-items: start; }
+  .occasion { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px 18px; }
+  .occasion-head { border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+  .occasion-head h2 { margin: 0; font-size: 23px; font-weight: 500; }
+  .occasion-head p { margin: 4px 0 0; font-size: 13px; color: var(--muted); max-width: 62ch; }
+
+  .group { margin-top: 18px; }
+  .group h3 {
+    margin: 0 0 6px;
+    font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); font-weight: 500;
+  }
+  .fields { list-style: none; margin: 0; padding: 0; }
+  .field { padding: 9px 0; border-top: 1px solid var(--line); }
+  .field:first-child { border-top: 0; }
+  .field-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+  .field-label { font-size: 14.5px; color: var(--ink); }
+  .field-key {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    background: var(--sheet);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+  .tag {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    border: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .tag + .tag { margin-left: 0; }
+  .tag-req { background: #f4f4f5; color: #18181b; border-color: #d4d4d8; }
+  .tag-opt { background: #ffffff; color: #52525b; }
+  .tag-none { background: #ffffff; color: #71717a; border-style: dashed; }
+  .tag-reuse { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+  .tag-new { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+  .field-note { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); max-width: 70ch; }
+
+  .baptism { margin-top: 22px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; }
+  .baptism h2 { margin: 0; font-size: 23px; font-weight: 500; }
+  .baptism .lead { margin-top: 4px; font-size: 13px; }
+  .baptism-grid { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 22px; margin-top: 16px; }
+  .baptism h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .key-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+  .key-list code {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--soft-ink);
+    background: var(--sheet);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 6px;
+  }
+  .baptism p { margin: 0; font-size: 13px; color: var(--muted); }
+  .baptism ul.plain { margin: 0; padding-left: 16px; font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+
+  .notes { margin-top: 22px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .notes section { padding: 18px 20px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+  .notes h2 { margin: 0 0 8px; font-size: 15px; font-weight: 500; }
+  .notes ul { margin: 0; padding-left: 16px; display: grid; gap: 5px; font-size: 12.5px; color: var(--soft-ink); }
+  .notes code { font-family: var(--mono); font-size: 11.5px; }
+  footer { margin-top: 20px; display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page-head">
+    <p class="eyebrow">Línea elegante · propuesta de contenido</p>
+    <h1>Datos que pide esta ocasión</h1>
+    <p class="lead">Qué campos necesita una invitación de XV años y una de boda, comparados con el esquema que el bautizo ya usa hoy. «Reutilizado» significa que el campo existe con el mismo nombre y el mismo tipo de dato; «nuevo» significa que hay que agregarlo. El bautizo formal no cambia el contenido: reutiliza el esquema del bautizo temático.</p>
+    <span class="badge">Propuesta para revisar · todavía no cambia el formulario</span>
+    <div class="legend">
+      <div><span class="tag tag-req">Obligatorio</span><span>El layout no se publica sin él.</span></div>
+      <div><span class="tag tag-opt">Opcional</span><span>Vacío, no muestra nada.</span></div>
+      <div><span class="tag tag-reuse">Reutilizado</span><span>Ya existe en el bautizo: mismo nombre y tipo.</span></div>
+      <div><span class="tag tag-new">Nuevo</span><span>Se agrega al esquema de este layout.</span></div>
+    </div>
+  </header>
+
+  <div class="columns">
+
+        <section class="occasion" aria-labelledby="xv">
+          <header class="occasion-head">
+            <h2 id="xv">XV años</h2>
+            <p>Dieciséis campos: trece reutilizados y tres nuevos. La diferencia con un cumpleaños son los dos lugares con su propia dirección y hora, y los padrinos de honor.</p>
+          </header>
+          
+          <div class="group">
+            <h3>La festejada</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Nombre de la festejada</span>
+                <code class="field-key">celebrantName</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Ya existe: es el nombre que hoy anuncia el cumpleaños y el bautizo.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Edad</span>
+                
+                <span class="tag tag-none">No se pide</span>
+                <span class="tag tag-none">Se retira</span>
+              </div>
+              <p class="field-note">No se pide ni se muestra: en XV años el número es siempre 15.</p>
+            </li>
+            </ul>
+          </div>
+
+          <div class="group">
+            <h3>La familia</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Padres</span>
+                <code class="field-key">parents</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Se reutiliza tal cual del esquema del bautizo.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Padrinos de honor</span>
+                <code class="field-key">honorSponsors</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Campo nuevo. Se separa de padrinos de bautizo porque la etiqueta y el lugar en la página son otros.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Chambelanes</span>
+                <code class="field-key">chambelanes</code>
+                <span class="tag tag-opt">Opcional</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Opcional y vacío por defecto: muchas familias ya no los tienen. Un solo campo de texto, un nombre por línea.</p>
+            </li>
+            </ul>
+          </div>
+
+          <div class="group">
+            <h3>El día</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Fecha</span>
+                <code class="field-key">date</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Ya existe. Alimenta la cuenta regresiva y el calendario.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Misa: lugar</span>
+                <code class="field-key">ceremonyPlace</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Se reutilizan los tres campos de ceremonia del bautizo.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Misa: dirección</span>
+                <code class="field-key">ceremonyAddress</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Es la dirección que usa «Cómo llegar».</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Misa: hora</span>
+                <code class="field-key">ceremonyTime</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Hora en formato de 24 h, como hoy.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Recepción: lugar</span>
+                <code class="field-key">receptionPlace</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Igual que el bloque de recepción del bautizo.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Recepción: dirección</span>
+                <code class="field-key">receptionAddress</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Segunda dirección de «Cómo llegar».</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Recepción: hora</span>
+                <code class="field-key">receptionTime</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Hora en formato de 24 h.</p>
+            </li>
+            </ul>
+          </div>
+
+          <div class="group">
+            <h3>Vestimenta, regalos y mensaje</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Código de vestimenta</span>
+                <code class="field-key">dressCode</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Campo nuevo: «Formal», «Etiqueta rigurosa». Se muestra como una línea corta, no como párrafo.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Mensaje</span>
+                <code class="field-key">message</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Ya existe.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Mesa de regalos</span>
+                <code class="field-key">giftRegistry</code>
+                <span class="tag tag-opt">Opcional</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Opcional, igual que en el bautizo: si está vacío no se muestra nada.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Foto principal</span>
+                <code class="field-key">mainPhoto</code>
+                <span class="tag tag-opt">Opcional</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Opcional. Cada layout la coloca a su manera: vertical, camafeo o arco.</p>
+            </li>
+            </ul>
+          </div>
+
+          <div class="group">
+            <h3>Confirmación</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Confirmar asistencia</span>
+                <code class="field-key">rsvpContact</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Nombre y teléfono de quien recibe las confirmaciones.</p>
+            </li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="occasion" aria-labelledby="bodas">
+          <header class="occasion-head">
+            <h2 id="bodas">Bodas</h2>
+            <p>Dieciocho campos: once reutilizados y siete nuevos. La diferencia con XV años: los dos nombres de la pareja, las dos familias por separado y el hashtag opcional.</p>
+          </header>
+          
+          <div class="group">
+            <h3>La pareja</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Primer nombre</span>
+                <code class="field-key">coupleNameOne</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Campo nuevo. Los dos nombres se componen en el lockup del layout.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Segundo nombre</span>
+                <code class="field-key">coupleNameTwo</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Campo nuevo. Admite el orden que la pareja prefiera.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Fecha</span>
+                <code class="field-key">date</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Ya existe. Alimenta la cuenta regresiva y el calendario.</p>
+            </li>
+            </ul>
+          </div>
+
+          <div class="group">
+            <h3>Las familias</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Padres de una parte</span>
+                <code class="field-key">firstFamilyParents</code>
+                <span class="tag tag-opt">Opcional</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Opcional y vacío por defecto: hay bodas donde la familia no se anuncia.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Padres de la otra parte</span>
+                <code class="field-key">secondFamilyParents</code>
+                <span class="tag tag-opt">Opcional</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Opcional. Si los dos están vacíos, el bloque de familia no se muestra.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Padrinos</span>
+                <code class="field-key">weddingSponsors</code>
+                <span class="tag tag-opt">Opcional</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Opcional. Un solo campo de texto, un nombre por línea, igual que los chambelanes de XV.</p>
+            </li>
+            </ul>
+          </div>
+
+          <div class="group">
+            <h3>El día</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Ceremonia: lugar</span>
+                <code class="field-key">ceremonyPlace</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Se reutilizan los campos de ceremonia del bautizo.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Ceremonia: dirección</span>
+                <code class="field-key">ceremonyAddress</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Dirección de «Cómo llegar».</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Ceremonia: hora</span>
+                <code class="field-key">ceremonyTime</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Hora en formato de 24 h.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Recepción: lugar</span>
+                <code class="field-key">receptionPlace</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Bloque de recepción del bautizo, sin cambios.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Recepción: dirección</span>
+                <code class="field-key">receptionAddress</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Segunda dirección de «Cómo llegar».</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Recepción: hora</span>
+                <code class="field-key">receptionTime</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Hora en formato de 24 h.</p>
+            </li>
+            </ul>
+          </div>
+
+          <div class="group">
+            <h3>Vestimenta, regalos y mensaje</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Código de vestimenta</span>
+                <code class="field-key">dressCode</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Campo nuevo, compartido con XV años.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Mensaje</span>
+                <code class="field-key">message</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Ya existe.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Mesa de regalos</span>
+                <code class="field-key">giftRegistry</code>
+                <span class="tag tag-opt">Opcional</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Opcional; vacío no se muestra.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Hashtag</span>
+                <code class="field-key">hashtag</code>
+                <span class="tag tag-opt">Opcional</span>
+                <span class="tag tag-new">Nuevo</span>
+              </div>
+              <p class="field-note">Opcional, una sola palabra o etiqueta, para mostrarla junto al mensaje.</p>
+            </li>
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Foto principal</span>
+                <code class="field-key">mainPhoto</code>
+                <span class="tag tag-opt">Opcional</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Opcional, como en el bautizo.</p>
+            </li>
+            </ul>
+          </div>
+
+          <div class="group">
+            <h3>Confirmación</h3>
+            <ul class="fields">
+
+            <li class="field">
+              <div class="field-top">
+                <span class="field-label">Confirmar asistencia</span>
+                <code class="field-key">rsvpContact</code>
+                <span class="tag tag-req">Obligatorio</span>
+                <span class="tag tag-reuse">Reutilizado</span>
+              </div>
+              <p class="field-note">Nombre y teléfono de quien recibe las confirmaciones.</p>
+            </li>
+            </ul>
+          </div>
+        </section>
+  </div>
+
+  <section class="baptism" aria-labelledby="bautizo">
+    <h2 id="bautizo">Bautizo formal: el mismo contenido, otro layout</h2>
+    <p class="lead">El bautizo formal es la versión elegante del bautizo temático. No pide datos nuevos y no cambia el esquema: cambian el layout, el tema y la tipografía. Esto evita migrar invitaciones ya publicadas y deja al bautizo temático y al formal con el mismo formulario.</p>
+    <div class="baptism-grid">
+      <div>
+        <h3>Requeridos, sin cambios</h3>
+        <ul class="key-list">
+          <li><code>celebrantName</code></li>
+          <li><code>date</code></li>
+          <li><code>parents</code></li>
+          <li><code>godparents</code></li>
+          <li><code>ceremonyPlace</code></li>
+          <li><code>ceremonyAddress</code></li>
+          <li><code>ceremonyTime</code></li>
+          <li><code>receptionPlace</code></li>
+          <li><code>receptionAddress</code></li>
+          <li><code>receptionTime</code></li>
+          <li><code>message</code></li>
+          <li><code>rsvpContact</code></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Opcionales, sin cambios</h3>
+        <ul class="key-list">
+          <li><code>giftRegistry</code></li>
+          <li><code>mainPhoto</code></li>
+        </ul>
+        <p style="margin-top:8px">El formulario no cambia; el selector solo muestra las plantillas de la línea elegante en la categoría <code>baptism</code>.</p>
+      </div>
+      <div>
+        <h3>Lo que sí cambia</h3>
+        <ul class="plain">
+          <li>El layout y el tema elegidos, que son parte de la versión de la plantilla, no del contenido.</li>
+          <li>La tipografía y los ornamentos del tema elegido.</li>
+          <li>Nada del contenido guardado: una invitación publicada sigue leyendo su versión fija.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="notes">
+    <section>
+      <h2>Cómo se guarda</h2>
+      <ul>
+        <li>Todos los campos de boda y de XV años son de tipo <code>string</code>, como los del bautizo: el contrato del renderer solo admite primitivos, así que una lista de padrinos o chambelanes es un campo de texto con un nombre por línea.</li>
+        <li>Los campos nuevos se declaran en <code>properties</code> y, si son opcionales, quedan fuera de <code>required</code>; el layout no se publica si falta uno obligatorio.</li>
+        <li>Un campo opcional vacío no se dibuja: mismo criterio que la foto y la mesa de regalos del bautizo.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Lo que necesita el bloque de funcionalidades</h2>
+      <ul>
+        <li>Cuenta regresiva y calendario: <code>date</code>, la hora de la ceremonia y la zona horaria que ya se guarda en la invitación.</li>
+        <li>«Cómo llegar»: <code>ceremonyAddress</code> y <code>receptionAddress</code>, una por lugar.</li>
+        <li>WhatsApp: el teléfono E.164 que ya guarda la cuenta, no un campo del contenido.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Riesgos de esta propuesta</h2>
+      <ul>
+        <li>Los nombres de los campos quedan fijos en la versión publicada: renombrar después exige una versión nueva de plantilla, no una edición.</li>
+        <li>Una boda con una sola ceremonia y sin recepción no cabe en el mínimo obligatorio; conviene decidir si la recepción puede quedar opcional en boda.</li>
+        <li>El hashtag necesita una regla de formato para no convertirse en texto libre con enlaces.</li>
+      </ul>
+    </section>
+  </div>
+
+  <footer>
+    <span>Los nombres de campo y las etiquetas siguen el esquema del bautizo (<code>BAPTISM_CONTENT_FIELDS</code>) para que la reutilización sea literal: mismo nombre, mismo tipo, mismo formulario.</span>
+    <span>Esta hoja no decide precios, paquetes ni qué layouts se publican: solo el contenido mínimo que cada ocasión necesita.</span>
+  </footer>
+</div>
+</body>
+</html>
