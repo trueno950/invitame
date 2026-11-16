@@ -132,6 +132,7 @@ const FAMILY_LICENSES: ReadonlyArray<{
 }> = [
   { folder: "baloo-2", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
   { folder: "bangers", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "bodoni-moda", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
   { folder: "caveat", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
   { folder: "chewy", license: "LICENSE.txt", text: /Apache License/ },
   { folder: "cinzel-decorative", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
@@ -139,6 +140,7 @@ const FAMILY_LICENSES: ReadonlyArray<{
   { folder: "fredoka", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
   { folder: "fraunces", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
   { folder: "great-vibes", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
+  { folder: "italiana", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
   { folder: "josefin-sans", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
   { folder: "jost", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
   { folder: "lilita-one", license: "OFL.txt", text: /SIL OPEN FONT LICENSE Version 1\.1/ },
@@ -153,16 +155,19 @@ const FAMILY_LICENSES: ReadonlyArray<{
 
 /**
  * The guest theme display fonts (S8, S13): Latin woff2 files loaded without preloading. The nine faces of
- * T7b are the baby shower and themed baptism titles of `design/celebration-themes/`.
+ * T7b are the baby shower and themed baptism titles of `design/celebration-themes/`; Bodoni Moda and
+ * Italiana are the elegant line's title faces from the theme board of `design/elegant-line/` (S4).
  */
 const THEME_FONT_VARIABLES = [
   "--font-baloo-2",
   "--font-bangers",
+  "--font-bodoni-moda",
   "--font-caveat",
   "--font-chewy",
   "--font-cinzel-decorative",
   "--font-fredoka",
   "--font-fraunces",
+  "--font-italiana",
   "--font-josefin-sans",
   "--font-lilita-one",
   "--font-lora",

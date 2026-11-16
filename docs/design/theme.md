@@ -70,9 +70,9 @@ The invitation display fonts are not utilities, because the face depends on the 
 (`--font-cinzel-decorative`, `--font-luckiest-guy`, `--font-bangers`, `--font-chewy`, `--font-lilita-one`,
 `--font-pacifico`, `--font-press-start-2p`, `--font-baloo-2`, `--font-quicksand`, `--font-fredoka`,
 `--font-playfair-display`, `--font-josefin-sans`, `--font-fraunces`, `--font-caveat`, `--font-nunito`,
-`--font-lora`, and the already-loaded `--font-great-vibes`) and the renderer points `--inv-display` at the one
-its theme names. All sixteen are declared with `preload: false`, because a guest page renders one theme and
-must not download sixteen faces. They are used for names and titles only; body text stays Jost 400/500, so no
+`--font-lora`, `--font-bodoni-moda`, `--font-italiana`, and the already-loaded `--font-great-vibes`) and the renderer
+points `--inv-display` at the one its theme names. All eighteen are declared with `preload: false`, because a guest
+page renders one theme and must not download eighteen faces. They are used for names and titles only; body text stays Jost 400/500, so no
 Jost 600/700 file was added and emphasis inside a layout uses Jost 500 (the variable file does draw 100–900, so
 a real bold is a deliberate, documented change later, never a silent one).
 
@@ -107,15 +107,23 @@ for it, copied byte for byte: `OFL.txt` for the SIL Open Font License 1.1 famili
 | `caveat/` | `caveat-latin-normal.woff2` | `700` | `OFL.txt` |
 | `nunito/` | `nunito-latin-normal.woff2` | `700` | `OFL.txt` |
 | `lora/` | `lora-latin-normal.woff2` | `700` | `OFL.txt` |
+| `bodoni-moda/` | `bodoni-moda-latin-normal.woff2` | `500` | `OFL.txt` |
+| `italiana/` | `italiana-latin-normal.woff2` | `400` | `OFL.txt` |
 
-The last nine rows are the display faces of the baby shower and themed baptism boards in
+The nine rows from `baloo-2/` to `lora/` are the display faces of the baby shower and themed baptism boards in
 `design/celebration-themes/` (T7b; S13): Baloo 2, Quicksand, Fredoka, Playfair Display, Josefin Sans, Fraunces,
 Caveat, Nunito, and Lora. All nine families ship the SIL Open Font License 1.1 (`ofl/<family>/OFL.txt`). Their
 fallbacks are the board's stacks, so the serif faces (Playfair Display, Fraunces, Lora) pair with Times New Roman
 and the rest with Arial.
 
+The last two rows are the elegant line's title faces from the theme board in `design/elegant-line/` (E3b; S4):
+Bodoni Moda at 500 and Italiana at its only weight, 400. Both ship the SIL Open Font License 1.1
+(`ofl/bodonimoda/OFL.txt` and `ofl/italiana/OFL.txt`), both are serif display faces, so both use the Times New
+Roman fallback.
+
 The fallback faces keep the fonts `next/font/google` used: `adjustFontFallback: "Times New Roman"` for Cormorant
-Garamond, Cinzel Decorative, Playfair Display, Fraunces, and Lora, and `"Arial"` for the other families.
+Garamond, Cinzel Decorative, Playfair Display, Fraunces, Lora, Bodoni Moda, and Italiana, and `"Arial"` for the
+other families.
 `next/font/local` computes the fallback metrics
 from the files, so the ascent and descent match the old ones and `size-adjust` differs by up to about five points
 (Great Vibes); it affects only the fallback shown before a font loads. `apps/web/app/fonts/.gitattributes` marks the
@@ -137,8 +145,8 @@ To add or update a font, a weight, or a style:
 4. Run `pnpm --filter @invitame/web test` and `pnpm build`, and compare the pages before and after.
 
 A theme display font is a title face only: one file, the single weight suited to display titles (`600` or `700` for
-the nine faces added by T7b), `preload: false`, and the theme board's fallback stack behind it where the theme
-declaration points `--inv-display`.
+the nine faces added by T7b, `500` for Bodoni Moda and `400` for Italiana in E3b), `preload: false`, and the theme
+declaration points `--inv-display` at it with the theme board's fallback stack behind that variable.
 
 ## Ornaments
 
@@ -366,6 +374,38 @@ real layout.
 - Samples: one fixed sample per category, and a renderer that refuses it (a drifted configuration, a category
   without a sample, an unregistered key) only loses its miniature. `samples.test.ts` proves the birthday sample
   passes every registered renderer's own props parser, for every theme.
+
+## Elegant layouts
+
+Status: **current** for «Arco y foto» (E3c) and «Ornamental» (E4b; `odd/tasks/elegant-line.md` S4, S5).
+
+The elegant line offers two visual directions over one content contract per occasion for XV años, weddings, and
+formal baptism.
+
+- «Arco y foto» (`xv-arch-01`, `wedding-arch-01`, `baptism-arch-01`) is one shared server component,
+  `app/_components/renderers/elegant-arch/arch-layout.ts`, with three thin renderers that keep their own content
+  schema and parser; the formal baptism reuses the themed baptism schema exactly. It opens with the photo in an arch,
+  or with a theme-colored wash and the theme's ornament when there is none, and the name sits on the theme's ink at
+  80 % over the photo, measuring 7.87-9.80:1 against the worst-case white pixel.
+- «Ornamental» (`xv-ornamental-01`, `wedding-ornamental-01`, `baptism-ornamental-01`) is one shared component,
+  `app/_components/renderers/elegant-ornamental/ornamental-layout.ts`, with three thin renderers: a centered
+  stationery card with a double hairline rule over paper textured only with theme colors, an original laurel
+  monogram (sprays beside an opaque medallion) above the name, foil-like gradient hairlines, the day in the theme's
+  display face, and the photo as an oval cameo (or an oval wash with the theme's ornament), then the family and
+  sponsors, both places, dress code and gift registry, the shared features block, the message, and the RSVP in one
+  centered column. It reads its arch sibling's parser instead of declaring a second schema, so one invitation could
+  render in either direction and the creator form does not change. `ORNAMENTAL_NAME_FONT` sets every ornamental name
+  in Great Vibes, the only licensed script face.
+- Both directions share the eight themes of `lib/renderers/elegant-themes.ts`: seven colors, one licensed display
+  font at a single weight, and one original fine-line ornament drawn only through theme variables; every text pair
+  keeps 4.5:1.
+- The six keys are registered in the web registry and the public props checks, expose ceremony and reception as
+  event facts (with «Boda de <uno> y <dos>» as the wedding title), and preview their category's fixed sample. In the
+  chooser, XV años and weddings group «Arco y foto» and «Ornamental»; baptism groups «Clásica», «Arco y foto», and
+  «Ornamental», each with its theme switches.
+- XV años and wedding fields have Spanish labels and short editor sections; lists are multi-line text with one name
+  per line, times are time inputs, and optional fields say «(opcional)». There is no client script, and decoration
+  never sits behind text.
 
 ## Guest invitation features
 

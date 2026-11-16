@@ -1,0 +1,42 @@
+{
+  "title": "Línea elegante — XV años, bodas y bautizo formal",
+  "brief": "Tres direcciones de layout y un tablero de temas para la línea formal de InvitaMe: XV años, bodas y bautizo formal. Las tres direcciones muestran la misma invitación completa de XV años de «Valentina Ramírez» a 390 px —monograma o lockup, fecha, padres, padrinos de honor, misa y recepción con dirección y hora, código de vestimenta, mensaje, mesa de regalos, confirmación, foto y el bloque de funcionalidades (cuenta regresiva, cómo llegar, calendario y WhatsApp)—, cada una con su propia paleta de siete colores. El tablero compara ocho temas en las tres ocasiones con su tipografía, su ornamento original y el contraste mínimo calculado con la fórmula WCAG. La hoja de datos propone, para revisión del dueño, los campos de XV años y de boda contra el esquema del bautizo, y confirma que el bautizo formal reutiliza ese contenido sin cambios. Arte original, sin personajes, logos ni nombres protegidos.",
+  "feature": "odd/tasks/elegant-line.md",
+  "artboards": [
+    {
+      "file": "01-editorial.html",
+      "title": "Editorial — revista de moda",
+      "tradeoff": "Da la jerarquía tipográfica más fuerte de las tres: nombre en serif de alto contraste, secciones numeradas al margen, reglas de un píxel y foto vertical a sangre, con el acento en tinta y oro. El costo es la extensión: seis secciones y una página de 2772 px, y el nombre compite con la foto por la atención antes de que el invitado llegue a la misa.",
+      "width": 390,
+      "height": 2772
+    },
+    {
+      "file": "02-ornamental.html",
+      "title": "Ornamental — papelería clásica",
+      "tradeoff": "Es la dirección que más se parece a una invitación impresa de lujo: tarjeta centrada con doble filete sobre papel texturizado, laurel dibujado en SVG original, acentos de foil y el nombre en script. El costo es que el ornamento ocupa la cabecera y todo el contenido queda en una columna centrada y estrecha, con la foto reducida a un camafeo en lugar de protagonista.",
+      "width": 390,
+      "height": 2252
+    },
+    {
+      "file": "03-arco-y-foto.html",
+      "title": "Arco y foto — la foto al frente",
+      "tradeoff": "Pone la foto vertical en un arco a sangre y superpone el nombre sobre un velo de tinta al 80 %, medido en 8.39:1 en el peor caso, con tarjetas elegantes para el resto. El costo es la dependencia de la imagen: con una foto floja la página pierde casi todo su efecto, y el arco recorta los extremos del encuadre que suba la familia.",
+      "width": 390,
+      "height": 2350
+    },
+    {
+      "file": "04-tablero-temas-elegantes.html",
+      "title": "Tablero de temas — ocho temas elegantes",
+      "tradeoff": "Compara los ocho temas en una sola vista de dos columnas, con tres miniaturas por tema (XV años, boda y bautizo formal) para juzgar la paleta en las tres ocasiones y su contraste mínimo impreso. El costo es que las miniaturas son pequeñas: muestran la paleta, la tipografía y el ornamento como marcador de línea, no el arte final ni el layout completo, que se elige en las tres direcciones de arriba.",
+      "width": 1440,
+      "height": 3052
+    },
+    {
+      "file": "05-datos-por-ocasion.html",
+      "title": "Datos que pide esta ocasión — XV años y bodas",
+      "tradeoff": "Pone los campos de XV años y de boda lado a lado y marca, campo por campo, qué se reutiliza del esquema del bautizo y qué es nuevo, con el bautizo formal aparte sin cambios de contenido. El costo es que es una hoja de decisión, no una pantalla de producto: no muestra el formulario real ni el orden en que se pedirá cada dato, y las listas opcionales (chambelanes, padrinos) quedan como texto de un nombre por línea.",
+      "width": 1440,
+      "height": 2550
+    }
+  ]
+}

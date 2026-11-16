@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Línea elegante — ocho temas</title>
+<style>
+  /*
+   * Tablero de temas de la línea elegante (E1; S1-S3). Ocho temas para XV años, bodas y bautizo formal.
+   * Cada tema es una paleta de siete colores con los mismos roles que la línea temática (fondo, superficie,
+   * suave, tinta, acento, decoración 1 y decoración 2), una tipografía con licencia comercial y un ornamento
+   * original. Las tres miniaturas de cada tarjeta muestran el mismo tema en XV años, boda y bautizo formal.
+   * El contraste mínimo está calculado con la fórmula WCAG 2.x; cada tema pasa 4.5:1 en sus nueve pares.
+   * El gris de la hoja es el andamio del tablero, no forma parte de ningún tema.
+   */
+  :root {
+    --sheet: #fafafa;
+    --card: #ffffff;
+    --line: #e4e4e7;
+    --ink: #18181b;
+    --muted: #52525b;
+    --soft-ink: #3f3f46;
+    --sans: "Jost", "Avenir Next", "Gill Sans", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--sheet);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 44px 56px 30px; }
+  .page-head { display: grid; gap: 10px; max-width: 104ch; }
+  .eyebrow {
+    margin: 0;
+    font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted);
+  }
+  h1 { margin: 0; font-size: 34px; line-height: 1.12; letter-spacing: -.01em; font-weight: 500; }
+  .lead { margin: 0; color: var(--soft-ink); font-size: 15px; }
+  .rules { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .rules span {
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--card);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 28px; }
+  .theme {
+    display: flex; flex-direction: column; gap: 16px;
+    padding: 20px 20px 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+  }
+  .theme-head { display: grid; gap: 2px; }
+  .theme-index { margin: 0; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  .theme-head h2 { margin: 0; font-size: 21px; font-weight: 500; line-height: 1.2; }
+  .theme-font { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+  .theme-font b { color: var(--soft-ink); font-weight: 500; }
+
+  /* Three previews per theme: same theme, three occasions. */
+  .minis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .mini {
+    margin: 0;
+    display: flex; flex-direction: column; gap: 5px;
+    padding: 12px 10px 9px;
+    background: var(--bg);
+    border: 1px solid color-mix(in srgb, var(--dec-2) 70%, transparent);
+    border-radius: 12px;
+    color: var(--ink);
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .motif { display: block; height: 32px; color: var(--dec-1); }
+  .motif svg {
+    display: block; width: 32px; height: 32px;
+    fill: none; stroke: var(--dec-1); stroke-width: 1;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .mini-kicker {
+    margin: 2px 0 0;
+    font-size: 7.5px; letter-spacing: .20em; text-transform: uppercase; color: var(--accent);
+  }
+  .mini-name {
+    margin: 0;
+    font-family: var(--font);
+    font-size: 25px;
+    line-height: 1.08;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .mini-date {
+    margin: 0 0 2px;
+    font-size: 9px; letter-spacing: .06em; color: var(--accent);
+  }
+  .mini-rows { display: grid; gap: 0; border-top: 1px solid color-mix(in srgb, var(--dec-2) 80%, transparent); }
+  .mini-row {
+    margin: 0;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0 6px;
+    padding: 5px 0 6px;
+    border-bottom: 1px solid color-mix(in srgb, var(--dec-2) 55%, transparent);
+  }
+  .mini-label {
+    grid-column: 1 / -1;
+    font-size: 6.8px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent);
+  }
+  .mini-time { font-size: 10px; font-weight: 500; }
+  .mini-place { grid-column: 1 / -1; font-size: 8.6px; color: var(--ink); opacity: .92; }
+  .mini-foot {
+    margin: auto 0 0;
+    display: flex; justify-content: space-between; gap: 4px;
+    padding: 5px 6px;
+    background: var(--soft);
+    border-radius: 7px;
+    font-size: 6.8px; letter-spacing: .04em; color: var(--accent);
+  }
+  .mini figcaption {
+    margin-top: 3px;
+    font-size: 7.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+  }
+
+  .swatches { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .swatches li { display: grid; gap: 3px; }
+  .chip { display: block; height: 26px; border-radius: 6px; border: 1px solid var(--line); }
+  .chip-role { font-size: 8.5px; line-height: 1.15; color: var(--muted); }
+  .chip-hex { font-size: 9px; color: var(--soft-ink); font-variant-numeric: tabular-nums; }
+
+  .meta { margin: 0; display: grid; grid-template-columns: 108px 1fr; gap: 6px 12px; font-size: 12.5px; }
+  .meta dt { color: var(--muted); }
+  .meta dd { margin: 0; color: var(--soft-ink); }
+
+  .contrast {
+    margin: 0;
+    display: flex; align-items: baseline; gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px; color: var(--muted);
+  }
+  .contrast b { font-size: 15px; color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .contrast .pair { margin-left: auto; font-size: 11.5px; }
+
+  .notes { margin-top: 26px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .notes section { padding: 18px 20px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+  .notes h2 { margin: 0 0 8px; font-size: 15px; font-weight: 500; }
+  .notes p, .notes li { font-size: 12.5px; color: var(--soft-ink); }
+  .notes ul { margin: 0; padding-left: 16px; display: grid; gap: 5px; }
+  .notes code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; }
+  footer { margin-top: 20px; display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page-head">
+    <p class="eyebrow">Tablero de temas · propuesta para revisar</p>
+    <h1>Línea elegante — ocho temas</h1>
+    <p class="lead">La versión formal de InvitaMe para XV años, bodas y bautizo formal. Cada tema es una paleta de siete colores con los mismos roles de la línea temática —fondo, superficie, suave, tinta, acento, decoración 1 y decoración 2—, una tipografía con licencia comercial y un ornamento original de línea fina. Aquí se ven los mismos ocho temas en las tres ocasiones: XV años, boda y bautizo formal. Toda decoración es dibujo propio: sin arte de personajes, logos ni nombres protegidos.</p>
+    <div class="rules">
+      <span>7 colores por tema</span>
+      <span>Tinta y acento ≥ 4.5:1 en fondo, superficie y suave</span>
+      <span>Blanco ≥ 4.5:1 sobre acento</span>
+      <span>Decoración nunca debajo del texto</span>
+      <span>Diseño a 390 px</span>
+    </div>
+  </header>
+
+  <main>
+
+        <article class="theme" style="--bg:#faf0ee;--surface:#fffdfc;--soft:#f3dcdf;--ink:#2b1f22;--accent:#8a3e52;--dec-1:#c99a62;--dec-2:#e3b7be;--font:'Playfair Display', Didot, 'Bodoni 72', Georgia, serif" aria-labelledby="tema-1">
+          <header class="theme-head">
+            <p class="theme-index">Tema 01</p>
+            <h2 id="tema-1">Rosa empolvado y oro</h2>
+            <p class="theme-font"><b>Playfair Display</b> · OFL 1.1 · ya cargada</p>
+          </header>
+          <div class="minis">
+
+            <figure class="mini" style="--font:'Playfair Display', Didot, 'Bodoni 72', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="18" cy="16" r="7"/><circle cx="27" cy="21" r="7"/><circle cx="14" cy="26" r="7"/><circle cx="23" cy="31" r="7"/><circle cx="34" cy="30" r="5"/><path d="M24 38c1 6 0 10-2 14M22 46c-4-2-6-5-6-9M23 41c4-1 7 1 8 4"/><circle cx="44" cy="14" r="2"/></svg>
+              </span>
+              <p class="mini-kicker">Mis XV años</p>
+              <p class="mini-name">Valentina</p>
+              <p class="mini-date">15 · agosto · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">18:00</span><span class="mini-place">Parroquia de San Agustín</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">20:30</span><span class="mini-place">Jardín de los Olivos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>XV años</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Playfair Display', Didot, 'Bodoni 72', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="18" cy="16" r="7"/><circle cx="27" cy="21" r="7"/><circle cx="14" cy="26" r="7"/><circle cx="23" cy="31" r="7"/><circle cx="34" cy="30" r="5"/><path d="M24 38c1 6 0 10-2 14M22 46c-4-2-6-5-6-9M23 41c4-1 7 1 8 4"/><circle cx="44" cy="14" r="2"/></svg>
+              </span>
+              <p class="mini-kicker">Nuestra boda</p>
+              <p class="mini-name">Ana &amp; Diego</p>
+              <p class="mini-date">12 · septiembre · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Ceremonia</span><span class="mini-time">17:00</span><span class="mini-place">Parroquia de Santa Ana</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">19:30</span><span class="mini-place">Hacienda San Gabriel</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Boda</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Playfair Display', Didot, 'Bodoni 72', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="18" cy="16" r="7"/><circle cx="27" cy="21" r="7"/><circle cx="14" cy="26" r="7"/><circle cx="23" cy="31" r="7"/><circle cx="34" cy="30" r="5"/><path d="M24 38c1 6 0 10-2 14M22 46c-4-2-6-5-6-9M23 41c4-1 7 1 8 4"/><circle cx="44" cy="14" r="2"/></svg>
+              </span>
+              <p class="mini-kicker">Bautizo de</p>
+              <p class="mini-name">Emilia</p>
+              <p class="mini-date">13 · abril · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">12:00</span><span class="mini-place">Parroquia San Miguel</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">14:00</span><span class="mini-place">Casa de los abuelos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Bautizo formal</figcaption>
+            </figure>
+          </div>
+          <ul class="swatches" aria-label="Paleta de siete colores del tema Rosa empolvado y oro">
+            <li><span class="chip" style="background:#faf0ee"></span><span class="chip-role">Fondo</span><span class="chip-hex">#faf0ee</span></li>
+            <li><span class="chip" style="background:#fffdfc"></span><span class="chip-role">Superficie</span><span class="chip-hex">#fffdfc</span></li>
+            <li><span class="chip" style="background:#f3dcdf"></span><span class="chip-role">Suave</span><span class="chip-hex">#f3dcdf</span></li>
+            <li><span class="chip" style="background:#2b1f22"></span><span class="chip-role">Tinta</span><span class="chip-hex">#2b1f22</span></li>
+            <li><span class="chip" style="background:#8a3e52"></span><span class="chip-role">Acento</span><span class="chip-hex">#8a3e52</span></li>
+            <li><span class="chip" style="background:#c99a62"></span><span class="chip-role">Decoración 1</span><span class="chip-hex">#c99a62</span></li>
+            <li><span class="chip" style="background:#e3b7be"></span><span class="chip-role">Decoración 2</span><span class="chip-hex">#e3b7be</span></li>
+          </ul>
+          <dl class="meta">
+            <dt>Ornamento</dt><dd>Rosa abierta de pétalos en dos trazos y hojas finas, con orla de puntos en el filete.</dd>
+            <dt>Ideal para</dt><dd>XV años y boda de día, jardín o terraza.</dd>
+          </dl>
+          <p class="contrast"><span>Contraste mínimo</span><b>5.57:1</b><span class="pair">acento sobre suave</span></p>
+        </article>
+
+        <article class="theme" style="--bg:#f3f0e9;--surface:#fbfaf6;--soft:#e4dfd3;--ink:#16150f;--accent:#4a4238;--dec-1:#a98f5e;--dec-2:#8c8578;--font:'Bodoni Moda', 'Bodoni 72', Didot, Georgia, serif" aria-labelledby="tema-2">
+          <header class="theme-head">
+            <p class="theme-index">Tema 02</p>
+            <h2 id="tema-2">Marfil y negro</h2>
+            <p class="theme-font"><b>Bodoni Moda</b> · OFL 1.1 · nueva</p>
+          </header>
+          <div class="minis">
+
+            <figure class="mini" style="--font:'Bodoni Moda', 'Bodoni 72', Didot, Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 22h36M6 28h36"/><path d="M24 8l6 7-6 7-6-7z"/><path d="M10 36h28"/><circle cx="24" cy="36" r="1.6"/></svg>
+              </span>
+              <p class="mini-kicker">Mis XV años</p>
+              <p class="mini-name">Valentina</p>
+              <p class="mini-date">15 · agosto · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">18:00</span><span class="mini-place">Parroquia de San Agustín</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">20:30</span><span class="mini-place">Jardín de los Olivos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>XV años</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Bodoni Moda', 'Bodoni 72', Didot, Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 22h36M6 28h36"/><path d="M24 8l6 7-6 7-6-7z"/><path d="M10 36h28"/><circle cx="24" cy="36" r="1.6"/></svg>
+              </span>
+              <p class="mini-kicker">Nuestra boda</p>
+              <p class="mini-name">Ana &amp; Diego</p>
+              <p class="mini-date">12 · septiembre · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Ceremonia</span><span class="mini-time">17:00</span><span class="mini-place">Parroquia de Santa Ana</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">19:30</span><span class="mini-place">Hacienda San Gabriel</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Boda</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Bodoni Moda', 'Bodoni 72', Didot, Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 22h36M6 28h36"/><path d="M24 8l6 7-6 7-6-7z"/><path d="M10 36h28"/><circle cx="24" cy="36" r="1.6"/></svg>
+              </span>
+              <p class="mini-kicker">Bautizo de</p>
+              <p class="mini-name">Emilia</p>
+              <p class="mini-date">13 · abril · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">12:00</span><span class="mini-place">Parroquia San Miguel</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">14:00</span><span class="mini-place">Casa de los abuelos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Bautizo formal</figcaption>
+            </figure>
+          </div>
+          <ul class="swatches" aria-label="Paleta de siete colores del tema Marfil y negro">
+            <li><span class="chip" style="background:#f3f0e9"></span><span class="chip-role">Fondo</span><span class="chip-hex">#f3f0e9</span></li>
+            <li><span class="chip" style="background:#fbfaf6"></span><span class="chip-role">Superficie</span><span class="chip-hex">#fbfaf6</span></li>
+            <li><span class="chip" style="background:#e4dfd3"></span><span class="chip-role">Suave</span><span class="chip-hex">#e4dfd3</span></li>
+            <li><span class="chip" style="background:#16150f"></span><span class="chip-role">Tinta</span><span class="chip-hex">#16150f</span></li>
+            <li><span class="chip" style="background:#4a4238"></span><span class="chip-role">Acento</span><span class="chip-hex">#4a4238</span></li>
+            <li><span class="chip" style="background:#a98f5e"></span><span class="chip-role">Decoración 1</span><span class="chip-hex">#a98f5e</span></li>
+            <li><span class="chip" style="background:#8c8578"></span><span class="chip-role">Decoración 2</span><span class="chip-hex">#8c8578</span></li>
+          </ul>
+          <dl class="meta">
+            <dt>Ornamento</dt><dd>Sin dibujo: reglas tipográficas, un diamante y un monograma recortado en negativo.</dd>
+            <dt>Ideal para</dt><dd>Boda de noche o XV con estética editorial.</dd>
+          </dl>
+          <p class="contrast"><span>Contraste mínimo</span><b>7.42:1</b><span class="pair">acento sobre suave</span></p>
+        </article>
+
+        <article class="theme" style="--bg:#eef1f5;--surface:#ffffff;--soft:#dde3ec;--ink:#101a2b;--accent:#1e3355;--dec-1:#c6a15b;--dec-2:#8fa3be;--font:'Cinzel Decorative', Copperplate, Georgia, serif" aria-labelledby="tema-3">
+          <header class="theme-head">
+            <p class="theme-index">Tema 03</p>
+            <h2 id="tema-3">Azul medianoche y oro</h2>
+            <p class="theme-font"><b>Cinzel Decorative</b> · OFL 1.1 · ya cargada</p>
+          </header>
+          <div class="minis">
+
+            <figure class="mini" style="--font:'Cinzel Decorative', Copperplate, Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 8l3.6 10.4L38 22l-10.4 3.6L24 36l-3.6-10.4L10 22l10.4-3.6z"/><path d="M40 30c3-6 1-12-4-15M8 34c-2-5-1-10 3-13"/><circle cx="44" cy="12" r="1.8"/></svg>
+              </span>
+              <p class="mini-kicker">Mis XV años</p>
+              <p class="mini-name">Valentina</p>
+              <p class="mini-date">15 · agosto · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">18:00</span><span class="mini-place">Parroquia de San Agustín</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">20:30</span><span class="mini-place">Jardín de los Olivos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>XV años</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Cinzel Decorative', Copperplate, Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 8l3.6 10.4L38 22l-10.4 3.6L24 36l-3.6-10.4L10 22l10.4-3.6z"/><path d="M40 30c3-6 1-12-4-15M8 34c-2-5-1-10 3-13"/><circle cx="44" cy="12" r="1.8"/></svg>
+              </span>
+              <p class="mini-kicker">Nuestra boda</p>
+              <p class="mini-name">Ana &amp; Diego</p>
+              <p class="mini-date">12 · septiembre · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Ceremonia</span><span class="mini-time">17:00</span><span class="mini-place">Parroquia de Santa Ana</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">19:30</span><span class="mini-place">Hacienda San Gabriel</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Boda</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Cinzel Decorative', Copperplate, Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 8l3.6 10.4L38 22l-10.4 3.6L24 36l-3.6-10.4L10 22l10.4-3.6z"/><path d="M40 30c3-6 1-12-4-15M8 34c-2-5-1-10 3-13"/><circle cx="44" cy="12" r="1.8"/></svg>
+              </span>
+              <p class="mini-kicker">Bautizo de</p>
+              <p class="mini-name">Emilia</p>
+              <p class="mini-date">13 · abril · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">12:00</span><span class="mini-place">Parroquia San Miguel</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">14:00</span><span class="mini-place">Casa de los abuelos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Bautizo formal</figcaption>
+            </figure>
+          </div>
+          <ul class="swatches" aria-label="Paleta de siete colores del tema Azul medianoche y oro">
+            <li><span class="chip" style="background:#eef1f5"></span><span class="chip-role">Fondo</span><span class="chip-hex">#eef1f5</span></li>
+            <li><span class="chip" style="background:#ffffff"></span><span class="chip-role">Superficie</span><span class="chip-hex">#ffffff</span></li>
+            <li><span class="chip" style="background:#dde3ec"></span><span class="chip-role">Suave</span><span class="chip-hex">#dde3ec</span></li>
+            <li><span class="chip" style="background:#101a2b"></span><span class="chip-role">Tinta</span><span class="chip-hex">#101a2b</span></li>
+            <li><span class="chip" style="background:#1e3355"></span><span class="chip-role">Acento</span><span class="chip-hex">#1e3355</span></li>
+            <li><span class="chip" style="background:#c6a15b"></span><span class="chip-role">Decoración 1</span><span class="chip-hex">#c6a15b</span></li>
+            <li><span class="chip" style="background:#8fa3be"></span><span class="chip-role">Decoración 2</span><span class="chip-hex">#8fa3be</span></li>
+          </ul>
+          <dl class="meta">
+            <dt>Ornamento</dt><dd>Estrella de ocho puntas, ramas de olivo y filete de oro doble.</dd>
+            <dt>Ideal para</dt><dd>Boda y XV de invierno o en salón cerrado.</dd>
+          </dl>
+          <p class="contrast"><span>Contraste mínimo</span><b>9.80:1</b><span class="pair">acento sobre suave</span></p>
+        </article>
+
+        <article class="theme" style="--bg:#f5f2e8;--surface:#fffdf7;--soft:#e5e3ce;--ink:#23281c;--accent:#4a5a34;--dec-1:#a8b48a;--dec-2:#c7b98d;--font:Lora, 'Iowan Old Style', Georgia, serif" aria-labelledby="tema-4">
+          <header class="theme-head">
+            <p class="theme-index">Tema 04</p>
+            <h2 id="tema-4">Verde olivo y crema</h2>
+            <p class="theme-font"><b>Lora</b> · OFL 1.1 · ya cargada</p>
+          </header>
+          <div class="minis">
+
+            <figure class="mini" style="--font:Lora, 'Iowan Old Style', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40C14 26 26 16 42 12"/><ellipse cx="15" cy="30" rx="6" ry="2.4" transform="rotate(-45 15 30)"/><ellipse cx="24" cy="23" rx="6" ry="2.4" transform="rotate(-40 24 23)"/><ellipse cx="33" cy="17" rx="5.4" ry="2.2" transform="rotate(-35 33 17)"/><circle cx="20" cy="34" r="2.6"/><circle cx="30" cy="27" r="2.2"/></svg>
+              </span>
+              <p class="mini-kicker">Mis XV años</p>
+              <p class="mini-name">Valentina</p>
+              <p class="mini-date">15 · agosto · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">18:00</span><span class="mini-place">Parroquia de San Agustín</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">20:30</span><span class="mini-place">Jardín de los Olivos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>XV años</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:Lora, 'Iowan Old Style', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40C14 26 26 16 42 12"/><ellipse cx="15" cy="30" rx="6" ry="2.4" transform="rotate(-45 15 30)"/><ellipse cx="24" cy="23" rx="6" ry="2.4" transform="rotate(-40 24 23)"/><ellipse cx="33" cy="17" rx="5.4" ry="2.2" transform="rotate(-35 33 17)"/><circle cx="20" cy="34" r="2.6"/><circle cx="30" cy="27" r="2.2"/></svg>
+              </span>
+              <p class="mini-kicker">Nuestra boda</p>
+              <p class="mini-name">Ana &amp; Diego</p>
+              <p class="mini-date">12 · septiembre · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Ceremonia</span><span class="mini-time">17:00</span><span class="mini-place">Parroquia de Santa Ana</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">19:30</span><span class="mini-place">Hacienda San Gabriel</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Boda</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:Lora, 'Iowan Old Style', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40C14 26 26 16 42 12"/><ellipse cx="15" cy="30" rx="6" ry="2.4" transform="rotate(-45 15 30)"/><ellipse cx="24" cy="23" rx="6" ry="2.4" transform="rotate(-40 24 23)"/><ellipse cx="33" cy="17" rx="5.4" ry="2.2" transform="rotate(-35 33 17)"/><circle cx="20" cy="34" r="2.6"/><circle cx="30" cy="27" r="2.2"/></svg>
+              </span>
+              <p class="mini-kicker">Bautizo de</p>
+              <p class="mini-name">Emilia</p>
+              <p class="mini-date">13 · abril · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">12:00</span><span class="mini-place">Parroquia San Miguel</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">14:00</span><span class="mini-place">Casa de los abuelos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Bautizo formal</figcaption>
+            </figure>
+          </div>
+          <ul class="swatches" aria-label="Paleta de siete colores del tema Verde olivo y crema">
+            <li><span class="chip" style="background:#f5f2e8"></span><span class="chip-role">Fondo</span><span class="chip-hex">#f5f2e8</span></li>
+            <li><span class="chip" style="background:#fffdf7"></span><span class="chip-role">Superficie</span><span class="chip-hex">#fffdf7</span></li>
+            <li><span class="chip" style="background:#e5e3ce"></span><span class="chip-role">Suave</span><span class="chip-hex">#e5e3ce</span></li>
+            <li><span class="chip" style="background:#23281c"></span><span class="chip-role">Tinta</span><span class="chip-hex">#23281c</span></li>
+            <li><span class="chip" style="background:#4a5a34"></span><span class="chip-role">Acento</span><span class="chip-hex">#4a5a34</span></li>
+            <li><span class="chip" style="background:#a8b48a"></span><span class="chip-role">Decoración 1</span><span class="chip-hex">#a8b48a</span></li>
+            <li><span class="chip" style="background:#c7b98d"></span><span class="chip-role">Decoración 2</span><span class="chip-hex">#c7b98d</span></li>
+          </ul>
+          <dl class="meta">
+            <dt>Ornamento</dt><dd>Rama de olivo con aceitunas y una cinta de dos líneas que cruza el nombre.</dd>
+            <dt>Ideal para</dt><dd>Boda al aire libre y bautizo formal de campo.</dd>
+          </dl>
+          <p class="contrast"><span>Contraste mínimo</span><b>5.78:1</b><span class="pair">acento sobre suave</span></p>
+        </article>
+
+        <article class="theme" style="--bg:#f7f0df;--surface:#fffcf2;--soft:#efe2c6;--ink:#2a2318;--accent:#6a4a16;--dec-1:#b08a3c;--dec-2:#d8c48e;--font:'Cormorant Garamond', 'Iowan Old Style', Georgia, serif" aria-labelledby="tema-5">
+          <header class="theme-head">
+            <p class="theme-index">Tema 05</p>
+            <h2 id="tema-5">Champaña</h2>
+            <p class="theme-font"><b>Cormorant Garamond</b> · OFL 1.1 · ya cargada</p>
+          </header>
+          <div class="minis">
+
+            <figure class="mini" style="--font:'Cormorant Garamond', 'Iowan Old Style', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 36a16 16 0 0 1 0-24M38 36a16 16 0 0 0 0-24"/><path d="M13 32l-6-2 2-6 6 2M13 22l-6-2 2-6 5 2M35 32l6-2-2-6-6 2M35 22l6-2-2-6-5 2"/><path d="M24 6l3 4-3 4-3-4z"/></svg>
+              </span>
+              <p class="mini-kicker">Mis XV años</p>
+              <p class="mini-name">Valentina</p>
+              <p class="mini-date">15 · agosto · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">18:00</span><span class="mini-place">Parroquia de San Agustín</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">20:30</span><span class="mini-place">Jardín de los Olivos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>XV años</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Cormorant Garamond', 'Iowan Old Style', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 36a16 16 0 0 1 0-24M38 36a16 16 0 0 0 0-24"/><path d="M13 32l-6-2 2-6 6 2M13 22l-6-2 2-6 5 2M35 32l6-2-2-6-6 2M35 22l6-2-2-6-5 2"/><path d="M24 6l3 4-3 4-3-4z"/></svg>
+              </span>
+              <p class="mini-kicker">Nuestra boda</p>
+              <p class="mini-name">Ana &amp; Diego</p>
+              <p class="mini-date">12 · septiembre · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Ceremonia</span><span class="mini-time">17:00</span><span class="mini-place">Parroquia de Santa Ana</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">19:30</span><span class="mini-place">Hacienda San Gabriel</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Boda</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Cormorant Garamond', 'Iowan Old Style', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 36a16 16 0 0 1 0-24M38 36a16 16 0 0 0 0-24"/><path d="M13 32l-6-2 2-6 6 2M13 22l-6-2 2-6 5 2M35 32l6-2-2-6-6 2M35 22l6-2-2-6-5 2"/><path d="M24 6l3 4-3 4-3-4z"/></svg>
+              </span>
+              <p class="mini-kicker">Bautizo de</p>
+              <p class="mini-name">Emilia</p>
+              <p class="mini-date">13 · abril · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">12:00</span><span class="mini-place">Parroquia San Miguel</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">14:00</span><span class="mini-place">Casa de los abuelos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Bautizo formal</figcaption>
+            </figure>
+          </div>
+          <ul class="swatches" aria-label="Paleta de siete colores del tema Champaña">
+            <li><span class="chip" style="background:#f7f0df"></span><span class="chip-role">Fondo</span><span class="chip-hex">#f7f0df</span></li>
+            <li><span class="chip" style="background:#fffcf2"></span><span class="chip-role">Superficie</span><span class="chip-hex">#fffcf2</span></li>
+            <li><span class="chip" style="background:#efe2c6"></span><span class="chip-role">Suave</span><span class="chip-hex">#efe2c6</span></li>
+            <li><span class="chip" style="background:#2a2318"></span><span class="chip-role">Tinta</span><span class="chip-hex">#2a2318</span></li>
+            <li><span class="chip" style="background:#6a4a16"></span><span class="chip-role">Acento</span><span class="chip-hex">#6a4a16</span></li>
+            <li><span class="chip" style="background:#b08a3c"></span><span class="chip-role">Decoración 1</span><span class="chip-hex">#b08a3c</span></li>
+            <li><span class="chip" style="background:#d8c48e"></span><span class="chip-role">Decoración 2</span><span class="chip-hex">#d8c48e</span></li>
+          </ul>
+          <dl class="meta">
+            <dt>Ornamento</dt><dd>Laurel abierto y una flor de lis de una sola pluma bajo el monograma.</dd>
+            <dt>Ideal para</dt><dd>Boda y XV de etiqueta, salón clásico.</dd>
+          </dl>
+          <p class="contrast"><span>Contraste mínimo</span><b>6.28:1</b><span class="pair">acento sobre suave</span></p>
+        </article>
+
+        <article class="theme" style="--bg:#f4f2f7;--surface:#ffffff;--soft:#e5e0ee;--ink:#221e2b;--accent:#4c3d63;--dec-1:#a9a2b8;--dec-2:#c8bfd9;--font:Italiana, Didot, 'Bodoni 72', Georgia, serif" aria-labelledby="tema-6">
+          <header class="theme-head">
+            <p class="theme-index">Tema 06</p>
+            <h2 id="tema-6">Lavanda y plata</h2>
+            <p class="theme-font"><b>Italiana</b> · OFL 1.1 · nueva</p>
+          </header>
+          <div class="minis">
+
+            <figure class="mini" style="--font:Italiana, Didot, 'Bodoni 72', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 42V16"/><path d="M24 16c-4-2-6-6-6-10 4 1 6 4 6 8M24 16c4-2 6-6 6-10-4 1-6 4-6 8M19 22c-4 0-7-2-8-6 4 0 7 2 8 5M29 22c4 0 7-2 8-6-4 0-7 2-8 5M18 30c-4 0-6-2-7-5 4 0 6 1 7 4M30 30c4 0 6-2 7-5-4 0-6 1-7 4"/><circle cx="24" cy="12" r="1.8"/></svg>
+              </span>
+              <p class="mini-kicker">Mis XV años</p>
+              <p class="mini-name">Valentina</p>
+              <p class="mini-date">15 · agosto · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">18:00</span><span class="mini-place">Parroquia de San Agustín</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">20:30</span><span class="mini-place">Jardín de los Olivos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>XV años</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:Italiana, Didot, 'Bodoni 72', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 42V16"/><path d="M24 16c-4-2-6-6-6-10 4 1 6 4 6 8M24 16c4-2 6-6 6-10-4 1-6 4-6 8M19 22c-4 0-7-2-8-6 4 0 7 2 8 5M29 22c4 0 7-2 8-6-4 0-7 2-8 5M18 30c-4 0-6-2-7-5 4 0 6 1 7 4M30 30c4 0 6-2 7-5-4 0-6 1-7 4"/><circle cx="24" cy="12" r="1.8"/></svg>
+              </span>
+              <p class="mini-kicker">Nuestra boda</p>
+              <p class="mini-name">Ana &amp; Diego</p>
+              <p class="mini-date">12 · septiembre · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Ceremonia</span><span class="mini-time">17:00</span><span class="mini-place">Parroquia de Santa Ana</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">19:30</span><span class="mini-place">Hacienda San Gabriel</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Boda</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:Italiana, Didot, 'Bodoni 72', Georgia, serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 42V16"/><path d="M24 16c-4-2-6-6-6-10 4 1 6 4 6 8M24 16c4-2 6-6 6-10-4 1-6 4-6 8M19 22c-4 0-7-2-8-6 4 0 7 2 8 5M29 22c4 0 7-2 8-6-4 0-7 2-8 5M18 30c-4 0-6-2-7-5 4 0 6 1 7 4M30 30c4 0 6-2 7-5-4 0-6 1-7 4"/><circle cx="24" cy="12" r="1.8"/></svg>
+              </span>
+              <p class="mini-kicker">Bautizo de</p>
+              <p class="mini-name">Emilia</p>
+              <p class="mini-date">13 · abril · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">12:00</span><span class="mini-place">Parroquia San Miguel</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">14:00</span><span class="mini-place">Casa de los abuelos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Bautizo formal</figcaption>
+            </figure>
+          </div>
+          <ul class="swatches" aria-label="Paleta de siete colores del tema Lavanda y plata">
+            <li><span class="chip" style="background:#f4f2f7"></span><span class="chip-role">Fondo</span><span class="chip-hex">#f4f2f7</span></li>
+            <li><span class="chip" style="background:#ffffff"></span><span class="chip-role">Superficie</span><span class="chip-hex">#ffffff</span></li>
+            <li><span class="chip" style="background:#e5e0ee"></span><span class="chip-role">Suave</span><span class="chip-hex">#e5e0ee</span></li>
+            <li><span class="chip" style="background:#221e2b"></span><span class="chip-role">Tinta</span><span class="chip-hex">#221e2b</span></li>
+            <li><span class="chip" style="background:#4c3d63"></span><span class="chip-role">Acento</span><span class="chip-hex">#4c3d63</span></li>
+            <li><span class="chip" style="background:#a9a2b8"></span><span class="chip-role">Decoración 1</span><span class="chip-hex">#a9a2b8</span></li>
+            <li><span class="chip" style="background:#c8bfd9"></span><span class="chip-role">Decoración 2</span><span class="chip-hex">#c8bfd9</span></li>
+          </ul>
+          <dl class="meta">
+            <dt>Ornamento</dt><dd>Ramillete de lavanda de tallos finos, atado con un lazo de plata.</dd>
+            <dt>Ideal para</dt><dd>XV y boda de primavera, paleta fría y serena.</dd>
+          </dl>
+          <p class="contrast"><span>Contraste mínimo</span><b>7.53:1</b><span class="pair">acento sobre suave</span></p>
+        </article>
+
+        <article class="theme" style="--bg:#faf3ee;--surface:#fffdfb;--soft:#f0e1d7;--ink:#2c211d;--accent:#8a4a2f;--dec-1:#a9b39b;--dec-2:#c98e6e;--font:'Josefin Sans', 'Avenir Next', 'Gill Sans', sans-serif" aria-labelledby="tema-7">
+          <header class="theme-head">
+            <p class="theme-index">Tema 07</p>
+            <h2 id="tema-7">Terracota y salvia</h2>
+            <p class="theme-font"><b>Josefin Sans</b> · OFL 1.1 · ya cargada</p>
+          </header>
+          <div class="minis">
+
+            <figure class="mini" style="--font:'Josefin Sans', 'Avenir Next', 'Gill Sans', sans-serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 40V20L24 8l14 12v20"/><path d="M18 40V28a6 6 0 0 1 12 0v12"/><path d="M6 40h36"/><path d="M40 14c2-3 5-4 8-3-1 3-4 5-8 3z"/></svg>
+              </span>
+              <p class="mini-kicker">Mis XV años</p>
+              <p class="mini-name">Valentina</p>
+              <p class="mini-date">15 · agosto · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">18:00</span><span class="mini-place">Parroquia de San Agustín</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">20:30</span><span class="mini-place">Jardín de los Olivos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>XV años</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Josefin Sans', 'Avenir Next', 'Gill Sans', sans-serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 40V20L24 8l14 12v20"/><path d="M18 40V28a6 6 0 0 1 12 0v12"/><path d="M6 40h36"/><path d="M40 14c2-3 5-4 8-3-1 3-4 5-8 3z"/></svg>
+              </span>
+              <p class="mini-kicker">Nuestra boda</p>
+              <p class="mini-name">Ana &amp; Diego</p>
+              <p class="mini-date">12 · septiembre · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Ceremonia</span><span class="mini-time">17:00</span><span class="mini-place">Parroquia de Santa Ana</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">19:30</span><span class="mini-place">Hacienda San Gabriel</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Boda</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Josefin Sans', 'Avenir Next', 'Gill Sans', sans-serif">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 40V20L24 8l14 12v20"/><path d="M18 40V28a6 6 0 0 1 12 0v12"/><path d="M6 40h36"/><path d="M40 14c2-3 5-4 8-3-1 3-4 5-8 3z"/></svg>
+              </span>
+              <p class="mini-kicker">Bautizo de</p>
+              <p class="mini-name">Emilia</p>
+              <p class="mini-date">13 · abril · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">12:00</span><span class="mini-place">Parroquia San Miguel</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">14:00</span><span class="mini-place">Casa de los abuelos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Bautizo formal</figcaption>
+            </figure>
+          </div>
+          <ul class="swatches" aria-label="Paleta de siete colores del tema Terracota y salvia">
+            <li><span class="chip" style="background:#faf3ee"></span><span class="chip-role">Fondo</span><span class="chip-hex">#faf3ee</span></li>
+            <li><span class="chip" style="background:#fffdfb"></span><span class="chip-role">Superficie</span><span class="chip-hex">#fffdfb</span></li>
+            <li><span class="chip" style="background:#f0e1d7"></span><span class="chip-role">Suave</span><span class="chip-hex">#f0e1d7</span></li>
+            <li><span class="chip" style="background:#2c211d"></span><span class="chip-role">Tinta</span><span class="chip-hex">#2c211d</span></li>
+            <li><span class="chip" style="background:#8a4a2f"></span><span class="chip-role">Acento</span><span class="chip-hex">#8a4a2f</span></li>
+            <li><span class="chip" style="background:#a9b39b"></span><span class="chip-role">Decoración 1</span><span class="chip-hex">#a9b39b</span></li>
+            <li><span class="chip" style="background:#c98e6e"></span><span class="chip-role">Decoración 2</span><span class="chip-hex">#c98e6e</span></li>
+          </ul>
+          <dl class="meta">
+            <dt>Ornamento</dt><dd>Arco de medio punto con hojas de salvia y un sol de trazo en la clave.</dd>
+            <dt>Ideal para</dt><dd>Boda boho y bautizo formal de tarde.</dd>
+          </dl>
+          <p class="contrast"><span>Contraste mínimo</span><b>5.31:1</b><span class="pair">acento sobre suave</span></p>
+        </article>
+
+        <article class="theme" style="--bg:#f8f0f0;--surface:#fffcfc;--soft:#eedcdc;--ink:#241417;--accent:#6b1f33;--dec-1:#c09a5a;--dec-2:#b0808c;--font:'Great Vibes', 'Snell Roundhand', 'Apple Chancery', cursive" aria-labelledby="tema-8">
+          <header class="theme-head">
+            <p class="theme-index">Tema 08</p>
+            <h2 id="tema-8">Borgoña y oro</h2>
+            <p class="theme-font"><b>Great Vibes</b> · OFL 1.1 · ya cargada</p>
+          </header>
+          <div class="minis">
+
+            <figure class="mini" style="--font:'Great Vibes', 'Snell Roundhand', 'Apple Chancery', cursive">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40V14h26M8 14c0 6 5 9 10 9s9-4 9-9"/><path d="M14 40h20"/><path d="M32 26l3 4-3 4-3-4z"/><path d="M40 16c3-1 5 0 6 2M40 22c3 1 4 3 4 5"/></svg>
+              </span>
+              <p class="mini-kicker">Mis XV años</p>
+              <p class="mini-name">Valentina</p>
+              <p class="mini-date">15 · agosto · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">18:00</span><span class="mini-place">Parroquia de San Agustín</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">20:30</span><span class="mini-place">Jardín de los Olivos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>XV años</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Great Vibes', 'Snell Roundhand', 'Apple Chancery', cursive">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40V14h26M8 14c0 6 5 9 10 9s9-4 9-9"/><path d="M14 40h20"/><path d="M32 26l3 4-3 4-3-4z"/><path d="M40 16c3-1 5 0 6 2M40 22c3 1 4 3 4 5"/></svg>
+              </span>
+              <p class="mini-kicker">Nuestra boda</p>
+              <p class="mini-name">Ana &amp; Diego</p>
+              <p class="mini-date">12 · septiembre · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Ceremonia</span><span class="mini-time">17:00</span><span class="mini-place">Parroquia de Santa Ana</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">19:30</span><span class="mini-place">Hacienda San Gabriel</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Boda</figcaption>
+            </figure>
+
+            <figure class="mini" style="--font:'Great Vibes', 'Snell Roundhand', 'Apple Chancery', cursive">
+              <span class="motif" aria-hidden="true">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40V14h26M8 14c0 6 5 9 10 9s9-4 9-9"/><path d="M14 40h20"/><path d="M32 26l3 4-3 4-3-4z"/><path d="M40 16c3-1 5 0 6 2M40 22c3 1 4 3 4 5"/></svg>
+              </span>
+              <p class="mini-kicker">Bautizo de</p>
+              <p class="mini-name">Emilia</p>
+              <p class="mini-date">13 · abril · 2026</p>
+              <div class="mini-rows">
+                <p class="mini-row"><span class="mini-label">Misa</span><span class="mini-time">12:00</span><span class="mini-place">Parroquia San Miguel</span></p>
+                <p class="mini-row"><span class="mini-label">Recepción</span><span class="mini-time">14:00</span><span class="mini-place">Casa de los abuelos</span></p>
+              </div>
+              <p class="mini-foot"><span>78 días</span><span>Cómo llegar</span><span>WhatsApp</span></p>
+              <figcaption>Bautizo formal</figcaption>
+            </figure>
+          </div>
+          <ul class="swatches" aria-label="Paleta de siete colores del tema Borgoña y oro">
+            <li><span class="chip" style="background:#f8f0f0"></span><span class="chip-role">Fondo</span><span class="chip-hex">#f8f0f0</span></li>
+            <li><span class="chip" style="background:#fffcfc"></span><span class="chip-role">Superficie</span><span class="chip-hex">#fffcfc</span></li>
+            <li><span class="chip" style="background:#eedcdc"></span><span class="chip-role">Suave</span><span class="chip-hex">#eedcdc</span></li>
+            <li><span class="chip" style="background:#241417"></span><span class="chip-role">Tinta</span><span class="chip-hex">#241417</span></li>
+            <li><span class="chip" style="background:#6b1f33"></span><span class="chip-role">Acento</span><span class="chip-hex">#6b1f33</span></li>
+            <li><span class="chip" style="background:#c09a5a"></span><span class="chip-role">Decoración 1</span><span class="chip-hex">#c09a5a</span></li>
+            <li><span class="chip" style="background:#b0808c"></span><span class="chip-role">Decoración 2</span><span class="chip-hex">#b0808c</span></li>
+          </ul>
+          <dl class="meta">
+            <dt>Ornamento</dt><dd>Filete doble con esquinas de voluta y un diamante al centro de cada regla.</dd>
+            <dt>Ideal para</dt><dd>XV y boda de gala en temporada de frío.</dd>
+          </dl>
+          <p class="contrast"><span>Contraste mínimo</span><b>8.51:1</b><span class="pair">acento sobre suave</span></p>
+        </article>
+  </main>
+
+  <div class="notes">
+    <section>
+      <h2>Cómo se aplica un tema</h2>
+      <ul>
+        <li>El tema pone los siete colores en las variables <code>--inv-background</code>, <code>--inv-surface</code>, <code>--inv-soft</code>, <code>--inv-ink</code>, <code>--inv-accent</code>, <code>--inv-decoration-one</code> y <code>--inv-decoration-two</code>.</li>
+        <li>La tipografía del tema se usa solo en nombres y títulos; el texto que se lee rápido queda en la sans del sistema de diseño.</li>
+        <li>El blanco sobre acento es el compañero de contraste, no un octavo color de la paleta.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Tipografías</h2>
+      <ul>
+        <li><b>Ya cargadas:</b> Playfair Display, Cinzel Decorative, Lora, Cormorant Garamond, Josefin Sans y Great Vibes, con la SIL Open Font License 1.1.</li>
+        <li><b>Nuevas:</b> Bodoni Moda e Italiana son también SIL Open Font License 1.1 y permiten uso comercial; suman un archivo woff2 cada una al tema que las usa.</li>
+        <li>Great Vibes solo aparece en el nombre de un tema; el resto de los datos usa una serif o sans legible.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Lo que este tablero no decide</h2>
+      <ul>
+        <li>El arte final de cada ornamento: aquí los motivos son marcadores de línea, no el dibujo definitivo.</li>
+        <li>El emparejamiento layout · tema del catálogo, que se elige por ocasión en el paso siguiente.</li>
+        <li>La forma de la foto: cada layout la resuelve (vertical, camafeo, arco).</li>
+      </ul>
+    </section>
+  </div>
+
+  <footer>
+    <span>Contraste calculado con la fórmula WCAG 2.x sobre los siete colores de cada tema: tinta y acento sobre fondo, superficie y suave, y blanco sobre acento. El mínimo impreso es el par más bajo de la paleta; el resto de los pares queda por encima.</span>
+    <span>Las miniaturas usan pilas de fuentes del sistema que nombran primero la fuente real del tema; al implementar, cada tema carga su archivo woff2 con su licencia.</span>
+  </footer>
+</div>
+</body>
+</html>

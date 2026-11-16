@@ -221,6 +221,33 @@ const lora = localFont({
   variable: "--font-lora",
 });
 
+/*
+ * Elegant line display fonts (E3b; S4): the two title faces of `design/elegant-line/`, committed as Latin
+ * woff2 files with the license google/fonts ships for each. Bodoni Moda is drawn at 500 for titles and
+ * Italiana at its only weight, 400; same rules as the themed faces above, so neither is preloaded.
+ */
+const bodoniModa = localFont({
+  src: [
+    {
+      path: "./fonts/bodoni-moda/bodoni-moda-latin-normal.woff2",
+      weight: "500",
+      style: "normal",
+    },
+  ],
+  display: "swap",
+  adjustFontFallback: "Times New Roman",
+  preload: false,
+  variable: "--font-bodoni-moda",
+});
+
+const italiana = localFont({
+  src: [{ path: "./fonts/italiana/italiana-latin-normal.woff2", weight: "400", style: "normal" }],
+  display: "swap",
+  adjustFontFallback: "Times New Roman",
+  preload: false,
+  variable: "--font-italiana",
+});
+
 const themeFontVariables = [
   cinzelDecorative.variable,
   luckiestGuy.variable,
@@ -238,6 +265,8 @@ const themeFontVariables = [
   caveat.variable,
   nunito.variable,
   lora.variable,
+  bodoniModa.variable,
+  italiana.variable,
 ].join(" ");
 
 /** Defaults for every page; the landing's honest pre-launch title and description (T8l; S37). */

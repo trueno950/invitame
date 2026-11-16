@@ -119,6 +119,17 @@ export const INVITATION_FIELD_LABELS: Readonly<Record<string, string>> = {
   receptionPlace: "Lugar de la recepción",
   receptionAddress: "Dirección de la recepción",
   receptionTime: "Hora de la recepción",
+  // Elegant line (E3c; S4): XV años and weddings. A list is one text field with one name per line, and an
+  // optional field says so in its own label, as the baby's name already does.
+  coupleNameOne: "Primer nombre de la pareja",
+  coupleNameTwo: "Segundo nombre de la pareja",
+  honorSponsors: "Padrinos de honor",
+  chambelanes: "Chambelanes (opcional)",
+  firstFamilyParents: "Padres de una parte (opcional)",
+  secondFamilyParents: "Padres de la otra parte (opcional)",
+  weddingSponsors: "Padrinos de la boda (opcional)",
+  dressCode: "Código de vestimenta",
+  hashtag: "Hashtag (opcional)",
 };
 
 /** Copy of the three invitation pages under `/cuenta` (M4 T5; S1, S6, S7). */
@@ -396,6 +407,8 @@ export const PUBLIC_INVITATION_COPY = {
   /** The title when the content has no celebrant name to show (A8). */
   titleFallback: "Invitación",
   title: (celebrantName: string) => `Invitación de ${celebrantName}`,
+  /** A wedding names the couple, because neither name alone describes the celebration (E3c; S4). */
+  coupleTitle: (first: string, second: string) => `Boda de ${first} y ${second}`,
   notFoundTitle: "Esta invitación no está disponible",
   notFoundBody:
     "Puede que el enlace no sea correcto, que la invitación ya no esté publicada o que la dirección haya cambiado.",

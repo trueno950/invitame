@@ -4,10 +4,20 @@ import {
   parseBabyShowerClassicContent,
 } from "../renderers/baby-shower-classic-01.ts";
 import {
+  BAPTISM_ARCH_COMPONENT_KEY,
+  parseBaptismArchConfiguration,
+  parseBaptismArchContent,
+} from "../renderers/baptism-arch-01.ts";
+import {
   BAPTISM_CLASSIC_COMPONENT_KEY,
   parseBaptismClassicConfiguration,
   parseBaptismClassicContent,
 } from "../renderers/baptism-classic-01.ts";
+import {
+  BAPTISM_ORNAMENTAL_COMPONENT_KEY,
+  parseBaptismOrnamentalConfiguration,
+  parseBaptismOrnamentalContent,
+} from "../renderers/baptism-ornamental-01.ts";
 import {
   BIRTHDAY_MAP_COMPONENT_KEY,
   parseBirthdayMapConfiguration,
@@ -25,6 +35,26 @@ import {
 } from "../renderers/birthday-story-01.ts";
 import type { RendererProps } from "../renderers/registry.ts";
 import { RendererPropsError } from "../renderers/renderer-props-error.ts";
+import {
+  parseWeddingArchConfiguration,
+  parseWeddingArchContent,
+  WEDDING_ARCH_COMPONENT_KEY,
+} from "../renderers/wedding-arch-01.ts";
+import {
+  parseWeddingOrnamentalConfiguration,
+  parseWeddingOrnamentalContent,
+  WEDDING_ORNAMENTAL_COMPONENT_KEY,
+} from "../renderers/wedding-ornamental-01.ts";
+import {
+  parseXVArchConfiguration,
+  parseXVArchContent,
+  XV_ARCH_COMPONENT_KEY,
+} from "../renderers/xv-arch-01.ts";
+import {
+  parseXVOrnamentalConfiguration,
+  parseXVOrnamentalContent,
+  XV_ORNAMENTAL_COMPONENT_KEY,
+} from "../renderers/xv-ornamental-01.ts";
 
 /**
  * Whether a registered renderer will accept the stored props of an invitation (M5 T5; A3). A renderer
@@ -76,6 +106,48 @@ const PROPS_CHECKS: ReadonlyMap<string, PropsCheck> = new Map<string, PropsCheck
     (props) => {
       parseBaptismClassicConfiguration(props.configuration);
       parseBaptismClassicContent(props.content);
+    },
+  ],
+  [
+    XV_ARCH_COMPONENT_KEY,
+    (props) => {
+      parseXVArchConfiguration(props.configuration);
+      parseXVArchContent(props.content);
+    },
+  ],
+  [
+    WEDDING_ARCH_COMPONENT_KEY,
+    (props) => {
+      parseWeddingArchConfiguration(props.configuration);
+      parseWeddingArchContent(props.content);
+    },
+  ],
+  [
+    BAPTISM_ARCH_COMPONENT_KEY,
+    (props) => {
+      parseBaptismArchConfiguration(props.configuration);
+      parseBaptismArchContent(props.content);
+    },
+  ],
+  [
+    XV_ORNAMENTAL_COMPONENT_KEY,
+    (props) => {
+      parseXVOrnamentalConfiguration(props.configuration);
+      parseXVOrnamentalContent(props.content);
+    },
+  ],
+  [
+    WEDDING_ORNAMENTAL_COMPONENT_KEY,
+    (props) => {
+      parseWeddingOrnamentalConfiguration(props.configuration);
+      parseWeddingOrnamentalContent(props.content);
+    },
+  ],
+  [
+    BAPTISM_ORNAMENTAL_COMPONENT_KEY,
+    (props) => {
+      parseBaptismOrnamentalConfiguration(props.configuration);
+      parseBaptismOrnamentalContent(props.content);
     },
   ],
 ]);

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Ilustración de boda con dos anillos entrelazados, un arco y una rama de olivo">
+  <rect width="800" height="600" fill="#f5f2e8"/>
+  <circle cx="400" cy="312" r="224" fill="#e5e3ce"/>
+  <circle cx="400" cy="312" r="224" fill="none" stroke="#c7b98d" stroke-width="2"/>
+  <path d="M268 516V318a132 132 0 0 1 264 0v198" fill="none" stroke="#a8b48a" stroke-width="3" stroke-linecap="round"/>
+  <path d="M290 516V318a110 110 0 0 1 220 0v198" fill="none" stroke="#c7b98d" stroke-width="2" stroke-linecap="round"/>
+  <g fill="none" stroke="#4a5a34" stroke-width="4" stroke-linecap="round">
+    <circle cx="372" cy="300" r="48"/>
+    <circle cx="428" cy="300" r="48"/>
+  </g>
+  <g fill="none" stroke="#a8b48a" stroke-width="3" stroke-linecap="round">
+    <path d="M328 336c-8 10-10 22-8 34"/>
+    <path d="M472 336c8 10 10 22 8 34"/>
+  </g>
+  <g fill="none" stroke="#4a5a34" stroke-width="3" stroke-linecap="round">
+    <path d="M282 470c44-34 92-48 142-44"/>
+    <path d="M518 470c-44-34-92-48-142-44"/>
+  </g>
+  <g fill="#a8b48a" opacity=".9">
+    <ellipse cx="316" cy="452" rx="26" ry="10" transform="rotate(-24 316 452)"/>
+    <ellipse cx="356" cy="436" rx="24" ry="9" transform="rotate(-14 356 436)"/>
+    <ellipse cx="484" cy="452" rx="26" ry="10" transform="rotate(24 484 452)"/>
+    <ellipse cx="444" cy="436" rx="24" ry="9" transform="rotate(14 444 436)"/>
+  </g>
+  <g fill="#c7b98d">
+    <circle cx="400" cy="300" r="6"/>
+    <circle cx="262" cy="236" r="5"/>
+    <circle cx="538" cy="236" r="5"/>
+    <circle cx="400" cy="208" r="4"/>
+    <circle cx="332" cy="204" r="4"/>
+    <circle cx="468" cy="204" r="4"/>
+  </g>
+  <path d="M352 516h96" fill="none" stroke="#a8b48a" stroke-width="3" stroke-linecap="round"/>
+  <path d="M340 500h120" fill="none" stroke="#c7b98d" stroke-width="2" stroke-linecap="round"/>
+</svg>

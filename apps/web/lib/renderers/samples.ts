@@ -21,13 +21,21 @@ export interface SampleInvitation {
 }
 
 /** The categories a fixed sample exists for; a category without one only gets cards without miniatures. */
-export const SAMPLE_CATEGORY_KEYS = ["birthday", "baby-shower", "baptism"] as const;
+export const SAMPLE_CATEGORY_KEYS = [
+  "birthday",
+  "baby-shower",
+  "baptism",
+  "quinceanera",
+  "wedding",
+] as const;
 
 /** Where each sample image lives under `apps/web/public`. */
 export const SAMPLE_IMAGE_PATHS = {
   birthday: "/samples/birthday-mateo.svg",
   "baby-shower": "/samples/baby-shower-sofia.svg",
   baptism: "/samples/baptism-emilia.svg",
+  quinceanera: "/samples/quinceanera-valentina.svg",
+  wedding: "/samples/wedding-ana-sofia-daniel.svg",
 } as const;
 
 /**
@@ -97,7 +105,62 @@ export function sampleContentFor(categoryKey: string, origin: string): unknown |
     };
   }
 
+  if (categoryKey === "quinceanera") {
+    return sampleQuinceaneraContent(mainPhoto);
+  }
+  if (categoryKey === "wedding") {
+    return sampleWeddingContent(mainPhoto);
+  }
+
   return sampleBaptismContent(mainPhoto);
+}
+
+/**
+ * The XV años sample of the elegant board (E3c; S4): the same «Valentina Ramírez» the artboard shows, with
+ * the lists written one name per line.
+ */
+function sampleQuinceaneraContent(mainPhoto: string): unknown {
+  return {
+    celebrantName: "Valentina Ramírez",
+    date: "2026-08-15",
+    parents: "Miguel Ramírez Alcántara\nAdriana Solís de Ramírez",
+    honorSponsors: "Joaquín Esquivel del Valle\nMariana Robles de Esquivel",
+    ceremonyPlace: "Parroquia de San Agustín",
+    ceremonyAddress: "Calle de los Fresnos 132, San Pedro de los Pinos, Ciudad de México",
+    ceremonyTime: "18:00",
+    receptionPlace: "Jardín de los Olivos",
+    receptionAddress: "Camino Real a Santa Fe 41, Santa Fe, Ciudad de México",
+    receptionTime: "20:30",
+    dressCode: "Formal · etiqueta",
+    message: "Hay días que se esperan toda una vida. El 15 de agosto quiero celebrar contigo.",
+    rsvpContact: "Confirma con Adriana al 55 8120 4471",
+    giftRegistry: "Mesa de regalos Liverpool · Código 5089 4421",
+    mainPhoto,
+  };
+}
+
+/** The wedding sample of the elegant board (E3c; S4), with the two families and the hashtag. */
+function sampleWeddingContent(mainPhoto: string): unknown {
+  return {
+    coupleNameOne: "Ana Sofía",
+    coupleNameTwo: "Daniel",
+    date: "2026-09-12",
+    firstFamilyParents: "Roberto Sánchez y Elena Vargas",
+    secondFamilyParents: "Jorge Medina y Lucía Peña",
+    weddingSponsors: "Andrés Reyes\nCamila Reyes",
+    ceremonyPlace: "Parroquia de Santa Ana",
+    ceremonyAddress: "Av. Juárez 120, Centro, Querétaro",
+    ceremonyTime: "17:00",
+    receptionPlace: "Hacienda San Gabriel",
+    receptionAddress: "Camino a la Hacienda 8, Querétaro",
+    receptionTime: "19:30",
+    dressCode: "Formal",
+    message: "Nos encantaría celebrar contigo el comienzo de nuestra vida juntos.",
+    rsvpContact: "Confirma con Ana Sofía al 55 1234 5678",
+    giftRegistry: "Mesa de regalos · Código 4471 2205",
+    hashtag: "#AnaYDaniel",
+    mainPhoto,
+  };
 }
 
 /** The baptism sample of the board: the ceremony at 11:00 and the reception at 13:30, like the artboards. */

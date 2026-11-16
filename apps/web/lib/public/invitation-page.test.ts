@@ -37,6 +37,39 @@ describe("invitationMetadata", () => {
     });
   });
 
+  it("titles a wedding page with the couple's two names", () => {
+    const metadata = invitationMetadata({
+      coupleNameOne: "Ana Sofía",
+      coupleNameTwo: "Daniel",
+      message: "Nos encantaría celebrar contigo.",
+    });
+
+    assert.deepEqual(metadata, {
+      title: "Boda de Ana Sofía y Daniel",
+      description: "Nos encantaría celebrar contigo.",
+      robots: ROBOTS,
+      openGraph: {
+        title: "Boda de Ana Sofía y Daniel",
+        description: "Nos encantaría celebrar contigo.",
+      },
+    });
+    // One name alone is not a couple: the generic title stays.
+    assert.equal(invitationMetadata({ coupleNameOne: "Ana Sofía" }).title, "Invitación");
+    assert.equal(
+      invitationMetadata({ coupleNameOne: "Ana Sofía", coupleNameTwo: "  " }).title,
+      "Invitación",
+    );
+    // A celebrant name still wins when a snapshot carries both shapes.
+    assert.equal(
+      invitationMetadata({
+        celebrantName: "Valentina",
+        coupleNameOne: "Ana",
+        coupleNameTwo: "Daniel",
+      }).title,
+      "Invitación de Valentina",
+    );
+  });
+
   it("falls back to the plain title when the content has no celebrant name", () => {
     assert.equal(
       invitationMetadata({ babyName: "Sofía", hosts: "Mariana" }).title,

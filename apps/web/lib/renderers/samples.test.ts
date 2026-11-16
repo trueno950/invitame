@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { BABY_SHOWER_THEMES } from "./baby-shower-themes.ts";
 import { BAPTISM_THEMES } from "./baptism-themes.ts";
 import { BIRTHDAY_THEMES } from "./birthday-themes.ts";
+import { ELEGANT_THEMES } from "./elegant-themes.ts";
 import { listRendererKeys } from "./registry.ts";
 import { SAMPLE_CATEGORY_KEYS, sampleContentFor, sampleInvitation } from "./samples.ts";
 
@@ -48,6 +49,44 @@ const LAYOUT_SAMPLES = [
     themes: BAPTISM_THEMES,
     image: "/samples/baptism-emilia.svg",
   },
+  {
+    componentKey: "xv-arch-01",
+    category: "quinceanera",
+    themes: ELEGANT_THEMES,
+    image: "/samples/quinceanera-valentina.svg",
+  },
+  {
+    componentKey: "wedding-arch-01",
+    category: "wedding",
+    themes: ELEGANT_THEMES,
+    image: "/samples/wedding-ana-sofia-daniel.svg",
+  },
+  {
+    componentKey: "baptism-arch-01",
+    category: "baptism",
+    themes: ELEGANT_THEMES,
+    image: "/samples/baptism-emilia.svg",
+  },
+  // The ornamental layouts of the elegant line (E4b; S5) read the same content as their arch siblings, so
+  // they preview the same sample of the same category.
+  {
+    componentKey: "xv-ornamental-01",
+    category: "quinceanera",
+    themes: ELEGANT_THEMES,
+    image: "/samples/quinceanera-valentina.svg",
+  },
+  {
+    componentKey: "wedding-ornamental-01",
+    category: "wedding",
+    themes: ELEGANT_THEMES,
+    image: "/samples/wedding-ana-sofia-daniel.svg",
+  },
+  {
+    componentKey: "baptism-ornamental-01",
+    category: "baptism",
+    themes: ELEGANT_THEMES,
+    image: "/samples/baptism-emilia.svg",
+  },
 ] as const;
 
 /** A configuration one themed layout accepts, for each layout the web knows. */
@@ -57,7 +96,13 @@ function themedConfiguration(componentKey: string, theme: string) {
 
 describe("chooser sample content", () => {
   it("keeps one fixed sample per occasion the catalog publishes", () => {
-    assert.deepEqual(SAMPLE_CATEGORY_KEYS, ["birthday", "baby-shower", "baptism"]);
+    assert.deepEqual(SAMPLE_CATEGORY_KEYS, [
+      "birthday",
+      "baby-shower",
+      "baptism",
+      "quinceanera",
+      "wedding",
+    ]);
     assert.deepEqual(sampleContentFor("birthday", ORIGIN), {
       celebrantName: "Mateo",
       age: 7,
@@ -102,8 +147,48 @@ describe("chooser sample content", () => {
     });
   });
 
+  it("keeps the XV años and wedding samples of the elegant boards", () => {
+    assert.deepEqual(sampleContentFor("quinceanera", ORIGIN), {
+      celebrantName: "Valentina Ramírez",
+      date: "2026-08-15",
+      parents: "Miguel Ramírez Alcántara\nAdriana Solís de Ramírez",
+      honorSponsors: "Joaquín Esquivel del Valle\nMariana Robles de Esquivel",
+      ceremonyPlace: "Parroquia de San Agustín",
+      ceremonyAddress: "Calle de los Fresnos 132, San Pedro de los Pinos, Ciudad de México",
+      ceremonyTime: "18:00",
+      receptionPlace: "Jardín de los Olivos",
+      receptionAddress: "Camino Real a Santa Fe 41, Santa Fe, Ciudad de México",
+      receptionTime: "20:30",
+      dressCode: "Formal · etiqueta",
+      message: "Hay días que se esperan toda una vida. El 15 de agosto quiero celebrar contigo.",
+      rsvpContact: "Confirma con Adriana al 55 8120 4471",
+      giftRegistry: "Mesa de regalos Liverpool · Código 5089 4421",
+      mainPhoto: `${ORIGIN}/samples/quinceanera-valentina.svg`,
+    });
+    assert.deepEqual(sampleContentFor("wedding", ORIGIN), {
+      coupleNameOne: "Ana Sofía",
+      coupleNameTwo: "Daniel",
+      date: "2026-09-12",
+      firstFamilyParents: "Roberto Sánchez y Elena Vargas",
+      secondFamilyParents: "Jorge Medina y Lucía Peña",
+      weddingSponsors: "Andrés Reyes\nCamila Reyes",
+      ceremonyPlace: "Parroquia de Santa Ana",
+      ceremonyAddress: "Av. Juárez 120, Centro, Querétaro",
+      ceremonyTime: "17:00",
+      receptionPlace: "Hacienda San Gabriel",
+      receptionAddress: "Camino a la Hacienda 8, Querétaro",
+      receptionTime: "19:30",
+      dressCode: "Formal",
+      message: "Nos encantaría celebrar contigo el comienzo de nuestra vida juntos.",
+      rsvpContact: "Confirma con Ana Sofía al 55 1234 5678",
+      giftRegistry: "Mesa de regalos · Código 4471 2205",
+      hashtag: "#AnaYDaniel",
+      mainPhoto: `${ORIGIN}/samples/wedding-ana-sofia-daniel.svg`,
+    });
+  });
+
   it("has no sample for a category nobody wrote one for", () => {
-    for (const category of ["wedding", "quinceanera", "graduation", "", "constructor"]) {
+    for (const category of ["graduation", "anniversary", "", "constructor"]) {
       assert.equal(sampleContentFor(category, ORIGIN), undefined, category);
     }
   });
@@ -148,7 +233,7 @@ describe("chooser sample content", () => {
     }
     assert.equal(
       LAYOUT_SAMPLES.reduce((total, layout) => total + layout.themes.length, 0),
-      38,
+      86,
     );
   });
 
@@ -161,6 +246,8 @@ describe("chooser sample content", () => {
       ["birthday-map-01", { theme: "dinosaurs" }],
       ["birthday-map-01", "not-an-object"],
       ["birthday-poster-01", { componentKey: "birthday-poster-01" }],
+      ["xv-arch-01", themedConfiguration("xv-arch-01", BAPTISM_THEMES[0])],
+      ["wedding-arch-01", themedConfiguration("wedding-arch-01", "dove-olive")],
       ["__proto__", themedConfiguration("birthday-map-01", BIRTHDAY_THEMES[0])],
     ] as const) {
       assert.equal(
@@ -174,7 +261,7 @@ describe("chooser sample content", () => {
       sampleInvitation(
         "birthday-map-01",
         themedConfiguration("birthday-map-01", "dinosaurs"),
-        "wedding",
+        "quinceanera",
         ORIGIN,
       ),
       undefined,
@@ -210,6 +297,8 @@ describe("the sample images", () => {
     SAMPLE_IMAGE_PATH,
     "/samples/baby-shower-sofia.svg",
     "/samples/baptism-emilia.svg",
+    "/samples/quinceanera-valentina.svg",
+    "/samples/wedding-ana-sofia-daniel.svg",
   ]) {
     const source = readFileSync(new URL(`../../public${image}`, import.meta.url), "utf8");
 

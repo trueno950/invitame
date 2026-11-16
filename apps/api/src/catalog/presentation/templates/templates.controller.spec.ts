@@ -247,6 +247,12 @@ describe("admin catalog templates and versions", () => {
         { componentKey: "birthday-story-01" },
         { componentKey: "baby-shower-classic-01" },
         { componentKey: "baptism-classic-01" },
+        { componentKey: "xv-arch-01" },
+        { componentKey: "wedding-arch-01" },
+        { componentKey: "baptism-arch-01" },
+        { componentKey: "xv-ornamental-01" },
+        { componentKey: "wedding-ornamental-01" },
+        { componentKey: "baptism-ornamental-01" },
       ]);
     });
   });
