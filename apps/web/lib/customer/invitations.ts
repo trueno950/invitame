@@ -277,6 +277,18 @@ const FIELD_SECTIONS: Readonly<Record<string, SectionKey>> = {
   receptionTime: "reception",
   giftRegistry: "content",
   rsvpContact: "content",
+  // Elegant XV años and weddings (E3c; S4): the couple, the honor sponsors, the chambelanes, and the
+  // wedding's two families belong with the celebrant; the dress code, the hashtag, and the gifts with the
+  // rest of the content.
+  coupleNameOne: "celebrant",
+  coupleNameTwo: "celebrant",
+  honorSponsors: "celebrant",
+  chambelanes: "celebrant",
+  firstFamilyParents: "celebrant",
+  secondFamilyParents: "celebrant",
+  weddingSponsors: "celebrant",
+  dressCode: "content",
+  hashtag: "content",
 };
 
 const SECTION_TITLES: Readonly<Record<SectionKey, string>> = {

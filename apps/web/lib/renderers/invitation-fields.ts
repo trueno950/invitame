@@ -170,3 +170,15 @@ export function formatLongDate(isoDate: string): string {
 
   return `${day} de ${MONTHS[(month ?? 1) - 1]} de ${year}`;
 }
+
+/**
+ * The names of a bounded text list, one per line (E3c; S4): the owner types a sponsor, a parent, or a
+ * chambelán on its own line, and the layout draws each on its own line. Blank lines and surrounding spaces
+ * are dropped, so a stray newline never leaves an empty row, and a single-line value stays one name.
+ */
+export function nameLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+}

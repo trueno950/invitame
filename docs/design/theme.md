@@ -375,6 +375,25 @@ real layout.
   without a sample, an unregistered key) only loses its miniature. `samples.test.ts` proves the birthday sample
   passes every registered renderer's own props parser, for every theme.
 
+## Elegant layouts
+
+Status: **current** for «Arco y foto» (E3c; `odd/tasks/elegant-line.md` S4); «Ornamental» is planned (E4b, S5).
+
+The elegant line adds «Arco y foto» to the catalog for XV años, weddings, and formal baptism. It is one shared server
+component (`app/_components/renderers/elegant-arch/arch-layout.ts`) with three thin renderers, `xv-arch-01`,
+`wedding-arch-01`, and `baptism-arch-01`, each keeping its own content schema and parser; the formal baptism reuses
+the themed baptism schema exactly, so no published invitation is migrated. The arch opens the invitation with the
+photo, or with a theme-colored wash and the theme's ornament when there is none, and the name sits on the theme's
+ink at 80 % over the photo, measuring 7.87-9.80:1 against the worst-case white pixel in the eight themes. Each theme
+in `lib/renderers/elegant-themes.ts` is seven colors, one licensed display font at a single weight, and one original
+fine-line ornament drawn only through theme variables; every text pair keeps 4.5:1. The three keys are registered in
+the web registry and the public props checks and expose event facts (ceremony and reception places, with «Boda de
+<uno> y <dos>» as the wedding title). In the chooser they group as three «Arco y foto» designs with eight theme
+switches, so baptism now offers «Clásica» and «Arco y foto»; a wedding page is titled with the couple's two names.
+XV años and wedding fields have Spanish labels and short editor sections; lists are multi-line text with one name per
+line, times are time inputs, and optional fields say «(opcional)». There is no client script, and decoration never
+sits behind text.
+
 ## Guest invitation features
 
 Status: **current** (F2, F3; S3, S4). The API decides which features an invitation shows: the pinned package's

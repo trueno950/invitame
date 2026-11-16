@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Ilustración de XV años con un arco, una rosa de línea fina y ramas doradas">
+  <rect width="800" height="600" fill="#faf0ee"/>
+  <circle cx="400" cy="318" r="228" fill="#f3dcdf"/>
+  <circle cx="400" cy="318" r="228" fill="none" stroke="#e3b7be" stroke-width="2"/>
+  <path d="M262 520V322a138 138 0 0 1 276 0v198" fill="none" stroke="#c99a62" stroke-width="3" stroke-linecap="round"/>
+  <path d="M286 520V322a114 114 0 0 1 228 0v198" fill="none" stroke="#e3b7be" stroke-width="2" stroke-linecap="round"/>
+  <g fill="none" stroke="#8a3e52" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M400 300c-22-18-20-52 4-66 24 14 26 48 4 66-28 12-52-2-56-28 20-16 44-12 56 6"/>
+    <path d="M404 306v78"/>
+    <path d="M404 342c26-10 44-8 60 6"/>
+    <path d="M404 372c-24-8-42-4-54 10"/>
+  </g>
+  <g fill="#c99a62" opacity=".85">
+    <ellipse cx="452" cy="356" rx="26" ry="10" transform="rotate(-26 452 356)"/>
+    <ellipse cx="470" cy="376" rx="22" ry="8" transform="rotate(-12 470 376)"/>
+    <ellipse cx="356" cy="394" rx="24" ry="9" transform="rotate(22 356 394)"/>
+    <ellipse cx="342" cy="416" rx="20" ry="8" transform="rotate(34 342 416)"/>
+    <ellipse cx="438" cy="426" rx="18" ry="7" transform="rotate(-18 438 426)"/>
+  </g>
+  <g fill="none" stroke="#c99a62" stroke-width="2.5" stroke-linecap="round">
+    <path d="M180 476c34-40 76-62 122-68"/>
+    <path d="M620 476c-34-40-76-62-122-68"/>
+  </g>
+  <g fill="#e3b7be">
+    <circle cx="180" cy="476" r="7"/>
+    <circle cx="620" cy="476" r="7"/>
+    <circle cx="248" cy="404" r="5"/>
+    <circle cx="552" cy="404" r="5"/>
+    <circle cx="400" cy="238" r="6"/>
+  </g>
+  <path d="M336 520h128" fill="none" stroke="#c99a62" stroke-width="3" stroke-linecap="round"/>
+</svg>

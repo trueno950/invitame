@@ -124,6 +124,87 @@ const BAPTISM_SCHEMA = {
   },
 };
 
+/** The XV años schema E3a publishes for `xv-arch-01` (S4). */
+const XV_ARCH_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "celebrantName",
+    "date",
+    "parents",
+    "honorSponsors",
+    "ceremonyPlace",
+    "ceremonyAddress",
+    "ceremonyTime",
+    "receptionPlace",
+    "receptionAddress",
+    "receptionTime",
+    "dressCode",
+    "message",
+    "rsvpContact",
+  ],
+  properties: {
+    celebrantName: { type: "string", maxLength: 80 },
+    date: { type: "string", format: "date" },
+    parents: { type: "string", maxLength: 400 },
+    honorSponsors: { type: "string", maxLength: 400 },
+    chambelanes: { type: "string", maxLength: 400 },
+    ceremonyPlace: { type: "string", maxLength: 120 },
+    ceremonyAddress: { type: "string", maxLength: 200 },
+    ceremonyTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    receptionPlace: { type: "string", maxLength: 120 },
+    receptionAddress: { type: "string", maxLength: 200 },
+    receptionTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    dressCode: { type: "string", maxLength: 120 },
+    message: { type: "string", maxLength: 500 },
+    giftRegistry: { type: "string", maxLength: 200 },
+    rsvpContact: { type: "string", maxLength: 120 },
+    mainPhoto: { type: "string", format: "uri" },
+  },
+};
+
+/** The wedding schema E3a publishes for `wedding-arch-01` (S4). */
+const WEDDING_ARCH_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "coupleNameOne",
+    "coupleNameTwo",
+    "date",
+    "ceremonyPlace",
+    "ceremonyAddress",
+    "ceremonyTime",
+    "receptionPlace",
+    "receptionAddress",
+    "receptionTime",
+    "dressCode",
+    "message",
+    "rsvpContact",
+  ],
+  properties: {
+    coupleNameOne: { type: "string", maxLength: 80 },
+    coupleNameTwo: { type: "string", maxLength: 80 },
+    date: { type: "string", format: "date" },
+    firstFamilyParents: { type: "string", maxLength: 400 },
+    secondFamilyParents: { type: "string", maxLength: 400 },
+    weddingSponsors: { type: "string", maxLength: 400 },
+    ceremonyPlace: { type: "string", maxLength: 120 },
+    ceremonyAddress: { type: "string", maxLength: 200 },
+    ceremonyTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    receptionPlace: { type: "string", maxLength: 120 },
+    receptionAddress: { type: "string", maxLength: 200 },
+    receptionTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    dressCode: { type: "string", maxLength: 120 },
+    message: { type: "string", maxLength: 500 },
+    giftRegistry: { type: "string", maxLength: 200 },
+    hashtag: { type: "string", maxLength: 60 },
+    rsvpContact: { type: "string", maxLength: 120 },
+    mainPhoto: { type: "string", format: "uri" },
+  },
+};
+
 const SUMMARY: InvitationSummary = {
   id: ID,
   templateVersionId: VERSION_ID,
@@ -381,6 +462,131 @@ describe("contentSections", () => {
 
   it("has no section for a schema that declares no field", () => {
     assert.deepEqual(contentSections([]), []);
+  });
+});
+
+describe("the elegant fields in the editor", () => {
+  it("labels every new XV años and wedding field in Spanish", () => {
+    assert.deepEqual(
+      [
+        "honorSponsors",
+        "chambelanes",
+        "coupleNameOne",
+        "coupleNameTwo",
+        "firstFamilyParents",
+        "secondFamilyParents",
+        "weddingSponsors",
+        "dressCode",
+        "hashtag",
+      ].map((name) => [name, INVITATION_FIELD_LABELS[name]]),
+      [
+        ["honorSponsors", "Padrinos de honor"],
+        ["chambelanes", "Chambelanes (opcional)"],
+        ["coupleNameOne", "Primer nombre de la pareja"],
+        ["coupleNameTwo", "Segundo nombre de la pareja"],
+        ["firstFamilyParents", "Padres de una parte (opcional)"],
+        ["secondFamilyParents", "Padres de la otra parte (opcional)"],
+        ["weddingSponsors", "Padrinos de la boda (opcional)"],
+        ["dressCode", "Código de vestimenta"],
+        ["hashtag", "Hashtag (opcional)"],
+      ],
+    );
+  });
+
+  it("groups the XV años fields into the short sections of the editor", () => {
+    assert.deepEqual(
+      contentSections(contentFields(XV_ARCH_SCHEMA)).map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ]),
+      [
+        ["Festejado", ["celebrantName", "parents", "honorSponsors", "chambelanes"]],
+        ["Cuándo", ["date"]],
+        ["Ceremonia", ["ceremonyPlace", "ceremonyAddress", "ceremonyTime"]],
+        ["Recepción", ["receptionPlace", "receptionAddress", "receptionTime"]],
+        ["Contenido", ["dressCode", "message", "rsvpContact", "giftRegistry", "mainPhoto"]],
+      ],
+    );
+  });
+
+  it("groups the wedding fields into the short sections of the editor", () => {
+    assert.deepEqual(
+      contentSections(contentFields(WEDDING_ARCH_SCHEMA)).map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ]),
+      [
+        [
+          "Festejado",
+          [
+            "coupleNameOne",
+            "coupleNameTwo",
+            "firstFamilyParents",
+            "secondFamilyParents",
+            "weddingSponsors",
+          ],
+        ],
+        ["Cuándo", ["date"]],
+        ["Ceremonia", ["ceremonyPlace", "ceremonyAddress", "ceremonyTime"]],
+        ["Recepción", ["receptionPlace", "receptionAddress", "receptionTime"]],
+        [
+          "Contenido",
+          ["dressCode", "message", "rsvpContact", "giftRegistry", "hashtag", "mainPhoto"],
+        ],
+      ],
+    );
+  });
+
+  it("edits every list with a multi-line field and every time with a time input", () => {
+    const fields = contentFields(WEDDING_ARCH_SCHEMA);
+    const inputOf = (name: string) => fields.find((field) => field.name === name)?.input;
+
+    for (const name of ["firstFamilyParents", "secondFamilyParents", "weddingSponsors"]) {
+      assert.equal(inputOf(name)?.kind, "textarea", name);
+    }
+    assert.equal(inputOf("ceremonyTime")?.kind, "time");
+    assert.equal(inputOf("receptionTime")?.kind, "time");
+    // A single-line field of the same schema stays single-line.
+    assert.equal(inputOf("dressCode")?.kind, "text");
+  });
+
+  it("marks a list optional in its label, not with the HTML required attribute", () => {
+    const fields = contentFields(XV_ARCH_SCHEMA);
+    const chambelanes = fields.find((field) => field.name === "chambelanes");
+
+    assert.equal(chambelanes?.required, false);
+    assert.equal(chambelanes?.label.endsWith("(opcional)"), true);
+    assert.equal(fields.find((field) => field.name === "honorSponsors")?.required, true);
+  });
+
+  it("saves a multi-line list exactly as typed, one name per line", () => {
+    const fields = contentFields(XV_ARCH_SCHEMA);
+    const form = new FormData();
+
+    form.set("celebrantName", "Valentina Ramírez");
+    form.set("parents", "Miguel Ramírez Alcántara\nAdriana Solís de Ramírez");
+    form.set("honorSponsors", "Joaquín Esquivel del Valle\nMariana Robles de Esquivel");
+    form.set("chambelanes", "Diego Fuentes\nRodrigo Salas");
+    form.set("date", "2026-08-15");
+    form.set("ceremonyPlace", "Parroquia de San Agustín");
+    form.set("ceremonyAddress", "Calle de los Fresnos 132");
+    form.set("ceremonyTime", "18:00");
+    form.set("receptionPlace", "Jardín de los Olivos");
+    form.set("receptionAddress", "Camino Real a Santa Fe 41");
+    form.set("receptionTime", "20:30");
+    form.set("dressCode", "Formal · etiqueta");
+    form.set("message", "Hay días que se esperan toda una vida.");
+    form.set("rsvpContact", "Adriana Solís · 55 8120 4471");
+
+    const parsed = parseContentForm(fields, form);
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.ok ? parsed.content.chambelanes : "", "Diego Fuentes\nRodrigo Salas");
+    assert.deepEqual(
+      parsed.ok ? parsed.content.parents : "",
+      "Miguel Ramírez Alcántara\nAdriana Solís de Ramírez",
+    );
+    assert.equal(parsed.ok ? Object.hasOwn(parsed.content, "giftRegistry") : true, false);
   });
 });
 

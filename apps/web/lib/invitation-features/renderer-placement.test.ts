@@ -4,13 +4,17 @@ import { describe, it } from "node:test";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BabyShowerClassicRenderer } from "../../app/_components/renderers/baby-shower-classic-01/baby-shower-classic-renderer.ts";
+import { BaptismArchRenderer } from "../../app/_components/renderers/baptism-arch-01/baptism-arch-renderer.ts";
 import { BaptismClassicRenderer } from "../../app/_components/renderers/baptism-classic-01/baptism-classic-renderer.ts";
 import { BirthdayMapRenderer } from "../../app/_components/renderers/birthday-map-01/birthday-map-renderer.ts";
 import { BirthdayPosterRenderer } from "../../app/_components/renderers/birthday-poster-01/birthday-poster-renderer.ts";
 import { BirthdayStoryRenderer } from "../../app/_components/renderers/birthday-story-01/birthday-story-renderer.ts";
+import { WeddingArchRenderer } from "../../app/_components/renderers/wedding-arch-01/wedding-arch-renderer.ts";
+import { XVArchRenderer } from "../../app/_components/renderers/xv-arch-01/xv-arch-renderer.ts";
 import { BABY_SHOWER_THEMES } from "../renderers/baby-shower-themes.ts";
 import { BAPTISM_THEMES } from "../renderers/baptism-themes.ts";
 import { BIRTHDAY_THEMES } from "../renderers/birthday-themes.ts";
+import { ELEGANT_THEMES } from "../renderers/elegant-themes.ts";
 import { findRenderer } from "../renderers/registry.ts";
 import type { InvitationFeatures } from "./invitation-features.ts";
 
@@ -106,6 +110,69 @@ const BAPTISM_MINIMAL = {
   rsvpContact: "Confirma con Valentina al 55 9876 5432",
 };
 
+const XV_CONTENT = {
+  celebrantName: "Valentina Ramírez",
+  date: "2026-08-15",
+  parents: "Miguel Ramírez Alcántara\nAdriana Solís de Ramírez",
+  honorSponsors: "Joaquín Esquivel del Valle\nMariana Robles de Esquivel",
+  ceremonyPlace: "Parroquia de San Agustín",
+  ceremonyAddress: "Calle de los Fresnos 132, Ciudad de México",
+  ceremonyTime: "18:00",
+  receptionPlace: "Jardín de los Olivos",
+  receptionAddress: "Camino Real a Santa Fe 41, Ciudad de México",
+  receptionTime: "20:30",
+  dressCode: "Formal · etiqueta",
+  message: "Hay días que se esperan toda una vida.",
+  rsvpContact: "Adriana Solís · 55 8120 4471",
+  mainPhoto: "https://example.com/valentina.svg",
+};
+
+const XV_MINIMAL = {
+  ...XV_CONTENT,
+  mainPhoto: undefined,
+};
+
+const WEDDING_CONTENT = {
+  coupleNameOne: "Ana Sofía",
+  coupleNameTwo: "Daniel",
+  date: "2026-09-12",
+  firstFamilyParents: "Roberto Sánchez y Elena Vargas",
+  secondFamilyParents: "Jorge Medina y Lucía Peña",
+  ceremonyPlace: "Parroquia de Santa Ana",
+  ceremonyAddress: "Av. Juárez 120, Centro, Querétaro",
+  ceremonyTime: "17:00",
+  receptionPlace: "Hacienda San Gabriel",
+  receptionAddress: "Camino a la Hacienda 8, Querétaro",
+  receptionTime: "19:30",
+  dressCode: "Formal",
+  message: "Nos encantaría celebrar contigo.",
+  rsvpContact: "Confirma con Ana Sofía al 55 1234 5678",
+  mainPhoto: "https://example.com/boda.svg",
+};
+
+const WEDDING_MINIMAL = {
+  coupleNameOne: "Ana Sofía",
+  coupleNameTwo: "Daniel",
+  date: "2026-09-12",
+  ceremonyPlace: "Parroquia de Santa Ana",
+  ceremonyAddress: "Av. Juárez 120, Centro, Querétaro",
+  ceremonyTime: "17:00",
+  receptionPlace: "Hacienda San Gabriel",
+  receptionAddress: "Camino a la Hacienda 8, Querétaro",
+  receptionTime: "19:30",
+  dressCode: "Formal",
+  message: "Nos encantaría celebrar contigo.",
+  rsvpContact: "Confirma con Ana Sofía al 55 1234 5678",
+};
+
+const BAPTISM_ARCH_CONTENT = {
+  ...BAPTISM_CONTENT,
+};
+
+const BAPTISM_ARCH_MINIMAL = {
+  ...BAPTISM_MINIMAL,
+};
+
 const LAYOUTS: readonly LayoutCase[] = [
   {
     key: "birthday-map-01",
@@ -172,6 +239,88 @@ const LAYOUTS: readonly LayoutCase[] = [
       "rsvp",
     ],
     minimal: BAPTISM_MINIMAL,
+    places: ["Ceremonia", "Recepción"],
+  },
+  {
+    key: "xv-arch-01",
+    Renderer: XVArchRenderer,
+    themes: ELEGANT_THEMES,
+    content: XV_CONTENT,
+    sectionsWithFeatures: [
+      "hero",
+      "family",
+      "ceremony",
+      "reception",
+      "details",
+      "features",
+      "message",
+      "rsvp",
+    ],
+    minimalSectionsWithFeatures: [
+      "hero",
+      "family",
+      "ceremony",
+      "reception",
+      "details",
+      "features",
+      "message",
+      "rsvp",
+    ],
+    minimal: XV_MINIMAL,
+    places: ["Ceremonia", "Recepción"],
+  },
+  {
+    key: "wedding-arch-01",
+    Renderer: WeddingArchRenderer,
+    themes: ELEGANT_THEMES,
+    content: WEDDING_CONTENT,
+    sectionsWithFeatures: [
+      "hero",
+      "family",
+      "ceremony",
+      "reception",
+      "details",
+      "features",
+      "message",
+      "rsvp",
+    ],
+    minimalSectionsWithFeatures: [
+      "hero",
+      "ceremony",
+      "reception",
+      "details",
+      "features",
+      "message",
+      "rsvp",
+    ],
+    minimal: WEDDING_MINIMAL,
+    places: ["Ceremonia", "Recepción"],
+  },
+  {
+    key: "baptism-arch-01",
+    Renderer: BaptismArchRenderer,
+    themes: ELEGANT_THEMES,
+    content: BAPTISM_ARCH_CONTENT,
+    sectionsWithFeatures: [
+      "hero",
+      "family",
+      "ceremony",
+      "reception",
+      "details",
+      "features",
+      "message",
+      "rsvp",
+    ],
+    minimalSectionsWithFeatures: [
+      "hero",
+      "family",
+      "ceremony",
+      "reception",
+      "features",
+      "message",
+      "rsvp",
+    ],
+    minimal: BAPTISM_ARCH_MINIMAL,
     places: ["Ceremonia", "Recepción"],
   },
 ];

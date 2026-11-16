@@ -51,7 +51,15 @@ export interface BaptismContent {
 
 /** The typed content of a stored version, or a `RendererPropsError` naming every defect. */
 export function parseBaptismClassicContent(value: unknown): BaptismContent {
-  const reader = contentReader(BAPTISM_CLASSIC_COMPONENT_KEY, value);
+  return parseBaptismContent(BAPTISM_CLASSIC_COMPONENT_KEY, value);
+}
+
+/**
+ * The baptism content, read for the layout that owns it (E3c; S4): the formal baptism reuses this schema
+ * exactly, so both renderers parse the same fields and only the component key of a refusal differs.
+ */
+export function parseBaptismContent(componentKey: string, value: unknown): BaptismContent {
+  const reader = contentReader(componentKey, value);
 
   const celebrantName = reader.text("celebrantName");
   const date = reader.formatted("date", isCalendarDate, "a calendar date as YYYY-MM-DD");

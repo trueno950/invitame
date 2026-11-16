@@ -61,15 +61,20 @@ export function truncateText(text: string, maxLength: number): string {
 
 /**
  * The static share metadata of an invitation page (A5, A8): the title names the celebrant when the
- * content has one (a baby shower names the baby instead, S13), the description is the stored message shortened to about 150 characters, and the page
- * asks no search engine and no share crawler to index or follow it. No image is generated.
+ * content has one (a baby shower names the baby instead, S13; a wedding names the couple, E3c), the
+ * description is the stored message shortened to about 150 characters, and the page asks no search engine
+ * and no share crawler to index or follow it. No image is generated.
  */
 export function invitationMetadata(content: unknown): InvitationPageMetadata {
   const celebrantName = contentText(content, "celebrantName") || contentText(content, "babyName");
+  const coupleNameOne = contentText(content, "coupleNameOne");
+  const coupleNameTwo = contentText(content, "coupleNameTwo");
   const title =
-    celebrantName === ""
-      ? PUBLIC_INVITATION_COPY.titleFallback
-      : PUBLIC_INVITATION_COPY.title(celebrantName);
+    celebrantName !== ""
+      ? PUBLIC_INVITATION_COPY.title(celebrantName)
+      : coupleNameOne !== "" && coupleNameTwo !== ""
+        ? PUBLIC_INVITATION_COPY.coupleTitle(coupleNameOne, coupleNameTwo)
+        : PUBLIC_INVITATION_COPY.titleFallback;
   const message = contentText(content, "message");
   const description =
     message === "" ? undefined : truncateText(message, INVITATION_DESCRIPTION_MAX_LENGTH);

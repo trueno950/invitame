@@ -1,6 +1,7 @@
 import { BABY_SHOWER_THEME, BABY_SHOWER_THEMES } from "./baby-shower-themes.ts";
 import { BAPTISM_THEME, BAPTISM_THEMES } from "./baptism-themes.ts";
 import { BIRTHDAY_THEME, BIRTHDAY_THEMES } from "./birthday-themes.ts";
+import { ELEGANT_THEME, ELEGANT_THEMES } from "./elegant-themes.ts";
 import type { InvitationTheme } from "./theme-tokens.ts";
 
 /**
@@ -59,6 +60,30 @@ export const THEMED_LAYOUTS: readonly ThemedLayoutDefinition[] = [
     description: "Una invitación de bautizo con ceremonia y recepción en su propio bloque.",
     themes: BAPTISM_THEMES,
     theme: BAPTISM_THEME,
+  },
+  // The elegant line (E3c; S4): one visual direction, «Arco y foto», shipped as three layouts because each
+  // occasion keeps its own content schema. All three share the eight elegant themes.
+  {
+    componentKey: "xv-arch-01",
+    title: "Arco y foto",
+    description:
+      "La foto en un arco con el nombre sobre un velo, y tarjetas elegantes para los datos.",
+    themes: ELEGANT_THEMES,
+    theme: ELEGANT_THEME,
+  },
+  {
+    componentKey: "wedding-arch-01",
+    title: "Arco y foto",
+    description: "Un arco con los dos nombres de la pareja y tarjetas finas para la boda.",
+    themes: ELEGANT_THEMES,
+    theme: ELEGANT_THEME,
+  },
+  {
+    componentKey: "baptism-arch-01",
+    title: "Arco y foto",
+    description: "Un arco sereno para el bautizo formal, con el nombre del bebé sobre el velo.",
+    themes: ELEGANT_THEMES,
+    theme: ELEGANT_THEME,
   },
 ];
 

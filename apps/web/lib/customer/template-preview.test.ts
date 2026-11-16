@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { BABY_SHOWER_THEME, BABY_SHOWER_THEMES } from "../renderers/baby-shower-themes.ts";
+import { BAPTISM_THEME, BAPTISM_THEMES } from "../renderers/baptism-themes.ts";
 import {
   BIRTHDAY_THEME,
   BIRTHDAY_THEMES,
   THEMED_LAYOUT_KEYS,
 } from "../renderers/birthday-themes.ts";
+import { ELEGANT_THEME, ELEGANT_THEMES } from "../renderers/elegant-themes.ts";
 import type { CreatorTemplate } from "../server/invitations-api.ts";
 import {
   findPreviewTarget,
@@ -272,6 +274,7 @@ describe("previewPath", () => {
 // chooser never needs a name or a key written into it for a new occasion.
 
 const BABY_SHOWER_CATEGORY = { key: "baby-shower", name: "Baby shower" };
+const BAPTISM_CATEGORY = { key: "baptism", name: "Bautizo" };
 
 const BABY_SHOWER_SEEDED: CreatorTemplate[] = BABY_SHOWER_THEMES.map((theme) =>
   template(`baby-shower-classic-01-${theme}`, "baby-shower-classic-01", {
@@ -280,6 +283,86 @@ const BABY_SHOWER_SEEDED: CreatorTemplate[] = BABY_SHOWER_THEMES.map((theme) =>
     configuration: { componentKey: "baby-shower-classic-01", theme },
   }),
 );
+
+const QUINCEANERA_CATEGORY = { key: "quinceanera", name: "XV años" };
+const WEDDING_CATEGORY = { key: "wedding", name: "Boda" };
+
+/** The 24 elegant templates: three arch layouts times eight themes (E3c; S4). */
+function elegantSeed(
+  componentKey: "xv-arch-01" | "wedding-arch-01" | "baptism-arch-01",
+  category: { key: string; name: string },
+): CreatorTemplate[] {
+  return ELEGANT_THEMES.map((theme) =>
+    template(`${componentKey}-${theme}`, componentKey, {
+      name: `Arco y foto · ${ELEGANT_THEME[theme].displayName}`,
+      category,
+      configuration: { componentKey, theme },
+    }),
+  );
+}
+
+describe("elegant occasion cards", () => {
+  it("groups each arch layout into one card titled «Arco y foto» with its eight themes", () => {
+    for (const [componentKey, seed, category] of [
+      ["xv-arch-01", elegantSeed("xv-arch-01", QUINCEANERA_CATEGORY), QUINCEANERA_CATEGORY],
+      ["wedding-arch-01", elegantSeed("wedding-arch-01", WEDDING_CATEGORY), WEDDING_CATEGORY],
+      ["baptism-arch-01", elegantSeed("baptism-arch-01", BAPTISM_CATEGORY), BAPTISM_CATEGORY],
+    ] as const) {
+      const cards = templateChoiceCards(seed, ORIGIN);
+
+      assert.equal(cards.length, 1, componentKey);
+      const [card] = cards;
+
+      assert.equal(card?.kind, "layout");
+      if (card?.kind !== "layout") {
+        continue;
+      }
+      assert.equal(card.componentKey, componentKey);
+      assert.equal(card.title, "Arco y foto");
+      assert.notEqual(card.description.length, 0);
+      assert.deepEqual(card.category, category);
+      assert.deepEqual(
+        card.options.map((option) => option.label),
+        ELEGANT_THEMES.map((theme) => ELEGANT_THEME[theme].displayName),
+      );
+      assert.equal(
+        card.options.every((option) => option.sample !== undefined),
+        true,
+      );
+    }
+  });
+
+  it("shows two baptism designs: the themed Clásica and the elegant Arco y foto", () => {
+    const seeds = [
+      ...BAPTISM_THEMES.map((theme) =>
+        template(`baptism-classic-01-${theme}`, "baptism-classic-01", {
+          name: `Clásica · ${BAPTISM_THEME[theme].displayName}`,
+          category: BAPTISM_CATEGORY,
+          configuration: { componentKey: "baptism-classic-01", theme },
+        }),
+      ),
+      ...elegantSeed("baptism-arch-01", BAPTISM_CATEGORY),
+    ];
+
+    const cards = templateChoiceCards(seeds, ORIGIN);
+
+    assert.deepEqual(
+      cards.map((card) => [
+        card.kind,
+        card.kind === "layout" ? card.componentKey : "",
+        card.kind === "layout" ? card.title : "",
+      ]),
+      [
+        ["layout", "baptism-classic-01", "Clásica"],
+        ["layout", "baptism-arch-01", "Arco y foto"],
+      ],
+    );
+    assert.deepEqual(
+      cards.map((card) => (card.kind === "layout" ? card.options.length : 0)),
+      [BAPTISM_THEMES.length, ELEGANT_THEMES.length],
+    );
+  });
+});
 
 describe("celebration occasion cards", () => {
   it("groups the single baby shower layout into one card with its eight themes", () => {
