@@ -9,10 +9,10 @@ import { BAPTISM_THEME } from "../../../../lib/renderers/baptism-themes.ts";
 import { formatLongDate } from "../../../../lib/renderers/invitation-fields.ts";
 import type { InvitationTheme } from "../../../../lib/renderers/theme-tokens.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
+import { DecorationZone } from "../illustrations/decoration.ts";
 import { CelebrationMotif } from "../themed/celebration-motif.ts";
 import {
   BACKGROUND_LAYER,
-  DECORATION_STRIP,
   displayFontStyle,
   INVITATION_ROOT,
   themeStyle,
@@ -27,6 +27,10 @@ import {
  * invitation has them. A server component with no client script: `.ts` + `createElement` because
  * `node --test` strips types but does not compile JSX. Every color comes from the theme through CSS
  * variables on the root, and the display font is used at the single weight it is loaded with.
+ *
+ * Decoration (I3a, I3e; S4): the theme opens the page as a paper-cut diorama above the band, cuts a torn strip
+ * between the two place cards and the features block, and closes it with a footer strip; a theme without an
+ * illustration keeps the motif strip this layout drew before, in the same place.
  */
 
 export interface BaptismClassicRendererProps {
@@ -123,16 +127,17 @@ export function BaptismClassicRenderer({
       "data-invitation-background": "",
       className: BACKGROUND_LAYER,
     }),
-    // The motif is decoration: it sits in its own strip above the band, where no text can fall on it.
-    h(
-      "div",
-      {
-        "aria-hidden": "true",
-        "data-decoration": "",
-        className: DECORATION_STRIP,
+    // The motif is decoration: it sits in its own strip above the band, where no text can fall on it. The
+    // theme illustration takes that place as a full-width diorama.
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "scene",
+      illustrationClassName: "pointer-events-none block",
+      fallback: {
+        node: h(CelebrationMotif, { motif: theme.motif, tone: "paper" }),
+        className: "pointer-events-none flex h-20 justify-center",
       },
-      h(CelebrationMotif, { motif: theme.motif, tone: "paper" }),
-    ),
+    }),
     h(
       "section",
       {
@@ -207,6 +212,12 @@ export function BaptismClassicRenderer({
       data.receptionAddress,
       data.receptionTime,
     ),
+    // The torn strip separates the two place cards from what follows, as in the other themed layouts.
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "divider",
+      illustrationClassName: "pointer-events-none -mx-5 block",
+    }),
     featuresBlock,
     data.mainPhoto === undefined
       ? null
@@ -255,5 +266,10 @@ export function BaptismClassicRenderer({
         data.rsvpContact,
       ),
     ),
+    h(DecorationZone, {
+      theme: themeKey,
+      part: "footer",
+      illustrationClassName: "pointer-events-none -mx-5 -mb-6 block",
+    }),
   );
 }

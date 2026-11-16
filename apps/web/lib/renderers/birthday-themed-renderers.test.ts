@@ -11,6 +11,8 @@ import { THEME_VARIABLES } from "../../app/_components/renderers/birthday/theme.
 import { BirthdayMapRenderer } from "../../app/_components/renderers/birthday-map-01/birthday-map-renderer.ts";
 import { BirthdayPosterRenderer } from "../../app/_components/renderers/birthday-poster-01/birthday-poster-renderer.ts";
 import { BirthdayStoryRenderer } from "../../app/_components/renderers/birthday-story-01/birthday-story-renderer.ts";
+import { themeIllustration } from "../../app/_components/renderers/illustrations/registry.ts";
+import { ILLUSTRATION_PARTS } from "../../app/_components/renderers/illustrations/types.ts";
 import { BIRTHDAY_THEME, BIRTHDAY_THEMES, THEME_COLOR_ROLES } from "./birthday-themes.ts";
 
 // The three themed birthday layouts (T6b; S2, S3, S5, S7, S8): each is a server component with no client
@@ -147,14 +149,18 @@ describe("themed birthday layouts", () => {
       }
     });
 
-    it(`${layout.key} draws a decorative motif that carries no meaning`, () => {
+    it(`${layout.key} draws a decorative motif or illustration that carries no meaning`, () => {
       for (const theme of BIRTHDAY_THEMES) {
         const html = render(layout, theme);
 
+        // A theme with a paper-cut illustration draws that instead of its motif strip (I3a; S4); either way
+        // the decoration is one `aria-hidden` SVG.
         assert.match(
           html,
-          /<svg[^>]*aria-hidden="true"[^>]*data-motif="[a-z]+"/,
-          `${theme} motif is hidden from assistive technology`,
+          themeIllustration(theme) === undefined
+            ? /<svg[^>]*aria-hidden="true"[^>]*data-motif="[a-z]+"/
+            : /<svg[^>]*aria-hidden="true"[^>]*data-illustration="scene"/,
+          `${theme} decoration is hidden from assistive technology`,
         );
       }
     });
@@ -339,36 +345,52 @@ describe("themed layout defects found by the browser check", () => {
       }
     });
 
-    it(`${layout.key} never distorts a motif`, () => {
+    it(`${layout.key} never distorts its decoration`, () => {
       for (const theme of BIRTHDAY_THEMES) {
-        const motif = tagWith(render(layout, theme), "data-motif");
-
-        assert.match(
-          motif,
-          /preserveAspectRatio="xMidYMid meet"/,
-          `${theme} motif keeps its aspect`,
+        const html = render(layout, theme);
+        const illustrations = [...html.matchAll(/<svg[^>]*data-illustration="[a-z]+"[^>]*>/g)].map(
+          (match) => match[0],
         );
-        assert.doesNotMatch(motif, /preserveAspectRatio="none"/, `${theme} motif is not stretched`);
+        const decorations =
+          illustrations.length > 0 ? illustrations : [tagWith(html, "data-motif")];
+
+        for (const decoration of decorations) {
+          assert.match(
+            decoration,
+            /preserveAspectRatio="xMidYMid (?:meet|slice)"/,
+            `${theme} decoration keeps its aspect`,
+          );
+          assert.doesNotMatch(
+            decoration,
+            /preserveAspectRatio="none"/,
+            `${theme} decoration is not stretched`,
+          );
+        }
       }
     });
 
-    it(`${layout.key} keeps its motif out of the text sections`, () => {
+    it(`${layout.key} keeps every decoration zone out of the text sections`, () => {
       for (const theme of BIRTHDAY_THEMES) {
         const html = render(layout, theme);
-        const index = html.indexOf("data-decoration");
+        const zones = [...html.matchAll(/<div[^>]*data-decoration[^>]*>[\s\S]*?<\/div>/g)];
 
-        assert.ok(index >= 0, `${theme} decoration strip`);
-        for (const [start, end] of sectionRanges(html)) {
-          assert.ok(
-            index < start || index >= end,
-            `${theme} decoration sits outside the section at ${start}`,
-          );
+        assert.ok(zones.length >= 1, `${theme} decoration zones`);
+        for (const zone of zones) {
+          const index = zone.index ?? 0;
+
+          for (const [start, end] of sectionRanges(html)) {
+            assert.ok(
+              index < start || index >= end,
+              `${theme} decoration sits outside the section at ${start}`,
+            );
+          }
+          assert.equal(textOf(zone[0]), "", `${theme} decoration carries no text`);
         }
         assert.equal(textOf(decorationBlock(html)), "", `${theme} decoration carries no text`);
       }
     });
 
-    it(`${layout.key} renders every motif with unique React keys`, () => {
+    it(`${layout.key} renders every motif and illustration with unique React keys`, () => {
       const messages: string[] = [];
       const original = console.error;
 
@@ -378,11 +400,17 @@ describe("themed layout defects found by the browser check", () => {
       try {
         for (const theme of BIRTHDAY_THEMES) {
           const motif = BIRTHDAY_THEME[theme].motif;
+          const illustration = themeIllustration(theme);
 
           // A repeated key among siblings makes React reconcile the wrong node, and the browser console
           // reports it on every guest page. React 19 does not warn while rendering to a string, so the
           // element tree the component returns is inspected directly.
           assert.deepEqual(duplicateKeys(Motif({ motif })), [], `${theme} motif keys`);
+          for (const part of ILLUSTRATION_PARTS) {
+            const drawing = illustration?.[part].draw((name) => `inv-test-${name}`);
+
+            assert.deepEqual(duplicateKeys(drawing), [], `${theme} ${part} keys`);
+          }
           render(layout, theme);
         }
       } finally {

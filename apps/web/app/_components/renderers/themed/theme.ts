@@ -71,6 +71,3 @@ export const INVITATION_ROOT =
 
 /** The theme background layer: viewport-sized, behind the content, and above the site's paper (T6c). */
 export const BACKGROUND_LAYER = "pointer-events-none fixed inset-0 -z-10 bg-(--inv-background)";
-
-/** The decorative motif strip: its own short band at an edge, where no text can fall on it. */
-export const DECORATION_STRIP = "pointer-events-none flex h-20 justify-center";

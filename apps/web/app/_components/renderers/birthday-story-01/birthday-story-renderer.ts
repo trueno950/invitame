@@ -10,6 +10,7 @@ import { BIRTHDAY_THEME } from "../../../../lib/renderers/birthday-themes.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { Motif } from "../birthday/motif.ts";
 import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthday/theme.ts";
+import { DecorationZone } from "../illustrations/decoration.ts";
 
 /*
  * The `birthday-story-01` invitation — «Cuento ilustrado» (T6b; S2, S7, S8), following
@@ -17,6 +18,10 @@ import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthd
  * celebrant introduced as the hero of a story, and the details and the message as numbered chapters. A
  * server component with no client script: `.ts` + `createElement` because `node --test` strips types but
  * does not compile JSX.
+ *
+ * Decoration (I3a; S4): the theme's paper-cut diorama opens the page sheet above the photo, a torn strip
+ * separates the chapters that hold the details from the message, and a footer strip closes the sheet; a theme
+ * without an illustration keeps the motif strip this layout drew before, at the foot of the sheet.
  */
 
 export interface BirthdayStoryRendererProps {
@@ -111,6 +116,14 @@ export function BirthdayStoryRenderer({
             "radial-gradient(circle at 12px 14px, var(--inv-surface) 12px, transparent 12.5px) 0 0 / 24px 14px repeat-x",
         },
       }),
+      // The diorama opens the page inside the sheet, bled over the sheet's own padding and clipped to its
+      // rounded corners, so the scene is a printed band on the paper and never a layer under the text.
+      h(DecorationZone, {
+        theme: themeKey,
+        part: "scene",
+        illustrationClassName:
+          "pointer-events-none -mx-6 -mt-10 block overflow-hidden rounded-t-lg",
+      }),
       h(
         "section",
         {
@@ -196,6 +209,11 @@ export function BirthdayStoryRenderer({
         h("p", { className: "mt-1 text-base text-(color:--inv-ink)" }, data.address),
       ),
       featuresBlock,
+      h(DecorationZone, {
+        theme: themeKey,
+        part: "divider",
+        illustrationClassName: "pointer-events-none -mx-6 block",
+      }),
       h(
         "section",
         { "data-section": "message", "aria-labelledby": `${idPrefix}-message`, className: "mt-7" },
@@ -218,15 +236,15 @@ export function BirthdayStoryRenderer({
         "…y la fiesta continúa contigo.",
       ),
       // Decoration stays inside the page sheet and below every line of text.
-      h(
-        "div",
-        {
-          "aria-hidden": "true",
-          "data-decoration": "",
+      h(DecorationZone, {
+        theme: themeKey,
+        part: "footer",
+        illustrationClassName: "pointer-events-none -mx-6 mt-6 block",
+        fallback: {
+          node: h(Motif, { motif: theme.motif, tone: "paper" }),
           className: "pointer-events-none mt-6 flex h-20 justify-center",
         },
-        h(Motif, { motif: theme.motif, tone: "paper" }),
-      ),
+      }),
     ),
   );
 }

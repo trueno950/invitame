@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "chosen": "01-papel-recortado.html",
+  "handoffs": {
+    "01-papel-recortado.html": {
+      "status": "implemented",
+      "queued": true,
+      "sentAt": "2026-11-15T02:36:46.766Z",
+      "startedAt": "2026-11-15T02:37:22.967Z",
+      "implementedAt": "2026-11-15T04:19:03.989Z",
+      "feature": "odd/tasks/theme-illustrations.md",
+      "note": "Paper-cut illustrations for all 22 themes in the five layouts (scene, divider, footer). Web 1030/1030 tests; 43 browser runs clean.",
+      "previewUrl": "http://localhost:3000/i/invitacion-m8bf24"
+    }
+  }
+}

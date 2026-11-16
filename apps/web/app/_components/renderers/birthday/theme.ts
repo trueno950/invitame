@@ -6,7 +6,6 @@
  */
 export {
   BACKGROUND_LAYER,
-  DECORATION_STRIP,
   DISPLAY_FONT,
   displayFontStyle,
   INVITATION_ROOT,

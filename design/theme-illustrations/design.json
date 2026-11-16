@@ -1,0 +1,28 @@
+{
+  "title": "Theme illustrations — Dinosaurios on the Cartel layout",
+  "brief": "Style samples for the guest invitation of the children's birthday themes: three ways to draw an original, hand-made-looking SVG illustration for «Dinosaurios» on the Cartel layout at 390 px, so the owner can pick a style before 28 themes are drawn. Same content, same layout and the same seven theme colours in all three, so only the illustration technique differs.",
+  "feature": "odd/tasks/theme-illustrations.md",
+  "artboards": [
+    {
+      "file": "01-papel-recortado.html",
+      "title": "Paper cut-out",
+      "tradeoff": "Chunky, warm and instantly readable at 390 px, and each theme becomes a physical diorama; the heaviest hand-drawing of the three, and a busy scene needs a tall header",
+      "width": 390,
+      "height": 1890
+    },
+    {
+      "file": "02-trazo-y-acuarela.html",
+      "title": "Ink line and wash",
+      "tradeoff": "The most obviously hand-made and the most human, with room for personality per theme; the naivest of the three and the most expensive to draw, because every contour is drawn as a line",
+      "width": 390,
+      "height": 1883
+    },
+    {
+      "file": "03-risografia.html",
+      "title": "Risograph, three inks",
+      "tradeoff": "The most designed and the cheapest to scale to 28 themes, with a shareable screen system; its three-ink discipline flattens themes that depend on many hues",
+      "width": 390,
+      "height": 1839
+    }
+  ]
+}
