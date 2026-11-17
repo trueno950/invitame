@@ -409,12 +409,12 @@ formal baptism.
 
 ## Guest invitation features
 
-Status: **current** (F2, F3, F6, F7; S3, S4, S7). The API decides which features an invitation shows: the pinned
-package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `WHATSAPP`, `MUSIC`, and
-`GIFT_REGISTRY`, plus add-to-calendar, which is always on and is not a catalog feature; WhatsApp also needs a stored
-phone and music a stored allow-listed playlist link. The web renders one themed **features block** in every layout,
-gates each layout's own gift registry block with the `giftRegistry` flag, and never reads a package or a feature name
-to choose a code path.
+Status: **current** (F2, F3, F6, F7, M6 G3; S3, S4, S7). The API decides which features an invitation shows: the
+pinned package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `WHATSAPP`, `MUSIC`,
+`GIFT_REGISTRY`, `RSVP`, `GUEST_LIST`, and `QR_PASS`, plus add-to-calendar, which is always on and is not a catalog
+feature; WhatsApp also needs a stored phone and music a stored allow-listed playlist link. The web renders one
+themed **features block** in every layout, gates each layout's own gift registry block with the `giftRegistry` flag,
+and never reads a package or a feature name to choose a code path.
 
 - Placement and shape: each layout (`birthday-map-01`, `birthday-poster-01`, `birthday-story-01`,
   `baby-shower-classic-01`, `baptism-classic-01`) places `InvitationFeaturesBlock`
@@ -451,6 +451,37 @@ to choose a code path.
   `features.giftRegistry` is true and the content has a value. A renderer called with no `features` prop — the
   template chooser previews and `lib/renderers/samples.ts` — keeps the content-alone rule it had before this batch.
   The birthday layouts declare no gift registry field, so they never render one.
+- Attendance (M6 G3; S1, S4): when the public read says `features.rsvp.mode` is `open`, the same block ends with
+  «Confirma tu asistencia»: the guest's name, «¿Asistirás?» with sí/no radios, the party size from 1 to the
+  invitation's own limit, an optional phone, an optional message of at most 280 characters, and one reserved field
+  no person sees — positioned off-screen, out of the tab order (`tabindex="-1"`), `autocomplete="off"`, and
+  `aria-hidden`, so a bot fills it and the API answers success without storing anything. The deadline is named in
+  the invitation's own zone («Confirma antes del 5 de diciembre de 2026 a las 18:00»); once it passes, the card
+  keeps its place and shows «La confirmación de asistencia cerró el …» instead of the form. The card is a plain
+  server-rendered form that posts to a server action: no client script, no client validation, and the server action
+  forwards the browser's address from the incoming request headers, which is what the API's per-address rate limit
+  counts. Every answer — stored, updated, or dropped by the honeypot — comes back to the same page, and the notice
+  is one of the page's own Spanish sentences: «¡Gracias! Recibimos tu respuesta.» as a status, or a `role="alert"`
+  sentence for a refused, closed, rate-limited, or failed submission. A repeat from the same normalized name and
+  phone updates that response instead of duplicating it, so a guest who answers again sees one thank-you. A
+  package with the guest list (`guest-list`) shows nothing here: its personal links are the way in (G4).
+- Personal page (M6 G4; S1, S4): `/i/[slug]/g/[token]` renders the same layouts and the same features block as the
+  public page, so a guest reads the invitation in its own theme. The block's heading becomes the greeting
+  («Hola, Ana», from the first word of the stored name) and its first card states the seats
+  («Tienes 4 lugares reservados a tu nombre.», singular when it is one). The last cards are the guest's own:
+  «Tu asistencia» repeats the open form's sí/no card with three differences — it never asks for a name or a phone
+  (the guest record already holds them), the party select stops at the guest's own seats, and there is no honeypot,
+  because the API counts this answer against the guest's own link — and it shows the answer the guest already gave
+  («Nos dijiste que vienen 2 personas.») with the closing note in place of the form once the deadline passed. The
+  personal page keeps the notice of the open form («¡Gracias! Recibimos tu respuesta.») as a status above the
+  invitation and a `role="alert"` sentence for a refusal, a closed form, a rate limit, or an outage.
+- Access pass (M6 G4; S4): a confirmed guest of a package that grants `QR_PASS` ends with «Tu pase de acceso», one
+  white card whose QR is drawn on the server as SVG and handed to an `<img>` as a data URL — no client script, no
+  third-party request, and no raw HTML in the page. The code encodes the creator's check-in URL only
+  (`/cuenta/acceso/<slug>/<token>`, see [Web boundary](../architecture/overview.md#web-boundary-current)), so a
+  screenshot of the pass leaks nothing the guest's own link does not already carry: no name, no seats, no phone, and
+  no invitation id. The card says «Muéstralo en la entrada. Es personal: no lo compartas.» and sits last, after the
+  answer.
 - Degradation: an unsupported zone turns off only the countdown and the calendar (the two features that read a
   wall clock); a snapshot whose facts cannot be read turns off the whole block. Neither is a guest-visible error.
 - Creator side: the draft page (`/cuenta/invitaciones/[id]`) has a «Funcionalidades» section after the content
@@ -486,6 +517,40 @@ plain text. The customer «Rosa y vino» theme stays; the invitation pages simpl
   fields from `sm` up; a multi-line field spans both. The side third holds the status badge, the slug as text, what
   is still missing («Faltan: …»), and the archive form, and stays in view (`lg:sticky`). An archived draft and a
   retired version keep the same layout, with the stored content in place of the form.
+- Attendance (M6 G3; S1, S4): below «Funcionalidades», the detail page adds an «Asistencia» section while the
+  package includes RSVP. It writes the deadline with a `datetime-local` field read in the invitation's own zone (the
+  zone is named under the field and travels in a hidden field, so the action reads the same wall clock the creator
+  saw), the party limit as a select from 1 to 10 personas, and saves through a server action with the same
+  notice/error query the other sections use; a refused save lists its Spanish issue sentences under the error. An
+  archived invitation shows the same pair read-only. The section links to
+  `/cuenta/invitaciones/[id]/asistencia`, which lists the answers newest first with the totals (personas que
+  asisten, no asistirán, respuestas), marks an answer that was updated, and keeps the table scrollable in its own
+  box on a phone. «Descargar CSV» goes through a route handler that forwards the owner's session, passes the API's
+  own `text/csv` type and attachment filename through, and answers `Cache-Control: no-store`; an ended session goes
+  to sign-in, a missing or foreign invitation is 404, and an outage is 503 rather than an empty file.
+- Guest list (M6 G4; S1, S4): when the pinned package grants `GUEST_LIST`, the same page keeps its frames and shows
+  the guests instead of the open answers. Six compact totals (invitados, lugares, personas que asisten, no
+  asistirán, sin responder, en la entrada) sit in a grid of two columns on a phone and six from `xl`; below them a
+  status line repeats the deadline and the party limit next to «Descargar CSV» — the same route handler, which in this
+  mode exports the guest list with pending guests and check-in times. The table has one row per guest with the name,
+  the stored phone and note under it, the seats, ¿asiste?, the confirmed party, the first check-in on the
+  invitation's clock, and the row's actions: «Editar» and «Quitar» are links that reload the page with `?editar=<id>` or
+  `?quitar=<id>`, which show one prefilled form or one confirmation panel above the table — removing a guest also
+  deletes the answer they gave, so it is never one click — and «Generar nuevo enlace» is a one-click form with the
+  warning «El enlace anterior dejará de funcionar y la persona necesitará el nuevo.» beside its button. «Agregar
+  invitado» is the same kind of server-rendered form (name, seats 1-10, optional phone and note). Every control is a
+  plain form posting to a server action, so the page needs no client script.
+- One-time personal link (M6 G4; S4): creating a guest or rotating their link answers the plain token exactly once,
+  and the attendance page shows the full link in «Enlace personal de …» — a read-only field to select by hand, because
+  «Copiar enlace» would need a script — with «Compartir por WhatsApp», which opens `wa.me` with a neutral Spanish
+  message naming the guest and carrying the link. The panel says «Cópialo ahora: este enlace se muestra una sola vez»
+  and is gone after the render that showed it; the list itself never holds a link, and a line above the table says so.
+- Check-in page (M6 G4; S4): `/cuenta/acceso/<slug>/<token>` is the page a QR opens. It uses the customer workspace
+  frames, the status note «Puedes volver a mostrar el mismo pase: el registro no se duplica.», and three cards — the
+  seats, the confirmed party, and the first check-in on the invitation's clock. Every refusal is one Spanish sentence
+  in the same frames («Este invitado todavía no confirma que asistirá…», «No encontramos este pase…», «Esta
+  invitación no incluye el pase de acceso…»), with the two ways back; a signed-out visitor is sent through sign-in
+  and returned to the same pass.
 - Inputs: `contentFields` derives each control from that property of the pinned schema and never from the template
   name. `format: "date"` is an `input type="date"`; `format: "time"`, or a `pattern` that accepts every 24-hour
   time and refuses anything else, is `input type="time"`; `format: "uri"` is `input type="url"` with

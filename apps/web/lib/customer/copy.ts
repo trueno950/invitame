@@ -275,6 +275,11 @@ export const INVITATION_NOTICE_CODES = [
   "published",
   "unpublished",
   "features-saved",
+  "rsvp-saved",
+  "guest-added",
+  "guest-saved",
+  "guest-removed",
+  "link-rotated",
 ] as const;
 export type InvitationNoticeCode = (typeof INVITATION_NOTICE_CODES)[number];
 
@@ -286,6 +291,11 @@ export const INVITATION_NOTICE_COPY: Record<InvitationNoticeCode, string> = {
   published: "Listo, publicamos tu invitación.",
   unpublished: "Listo, tu invitación volvió a borrador.",
   "features-saved": "Listo, guardamos las funcionalidades.",
+  "rsvp-saved": "Listo, guardamos la configuración de asistencia.",
+  "guest-added": "Listo, agregamos al invitado.",
+  "guest-saved": "Listo, guardamos los cambios del invitado.",
+  "guest-removed": "Listo, quitamos al invitado de la lista.",
+  "link-rotated": "Listo, generamos un enlace nuevo.",
 };
 
 /**
@@ -321,6 +331,19 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "content-unavailable":
     "No pudimos comprobar la plantilla de esta invitación. Inténtalo de nuevo en unos minutos.",
   "features-invalid": "Revisa las funcionalidades: hay un dato que no pudimos guardar.",
+  "rsvp-settings-invalid":
+    "Revisa la configuración de asistencia: hay un dato que no pudimos guardar.",
+  "invalid-guest":
+    "Revisa los datos del invitado: el nombre, los lugares, el teléfono o la nota no cumplen lo que pide el formulario.",
+  "guest-list-unavailable":
+    "Esta invitación no incluye la lista de invitados. Se muestra con el paquete Deluxe.",
+  "guest-not-found": "No encontramos ese invitado en esta invitación.",
+  "guest-not-confirmed":
+    "Ese invitado todavía no confirma que asistirá, así que no podemos registrar su entrada.",
+  "guest-seats-below-response":
+    "No puedes dejar menos lugares de los que la persona ya confirmó. Ajusta primero su respuesta o pide que la cambie.",
+  "qr-pass-unavailable":
+    "Esta invitación no incluye el pase de acceso con QR. Se muestra con el paquete Deluxe.",
   unavailable: "No pudimos completar la acción. Inténtalo de nuevo en unos minutos.",
 };
 
@@ -377,6 +400,50 @@ export const FEATURE_COPY = {
 } as const;
 
 /**
+ * The creator's «Asistencia» section and its responses page (M6 G3; S1, S4). The section configures when answers
+ * close and how many people one may name; the page lists every answer with its totals and the CSV download.
+ */
+export const RSVP_COPY = {
+  sectionTitle: "Asistencia",
+  sectionHint:
+    "Decide hasta cuándo aceptas respuestas y cuántas personas puede confirmar cada invitado. Los invitados no ven a los demás.",
+  deadlineLabel: "Fecha y hora límite (opcional)",
+  deadlineHint:
+    "Después de esta fecha y hora la invitación deja de recibir respuestas. Se lee en la zona horaria de la invitación.",
+  partyLimitLabel: "Personas por respuesta",
+  partyLimitHint: "Cada invitado puede confirmar de 1 a este número de personas.",
+  save: "Guardar asistencia",
+  archivedNote:
+    "Esta invitación está archivada: puedes consultar la configuración de asistencia, pero ya no editarla.",
+  unavailable:
+    "No pudimos leer la configuración de asistencia. Inténtalo de nuevo en unos minutos.",
+  responsesLink: "Ver respuestas",
+  responsesTitle: "Respuestas de asistencia | InvitaMe",
+  responsesEyebrow: "Tu invitación",
+  responsesHeading: "Respuestas de asistencia",
+  responsesIntro:
+    "Aquí están las respuestas que recibió tu invitación, de la más reciente a la más antigua.",
+  totalsHeading: "Totales",
+  totalAttending: "Personas que asisten",
+  totalDeclined: "No asistirán",
+  totalResponses: "Respuestas",
+  emptyNote:
+    "Todavía no hay respuestas. Cuando alguien confirme desde la invitación, aparecerá aquí.",
+  download: "Descargar CSV",
+  columnName: "Nombre",
+  columnAnswer: "¿Asiste?",
+  columnParty: "Personas",
+  columnPhone: "Teléfono",
+  columnMessage: "Mensaje",
+  columnAnsweredAt: "Respondió",
+  attendingYes: "Sí",
+  attendingNo: "No",
+  updatedNote: "Actualizada",
+  deadlineNone: "Sin fecha límite",
+  backToInvitation: "Volver a la invitación",
+} as const;
+
+/**
  * The Spanish label of each zone the creator may pick (S4). Each one names the place and keeps the IANA id in
  * parentheses, because several zones serve neighboring cities and the id is what the invitation stores.
  */
@@ -412,6 +479,16 @@ export const FEATURE_ISSUE_COPY = {
 } as const;
 
 /**
+ * Why the API refused an RSVP settings save, in Spanish (M6 G3; S4). The API answers deterministic English issues;
+ * the action maps each one to a code in its own query and these sentences turn it back.
+ */
+export const RSVP_SETTINGS_ISSUE_COPY = {
+  deadline: "Escribe una fecha y hora válidas para cerrar la confirmación, o deja el campo vacío.",
+  party: "Elige un número de personas entre 1 y 10.",
+  other: "Hay un dato de la asistencia que no pudimos guardar. Revísalo y vuelve a intentarlo.",
+} as const;
+
+/**
  * The guest's page of a published invitation (M5 T5; S1, S5, A3, A5). A guest is not a customer here: the
  * page shows the invitation and nothing about the owner's account, and it asks search engines to stay away.
  */
@@ -429,4 +506,175 @@ export const PUBLIC_INVITATION_COPY = {
   home: "Ir al inicio",
   /** The discreet footer credit that links back to the site (S1). */
   madeWith: "Hecha con InvitaMe",
+} as const;
+
+/**
+ * The guest's own page (`/i/<slug>/g/<token>`) and their own pase (M6 G4; S1, S4). The guest is greeted by the first
+ * name they were registered with, reads how many seats they have, answers with the same sí/no card the open form uses,
+ * and sees their access pass once they confirmed. Nothing here promises a delivery, and nothing names another guest.
+ */
+export const GUEST_PAGE_COPY = {
+  pageTitle: "Tu invitación | InvitaMe",
+  greeting: (firstName: string) => `Hola, ${firstName}`,
+  seatsOne: "Tienes 1 lugar reservado a tu nombre.",
+  seatsMany: (seats: number) => `Tienes ${seats} lugares reservados a tu nombre.`,
+  answerTitle: "Tu asistencia",
+  answerCurrentYes: (party: number) =>
+    `Nos dijiste que vienen ${party === 1 ? "1 persona" : `${party} personas`}.`,
+  answerCurrentNo: "Nos dijiste que no podrás asistir.",
+  answerPending: "Todavía no nos dices si podrás asistir.",
+  answerHint: "Puedes cambiar tu respuesta hasta la fecha límite.",
+  partyLabel: "Personas que vienen contigo (incluido tú)",
+  messageLabel: "Mensaje (opcional)",
+  messageHint: "Puedes escribir hasta 280 caracteres.",
+  submit: "Guardar respuesta",
+  /** The prefilled WhatsApp message of a personal link the creator shares (G4). */
+  shareMessage: (firstName: string, url: string) =>
+    `Hola ${firstName}, aquí está tu invitación personal: ${url}`,
+  passTitle: "Tu pase de acceso",
+  passHint: "Muéstralo en la entrada. Es personal: no lo compartas.",
+  passAlt: "Código QR de tu pase de acceso",
+} as const;
+
+/**
+ * The creator's guest list (M6 G4; S1, S4): the totals, the guests with their answer and check-in state, the form
+ * that adds and edits one, and the two one-time reveals of a personal link.
+ */
+export const GUEST_COPY = {
+  responsesTitle: "Lista de invitados | InvitaMe",
+  responsesEyebrow: "Tu invitación",
+  responsesHeading: "Lista de invitados",
+  responsesIntro:
+    "Aquí están tus invitados con su respuesta y su registro en la entrada. Cada uno recibe un enlace personal.",
+  totalGuests: "Invitados",
+  totalSeats: "Lugares",
+  totalAttending: "Personas que asisten",
+  totalDeclined: "No asistirán",
+  totalPending: "Sin responder",
+  totalCheckedIn: "En la entrada",
+  emptyNote:
+    "Todavía no tienes invitados. Agrega el primero y comparte su enlace personal cuando lo tengas.",
+  columnGuest: "Invitado",
+  columnSeats: "Lugares",
+  columnAnswer: "¿Asiste?",
+  columnParty: "Personas",
+  columnCheckIn: "Entrada",
+  columnActions: "Acciones",
+  answerPending: "Sin responder",
+  answerYes: "Sí",
+  answerNo: "No",
+  checkInDone: (time: string) => `Registrado el ${time}`,
+  checkInNone: "Sin registrar",
+  updatedNote: "Actualizada",
+  addHeading: "Agregar invitado",
+  addHint:
+    "Escribe el nombre y cuántos lugares le reservas. Al guardar te mostramos su enlace personal una sola vez.",
+  nameLabel: "Nombre",
+  nameHint: "Hasta 80 caracteres.",
+  seatsLabel: "Lugares reservados",
+  seatsHint: "De 1 a 10. Es el máximo de personas que puede confirmar.",
+  phoneLabel: "Teléfono (opcional)",
+  phoneHint:
+    "Escribe 10 dígitos o un número internacional que empiece con +. Solo lo usas tú, para contactarlo.",
+  noteLabel: "Nota (opcional)",
+  noteHint: "Hasta 200 caracteres. Solo la ves tú.",
+  add: "Agregar invitado",
+  editHeading: (name: string) => `Editar a ${name}`,
+  edit: "Editar",
+  save: "Guardar cambios",
+  cancel: "Cancelar",
+  removeHeading: "Quitar invitado",
+  removeLink: "Quitar",
+  removeQuestion: (name: string) =>
+    `¿Quitar a ${name} de la lista? También se borra la respuesta que haya dado.`,
+  remove: "Sí, quitar",
+  rotateHeading: "Enlace personal",
+  rotate: "Generar nuevo enlace",
+  rotateWarning: "El enlace anterior dejará de funcionar y la persona necesitará el nuevo.",
+  linkHeading: (name: string) => `Enlace personal de ${name}`,
+  linkHint: "Cópialo ahora: este enlace se muestra una sola vez. Si lo pierdes, genera uno nuevo.",
+  linkLabel: "Enlace personal",
+  whatsappShare: "Compartir por WhatsApp",
+  linkDismiss: "Entendido",
+  deadlineLabel: "Fecha y hora límite",
+  partyLimitLabel: "Personas por respuesta",
+  download: "Descargar CSV",
+  notAvailableHeading: "Esta invitación no incluye lista de invitados",
+  notAvailableBody:
+    "La lista de invitados se muestra con el paquete Deluxe. Puedes seguir usando la confirmación abierta en la invitación.",
+  unavailableHeading: "No pudimos cargar la lista de invitados",
+  unavailableBody: "Inténtalo de nuevo en unos minutos.",
+  backToInvitation: "Volver a la invitación",
+  /** Why the personal link of a guest is not in the list: it is answered once, by the API (S4). */
+  linkOnceNote:
+    "Los enlaces personales no se guardan a la vista: se muestran una sola vez, al crearlos o al generarlos de nuevo.",
+} as const;
+
+/**
+ * The owner's check-in page of one QR (`/cuenta/acceso/<slug>/<token>`), (M6 G4; S4). Opening the QR marks the guest
+ * present and shows the name, the seats, the confirmed party, and the first check-in instant.
+ */
+export const CHECK_IN_COPY = {
+  pageTitle: "Registro de entrada | InvitaMe",
+  eyebrow: "Tu invitación",
+  heading: "Registro de entrada",
+  intro: "Este es el pase de uno de tus invitados.",
+  registeredHeading: (name: string) => `${name} ya está registrado`,
+  registeredAgainHeading: (name: string) => `${name} ya estaba registrado`,
+  registeredBody: "Puedes volver a mostrar el mismo pase: el registro no se duplica.",
+  seatsLabel: "Lugares reservados",
+  partyLabel: "Personas confirmadas",
+  checkInLabel: "Primer registro",
+  notConfirmed: "Este invitado todavía no confirma que asistirá, así que no podemos registrarlo.",
+  notFound: "No encontramos este pase. Puede que el enlace se haya generado de nuevo.",
+  noPass: "Esta invitación no incluye el pase de acceso, así que este código no sirve.",
+  invitationNotFound: "No encontramos esa invitación en tu cuenta.",
+  invalidLink: "Este enlace no es un pase de acceso válido.",
+  unavailable: "No pudimos registrar la entrada. Inténtalo de nuevo en unos minutos.",
+  backToInvitation: "Volver a la invitación",
+  backToList: "Volver a mis invitaciones",
+  signInHeading: "Ingresa para registrar la entrada",
+  signInBody:
+    "Este enlace es para quien organiza la invitación. Ingresa con tu cuenta y volvemos aquí.",
+  signIn: "Ingresar",
+} as const;
+
+/**
+ * The guest's open RSVP block (M6 G3; S1, S4). A guest types a name, says whether they will come, and may name how
+ * many people, a phone, and a message. The block is one themed card of the features block, it posts without any
+ * client script, and it never promises delivery or a personal link.
+ */
+export const RSVP_FORM_COPY = {
+  title: "Confirma tu asistencia",
+  hint: "Cuéntanos si podrás acompañarnos.",
+  nameLabel: "Tu nombre",
+  namePlaceholder: "Nombre y apellido",
+  attendingLegend: "¿Asistirás?",
+  attendingYes: "Sí, asistiré",
+  attendingNo: "No podré asistir",
+  partyLabel: "Número de personas",
+  partyHint: "Cuántas personas vienen contigo, incluido tú. Si no asistirás, no hace falta elegir.",
+  phoneLabel: "Teléfono (opcional)",
+  phoneHint: "Solo lo usará quien organiza, por si necesita contactarte.",
+  messageLabel: "Mensaje (opcional)",
+  messageHint: "Puedes escribir hasta 280 caracteres.",
+  submit: "Enviar respuesta",
+  /** The one field no person sees: a bot fills it, and the API then answers success without storing anything. */
+  honeypotLabel: "No llenes este campo",
+  deadlineNote: (deadline: string) => `Confirma antes del ${deadline}.`,
+  closedNote: (deadline: string) => `La confirmación de asistencia cerró el ${deadline}.`,
+  /** The same news when the stored deadline cannot be read on this runtime's clock. */
+  closedGeneric: "La confirmación de asistencia ya cerró.",
+} as const;
+
+/**
+ * What the guest page says after an answer, read from its own query (M6 G3; S4). Each code is one Spanish
+ * sentence, so no API text ever reaches a guest; a code the page does not know shows nothing.
+ */
+export const RSVP_NOTICE_COPY = {
+  received: "¡Gracias! Recibimos tu respuesta.",
+  invalid: "Revisa los datos de tu respuesta e inténtalo de nuevo.",
+  closed: "La confirmación de asistencia ya cerró.",
+  limited: "Recibimos muchos intentos desde tu conexión. Espera unos minutos e inténtalo de nuevo.",
+  unavailable: "No pudimos guardar tu respuesta. Inténtalo de nuevo en unos minutos.",
 } as const;

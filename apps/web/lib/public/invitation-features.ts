@@ -5,8 +5,10 @@ import {
 } from "../invitation-features/calendar.ts";
 import { type EventFacts, eventFactsFor } from "../invitation-features/event-facts.ts";
 import {
+  type GuestPageBlockView,
   hasAnyFeature,
   type InvitationFeatures,
+  type RsvpBlockView,
 } from "../invitation-features/invitation-features.ts";
 import { isSupportedTimeZone, startInstant } from "../invitation-features/start-instant.ts";
 import type { PublicInvitation } from "../server/public-invitations-api.ts";
@@ -76,9 +78,14 @@ function factsOf(invitation: PublicInvitation): EventFacts | undefined {
  * Undefined is the same value the layouts read as "no features", so an invitation without features renders
  * exactly the markup it rendered before the block existed (S4). A gift registry that is gated on but has no other
  * feature still returns a block, because the layout reads `features.giftRegistry`: the block itself renders
- * nothing when it has no section (F7; S7).
+ * nothing when it has no section (F7; S7). The `rsvp` block of an open invitation is part of the same block, so
+ * every layout shows the same form in the same place (G3; S4).
  */
-export function publicFeatureBlock(invitation: PublicInvitation): PublicFeatureBlock | undefined {
+export function publicFeatureBlock(
+  invitation: PublicInvitation,
+  rsvp?: RsvpBlockView,
+  guest?: GuestPageBlockView,
+): PublicFeatureBlock | undefined {
   const facts = factsOf(invitation);
 
   if (facts === undefined) {
@@ -94,6 +101,8 @@ export function publicFeatureBlock(invitation: PublicInvitation): PublicFeatureB
     whatsapp: invitation.features.whatsapp,
     music: invitation.features.music,
     giftRegistry: invitation.features.giftRegistry,
+    ...(rsvp === undefined ? {} : { rsvp }),
+    ...(guest === undefined ? {} : { guest }),
   };
 
   return hasAnyFeature(features) || features.giftRegistry

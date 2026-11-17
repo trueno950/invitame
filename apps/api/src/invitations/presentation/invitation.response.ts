@@ -89,6 +89,17 @@ export interface PublicInvitationResponse {
     music: { url: string; provider: string } | null;
     /** Whether the layouts render their gift registry block (S7). */
     giftRegistry: boolean;
+    /**
+     * How the guest page accepts attendance answers (M6 G1, G2; S4): `open`, `guest-list`, or `null`, with the
+     * creator's deadline as an ISO instant (or null) and the party limit, and whether a confirmed guest's personal
+     * page may show the access QR.
+     */
+    rsvp: {
+      mode: "open" | "guest-list" | null;
+      deadline: string | null;
+      partyLimit: number;
+      qrPass: boolean;
+    };
   };
 }
 
@@ -140,6 +151,12 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
           ? null
           : { url: stored.features.music.url, provider: stored.features.music.provider },
       giftRegistry: stored.features.giftRegistry,
+      rsvp: {
+        mode: stored.features.rsvp.mode,
+        deadline: stored.features.rsvp.deadline?.toISOString() ?? null,
+        partyLimit: stored.features.rsvp.partyLimit,
+        qrPass: stored.features.rsvp.qrPass,
+      },
     },
   };
 }

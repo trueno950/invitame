@@ -98,15 +98,68 @@ export interface ApiRequest {
    * no session and the page must never forward a browser cookie it did not choose.
    */
   cookie?: string;
-  method: "GET" | "POST" | "PATCH" | "PUT";
+  method: "DELETE" | "GET" | "POST" | "PATCH" | "PUT";
   path: string;
   body?: unknown;
+  /**
+   * The guest's address, forwarded in the header the API reads it from (M6 G3; S4). Only the public RSVP
+   * submission sends one: the API counts that answer against it. It is set last, so no other caller can
+   * replace it, and it is never logged or stored here.
+   */
+  clientAddress?: string;
 }
 
-/** The status, and the body text only when the caller asked to read it for that status. */
+/** The status, the body text only when the caller asked to read it for that status, and the headers. */
 export interface ApiResponse {
   status: number;
   text: string | undefined;
+  headers: Headers;
+}
+
+/** One download: the status, the API's own headers, and the body as a stream the caller can pass through. */
+export interface ApiDownload {
+  status: number;
+  headers: Headers;
+  body: ReadableStream<Uint8Array> | null;
+}
+
+/** The upstream answer of one request, before any caller decides whether to read the body. */
+async function sendApiRequestRaw(
+  options: ApiClientOptions,
+  request: ApiRequest,
+): Promise<Response> {
+  const { config } = options;
+  const headers = new Headers({ accept: "application/json" });
+
+  if (request.cookie !== undefined) {
+    headers.set("cookie", request.cookie);
+  }
+
+  if (config.proxySecret !== undefined) {
+    headers.set(AUTH_PROXY_SECRET_HEADER, config.proxySecret);
+  }
+
+  // Set last, so a forwarded address is never a value another caller could add by accident.
+  if (request.clientAddress !== undefined) {
+    headers.set(config.clientIpHeader, request.clientAddress);
+  }
+
+  if (request.body !== undefined) {
+    headers.set("content-type", "application/json");
+  }
+
+  try {
+    return await (options.fetch ?? fetch)(new URL(request.path, config.apiOrigin), {
+      method: request.method,
+      headers,
+      ...(request.body === undefined ? {} : { body: JSON.stringify(request.body) }),
+      redirect: "manual",
+      cache: "no-store",
+      signal: AbortSignal.timeout(options.timeoutMs ?? API_CLIENT_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new ApiClientError("unavailable", undefined, { cause: error });
+  }
 }
 
 /**
@@ -121,41 +174,38 @@ export async function sendApiRequest(
   request: ApiRequest,
   readsBody: (status: number) => boolean,
 ): Promise<ApiResponse> {
-  const { config } = options;
-  const headers = new Headers({ accept: "application/json" });
+  const response = await sendApiRequestRaw(options, request);
 
-  if (request.cookie !== undefined) {
-    headers.set("cookie", request.cookie);
+  if (!readsBody(response.status)) {
+    await response.body?.cancel();
+    return { status: response.status, text: undefined, headers: response.headers };
   }
 
-  if (config.proxySecret !== undefined) {
-    headers.set(AUTH_PROXY_SECRET_HEADER, config.proxySecret);
-  }
-
-  if (request.body !== undefined) {
-    headers.set("content-type", "application/json");
-  }
-
+  // A body that stalls past the deadline or breaks off is an outage, not a contract mismatch.
   try {
-    const response = await (options.fetch ?? fetch)(new URL(request.path, config.apiOrigin), {
-      method: request.method,
-      headers,
-      ...(request.body === undefined ? {} : { body: JSON.stringify(request.body) }),
-      redirect: "manual",
-      cache: "no-store",
-      signal: AbortSignal.timeout(options.timeoutMs ?? API_CLIENT_TIMEOUT_MS),
-    });
-
-    if (!readsBody(response.status)) {
-      await response.body?.cancel();
-      return { status: response.status, text: undefined };
-    }
-
-    // A body that stalls past the deadline or breaks off is an outage, not a contract mismatch.
-    return { status: response.status, text: await response.text() };
+    return {
+      status: response.status,
+      text: await response.text(),
+      headers: response.headers,
+    };
   } catch (error) {
     throw new ApiClientError("unavailable", undefined, { cause: error });
   }
+}
+
+/**
+ * Sends one request whose answer is a file the API builds (M6 G3; the owner's RSVP CSV): the status and the API's
+ * own headers, with the body still unread, so a route handler can pass the download through without copying it
+ * into memory. A body the caller does not pass on is cancelled by the caller, and a stalled read is the
+ * download's own failure.
+ */
+export async function sendApiDownload(
+  options: ApiClientOptions,
+  request: ApiRequest,
+): Promise<ApiDownload> {
+  const response = await sendApiRequestRaw(options, request);
+
+  return { status: response.status, headers: response.headers, body: response.body };
 }
 
 const isSuccess = (status: number): boolean => status >= 200 && status < 300;

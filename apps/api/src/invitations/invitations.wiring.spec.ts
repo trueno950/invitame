@@ -11,7 +11,9 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
 import { CATALOG_PUBLIC_READER } from "../catalog/application/public/catalog-public-reader";
+import { createConfigModule } from "../config/config.module";
 import { PrismaService } from "../database/prisma.service";
+import { GUEST_REPOSITORY } from "./application/guest.repository";
 import { INVITATION_REPOSITORY } from "./application/invitation.repository";
 import {
   ArchiveInvitationUseCase,
@@ -25,10 +27,31 @@ import {
   UpdateInvitationFeaturesUseCase,
 } from "./application/invitation.use-cases";
 import { INVITATION_CATALOG } from "./application/invitation-catalog";
+import {
+  CheckInGuestUseCase,
+  CreateGuestUseCase,
+  DeleteGuestUseCase,
+  GetAttendanceExportUseCase,
+  GetPublicGuestUseCase,
+  ListGuestsUseCase,
+  RotateGuestTokenUseCase,
+  SubmitGuestRsvpUseCase,
+  UpdateGuestUseCase,
+} from "./application/invitation-guest.use-cases";
 import { INVITATION_PAYMENT_GATE } from "./application/invitation-payment-gate";
+import {
+  GetRsvpResponsesUseCase,
+  SubmitPublicRsvpUseCase,
+  UpdateRsvpSettingsUseCase,
+} from "./application/invitation-rsvp.use-cases";
+import { RSVP_REPOSITORY } from "./application/rsvp.repository";
+import { RSVP_RATE_LIMITER } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
 import { NoPaymentRequiredGate } from "./infrastructure/no-payment-required";
+import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
+import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
+import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
 import { InvitationsModule } from "./invitations.module";
 import { InvitationsController } from "./presentation/invitations.controller";
 import { PublicInvitationsController } from "./presentation/public-invitations.controller";
@@ -46,7 +69,20 @@ import { PublicInvitationsController } from "./presentation/public-invitations.c
 })
 class StubDatabaseModule {}
 
-@Module({ imports: [StubDatabaseModule, InvitationsModule] })
+@Module({
+  imports: [
+    // The public controller reads the configured client-IP header for the per-address RSVP rate limit.
+    createConfigModule({
+      NODE_ENV: "test",
+      CORS_ORIGIN: "http://localhost:3000",
+      DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
+      BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
+      AUTH_BASE_URL: "http://localhost:3000",
+    }),
+    StubDatabaseModule,
+    InvitationsModule,
+  ],
+})
 class InvitationsTestModule {}
 
 describe("InvitationsModule wiring", () => {
@@ -67,6 +103,18 @@ describe("InvitationsModule wiring", () => {
         PublishInvitationUseCase,
         UnpublishInvitationUseCase,
         GetPublicInvitationUseCase,
+        UpdateRsvpSettingsUseCase,
+        GetRsvpResponsesUseCase,
+        SubmitPublicRsvpUseCase,
+        ListGuestsUseCase,
+        CreateGuestUseCase,
+        UpdateGuestUseCase,
+        DeleteGuestUseCase,
+        RotateGuestTokenUseCase,
+        GetPublicGuestUseCase,
+        SubmitGuestRsvpUseCase,
+        CheckInGuestUseCase,
+        GetAttendanceExportUseCase,
       ]) {
         assert.ok(context.get(useCase) instanceof useCase, useCase.name);
       }
@@ -94,6 +142,11 @@ describe("InvitationsModule wiring", () => {
       assert.ok(
         context.get(INVITATION_PAYMENT_GATE, { strict: false }) instanceof NoPaymentRequiredGate,
       );
+      // RSVP data and its rate limit have their own adapters, both on the shared Prisma client (M6 G1; S4).
+      assert.ok(context.get(RSVP_REPOSITORY, { strict: false }) instanceof PrismaRsvpRepository);
+      assert.ok(context.get(RSVP_RATE_LIMITER, { strict: false }) instanceof PrismaRsvpRateLimiter);
+      // The guest list has its own adapter on the same Prisma client (M6 G2; S1, S4).
+      assert.ok(context.get(GUEST_REPOSITORY, { strict: false }) instanceof PrismaGuestRepository);
     } finally {
       await context.close();
     }
@@ -148,6 +201,19 @@ describe("AppModule invitation wiring", () => {
       ["POST", `/invitations/${id}/archive`],
       ["POST", `/invitations/${id}/publish`],
       ["POST", `/invitations/${id}/unpublish`],
+      ["PUT", `/invitations/${id}/rsvp-settings`, { deadline: null, partyLimit: 4 }],
+      ["GET", `/invitations/${id}/rsvp`],
+      ["GET", `/invitations/${id}/rsvp.csv`],
+      ["GET", `/invitations/${id}/guests`],
+      ["POST", `/invitations/${id}/guests`, { name: "Ana", seats: 2, phone: null, note: null }],
+      [
+        "PUT",
+        `/invitations/${id}/guests/${id}`,
+        { name: "Ana", seats: 2, phone: null, note: null },
+      ],
+      ["DELETE", `/invitations/${id}/guests/${id}`],
+      ["POST", `/invitations/${id}/guests/${id}/token`],
+      ["POST", `/invitations/${id}/guests/check-in`, { token: "A".repeat(22) }],
     ];
 
     for (const [method, path, body] of routes) {
@@ -165,14 +231,29 @@ describe("AppModule invitation wiring", () => {
     assert.equal((await fetch(`${baseUrl}/invitations-unknown`)).status, 404);
   });
 
-  it("lets an anonymous request reach the public invitation route", async () => {
+  it("lets an anonymous request reach the public invitation routes", async () => {
     // The guard never reads a session here: a request without one is not refused. The StubDatabaseModule
     // cannot answer the read, so the status is whatever the wired adapter reports; what this asserts is that
-    // the route exists and is public, not what a real database would answer.
-    const response = await fetch(`${baseUrl}/public/invitations/invitacion-abcdef`);
+    // the routes exist and are public, not what a real database would answer.
+    const routes: Array<[string, string]> = [
+      ["GET", "/public/invitations/invitacion-abcdef"],
+      ["POST", "/public/invitations/invitacion-abcdef/rsvp"],
+      ["GET", "/public/invitations/invitacion-abcdef/guests/AAAAAAAAAAAAAAAAAAAAAA"],
+      ["POST", "/public/invitations/invitacion-abcdef/guests/AAAAAAAAAAAAAAAAAAAAAA/rsvp"],
+    ];
 
-    assert.notEqual(response.status, 401, "the public route is not behind the session guard");
-    assert.notEqual(response.status, 403);
-    assert.notEqual(response.status, 404, "the route is registered");
+    for (const [method, path] of routes) {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method,
+        headers: { "content-type": "application/json" },
+        ...(method === "POST"
+          ? { body: JSON.stringify({ name: "Ana", attending: true, partySize: 1 }) }
+          : {}),
+      });
+
+      assert.notEqual(response.status, 401, `${method} ${path} is not behind the session guard`);
+      assert.notEqual(response.status, 403);
+      assert.notEqual(response.status, 404, `${method} ${path} is registered`);
+    }
   });
 });

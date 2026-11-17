@@ -265,6 +265,11 @@ model Invitation {
   // The IANA zone the guest's countdown and calendar links use. The allow-list lives in the API domain
   // (`domain/invitation-features.ts`, S4); the database checks the shape and the default.
   timeZone          String           @default("America/Mexico_City") @db.VarChar(64)
+  // RSVP settings (M6 G1; S4): an optional deadline and a party limit of 1 to 10. The deadline is nullable, so
+  // every row that existed before the migration keeps accepting responses; the limit defaults to 4 and migration
+  // 20261117120000_add_rsvp_responses adds the CHECK constraint Prisma cannot express.
+  rsvpDeadline      DateTime?        @db.Timestamptz(6)
+  rsvpPartyLimit    Int              @default(4)
   archivedAt        DateTime?        @db.Timestamptz(6)
   // Set exactly while the status is PUBLISHED: unpublishing and archiving clear it (S7, A2).
   publishedAt       DateTime?        @db.Timestamptz(6)
@@ -277,6 +282,8 @@ model Invitation {
   templateVersion TemplateVersion           @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
   package         Package                   @relation(fields: [packageId], references: [id], onDelete: Restrict)
   featureSettings InvitationFeatureSettings?
+  rsvpResponses   RsvpResponse[]
+  guests          Guest[]
 
   @@index([ownerId])
 }
@@ -301,4 +308,73 @@ model InvitationFeatureSettings {
   updatedAt     DateTime @updatedAt @db.Timestamptz(6)
 
   invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+}
+
+// One guest's attendance answer to one invitation (M6 G1; S1, S4). The row is tied to the invitation, which is
+// never hard-deleted here (archiving is its only terminal lifecycle write), so the reference is ON DELETE RESTRICT.
+// `dedupeKey` is the normalized name and normalized phone: the unique index on `(invitationId, dedupeKey)` is what
+// makes an open-form retry an update instead of a duplicate and what lets two concurrent identical submissions end
+// in one row. A personal-link answer instead carries `guestId` (`guest|<guestId>` as its dedupe key) and upserts on
+// that unique column, which the guest table and its nullable reference arrive with (M6 G2).
+// The response carries bounded values only — a name of 1 to 80 characters, an attending flag, a party size of 0 to
+// 10 (0 exactly when declined), an optional E.164 phone, an optional message of at most 280 characters, and the
+// timestamps — and no free-form JSONB.
+// Migration 20261117120000_add_rsvp_responses adds what Prisma cannot express: the CHECK constraints
+// "RsvpResponse_name_length", "RsvpResponse_partySize_range", "RsvpResponse_partySize_matches_attending",
+// "RsvpResponse_phone_format", and "RsvpResponse_message_length", plus "Invitation_rsvpPartyLimit_range".
+model RsvpResponse {
+  id           String   @id @default(uuid()) @db.Uuid
+  invitationId String   @db.Uuid
+  // The guest a personal-link answer belongs to, or NULL for an answer to the open form (M6 G2; S4). The unique
+  // index on this column is what makes one guest have at most one answer; the foreign key is ON DELETE RESTRICT
+  // and the guest's own removal deletes the answer in the same statement.
+  guestId      String?  @unique @db.Uuid
+  // The dedupe-normalized name and the normalized phone, separated by `|` (at most 97 characters).
+  dedupeKey    String   @db.VarChar(200)
+  name         String   @db.VarChar(80)
+  attending    Boolean
+  // 0 when the guest declined; otherwise 1 to the invitation's `rsvpPartyLimit` (the domain checks the limit).
+  partySize    Int
+  // E.164 or NULL; the domain normalizes a Mexican ten-digit number to `+52…` like the WhatsApp contact does.
+  phone        String?  @db.VarChar(16)
+  message      String?  @db.VarChar(280)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  guest      Guest?     @relation(fields: [guestId], references: [id], onDelete: Restrict)
+
+  @@unique([invitationId, dedupeKey])
+}
+
+// One person on an invitation's guest list (M6 G2; S1, S3, S4). The owner reaches a guest only through the
+// invitation that pins the package granting `GUEST_LIST`, so there is no owner column here: the adapter's every
+// statement joins the invitation and names its owner. `tokenHash` is the SHA-256 hex digest of the guest's personal
+// token, the only form ever stored, and its unique index is what a personal link is looked up through. The token
+// itself is 128 bits drawn by the platform's cryptographic random source and is answered once, on creation or
+// rotation. The row carries bounded values only: a name of 1 to 80 characters, 1 to 10 seats, an optional E.164
+// phone, an optional note of at most 200 characters, and the check-in instant the owner's QR scan sets once.
+// Migration 20261118120000_add_guests adds what Prisma cannot express: the CHECK constraints
+// "Guest_name_length", "Guest_seats_range", "Guest_phone_format", "Guest_note_length", and
+// "Guest_tokenHash_format", plus the RsvpResponse "guestId" column and its unique index.
+model Guest {
+  id            String    @id @default(uuid()) @db.Uuid
+  invitationId  String    @db.Uuid
+  name          String    @db.VarChar(80)
+  // The party this guest may confirm, 1 to 10; the domain refuses anything else.
+  seats         Int
+  phone         String?   @db.VarChar(16)
+  note          String?   @db.VarChar(200)
+  // The SHA-256 hex digest of the personal token: the only form stored, unique, and what a link looks up.
+  tokenHash     String    @unique @db.VarChar(64)
+  tokenIssuedAt DateTime  @db.Timestamptz(6)
+  // When the owner first checked this guest in, or NULL while not checked in. A repeated scan keeps the first.
+  checkedInAt   DateTime? @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+
+  invitation   Invitation    @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  rsvpResponse RsvpResponse?
+
+  @@index([invitationId])
 }

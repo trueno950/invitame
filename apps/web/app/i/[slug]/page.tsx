@@ -7,11 +7,14 @@ import { PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
 import { publicFeatureBlock } from "../../../lib/public/invitation-features.ts";
 import { invitationMetadata } from "../../../lib/public/invitation-page.ts";
 import { rendererAcceptsProps } from "../../../lib/public/invitation-render.ts";
+import { publicRsvpBlock, rsvpNotice } from "../../../lib/public/invitation-rsvp.ts";
 import { findRenderer } from "../../../lib/renderers/registry.ts";
 import { textButton } from "../../_components/ui.ts";
 import { InvitationMessage } from "./_components/invitation-message.tsx";
+import { RsvpNoticeNote } from "./_components/rsvp-notice.tsx";
 import { loadPublicInvitation } from "./_lib/load.ts";
 import { logPublicInvitation, PUBLIC_INVITATION_LOG_EVENT } from "./_lib/public-api.ts";
+import { submitRsvpAction } from "./actions.ts";
 
 /**
  * `/i/[slug]` (M5 T5; S1, S5, A3, A5, A6, A7, A8): the guest's page of a published invitation. A server
@@ -26,6 +29,7 @@ import { logPublicInvitation, PUBLIC_INVITATION_LOG_EVENT } from "./_lib/public-
 
 interface PublicInvitationPageProperties {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 const NO_INDEX: Metadata = { robots: { index: false, follow: false } };
@@ -53,10 +57,13 @@ export async function generateMetadata({
   };
 }
 
-export default async function PublicInvitationPage({ params }: PublicInvitationPageProperties) {
+export default async function PublicInvitationPage({
+  params,
+  searchParams,
+}: PublicInvitationPageProperties) {
   // Rendered per request, so an owner's change is visible at once and no page is reused (A6, S7).
   await connection();
-  const { slug } = await params;
+  const [{ slug }, parameters] = await Promise.all([params, searchParams]);
   const loaded = await loadPublicInvitation(slug);
 
   if (loaded.status === "not-found") {
@@ -92,16 +99,21 @@ export default async function PublicInvitationPage({ params }: PublicInvitationP
   }
 
   // What the API gated, mapped to the block's props (F3; S4). With nothing to show the layouts render
-  // exactly the markup they rendered before the block existed.
-  const block = publicFeatureBlock(invitation);
+  // exactly the markup they rendered before the block existed. An invitation that accepts open answers adds
+  // the «Confirma tu asistencia» card to that same block, so every layout shows it in the same place (G3; S4).
+  const rsvp = publicRsvpBlock(invitation.features.rsvp, invitation.slug, submitRsvpAction);
+  const block = publicFeatureBlock(invitation, rsvp);
   const rendererProps =
     block === undefined
       ? props
       : { ...props, features: block.features, calendarHref: block.calendarHref };
+  // The answer's notice, read from this page's own query and rendered on the server (G3; S4).
+  const notice = rsvpNotice(parameters);
 
   return (
     <main className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
+        {notice === undefined ? null : <RsvpNoticeNote notice={notice} />}
         <Renderer {...rendererProps} />
         <footer className="flex justify-center">
           <Link className={textButton} href="/">

@@ -98,6 +98,15 @@ function stub(answers: Answers = {}): Stub {
     unpublish: () => unexpected("unpublish"),
     templates: () => unexpected("templates"),
     packages: () => unexpected("packages"),
+    readRsvp: () => unexpected("readRsvp"),
+    updateRsvpSettings: () => unexpected("updateRsvpSettings"),
+    rsvpCsv: () => unexpected("rsvpCsv"),
+    guests: () => unexpected("guests"),
+    createGuest: () => unexpected("createGuest"),
+    updateGuest: () => unexpected("updateGuest"),
+    removeGuest: () => unexpected("removeGuest"),
+    rotateGuestToken: () => unexpected("rotateGuestToken"),
+    checkInGuest: () => unexpected("checkInGuest"),
   };
   return { api, calls };
 }

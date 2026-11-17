@@ -77,6 +77,24 @@ export const invitations = {
     id: string,
     features: Parameters<InvitationsClient["updateInvitationFeatures"]>[1],
   ) => logged((api) => api.updateInvitationFeatures(id, features)),
+  readRsvp: (id: string) => logged((api) => api.readRsvp(id)),
+  updateRsvpSettings: (
+    id: string,
+    settings: Parameters<InvitationsClient["updateRsvpSettings"]>[1],
+  ) => logged((api) => api.updateRsvpSettings(id, settings)),
+  rsvpCsv: (id: string) => logged((api) => api.rsvpCsv(id)),
+  guests: (id: string) => logged((api) => api.guests(id)),
+  createGuest: (id: string, guest: Parameters<InvitationsClient["createGuest"]>[1]) =>
+    logged((api) => api.createGuest(id, guest)),
+  updateGuest: (
+    id: string,
+    guestId: string,
+    guest: Parameters<InvitationsClient["updateGuest"]>[2],
+  ) => logged((api) => api.updateGuest(id, guestId, guest)),
+  removeGuest: (id: string, guestId: string) => logged((api) => api.removeGuest(id, guestId)),
+  rotateGuestToken: (id: string, guestId: string) =>
+    logged((api) => api.rotateGuestToken(id, guestId)),
+  checkInGuest: (id: string, token: string) => logged((api) => api.checkInGuest(id, token)),
   archive: (id: string) => logged((api) => api.archive(id)),
   publish: (id: string) => logged((api) => api.publish(id)),
   unpublish: (id: string) => logged((api) => api.unpublish(id)),

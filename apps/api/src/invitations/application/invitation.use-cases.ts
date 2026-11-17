@@ -173,6 +173,8 @@ function toOwnedInvitation(
       includedFeatureKeys,
       whatsappPhone: record.whatsappPhone,
       playlistUrl: record.playlistUrl,
+      rsvpDeadline: record.rsvpDeadline,
+      rsvpPartyLimit: record.rsvpPartyLimit,
     }),
   };
 }
@@ -180,8 +182,9 @@ function toOwnedInvitation(
 /**
  * The feature keys the pinned package includes right now, or none when the catalog can no longer answer for it.
  * A missing package fails closed: the gate then offers only `CALENDAR`, never a feature nobody verified (S4).
+ * It is exported because the guest-list use cases ask the same question of the same contract (M6 G2).
  */
-async function includedFeatureKeysOf(
+export async function includedFeatureKeysOf(
   catalog: InvitationCatalog,
   packageId: string,
 ): Promise<readonly string[]> {
@@ -558,7 +561,15 @@ export class GetPublicInvitationUseCase {
     if (published === null) {
       return null;
     }
+    return this.project(published);
+  }
 
+  /**
+   * The same projection for an invitation the caller already resolved as a live published row (M6 G2): the
+   * personal guest page composes this read with the guest's own block, so both pages share one definition of what a
+   * guest may see. It throws `PublicInvitationNotRenderableError` exactly like `execute`.
+   */
+  async project(published: InvitationRecord): Promise<PublicInvitation> {
     const render = await this.catalog.findVersionRenderData(published.templateVersionId);
     // Fail closed: with no pinned version or a renderer nobody implements there is nothing to render (A3).
     if (render === null || !this.catalog.isRendererRegistered(render.componentKey)) {
@@ -579,6 +590,8 @@ export class GetPublicInvitationUseCase {
         includedFeatureKeys,
         whatsappPhone: published.whatsappPhone,
         playlistUrl: published.playlistUrl,
+        rsvpDeadline: published.rsvpDeadline,
+        rsvpPartyLimit: published.rsvpPartyLimit,
       }),
     };
   }

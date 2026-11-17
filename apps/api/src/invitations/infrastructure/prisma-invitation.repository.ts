@@ -24,6 +24,8 @@ const INVITATION_SELECT = {
   status: true,
   content: true,
   timeZone: true,
+  rsvpDeadline: true,
+  rsvpPartyLimit: true,
   archivedAt: true,
   publishedAt: true,
   expiresAt: true,
@@ -55,6 +57,8 @@ function toRecord(row: InvitationRow): InvitationRecord {
     // No settings row yet means no feature data: the phone is null, never an empty string.
     whatsappPhone: row.featureSettings?.whatsappPhone ?? null,
     playlistUrl: row.featureSettings?.playlistUrl ?? null,
+    rsvpDeadline: row.rsvpDeadline,
+    rsvpPartyLimit: row.rsvpPartyLimit,
     archivedAt: row.archivedAt,
     publishedAt: row.publishedAt,
     expiresAt: row.expiresAt,

@@ -14,7 +14,7 @@ explicitly planned unless marked current.
 | API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling, administrator creation, and administrator recovery by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
 | Database | PostgreSQL and Prisma own `User` and the identity tables Better Auth reads and writes (sessions, credential accounts, verification codes, two-factor records, and rate-limit counters) plus the catalog, packages, features, templates, immutable template versions, and `Invitation` drafts pinned to a version; see [`model.md`](../database/model.md). | Guest, RSVP, payment, media, and analytics models. **Planned.** |
 | Catalog | The API `catalog` module (`apps/api/src/catalog`) serves administrator-only endpoints under `/admin/catalog` for categories, features, packages with their features and MXN prices, templates, and template versions (create, publish, retire); the web pages under `/admin/catalogo` call them from the server. See Catalog administration below. Signed-in creators read the published templates and active packages through `GET /catalog/templates` and `GET /catalog/packages`, served from the catalog's public application contract (`CatalogPublicReader`); the template read also answers the published version's own `configuration` snapshot, so the creator chooser can preview each template with the real renderer instead of a stored screenshot. | Anonymous catalog browsing. **Planned.** |
-| Invitations | The API `invitations` module (`apps/api/src/invitations`) lets a signed-in customer create, list, read, edit the content of, edit the feature data of, and archive their own drafts under `/invitations`, and publish (`POST /invitations/:id/publish`) or unpublish them; publication requires every required field, content that still validates, a package that still fits, and a pinned version that is still published, and it asks a payment gate that answers "no payment required" until Milestone 7. A published invitation stays editable live. Each invitation stores an IANA `timeZone` and one optional `InvitationFeatureSettings` row keyed by the invitation, written through `PUT /invitations/:id/features` (creator-owned, validated, refused for an archived invitation like a content save); the domain gates what a guest may see as the pinned package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `WHATSAPP`, `MUSIC`, and `GIFT_REGISTRY`, plus the always-available calendar, with WhatsApp only while a phone is stored and music only while an allow-listed playlist link is stored. Guests read it through the public, uncacheable `GET /public/invitations/:slug`, which returns only the slug, `componentKey`, configuration, the pinned schema's content, `publishedAt`, `timeZone`, and the gated `features` (`countdown`, `map`, `calendar`, `whatsapp`, `music` as `{ url, provider }` or null, and `giftRegistry`); nothing about the package travels. The web draft page adds a «Funcionalidades» section (the time zone select, the WhatsApp contact and the playlist link when the pinned package includes them, the note that names the packages granting the gift registry, and the automatic features the guests will see) that saves through a server action like the content form. A draft pins a published `TemplateVersion` and an active package that includes the renderer's required feature keys, gets a generated unique slug, and stores partial content validated against the pinned schema; the owner comes only from the session and another owner's draft answers 404. See `odd/tasks/m4-invitations.md` and `odd/tasks/invitation-features.md`. | Payment, guests, media, expiration rules, and slug regeneration. **Planned.** |
+| Invitations | The API `invitations` module (`apps/api/src/invitations`) lets a signed-in customer create, list, read, edit the content of, edit the feature data of, and archive their own drafts under `/invitations`, and publish (`POST /invitations/:id/publish`) or unpublish them; publication requires every required field, content that still validates, a package that still fits, and a pinned version that is still published, and it asks a payment gate that answers "no payment required" until Milestone 7. A published invitation stays editable live. Each invitation stores an IANA `timeZone` and one optional `InvitationFeatureSettings` row keyed by the invitation, written through `PUT /invitations/:id/features` (creator-owned, validated, refused for an archived invitation like a content save); the domain gates what a guest may see as the pinned package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `RSVP`, `WHATSAPP`, `MUSIC`, `GIFT_REGISTRY`, `GUEST_LIST`, and `QR_PASS`, plus the always-available calendar, with WhatsApp only while a phone is stored and music only while an allow-listed playlist link is stored. Guests read it through the public, uncacheable `GET /public/invitations/:slug`, which returns only the slug, `componentKey`, configuration, the pinned schema's content, `publishedAt`, `timeZone`, and the gated `features` (`countdown`, `map`, `calendar`, `whatsapp`, `music` as `{ url, provider }` or null, `giftRegistry`, and `rsvp` as `{ mode: "open" | "guest-list" | null, deadline, partyLimit, qrPass }`, where `qrPass` is true only while the package grants both the guest list and its access pass); nothing about the package travels. Milestone 6 G1 adds the open RSVP: a creator sets the deadline and the party limit (`PUT /invitations/:id/rsvp-settings`, refused for an archived invitation), reads the answers with their totals (`GET /invitations/:id/rsvp`), and downloads them as a spreadsheet-safe CSV attachment (`GET /invitations/:id/rsvp.csv`); a guest submits `POST /public/invitations/:slug/rsvp` without a session, which is refused unless the invitation is published, its package grants `RSVP` without `GUEST_LIST`, and the deadline has not passed, is limited to 10 submissions per hour per client address and invitation on the shared `RateLimit` store, drops a submission whose honeypot field is filled while answering the same 202, and upserts on `(invitationId, dedupeKey)` so a retry never duplicates. Milestone 6 G2 adds the guest list behind `GUEST_LIST`: the creator lists the guests with their answers, check-in state, and totals (`GET /invitations/:id/guests`), adds one (`POST /invitations/:id/guests`, which answers the plain personal token once), edits one (`PUT /invitations/:id/guests/:guestId`), removes one together with the answer it gave (`DELETE /invitations/:id/guests/:guestId`), and rotates one's link (`POST /invitations/:id/guests/:guestId/token`); the CSV export becomes the guest list, pending guests and check-in times included, while the open form keeps its own export. A personal link is `/i/<slug>/g/<token>`, read through `GET /public/invitations/:slug/guests/:token` as the same public projection plus one `guest` block, and answered through `POST /public/invitations/:slug/guests/:token/rsvp`; both answer the one public 404 for every unknown, revoked, or foreign token, the answer is validated against the guest's own seats, and a submission is limited per guest on the shared `RateLimit` store. With `QR_PASS`, the owner checks a confirmed guest in through `POST /invitations/:id/guests/check-in`, which keeps the first check-in instant, and the personal page offers the access QR only to a confirmed guest. Every guest route is refused with 409 `GUEST_LIST_NOT_AVAILABLE` (or `QR_PASS_NOT_AVAILABLE` for the check-in) unless the pinned package grants the key. The web draft page adds a «Funcionalidades» section (the time zone select, the WhatsApp contact and the playlist link when the pinned package includes them, the note that names the packages granting the gift registry, and the automatic features the guests will see) that saves through a server action like the content form. A draft pins a published `TemplateVersion` and an active package that includes the renderer's required feature keys, gets a generated unique slug, and stores partial content validated against the pinned schema; the owner comes only from the session and another owner's draft answers 404. See `odd/tasks/m4-invitations.md` and `odd/tasks/invitation-features.md`. | Payment, the web guest list and QR pages (M6 G4), media, expiration rules, and slug regeneration. **Planned.** |
 | Renderer | An allow-listed renderer registry: the API validates each version's `schema` and `configuration` against the renderer contract at creation and publication, and the web maps `componentKey` to a reviewed component; a test keeps both key lists equal. The registered renderers are the three themed birthday layouts `birthday-map-01`, `birthday-poster-01`, and `birthday-story-01` with the shared eight-theme allow-list, the baby shower layout `baby-shower-classic-01` with its eight baby shower themes, the themed baptism layout `baptism-classic-01` with its six themes, the three elegant «Arco y foto» layouts `xv-arch-01`, `wedding-arch-01`, and `baptism-arch-01`, and the three elegant «Ornamental» layouts `xv-ornamental-01`, `wedding-ornamental-01`, and `baptism-ornamental-01`, all six with the shared eight elegant themes; each takes exactly `{ componentKey, theme }`. The earlier single design `birthday-adventure-01` was deleted when the themed layouts replaced it. | Further layouts and themes per occasion. **Planned.** |
 | Operations | Local Docker Compose database and Mailpit mail catcher, workspace scripts, and limited GitHub Actions quality-gate CI; issue/PR governance is unmanaged. | CD, hosted deployment, observability, provider operations, and issue/PR enforcement. **Planned.** |
 
@@ -677,12 +677,90 @@ Public URL /i/<slug>
   → web maps timeZone and the gated features to one shared features block (countdown, map, calendar, WhatsApp)
   → registry renders the invitation with data, never with executable database content
 
+Public RSVP form (the open form, when the pinned package grants RSVP and no guest list)
+  → apps/api POST /public/invitations/:slug/rsvp (@Public, Cache-Control: no-store)
+  → one query loads the PUBLISHED, unexpired Invitation by its unique slug
+  → the package gate answers `open` (no RSVP key, or a guest list, answers 409 RSVP_NOT_OPEN), and the deadline is checked
+  → 10 submissions per hour per client address and invitation are counted on the shared RateLimit store (429 over it)
+  → a filled honeypot answers the same 202 without storing; the payload is validated against the party limit
+  → one `INSERT … ON CONFLICT (invitationId, dedupeKey) DO UPDATE` stores or updates the one response of that guest
+  → 202 { status: "received" } for every accepted attempt; the body carries no id, count, or other guest's data
+
+Personal guest page (the guest list, when the pinned package grants GUEST_LIST; M6 G2)
+  → apps/web renders /i/<slug>/g/<token> per request (noindex; no session, no cookie forwarded)
+  → apps/api GET /public/invitations/:slug/guests/:token (@Public, Cache-Control: no-store)
+  → one query resolves the PUBLISHED, unexpired Invitation by its unique slug, then one probe of Guest_tokenHash_key
+    finds the guest by the SHA-256 digest of the token, scoped by that invitation
+  → the package gate answers `guest-list`; any other mode, any malformed, unknown, revoked, or foreign token, and the
+    same invisible slug cases answer the one public 404 PUBLIC_INVITATION_NOT_FOUND (no oracle)
+  → the body is the public projection plus guest: { name, seats, response, qrPass }; no other guest is read
+  → qrPass is true only for a confirmed guest of a package that grants QR_PASS
+
+Personal guest answer (M6 G2)
+  → apps/web app/i/[slug]/g/[token]/actions.ts posts the card of the same page; the action forwards the browser's
+    address from the incoming request headers and redirects back to /i/<slug>/g/<token>?rsvp=<code>
+  → apps/api POST /public/invitations/:slug/guests/:token/rsvp (@Public, Cache-Control: no-store)
+  → 404 for every invisible slug or token case, 409 RSVP_NOT_OPEN when the mode is not `guest-list` or the deadline
+    passed, 429 RSVP_RATE_LIMITED over the per-guest cap on the shared RateLimit store, 400 INVALID_RSVP with the
+    domain issues
+  → the answer is validated against the guest's own seats; name and phone come from the guest row, never the body
+  → one `INSERT … ON CONFLICT (guestId) DO UPDATE` stores or updates the one answer of that guest, and its SELECT
+    repeats the publication status and the deadline, so a race is refused by the database
+  → 202 { status: "received" } for a first answer and for a change of mind
+
+Owner check-in (M6 G2; the API's own route is /invitations/:id/guests/check-in)
+  → apps/web app/cuenta/acceso/[slug]/[token] is the page a QR opens (M6 G4): the public read carries no invitation
+    id, so the pass encodes /cuenta/acceso/<slug>/<token> and the page resolves the id from the owner's own invitations
+    list before it calls the API; a slug the caller does not own finds no invitation and no request is made
+  → a signed-out visitor is redirected to /cuenta/acceso/<slug>/<token>/ingresar, a route handler that stores the bare
+    check-in path in the one-time hand-off (below) and answers 303 to /ingresar; /cuenta reads that handle once, after
+    the visitor is signed in, and sends them back to the pass
+  → apps/api POST /invitations/:id/guests/check-in { token } with the owner's session
+  → 404 GUEST_NOT_FOUND for a malformed or unknown token, 409 GUEST_NOT_CONFIRMED without an attending answer,
+    409 QR_PASS_NOT_AVAILABLE without the catalog key, 404 INVITATION_NOT_FOUND for a foreign invitation
+  → one statement requires the owned, non-archived invitation, the token digest, and the attending answer, and keeps
+    the first checkedInAt, so the same QR twice is idempotent
+  → 200 { guestId, name, seats, attendingPartySize, checkedInAt }
+
+Creator guest list (M6 G4; /cuenta/invitaciones/[id]/asistencia in guest-list mode)
+  → apps/api GET /invitations/:id/guests with the owner's session (guests, answers, check-in state, totals)
+  → apps/api POST /invitations/:id/guests, PUT /invitations/:id/guests/:guestId, DELETE the same path, and
+    POST /invitations/:id/guests/:guestId/token, each from one server action
+  → a creation and a rotation answer the plain personal token once; the action keeps it in this process's one-time
+    store and the attendance page shows it exactly once (below)
+
 Public URL /i/<slug>/calendario.ics
   → apps/web/app/i/[slug]/calendario.ics/route.ts answers the same public read as the page
   → the calendar is built from the invitation's own facts and stored zone (four hours from the start)
   → text/calendar; charset=utf-8, attachment filename="invitacion.ics", Cache-Control: no-store
   → 404 for a slug that is not public and for a calendar that cannot be built
 ```
+
+The personal page and its pass are `noindex, nofollow` in their metadata and rendered per request: the page calls
+`connection()` and exports `dynamic = "force-dynamic"`, `fetch` is never cached (`sendApiRequest` always sends
+`cache: "no-store"`), and React's `cache` only deduplicates the read inside one request. The HTTP response header
+observed in the development server is `Cache-Control: no-cache, must-revalidate`, which is what every dynamic page of
+this app answers; an explicit `no-store` on the document would need a route handler or a `next.config.ts` rule.
+
+The pass's QR is drawn on the server by `qrcode` (MIT, pinned in `apps/web/package.json` at 1.5.4 with
+`@types/qrcode`), which answers the module matrix synchronously without a DOM, a canvas, or an image encoder; the web
+turns that matrix into SVG (`apps/web/lib/server/guest-pass-qr.ts`) and hands it to an `<img>` as a data URL, so no
+page injects raw markup and no guest page loads a script or a third-party request. `lean-qr` stays the browser-side
+encoder of the administrator enrollment QR. The pass encodes the absolute check-in URL built from the request's own
+origin (`requestOrigin`), never a value the browser sends in a path, query, or body, and it carries nothing but the
+token the guest's own URL already holds.
+
+The one-time hand-off (`apps/web/lib/server/single-use-flash.ts`) is how a token answers once without ever becoming a
+URL: the server action stores the personal link in this process's bounded, five-minute store and the browser carries
+only an opaque 22-character handle, in a cookie that is `httpOnly`, `SameSite=Strict`, path-scoped to the one
+attendance page (`/cuenta/invitaciones/<id>/asistencia`) or to `/cuenta`, and `Secure` under https. The page takes the
+value out of the store as it renders, which deletes it, so a reload, a second tab, or a later visit shows nothing
+instead of the link again — Next.js allows no cookie deletion during a server render, which is why the store rather
+than the cookie is what makes the reveal single-use. The after-sign-in return uses the same store with a bare
+`/cuenta/acceso/<slug>/<token>` path, re-validated when it is read, so the return can never leave `/cuenta`. The store
+lives in the web process's memory, which is what the single Node.js web server this repository targets provides; a
+deployment with more than one web replica would need a shared store, and until then the hand-off would degrade to
+showing nothing rather than to showing it twice. Nothing from either hand-off is ever logged.
 
 Feature data is read per request from the invitation and its pinned package and gated in the API: a package key the
 API does not implement never becomes a feature, and WhatsApp needs a stored E.164 phone. The public body carries the

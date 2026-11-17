@@ -951,6 +951,42 @@ function stub(answers: Answers = {}): Stub {
       calls.push("packages");
       return answers.packages?.() ?? unexpected("packages");
     },
+    readRsvp: () => {
+      calls.push("readRsvp");
+      return unexpected("readRsvp");
+    },
+    updateRsvpSettings: () => {
+      calls.push("updateRsvpSettings");
+      return unexpected("updateRsvpSettings");
+    },
+    rsvpCsv: () => {
+      calls.push("rsvpCsv");
+      return unexpected("rsvpCsv");
+    },
+    guests: (id) => {
+      calls.push(`guests:${id}`);
+      return unexpected("guests");
+    },
+    createGuest: () => {
+      calls.push("createGuest");
+      return unexpected("createGuest");
+    },
+    updateGuest: () => {
+      calls.push("updateGuest");
+      return unexpected("updateGuest");
+    },
+    removeGuest: () => {
+      calls.push("removeGuest");
+      return unexpected("removeGuest");
+    },
+    rotateGuestToken: () => {
+      calls.push("rotateGuestToken");
+      return unexpected("rotateGuestToken");
+    },
+    checkInGuest: () => {
+      calls.push("checkInGuest");
+      return unexpected("checkInGuest");
+    },
   };
   return { api, calls };
 }

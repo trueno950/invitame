@@ -106,10 +106,12 @@ class MemoryInvitationRepository implements InvitationRepository {
       expiresAt: null,
       createdAt: now,
       updatedAt: now,
-      // The database default every new row reads (S4).
+      // The database defaults every new row reads (S4, M6 G1).
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl: null,
+      rsvpDeadline: null,
+      rsvpPartyLimit: 4,
       ...input,
       content: { ...input.content },
     };
@@ -838,6 +840,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
     assert.deepEqual(updated?.availableFeatures, [
       "COUNTDOWN",
       "MAP",
+      "RSVP",
       "WHATSAPP",
       "MUSIC",
       "CALENDAR",
@@ -902,7 +905,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       });
 
       assert.equal(updated?.featureSettings.playlistUrl, null, String(cleared));
-      assert.deepEqual(updated?.availableFeatures, ["COUNTDOWN", "MAP", "CALENDAR"]);
+      assert.deepEqual(updated?.availableFeatures, ["COUNTDOWN", "MAP", "RSVP", "CALENDAR"]);
       assert.equal(fixture.repository.rows[0]?.playlistUrl, null);
     }
   });
@@ -1332,6 +1335,7 @@ describe("GetPublicInvitationUseCase", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     });
     // Nothing outside the allow-list leaks: no owner, package, price, id, or status (A7).
@@ -1436,6 +1440,14 @@ describe("GetPublicInvitationUseCase", () => {
           whatsapp: null,
           music: null,
           giftRegistry: packageKey === "deluxe",
+          // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form (M6 S4).
+          rsvp: {
+            mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
+            deadline: null,
+            partyLimit: 4,
+            // Deluxe also grants the guest list's access pass (M6 G2).
+            qrPass: packageKey === "deluxe",
+          },
         },
         packageKey,
       );
@@ -1460,6 +1472,13 @@ describe("GetPublicInvitationUseCase", () => {
           // Basic grants no MUSIC; Premium and Deluxe do, and both get the service the link names.
           music: packageKey === "basic" ? null : { url: PLAYLIST, provider: "spotify" },
           giftRegistry: packageKey === "deluxe",
+          rsvp: {
+            mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
+            deadline: null,
+            partyLimit: 4,
+            // Deluxe also grants the guest list's access pass (M6 G2).
+            qrPass: packageKey === "deluxe",
+          },
         },
         packageKey,
       );
@@ -1470,6 +1489,7 @@ describe("GetPublicInvitationUseCase", () => {
         "giftRegistry",
         "map",
         "music",
+        "rsvp",
         "whatsapp",
       ]);
       assert.equal(JSON.stringify(page).includes("COUNTDOWN"), false);
@@ -1497,6 +1517,7 @@ describe("GetPublicInvitationUseCase", () => {
       whatsapp: null,
       music: { url: PLAYLIST, provider: "spotify" },
       giftRegistry: false,
+      rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
     });
     assert.equal(JSON.stringify(page).includes(PHONE), false);
   });

@@ -26,6 +26,16 @@ export interface InvitationRecord {
    * invitation has none (F6; S7). It travels flattened with the phone, from the same settings row.
    */
   playlistUrl: string | null;
+  /**
+   * The RSVP deadline, or null for one that never closes (M6 G1; S4). The column is nullable, so every row that
+   * existed before the migration reads null and keeps accepting responses.
+   */
+  rsvpDeadline: Date | null;
+  /**
+   * The party limit the owner set, 1 to 10, defaulting to 4 (M6 G1; S4). The column is NOT NULL with a default,
+   * so every stored invitation has one; the domain validates the limit a creator saves.
+   */
+  rsvpPartyLimit: number;
   archivedAt: Date | null;
   /**
    * When the invitation was published; the database `Invitation_publishedAt_matches_status` check keeps it

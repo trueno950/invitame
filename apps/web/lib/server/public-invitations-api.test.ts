@@ -41,7 +41,18 @@ const PUBLIC: PublicInvitation = {
     whatsapp: { phone: "+525512345678" },
     music: { url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", provider: "spotify" },
     giftRegistry: true,
+    rsvp: { mode: "open", deadline: "2026-12-01T18:00:00.000Z", partyLimit: 4, qrPass: false },
   },
+};
+
+/** One guest's open RSVP answer, as the guest page posts it (M6 G3; S4). */
+const SUBMISSION = {
+  name: "Ana Pérez",
+  attending: true,
+  partySize: 2,
+  phone: "+525512345678",
+  message: "Con mucho gusto",
+  honeypot: "",
 };
 
 interface Received {
@@ -289,6 +300,7 @@ describe("parsePublicInvitation", () => {
           whatsapp: null,
           music: null,
           giftRegistry: false,
+          rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
         },
       }),
       {
@@ -300,8 +312,145 @@ describe("parsePublicInvitation", () => {
           whatsapp: null,
           music: null,
           giftRegistry: false,
+          rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
         },
       },
     );
+  });
+});
+
+describe("the RSVP feature of the public read (M6 G3; S4)", () => {
+  it("reads how the page accepts answers: open, the guest list, or nothing at all", () => {
+    for (const rsvp of [
+      { mode: "open" as const, deadline: null, partyLimit: 4, qrPass: false },
+      {
+        mode: "guest-list" as const,
+        deadline: "2026-12-01T18:00:00.000Z",
+        partyLimit: 10,
+        qrPass: true,
+      },
+      { mode: null, deadline: null, partyLimit: 1, qrPass: false },
+    ]) {
+      assert.deepEqual(
+        parsePublicInvitation({ ...PUBLIC, features: { ...PUBLIC.features, rsvp } }),
+        {
+          ...PUBLIC,
+          features: { ...PUBLIC.features, rsvp },
+        },
+      );
+    }
+  });
+
+  it("refuses an unknown mode, a deadline that is no instant, or a party limit outside 1 to 10", () => {
+    const broken: unknown[] = [
+      undefined,
+      null,
+      "open",
+      {},
+      { mode: "guests", deadline: null, partyLimit: 4, qrPass: false },
+      { mode: "open", partyLimit: 4, qrPass: false },
+      { mode: "open", deadline: "mañana", partyLimit: 4, qrPass: false },
+      { mode: "open", deadline: 0, partyLimit: 4, qrPass: false },
+      { mode: "open", deadline: null, partyLimit: 0, qrPass: false },
+      { mode: "open", deadline: null, partyLimit: 11, qrPass: false },
+      { mode: "open", deadline: null, partyLimit: 2.5, qrPass: false },
+      { mode: "open", deadline: null, partyLimit: "4", qrPass: false },
+      // The pass is a boolean the guest list reads; anything else is not this contract (M6 G2; S4).
+      { mode: "guest-list", deadline: null, partyLimit: 4 },
+      { mode: "guest-list", deadline: null, partyLimit: 4, qrPass: "true" },
+      { mode: "open", deadline: null, partyLimit: 4, qrPass: null },
+    ];
+
+    for (const rsvp of broken) {
+      assert.equal(
+        parsePublicInvitation({ ...PUBLIC, features: { ...PUBLIC.features, rsvp } }),
+        undefined,
+        JSON.stringify(rsvp),
+      );
+    }
+  });
+});
+
+describe("public RSVP submission (M6 G3; S4)", () => {
+  it("posts the guest's answer to the slug with the address the web forwarded and no cookie", async () => {
+    answer(202, { status: "received" });
+
+    const result = await client().submitRsvp(PUBLIC.slug, SUBMISSION, {
+      clientAddress: "203.0.113.7",
+    });
+
+    assert.deepEqual(result, { ok: true });
+    assert.equal(received.length, 1);
+    const request = received[0];
+    assert.equal(request?.method, "POST");
+    assert.equal(request?.url, `/public/invitations/${PUBLIC.slug}/rsvp`);
+    // A guest has no session, and the API counts the answer against the guest's own address.
+    assert.equal(request?.headers.cookie, undefined);
+    assert.equal(request?.headers["x-invitame-proxy-secret"], PROXY_SECRET);
+    assert.equal(request?.headers["x-invitame-client-ip"], "203.0.113.7");
+    assert.equal(request?.headers["content-type"], "application/json");
+    assert.deepEqual(JSON.parse(request?.body ?? "null"), SUBMISSION);
+  });
+
+  it("forwards no address header when the web could not read one", async () => {
+    answer(202, { status: "received" });
+
+    assert.deepEqual(await client().submitRsvp(PUBLIC.slug, SUBMISSION), { ok: true });
+    assert.equal(received[0]?.headers["x-invitame-client-ip"], undefined);
+  });
+
+  it("makes no request for a slug that cannot be one", async () => {
+    for (const slug of ["", "Invitacion", "a-", "invitacion--doble", "../cuenta"]) {
+      assert.deepEqual(await client().submitRsvp(slug, SUBMISSION), {
+        ok: false,
+        failure: "not-found",
+      });
+    }
+    assert.deepEqual(received, []);
+  });
+
+  it("maps each documented refusal to its own outcome", async () => {
+    const refusals: Array<[number, unknown, string]> = [
+      [404, { code: "PUBLIC_INVITATION_NOT_FOUND" }, "not-found"],
+      [409, { code: "RSVP_NOT_OPEN" }, "not-open"],
+      [429, { code: "RSVP_RATE_LIMITED" }, "rate-limited"],
+      [
+        400,
+        { code: "INVALID_RSVP", issues: ["name must be between 1 and 80 characters"] },
+        "invalid",
+      ],
+    ];
+
+    for (const [status, body, failure] of refusals) {
+      answer(status, body);
+      assert.deepEqual(
+        await client().submitRsvp(PUBLIC.slug, SUBMISSION),
+        { ok: false, failure },
+        `${status}`,
+      );
+    }
+  });
+
+  it("fails closed on a refusal this deployment does not implement and on an accepted body that breaks the contract", async () => {
+    answer(400, { code: "SOMETHING_ELSE" });
+    await assert.rejects(client().submitRsvp(PUBLIC.slug, SUBMISSION), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "rejected");
+      return true;
+    });
+
+    answer(503, { code: "SERVICE_UNAVAILABLE" });
+    await assert.rejects(client().submitRsvp(PUBLIC.slug, SUBMISSION), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "unavailable");
+      return true;
+    });
+
+    answer(202, { status: "stored", name: "Ana Pérez" });
+    await assert.rejects(client().submitRsvp(PUBLIC.slug, SUBMISSION), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "invalid-response");
+      return true;
+    });
   });
 });

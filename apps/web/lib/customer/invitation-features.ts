@@ -56,6 +56,7 @@ const AUTOMATIC_FEATURES = [
 const WHATSAPP_FEATURE_KEY = "WHATSAPP";
 const CALENDAR_FEATURE_KEY = "CALENDAR";
 const MUSIC_FEATURE_KEY = "MUSIC";
+const RSVP_FEATURE_KEY = "RSVP";
 const GIFT_REGISTRY_FEATURE_KEY = "GIFT_REGISTRY";
 
 /** Everything the section renders for one draft. */
@@ -75,6 +76,11 @@ export interface FeatureSettingsView {
   readonly playlistUrl: string;
   /** Whether the package includes MUSIC, which is the only reason the link field is shown (S7). */
   readonly showMusic: boolean;
+  /**
+   * Whether the package includes RSVP, which is the only reason the draft offers its «Asistencia» section
+   * (M6 G3; S4). A package with the guest list instead keeps that section for the guest-list tools (G4).
+   */
+  readonly showRsvp: boolean;
   /**
    * Why the gift registry block does not show, naming the packages that include it, or "" when this package
    * grants it or when the catalog could not be read and no package can be named (F7; S7).
@@ -153,6 +159,7 @@ export function featureSettingsView(
     showWhatsapp: included.has(WHATSAPP_FEATURE_KEY),
     playlistUrl: invitation.featureSettings.playlistUrl ?? "",
     showMusic: included.has(MUSIC_FEATURE_KEY),
+    showRsvp: included.has(RSVP_FEATURE_KEY),
     giftRegistryNote: giftRegistryNote(packages, included),
     automaticFeatures: AUTOMATIC_FEATURES.filter(
       (feature) => feature.key === CALENDAR_FEATURE_KEY || included.has(feature.key),

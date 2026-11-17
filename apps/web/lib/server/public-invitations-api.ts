@@ -2,7 +2,13 @@ import { isE164Phone } from "../invitation-features/invitation-features.ts";
 import { type MusicProvider, musicServiceOf } from "../invitation-features/music.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import { ApiClientError, type ApiClientOptions, sendApiRequest } from "./api-client.ts";
-import { isInvitationSlug } from "./invitations-api.ts";
+import {
+  GUEST_NAME_MAX_LENGTH,
+  GUEST_SEATS_MAX,
+  GUEST_SEATS_MIN,
+  isGuestToken,
+  isInvitationSlug,
+} from "./invitations-api.ts";
 
 /**
  * The web server's client of the public invitation read (M5 T5; S1, S5, A3, A7). A guest has no session
@@ -18,6 +24,25 @@ import { isInvitationSlug } from "./invitations-api.ts";
  * cookie-free wiring that imports it lives in `app/i/[slug]/_lib/public-api.ts` and is `server-only`.
  */
 
+/** The party limits the API accepts, mirrored so a guest page never renders an option the API refuses (S4). */
+export const RSVP_PARTY_LIMIT_MIN = 1;
+export const RSVP_PARTY_LIMIT_MAX = 10;
+
+/**
+ * How the guest page accepts attendance answers (M6 G1, G3; S4): an open form, a guest list with personal links,
+ * or nothing at all, with the creator's deadline as an ISO instant (or null) and the party limit of one answer.
+ */
+export interface PublicRsvpFeature {
+  readonly mode: "open" | "guest-list" | null;
+  readonly deadline: string | null;
+  readonly partyLimit: number;
+  /**
+   * Whether a confirmed guest's personal page may show the access QR (M6 G2; S4). It is only ever true in guest-list
+   * mode: the pass belongs to a personal link, and G4 renders it. This client reads it and never acts on it here.
+   */
+  readonly qrPass: boolean;
+}
+
 /** The features the API gated for one invitation, as a guest page reads them (S4, S7). */
 export interface PublicInvitationFeatures {
   readonly countdown: boolean;
@@ -29,6 +54,8 @@ export interface PublicInvitationFeatures {
   readonly music: { readonly url: string; readonly provider: MusicProvider } | null;
   /** Whether the layouts render their gift registry block (S7). */
   readonly giftRegistry: boolean;
+  /** Which attendance answers the page accepts, and the limits of one (G3; S4). */
+  readonly rsvp: PublicRsvpFeature;
 }
 
 /** The guest's page of a published invitation: the projection of A7, and nothing else. */
@@ -65,6 +92,44 @@ function isTimestamp(value: unknown): value is string {
 const MAX_COMPONENT_KEY_LENGTH = 120;
 
 /**
+ * The RSVP mode of one invitation (S4). The API decides it from the package's catalog keys alone: `guest-list` when
+ * the package includes the guest list, `open` when it includes RSVP, and null when it includes neither. The party
+ * limit is the creator's, from 1 to 10; the deadline is an ISO instant or null.
+ */
+function parsePublicRsvp(value: unknown): PublicRsvpFeature | undefined {
+  const rsvp = record(value);
+
+  if (rsvp === undefined) {
+    return undefined;
+  }
+
+  const mode = rsvp.mode;
+  const deadline = rsvp.deadline;
+  const partyLimit = rsvp.partyLimit;
+  const qrPass = rsvp.qrPass;
+
+  if (!(mode === "open" || mode === "guest-list" || mode === null)) {
+    return undefined;
+  }
+  if (typeof qrPass !== "boolean") {
+    return undefined;
+  }
+  if (!(deadline === null || isTimestamp(deadline))) {
+    return undefined;
+  }
+  if (
+    typeof partyLimit !== "number" ||
+    !Number.isInteger(partyLimit) ||
+    partyLimit < RSVP_PARTY_LIMIT_MIN ||
+    partyLimit > RSVP_PARTY_LIMIT_MAX
+  ) {
+    return undefined;
+  }
+
+  return { mode, deadline, partyLimit, qrPass };
+}
+
+/**
  * The gated features of a guest page (S4, S7). The read always says `calendar: true`, because add-to-calendar is
  * not a catalog feature; a body that says otherwise is not this contract, so it is refused instead of being
  * normalized. `whatsapp` is the stored E.164 contact or null, `music` is an allow-listed `https` link and the
@@ -84,8 +149,9 @@ function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefin
   }
 
   const music = features.music === null ? null : musicServiceOf(features.music);
+  const rsvp = parsePublicRsvp(features.rsvp);
 
-  if (music === undefined) {
+  if (music === undefined || rsvp === undefined) {
     return undefined;
   }
 
@@ -96,6 +162,7 @@ function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefin
     calendar: true,
     giftRegistry: features.giftRegistry,
     music,
+    rsvp,
   } as const;
 
   if (whatsapp === null) {
@@ -155,16 +222,198 @@ export function parsePublicInvitation(value: unknown): PublicInvitation | undefi
 
 const NOT_FOUND: PublicInvitationResult = { ok: false, failure: "not-found" };
 
+/**
+ * One guest's own block of their personal page (M6 G4; S4): their name, their seats, the answer they last gave, and
+ * whether the access pass is offered. Nothing here names another guest, the invitation's id, or the owner.
+ */
+export interface PublicGuestResponse {
+  readonly name: string;
+  readonly seats: number;
+  readonly response: {
+    readonly attending: boolean;
+    readonly partySize: number;
+    readonly message: string | null;
+  } | null;
+  /** Whether the pass is offered: only for a confirmed guest of a package that grants `QR_PASS` (S4). */
+  readonly qrPass: boolean;
+}
+
+/** The personal page: the public projection of A7 plus one guest block (S4). */
+export interface PublicGuestInvitation extends PublicInvitation {
+  readonly guest: PublicGuestResponse;
+}
+
+/** One guest's answer, as the public block reads it: a confirmed answer names 1 to seats, a decline none. */
+function parsePublicGuestResponse(
+  value: unknown,
+  seats: number,
+): PublicGuestResponse["response"] | undefined {
+  const response = record(value);
+
+  if (response === undefined) {
+    return undefined;
+  }
+
+  const { attending, partySize, message } = response;
+
+  if (
+    typeof attending !== "boolean" ||
+    typeof partySize !== "number" ||
+    !Number.isSafeInteger(partySize) ||
+    partySize < 0 ||
+    partySize > seats ||
+    (attending && partySize < 1) ||
+    (!attending && partySize !== 0) ||
+    !(message === null || typeof message === "string")
+  ) {
+    return undefined;
+  }
+
+  return { attending, partySize, message };
+}
+
+/**
+ * The personal page of a success body, or `undefined` when it breaks the documented contract: the public projection
+ * is parsed again, and the guest block must name this guest's seats, answer, and pass without anything else. A body
+ * that grows another guest, an owner, a package, or an id never reaches the page.
+ */
+export function parsePublicGuestInvitation(value: unknown): PublicGuestInvitation | undefined {
+  const page = parsePublicInvitation(value);
+  const guest = record(record(value)?.guest);
+
+  if (page === undefined || guest === undefined) {
+    return undefined;
+  }
+
+  const { name, seats, qrPass } = guest;
+
+  if (
+    typeof name !== "string" ||
+    name.trim().length === 0 ||
+    [...name].length > GUEST_NAME_MAX_LENGTH ||
+    typeof seats !== "number" ||
+    !Number.isInteger(seats) ||
+    seats < GUEST_SEATS_MIN ||
+    seats > GUEST_SEATS_MAX ||
+    typeof qrPass !== "boolean"
+  ) {
+    return undefined;
+  }
+
+  const response = guest.response === null ? null : parsePublicGuestResponse(guest.response, seats);
+
+  if (response === undefined) {
+    return undefined;
+  }
+
+  return { ...page, guest: { name, seats, response, qrPass } };
+}
+
+export type PublicGuestResult =
+  | { ok: true; value: PublicGuestInvitation }
+  | { ok: false; failure: "not-found" };
+
+const GUEST_NOT_FOUND: PublicGuestResult = { ok: false, failure: "not-found" };
+
+/** One guest's personal answer, as the page's form submits it (M6 G4; S4). */
+export interface PublicGuestRsvpSubmission {
+  readonly attending: boolean;
+  /** The people who come: 1 to the guest's seats; none at all for a decline. */
+  readonly partySize: number;
+  readonly message: string | null;
+}
+
+/** The outcomes of one personal answer; every accepted attempt, first or repeated, is `{ ok: true }`. */
+export type PublicGuestRsvpSubmitResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly failure: "not-found" | "not-open" | "rate-limited" | "invalid" };
+
 const readsBody = (status: number): boolean => (status >= 200 && status < 300) || status === 404;
+
+/** The statuses of a submission whose body the page reads: its success, and every refusal it maps (S4). */
+const readsRsvpBody = (status: number): boolean =>
+  (status >= 200 && status < 300) ||
+  status === 400 ||
+  status === 404 ||
+  status === 409 ||
+  status === 429;
+
+/** One guest's open RSVP answer, as the form submits it (M6 G3; S4). */
+export interface PublicRsvpSubmission {
+  readonly name: string;
+  readonly attending: boolean;
+  readonly partySize: number;
+  readonly phone: string | null;
+  readonly message: string | null;
+  /** The hidden field a bot fills; any value makes the API answer success without storing anything (S4). */
+  readonly honeypot: string;
+}
+
+/**
+ * The outcomes of one submission the page handles. Every accepted attempt — stored, updated, or dropped because
+ * the honeypot was filled — is `{ ok: true }`, so the page says thank you without learning which one it was.
+ */
+export type PublicRsvpSubmitResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly failure: "not-found" | "not-open" | "rate-limited" | "invalid" };
+
+/** The status and code pairing each refusal this deployment implements; anything else fails closed. */
+const RSVP_REFUSALS: Readonly<Record<string, { status: number; failure: string }>> = {
+  PUBLIC_INVITATION_NOT_FOUND: { status: 404, failure: "not-found" },
+  RSVP_NOT_OPEN: { status: 409, failure: "not-open" },
+  RSVP_RATE_LIMITED: { status: 429, failure: "rate-limited" },
+  INVALID_RSVP: { status: 400, failure: "invalid" },
+};
+
+/** The `code` of a refusal body, if the body is one this client can read at all. */
+function refusalCode(text: string | undefined): string | undefined {
+  try {
+    const body = record(JSON.parse(text ?? ""));
+    const code = body?.code;
+
+    return typeof code === "string" ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The fixed success body of `POST /public/invitations/:slug/rsvp` (S4). */
+function isAccepted(value: unknown): boolean {
+  return record(value)?.status === "received";
+}
 
 export interface PublicInvitationsClient {
   /** `GET /public/invitations/:slug`: the guest's page, or `not-found` (A3). */
   getBySlug(slug: string): Promise<PublicInvitationResult>;
+  /**
+   * `GET /public/invitations/:slug/guests/:token`: one guest's personal page (M6 G4; S4), or `not-found` for every
+   * invisible case — an unknown slug, a revoked token, or a token of another invitation. No cookie is sent.
+   */
+  getGuest(slug: string, token: string): Promise<PublicGuestResult>;
+  /**
+   * `POST /public/invitations/:slug/guests/:token/rsvp`: one guest's answer through their personal link (G4; S4).
+   * The address the web forwarded travels in the API's client-IP header and is what the API's rate limit counts.
+   */
+  submitGuestRsvp(
+    slug: string,
+    token: string,
+    submission: PublicGuestRsvpSubmission,
+    options?: { clientAddress?: string },
+  ): Promise<PublicGuestRsvpSubmitResult>;
+  /**
+   * `POST /public/invitations/:slug/rsvp`: one guest's open answer (M6 G3; S4). The address the web forwarded
+   * travels in the API's client-IP header and is what the API's rate limit counts against.
+   */
+  submitRsvp(
+    slug: string,
+    submission: PublicRsvpSubmission,
+    options?: { clientAddress?: string },
+  ): Promise<PublicRsvpSubmitResult>;
 }
 
 /**
- * A stateless client of the public read. A slug that cannot be one names nothing, so no request is made;
- * an unusually shaped slug never becomes a path segment the API could interpret differently.
+ * A stateless client of the public read and the public submission. A slug that cannot be one names nothing, so no
+ * request is made; an unusually shaped slug never becomes a path segment the API could interpret differently.
  */
 export function createPublicInvitationsClient(options: ApiClientOptions): PublicInvitationsClient {
   return {
@@ -200,6 +449,132 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
         throw new ApiClientError("invalid-response", status);
       }
       return { ok: true, value: invitation };
+    },
+
+    async getGuest(slug: string, token: string): Promise<PublicGuestResult> {
+      // A slug or a token that cannot be one names nothing, so no request is made and neither becomes a path
+      // segment the API could read differently.
+      if (!isInvitationSlug(slug) || !isGuestToken(token)) {
+        return GUEST_NOT_FOUND;
+      }
+
+      const { status, text } = await sendApiRequest(
+        options,
+        {
+          method: "GET",
+          path: `/public/invitations/${encodeURIComponent(slug)}/guests/${encodeURIComponent(token)}`,
+        },
+        readsBody,
+      );
+
+      if (status === 404) {
+        return GUEST_NOT_FOUND;
+      }
+
+      if (status < 200 || status >= 300) {
+        throw new ApiClientError(status >= 500 ? "unavailable" : "rejected", status);
+      }
+
+      let payload: unknown;
+      try {
+        payload = JSON.parse(text ?? "");
+      } catch {
+        payload = undefined;
+      }
+
+      const page = parsePublicGuestInvitation(payload);
+
+      if (page === undefined) {
+        throw new ApiClientError("invalid-response", status);
+      }
+      return { ok: true, value: page };
+    },
+
+    async submitGuestRsvp(
+      slug: string,
+      token: string,
+      submission: PublicGuestRsvpSubmission,
+      request: { clientAddress?: string } = {},
+    ): Promise<PublicGuestRsvpSubmitResult> {
+      if (!isInvitationSlug(slug) || !isGuestToken(token)) {
+        return { ok: false, failure: "not-found" };
+      }
+
+      const { status, text } = await sendApiRequest(
+        options,
+        {
+          method: "POST",
+          path: `/public/invitations/${encodeURIComponent(slug)}/guests/${encodeURIComponent(token)}/rsvp`,
+          body: submission,
+          ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+        },
+        (answer): boolean => readsRsvpBody(answer),
+      );
+
+      if (status >= 200 && status < 300) {
+        let payload: unknown;
+        try {
+          payload = JSON.parse(text ?? "");
+        } catch {
+          payload = undefined;
+        }
+        if (!isAccepted(payload)) {
+          throw new ApiClientError("invalid-response", status);
+        }
+        return { ok: true };
+      }
+
+      const code = refusalCode(text);
+      const refusal = code === undefined ? undefined : RSVP_REFUSALS[code];
+
+      if (refusal !== undefined && refusal.status === status) {
+        return { ok: false, failure: refusal.failure as "not-found" };
+      }
+
+      throw new ApiClientError(status >= 500 ? "unavailable" : "rejected", status);
+    },
+
+    async submitRsvp(
+      slug: string,
+      submission: PublicRsvpSubmission,
+      request: { clientAddress?: string } = {},
+    ): Promise<PublicRsvpSubmitResult> {
+      if (!isInvitationSlug(slug)) {
+        return { ok: false, failure: "not-found" };
+      }
+
+      const { status, text } = await sendApiRequest(
+        options,
+        {
+          method: "POST",
+          path: `/public/invitations/${encodeURIComponent(slug)}/rsvp`,
+          body: submission,
+          ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+        },
+        (answer): boolean => readsRsvpBody(answer),
+      );
+
+      if (status >= 200 && status < 300) {
+        let payload: unknown;
+        try {
+          payload = JSON.parse(text ?? "");
+        } catch {
+          payload = undefined;
+        }
+        if (!isAccepted(payload)) {
+          throw new ApiClientError("invalid-response", status);
+        }
+        return { ok: true };
+      }
+
+      const code = refusalCode(text);
+      const refusal = code === undefined ? undefined : RSVP_REFUSALS[code];
+
+      if (refusal !== undefined && refusal.status === status) {
+        return { ok: false, failure: refusal.failure as "not-found" };
+      }
+
+      throw new ApiClientError(status >= 500 ? "unavailable" : "rejected", status);
     },
   };
 }

@@ -521,6 +521,15 @@ describe("invitation feature data (real PostgreSQL)", () => {
             whatsapp: { phone: PHONE },
             music: packageKey === "basic" ? null : { url: PLAYLIST, provider: "spotify" },
             giftRegistry: packageKey === "deluxe",
+            // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form.
+            rsvp: {
+              mode:
+                packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
+              deadline: null,
+              partyLimit: 4,
+              // Deluxe also grants the guest list's access pass (M6 G2).
+              qrPass: packageKey === "deluxe",
+            },
           },
           packageKey,
         );
@@ -543,6 +552,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         whatsapp: null,
         music: { url: PLAYLIST, provider: "spotify" },
         giftRegistry: false,
+        rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
       });
     });
 
@@ -562,6 +572,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         whatsapp: { phone: PHONE },
         music: null,
         giftRegistry: true,
+        rsvp: { mode: "guest-list", deadline: null, partyLimit: 4, qrPass: true },
       });
     });
 
@@ -582,6 +593,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       assert.equal(JSON.stringify(page).includes(PHONE), false);
       assert.equal(JSON.stringify(page).includes(PLAYLIST), false);
@@ -603,6 +615,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "giftRegistry",
         "map",
         "music",
+        "rsvp",
         "whatsapp",
       ]);
       assert.deepEqual(Object.keys(page ?? {}).sort(), [

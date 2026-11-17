@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { loadAccountView } from "../../lib/customer/account.ts";
 import { ACCOUNT_COPY } from "../../lib/customer/copy.ts";
+import { isCheckInPath } from "../../lib/public/guest-pass.ts";
 import { getOwnProfile } from "../../lib/server/session-api.ts";
+import { AFTER_SIGN_IN_COOKIE, afterSignIn } from "../../lib/server/single-use-flash.ts";
 import { CustomerShell } from "../_components/customer-shell.tsx";
 import { quietButton } from "../_components/ui.ts";
 import { DisplayNameForm } from "./display-name-form.tsx";
@@ -27,6 +30,19 @@ export default async function AccountPage() {
 
   if (view.kind === "signed-out") {
     redirect("/ingresar");
+  }
+
+  // A visitor who opened a guest's access pass before signing in comes back to it (M6 G4; S4). The one-time store
+  // answers a bare check-in path it validated, never an absolute or arbitrary target, and reading it deletes it, so a
+  // later visit to this page is a plain account page.
+  const handle = (await cookies()).get(AFTER_SIGN_IN_COOKIE)?.value;
+  const pending =
+    handle === undefined
+      ? undefined
+      : afterSignIn.take(handle, (path): path is string => isCheckInPath(path));
+
+  if (pending !== undefined) {
+    redirect(pending);
   }
 
   return (
