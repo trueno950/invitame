@@ -778,6 +778,49 @@ An invitation points to `TemplateVersion`, not to mutable `Template` metadata. P
 state is publicly visible; it does not rewrite the version snapshot. Public rendering must fetch the required data
 without an N+1 query pattern and must fail closed for unpublished, missing, or unauthorized resources.
 
+## Invitation media (current)
+
+Implemented by Milestone 8 (S1, S3, S4). Creators upload the invitation's main photo and, when the pinned package
+grants `GALLERY`, up to twelve gallery photos. Binaries live in object storage, never in PostgreSQL and never on an
+ephemeral filesystem in production.
+
+- Feature module `apps/api/src/media/`: `domain` owns the pure upload rules (magic-byte format detection, 10 MB,
+  8000 px per side, the 2000 px output target, the 120-character alt text, the key format and the two limits);
+  `application` owns the `MediaStorage` and `ImageProcessor` ports, the `MediaRepository` port, and the use cases;
+  `infrastructure` holds both storage adapters (`local`, `s3`), the `sharp` processor, and the Prisma repository;
+  `presentation` holds the owner routes and the one public serving route.
+- `MediaStorage` is the provider-neutral port (put, get as a stream with its size, idempotent delete, and a key list
+  for cleanup). `MEDIA_STORAGE_DRIVER` selects the adapter: `local` in development and tests, refused at startup in
+  production; `s3` for any S3-compatible provider (R2, AWS S3, MinIO), configured from the environment and failing
+  closed until a bucket is set. The credential never leaves the adapter, and no provider message, endpoint, bucket,
+  key, or signed URL reaches a log or a response.
+- Uploads: `POST /invitations/:id/media` is multipart and accepts only `file`, `kind` (`main-photo` or `gallery`),
+  and `alt`, with an approximately 11 MB body bound (413 past it); every other route keeps its existing JSON body
+  limit. The format is decided from magic bytes, never the filename or the client MIME. The image is re-encoded to
+  WebP with its longest side at most 2000 px and its metadata stripped (EXIF, GPS), so no location leaks.
+- The order of side effects is the retry policy: process, put the object, insert the row; if the insert fails, the
+  object is deleted best effort and logged by event name only. Deletion marks the row `deleted` first and deletes the
+  object after it; a failed object delete leaves a row for `pnpm media:cleanup`, which also removes objects whose rows
+  are missing. It is idempotent and supports `--dry-run`.
+- Limits (S4), enforced in the transaction that writes a row and serialized on the invitation: one current main
+  photo per invitation (replacing marks the previous one deleted and deletes its object), at most 12 gallery photos,
+  at most 40 stored assets. Ownership and the archived refusal are in the same statement that reads or writes the
+  row, so another customer's invitation or asset answers one 404 (A4).
+- REST: owner routes `GET`/`POST /invitations/:id/media`, `PATCH`/`DELETE /invitations/:id/media/:assetId` behind the
+  session guard, and the public `GET /media/:assetId`. That route is `@Public()`: a published invitation's image is
+  public and cached for a year as immutable, the owner sees a draft with `private, no-store`, and every other case —
+  missing, deleted, unpublished, foreign, or an object that is gone — is the same 404. It answers
+  `Content-Type: image/webp`, `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`, and
+  `Cross-Origin-Resource-Policy: cross-origin`; the session is read only when the invitation is not published.
+- URLs are absolute API URLs built from the validated `MEDIA_PUBLIC_BASE_URL` (`<origin>/media/<assetId>`), never a
+  provider URL. `GALLERY` joins the implemented feature allow-list, and the public read gains
+  `features.gallery: [{ url, width, height, alt }]` in position order — an empty array when the package does not
+  grant `GALLERY`, so the shape is stable and a layout always reads an array. The public projection reads the gallery
+  through the `InvitationGalleryReader` port that the media module implements, so the invitations module never
+  imports a media repository; the owner read exposes media only through the media routes.
+- Configuration and operations: [`../development/media-storage.md`](../development/media-storage.md) documents every
+  variable, the production checklist, the serving headers, and the cleanup command.
+
 ## Renderer registry and `componentKey`
 
 `componentKey` is an identifier, not a module path, JavaScript expression, template string, or code blob. The

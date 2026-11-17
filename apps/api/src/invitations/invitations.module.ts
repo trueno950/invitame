@@ -6,6 +6,7 @@ import {
 } from "../catalog/application/public/catalog-public-reader";
 import { CatalogModule } from "../catalog/catalog.module";
 import { PrismaService } from "../database/prisma.service";
+import { MediaModule } from "../media/media.module";
 import { GUEST_REPOSITORY, type GuestRepository } from "./application/guest.repository";
 import {
   INVITATION_REPOSITORY,
@@ -23,6 +24,10 @@ import {
   UpdateInvitationFeaturesUseCase,
 } from "./application/invitation.use-cases";
 import { INVITATION_CATALOG, type InvitationCatalog } from "./application/invitation-catalog";
+import {
+  INVITATION_GALLERY_READER,
+  type InvitationGalleryReader,
+} from "./application/invitation-gallery";
 import {
   CheckInGuestUseCase,
   CreateGuestUseCase,
@@ -92,7 +97,21 @@ export const INVITATION_USE_CASES: Provider[] = [
   useCase(GetOwnInvitationUseCase),
   useCase(UpdateInvitationContentUseCase),
   useCase(UpdateInvitationFeaturesUseCase),
-  useCase(GetPublicInvitationUseCase),
+  {
+    provide: GetPublicInvitationUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      gallery: InvitationGalleryReader | undefined,
+    ) => new GetPublicInvitationUseCase(invitations, catalog, gallery),
+    // The media module implements the gallery port (M8 S4), so the public projection never queries media tables.
+    // Optional, so a test module that composes the invitations read alone still projects a published invitation.
+    inject: [
+      INVITATION_REPOSITORY,
+      INVITATION_CATALOG,
+      { token: INVITATION_GALLERY_READER, optional: true },
+    ],
+  },
   {
     provide: PublishInvitationUseCase,
     useFactory: (
@@ -224,7 +243,7 @@ export const INVITATION_USE_CASES: Provider[] = [
  * Milestone 6 G2 adds the guest list behind the same ports.
  */
 @Module({
-  imports: [CatalogModule],
+  imports: [CatalogModule, MediaModule],
   controllers: [InvitationsController, PublicInvitationsController],
   providers: [
     ...INVITATION_USE_CASES,

@@ -50,9 +50,9 @@ export function isInvitationTimeZone(value: unknown): value is InvitationTimeZon
 /**
  * The catalog feature keys this batch implements (S4, S7, M6 S3). A package feature outside this list is stored
  * catalog data that no current layout renders, so gating drops it instead of letting a key select a component.
- * `RSVP` and `GUEST_LIST` arrived with Milestone 6 (`GUEST_LIST` is the personal-link guest list, M6 G2), and
- * `QR_PASS` is the guest list's access pass for the door, also M6 G2. The order is the order the owner's feature
- * list follows.
+ * `RSVP` and `GUEST_LIST` arrived with Milestone 6 (`GUEST_LIST` is the personal-link guest list, M6 G2),
+ * `QR_PASS` is the guest list's access pass for the door, also M6 G2, and `GALLERY` is the invitation's photo
+ * gallery (M8 S3, S4). The order is the order the owner's feature list follows.
  */
 export const IMPLEMENTED_INVITATION_FEATURES = [
   "COUNTDOWN",
@@ -63,6 +63,7 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   "GIFT_REGISTRY",
   "GUEST_LIST",
   "QR_PASS",
+  "GALLERY",
 ] as const;
 
 export type ImplementedInvitationFeature = (typeof IMPLEMENTED_INVITATION_FEATURES)[number];
@@ -75,6 +76,21 @@ export const GUEST_LIST_FEATURE_KEY = "GUEST_LIST";
 
 /** The catalog key that grants the guest list its access QR and the owner's check-in (M6 S3; G2). */
 export const QR_PASS_FEATURE_KEY = "QR_PASS";
+
+/** The catalog key that grants the invitation's photo gallery (M8 S3, S4); Premium and Deluxe include it. */
+export const GALLERY_FEATURE_KEY = "GALLERY";
+
+/**
+ * One gallery photo as a guest renders it (M8 S4): the absolute API URL of the image, the dimensions the layout
+ * reserves, and the creator's alt text. It lives in the domain because it is part of what a guest may see, and it
+ * carries no storage key, provider, or owner.
+ */
+export interface PublicGalleryPhoto {
+  url: string;
+  width: number;
+  height: number;
+  alt: string | null;
+}
 
 /**
  * How an invitation accepts attendance answers (M6 S4): the open form when the package grants `RSVP` and no guest
@@ -397,6 +413,12 @@ export interface PublicInvitationFeatures {
   /** Whether the layouts render their gift registry block (S7); the content decides its value, not the API. */
   readonly giftRegistry: boolean;
   /**
+   * The gallery photos the page renders, ordered by position (M8 S4). Empty when the package does not grant
+   * `GALLERY`, so the shape is stable and a layout can always read an array; an empty array and an absent gallery
+   * look the same to the guest, which is exactly right: there is nothing to render either way.
+   */
+  readonly gallery: readonly PublicGalleryPhoto[];
+  /**
    * How the guest page accepts attendance answers (M6 S1, S4): the open form (`open`), personal links
    * (`guest-list`, G2), or nothing (`null`), together with the creator's deadline and party limit and whether the
    * guest-list access pass is granted. The mode is an answer about the page, not a package name, a price, or a
@@ -424,7 +446,10 @@ export interface PublicInvitationFeatures {
  * the package's keys directly, together with the deadline, the party limit, and whether the guest-list access
  * pass is granted (M6 G2).
  */
-export function publicInvitationFeatures(gate: InvitationFeatureGate): PublicInvitationFeatures {
+export function publicInvitationFeatures(
+  gate: InvitationFeatureGate,
+  galleryPhotos: readonly PublicGalleryPhoto[] = [],
+): PublicInvitationFeatures {
   const keys = new Set(availableFeatureKeys(gate));
   const provider = keys.has("MUSIC") ? musicProviderOf(gate.playlistUrl) : null;
   const mode = rsvpModeOf(gate.includedFeatureKeys);
@@ -438,6 +463,8 @@ export function publicInvitationFeatures(gate: InvitationFeatureGate): PublicInv
     music:
       provider === null || gate.playlistUrl === null ? null : { url: gate.playlistUrl, provider },
     giftRegistry: keys.has("GIFT_REGISTRY"),
+    // Only a package that grants GALLERY renders photos; the read passes none otherwise, and this repeats the gate.
+    gallery: keys.has(GALLERY_FEATURE_KEY) ? galleryPhotos : [],
     rsvp: {
       mode,
       deadline: gate.rsvpDeadline,

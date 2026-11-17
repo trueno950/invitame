@@ -90,6 +90,11 @@ export interface PublicInvitationResponse {
     /** Whether the layouts render their gift registry block (S7). */
     giftRegistry: boolean;
     /**
+     * The gallery photos in position order (M8 S4), an empty array when the package does not grant `GALLERY`; each
+     * one is an absolute API URL with the dimensions the layout reserves and the creator's alt text.
+     */
+    gallery: Array<{ url: string; width: number; height: number; alt: string | null }>;
+    /**
      * How the guest page accepts attendance answers (M6 G1, G2; S4): `open`, `guest-list`, or `null`, with the
      * creator's deadline as an ISO instant (or null) and the party limit, and whether a confirmed guest's personal
      * page may show the access QR.
@@ -151,6 +156,12 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
           ? null
           : { url: stored.features.music.url, provider: stored.features.music.provider },
       giftRegistry: stored.features.giftRegistry,
+      gallery: stored.features.gallery.map((photo) => ({
+        url: photo.url,
+        width: photo.width,
+        height: photo.height,
+        alt: photo.alt,
+      })),
       rsvp: {
         mode: stored.features.rsvp.mode,
         deadline: stored.features.rsvp.deadline?.toISOString() ?? null,

@@ -13,6 +13,9 @@ playwright-report/
 .codegraph/
 .atl/
 
+# Local media storage (MEDIA_STORAGE_DRIVER=local)
+apps/api/.local-media/
+
 # Local environment files
 .env
 .env.*

@@ -6,6 +6,7 @@ import {
 } from "../domain/invitation-content";
 import {
   availableFeatureKeys,
+  GALLERY_FEATURE_KEY,
   publicInvitationFeatures,
   validateInvitationFeatureSettings,
 } from "../domain/invitation-features";
@@ -40,6 +41,7 @@ import type {
   NewInvitation,
 } from "./invitation.repository";
 import type { InvitationCatalog } from "./invitation-catalog";
+import type { InvitationGalleryReader } from "./invitation-gallery";
 import type { InvitationPaymentGate } from "./invitation-payment-gate";
 import { type PublicInvitation, projectPublicContent } from "./invitation-public";
 
@@ -551,6 +553,11 @@ export class GetPublicInvitationUseCase {
   constructor(
     private readonly invitations: InvitationRepository,
     private readonly catalog: InvitationCatalog,
+    /**
+     * The gallery source (M8 S4). The media module provides it; the default answers no photos so a test that
+     * composes this read without media still projects a published invitation.
+     */
+    private readonly gallery: InvitationGalleryReader = { readGallery: async () => [] },
   ) {}
 
   async execute(slug: string): Promise<PublicInvitation | null> {
@@ -578,6 +585,10 @@ export class GetPublicInvitationUseCase {
 
     // The gate reads the pinned package's keys at request time and fails closed when it cannot (S4).
     const includedFeatureKeys = await includedFeatureKeysOf(this.catalog, published.packageId);
+    // The gallery is read only when the package grants it, so an invitation without it costs no extra query (S4).
+    const gallery = includedFeatureKeys.includes(GALLERY_FEATURE_KEY)
+      ? await this.gallery.readGallery(published.id)
+      : [];
 
     return {
       slug: published.slug,
@@ -586,13 +597,16 @@ export class GetPublicInvitationUseCase {
       content: projectPublicContent(render.schema, published.content),
       publishedAt: published.publishedAt,
       timeZone: published.timeZone,
-      features: publicInvitationFeatures({
-        includedFeatureKeys,
-        whatsappPhone: published.whatsappPhone,
-        playlistUrl: published.playlistUrl,
-        rsvpDeadline: published.rsvpDeadline,
-        rsvpPartyLimit: published.rsvpPartyLimit,
-      }),
+      features: publicInvitationFeatures(
+        {
+          includedFeatureKeys,
+          whatsappPhone: published.whatsappPhone,
+          playlistUrl: published.playlistUrl,
+          rsvpDeadline: published.rsvpDeadline,
+          rsvpPartyLimit: published.rsvpPartyLimit,
+        },
+        gallery,
+      ),
     };
   }
 }

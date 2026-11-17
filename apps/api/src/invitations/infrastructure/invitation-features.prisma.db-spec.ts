@@ -521,6 +521,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
             whatsapp: { phone: PHONE },
             music: packageKey === "basic" ? null : { url: PLAYLIST, provider: "spotify" },
             giftRegistry: packageKey === "deluxe",
+            gallery: [],
             // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form.
             rsvp: {
               mode:
@@ -552,6 +553,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         whatsapp: null,
         music: { url: PLAYLIST, provider: "spotify" },
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
       });
     });
@@ -572,6 +574,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         whatsapp: { phone: PHONE },
         music: null,
         giftRegistry: true,
+        gallery: [],
         rsvp: { mode: "guest-list", deadline: null, partyLimit: 4, qrPass: true },
       });
     });
@@ -593,6 +596,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       assert.equal(JSON.stringify(page).includes(PHONE), false);
@@ -612,6 +616,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
       assert.deepEqual(Object.keys(page?.features ?? {}).sort(), [
         "calendar",
         "countdown",
+        "gallery",
         "giftRegistry",
         "map",
         "music",

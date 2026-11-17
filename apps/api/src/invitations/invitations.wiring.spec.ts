@@ -7,6 +7,7 @@ import { after, before, describe, it } from "node:test";
 
 import { Global, type INestApplication, Module } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { AuthService } from "@thallesp/nestjs-better-auth";
 
 import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
@@ -69,6 +70,22 @@ import { PublicInvitationsController } from "./presentation/public-invitations.c
 })
 class StubDatabaseModule {}
 
+/**
+ * The real `AuthModule` is global when the application registers it (M8 S4): the media serving route reads an
+ * optional session for a draft's owner. This stub stands in for it so the invitations module is exercised alone.
+ */
+@Global()
+@Module({
+  providers: [
+    {
+      provide: AuthService,
+      useValue: { api: { getSession: async () => null } },
+    },
+  ],
+  exports: [AuthService],
+})
+class StubAuthModule {}
+
 @Module({
   imports: [
     // The public controller reads the configured client-IP header for the per-address RSVP rate limit.
@@ -80,6 +97,7 @@ class StubDatabaseModule {}
       AUTH_BASE_URL: "http://localhost:3000",
     }),
     StubDatabaseModule,
+    StubAuthModule,
     InvitationsModule,
   ],
 })

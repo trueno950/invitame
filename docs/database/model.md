@@ -17,8 +17,11 @@ column, so no row is rewritten and no default is needed. Milestone 6 adds the ad
 answer. Every column added is nullable or has a default, so no row is rewritten and nothing is deleted. Its second
 batch (G2) adds the additive `20261118120000_add_guests` migration: the `Guest` table with its unique token digest
 and the nullable `RsvpResponse.guestId` reference. Every object is new or nullable, so no row is rewritten and
-nothing is deleted. Future payment, media, and analytics design is documented separately in
-[`future-model.md`](future-model.md); that document does not add tables.
+nothing is deleted. Milestone 8 adds the additive `20261120120000_add_media_assets` migration: two enum types and
+the `MediaAsset` table with its checks, its unique storage key, its one-current-main-photo index, and its gallery
+index. Every object is new, so no row is rewritten and nothing is deleted; no binary is stored in PostgreSQL.
+Future payment and analytics design is documented separately in [`future-model.md`](future-model.md); that document
+does not add tables.
 
 | Model | Role |
 | --- | --- |
@@ -37,6 +40,7 @@ nothing is deleted. Future payment, media, and analytics design is documented se
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
 | `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the unused-nullable expiry `expiresAt`, JSONB `content`, the archive marker, the IANA `timeZone`, and the RSVP settings `rsvpDeadline` and `rsvpPartyLimit` |
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, an optional E.164 `phone`, an optional `message`, and timestamps |
+| `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
 | `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), and timestamps |
 
@@ -220,6 +224,59 @@ of a list — live in `apps/api/src/invitations/domain/invitation-guest.ts`; the
   `DROP TABLE "Guest";`. Only guest lists and personal-link answers are lost; invitations, their content, their
   feature data, their lifecycle state, and the open form's answers are untouched. Never edit the applied migration
   file.
+
+## Invitation media
+
+Current status: the `MediaAsset` table exists and the API reads and writes it (M8 S1, S3, S4). The bytes live in the
+storage adapter, never in PostgreSQL and never on an ephemeral filesystem in production; the table is the database
+truth about an object that exists, its bounds, its lifecycle, and its owner through the invitation. The upload rules
+and the storage key format live in `apps/api/src/media/domain/media-asset.ts`; the order of the side effects belongs
+to the use cases in `apps/api/src/media/application/media.use-cases.ts`; the SQL is
+`apps/api/src/media/infrastructure/prisma-media.repository.ts`. The environment, the serving headers, and the
+cleanup command are documented in [`../development/media-storage.md`](../development/media-storage.md).
+
+- `MediaAsset.invitationId` references `Invitation` with `ON DELETE RESTRICT`, like every other reference here: an
+  invitation is never hard-deleted, so deleting one that still carries media is refused. There is no owner column:
+  every creator statement joins the invitation and names `ownerId` and the editable statuses in its own `WHERE`, so
+  ownership and the archived refusal are decided in the same statement that reads or writes the row (A2, A4).
+- `kind` is the enum `MediaAssetKind` with the stored labels `main-photo` and `gallery`; `status` is the enum
+  `MediaAssetStatus` with `stored` and `deleted`. Label names are contract data: no code branches on a catalog or
+  package name, and the stored labels match the REST contract.
+- `storageKey` is `VARCHAR(200)`, unique, and always `invitations/<invitationId>/<assetId>.webp` with lower-case
+  UUIDs. `MediaAsset_storageKey_format` refuses any other shape, so a stored value can never name another prefix,
+  another extension, or a traversing path; the local adapter additionally resolves every key inside its root and
+  refuses one that escapes it. The key embeds ids the API generated, never a user-supplied filename.
+- `mime` is `image/webp` (`MediaAsset_mime_webp`): every stored object is the API's own re-encoded WebP, so no client
+  MIME and no original format is ever database truth. `byteSize` is checked `0 < byteSize <= 10485760`
+  (`MediaAsset_byteSize_range`), and `width` and `height` are checked `0 < side <= 2000`
+  (`MediaAsset_dimensions_range`), the output bound of S4.
+- `position` orders the gallery: `MediaAsset_position_matches_kind` requires a non-negative position exactly for
+  `gallery` and none for `main-photo`. The adapter assigns the next position inside the transaction that writes a
+  row, and a reorder rewrites `0..n-1` in one transaction; there is no unique index on `position`, because a reorder
+  swaps values and the order is the ordered set, not a slot identity.
+- `alt` is `VARCHAR(120)` and nullable; `MediaAsset_alt_length` bounds it. The domain trims it and stores `NULL` for
+  a blank value.
+- `MediaAsset_one_stored_main_photo` is a partial unique index on `("invitationId")` where
+  `"kind" = 'main-photo' AND "status" = 'stored'`: one current main photo per invitation is database truth (S4).
+  Replacing it marks the previous row `deleted` in the same transaction, so the index can never be violated by a
+  legal write, and two concurrent replacements serialize on the invitation row.
+- `MediaAsset_invitationId_kind_status_position_idx` serves the gallery order and the owner list. The two limits of
+  S4 — at most 12 stored gallery photos and at most 40 stored assets per invitation — are enforced by the adapter
+  inside the transaction that inserts the row, serialized on the invitation with `SELECT ... FOR UPDATE`, so two
+  simultaneous uploads cannot both take the last slot.
+- Retention: nothing deletes an invitation (archiving is terminal, A2), so an archived invitation's media stays
+  readable and is kept until a later retention decision. A removed asset is marked `deleted` and its object is
+  deleted after the row; a failed object delete leaves the `deleted` row for `pnpm media:cleanup`, which removes the
+  objects of `deleted` rows, the objects under `invitations/` that no row names, and then the rows whose object is
+  gone. The command is idempotent and supports `--dry-run`. No row is deleted automatically by any other path.
+- Retry and recovery order (S4): an upload processes the image, writes the object, and only then inserts the row; if
+  the insert fails the object is deleted best effort and the failure is logged by event name only. A deletion marks
+  the row first and deletes the object second, so the database never loses track of an object that still exists.
+- Rollback / recovery of `20261120120000_add_media_assets`: the change is additive, so recovery is redeploying the
+  previous migration set or dropping the objects by hand — `DROP TABLE "MediaAsset";` then
+  `DROP TYPE "MediaAssetStatus"; DROP TYPE "MediaAssetKind";`. Only media rows are lost; invitations, content,
+  feature data, guests, and RSVP answers are untouched. Stored objects then become orphans, and the deployment must
+  empty the bucket or directory with its own tooling. Never edit the applied migration file.
 
 ## Identity tables
 

@@ -19,6 +19,7 @@
     "format:check": "biome format .",
     "docs:check": "node scripts/check-docs.mjs",
     "lint": "turbo run lint",
+    "media:cleanup": "pnpm --filter @invitame/api media:cleanup",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },

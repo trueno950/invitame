@@ -1842,6 +1842,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       assert.equal(new Date(String(body.publishedAt)).toISOString(), body.publishedAt);
@@ -1979,6 +1980,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       // No package key list, name, or id reaches a guest; only the gated result does (S4, A7).
@@ -2009,6 +2011,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: { url: PLAYLIST, provider: "spotify" },
         giftRegistry: true,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       assert.equal(JSON.stringify(body).includes(MUSIC_PACKAGE_ID), false);
@@ -2048,6 +2051,7 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
     });
