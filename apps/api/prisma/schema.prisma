@@ -58,6 +58,17 @@ enum MediaAssetStatus {
   DELETED @map("deleted")
 }
 
+// The lifecycle of one payment (M7 S1, S4). `pending` is what a checkout writes; a verified provider event moves it
+// to `paid`, `failed`, or `expired`, and only `paid` becomes `refunded`. The domain state machine
+// (`src/payments/domain/payment.ts`) is the rule; this enum is the guard that makes any other value unstorable.
+enum PaymentStatus {
+  pending  @map("pending")
+  paid     @map("paid")
+  failed   @map("failed")
+  expired  @map("expired")
+  refunded @map("refunded")
+}
+
 // Better Auth `user` model. Better Auth's `name` field is mapped onto `displayName`.
 // `role` is server-side only and never accepted as client input.
 model User {
@@ -185,6 +196,7 @@ model Package {
   packageFeatures PackageFeature[]
   prices          PackagePrice[]
   invitations     Invitation[]
+  payments        Payment[]
 }
 
 // A price of a package in one currency, as an integer amount in minor units (centavos for MXN). A price
@@ -299,6 +311,7 @@ model Invitation {
   rsvpResponses   RsvpResponse[]
   guests          Guest[]
   mediaAssets     MediaAsset[]
+  payments        Payment[]
 
   @@index([ownerId])
 }
@@ -423,4 +436,66 @@ model Guest {
   rsvpResponse RsvpResponse?
 
   @@index([invitationId])
+}
+
+// One checkout intent for one invitation (M7 S1, S4). `amountMinor` and `currency` are the snapshot of the
+// package's price at the moment the payment was created: the catalog may retire that price and publish another,
+// and this row keeps the amount the owner actually saw. `provider` is the adapter key (never a credential) and
+// `providerReference` is the provider's own identifier of the checkout, unique per provider and NULL until the
+// adapter has created it. `idempotencyKey` is the server-generated key the adapter passes so a retried checkout
+// asks the provider for the same session instead of a second one. `paidAt` is the API's own receipt instant (the
+// instant a verified `paid` event was applied), never a provider-supplied time in a money-relevant column.
+// Migration 20261121120000_add_payments adds what Prisma cannot express: the CHECK constraints
+// "Payment_amountMinor_non_negative", "Payment_currency_format", and "Payment_paidAt_matches_status", and the
+// partial unique index "Payment_one_pending_key" (one `pending` payment per invitation) that makes two
+// simultaneous checkouts converge on one row.
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  invitationId      String        @db.Uuid
+  // The package whose price this payment bought; the entitlement rule requires this to match the invitation's.
+  packageId         String        @db.Uuid
+  amountMinor       Int
+  currency          String        @db.Char(3)
+  status            PaymentStatus @default(pending)
+  provider          String        @db.VarChar(40)
+  providerReference String?       @db.VarChar(200)
+  idempotencyKey    String        @unique @db.VarChar(100)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(6)
+  paidAt            DateTime?     @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(6)
+
+  invitation Invitation     @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  package    Package        @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  events     PaymentEvent[]
+
+  @@unique([provider, providerReference])
+  @@index([invitationId, status])
+}
+
+// One received provider event (M7 S1, S4): the normalized type, the provider's own event id, when the API received
+// and processed it, what the intake decided, and the SHA-256 hex digest of the raw payload. The raw payload is
+// never stored: it can carry a payer's name, e-mail address, or card metadata, and the normalized event plus the
+// digest is everything a replay investigation needs. `(provider, providerEventId)` is unique, so a retried or
+// duplicated delivery inserts nothing and is answered as a no-op. `paymentId` is NULL for a signed event about a
+// provider reference this API does not know, which is recorded and ignored rather than dropped.
+// Migration 20261121120000_add_payments adds what Prisma cannot express: the CHECK constraints
+// "PaymentEvent_outcome_allowed", "PaymentEvent_type_allowed", and "PaymentEvent_payloadSha256_format" (a
+// lowercase SHA-256 hex digest), plus the index on `paymentId`.
+model PaymentEvent {
+  id              String    @id @default(uuid()) @db.Uuid
+  paymentId       String?   @db.Uuid
+  provider        String    @db.VarChar(40)
+  providerEventId String    @db.VarChar(200)
+  type            String    @db.VarChar(40)
+  receivedAt      DateTime  @default(now()) @db.Timestamptz(6)
+  processedAt     DateTime? @db.Timestamptz(6)
+  // The decision the intake took for this delivery, written when the row is inserted and corrected to
+  // `ignored_transition` if a concurrent delivery won the guarded transition.
+  outcome         String    @db.VarChar(40)
+  payloadSha256   String    @db.Char(64)
+
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerEventId])
+  @@index([paymentId])
 }

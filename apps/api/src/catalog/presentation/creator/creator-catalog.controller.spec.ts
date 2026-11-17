@@ -18,6 +18,7 @@ import { InMemoryEmailSender } from "../../../email/infrastructure/in-memory-ema
 import { SystemEmailDeliveryRuntime } from "../../../email/infrastructure/system-email-delivery-runtime";
 import {
   CATALOG_PUBLIC_READER,
+  type CatalogCurrentPrice,
   type CatalogPackageEntitlements,
   type CatalogPublicReader,
   type CreatorPackageSummary,
@@ -125,6 +126,11 @@ class MemoryCatalogPublicReader implements CatalogPublicReader {
         .map((feature) => feature.key)
         .sort(),
     };
+  }
+
+  /** The price in force (M7 S4): the tests of this read never charge, so no package carries one here. */
+  async findCurrentPackagePrice(): Promise<CatalogCurrentPrice | null> {
+    return null;
   }
 
   async listPublishedTemplates(): Promise<CreatorTemplateSummary[]> {

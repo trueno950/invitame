@@ -74,6 +74,8 @@ function testEnvironment(overrides: Record<string, unknown> = {}): Record<string
     MEDIA_S3_BUCKET: "invitame-media",
     MEDIA_S3_ACCESS_KEY_ID: "test-access-key-id",
     MEDIA_S3_SECRET_ACCESS_KEY: "test-secret-access-key",
+    // M7 S4: production names its payment mode explicitly; this suite charges nothing.
+    PAYMENTS_MODE: "free",
   };
 
   for (const [name, value] of Object.entries(overrides)) {
