@@ -1,0 +1,140 @@
+import { Module } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+
+import {
+  CATALOG_PUBLIC_READER,
+  type CatalogPublicContract,
+} from "../catalog/application/public/catalog-public-reader";
+import { CatalogModule } from "../catalog/catalog.module";
+import {
+  PAYMENTS_MODE,
+  type PaymentsEnvironment,
+  type RuntimeEnvironment,
+} from "../config/environment";
+import { PrismaService } from "../database/prisma.service";
+import { INVITATION_PAYMENT_GATE } from "../invitations/application/invitation-payment-gate";
+import { PAYMENT_REPOSITORY } from "./application/payment.repository";
+import {
+  EmitSimulatedPaymentUseCase,
+  GetInvitationPaymentUseCase,
+  StartCheckoutUseCase,
+} from "./application/payment.use-cases";
+import { PAYMENT_CATALOG } from "./application/payment-catalog";
+import { PAYMENT_PROVIDER, type PaymentProvider } from "./application/payment-provider.port";
+import { HandlePaymentWebhookUseCase } from "./application/payment-webhook.use-case";
+import { PAYMENTS_MODE_TOKEN, type PaymentsModeSetting } from "./application/payments-mode";
+import { CatalogPaymentPrices } from "./infrastructure/catalog-payment-prices";
+import { DisabledPaymentProvider } from "./infrastructure/disabled-payment-provider";
+import { PaymentGate } from "./infrastructure/payment-gate";
+import { PrismaPaymentRepository } from "./infrastructure/prisma-payment.repository";
+import { SimulatedPaymentProvider } from "./infrastructure/simulated-payment-provider";
+import { InvitationPaymentsController } from "./presentation/invitation-payments.controller";
+import { PaymentsController } from "./presentation/payments.controller";
+
+/**
+ * The provider adapter of the validated mode (M7 S4). `free` binds an adapter that refuses to charge, and `simulated`
+ * binds the development provider with its validated secret and return origin; a real provider adds one case here and
+ * one adapter file, and nothing else in the application changes.
+ */
+function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
+  switch (payments.mode) {
+    case PAYMENTS_MODE.FREE:
+      return new DisabledPaymentProvider();
+    case PAYMENTS_MODE.SIMULATED:
+      return new SimulatedPaymentProvider({
+        secret: payments.secret,
+        returnBaseUrl: payments.returnBaseUrl,
+      });
+  }
+}
+
+/**
+ * Checkout and payments (M7 S1, S3, S4): the `Payment`/`PaymentEvent` persistence port and its Prisma adapter, the
+ * provider port and the adapters the mode selects, the catalog price read through the catalog's public contract, the
+ * publication gate the invitations module asks (it exports `INVITATION_PAYMENT_GATE`), the owner routes at
+ * `/invitations/:id/checkout` and `/invitations/:id/payment`, and the public webhook plus the development emit under
+ * `/payments`. The module owns no invitation table logic of its own beyond the owner-scoped reads its adapter runs,
+ * which is the same rule the media module follows: the owner travels in the query (A4, S9).
+ *
+ * The gate lives here because the payments module owns the entitlement rule, and the invitations module imports this
+ * module instead of binding an adapter of its own — the one seam Milestone 5 left for exactly this (S3).
+ */
+@Module({
+  imports: [CatalogModule],
+  controllers: [InvitationPaymentsController, PaymentsController],
+  providers: [
+    {
+      provide: PAYMENTS_MODE_TOKEN,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<RuntimeEnvironment, true>): PaymentsModeSetting =>
+        config.get("PAYMENTS", { infer: true }).mode,
+    },
+    {
+      provide: PAYMENT_PROVIDER,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<RuntimeEnvironment, true>): PaymentProvider =>
+        createPaymentProvider(config.get("PAYMENTS", { infer: true })),
+    },
+    {
+      provide: PAYMENT_REPOSITORY,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PrismaPaymentRepository(prisma),
+    },
+    {
+      provide: PAYMENT_CATALOG,
+      inject: [CATALOG_PUBLIC_READER],
+      useFactory: (catalog: CatalogPublicContract) => new CatalogPaymentPrices(catalog),
+    },
+    {
+      provide: HandlePaymentWebhookUseCase,
+      inject: [PAYMENT_REPOSITORY, PAYMENT_PROVIDER],
+      useFactory: (payments: PrismaPaymentRepository, provider: PaymentProvider) =>
+        new HandlePaymentWebhookUseCase(payments, provider),
+    },
+    {
+      provide: StartCheckoutUseCase,
+      inject: [PAYMENT_REPOSITORY, PAYMENT_CATALOG, PAYMENT_PROVIDER, PAYMENTS_MODE_TOKEN],
+      useFactory: (
+        payments: PrismaPaymentRepository,
+        catalog: CatalogPaymentPrices,
+        provider: PaymentProvider,
+        mode: PaymentsModeSetting,
+      ) => new StartCheckoutUseCase(payments, catalog, provider, mode),
+    },
+    {
+      provide: GetInvitationPaymentUseCase,
+      inject: [PAYMENT_REPOSITORY, PAYMENT_CATALOG, PAYMENTS_MODE_TOKEN],
+      useFactory: (
+        payments: PrismaPaymentRepository,
+        catalog: CatalogPaymentPrices,
+        mode: PaymentsModeSetting,
+      ) => new GetInvitationPaymentUseCase(payments, catalog, mode),
+    },
+    {
+      provide: EmitSimulatedPaymentUseCase,
+      inject: [
+        PAYMENT_REPOSITORY,
+        PAYMENT_PROVIDER,
+        PAYMENTS_MODE_TOKEN,
+        HandlePaymentWebhookUseCase,
+      ],
+      useFactory: (
+        payments: PrismaPaymentRepository,
+        provider: PaymentProvider,
+        mode: PaymentsModeSetting,
+        webhook: HandlePaymentWebhookUseCase,
+      ) => new EmitSimulatedPaymentUseCase(payments, provider, mode, webhook),
+    },
+    {
+      provide: INVITATION_PAYMENT_GATE,
+      inject: [PAYMENTS_MODE_TOKEN, PAYMENT_CATALOG, PAYMENT_REPOSITORY],
+      useFactory: (
+        mode: PaymentsModeSetting,
+        catalog: CatalogPaymentPrices,
+        payments: PrismaPaymentRepository,
+      ) => new PaymentGate(mode, catalog, payments),
+    },
+  ],
+  exports: [INVITATION_PAYMENT_GATE],
+})
+export class PaymentsModule {}

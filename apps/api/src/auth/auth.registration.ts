@@ -36,6 +36,9 @@ export function createAuthModuleOptions(
       log: (event) => logger.warn(event),
     }),
     disableTrustedOriginsCors: true,
+    // Keep the exact raw bytes of every JSON request (M7 S4): a provider webhook signature covers the raw body, not
+    // the re-serialized one, and `POST /payments/webhooks/:provider` reads it from `request.rawBody`.
+    bodyParser: { rawBody: true },
   };
 }
 

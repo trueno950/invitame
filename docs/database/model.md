@@ -297,7 +297,7 @@ Current status: the `Payment` and `PaymentEvent` tables exist and the API reads 
 state machine, the entitlement rule, and the event decision live in `apps/api/src/payments/domain/`; the side effects
 belong to the use cases in `apps/api/src/payments/application/`; the SQL is
 `apps/api/src/payments/infrastructure/prisma-payment.repository.ts`. The modes, the environment, and the signature
-scheme are documented in `docs/development/payments.md`, which arrives with the payment routes.
+scheme are documented in [`../development/payments.md`](../development/payments.md).
 
 - `Payment.invitationId` references `Invitation` and `Payment.packageId` references `Package`, both with
   `ON DELETE RESTRICT`: an invitation is never hard-deleted and a payment outlives a retired catalog price, so
