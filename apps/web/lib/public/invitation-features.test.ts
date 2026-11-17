@@ -39,6 +39,7 @@ const PUBLIC: PublicInvitation = {
     whatsapp: { phone: "+525512345678" },
     music: { url: PLAYLIST, provider: "spotify" },
     giftRegistry: true,
+    gallery: [],
     rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
   },
 };
@@ -63,6 +64,7 @@ describe("publicFeatureBlock", () => {
         whatsapp: { phone: "+525512345678" },
         music: { url: PLAYLIST, provider: "spotify" },
         giftRegistry: true,
+        gallery: [],
       },
       facts: FACTS,
       calendarHref: "/i/invitacion-k7m2qx/calendario.ics",
@@ -81,6 +83,7 @@ describe("publicFeatureBlock", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     } as unknown as PublicInvitation;
@@ -99,6 +102,7 @@ describe("publicFeatureBlock", () => {
       whatsapp: { phone: "+525512345678" },
       music: { url: PLAYLIST, provider: "spotify" },
       giftRegistry: true,
+      gallery: [],
     });
     assert.equal(block?.calendarHref, "/i/invitacion-k7m2qx/calendario.ics");
   });
@@ -113,6 +117,7 @@ describe("publicFeatureBlock", () => {
         whatsapp: null,
         music: null,
         giftRegistry: true,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     });
@@ -126,6 +131,7 @@ describe("publicFeatureBlock", () => {
       whatsapp: null,
       music: null,
       giftRegistry: true,
+      gallery: [],
     });
   });
 
@@ -150,6 +156,7 @@ describe("publicFeatureBlock", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     });
@@ -162,6 +169,7 @@ describe("publicFeatureBlock", () => {
       whatsapp: null,
       music: null,
       giftRegistry: false,
+      gallery: [],
     });
   });
 });

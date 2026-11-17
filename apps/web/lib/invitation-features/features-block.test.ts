@@ -640,3 +640,97 @@ describe("«Confirma tu asistencia» in the features block (M6 G3; S4)", () => {
     assert.doesNotMatch(html, /style="[^"]*#[0-9a-fA-F]{3,6}/);
   });
 });
+
+// The gallery of the guest page (M8 S3, S4): the shared block renders «Galería» only when the API answered photos, as a
+// responsive grid of `<img>` elements that reserve the API's dimensions, load lazily, decode off the main thread, and
+// link to the full image in a new tab. No client script, and every color from the theme's own variables.
+const GALLERY = [
+  {
+    url: "http://localhost:3001/media/9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19",
+    width: 1200,
+    height: 800,
+    alt: "Los novios en el jardín",
+  },
+  {
+    url: "http://localhost:3001/media/8b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e18",
+    width: 800,
+    height: 1200,
+    alt: null,
+  },
+];
+
+function galleryHtml(photos = GALLERY): string {
+  return render(featuresOf({ gallery: photos }));
+}
+
+describe("gallery in the features block", () => {
+  it("renders nothing when the invitation has no photos", () => {
+    assert.equal(galleryHtml([]), "");
+    assert.doesNotMatch(render(featuresOf({ calendar: true })), /data-feature="gallery"/);
+  });
+
+  it("renders every photo in the API's order", () => {
+    const html = galleryHtml();
+    const sources = [...html.matchAll(/<img[^>]*\ssrc="([^"]+)"/g)].map((match) => match[1]);
+
+    assert.equal(sources.length, 2);
+    assert.deepEqual(
+      sources,
+      GALLERY.map((photo) => photo.url),
+    );
+    assert.match(html, /data-feature="gallery"/);
+    assert.match(html, />Galería</);
+  });
+
+  it("links each photo to the full image in a new tab, without leaking the opener", () => {
+    const html = galleryHtml();
+    const links = linksOf(html);
+
+    assert.equal(links.length, 2);
+    for (const [index, link] of links.entries()) {
+      assert.equal(attributeOf(link, "href"), GALLERY[index]?.url);
+      assert.equal(attributeOf(link, "target"), "_blank");
+      assert.equal(attributeOf(link, "rel"), "noopener noreferrer");
+    }
+  });
+
+  it("reserves the API's dimensions and defers every photo", () => {
+    const html = galleryHtml();
+    const images = html.match(/<img\b[^>]*>/g) ?? [];
+
+    assert.equal(images.length, 2);
+    for (const [index, image] of images.entries()) {
+      assert.equal(attributeOf(image, "width"), String(GALLERY[index]?.width), image);
+      assert.equal(attributeOf(image, "height"), String(GALLERY[index]?.height), image);
+      assert.equal(attributeOf(image, "loading"), "lazy", image);
+      assert.equal(attributeOf(image, "decoding"), "async", image);
+    }
+  });
+
+  it("uses the creator's alt text and a generic description when there is none", () => {
+    const html = galleryHtml();
+    const images = html.match(/<img\b[^>]*>/g) ?? [];
+
+    assert.equal(attributeOf(images[0] ?? "", "alt"), "Los novios en el jardín");
+    assert.equal(attributeOf(images[1] ?? "", "alt"), "Foto de la galería");
+  });
+
+  it("is a two-column grid on phones and three columns on wide screens, drawn from the theme", () => {
+    const html = galleryHtml();
+    const grid = /<div[^>]*data-gallery-grid[^>]*>/.exec(html)?.[0] ?? "";
+
+    assert.ok(classesOf(grid).includes("grid-cols-2"), grid);
+    assert.ok(classesOf(grid).includes("sm:grid-cols-3"), grid);
+    assert.match(html, /bg-\(--inv-surface\)/);
+    assert.match(html, /text-\(color:--inv-ink\)/);
+    assert.match(html, /text-\(color:--inv-accent\)/);
+    assert.doesNotMatch(html, /style="[^"]*#[0-9a-fA-F]{3,6}/);
+  });
+
+  it("ships no client script and no inline handler", () => {
+    const html = galleryHtml();
+
+    assert.doesNotMatch(html, /<script/i);
+    assert.doesNotMatch(html, /\son[a-z]+=/);
+  });
+});

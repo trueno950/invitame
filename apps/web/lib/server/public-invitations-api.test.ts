@@ -41,6 +41,7 @@ const PUBLIC: PublicInvitation = {
     whatsapp: { phone: "+525512345678" },
     music: { url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", provider: "spotify" },
     giftRegistry: true,
+    gallery: [],
     rsvp: { mode: "open", deadline: "2026-12-01T18:00:00.000Z", partyLimit: 4, qrPass: false },
   },
 };
@@ -300,6 +301,8 @@ describe("parsePublicInvitation", () => {
           whatsapp: null,
           music: null,
           giftRegistry: false,
+          // The gallery is always a list, empty when the package grants no `GALLERY` (M8 S4).
+          gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
         },
       }),
@@ -312,6 +315,7 @@ describe("parsePublicInvitation", () => {
           whatsapp: null,
           music: null,
           giftRegistry: false,
+          gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
         },
       },
@@ -452,5 +456,62 @@ describe("public RSVP submission (M6 G3; S4)", () => {
       assert.equal(error.kind, "invalid-response");
       return true;
     });
+  });
+});
+
+// The gallery of the public read (M8 S3, S4): the API answers the photos in position order, each with the dimensions a
+// layout reserves and the creator's alt text, and an empty array when the package does not grant `GALLERY`.
+const GALLERY_PHOTOS = [
+  {
+    url: "http://localhost:3001/media/9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19",
+    width: 1200,
+    height: 800,
+    alt: "Los novios en el jardín",
+  },
+  {
+    url: "http://localhost:3001/media/8b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e18",
+    width: 800,
+    height: 1200,
+    alt: null,
+  },
+];
+
+/** The public read of one invitation, with its gallery replaced. */
+function withGallery(gallery: unknown): unknown {
+  return { ...PUBLIC, features: { ...PUBLIC.features, gallery } };
+}
+
+describe("the gallery of the public read (M8 S3, S4)", () => {
+  it("keeps the photos in the API's order, with their dimensions and alt text", () => {
+    const parsed = parsePublicInvitation(withGallery(GALLERY_PHOTOS));
+
+    assert.deepEqual(parsed?.features.gallery, GALLERY_PHOTOS);
+  });
+
+  it("accepts an empty gallery, which is what a package without GALLERY answers", () => {
+    assert.deepEqual(parsePublicInvitation(withGallery([]))?.features.gallery, []);
+  });
+
+  it("refuses a gallery that is not a list of the documented photos", () => {
+    const broken: unknown[] = [
+      null,
+      undefined,
+      "gallery",
+      {},
+      [null],
+      [{ ...GALLERY_PHOTOS[0], url: "javascript:alert(1)" }],
+      [{ ...GALLERY_PHOTOS[0], url: "/media/relative" }],
+      [{ ...GALLERY_PHOTOS[0], url: "http://user:secret@localhost:3001/media/x" }],
+      [{ ...GALLERY_PHOTOS[0], width: 0 }],
+      [{ ...GALLERY_PHOTOS[0], width: 1.5 }],
+      [{ ...GALLERY_PHOTOS[0], height: -1 }],
+      [{ ...GALLERY_PHOTOS[0], alt: 7 }],
+      [{ ...GALLERY_PHOTOS[0], alt: "x".repeat(121) }],
+      Array.from({ length: 13 }, () => GALLERY_PHOTOS[0]),
+    ];
+
+    for (const gallery of broken) {
+      assert.equal(parsePublicInvitation(withGallery(gallery)), undefined, JSON.stringify(gallery));
+    }
   });
 });

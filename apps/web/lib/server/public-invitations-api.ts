@@ -1,3 +1,4 @@
+import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import { isE164Phone } from "../invitation-features/invitation-features.ts";
 import { type MusicProvider, musicServiceOf } from "../invitation-features/music.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
@@ -9,6 +10,7 @@ import {
   isGuestToken,
   isInvitationSlug,
 } from "./invitations-api.ts";
+import { isAbsoluteMediaUrl } from "./media-api.ts";
 
 /**
  * The web server's client of the public invitation read (M5 T5; S1, S5, A3, A7). A guest has no session
@@ -54,6 +56,11 @@ export interface PublicInvitationFeatures {
   readonly music: { readonly url: string; readonly provider: MusicProvider } | null;
   /** Whether the layouts render their gift registry block (S7). */
   readonly giftRegistry: boolean;
+  /**
+   * The gallery photos in the creator's order (M8 S3, S4), an empty array when the package does not grant `GALLERY`
+   * and always a list, so a layout can read it without a guard.
+   */
+  readonly gallery: readonly GalleryPhoto[];
   /** Which attendance answers the page accepts, and the limits of one (G3; S4). */
   readonly rsvp: PublicRsvpFeature;
 }
@@ -129,6 +136,62 @@ function parsePublicRsvp(value: unknown): PublicRsvpFeature | undefined {
   return { mode, deadline, partyLimit, qrPass };
 }
 
+/** The alt texts the API stores, mirrored so a body that says more is refused whole (M8 S4). */
+const MEDIA_ALT_MAX_LENGTH = 120;
+/** How many photos one gallery may hold, mirrored from the API's own limit (M8 S4). */
+const MAX_GALLERY_PHOTOS = 12;
+
+/**
+ * One gallery photo of a guest page (M8 S4): the absolute API URL of the image, the dimensions a layout reserves, and
+ * the creator's alt text. A relative path, another scheme, an URL with credentials, a non-positive dimension, or a
+ * photo count past the API's own limit is not this contract, so the whole body is refused instead of being shown.
+ */
+function parseGalleryPhoto(value: unknown): GalleryPhoto | undefined {
+  const photo = record(value);
+
+  if (photo === undefined) {
+    return undefined;
+  }
+
+  const { url, width, height, alt } = photo;
+
+  if (typeof url !== "string" || !isAbsoluteMediaUrl(url)) {
+    return undefined;
+  }
+  if (
+    typeof width !== "number" ||
+    !Number.isSafeInteger(width) ||
+    width <= 0 ||
+    typeof height !== "number" ||
+    !Number.isSafeInteger(height) ||
+    height <= 0
+  ) {
+    return undefined;
+  }
+  if (!(alt === null || (typeof alt === "string" && [...alt].length <= MEDIA_ALT_MAX_LENGTH))) {
+    return undefined;
+  }
+
+  return { url, width, height, alt };
+}
+
+/** The gallery of a guest page: every photo of the documented shape, or nothing at all (M8 S4). */
+function parseGallery(value: unknown): GalleryPhoto[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_GALLERY_PHOTOS) {
+    return undefined;
+  }
+
+  const photos: GalleryPhoto[] = [];
+  for (const item of value) {
+    const photo = parseGalleryPhoto(item);
+    if (photo === undefined) {
+      return undefined;
+    }
+    photos.push(photo);
+  }
+  return photos;
+}
+
 /**
  * The gated features of a guest page (S4, S7). The read always says `calendar: true`, because add-to-calendar is
  * not a catalog feature; a body that says otherwise is not this contract, so it is refused instead of being
@@ -150,8 +213,9 @@ function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefin
 
   const music = features.music === null ? null : musicServiceOf(features.music);
   const rsvp = parsePublicRsvp(features.rsvp);
+  const gallery = parseGallery(features.gallery);
 
-  if (music === undefined || rsvp === undefined) {
+  if (music === undefined || rsvp === undefined || gallery === undefined) {
     return undefined;
   }
 
@@ -162,6 +226,7 @@ function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefin
     calendar: true,
     giftRegistry: features.giftRegistry,
     music,
+    gallery,
     rsvp,
   } as const;
 

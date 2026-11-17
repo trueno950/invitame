@@ -280,6 +280,10 @@ export const INVITATION_NOTICE_CODES = [
   "guest-saved",
   "guest-removed",
   "link-rotated",
+  "photo-uploaded",
+  "gallery-uploaded",
+  "media-saved",
+  "media-removed",
 ] as const;
 export type InvitationNoticeCode = (typeof INVITATION_NOTICE_CODES)[number];
 
@@ -296,6 +300,10 @@ export const INVITATION_NOTICE_COPY: Record<InvitationNoticeCode, string> = {
   "guest-saved": "Listo, guardamos los cambios del invitado.",
   "guest-removed": "Listo, quitamos al invitado de la lista.",
   "link-rotated": "Listo, generamos un enlace nuevo.",
+  "photo-uploaded": "Listo, subimos tu foto principal.",
+  "gallery-uploaded": "Listo, agregamos la foto a tu galería.",
+  "media-saved": "Listo, guardamos los cambios de la galería.",
+  "media-removed": "Listo, quitamos la foto de tu galería.",
 };
 
 /**
@@ -307,7 +315,8 @@ export type InvitationErrorCode =
   | Exclude<InvitationFailure, "signed-out">
   | "invalid-form"
   | "content-unavailable"
-  | "unavailable";
+  | "unavailable"
+  | MediaErrorCode;
 
 export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "invalid-form":
@@ -345,7 +354,75 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "qr-pass-unavailable":
     "Esta invitación no incluye el pase de acceso con QR. Se muestra con el paquete Deluxe.",
   unavailable: "No pudimos completar la acción. Inténtalo de nuevo en unos minutos.",
+  "media-invalid-upload":
+    "Revisa la foto: debe ser un archivo JPEG, PNG o WebP de hasta 10 MB, con 8000 píxeles por lado como máximo.",
+  "media-invalid-alt": "Escribe un texto alternativo de hasta 120 caracteres.",
+  "media-invalid-update": "Revisa el texto alternativo de la foto y vuelve a intentarlo.",
+  "media-too-large": "La foto pesa más de 10 MB. Elige una más ligera y vuelve a intentarlo.",
+  "media-unsupported-type": "Ese archivo no es una foto JPEG, PNG o WebP.",
+  "media-not-found": "No encontramos esa foto en tu invitación.",
+  "media-limit-reached":
+    "Tu galería ya tiene 12 fotos. Quita una para subir otra: la invitación admite hasta 12.",
+  "media-storage-unavailable":
+    "No pudimos guardar la foto. Espera un momento y vuelve a intentarlo; tu invitación no cambió.",
+  "gallery-unavailable":
+    "Esta invitación no incluye la galería de fotos. Se muestra con los paquetes Premium y Deluxe.",
 };
+
+/**
+ * The refusals of the media routes, as the page's own codes (M8 S2, S4). The web adds one of its own — `media-invalid-alt`,
+ * for alt text over the API's bound that never leaves this server — and the rest mirror the API's stable codes.
+ */
+export type MediaErrorCode =
+  | "media-invalid-upload"
+  | "media-invalid-alt"
+  | "media-invalid-update"
+  | "media-too-large"
+  | "media-unsupported-type"
+  | "media-not-found"
+  | "media-limit-reached"
+  | "media-storage-unavailable"
+  | "gallery-unavailable";
+
+/**
+ * The creator's media controls (M8 S2, S3, S4): the «Subir foto» next to the photo link field and the «Galería»
+ * section of a draft. The customer is addressed with "tú", like the rest of the customer pages.
+ */
+export const MEDIA_COPY = {
+  /** The main photo's upload, next to the template's own photo link field (S4). */
+  mainPhotoHeading: "Subir foto",
+  mainPhotoHint:
+    "Sube una foto JPEG, PNG o WebP de hasta 10 MB. La guardamos en tu invitación y reemplaza la que tenías.",
+  mainPhotoCurrent: "Foto actual",
+  mainPhotoNone: "Todavía no has subido una foto principal.",
+  mainPhotoFileLabel: "Archivo de la foto",
+  mainPhotoAccept: "image/jpeg,image/png,image/webp",
+  mainPhotoSubmit: "Subir foto",
+  /** The «Galería» section of a draft (S3, S4). */
+  galleryTitle: "Galería",
+  galleryHint:
+    "Sube hasta 12 fotos y ordénalas como quieres que las vean tus invitados. Cada foto se abre en grande al tocarla.",
+  galleryUploadHeading: "Agregar una foto",
+  galleryUploadHint:
+    "Sube una foto a la vez. Puedes cambiar el orden y el texto de cada una después.",
+  galleryUploadSubmit: "Subir a la galería",
+  galleryAltLabel: "Texto alternativo (opcional)",
+  galleryAltHint:
+    "Describe la foto en una frase de hasta 120 caracteres. Ayuda a quien usa un lector de pantalla.",
+  galleryAltSave: "Guardar texto",
+  galleryMoveUp: "Subir",
+  galleryMoveDown: "Bajar",
+  galleryRemove: "Quitar",
+  galleryEmpty: "Tu galería todavía no tiene fotos.",
+  galleryLimitNote: (limit: number) =>
+    `Tu galería ya tiene ${limit} fotos, el máximo de la invitación. Quita una para subir otra.`,
+  galleryCount: (count: number, limit: number) => `${count} de ${limit} fotos.`,
+  galleryUnavailable:
+    "Esta invitación no incluye la galería de fotos. Se muestra con los paquetes Premium y Deluxe.",
+  galleryUnavailableRead:
+    "No pudimos leer la galería de esta invitación. Inténtalo de nuevo en unos minutos.",
+  archiveNote: "Esta invitación está archivada: puedes consultar sus fotos, pero ya no editarlas.",
+} as const;
 
 /**
  * Why the API refused to publish an invitation, in Spanish (M5 T5; S7). The API answers English readiness

@@ -36,6 +36,7 @@ const GUEST_PAGE: PublicGuestInvitation = {
     whatsapp: null,
     music: null,
     giftRegistry: false,
+    gallery: [],
     rsvp: { mode: "guest-list", deadline: "2026-12-01T18:00:00.000Z", partyLimit: 4, qrPass: true },
   },
   guest: {

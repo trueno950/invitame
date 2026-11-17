@@ -102,6 +102,14 @@ export interface ApiRequest {
   path: string;
   body?: unknown;
   /**
+   * A body that is already a form: the multipart upload of one photo (M8 S2, S4). It replaces `body`, and the
+   * runtime sets the `content-type` with its own boundary, so this client never declares it and never turns the
+   * part into JSON.
+   */
+  multipart?: FormData;
+  /** The deadline of this one request; the client's own deadline covers the rest (M8 S4: an upload of 10 MB). */
+  timeoutMs?: number;
+  /**
    * The guest's address, forwarded in the header the API reads it from (M6 G3; S4). Only the public RSVP
    * submission sends one: the API counts that answer against it. It is set last, so no other caller can
    * replace it, and it is never logged or stored here.
@@ -144,18 +152,21 @@ async function sendApiRequestRaw(
     headers.set(config.clientIpHeader, request.clientAddress);
   }
 
-  if (request.body !== undefined) {
+  if (request.body !== undefined && request.multipart === undefined) {
     headers.set("content-type", "application/json");
   }
+
+  const body =
+    request.multipart ?? (request.body === undefined ? undefined : JSON.stringify(request.body));
 
   try {
     return await (options.fetch ?? fetch)(new URL(request.path, config.apiOrigin), {
       method: request.method,
       headers,
-      ...(request.body === undefined ? {} : { body: JSON.stringify(request.body) }),
+      ...(body === undefined ? {} : { body }),
       redirect: "manual",
       cache: "no-store",
-      signal: AbortSignal.timeout(options.timeoutMs ?? API_CLIENT_TIMEOUT_MS),
+      signal: AbortSignal.timeout(request.timeoutMs ?? options.timeoutMs ?? API_CLIENT_TIMEOUT_MS),
     });
   } catch (error) {
     throw new ApiClientError("unavailable", undefined, { cause: error });
