@@ -48,6 +48,15 @@ export const MAX_UPLOAD_REQUEST_BYTES = 11 * 1024 * 1024;
 /** The prefix every media object lives under, so a cleanup can list exactly the objects it owns. */
 export const MEDIA_STORAGE_PREFIX = "invitations/";
 
+/**
+ * How long an object under `invitations/` is left alone before the cleanup scan may call it an orphan (S4, A3). An
+ * upload writes its object before it inserts the row, so an object with no row may simply be an upload in flight;
+ * only one that is still unmatched after this long is abandoned. One hour is far longer than the put-to-insert
+ * window of one request and far shorter than a human noticing a lost upload, and it is documented in
+ * `docs/development/media-storage.md` and `docs/database/model.md`.
+ */
+export const MEDIA_ORPHAN_GRACE_MS = 60 * 60 * 1000;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**

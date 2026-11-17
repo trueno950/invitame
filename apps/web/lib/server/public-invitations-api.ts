@@ -10,7 +10,7 @@ import {
   isGuestToken,
   isInvitationSlug,
 } from "./invitations-api.ts";
-import { isAbsoluteMediaUrl } from "./media-api.ts";
+import { isApiMediaUrl } from "./media-api.ts";
 
 /**
  * The web server's client of the public invitation read (M5 T5; S1, S5, A3, A7). A guest has no session
@@ -143,10 +143,11 @@ const MAX_GALLERY_PHOTOS = 12;
 
 /**
  * One gallery photo of a guest page (M8 S4): the absolute API URL of the image, the dimensions a layout reserves, and
- * the creator's alt text. A relative path, another scheme, an URL with credentials, a non-positive dimension, or a
- * photo count past the API's own limit is not this contract, so the whole body is refused instead of being shown.
+ * the creator's alt text. A relative path, another scheme, an URL with credentials, a URL on any host but the
+ * configured API origin (A5), a non-positive dimension, or a photo count past the API's own limit is not this
+ * contract, so the whole body is refused instead of being shown.
  */
-function parseGalleryPhoto(value: unknown): GalleryPhoto | undefined {
+function parseGalleryPhoto(value: unknown, apiOrigin: string): GalleryPhoto | undefined {
   const photo = record(value);
 
   if (photo === undefined) {
@@ -155,7 +156,7 @@ function parseGalleryPhoto(value: unknown): GalleryPhoto | undefined {
 
   const { url, width, height, alt } = photo;
 
-  if (typeof url !== "string" || !isAbsoluteMediaUrl(url)) {
+  if (typeof url !== "string" || !isApiMediaUrl(url, apiOrigin)) {
     return undefined;
   }
   if (
@@ -176,14 +177,14 @@ function parseGalleryPhoto(value: unknown): GalleryPhoto | undefined {
 }
 
 /** The gallery of a guest page: every photo of the documented shape, or nothing at all (M8 S4). */
-function parseGallery(value: unknown): GalleryPhoto[] | undefined {
+function parseGallery(value: unknown, apiOrigin: string): GalleryPhoto[] | undefined {
   if (!Array.isArray(value) || value.length > MAX_GALLERY_PHOTOS) {
     return undefined;
   }
 
   const photos: GalleryPhoto[] = [];
   for (const item of value) {
-    const photo = parseGalleryPhoto(item);
+    const photo = parseGalleryPhoto(item, apiOrigin);
     if (photo === undefined) {
       return undefined;
     }
@@ -198,7 +199,10 @@ function parseGallery(value: unknown): GalleryPhoto[] | undefined {
  * normalized. `whatsapp` is the stored E.164 contact or null, `music` is an allow-listed `https` link and the
  * service it names or null, and `giftRegistry` is the boolean the layouts gate their own block with.
  */
-function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefined {
+function parsePublicFeatures(
+  value: unknown,
+  apiOrigin: string,
+): PublicInvitationFeatures | undefined {
   const features = record(value);
 
   if (
@@ -213,7 +217,7 @@ function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefin
 
   const music = features.music === null ? null : musicServiceOf(features.music);
   const rsvp = parsePublicRsvp(features.rsvp);
-  const gallery = parseGallery(features.gallery);
+  const gallery = parseGallery(features.gallery, apiOrigin);
 
   if (music === undefined || rsvp === undefined || gallery === undefined) {
     return undefined;
@@ -246,9 +250,13 @@ function parsePublicFeatures(value: unknown): PublicInvitationFeatures | undefin
 /**
  * The public invitation of a success body, or `undefined` when it breaks the documented contract. Only
  * the fields of the projection are kept: a body that grows an owner, a package, a price, a status, or an id
- * never reaches the page.
+ * never reaches the page. `apiOrigin` is the origin of the API this deployment reads, and the only host a gallery
+ * photo's URL may name (A5).
  */
-export function parsePublicInvitation(value: unknown): PublicInvitation | undefined {
+export function parsePublicInvitation(
+  value: unknown,
+  apiOrigin: string,
+): PublicInvitation | undefined {
   const invitation = record(value);
 
   if (invitation === undefined) {
@@ -258,7 +266,7 @@ export function parsePublicInvitation(value: unknown): PublicInvitation | undefi
   const configuration = record(invitation.configuration);
   const content = record(invitation.content);
   const componentKey = invitation.componentKey;
-  const features = parsePublicFeatures(invitation.features);
+  const features = parsePublicFeatures(invitation.features, apiOrigin);
 
   if (
     !isInvitationSlug(invitation.slug) ||
@@ -342,8 +350,11 @@ function parsePublicGuestResponse(
  * is parsed again, and the guest block must name this guest's seats, answer, and pass without anything else. A body
  * that grows another guest, an owner, a package, or an id never reaches the page.
  */
-export function parsePublicGuestInvitation(value: unknown): PublicGuestInvitation | undefined {
-  const page = parsePublicInvitation(value);
+export function parsePublicGuestInvitation(
+  value: unknown,
+  apiOrigin: string,
+): PublicGuestInvitation | undefined {
+  const page = parsePublicInvitation(value, apiOrigin);
   const guest = record(record(value)?.guest);
 
   if (page === undefined || guest === undefined) {
@@ -508,7 +519,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
         payload = undefined;
       }
 
-      const invitation = parsePublicInvitation(payload);
+      const invitation = parsePublicInvitation(payload, options.config.apiOrigin);
 
       if (invitation === undefined) {
         throw new ApiClientError("invalid-response", status);
@@ -547,7 +558,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
         payload = undefined;
       }
 
-      const page = parsePublicGuestInvitation(payload);
+      const page = parsePublicGuestInvitation(payload, options.config.apiOrigin);
 
       if (page === undefined) {
         throw new ApiClientError("invalid-response", status);

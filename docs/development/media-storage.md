@@ -8,9 +8,10 @@ companion of the code: the rules live in `apps/api/src/media/domain/media-asset.
 ## Shape
 
 - `MediaStorage` (`apps/api/src/media/application/media-storage.ts`) is the port: `put` writes an object with its
-  content type, `get` answers a stream with its size or null, `delete` is idempotent, and `listKeys` feeds the
-  cleanup scan. Keys are the API's own `invitations/<invitationId>/<assetId>.webp` values, so no caller can name an
-  arbitrary path or object.
+  content type, `get` answers a stream with its size or null, `delete` is idempotent, and `listObjects` feeds the
+  cleanup scan with every object under a prefix and the time it was last written (the file's modification time
+  locally, the provider's `LastModified` on S3). Keys are the API's own `invitations/<invitationId>/<assetId>.webp`
+  values, so no caller can name an arbitrary path or object.
 - `MEDIA_STORAGE_DRIVER` selects the adapter: `local` (a directory, development and tests only) or `s3` (any
   S3-compatible provider: Cloudflare R2, AWS S3, MinIO).
 - The local driver is refused at startup in production, because an ephemeral filesystem would lose the photos.
@@ -18,6 +19,11 @@ companion of the code: the rules live in `apps/api/src/media/domain/media-asset.
 - `sharp` re-encodes every accepted image to WebP at most 2000 px on its longest side and strips EXIF, GPS, XMP, and
   the ICC profile, so no location or camera data reaches a guest. Only JPEG, PNG, and WebP pass the magic-byte check,
   at most 10 MB and at most 8000 px per side, read from the header before any decode.
+- The header read is unbounded by pixels on purpose, and the decode is bounded (S4, A4, A2): an image whose header
+  declares 9000 px a side is refused by the domain's 8000 px rule with the dimensions message instead of looking like
+  a bad format, the decode path keeps `sharp`'s 8000 x 8000 pixel cap, and one API process runs one image operation
+  at a time (`ProcessingLimiter`, `sharp.concurrency(1)`, no libvips operation cache), so two 64-megapixel decodes
+  cannot be in memory at once.
 - Binaries never enter PostgreSQL. The `MediaAsset` row names the object by `storageKey`; see
   [`../database/model.md`](../database/model.md).
 - Public URLs are absolute API URLs built from `MEDIA_PUBLIC_BASE_URL`: `<origin>/media/<assetId>`. Nothing in a URL,
@@ -63,7 +69,9 @@ public with `Cache-Control: public, max-age=31536000, immutable`, and the owner 
 same 404, and the session is read only when the invitation is not published, so a public image never depends on the
 auth store. The response is `Content-Type: image/webp`, `X-Content-Type-Options: nosniff`,
 `Content-Disposition: inline`, and `Cross-Origin-Resource-Policy: cross-origin`, because the web app on another
-origin embeds it.
+origin embeds it. The web app's own response parsers accept a media URL only on the configured API origin (its
+`API_ORIGIN`, compared by origin with no path, query, or credentials), so a body that names another host is refused
+as an invalid response instead of being rendered as an `<img src>`.
 
 ## Cleanup command
 
@@ -81,3 +89,14 @@ rows whose object is gone. It is idempotent and prints one line of counts only (
 Exit code 0 means every object it tried to delete is gone; 1 means at least one failed and the row is kept for the
 next run, or the command itself failed. Run it after a failed upload or delete, or as a periodic job; it needs
 `NODE_ENV`, the database URL, and the media variables, but no auth or web secret.
+
+### The orphan grace period
+
+`MEDIA_ORPHAN_GRACE_MS` (`apps/api/src/media/domain/media-asset.ts`) is **one hour**, and it is the reason the scan
+is safe to run at any time. An upload writes its object *before* it inserts the row, so an object with no row may be
+an upload in flight; deleting it in that window would leave a `stored` row whose object is gone. The scan therefore
+only treats an object as an orphan once its last-modified time is older than the grace period, and an object the
+adapter cannot date (a provider that answered no `LastModified`) is treated as recent. The counts name both groups:
+`orphanObjects` are the objects the run deleted or would delete, and `skippedRecentObjects` are the ones it left
+alone for now. The objects of rows marked `deleted` are never subject to the grace period: the row already records
+that the object is abandoned.

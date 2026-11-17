@@ -152,7 +152,8 @@ function isPixelSize(value: unknown): value is number {
 
 /**
  * Whether a value is an absolute `http`/`https` URL without credentials, which is the only shape the API's own
- * `/media/<assetId>` URL has. A relative path or any other scheme never becomes the `src` of a page.
+ * `/media/<assetId>` URL has. A relative path or any other scheme never becomes the `src` of a page. This is the
+ * shape check only; a URL this web app renders must also be on the API's own origin, which `isApiMediaUrl` decides.
  */
 export function isAbsoluteMediaUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.length === 0 || value.length > 2048) {
@@ -174,6 +175,25 @@ export function isAbsoluteMediaUrl(value: unknown): value is string {
   );
 }
 
+/**
+ * Whether a value is an absolute media URL on the configured API origin (M8 S4, A5). The API builds every media URL
+ * from its own `MEDIA_PUBLIC_BASE_URL`, so a body that names another host — a third party, a tracker, a provider
+ * bucket — is not this contract, and defence in depth refuses it here instead of rendering it: an `<img src>` is a
+ * request the guest's browser makes, so the host of a media URL is a decision this server does not delegate.
+ */
+export function isApiMediaUrl(value: unknown, apiOrigin: string): value is string {
+  if (!isAbsoluteMediaUrl(value)) {
+    return false;
+  }
+
+  try {
+    return new URL(value).origin === new URL(apiOrigin).origin;
+  } catch {
+    // An unparseable configured origin accepts nothing, so a bad setting fails closed instead of open.
+    return false;
+  }
+}
+
 function isMediaKind(value: unknown): value is MediaKind {
   return typeof value === "string" && (MEDIA_KINDS as readonly string[]).includes(value);
 }
@@ -185,9 +205,10 @@ function isMediaAlt(value: unknown): value is string | null {
 
 /**
  * One asset of a success body, or undefined when it breaks the documented contract. Only the fields the editor
- * renders are read, and an extra key never reaches a page.
+ * renders are read, and an extra key never reaches a page. `apiOrigin` is the API's own origin: a media URL on any
+ * other host is not this contract (A5).
  */
-export function parseMediaAsset(value: unknown): MediaAsset | undefined {
+export function parseMediaAsset(value: unknown, apiOrigin: string): MediaAsset | undefined {
   const asset = record(value);
 
   if (asset === undefined) {
@@ -199,7 +220,7 @@ export function parseMediaAsset(value: unknown): MediaAsset | undefined {
   if (
     !isMediaId(id) ||
     !isMediaKind(kind) ||
-    !isAbsoluteMediaUrl(url) ||
+    !isApiMediaUrl(url, apiOrigin) ||
     !isPixelSize(width) ||
     !isPixelSize(height) ||
     !isMediaAlt(alt) ||
@@ -216,14 +237,14 @@ export function parseMediaAsset(value: unknown): MediaAsset | undefined {
 }
 
 /** The assets of one read, refused whole when any entry is not the documented shape. */
-export function parseMediaAssets(value: unknown): MediaAsset[] | undefined {
+export function parseMediaAssets(value: unknown, apiOrigin: string): MediaAsset[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
 
   const assets: MediaAsset[] = [];
   for (const item of value) {
-    const asset = parseMediaAsset(item);
+    const asset = parseMediaAsset(item, apiOrigin);
     if (asset === undefined) {
       return undefined;
     }
@@ -342,6 +363,10 @@ export function createMediaClient(
   options: ApiClientOptions,
   readCookieHeader: () => Promise<string | null | undefined>,
 ): MediaClient {
+  // Every image URL this client answers must be on the API's own origin, so a body that names another host is
+  // refused as an invalid response instead of reaching an `<img src>` (A5).
+  const parseAsset = (value: unknown): MediaAsset | undefined =>
+    parseMediaAsset(value, options.config.apiOrigin);
   async function call<T>(
     method: "DELETE" | "GET" | "PATCH" | "POST",
     path: string,
@@ -404,7 +429,9 @@ export function createMediaClient(
     async list(invitationId: string): Promise<MediaResult<MediaAsset[]>> {
       const path = mediaPath(invitationId);
 
-      return path === undefined ? NOT_FOUND : call("GET", path, {}, parseMediaAssets);
+      return path === undefined
+        ? NOT_FOUND
+        : call("GET", path, {}, (value) => parseMediaAssets(value, options.config.apiOrigin));
     },
 
     async upload(invitationId: string, upload: MediaUploadInput): Promise<MediaResult<MediaAsset>> {
@@ -422,7 +449,7 @@ export function createMediaClient(
         "POST",
         path,
         { multipart: mediaUploadForm(upload), timeoutMs: MEDIA_UPLOAD_TIMEOUT_MS },
-        parseMediaAsset,
+        parseAsset,
       );
     },
 
@@ -445,7 +472,7 @@ export function createMediaClient(
         ...(patch.position === undefined ? {} : { position: patch.position }),
       };
 
-      return call("PATCH", path, { body, uncoded: "invalid-update" }, parseMediaAsset);
+      return call("PATCH", path, { body, uncoded: "invalid-update" }, parseAsset);
     },
 
     async remove(

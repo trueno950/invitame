@@ -6,6 +6,8 @@ import { assertEditable } from "../../invitations/domain/invitation-lifecycle";
 import {
   MEDIA_FORMAT_ISSUE,
   MEDIA_MIME,
+  MEDIA_ORPHAN_GRACE_MS,
+  MEDIA_STORAGE_PREFIX,
   normalizeMediaAlt,
   outputDimensions,
   storageKeyFor,
@@ -27,7 +29,7 @@ import type {
   NewMediaAsset,
 } from "./media.repository";
 import type { MediaCatalog } from "./media-catalog";
-import type { MediaStorage } from "./media-storage";
+import type { MediaStorage, MediaStorageObject } from "./media-storage";
 import type { AssetUrl } from "./media-url";
 
 // The media use cases (M8 S1, S4). Every creator command follows one order, so a guard cannot be reordered by
@@ -445,35 +447,50 @@ export class ReadPublicGalleryUseCase {
 export interface MediaCleanupResult {
   deletedObjects: number;
   orphanObjects: number;
+  /** Orphans the scan left alone because they are younger than the grace period, or the adapter could not date them. */
+  skippedRecentObjects: number;
   deletedRows: number;
   failedObjects: number;
 }
 
 /**
- * The cleanup command (S4): deletes the objects of rows marked deleted and the orphan objects under `invitations/`
+ * The cleanup command (S4, A3): deletes the objects of rows marked deleted and the orphan objects under `invitations/`
  * that no row names, then removes the rows whose object is gone. It is idempotent, supports a dry run that reports
  * the same counts without deleting anything, and logs one line of counts only.
+ *
+ * An orphan is only deleted once it is older than `MEDIA_ORPHAN_GRACE_MS`. The upload writes its object before it
+ * inserts the row, so an object with no row may be an upload in flight; deleting it there would leave a `stored` row
+ * whose object is gone. An object a scan cannot date (a provider that answered no `LastModified`) is treated as
+ * recent, so nothing undated is ever deleted.
  */
 export class CleanupMediaUseCase {
+  private readonly now: () => Date;
+
   constructor(
     private readonly invitations: MediaRepository,
     private readonly storage: MediaStorage,
     private readonly log: MediaLog = () => {},
-  ) {}
+    options: { now?: () => Date } = {},
+  ) {
+    this.now = options.now ?? (() => new Date());
+  }
 
   async execute(options: { dryRun: boolean }): Promise<MediaCleanupResult> {
     const deletedRows = await this.invitations.listDeleted();
     const result: MediaCleanupResult = {
       deletedObjects: deletedRows.length,
       orphanObjects: 0,
+      skippedRecentObjects: 0,
       deletedRows: deletedRows.length,
       failedObjects: 0,
     };
+    // Objects written inside this window may belong to an upload that has not inserted its row yet.
+    const cutoff = this.now().getTime() - MEDIA_ORPHAN_GRACE_MS;
 
     if (options.dryRun) {
-      const known = new Set(await this.invitations.listStorageKeys());
-      const keys = await this.storage.listKeys("invitations/");
-      result.orphanObjects = keys.filter((key) => !known.has(key)).length;
+      const scan = await this.scanOrphans(cutoff);
+      result.orphanObjects = scan.orphans.length;
+      result.skippedRecentObjects = scan.recent;
 
       return result;
     }
@@ -489,14 +506,13 @@ export class CleanupMediaUseCase {
     }
     await this.invitations.remove(removed);
 
-    const known = new Set(await this.invitations.listStorageKeys());
-    const keys = await this.storage.listKeys("invitations/");
-    const orphans = keys.filter((key) => !known.has(key));
-    result.orphanObjects = orphans.length;
+    const scan = await this.scanOrphans(cutoff);
+    result.orphanObjects = scan.orphans.length;
+    result.skippedRecentObjects = scan.recent;
 
-    for (const key of orphans) {
+    for (const object of scan.orphans) {
       try {
-        await this.storage.delete(key);
+        await this.storage.delete(object.key);
       } catch {
         result.failedObjects += 1;
       }
@@ -505,5 +521,33 @@ export class CleanupMediaUseCase {
     this.log({ event: "media_cleanup", mode: "apply", ...result });
 
     return result;
+  }
+
+  /**
+   * The objects under the media prefix that no row names and that are old enough to be abandoned, plus how many were
+   * left alone for being recent or undated. The keys the database knows are read once, so a fresh upload that just
+   * inserted its row is never counted twice.
+   */
+  private async scanOrphans(
+    cutoff: number,
+  ): Promise<{ orphans: MediaStorageObject[]; recent: number }> {
+    const known = new Set(await this.invitations.listStorageKeys());
+    const objects = await this.storage.listObjects(MEDIA_STORAGE_PREFIX);
+    const orphans: MediaStorageObject[] = [];
+    let recent = 0;
+
+    for (const object of objects) {
+      // A row names it: never an orphan, whatever its age.
+      if (known.has(object.key)) {
+        continue;
+      }
+      if (object.lastModified === null || object.lastModified.getTime() > cutoff) {
+        recent += 1;
+        continue;
+      }
+      orphans.push(object);
+    }
+
+    return { orphans, recent };
   }
 }

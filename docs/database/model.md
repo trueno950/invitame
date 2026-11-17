@@ -269,6 +269,14 @@ cleanup command are documented in [`../development/media-storage.md`](../develop
   deleted after the row; a failed object delete leaves the `deleted` row for `pnpm media:cleanup`, which removes the
   objects of `deleted` rows, the objects under `invitations/` that no row names, and then the rows whose object is
   gone. The command is idempotent and supports `--dry-run`. No row is deleted automatically by any other path.
+- The orphan scan has a **one-hour grace period** (`MEDIA_ORPHAN_GRACE_MS` in
+  `apps/api/src/media/domain/media-asset.ts`). An upload writes its object before it inserts the row, so an object
+  that no row names yet may be an upload in flight; the scan deletes an unmatched object only when its
+  last-modified time — the file's mtime locally, the provider's `LastModified` on S3 — is older than the grace
+  period, and treats an object it cannot date as recent. The run reports such objects as `skippedRecentObjects`
+  instead of `orphanObjects`. The objects of rows already marked `deleted` are deleted without waiting, because the
+  row itself records that the object is abandoned. The grace period is documented in
+  [`../development/media-storage.md`](../development/media-storage.md).
 - Retry and recovery order (S4): an upload processes the image, writes the object, and only then inserts the row; if
   the insert fails the object is deleted best effort and the failure is logged by event name only. A deletion marks
   the row first and deletes the object second, so the database never loses track of an object that still exists.

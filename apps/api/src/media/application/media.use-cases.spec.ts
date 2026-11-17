@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { describe, it } from "node:test";
 import { InvitationNotEditableError } from "../../invitations/domain/invitation.errors";
-import { MEDIA_MIME, storageKeyFor } from "../domain/media-asset";
+import { MEDIA_MIME, MEDIA_ORPHAN_GRACE_MS, storageKeyFor } from "../domain/media-asset";
 import {
   type ImageMetadata,
   type ImageProcessor,
@@ -36,7 +36,7 @@ import {
   UploadMediaUseCase,
 } from "./media.use-cases";
 import type { MediaCatalog } from "./media-catalog";
-import type { MediaObject, MediaStorage } from "./media-storage";
+import type { MediaObject, MediaStorage, MediaStorageObject } from "./media-storage";
 import { MediaStorageError } from "./media-storage";
 
 // The media use cases (M8 S4): owner-scoped uploads, the main-photo replacement, the limits, the delete order,
@@ -144,13 +144,28 @@ class FakeRepository implements MediaRepository {
 
 class FakeStorage implements MediaStorage {
   objects = new Map<string, Buffer>();
+  /** When each object was last written, which is what the cleanup scan dates it by. */
+  modified = new Map<string, Date>();
+  /** The clock `put` stamps an object with. */
+  writtenAt = new Date("2026-01-01T00:00:00.000Z");
   failDelete: MediaStorageError | null = null;
 
   constructor(private readonly calls: string[]) {}
 
+  /** Seeds one object with an explicit write time; a null time is the undated object a provider might answer. */
+  seed(key: string, lastModified: Date | null): void {
+    this.objects.set(key, Buffer.from("x"));
+    if (lastModified === null) {
+      this.modified.delete(key);
+    } else {
+      this.modified.set(key, lastModified);
+    }
+  }
+
   async put(key: string, bytes: Uint8Array): Promise<void> {
     this.calls.push(`put:${key}`);
     this.objects.set(key, Buffer.from(bytes));
+    this.modified.set(key, this.writtenAt);
   }
 
   async get(key: string): Promise<MediaObject | null> {
@@ -169,8 +184,11 @@ class FakeStorage implements MediaStorage {
     }
   }
 
-  async listKeys(): Promise<string[]> {
-    return [...this.objects.keys()];
+  async listObjects(prefix: string): Promise<MediaStorageObject[]> {
+    return [...this.objects.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .sort()
+      .map((key) => ({ key, lastModified: this.modified.get(key) ?? null }));
   }
 }
 
@@ -447,6 +465,86 @@ describe("upload media", () => {
     assert.deepEqual(events, ["media_upload_recovery"]);
   });
 
+  it("recovers an upload in one documented order: put, insert, object delete, one event", async () => {
+    const { upload, repository, calls, events } = setup();
+    repository.failInsert = new Error("database unavailable");
+    const key = storageKeyFor(INVITATION, "44444444-4444-4444-8444-444444444444");
+
+    await assert.rejects(
+      upload.execute({
+        ownerId: OWNER,
+        invitationId: INVITATION,
+        kind: "gallery",
+        alt: null,
+        bytes: JPEG,
+      }),
+    );
+
+    assert.deepEqual(calls, [
+      "findOwnedInvitation",
+      "metadata",
+      "toWebp",
+      `put:${key}`,
+      "insert",
+      `delete:${key}`,
+    ]);
+    assert.deepEqual(events, ["media_upload_recovery"]);
+  });
+
+  it("logs one replacement recovery event, after the insert, when the old object cannot be deleted", async () => {
+    const { upload, repository, storage, calls, events } = setup({ withGalleryFeature: false });
+    const previousKey = storageKeyFor(INVITATION, "55555555-5555-4555-8555-555555555555");
+    repository.replaced = {
+      id: "55555555-5555-4555-8555-555555555555",
+      invitationId: INVITATION,
+      kind: "main-photo",
+      storageKey: previousKey,
+      mime: MEDIA_MIME,
+      byteSize: 10,
+      width: 10,
+      height: 10,
+      position: null,
+      alt: null,
+      status: "deleted",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    storage.failDelete = new MediaStorageError("delete");
+
+    const view = await upload.execute({
+      ownerId: OWNER,
+      invitationId: INVITATION,
+      kind: "main-photo",
+      alt: null,
+      bytes: JPEG,
+    });
+
+    assert.equal(view.kind, "main-photo");
+    assert.deepEqual(calls.slice(-2), ["insert", `delete:${previousKey}`]);
+    assert.deepEqual(events, ["media_replace_recovery"]);
+  });
+
+  it("refuses a 9000x9000 header with the dimensions issue, before anything is encoded", async () => {
+    const { upload, processor, storage, calls } = setup();
+    processor.metadata_ = { format: "png", width: 9000, height: 9000, orientation: null };
+
+    await assert.rejects(
+      upload.execute({
+        ownerId: OWNER,
+        invitationId: INVITATION,
+        kind: "gallery",
+        alt: null,
+        bytes: JPEG,
+      }),
+      (error: unknown) =>
+        error instanceof InvalidMediaUploadError &&
+        error.issues.length === 1 &&
+        error.issues[0] === "image dimensions must not exceed 8000 px per side",
+    );
+    assert.equal(calls.includes("toWebp"), false, "nothing is decoded");
+    assert.equal(storage.objects.size, 0);
+  });
+
   it("still answers when the recovery delete fails, and logs the failure", async () => {
     const { upload, repository, storage, events } = setup();
     repository.failInsert = new Error("database unavailable");
@@ -691,6 +789,15 @@ describe("cleanup command", () => {
     updatedAt: new Date(0),
   };
 
+  /** The cleanup's own clock, so the grace period is decided by the test and not by the machine. */
+  const NOW = new Date("2026-01-01T12:00:00.000Z");
+  const ANCIENT = new Date(NOW.getTime() - 2 * MEDIA_ORPHAN_GRACE_MS);
+  const JUST_WRITTEN = new Date(NOW.getTime() - 1000);
+
+  function cleanupOf(storage: MediaStorage, repository: MediaRepository) {
+    return new CleanupMediaUseCase(repository, storage, () => {}, { now: () => NOW });
+  }
+
   it("deletes the objects of deleted rows and the orphan objects, and reports counts only", async () => {
     const calls: string[] = [];
     const storage = new FakeStorage(calls);
@@ -699,16 +806,19 @@ describe("cleanup command", () => {
     const known = storageKeyFor(INVITATION, "66666666-6666-4666-8666-666666666666");
     const orphan = storageKeyFor(INVITATION, "77777777-7777-4777-8777-777777777777");
     repository.allKeys = [known];
-    storage.objects.set(deletedRow.storageKey, Buffer.from("x"));
-    storage.objects.set(orphan, Buffer.from("x"));
+    storage.seed(deletedRow.storageKey, ANCIENT);
+    storage.seed(orphan, ANCIENT);
     const events: Array<Record<string, unknown>> = [];
-    const cleanup = new CleanupMediaUseCase(repository, storage, (event) => events.push(event));
+    const cleanup = new CleanupMediaUseCase(repository, storage, (event) => events.push(event), {
+      now: () => NOW,
+    });
 
     const result = await cleanup.execute({ dryRun: false });
 
     assert.deepEqual(result, {
       deletedObjects: 1,
       orphanObjects: 1,
+      skippedRecentObjects: 0,
       deletedRows: 1,
       failedObjects: 0,
     });
@@ -723,6 +833,7 @@ describe("cleanup command", () => {
         mode: "apply",
         deletedObjects: 1,
         orphanObjects: 1,
+        skippedRecentObjects: 0,
         deletedRows: 1,
         failedObjects: 0,
       },
@@ -735,12 +846,13 @@ describe("cleanup command", () => {
     const repository = new CleanupRepository(calls);
     repository.rows = [deletedRow];
     const orphan = storageKeyFor(INVITATION, "77777777-7777-4777-8777-777777777777");
-    storage.objects.set(orphan, Buffer.from("x"));
-    const cleanup = new CleanupMediaUseCase(repository, storage, () => {});
+    storage.seed(orphan, ANCIENT);
+    const cleanup = cleanupOf(storage, repository);
 
     assert.deepEqual(await cleanup.execute({ dryRun: true }), {
       deletedObjects: 1,
       orphanObjects: 1,
+      skippedRecentObjects: 0,
       deletedRows: 1,
       failedObjects: 0,
     });
@@ -756,9 +868,105 @@ describe("cleanup command", () => {
     assert.deepEqual(await cleanup.execute({ dryRun: false }), {
       deletedObjects: 0,
       orphanObjects: 0,
+      skippedRecentObjects: 0,
       deletedRows: 0,
       failedObjects: 0,
     });
+  });
+
+  it("leaves an in-flight upload's object alone while it is inside the grace period", async () => {
+    // The upload writes the object before it inserts the row, so a scan that runs inside that window must not
+    // treat the young object as an orphan: doing so would leave a `stored` row whose object is gone (A3).
+    const calls: string[] = [];
+    const storage = new FakeStorage(calls);
+    const repository = new CleanupRepository(calls);
+    const inFlight = storageKeyFor(INVITATION, "88888888-8888-4888-8888-888888888888");
+    storage.seed(inFlight, JUST_WRITTEN);
+    const cleanup = cleanupOf(storage, repository);
+
+    const dryRun = await cleanup.execute({ dryRun: true });
+    assert.deepEqual(dryRun, {
+      deletedObjects: 0,
+      orphanObjects: 0,
+      skippedRecentObjects: 1,
+      deletedRows: 0,
+      failedObjects: 0,
+    });
+
+    const applied = await cleanup.execute({ dryRun: false });
+    assert.deepEqual(applied, {
+      deletedObjects: 0,
+      orphanObjects: 0,
+      skippedRecentObjects: 1,
+      deletedRows: 0,
+      failedObjects: 0,
+    });
+    assert.equal(storage.objects.has(inFlight), true, "the in-flight object survives the scan");
+    assert.deepEqual(
+      calls.filter((call) => call.startsWith("delete:")),
+      [],
+    );
+  });
+
+  it("deletes an orphan once it is older than the grace period", async () => {
+    const calls: string[] = [];
+    const storage = new FakeStorage(calls);
+    const repository = new CleanupRepository(calls);
+    const old = storageKeyFor(INVITATION, "99999999-9999-4999-8999-999999999999");
+    const young = storageKeyFor(INVITATION, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    storage.seed(old, ANCIENT);
+    storage.seed(young, JUST_WRITTEN);
+    const cleanup = cleanupOf(storage, repository);
+
+    const result = await cleanup.execute({ dryRun: false });
+
+    assert.equal(result.orphanObjects, 1);
+    assert.equal(result.skippedRecentObjects, 1);
+    assert.equal(storage.objects.has(old), false, "an old orphan is deleted");
+    assert.equal(storage.objects.has(young), true, "a young orphan is kept");
+  });
+
+  it("treats an orphan a scan cannot date as recent, so nothing undated is deleted", async () => {
+    const calls: string[] = [];
+    const storage = new FakeStorage(calls);
+    const repository = new CleanupRepository(calls);
+    const undated = storageKeyFor(INVITATION, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    storage.seed(undated, null);
+
+    const result = await cleanupOf(storage, repository).execute({ dryRun: false });
+
+    assert.equal(result.orphanObjects, 0);
+    assert.equal(result.skippedRecentObjects, 1);
+    assert.equal(storage.objects.has(undated), true);
+  });
+
+  it("never deletes the object a stored row names, however old it is", async () => {
+    const calls: string[] = [];
+    const storage = new FakeStorage(calls);
+    const repository = new CleanupRepository(calls);
+    const stored: MediaAssetRecord = {
+      ...deletedRow,
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      storageKey: storageKeyFor(INVITATION, "cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+      status: "stored",
+    };
+    repository.allKeys = [stored.storageKey];
+    storage.seed(stored.storageKey, ANCIENT);
+
+    const result = await cleanupOf(storage, repository).execute({ dryRun: false });
+
+    assert.deepEqual(result, {
+      deletedObjects: 0,
+      orphanObjects: 0,
+      skippedRecentObjects: 0,
+      deletedRows: 0,
+      failedObjects: 0,
+    });
+    assert.equal(
+      storage.objects.has(stored.storageKey),
+      true,
+      "a stored row's object is never deleted",
+    );
   });
 });
 

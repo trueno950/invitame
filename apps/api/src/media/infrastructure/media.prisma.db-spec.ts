@@ -10,11 +10,12 @@ import { InvitationNotEditableError } from "../../invitations/domain/invitation.
 import { PrismaInvitationRepository } from "../../invitations/infrastructure/prisma-invitation.repository";
 import { MediaLimitExceededError } from "../application/media.errors";
 import { CleanupMediaUseCase, ServeMediaUseCase } from "../application/media.use-cases";
-import type { MediaObject, MediaStorage } from "../application/media-storage";
+import type { MediaObject, MediaStorage, MediaStorageObject } from "../application/media-storage";
 import {
   MAX_GALLERY_PHOTOS,
   MAX_STORED_ASSETS,
   MEDIA_MIME,
+  MEDIA_ORPHAN_GRACE_MS,
   storageKeyFor,
 } from "../domain/media-asset";
 import { PrismaMediaRepository } from "./prisma-media.repository";
@@ -31,10 +32,18 @@ const AT = new Date("2026-11-20T10:00:00.000Z");
 /** An in-memory storage adapter: the database suite proves the SQL, not the filesystem or a bucket. */
 class MapStorage implements MediaStorage {
   objects = new Map<string, Buffer>();
+  /** When each object was written; `put` stamps the current time, and a test can age one. */
+  modified = new Map<string, Date>();
   failDelete = false;
 
   async put(key: string, bytes: Uint8Array): Promise<void> {
     this.objects.set(key, Buffer.from(bytes));
+    this.modified.set(key, new Date());
+  }
+
+  /** Ages one object past the cleanup's grace period, so the scan sees an abandoned object. */
+  age(key: string, milliseconds: number): void {
+    this.modified.set(key, new Date(Date.now() - milliseconds));
   }
 
   async get(key: string): Promise<MediaObject | null> {
@@ -51,8 +60,11 @@ class MapStorage implements MediaStorage {
     this.objects.delete(key);
   }
 
-  async listKeys(prefix: string): Promise<string[]> {
-    return [...this.objects.keys()].filter((key) => key.startsWith(prefix)).sort();
+  async listObjects(prefix: string): Promise<MediaStorageObject[]> {
+    return [...this.objects.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .sort()
+      .map((key) => ({ key, lastModified: this.modified.get(key) ?? null }));
   }
 }
 
@@ -539,27 +551,45 @@ describe("media assets on real PostgreSQL (M8 S4)", () => {
     it("removes the objects of deleted rows and the orphan objects, then the rows", async () => {
       const { invitation } = await newInvitation();
       const created = await upload(invitation);
+      // A second photo that stays stored: its object is old, but a row names it, so the orphan scan must not touch it.
+      const kept = await upload(invitation);
       await media.markDeleted(invitation.ownerId, invitation.id, created.asset.id, AT);
       const orphan = storageKeyFor(invitation.id, randomUUID());
+      const inFlight = storageKeyFor(invitation.id, randomUUID());
       const storage = new MapStorage();
       await storage.put(created.asset.storageKey, Buffer.from("image"));
+      await storage.put(kept.asset.storageKey, Buffer.from("image"));
+      storage.age(kept.asset.storageKey, 2 * MEDIA_ORPHAN_GRACE_MS);
       await storage.put(orphan, Buffer.from("image"));
+      // An object with no row is only an orphan once it is past the grace period: younger ones may be in flight.
+      storage.age(orphan, 2 * MEDIA_ORPHAN_GRACE_MS);
+      await storage.put(inFlight, Buffer.from("image"));
       const cleanup = new CleanupMediaUseCase(media, storage, () => {});
 
       // The command is global by design, so this suite's earlier deleted rows are part of its answer too.
       const dryRun = await cleanup.execute({ dryRun: true });
       assert.ok(dryRun.deletedObjects >= 1);
       assert.equal(dryRun.orphanObjects, 1);
+      assert.equal(dryRun.skippedRecentObjects, 1, "a young object is left for a later run");
       assert.equal(dryRun.failedObjects, 0);
-      assert.equal(storage.objects.size, 2, "a dry run deletes nothing");
+      assert.equal(storage.objects.size, 4, "a dry run deletes nothing");
 
       const result = await cleanup.execute({ dryRun: false });
       assert.ok(result.deletedObjects >= 1);
       assert.equal(result.orphanObjects, 1);
+      assert.equal(result.skippedRecentObjects, 1);
       assert.ok(result.deletedRows >= 1);
       assert.equal(result.failedObjects, 0);
-      assert.equal(storage.objects.size, 0);
+      assert.equal(storage.objects.size, 2, "only the stored and the in-flight object are left");
+      assert.equal(
+        storage.objects.has(kept.asset.storageKey),
+        true,
+        "a stored row's object is never deleted",
+      );
+      assert.equal(storage.objects.has(inFlight), true);
+      assert.equal(storage.objects.has(created.asset.storageKey), false);
       assert.equal(await prisma.mediaAsset.count({ where: { id: created.asset.id } }), 0);
+      assert.equal(await prisma.mediaAsset.count({ where: { id: kept.asset.id } }), 1);
     });
 
     it("keeps a deleted row when its object cannot be deleted, so a later run finishes the job", async () => {

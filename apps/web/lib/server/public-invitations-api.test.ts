@@ -8,7 +8,7 @@ import { ApiClientError } from "./api-client.ts";
 import {
   createPublicInvitationsClient,
   type PublicInvitation,
-  parsePublicInvitation,
+  parsePublicInvitation as parsePublicInvitationContract,
 } from "./public-invitations-api.ts";
 
 // The web server's client of the public invitation read (M5 T5; S1, S5, A3, A7). A guest is anonymous:
@@ -17,6 +17,13 @@ import {
 
 const PROXY_SECRET = randomBytes(32).toString("base64url");
 const AT = "2026-11-12T15:30:00.000Z";
+
+/** The origin the API builds its own `/media/<assetId>` URLs from; the gallery parser accepts no other host (A5). */
+const MEDIA_ORIGIN = "http://localhost:3001";
+
+/** The public read parsed against this deployment's API origin, which is what the client passes. */
+const parsePublicInvitation = (value: unknown) =>
+  parsePublicInvitationContract(value, MEDIA_ORIGIN);
 
 const PUBLIC: PublicInvitation = {
   slug: "invitacion-k7m2qx",
@@ -492,6 +499,25 @@ describe("the gallery of the public read (M8 S3, S4)", () => {
     assert.deepEqual(parsePublicInvitation(withGallery([]))?.features.gallery, []);
   });
 
+  it("refuses a gallery photo whose host is not the API origin this deployment reads", async () => {
+    // The guest page renders each photo as an `<img src>`, so a foreign host never reaches it (A5).
+    const foreign = [{ ...GALLERY_PHOTOS[0], url: "https://evil.example/media/9b6f3e0e" }];
+    assert.equal(parsePublicInvitation(withGallery(foreign)), undefined);
+    // A URL of the same origin with an unexpected path is still this contract; only the host is the rule.
+    assert.deepEqual(
+      parsePublicInvitation(withGallery([{ ...GALLERY_PHOTOS[0], url: `${MEDIA_ORIGIN}/media/x` }]))
+        ?.features.gallery,
+      [{ ...GALLERY_PHOTOS[0], url: `${MEDIA_ORIGIN}/media/x` }],
+    );
+
+    answer(200, withGallery(foreign));
+    await assert.rejects(client().getBySlug(PUBLIC.slug), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "invalid-response");
+      return true;
+    });
+  });
+
   it("refuses a gallery that is not a list of the documented photos", () => {
     const broken: unknown[] = [
       null,
@@ -502,6 +528,10 @@ describe("the gallery of the public read (M8 S3, S4)", () => {
       [{ ...GALLERY_PHOTOS[0], url: "javascript:alert(1)" }],
       [{ ...GALLERY_PHOTOS[0], url: "/media/relative" }],
       [{ ...GALLERY_PHOTOS[0], url: "http://user:secret@localhost:3001/media/x" }],
+      // Defence in depth (A5): a gallery URL on any host but the configured API origin is refused whole.
+      [{ ...GALLERY_PHOTOS[0], url: "https://evil.example/media/9b6f3e0e" }],
+      [{ ...GALLERY_PHOTOS[0], url: "http://localhost:3001.evil.example/media/9b6f3e0e" }],
+      [{ ...GALLERY_PHOTOS[0], url: "https://localhost:3001/media/9b6f3e0e" }],
       [{ ...GALLERY_PHOTOS[0], width: 0 }],
       [{ ...GALLERY_PHOTOS[0], width: 1.5 }],
       [{ ...GALLERY_PHOTOS[0], height: -1 }],

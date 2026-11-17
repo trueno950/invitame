@@ -97,12 +97,24 @@ describe("S3 media storage (S4)", () => {
     assert.ok(client.commands[0] instanceof DeleteObjectCommand);
 
     const second = storageKeyFor(randomUUID(), randomUUID());
+    const writtenAt = new Date("2026-11-20T12:00:00.000Z");
     client.responses.push(
-      () => ({ Contents: [{ Key: key }], IsTruncated: true, NextContinuationToken: "next" }),
+      () => ({
+        Contents: [{ Key: key, LastModified: writtenAt }],
+        IsTruncated: true,
+        NextContinuationToken: "next",
+      }),
+      // A provider that answers no `LastModified` leaves that object undated, never wrongly old.
       () => ({ Contents: [{ Key: second }], IsTruncated: false }),
     );
 
-    assert.deepEqual(await storage.listKeys("invitations/"), [key, second].sort());
+    assert.deepEqual(
+      await storage.listObjects("invitations/"),
+      [
+        { key, lastModified: writtenAt },
+        { key: second, lastModified: null },
+      ].sort((left, right) => left.key.localeCompare(right.key)),
+    );
     const firstList = client.commands[1];
     assert.ok(firstList instanceof ListObjectsV2Command);
     assert.equal(firstList.input.Prefix, "invitations/");

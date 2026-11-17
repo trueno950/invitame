@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -72,16 +72,22 @@ describe("local media storage (S4)", () => {
     assert.equal(existsSync(join(root, "..", "escape.webp")), false);
   });
 
-  it("lists only the keys under its invitations prefix", async () => {
+  it("lists the keys under its invitations prefix with the time each object was written", async () => {
     const another = storageKeyFor(randomUUID(), randomUUID());
+    const writtenAt = new Date("2026-11-20T12:00:00.000Z");
     await storage.put(another, Buffer.from("x"), "image/webp");
+    await utimes(join(root, another), writtenAt, writtenAt);
 
-    const keys = await storage.listKeys("invitations/");
+    const objects = await storage.listObjects("invitations/");
 
-    assert.ok(keys.includes(another));
+    assert.ok(objects.some((object) => object.key === another));
     assert.equal(
-      keys.every((listed) => listed.startsWith("invitations/")),
+      objects.every((object) => object.key.startsWith("invitations/")),
       true,
     );
+    // The file's own modification time is what the cleanup scan dates an object by.
+    const listed = objects.find((object) => object.key === another);
+    assert.ok(listed?.lastModified instanceof Date);
+    assert.equal(listed?.lastModified.getTime(), writtenAt.getTime());
   });
 });

@@ -8,6 +8,7 @@ import { ApiClientError } from "./api-client.ts";
 import {
   createMediaClient,
   MAX_MEDIA_UPLOAD_BYTES,
+  type MediaAsset,
   parseDeletedMedia,
   parseMediaAsset,
   parseMediaAssets,
@@ -23,10 +24,11 @@ const ID = "0b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e10";
 const ASSET_ID = "9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19";
 const AT = "2026-11-20T12:00:00.000Z";
 
-const ASSET = {
+/** The asset every answer carries; its URL is the API's own origin, which is only known once the server listens. */
+let ASSET: MediaAsset = {
   id: ASSET_ID,
   kind: "gallery",
-  url: `http://localhost:3001/media/${ASSET_ID}`,
+  url: "",
   width: 1200,
   height: 800,
   alt: "Los novios en el jardín",
@@ -64,6 +66,8 @@ before(async () => {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as AddressInfo;
   apiOrigin = `http://127.0.0.1:${address.port}`;
+  // The API answers `/media/<id>` on its own origin, which is the only host this client accepts (A5).
+  ASSET = { ...ASSET, url: `${apiOrigin}/media/${ASSET_ID}` };
 });
 
 after(async () => {
@@ -114,9 +118,12 @@ function bytes(...values: number[]): Uint8Array {
 
 describe("media response parsers", () => {
   it("reads one asset of the documented shape", () => {
-    assert.deepEqual(parseMediaAsset(ASSET), ASSET);
+    assert.deepEqual(parseMediaAsset(ASSET, apiOrigin), ASSET);
     assert.deepEqual(
-      parseMediaAssets([ASSET, { ...ASSET, id: ID, kind: "main-photo", position: null }]),
+      parseMediaAssets(
+        [ASSET, { ...ASSET, id: ID, kind: "main-photo", position: null }],
+        apiOrigin,
+      ),
       [ASSET, { ...ASSET, id: ID, kind: "main-photo", position: null }],
     );
   });
@@ -135,10 +142,31 @@ describe("media response parsers", () => {
       { ...ASSET, createdAt: "yesterday" },
       { ...ASSET, width: undefined },
     ]) {
-      assert.equal(parseMediaAsset(broken), undefined);
+      assert.equal(parseMediaAsset(broken, apiOrigin), undefined);
     }
-    assert.equal(parseMediaAssets({}), undefined);
-    assert.equal(parseMediaAssets([ASSET, { id: ID }]), undefined);
+    assert.equal(parseMediaAssets({}, apiOrigin), undefined);
+    assert.equal(parseMediaAssets([ASSET, { id: ID }], apiOrigin), undefined);
+  });
+
+  it("refuses an asset URL on any host but the API origin", () => {
+    // Defence in depth (A5): the API builds `<origin>/media/<id>` from its own public base URL, so a body that names
+    // another host — a third party, a tracker, a provider bucket — is not this contract and is refused whole.
+    for (const url of [
+      `https://evil.example/media/${ASSET_ID}`,
+      `http://localhost:3001/media/${ASSET_ID}`,
+      `http://127.0.0.1:1/media/${ASSET_ID}`,
+      `${apiOrigin}.evil.example/media/${ASSET_ID}`,
+      `${apiOrigin}/media/${ASSET_ID}`.replace("http://", "https://"),
+    ]) {
+      assert.equal(parseMediaAsset({ ...ASSET, url }, apiOrigin), undefined, url);
+      assert.equal(parseMediaAssets([{ ...ASSET, url }], apiOrigin), undefined, url);
+    }
+
+    // The same path on the configured origin is accepted, so only the host is the rule.
+    assert.deepEqual(
+      parseMediaAsset({ ...ASSET, url: `${apiOrigin}/media/${ASSET_ID}` }, apiOrigin),
+      ASSET,
+    );
   });
 
   it("reads the answer of a removal", () => {
@@ -254,6 +282,17 @@ describe("media upload", () => {
 
   it("fails closed on a success body that breaks the contract", async () => {
     answerJson(201, { ...ASSET, width: "wide" });
+
+    await assert.rejects(
+      () => client().upload(ID, { bytes: bytes(0xff), kind: "gallery", alt: null }),
+      (error: unknown) => error instanceof ApiClientError && error.kind === "invalid-response",
+    );
+  });
+
+  it("fails closed when an answered image URL is not on the API origin", async () => {
+    // The editor renders this URL as an `<img src>`; a body that points somewhere else is refused before it can
+    // reach a page (A5).
+    answerJson(201, { ...ASSET, url: `https://evil.example/media/${ASSET_ID}` });
 
     await assert.rejects(
       () => client().upload(ID, { bytes: bytes(0xff), kind: "gallery", alt: null }),

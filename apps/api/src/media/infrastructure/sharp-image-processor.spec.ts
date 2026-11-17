@@ -3,7 +3,11 @@ import { describe, it } from "node:test";
 
 import sharp from "sharp";
 import { MediaProcessingError } from "../application/image-processing";
-import { MAX_OUTPUT_DIMENSION } from "../domain/media-asset";
+import {
+  MAX_INPUT_DIMENSION,
+  MAX_OUTPUT_DIMENSION,
+  validateImageDimensions,
+} from "../domain/media-asset";
 import { SharpImageProcessor } from "./sharp-image-processor";
 
 // The processing adapter (M8 S4): every fixture is built here with sharp, so no personal photo is ever committed.
@@ -25,7 +29,13 @@ const CAMERA_EXIF = {
   },
 } as unknown as NonNullable<WithMetadataOptions>["exif"];
 
-/** A JPEG with camera metadata, including a location, as a phone camera would write it. */
+/** An XMP packet with a location and a marker string, as an editor or a phone application writes it. */
+const CAMERA_XMP = `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:inv="https://invitame.test/ns/" inv:gps="19.4326,-99.1332" inv:marker="invitame-xmp-fixture"/></rdf:RDF></x:xmpmeta>`;
+
+/**
+ * A JPEG with the metadata a phone camera writes: a hand-built EXIF block with a GPS location, an XMP packet with a
+ * location, and an embedded ICC profile. Every fixture is built here, so no personal photo is ever committed.
+ */
 async function jpegWithLocation(width: number, height: number): Promise<Buffer> {
   return sharp({ create: { width, height, channels: 3, background: "#a33" } })
     .jpeg()
@@ -34,7 +44,41 @@ async function jpegWithLocation(width: number, height: number): Promise<Buffer> 
       // camera writes and what the adapter must strip.
       exif: CAMERA_EXIF,
     })
+    .withXmp(CAMERA_XMP)
+    .withIccProfile("srgb")
     .toBuffer();
+}
+
+/** The CRC-32 of one PNG chunk, as `zlib.crc32` computes it: the test patches a header and must fix its checksum. */
+function crc32(bytes: Buffer): number {
+  let crc = 0xffffffff;
+
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc & 1) === 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * A real 8x8 PNG whose IHDR declares `width` x `height`, with the chunk's CRC recomputed so the header is valid.
+ * The pixel data is tiny on purpose: only the declared dimensions are being tested.
+ */
+async function pngClaiming(width: number, height: number): Promise<Buffer> {
+  const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#333" } })
+    .png()
+    .toBuffer();
+  const patched = Buffer.from(png);
+
+  // Signature (8) + length (4) + "IHDR" (4), then the two dimensions, then the chunk's CRC over type and data.
+  patched.writeUInt32BE(width, 16);
+  patched.writeUInt32BE(height, 20);
+  patched.writeUInt32BE(crc32(patched.subarray(12, 29)), 29);
+
+  return patched;
 }
 
 describe("sharp image processing (S4)", () => {
@@ -68,6 +112,24 @@ describe("sharp image processing (S4)", () => {
     assert.equal(processed.bytes.includes(Buffer.from("Exif")), false);
     assert.equal(processed.bytes.includes(Buffer.from("GPS")), false);
     assert.equal(processed.bytes.includes(Buffer.from("invitame-test-fixture")), false);
+  });
+
+  it("strips the XMP packet and the ICC profile too, not only EXIF", async () => {
+    // A location can travel in the XMP packet, and a profile is fingerprinting data for the camera: neither may
+    // reach the file a guest downloads.
+    const source = await jpegWithLocation(800, 600);
+    const sourceMetadata = await sharp(source).metadata();
+    assert.ok(sourceMetadata.xmp, "the fixture carries an XMP packet");
+    assert.ok(sourceMetadata.icc, "the fixture carries an ICC profile");
+
+    const processed = await processor.toWebp(source, { width: 800, height: 600 });
+    const output = await sharp(processed.bytes).metadata();
+
+    assert.equal(output.xmp, undefined);
+    assert.equal(output.icc, undefined);
+    assert.equal(processed.bytes.includes(Buffer.from("invitame-xmp-fixture")), false);
+    assert.equal(processed.bytes.includes(Buffer.from("invitame.test/ns")), false);
+    assert.equal(processed.bytes.includes(Buffer.from("19.4326")), false);
   });
 
   it("accepts PNG and WebP input and never enlarges a small image", async () => {
@@ -121,6 +183,28 @@ describe("sharp image processing (S4)", () => {
     await assert.rejects(
       processor.toWebp(garbage, { width: 10, height: 10 }),
       (error: unknown) => error instanceof MediaProcessingError && !error.message.includes("sharp"),
+    );
+  });
+
+  it("reports the declared dimensions of an image over the pixel cap instead of failing like a bad format", async () => {
+    // An image whose header claims 9000x9000 is refused by the domain's 8000 px rule with the dimensions issue. If
+    // the header read itself tripped sharp's pixel cap, the upload would be answered as a bad format instead (A4).
+    const oversized = await pngClaiming(9000, 9000);
+
+    const metadata = await processor.metadata(oversized);
+
+    assert.equal(metadata.format, "png");
+    assert.equal(metadata.width, 9000);
+    assert.equal(metadata.height, 9000);
+    assert.equal(MAX_INPUT_DIMENSION, 8000);
+    assert.deepEqual(validateImageDimensions(metadata), [
+      "image dimensions must not exceed 8000 px per side",
+    ]);
+
+    // The decode path keeps the cap, so the oversized image is still never decoded.
+    await assert.rejects(
+      processor.toWebp(oversized, { width: 2000, height: 2000 }),
+      MediaProcessingError,
     );
   });
 });

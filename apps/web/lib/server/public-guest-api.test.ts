@@ -9,7 +9,7 @@ import {
   createPublicInvitationsClient,
   type PublicGuestInvitation,
   type PublicGuestRsvpSubmission,
-  parsePublicGuestInvitation,
+  parsePublicGuestInvitation as parsePublicGuestInvitationContract,
 } from "./public-invitations-api.ts";
 
 // One guest's personal page and personal answer (M6 G4; S1, S4). A guest has no session, so neither call sends a
@@ -18,6 +18,12 @@ import {
 // so a body that grows another guest, an owner, or an id is refused whole.
 
 const PROXY_SECRET = randomBytes(32).toString("base64url");
+/** The API's own origin for media URLs; the gallery parser accepts no other host (A5). */
+const MEDIA_ORIGIN = "http://localhost:3001";
+
+/** One guest page parsed against this deployment's API origin, which is what the client passes. */
+const parsePublicGuestInvitation = (value: unknown) =>
+  parsePublicGuestInvitationContract(value, MEDIA_ORIGIN);
 const SLUG = "invitacion-k7m2qx";
 const TOKEN = "AbCdEfGhIjKlMnOpQrStUv";
 const AT = "2026-11-12T15:30:00.000Z";

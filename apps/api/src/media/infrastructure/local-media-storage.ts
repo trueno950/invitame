@@ -1,9 +1,9 @@
 import { createReadStream } from "node:fs";
 import { mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, posix, relative, resolve, sep } from "node:path";
-import type { MediaObject, MediaStorage } from "../application/media-storage";
+import type { MediaObject, MediaStorage, MediaStorageObject } from "../application/media-storage";
 import { MediaStorageError } from "../application/media-storage";
-import { isStorageKey } from "../domain/media-asset";
+import { isStorageKey, MEDIA_STORAGE_PREFIX } from "../domain/media-asset";
 
 // The local storage adapter (M8 S4): a directory from `MEDIA_LOCAL_DIRECTORY`, for development and tests only.
 // `environment.ts` refuses it in production, because an ephemeral filesystem would lose the photos. The adapter
@@ -58,8 +58,8 @@ export class LocalMediaStorage implements MediaStorage {
     }
   }
 
-  async listKeys(prefix: string): Promise<string[]> {
-    if (!prefix.startsWith("invitations/")) {
+  async listObjects(prefix: string): Promise<MediaStorageObject[]> {
+    if (!prefix.startsWith(MEDIA_STORAGE_PREFIX)) {
       throw new MediaStorageError("list");
     }
 
@@ -68,24 +68,32 @@ export class LocalMediaStorage implements MediaStorage {
       const files = await this.walk(this.root);
 
       return files
-        .map((file) => relative(this.root, file).split(sep).join(posix.sep))
-        .filter((key) => key.startsWith(prefix))
-        .sort();
+        .map((file) => ({
+          key: relative(this.root, file.path).split(sep).join(posix.sep),
+          lastModified: file.lastModified,
+        }))
+        .filter((object) => object.key.startsWith(prefix))
+        .sort((left, right) => left.key.localeCompare(right.key));
     } catch {
       throw new MediaStorageError("list");
     }
   }
 
-  private async walk(directory: string): Promise<string[]> {
+  /**
+   * Every file under `directory` with the modification time the filesystem records, which is what the cleanup scan
+   * dates an object by: `put` writes a new file, so a file's mtime is when its object was written.
+   */
+  private async walk(directory: string): Promise<Array<{ path: string; lastModified: Date }>> {
     const entries = await readdir(directory, { withFileTypes: true });
-    const files: string[] = [];
+    const files: Array<{ path: string; lastModified: Date }> = [];
 
     for (const entry of entries) {
       const entryPath = join(directory, entry.name);
       if (entry.isDirectory()) {
         files.push(...(await this.walk(entryPath)));
       } else if (entry.isFile()) {
-        files.push(entryPath);
+        const metadata = await stat(entryPath);
+        files.push({ path: entryPath, lastModified: metadata.mtime });
       }
     }
 

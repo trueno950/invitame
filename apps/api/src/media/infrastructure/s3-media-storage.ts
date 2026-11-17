@@ -8,9 +8,9 @@ import {
 } from "@aws-sdk/client-s3";
 
 import type { MediaS3Environment } from "../../config/environment";
-import type { MediaObject, MediaStorage } from "../application/media-storage";
+import type { MediaObject, MediaStorage, MediaStorageObject } from "../application/media-storage";
 import { MediaStorageError } from "../application/media-storage";
-import { isStorageKey } from "../domain/media-asset";
+import { isStorageKey, MEDIA_STORAGE_PREFIX } from "../domain/media-asset";
 
 // The S3-compatible storage adapter (M8 S4): one adapter for Cloudflare R2, AWS S3, and MinIO, selected by
 // `MEDIA_STORAGE_DRIVER=s3` and configured from the validated environment. The credential lives only in the client;
@@ -32,7 +32,7 @@ interface GetObjectOutput {
 
 /** The response fields of `ListObjectsV2` this adapter reads. */
 interface ListObjectsOutput {
-  Contents?: Array<{ Key?: string }>;
+  Contents?: Array<{ Key?: string; LastModified?: unknown }>;
   IsTruncated?: boolean;
   NextContinuationToken?: string;
 }
@@ -115,12 +115,12 @@ export class S3MediaStorage implements MediaStorage {
     }
   }
 
-  async listKeys(prefix: string): Promise<string[]> {
-    if (prefix !== "invitations/") {
+  async listObjects(prefix: string): Promise<MediaStorageObject[]> {
+    if (prefix !== MEDIA_STORAGE_PREFIX) {
       throw new MediaStorageError("list");
     }
 
-    const keys: string[] = [];
+    const objects: MediaStorageObject[] = [];
     let token: string | undefined;
     try {
       do {
@@ -134,7 +134,12 @@ export class S3MediaStorage implements MediaStorage {
 
         for (const entry of output.Contents ?? []) {
           if (typeof entry.Key === "string") {
-            keys.push(entry.Key);
+            // The provider's own write time, which is what the cleanup scan compares against its grace period; an
+            // answer without one is reported as undated and the scan then leaves that object alone.
+            objects.push({
+              key: entry.Key,
+              lastModified: entry.LastModified instanceof Date ? entry.LastModified : null,
+            });
           }
         }
         token = output.IsTruncated === true ? output.NextContinuationToken : undefined;
@@ -143,7 +148,7 @@ export class S3MediaStorage implements MediaStorage {
       throw new MediaStorageError("list");
     }
 
-    return keys.sort();
+    return objects.sort((left, right) => left.key.localeCompare(right.key));
   }
 
   private assertKey(key: string, operation: "put" | "get" | "delete"): void {

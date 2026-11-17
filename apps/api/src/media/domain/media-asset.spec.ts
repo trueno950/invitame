@@ -141,6 +141,13 @@ describe("media upload validation (S4)", () => {
     assert.deepEqual(validateImageDimensions({ width: 0, height: 10 }), [
       "image dimensions must be positive",
     ]);
+    // A side that is not a whole number of pixels names no image this API can store.
+    assert.deepEqual(validateImageDimensions({ width: 1.5, height: 10 }), [
+      "image dimensions must be positive",
+    ]);
+    assert.deepEqual(validateImageDimensions({ width: 10, height: Number.NaN }), [
+      "image dimensions must be positive",
+    ]);
     assert.equal(MAX_INPUT_DIMENSION, 8000);
   });
 
@@ -151,6 +158,10 @@ describe("media upload validation (S4)", () => {
     assert.deepEqual(outputDimensions(1, 5000), { width: 1, height: 2000 });
     assert.deepEqual(outputDimensions(8000, 8000), { width: 2000, height: 2000 });
     assert.deepEqual(outputDimensions(3, 2), { width: 3, height: 2 });
+    // One pixel past the target and one side of a single pixel: the scale never answers a 0 px side.
+    assert.deepEqual(outputDimensions(2001, 2001), { width: 2000, height: 2000 });
+    assert.deepEqual(outputDimensions(4001, 1), { width: 2000, height: 1 });
+    assert.deepEqual(outputDimensions(1, 4001), { width: 1, height: 2000 });
   });
 
   it("builds the storage key from validated ids only", () => {
