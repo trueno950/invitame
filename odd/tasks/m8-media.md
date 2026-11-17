@@ -77,3 +77,7 @@ includes `GALLERY`, a small photo gallery; binaries live in object storage, neve
   end: the production provider (bucket, credentials, public base URL), the limits, and the retention of archived
   invitations' media. Note: `.env.example` and the README env table could not be edited (the policy blocks `.env*`);
   `docs/development/media-storage.md` lists every variable.
+- L3 — Build fix `954391a`: the API build compiled `scripts/` outside `rootDir`, so `tsconfig.build.json` now excludes
+  `scripts`; the cleanup command runs through `@swc-node/register`. Full gates pass (docs, format, lint, typecheck,
+  test, build). Native review of the advisory-fix range (`1ab0874..954391a`, 1,230 lines; lenses risk and
+  resilience; lineage `review-efb3b4c0042eb541`) was APPROVED, and its authority was acknowledged and burned.
