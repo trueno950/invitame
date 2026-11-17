@@ -62,3 +62,14 @@ creators manage a guest list with personal links and an access QR, and check gue
 - L1 — The parent fixed contract S4 from the ROADMAP, the catalog packages, and the owner's go-ahead. The decisions
   that touch security or personal data are recorded for the owner's review at the end: token format and storage,
   open-form rate limit and dedupe, the check-in authorization, and the new `qrcode` dependency.
+- L2 — G1 `9a2fcfa`, G2 `1a6b67d`, G3 `86aaef4`, G4 `2ab6005` (plus `90f6d34` playlist length fix and `95b1e61`
+  RSVP key mirror). Dev and test databases migrated (`20261117120000_add_rsvp_responses`,
+  `20261118120000_add_guests`). Checks at G4: API 1400 unit and 343 db-specs, web 1387 tests, both typechecks, docs,
+  Biome. Browser runs covered Premium open RSVP and the Deluxe guest list, personal page, QR, idempotent check-in,
+  rotation, and CSV. The G4 worker was resumed once after a provider network error. Native review was attempted
+  under the owner's standing authorization and stopped with `lens_context_budget_exceeded`: the candidate is too
+  large for one review and is not retryable as is. The independent verification G5 (also resumed after a network
+  error) is the required check for this high-risk change. Owner-review items: the token format and storage, the
+  open-form rate limit (10 per hour per address per invitation) and dedupe, the check-in authorization, the per-process
+  one-time link store (multi-replica caveat), and the `qrcode` 1.5.4 dependency. The baby shower «Confirma tu
+  asistencia» heading on the contact field can be confused with the RSVP card.
