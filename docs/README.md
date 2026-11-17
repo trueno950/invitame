@@ -39,6 +39,8 @@ to be checked before prose, and it defines when a human decision is required.
 - [`architecture/overview.md`](architecture/overview.md) — current runtime map and planned module boundaries.
 - [`design/theme.md`](design/theme.md) — the current visual theme: tokens, fonts, ornaments, motion, and contrast rules.
 - [`development/quality-gates.md`](development/quality-gates.md) — current scripts and Definition of Done.
+- [`development/payments.md`](development/payments.md) — payment modes, environment, the simulated signature scheme, adding a real provider adapter, and the production checklist.
+- [`development/media-storage.md`](development/media-storage.md) — invitation media storage, environment, serving, and the cleanup command.
 - [`development/git-workflow.md`](development/git-workflow.md) — branch, work-unit, staged-diff, and PR procedure.
 - [`development/anti-patterns.md`](development/anti-patterns.md) — failure modes and preferred alternatives.
 - [`development/m2-security-evidence.md`](development/m2-security-evidence.md) — Milestone 2 security evidence: spec verdicts, sign-off areas, and open risks.

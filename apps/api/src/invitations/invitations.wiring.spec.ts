@@ -14,8 +14,9 @@ import { createApp } from "../app.setup";
 import { CATALOG_PUBLIC_READER } from "../catalog/application/public/catalog-public-reader";
 import { createConfigModule } from "../config/config.module";
 import { PrismaService } from "../database/prisma.service";
+import { PaymentGate } from "../payments/infrastructure/payment-gate";
 import { GUEST_REPOSITORY } from "./application/guest.repository";
-import { INVITATION_REPOSITORY } from "./application/invitation.repository";
+import { INVITATION_REPOSITORY, type InvitationRecord } from "./application/invitation.repository";
 import {
   ArchiveInvitationUseCase,
   CreateInvitationDraftUseCase,
@@ -39,7 +40,10 @@ import {
   SubmitGuestRsvpUseCase,
   UpdateGuestUseCase,
 } from "./application/invitation-guest.use-cases";
-import { INVITATION_PAYMENT_GATE } from "./application/invitation-payment-gate";
+import {
+  INVITATION_PAYMENT_GATE,
+  type InvitationPaymentGate,
+} from "./application/invitation-payment-gate";
 import {
   GetRsvpResponsesUseCase,
   SubmitPublicRsvpUseCase,
@@ -48,7 +52,6 @@ import {
 import { RSVP_REPOSITORY } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
-import { NoPaymentRequiredGate } from "./infrastructure/no-payment-required";
 import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
@@ -103,6 +106,29 @@ class StubAuthModule {}
 })
 class InvitationsTestModule {}
 
+/** The stored row a gate is asked about: `free` mode answers without reading any field. */
+function invitationRecord(): InvitationRecord {
+  return {
+    id: "00000000-0000-4000-8000-000000000000",
+    ownerId: "00000000-0000-4000-8000-000000000001",
+    templateVersionId: "00000000-0000-4000-8000-000000000002",
+    packageId: "00000000-0000-4000-8000-000000000003",
+    slug: "invitacion-abcdef",
+    status: "DRAFT",
+    content: {},
+    timeZone: "America/Mexico_City",
+    whatsappPhone: null,
+    playlistUrl: null,
+    rsvpDeadline: null,
+    rsvpPartyLimit: 4,
+    archivedAt: null,
+    publishedAt: null,
+    expiresAt: null,
+    createdAt: new Date("2026-11-21T10:00:00.000Z"),
+    updatedAt: new Date("2026-11-21T10:00:00.000Z"),
+  };
+}
+
 describe("InvitationsModule wiring", () => {
   it("provides every use case bound to the Prisma repository, the catalog public reader, and the payment gate", async () => {
     const context = await NestFactory.createApplicationContext(InvitationsTestModule, {
@@ -156,10 +182,15 @@ describe("InvitationsModule wiring", () => {
       assert.ok(
         context.get(INVITATION_CATALOG, { strict: false }) instanceof CatalogInvitationReader,
       );
-      // Milestone 7 swaps only this provider, so publication is free today (S6).
-      assert.ok(
-        context.get(INVITATION_PAYMENT_GATE, { strict: false }) instanceof NoPaymentRequiredGate,
-      );
+      // Milestone 7 moves the gate to the payments module, which binds it for the mode the environment names
+      // (S3, S4). This test module sets no `PAYMENTS_MODE`, so it runs `free` and publication stays free.
+      const paymentGate = context.get<InvitationPaymentGate>(INVITATION_PAYMENT_GATE, {
+        strict: false,
+      });
+      assert.ok(paymentGate instanceof PaymentGate);
+      assert.deepEqual(await paymentGate.publicationPaymentRequired(invitationRecord()), {
+        required: false,
+      });
       // RSVP data and its rate limit have their own adapters, both on the shared Prisma client (M6 G1; S4).
       assert.ok(context.get(RSVP_REPOSITORY, { strict: false }) instanceof PrismaRsvpRepository);
       assert.ok(context.get(RSVP_RATE_LIMITER, { strict: false }) instanceof PrismaRsvpRateLimiter);

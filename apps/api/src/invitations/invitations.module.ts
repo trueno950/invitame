@@ -7,6 +7,7 @@ import {
 import { CatalogModule } from "../catalog/catalog.module";
 import { PrismaService } from "../database/prisma.service";
 import { MediaModule } from "../media/media.module";
+import { PaymentsModule } from "../payments/payments.module";
 import { GUEST_REPOSITORY, type GuestRepository } from "./application/guest.repository";
 import {
   INVITATION_REPOSITORY,
@@ -51,7 +52,6 @@ import {
 import { RSVP_REPOSITORY, type RsvpRepository } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER, type RsvpRateLimiter } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
-import { NoPaymentRequiredGate } from "./infrastructure/no-payment-required";
 import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
@@ -235,15 +235,16 @@ export const INVITATION_USE_CASES: Provider[] = [
  * (M4 T3, T4, M5 T3, T4, M6 G1). The owner routes live at `/invitations` behind the global guard; the public read
  * and the public submission live under `/public/invitations/...` and carry `@Public()`, so the guard never reads a
  * session for a guest. This module binds the Prisma adapter to `INVITATION_REPOSITORY`, the catalog's exported
- * `CATALOG_PUBLIC_READER` to `INVITATION_CATALOG` through `CatalogInvitationReader`, the always-free payment gate
- * to `INVITATION_PAYMENT_GATE`, the RSVP data adapter to `RSVP_REPOSITORY`, and the RSVP rate limiter — the
- * authentication flow's own `RateLimit` table — to `RSVP_RATE_LIMITER`, so the invitations module never imports a
- * catalog repository or queries a catalog table. The owner routes read the owner only from the session (S9);
- * ownership itself is enforced by the repository queries (A4). Milestone 7 replaces only the payment provider (S6);
- * Milestone 6 G2 adds the guest list behind the same ports.
+ * `CATALOG_PUBLIC_READER` to `INVITATION_CATALOG` through `CatalogInvitationReader`, the RSVP data adapter to
+ * `RSVP_REPOSITORY`, and the RSVP rate limiter — the authentication flow's own `RateLimit` table — to
+ * `RSVP_RATE_LIMITER`, so the invitations module never imports a catalog repository or queries a catalog table. The
+ * owner routes read the owner only from the session (S9); ownership itself is enforced by the repository queries
+ * (A4). Milestone 7 moves the payment gate out of this module: `PaymentsModule` binds `INVITATION_PAYMENT_GATE`
+ * (S3, S4), and this module imports it, so the publish use case keeps asking the same port. Milestone 6 G2 adds the
+ * guest list behind the same ports.
  */
 @Module({
-  imports: [CatalogModule, MediaModule],
+  imports: [CatalogModule, MediaModule, PaymentsModule],
   controllers: [InvitationsController, PublicInvitationsController],
   providers: [
     ...INVITATION_USE_CASES,
@@ -257,10 +258,6 @@ export const INVITATION_USE_CASES: Provider[] = [
       // The token carries one object: the catalog's public reader also implements the rendering facet (M5 T3).
       useFactory: (catalog: CatalogPublicContract) => new CatalogInvitationReader(catalog),
       inject: [CATALOG_PUBLIC_READER],
-    },
-    {
-      provide: INVITATION_PAYMENT_GATE,
-      useFactory: () => new NoPaymentRequiredGate(),
     },
     {
       provide: RSVP_REPOSITORY,
