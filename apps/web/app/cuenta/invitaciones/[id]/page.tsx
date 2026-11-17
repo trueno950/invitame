@@ -2,13 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 
-import { INVITATION_COPY, INVITATION_ERROR_COPY } from "../../../../lib/customer/copy.ts";
+import {
+  INVITATION_COPY,
+  INVITATION_ERROR_COPY,
+  PAYMENT_COPY,
+} from "../../../../lib/customer/copy.ts";
 import { featureSettingsView } from "../../../../lib/customer/invitation-features.ts";
 import {
   type MediaSectionView,
   mainPhotoUrl,
   mediaSectionView,
 } from "../../../../lib/customer/invitation-media.ts";
+import { paymentPanelView } from "../../../../lib/customer/invitation-payment.ts";
 import { rsvpSettingsView } from "../../../../lib/customer/invitation-rsvp.ts";
 import {
   contentSections,
@@ -24,6 +29,7 @@ import type { OwnedInvitation, RsvpRead } from "../../../../lib/server/invitatio
 import { isInvitationId } from "../../../../lib/server/invitations-api.ts";
 import { CustomerWorkspaceShell } from "../../../_components/customer-workspace-shell.tsx";
 import {
+  fieldHint,
   primaryButton,
   quietButton,
   statusNote,
@@ -39,6 +45,7 @@ import {
   GalleryUnreadable,
 } from "../_components/media-section.tsx";
 import { Notices } from "../_components/notices.tsx";
+import { PaymentPanel } from "../_components/payment-panel.tsx";
 import {
   RsvpSettingsForm,
   RsvpSettingsSummary,
@@ -57,6 +64,7 @@ import {
   saveInvitationContentAction,
   saveInvitationFeaturesAction,
   saveRsvpSettingsAction,
+  startCheckoutAction,
   unpublishInvitationAction,
   uploadGalleryPhotoAction,
   uploadMainPhotoAction,
@@ -237,6 +245,19 @@ export default async function InvitationDetailPage({
     invitation.availableFeatures.includes("GALLERY")
       ? await gallerySection(invitation)
       : "unavailable";
+  // The payment state the panel renders is the API's (M7 T2; S1, S4). A read that fails leaves the page as it was,
+  // because the API's own payment gate is what refuses a publication that still owes money: the panel and the
+  // disabled button are a convenience, never the guard.
+  const paymentState = await attempt(() => invitations.payment(invitation.id));
+  const payment =
+    paymentState === "unavailable" || !paymentState.ok ? undefined : paymentState.value;
+  const paymentPanel = payment === undefined ? undefined : paymentPanelView(payment);
+  /** Whether the gate still asks for a payment, so publishing cannot succeed yet. */
+  const paymentPending =
+    paymentPanel !== undefined &&
+    (paymentPanel.kind === "pay" ||
+      paymentPanel.kind === "retry" ||
+      paymentPanel.kind === "amount-unavailable");
   const pinned =
     templates === undefined
       ? undefined
@@ -350,6 +371,14 @@ export default async function InvitationDetailPage({
               {missing === null ? null : <p className={statusNote}>{missing}</p>}
             </div>
 
+            {paymentPanel === undefined || archived ? null : (
+              <PaymentPanel
+                action={startCheckoutAction}
+                invitationId={invitation.id}
+                view={paymentPanel}
+              />
+            )}
+
             {invitation.status === "DRAFT" ? (
               <form
                 action={publishInvitationAction}
@@ -358,7 +387,10 @@ export default async function InvitationDetailPage({
                 <input name="id" type="hidden" value={invitation.id} />
                 <BlockLabel>{INVITATION_COPY.publishHeading}</BlockLabel>
                 <p className="text-sm leading-6 text-muted">{INVITATION_COPY.publishHint}</p>
-                <button className={primaryButton} type="submit">
+                {paymentPending ? (
+                  <p className={fieldHint}>{PAYMENT_COPY.publishBlockedHint}</p>
+                ) : null}
+                <button className={primaryButton} disabled={paymentPending} type="submit">
                   {INVITATION_COPY.publish}
                 </button>
               </form>

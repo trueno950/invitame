@@ -987,6 +987,18 @@ function stub(answers: Answers = {}): Stub {
       calls.push("checkInGuest");
       return unexpected("checkInGuest");
     },
+    checkout: (id) => {
+      calls.push(`checkout:${id}`);
+      return unexpected("checkout");
+    },
+    payment: (id) => {
+      calls.push(`payment:${id}`);
+      return unexpected("payment");
+    },
+    emitSimulatedPayment: () => {
+      calls.push("emitSimulatedPayment");
+      return unexpected("emitSimulatedPayment");
+    },
   };
   return { api, calls };
 }

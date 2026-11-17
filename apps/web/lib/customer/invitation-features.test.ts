@@ -107,6 +107,9 @@ function stub(answers: Answers = {}): Stub {
     removeGuest: () => unexpected("removeGuest"),
     rotateGuestToken: () => unexpected("rotateGuestToken"),
     checkInGuest: () => unexpected("checkInGuest"),
+    checkout: () => unexpected("checkout"),
+    payment: () => unexpected("payment"),
+    emitSimulatedPayment: () => unexpected("emitSimulatedPayment"),
   };
   return { api, calls };
 }

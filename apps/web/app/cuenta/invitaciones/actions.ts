@@ -18,6 +18,7 @@ import {
   uploadGalleryPhoto,
   uploadMainPhoto,
 } from "../../../lib/customer/invitation-media.ts";
+import { emitSimulatedPayment, startCheckout } from "../../../lib/customer/invitation-payment.ts";
 import { saveRsvpSettings } from "../../../lib/customer/invitation-rsvp.ts";
 import {
   archiveInvitation,
@@ -111,6 +112,23 @@ export async function publishInvitationAction(formData: FormData): Promise<void>
 /** Returns a published invitation to draft, so its public page stops answering (M5 T5; S7). */
 export async function unpublishInvitationAction(formData: FormData): Promise<void> {
   redirect(await unpublishInvitation(invitations, formData));
+}
+
+/**
+ * Starts or resumes the checkout of one invitation (M7 T2; S4). The redirect the API answered is followed only when
+ * it points at this invitation's own payment page on this request's origin, so the command needs the origin the page
+ * itself was served from; a refused answer comes back to the invitation as an error notice instead of leaving.
+ */
+export async function startCheckoutAction(formData: FormData): Promise<void> {
+  redirect(await startCheckout(invitations, formData, requestOrigin(await headers())));
+}
+
+/**
+ * Emits one simulated payment outcome (M7 T2; S4). Development and test only: the API refuses it unless the
+ * deployment runs the simulated provider, and the emit passes through the same signed intake a provider would use.
+ */
+export async function emitSimulatedPaymentAction(formData: FormData): Promise<void> {
+  redirect(await emitSimulatedPayment(invitations, formData));
 }
 
 /**

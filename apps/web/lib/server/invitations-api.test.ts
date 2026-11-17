@@ -8,8 +8,10 @@ import { ApiClientError } from "./api-client.ts";
 import {
   createInvitationsClient,
   isInvitationId,
+  parseCheckout,
   parseCreatorPackages,
   parseCreatorTemplates,
+  parseInvitationPayment,
   parseInvitationSummaries,
   parseOwnedInvitation,
   parseRsvpRead,
@@ -118,6 +120,23 @@ const PACKAGE = {
   includedFeatureKeys: ["COUNTDOWN"],
 };
 
+// The payment routes of the owner (M7 S4): the checkout, the state the panel renders, and the development emit.
+const PAYMENT_ID = "2b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e12";
+const CHECKOUT = {
+  paymentId: PAYMENT_ID,
+  redirectUrl: `http://localhost:3000/cuenta/invitaciones/${ID}/pago/simulado/${PAYMENT_ID}`,
+  amountMinor: 150000,
+  currency: "MXN",
+};
+const INVITATION_PAYMENT = {
+  paymentRequired: true,
+  status: "pending",
+  amountMinor: 150000,
+  currency: "MXN",
+  paidAt: null,
+};
+const PAYMENT_EMIT = { outcome: "processed" };
+
 interface Received {
   method: string;
   url: string;
@@ -220,6 +239,15 @@ describe("requests", () => {
       [() => api.unpublish(ID), "POST", `/invitations/${ID}/unpublish`, undefined, SUMMARY],
       [() => api.templates(), "GET", "/catalog/templates", undefined, [TEMPLATE]],
       [() => api.packages(), "GET", "/catalog/packages", undefined, [PACKAGE]],
+      [() => api.checkout(ID), "POST", `/invitations/${ID}/checkout`, undefined, CHECKOUT],
+      [() => api.payment(ID), "GET", `/invitations/${ID}/payment`, undefined, INVITATION_PAYMENT],
+      [
+        () => api.emitSimulatedPayment(PAYMENT_ID, "paid"),
+        "POST",
+        `/payments/simulated/${PAYMENT_ID}/emit`,
+        { outcome: "paid" },
+        PAYMENT_EMIT,
+      ],
     ];
 
     for (const [call, method, path, body, expected] of calls) {
@@ -389,6 +417,160 @@ describe("RSVP routes of the owner (M6 G1, G3; S1, S4)", () => {
         assert.equal(error.kind, "invalid-response");
         return true;
       });
+    }
+  });
+});
+
+describe("payment routes of the owner (M7 S4)", () => {
+  it("reads the payment state the panel and the return page render", async () => {
+    answer(200, INVITATION_PAYMENT);
+    assert.deepEqual(await client().payment(ID), { ok: true, value: INVITATION_PAYMENT });
+    assert.equal(received[0]?.method, "GET");
+    assert.equal(received[0]?.url, `/invitations/${ID}/payment`);
+    assert.equal(received[0]?.headers.cookie, SESSION_COOKIE);
+    assert.equal(received[0]?.body, "");
+
+    answer(200, { ...INVITATION_PAYMENT, paymentRequired: false, status: null });
+    assert.deepEqual(await client().payment(ID), {
+      ok: true,
+      value: {
+        paymentRequired: false,
+        status: null,
+        amountMinor: 150000,
+        currency: "MXN",
+        paidAt: null,
+      },
+    });
+  });
+
+  it("emits either outcome through the simulated route", async () => {
+    for (const outcome of ["paid", "failed"] as const) {
+      received = [];
+      answer(200, { outcome: "duplicate" });
+
+      assert.deepEqual(await client().emitSimulatedPayment(PAYMENT_ID, outcome), {
+        ok: true,
+        value: { outcome: "duplicate" },
+      });
+      assert.equal(received[0]?.method, "POST");
+      assert.equal(received[0]?.url, `/payments/simulated/${PAYMENT_ID}/emit`);
+      assert.deepEqual(JSON.parse(received[0]?.body ?? "null"), { outcome });
+    }
+  });
+
+  it("maps every documented checkout refusal to its own failure", async () => {
+    const cases: Array<[number, string, string]> = [
+      [409, "PAYMENTS_DISABLED", "payments-disabled"],
+      [409, "PAYMENT_NOT_REQUIRED", "payment-not-required"],
+      [409, "PAYMENT_PRICE_UNAVAILABLE", "payment-price-unavailable"],
+      [409, "PAYMENT_ALREADY_PAID", "payment-already-paid"],
+      [409, "INVITATION_PACKAGE_LOCKED_BY_PAYMENT", "payment-package-locked"],
+      [409, "INVITATION_NOT_EDITABLE", "not-editable"],
+      [404, "INVITATION_NOT_FOUND", "not-found"],
+      [503, "PAYMENT_PROVIDER_UNAVAILABLE", "payment-provider-unavailable"],
+    ];
+
+    for (const [status, code, failure] of cases) {
+      answer(status, { code });
+      assert.deepEqual(await client().checkout(ID), { ok: false, failure }, code);
+    }
+  });
+
+  it("maps the simulated emit's own refusals", async () => {
+    answer(409, { code: "PAYMENT_SIMULATED_DISABLED" });
+    assert.deepEqual(await client().emitSimulatedPayment(PAYMENT_ID, "paid"), {
+      ok: false,
+      failure: "simulated-payment-disabled",
+    });
+
+    answer(404, { code: "PAYMENT_NOT_FOUND" });
+    assert.deepEqual(await client().emitSimulatedPayment(PAYMENT_ID, "paid"), {
+      ok: false,
+      failure: "payment-not-found",
+    });
+  });
+
+  it("makes no request for an invitation or a payment id that is not a UUID", async () => {
+    const api = client();
+
+    for (const id of ["", "1", "not-a-uuid", `${ID}/../x`]) {
+      assert.deepEqual(await api.checkout(id), { ok: false, failure: "not-found" }, id);
+      assert.deepEqual(await api.payment(id), { ok: false, failure: "not-found" }, id);
+      assert.deepEqual(
+        await api.emitSimulatedPayment(id, "paid"),
+        { ok: false, failure: "payment-not-found" },
+        id,
+      );
+    }
+    assert.deepEqual(received, []);
+  });
+
+  it("fails closed on a payment answer that breaks the contract", async () => {
+    for (const body of [
+      { ...CHECKOUT, paymentId: "1" },
+      { ...CHECKOUT, redirectUrl: "" },
+      { ...CHECKOUT, amountMinor: 1.5 },
+      { ...CHECKOUT, currency: null },
+    ]) {
+      answer(200, body);
+      await assert.rejects(client().checkout(ID), (error: unknown) => {
+        assert.ok(error instanceof ApiClientError);
+        assert.equal(error.kind, "invalid-response");
+        return true;
+      });
+    }
+
+    for (const body of [
+      { ...INVITATION_PAYMENT, paymentRequired: "sí" },
+      { ...INVITATION_PAYMENT, status: "cancelled" },
+      { ...INVITATION_PAYMENT, amountMinor: -1 },
+      { ...INVITATION_PAYMENT, paidAt: "ayer" },
+    ]) {
+      answer(200, body);
+      await assert.rejects(client().payment(ID), (error: unknown) => {
+        assert.ok(error instanceof ApiClientError);
+        assert.equal(error.kind, "invalid-response");
+        return true;
+      });
+    }
+  });
+
+  it("reads the payment shapes strictly", () => {
+    assert.deepEqual(parseCheckout({ ...CHECKOUT, extra: true }), CHECKOUT);
+    assert.deepEqual(parseInvitationPayment({ ...INVITATION_PAYMENT, ownerId: "leak" }), {
+      ...INVITATION_PAYMENT,
+      status: "pending",
+    });
+    assert.deepEqual(
+      parseInvitationPayment({
+        paymentRequired: false,
+        status: null,
+        amountMinor: null,
+        currency: null,
+        paidAt: null,
+      }),
+      { paymentRequired: false, status: null, amountMinor: null, currency: null, paidAt: null },
+    );
+
+    for (const value of [
+      null,
+      {},
+      { ...CHECKOUT, redirectUrl: undefined },
+      { ...CHECKOUT, redirectUrl: 7 },
+      { ...CHECKOUT, amountMinor: Number.MAX_SAFE_INTEGER + 2 },
+    ]) {
+      assert.equal(parseCheckout(value), undefined, JSON.stringify(value));
+    }
+
+    for (const value of [
+      null,
+      {},
+      { ...INVITATION_PAYMENT, paymentRequired: undefined },
+      { ...INVITATION_PAYMENT, status: "PAID" },
+      { ...INVITATION_PAYMENT, currency: "" },
+      { ...INVITATION_PAYMENT, paidAt: undefined },
+    ]) {
+      assert.equal(parseInvitationPayment(value), undefined, JSON.stringify(value));
     }
   });
 });

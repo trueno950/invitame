@@ -335,7 +335,7 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "not-publishable":
     "Todavía no podemos publicar la invitación. Revisa lo que falta y vuelve a intentarlo.",
   "payment-required":
-    "Publicar requiere un pago que todavía no podemos procesar. Inténtalo de nuevo más tarde.",
+    "Para publicar esta invitación primero tienes que pagar tu paquete: usa el botón «Pagar y publicar» de la invitación.",
   "content-invalid": "Revisa los datos: hay un campo que no cumple el formato de la plantilla.",
   "content-unavailable":
     "No pudimos comprobar la plantilla de esta invitación. Inténtalo de nuevo en unos minutos.",
@@ -353,6 +353,22 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
     "No puedes dejar menos lugares de los que la persona ya confirmó. Ajusta primero su respuesta o pide que la cambie.",
   "qr-pass-unavailable":
     "Esta invitación no incluye el pase de acceso con QR. Se muestra con el paquete Deluxe.",
+  "payments-disabled":
+    "El cobro no está activo en este momento. Vuelve a cargar la invitación para publicarla sin costo.",
+  "payment-not-required":
+    "Tu paquete no tiene costo, así que puedes publicar la invitación sin pagar.",
+  "payment-price-unavailable":
+    "No pudimos calcular el precio de tu paquete. Inténtalo de nuevo en unos minutos.",
+  "payment-already-paid": "Esta invitación ya está pagada: puedes publicarla.",
+  "payment-package-locked":
+    "Esta invitación ya tiene un pago aprobado y su paquete no puede cambiar.",
+  "payment-provider-unavailable":
+    "El servicio de pagos no está disponible en este momento. Inténtalo de nuevo en unos minutos.",
+  "simulated-payment-disabled":
+    "El pago de prueba no está activo en este entorno, así que no podemos simularlo.",
+  "payment-not-found": "No encontramos ese pago.",
+  "payment-redirect-refused":
+    "No pudimos abrir la página de pago porque no corresponde a esta invitación. Vuelve a intentarlo.",
   unavailable: "No pudimos completar la acción. Inténtalo de nuevo en unos minutos.",
   "media-invalid-upload":
     "Revisa la foto: debe ser un archivo JPEG, PNG o WebP de hasta 10 MB, con 8000 píxeles por lado como máximo.",
@@ -435,6 +451,62 @@ export const PUBLISH_ISSUE_COPY = {
     "El paquete que elegiste ya no incluye lo que necesita esta plantilla. Elige otro paquete.",
   version: "La versión de la plantilla de esta invitación ya no está publicada.",
   other: "Hay un dato que no cumple lo que pide la plantilla. Revísalo y vuelve a intentarlo.",
+} as const;
+
+/**
+ * The creator's side of a payment (M7 T2; S1, S4): the «Pagar y publicar» panel of a draft, the return page the
+ * provider sends the browser back to, and the development-only simulated page. The state always comes from the API;
+ * the copy only names what the API already decided, and it addresses the customer with "tú" like the rest of the
+ * customer pages.
+ */
+export const PAYMENT_COPY = {
+  /** The panel of a draft that still has to pay its package. */
+  payHeading: "Pagar y publicar",
+  pay: "Pagar y publicar",
+  payHint:
+    "Tu paquete se cobra una sola vez. En cuanto se confirme el pago podrás publicar tu invitación.",
+  retryHeading: "Pagar y publicar",
+  retry: "Intentar de nuevo",
+  retryHint: "El pago anterior no se completó. Puedes intentarlo de nuevo con el mismo botón.",
+  /** The panel of a draft whose payment the API already reports as paid. */
+  paidHeading: "Pago confirmado",
+  paidHint: "Tu paquete está pagado: ya puedes publicar tu invitación.",
+  paidOn: (date: string) => `Pagado el ${date}`,
+  /** The amount line of every state that shows what the owner pays. */
+  total: (amount: string) => `Total: ${amount}`,
+  /** What the panel says instead of offering a checkout whose amount it could not read (fail closed). */
+  amountUnavailableNote:
+    "No pudimos leer el monto de tu pago. Vuelve a cargar la página para intentarlo de nuevo.",
+  /** Why the publish button of a draft is not available yet; the API's own 402 remains the guard (S1). */
+  publishBlockedHint:
+    "Para publicar esta invitación primero hay que pagar el paquete. Usa «Pagar y publicar» en el resumen.",
+  /** The return page `/cuenta/invitaciones/<id>/pago` (S4). */
+  returnTitle: "Pago de tu invitación | InvitaMe",
+  returnEyebrow: "Pago de tu invitación",
+  pendingHeading: "Estamos confirmando tu pago",
+  pendingBody:
+    "En cuanto el proveedor de pagos confirme el cobro, esta página mostrará tu pago como confirmado.",
+  refresh: "Actualizar",
+  paidReturnBody: "Recibimos tu pago. Vuelve a tu invitación para publicarla.",
+  backToInvitation: "Volver a la invitación",
+  failedHeading: "El pago no se completó",
+  failedBody:
+    "No se cobró tu paquete. Puedes intentarlo de nuevo cuando quieras; tu invitación sigue guardada como borrador.",
+  notRequiredHeading: "Esta invitación no necesita pago",
+  notRequiredBody: "Puedes publicarla desde su página, sin costo.",
+  unavailableHeading: "No pudimos consultar el pago",
+  unavailableBody: "Inténtalo de nuevo en unos minutos.",
+  /** The development-only simulated page (S4). */
+  simulatedTitle: "Pago de prueba | InvitaMe",
+  simulatedEyebrow: "Pago de prueba",
+  simulatedHeading: "Pago de prueba",
+  simulatedNote:
+    "Este pago es de prueba: no se cobra dinero real. Solo sirve para revisar el flujo de pago completo en este entorno.",
+  simulatePay: "Pagar",
+  simulateFail: "Simular rechazo",
+  simulatedUnavailableHeading: "Este pago de prueba no está disponible",
+  simulatedUnavailableBody:
+    "Puede que el pago ya no exista, que ya esté pagado o que este entorno no use el proveedor de prueba.",
 } as const;
 
 /**
