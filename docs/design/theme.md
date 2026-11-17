@@ -409,10 +409,11 @@ formal baptism.
 
 ## Guest invitation features
 
-Status: **current** (F2, F3, F6, F7, M6 G3; S3, S4, S7). The API decides which features an invitation shows: the
-pinned package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `WHATSAPP`, `MUSIC`,
-`GIFT_REGISTRY`, `RSVP`, `GUEST_LIST`, and `QR_PASS`, plus add-to-calendar, which is always on and is not a catalog
-feature; WhatsApp also needs a stored phone and music a stored allow-listed playlist link. The web renders one
+Status: **current** (F2, F3, F6, F7, M6 G3, M8 S3-S4; S3, S4, S7). The API decides which features an invitation
+shows: the pinned package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `WHATSAPP`,
+`MUSIC`, `GIFT_REGISTRY`, `RSVP`, `GUEST_LIST`, `QR_PASS`, and `GALLERY`, plus add-to-calendar, which is always on and
+is not a catalog feature; WhatsApp also needs a stored phone, music a stored allow-listed playlist link, and the
+gallery at least one stored photo. The web renders one
 themed **features block** in every layout, gates each layout's own gift registry block with the `giftRegistry` flag,
 and never reads a package or a feature name to choose a code path.
 
@@ -451,6 +452,24 @@ and never reads a package or a feature name to choose a code path.
   `features.giftRegistry` is true and the content has a value. A renderer called with no `features` prop — the
   template chooser previews and `lib/renderers/samples.ts` — keeps the content-alone rule it had before this batch.
   The birthday layouts declare no gift registry field, so they never render one.
+- Galería (M8 S3, S4): when the public read answers photos, the same block renders «Galería» — a two-column grid on a
+  phone and three columns from the small breakpoint up (`grid-cols-2 sm:grid-cols-3`) of the photos in the creator's
+  order. Every image is a plain `<img>` (not `next/image`: the bytes live on the API's public origin, which is not in
+  this app's image configuration), carries the `width`/`height` the API stored so the page reserves its space, and uses
+  `loading="lazy"` and `decoding="async"` so twelve photos never delay the invitation. The alt text is the creator's own,
+  or «Foto de la galería» when they wrote none. Each photo is a link to its full image with `target="_blank"` and
+  `rel="noopener noreferrer"`. The card, the grid, and the hairline around each photo use only the theme's variables
+  (`--inv-surface`, `--inv-soft`, `--inv-ink`, `--inv-accent`), and the section has no client script. An empty or absent
+  gallery renders nothing at all, so a package without `GALLERY` looks exactly as it did before this milestone.
+- Creator side of the media (M8 S2, S4): the draft page's content form adds «Subir foto» right under the template's own
+  photo link field — a file input that accepts only `image/jpeg,image/png,image/webp` and one submit — and the
+  «Galería» section below the content form when the pinned package grants `GALLERY`. Both post to server actions that
+  forward the file to the API as multipart; nothing here needs JavaScript, and the link field keeps working for a
+  creator who already hosts the photo elsewhere. A successful main-photo upload writes the answered URL into the
+  template's photo field, so every layout keeps rendering it unchanged. The gallery section shows the photo count of
+  twelve, one upload form, and per photo its thumbnail, its alt text (≤ 120 characters), «Subir», «Bajar», and
+  «Quitar», each its own small form so one submit never carries another control's value. An archived invitation shows
+  the photos with no form, and a media read that fails leaves the rest of the draft editable with one short note.
 - Attendance (M6 G3; S1, S4): when the public read says `features.rsvp.mode` is `open`, the same block ends with
   «Confirma tu asistencia»: the guest's name, «¿Asistirás?» with sí/no radios, the party size from 1 to the
   invitation's own limit, an optional phone, an optional message of at most 280 characters, and one reserved field
@@ -618,6 +637,8 @@ JavaScript.
 | Invitation theme tokens, shared content parser, layout parsers and registries | `apps/web/lib/renderers/` |
 | Themed invitation components, display-font bridge, and motifs | `apps/web/app/_components/renderers/` |
 | Themed pages | `apps/web/app/ingresar/`, `apps/web/app/cuenta/`, `apps/web/app/page.tsx` |
+| Invitation media (upload forms, gallery manager, creator actions) | `apps/web/app/cuenta/invitaciones/_components/media-section.tsx`, `apps/web/lib/customer/invitation-media.ts` |
+| Media API client and its parsers | `apps/web/lib/server/media-api.ts` |
 | Customer workspace (invitation pages) | `apps/web/app/cuenta/invitaciones/`, `apps/web/app/_components/customer-workspace-shell.tsx` |
 | Administration classes and frames | `apps/web/app/admin/_components/` |
 | Landing sections, styles, and drawings | `apps/web/app/_components/landing/` |

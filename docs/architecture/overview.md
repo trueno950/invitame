@@ -778,6 +778,83 @@ An invitation points to `TemplateVersion`, not to mutable `Template` metadata. P
 state is publicly visible; it does not rewrite the version snapshot. Public rendering must fetch the required data
 without an N+1 query pattern and must fail closed for unpublished, missing, or unauthorized resources.
 
+## Invitation media (current)
+
+Implemented by Milestone 8 (S1, S3, S4). Creators upload the invitation's main photo and, when the pinned package
+grants `GALLERY`, up to twelve gallery photos. Binaries live in object storage, never in PostgreSQL and never on an
+ephemeral filesystem in production.
+
+- Feature module `apps/api/src/media/`: `domain` owns the pure upload rules (magic-byte format detection, 10 MB,
+  8000 px per side, the 2000 px output target, the 120-character alt text, the key format and the two limits);
+  `application` owns the `MediaStorage` and `ImageProcessor` ports, the `MediaRepository` port, and the use cases;
+  `infrastructure` holds both storage adapters (`local`, `s3`), the `sharp` processor, and the Prisma repository;
+  `presentation` holds the owner routes and the one public serving route.
+- `MediaStorage` is the provider-neutral port (put, get as a stream with its size, idempotent delete, and a key list
+  for cleanup). `MEDIA_STORAGE_DRIVER` selects the adapter: `local` in development and tests, refused at startup in
+  production; `s3` for any S3-compatible provider (R2, AWS S3, MinIO), configured from the environment and failing
+  closed until a bucket is set. The credential never leaves the adapter, and no provider message, endpoint, bucket,
+  key, or signed URL reaches a log or a response.
+- Uploads: `POST /invitations/:id/media` is multipart and accepts only `file`, `kind` (`main-photo` or `gallery`),
+  and `alt`, with an approximately 11 MB body bound (413 past it); every other route keeps its existing JSON body
+  limit. The format is decided from magic bytes, never the filename or the client MIME. The image is re-encoded to
+  WebP with its longest side at most 2000 px and its metadata stripped (EXIF, GPS), so no location leaks.
+- The order of side effects is the retry policy: process, put the object, insert the row; if the insert fails, the
+  object is deleted best effort and logged by event name only. Deletion marks the row `deleted` first and deletes the
+  object after it; a failed object delete leaves a row for `pnpm media:cleanup`, which also removes objects whose rows
+  are missing. It is idempotent and supports `--dry-run`.
+- Limits (S4), enforced in the transaction that writes a row and serialized on the invitation: one current main
+  photo per invitation (replacing marks the previous one deleted and deletes its object), at most 12 gallery photos,
+  at most 40 stored assets. Ownership and the archived refusal are in the same statement that reads or writes the
+  row, so another customer's invitation or asset answers one 404 (A4).
+- REST: owner routes `GET`/`POST /invitations/:id/media`, `PATCH`/`DELETE /invitations/:id/media/:assetId` behind the
+  session guard, and the public `GET /media/:assetId`. That route is `@Public()`: a published invitation's image is
+  public and cached for a year as immutable, the owner sees a draft with `private, no-store`, and every other case —
+  missing, deleted, unpublished, foreign, or an object that is gone — is the same 404. It answers
+  `Content-Type: image/webp`, `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`, and
+  `Cross-Origin-Resource-Policy: cross-origin`; the session is read only when the invitation is not published.
+- URLs are absolute API URLs built from the validated `MEDIA_PUBLIC_BASE_URL` (`<origin>/media/<assetId>`), never a
+  provider URL. `GALLERY` joins the implemented feature allow-list, and the public read gains
+  `features.gallery: [{ url, width, height, alt }]` in position order — an empty array when the package does not
+  grant `GALLERY`, so the shape is stable and a layout always reads an array. The public projection reads the gallery
+  through the `InvitationGalleryReader` port that the media module implements, so the invitations module never
+  imports a media repository; the owner read exposes media only through the media routes.
+- Configuration and operations: [`../development/media-storage.md`](../development/media-storage.md) documents every
+  variable, the production checklist, the serving headers, and the cleanup command.
+- Web (M8 S2, S4): `apps/web/lib/server/media-api.ts` is the web server's client of the four owner routes. It forwards
+  only Better Auth's cookies and the proxy secret, parses every answer strictly (an absolute `http`/`https` URL without
+  credentials, positive dimensions, a bounded alt text, a non-negative position), and maps each documented refusal to a
+  typed outcome that never carries a body. The upload is multipart built on the server from the bytes the browser sent:
+  the part is named `photo`, declared `application/octet-stream`, and carries no browser filename, so the creator's own
+  file name and the browser's claimed MIME never leave the web. The 10 MB bound is enforced there before the body is
+  read, and again before it is sent; one upload gets a 60-second deadline instead of the shared 10.
+- Web actions (M8 S2, S3, S4): `apps/web/lib/customer/invitation-media.ts` turns one submitted form into the API call
+  and the page's own redirect. A main photo is uploaded with `kind: main-photo` and then its answered URL is written
+  into the template's `mainPhoto` content field through the same content save the editor uses, so every layout keeps
+  rendering it unchanged. The gallery actions upload one photo, replace one alt text, move one photo one place (the
+  API's `position` is the index it moves to, computed from the owner's own read, never from the browser), and remove
+  one photo. Alt text over 120 characters and a file over 10 MB are refused on the web before any request. Each action
+  is a server action (`apps/web/app/cuenta/invitaciones/actions.ts`), so the form works without JavaScript, and one
+  unexpected failure is logged once as `invitation_media_call_failed` with the error class, the client's failure kind,
+  and the class of its cause: never an alt text, a file name, an id, a cookie, or a response body.
+- Web UI (M8 S2, S4): the draft page's content form carries «Subir foto» under the template's photo link field — its
+  controls are associated with their own form element through the HTML `form` attribute, because a form cannot nest
+  another one — and the «Galería» section appears below the content form only when the owner read lists `GALLERY` in
+  `availableFeatures`. The gallery shows the count of twelve, one upload form, and per photo its thumbnail, its alt
+  text, «Subir», «Bajar», and «Quitar». An archived invitation shows the photos with no form; a failed media read keeps
+  the rest of the draft editable with one short note.
+- Web rendering (M8 S3, S4): the public read's `features.gallery` is parsed strictly (a list of at most twelve photos,
+  each an absolute API URL with positive dimensions and a bounded alt text) and handed to the shared features block,
+  which renders «Galería» as a `grid-cols-2 sm:grid-cols-3` grid of plain `<img>` elements with the API's `width` and
+  `height`, `loading="lazy"`, `decoding="async"`, and an `<a target="_blank" rel="noopener noreferrer">` around each
+  photo. `next/image` is not used, so the API origin needs no entry in an image configuration; the web sends no
+  `Content-Security-Policy` today, and the API's `Cross-Origin-Resource-Policy: cross-origin` is what lets the browser
+  embed the image from the other origin. `GALLERY` also joined the web's mirror of the gated feature keys, because the
+  owner read refuses a body that names a key this deployment does not know.
+- Browser harness (M8 S2, S4): the end-to-end API process already runs with `NODE_ENV=development`
+  (`apps/web/playwright.config.ts`), which is what keeps the local media driver allowed and the API starting without an
+  S3 bucket. Serving correct media URLs there additionally needs `MEDIA_PUBLIC_BASE_URL` set to the harness's API origin
+  (`API_ORIGIN`, port 3411), because the API builds absolute URLs from its own configuration.
+
 ## Renderer registry and `componentKey`
 
 `componentKey` is an identifier, not a module path, JavaScript expression, template string, or code blob. The

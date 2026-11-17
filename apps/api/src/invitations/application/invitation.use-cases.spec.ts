@@ -843,6 +843,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       "RSVP",
       "WHATSAPP",
       "MUSIC",
+      "GALLERY",
       "CALENDAR",
     ]);
     // The owner id never enters a response, and the stored row carries the E.164 value and the link.
@@ -905,7 +906,13 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       });
 
       assert.equal(updated?.featureSettings.playlistUrl, null, String(cleared));
-      assert.deepEqual(updated?.availableFeatures, ["COUNTDOWN", "MAP", "RSVP", "CALENDAR"]);
+      assert.deepEqual(updated?.availableFeatures, [
+        "COUNTDOWN",
+        "MAP",
+        "RSVP",
+        "GALLERY",
+        "CALENDAR",
+      ]);
       assert.equal(fixture.repository.rows[0]?.playlistUrl, null);
     }
   });
@@ -1335,6 +1342,7 @@ describe("GetPublicInvitationUseCase", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     });
@@ -1440,6 +1448,7 @@ describe("GetPublicInvitationUseCase", () => {
           whatsapp: null,
           music: null,
           giftRegistry: packageKey === "deluxe",
+          gallery: [],
           // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form (M6 S4).
           rsvp: {
             mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
@@ -1472,6 +1481,7 @@ describe("GetPublicInvitationUseCase", () => {
           // Basic grants no MUSIC; Premium and Deluxe do, and both get the service the link names.
           music: packageKey === "basic" ? null : { url: PLAYLIST, provider: "spotify" },
           giftRegistry: packageKey === "deluxe",
+          gallery: [],
           rsvp: {
             mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
             deadline: null,
@@ -1486,6 +1496,7 @@ describe("GetPublicInvitationUseCase", () => {
       assert.deepEqual(Object.keys(page?.features ?? {}).sort(), [
         "calendar",
         "countdown",
+        "gallery",
         "giftRegistry",
         "map",
         "music",
@@ -1517,6 +1528,7 @@ describe("GetPublicInvitationUseCase", () => {
       whatsapp: null,
       music: { url: PLAYLIST, provider: "spotify" },
       giftRegistry: false,
+      gallery: [],
       rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
     });
     assert.equal(JSON.stringify(page).includes(PHONE), false);

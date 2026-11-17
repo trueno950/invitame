@@ -385,7 +385,7 @@ describe("feature gating (S4)", () => {
       ...gate,
     });
 
-  it("implements exactly COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, GUEST_LIST, and QR_PASS, with CALENDAR always added", () => {
+  it("implements exactly COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, GUEST_LIST, QR_PASS, and GALLERY, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
       "COUNTDOWN",
       "MAP",
@@ -395,10 +395,12 @@ describe("feature gating (S4)", () => {
       "GIFT_REGISTRY",
       "GUEST_LIST",
       "QR_PASS",
+      "GALLERY",
     ]);
     assert.equal(CALENDAR_FEATURE_KEY, "CALENDAR");
-    // A catalog feature this batch does not implement never becomes an available feature.
-    assert.deepEqual(gated(["GALLERY"]), ["CALENDAR"]);
+    // The photo gallery arrived with M8 (S3, S4); a key this batch does not implement never becomes a feature.
+    assert.deepEqual(gated(["GALLERY"]), ["GALLERY", "CALENDAR"]);
+    assert.deepEqual(gated(["VIDEO"]), ["CALENDAR"]);
     // The guest list and its QR pass are implemented by M6 G2 (S3, S4).
     assert.deepEqual(gated(["GUEST_LIST", "QR_PASS"]), ["GUEST_LIST", "QR_PASS", "CALENDAR"]);
   });
@@ -417,6 +419,7 @@ describe("feature gating (S4)", () => {
       "RSVP",
       "WHATSAPP",
       "MUSIC",
+      "GALLERY",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe), [
@@ -428,6 +431,7 @@ describe("feature gating (S4)", () => {
       "GIFT_REGISTRY",
       "GUEST_LIST",
       "QR_PASS",
+      "GALLERY",
       "CALENDAR",
     ]);
   });
@@ -439,6 +443,7 @@ describe("feature gating (S4)", () => {
       "MAP",
       "RSVP",
       "MUSIC",
+      "GALLERY",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe, null), [
@@ -449,6 +454,7 @@ describe("feature gating (S4)", () => {
       "GIFT_REGISTRY",
       "GUEST_LIST",
       "QR_PASS",
+      "GALLERY",
       "CALENDAR",
     ]);
   });
@@ -459,6 +465,7 @@ describe("feature gating (S4)", () => {
       "MAP",
       "RSVP",
       "WHATSAPP",
+      "GALLERY",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe, PHONE, null), [
@@ -469,6 +476,7 @@ describe("feature gating (S4)", () => {
       "GIFT_REGISTRY",
       "GUEST_LIST",
       "QR_PASS",
+      "GALLERY",
       "CALENDAR",
     ]);
   });
@@ -488,6 +496,7 @@ describe("feature gating (S4)", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     );
@@ -518,6 +527,7 @@ describe("feature gating (S4)", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     );
@@ -534,6 +544,7 @@ describe("feature gating (S4)", () => {
         whatsapp: { phone: PHONE },
         music: null,
         giftRegistry: false,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     );
@@ -550,6 +561,7 @@ describe("feature gating (S4)", () => {
         whatsapp: null,
         music: { url: PLAYLIST, provider: "spotify" },
         giftRegistry: true,
+        gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
     );

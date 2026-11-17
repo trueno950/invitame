@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { join, resolve } from "node:path";
 
 export const NODE_ENVIRONMENT = {
   DEVELOPMENT: "development",
@@ -35,6 +36,48 @@ export interface ClientIpEnvironment {
   trustedProxies: readonly string[];
 }
 
+/** The storage adapter that serves invitation media (M8 S4). */
+export const MEDIA_STORAGE_DRIVER = {
+  LOCAL: "local",
+  S3: "s3",
+} as const;
+
+export type MediaStorageDriver = (typeof MEDIA_STORAGE_DRIVER)[keyof typeof MEDIA_STORAGE_DRIVER];
+
+/**
+ * The settings of the S3-compatible storage adapter (M8 S4). `endpoint` makes the same adapter work with
+ * Cloudflare R2, AWS S3, or MinIO. The credential is carried here and never logged, echoed, or returned.
+ */
+export interface MediaS3Environment {
+  endpoint: string;
+  region: string;
+  bucket: string;
+  /** Access key id; never logged or echoed in error messages. */
+  accessKeyId: string;
+  /** Secret access key; never logged or echoed in error messages. */
+  secretAccessKey: string;
+  /** Whether the endpoint needs path-style addressing (MinIO does; R2 and AWS S3 do not). */
+  forcePathStyle: boolean;
+}
+
+/**
+ * Where invitation media lives and the absolute origin its public URLs are built from (M8 S4). Each variant
+ * carries only the settings its adapter needs, so an unused variable is read only when it is in use.
+ */
+export type MediaEnvironment =
+  | {
+      driver: typeof MEDIA_STORAGE_DRIVER.LOCAL;
+      /** Absolute directory the local adapter writes under; development and test only. */
+      directory: string;
+      /** The API's public origin, used to build absolute `/media/<id>` URLs. Never the provider's URL. */
+      publicBaseUrl: string;
+    }
+  | {
+      driver: typeof MEDIA_STORAGE_DRIVER.S3;
+      publicBaseUrl: string;
+      s3: MediaS3Environment;
+    };
+
 export interface RuntimeEnvironment {
   NODE_ENV: NodeEnvironment;
   PORT: number;
@@ -65,9 +108,23 @@ export interface RuntimeEnvironment {
    * removed. Optional everywhere; it needs the current secret and follows its rules.
    */
   AUTH_PROXY_SECRET_PREVIOUS: string | undefined;
+  /** Invitation media storage and the public origin its URLs are built from (M8 S4). */
+  MEDIA: MediaEnvironment;
 }
 
 const DEFAULT_PORT = 3001;
+/**
+ * The development origin of the API itself: media URLs are absolute and point at this API, never at the storage
+ * provider (M8 S4). Production must name its own origin, so a wrong default can never leak into a deployment.
+ */
+const DEFAULT_MEDIA_PUBLIC_BASE_URL = "http://localhost:3001";
+/** A gitignored directory inside `apps/api`, so local uploads never reach the repository. */
+const DEFAULT_LOCAL_MEDIA_DIRECTORY = join(__dirname, "..", "..", ".local-media");
+/** S3 bucket names: lower-case letters, digits, dots, and hyphens, 3 to 63 characters. */
+const S3_BUCKET_PATTERN = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+/** An S3 region name, such as `auto` (R2) or `us-east-1`. */
+const S3_REGION_PATTERN = /^[a-z0-9-]+$/;
+const BOOLEAN_VALUES: Readonly<Record<string, boolean>> = { true: true, false: false };
 const DEFAULT_EMAIL_TRANSPORT: Record<NodeEnvironment, EmailTransport> = {
   development: EMAIL_TRANSPORT.MAILPIT,
   test: EMAIL_TRANSPORT.MEMORY,
@@ -421,6 +478,102 @@ function parseClientIpEnvironment(
   return { header, trustedProxies };
 }
 
+function isMediaStorageDriver(value: string): value is MediaStorageDriver {
+  return Object.values(MEDIA_STORAGE_DRIVER).some((driver) => driver === value);
+}
+
+/**
+ * Invitation media storage (M8 S4). The local driver is development and test only and is refused in production,
+ * because an ephemeral filesystem would lose the photos; production therefore defaults to the S3-compatible
+ * adapter and fails closed until its bucket is configured. Development and test need no new variable at all.
+ * Every message names a variable and never echoes its value, because two of them are credentials.
+ */
+function parseMediaEnvironment(
+  environment: Record<string, unknown>,
+  nodeEnvironment: NodeEnvironment,
+): MediaEnvironment {
+  const publicBaseUrl = validateHttpOrigin(
+    "MEDIA_PUBLIC_BASE_URL",
+    readOptionalString(environment.MEDIA_PUBLIC_BASE_URL) ?? DEFAULT_MEDIA_PUBLIC_BASE_URL,
+  );
+
+  if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION && !usesHttps(publicBaseUrl)) {
+    throw new Error("MEDIA_PUBLIC_BASE_URL must use HTTPS in production.");
+  }
+
+  const driver =
+    readOptionalString(environment.MEDIA_STORAGE_DRIVER) ??
+    (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION
+      ? MEDIA_STORAGE_DRIVER.S3
+      : MEDIA_STORAGE_DRIVER.LOCAL);
+
+  if (!isMediaStorageDriver(driver)) {
+    throw new Error("MEDIA_STORAGE_DRIVER must be local or s3.");
+  }
+
+  if (driver === MEDIA_STORAGE_DRIVER.LOCAL) {
+    if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION) {
+      throw new Error("MEDIA_STORAGE_DRIVER must be s3 in production.");
+    }
+
+    return {
+      driver,
+      directory: resolve(
+        readOptionalString(environment.MEDIA_LOCAL_DIRECTORY) ?? DEFAULT_LOCAL_MEDIA_DIRECTORY,
+      ),
+      publicBaseUrl,
+    };
+  }
+
+  const endpoint = validateHttpOrigin(
+    "MEDIA_S3_ENDPOINT",
+    readRequiredString(environment, "MEDIA_S3_ENDPOINT"),
+  );
+
+  if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION && !usesHttps(endpoint)) {
+    throw new Error("MEDIA_S3_ENDPOINT must use HTTPS in production.");
+  }
+
+  const region = readRequiredString(environment, "MEDIA_S3_REGION");
+  if (!S3_REGION_PATTERN.test(region)) {
+    throw new Error("MEDIA_S3_REGION must be a region name such as us-east-1 or auto.");
+  }
+
+  const bucket = readRequiredString(environment, "MEDIA_S3_BUCKET");
+  if (!S3_BUCKET_PATTERN.test(bucket)) {
+    throw new Error("MEDIA_S3_BUCKET must be a valid bucket name.");
+  }
+
+  const accessKeyId = readRequiredString(environment, "MEDIA_S3_ACCESS_KEY_ID");
+  const secretAccessKey = readRequiredString(environment, "MEDIA_S3_SECRET_ACCESS_KEY");
+  const forcePathStyleValue = readOptionalString(environment.MEDIA_S3_FORCE_PATH_STYLE) ?? "false";
+  const forcePathStyle = BOOLEAN_VALUES[forcePathStyleValue];
+
+  if (forcePathStyle === undefined) {
+    throw new Error("MEDIA_S3_FORCE_PATH_STYLE must be true or false.");
+  }
+
+  return {
+    driver,
+    publicBaseUrl,
+    s3: { endpoint, region, bucket, accessKeyId, secretAccessKey, forcePathStyle },
+  };
+}
+
+/**
+ * The media settings alone, for a command that needs storage but no web or auth configuration (`media:cleanup`).
+ * `NODE_ENV` is still required, because it decides whether the local driver is allowed at all.
+ */
+export function validateMediaEnvironment(environment: Record<string, unknown>): MediaEnvironment {
+  const nodeEnvironment = readOptionalString(environment.NODE_ENV);
+
+  if (nodeEnvironment === undefined || !isNodeEnvironment(nodeEnvironment)) {
+    throw new Error("NODE_ENV must be development, production, or test.");
+  }
+
+  return parseMediaEnvironment(environment, nodeEnvironment);
+}
+
 export function validateEnvironment(environment: Record<string, unknown>): RuntimeEnvironment {
   // No default (S56, L79): with `NODE_ENV` unset, every production rule would be off. A missing value
   // fails the startup, like an invalid one, and neither message echoes the value.
@@ -451,6 +604,7 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     AUTH_CLIENT_IP: parseClientIpEnvironment(environment, nodeEnvironment),
     AUTH_PROXY_SECRET: parseProxySecret(environment, nodeEnvironment),
     AUTH_PROXY_SECRET_PREVIOUS: parsePreviousProxySecret(environment),
+    MEDIA: parseMediaEnvironment(environment, nodeEnvironment),
   };
 
   // Cross-field rules run last, so every single-variable error keeps its precedence.

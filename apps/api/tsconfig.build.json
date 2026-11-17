@@ -5,5 +5,13 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo",
     "types": ["node"]
   },
-  "exclude": ["dist", "node_modules", "prisma", "test", "**/*.spec.ts", "**/*.db-spec.ts"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "prisma",
+    "scripts",
+    "test",
+    "**/*.spec.ts",
+    "**/*.db-spec.ts"
+  ]
 }

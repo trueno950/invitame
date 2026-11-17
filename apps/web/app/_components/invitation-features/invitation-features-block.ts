@@ -5,6 +5,12 @@ import { calendarEventFor, googleCalendarUrl } from "../../../lib/invitation-fea
 import { countdownParts } from "../../../lib/invitation-features/countdown.ts";
 import type { EventFacts, EventPlace } from "../../../lib/invitation-features/event-facts.ts";
 import {
+  GALLERY_SECTION_HINT,
+  GALLERY_SECTION_TITLE,
+  type GalleryPhoto,
+  galleryPhotoAlt,
+} from "../../../lib/invitation-features/gallery.ts";
+import {
   type GuestPassBlockView,
   type GuestRsvpBlockView,
   hasAnyFeature,
@@ -367,6 +373,50 @@ function guestRsvpSection(
 }
 
 /**
+ * The gallery of one invitation (M8 S3, S4): a responsive grid — two columns on a phone, three from the small
+ * breakpoint up — of the photos the API answered, in the creator's order. Every image reserves the dimensions the API
+ * stored, so the page does not jump while the photos load, and it loads lazily and decodes off the main thread. Each
+ * photo links to its full image in a new tab without handing the opener to the other document, and there is no client
+ * script at all: the grid is plain markup over the theme's own variables.
+ */
+function gallerySection(photos: readonly GalleryPhoto[]): ReactElement {
+  return h(
+    "div",
+    { key: "gallery", "data-feature": "gallery", className: SURFACE_CARD },
+    h("h3", { className: FEATURE_TITLE }, GALLERY_SECTION_TITLE),
+    h("p", { className: HINT }, GALLERY_SECTION_HINT),
+    h(
+      "div",
+      {
+        "data-gallery-grid": "",
+        className: "mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3",
+      },
+      photos.map((photo) =>
+        h(
+          "a",
+          {
+            key: photo.url,
+            href: photo.url,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            className: "block overflow-hidden rounded-lg ring-1 ring-(--inv-soft)",
+          },
+          h("img", {
+            src: photo.url,
+            alt: galleryPhotoAlt(photo.alt),
+            width: photo.width,
+            height: photo.height,
+            loading: "lazy",
+            decoding: "async",
+            className: "h-auto w-full",
+          }),
+        ),
+      ),
+    ),
+  );
+}
+
+/**
  * The access pass of a confirmed guest (M6 G4; S4): the SVG QR drawn on the server, handed to an `<img>` as a data
  * URL, so the page injects no markup and the image document cannot run script. A pass whose URL cannot be drawn is
  * not shown at all, instead of breaking the guest's page.
@@ -562,6 +612,11 @@ export function InvitationFeaturesBlock({
         ),
       ),
     );
+  }
+
+  // The creator's own photos, before the guest's own cards: nothing to decide, so they never push an action away.
+  if (features.gallery !== undefined && features.gallery.length > 0) {
+    sections.push(gallerySection(features.gallery));
   }
 
   // The guest's own block first: their greeting and their seats, before anything else the invitation shows (G4).

@@ -101,6 +101,8 @@ export function publicFeatureBlock(
     whatsapp: invitation.features.whatsapp,
     music: invitation.features.music,
     giftRegistry: invitation.features.giftRegistry,
+    // The API gates the gallery and answers it in the creator's order; the block renders it as it comes (M8 S4).
+    gallery: invitation.features.gallery,
     ...(rsvp === undefined ? {} : { rsvp }),
     ...(guest === undefined ? {} : { guest }),
   };

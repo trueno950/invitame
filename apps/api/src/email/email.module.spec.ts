@@ -23,6 +23,14 @@ function baseEnvironment(overrides: Record<string, unknown>): Record<string, unk
     DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
     BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
     AUTH_BASE_URL: "http://localhost:3000",
+    // M8 S4: production has no local media driver, so a valid production environment names its bucket.
+    MEDIA_STORAGE_DRIVER: "s3",
+    MEDIA_PUBLIC_BASE_URL: "https://api.example.test",
+    MEDIA_S3_ENDPOINT: "https://account.r2.example.test",
+    MEDIA_S3_REGION: "auto",
+    MEDIA_S3_BUCKET: "invitame-media",
+    MEDIA_S3_ACCESS_KEY_ID: "test-access-key-id",
+    MEDIA_S3_SECRET_ACCESS_KEY: "test-secret-access-key",
     ...overrides,
   };
 }

@@ -44,6 +44,20 @@ enum InvitationStatus {
   PUBLISHED
 }
 
+// The two kinds of invitation media (M8 S4). The stored labels are the contract's own; the Prisma names are only
+// the client-side identifiers, so no code compares an enum name.
+enum MediaAssetKind {
+  MAIN_PHOTO @map("main-photo")
+  GALLERY    @map("gallery")
+}
+
+// The lifecycle of one media asset (M8 S4): `deleted` marks a row whose object may still exist until the cleanup
+// command removes it, so the delete is recoverable and idempotent.
+enum MediaAssetStatus {
+  STORED  @map("stored")
+  DELETED @map("deleted")
+}
+
 // Better Auth `user` model. Better Auth's `name` field is mapped onto `displayName`.
 // `role` is server-side only and never accepted as client input.
 model User {
@@ -284,6 +298,7 @@ model Invitation {
   featureSettings InvitationFeatureSettings?
   rsvpResponses   RsvpResponse[]
   guests          Guest[]
+  mediaAssets     MediaAsset[]
 
   @@index([ownerId])
 }
@@ -345,6 +360,37 @@ model RsvpResponse {
   guest      Guest?     @relation(fields: [guestId], references: [id], onDelete: Restrict)
 
   @@unique([invitationId, dedupeKey])
+}
+
+// One uploaded photo of one invitation (M8 S4). The binary never lives here: `storageKey` names the object in the
+// storage adapter, and it is unique because it embeds the generated asset id. `kind` is `main-photo` (at most one
+// current per invitation, enforced by the partial unique index the migration adds) or `gallery` (ordered by
+// `position`, at most 12 stored); an invitation holds at most 40 stored assets, enforced by the application in the
+// transaction that writes a row, serialized on the invitation. `alt` is optional and at most 120 characters.
+// Migration 20261120120000_add_media_assets adds what Prisma cannot express: the CHECK constraints
+// "MediaAsset_byteSize_range", "MediaAsset_dimensions_range", "MediaAsset_mime_webp",
+// "MediaAsset_position_matches_kind", "MediaAsset_alt_length", and "MediaAsset_storageKey_format", plus the partial
+// unique index "MediaAsset_one_stored_main_photo" and the index on (invitationId, kind, status, position).
+model MediaAsset {
+  id           String           @id @default(uuid()) @db.Uuid
+  invitationId String           @db.Uuid
+  kind         MediaAssetKind
+  // `invitations/<invitationId>/<assetId>.webp`: built by the API from validated ids only (S4).
+  storageKey   String           @unique @db.VarChar(200)
+  mime         String           @default("image/webp") @db.VarChar(64)
+  byteSize     Int
+  width        Int
+  height       Int
+  // The gallery order; NULL for the one main photo (S4). The CHECK keeps the two kinds apart.
+  position     Int?
+  alt          String?          @db.VarChar(120)
+  status       MediaAssetStatus @default(STORED)
+  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime         @updatedAt @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+
+  @@index([invitationId, kind, status, position])
 }
 
 // One person on an invitation's guest list (M6 G2; S1, S3, S4). The owner reaches a guest only through the

@@ -4,6 +4,11 @@ import { connection } from "next/server";
 
 import { INVITATION_COPY, INVITATION_ERROR_COPY } from "../../../../lib/customer/copy.ts";
 import { featureSettingsView } from "../../../../lib/customer/invitation-features.ts";
+import {
+  type MediaSectionView,
+  mainPhotoUrl,
+  mediaSectionView,
+} from "../../../../lib/customer/invitation-media.ts";
 import { rsvpSettingsView } from "../../../../lib/customer/invitation-rsvp.ts";
 import {
   contentSections,
@@ -28,6 +33,11 @@ import {
 import { ContentForm } from "../_components/content-form.tsx";
 import { ContentSummary } from "../_components/content-summary.tsx";
 import { FeaturesForm, FeaturesSummary } from "../_components/features-form.tsx";
+import {
+  GallerySection,
+  GalleryUnavailable,
+  GalleryUnreadable,
+} from "../_components/media-section.tsx";
 import { Notices } from "../_components/notices.tsx";
 import {
   RsvpSettingsForm,
@@ -37,13 +47,19 @@ import {
 import { StatusBadge } from "../_components/status-badge.tsx";
 import { invitations } from "../_lib/api.ts";
 import { attempt, type Loaded, resolveRead } from "../_lib/load.ts";
+import { media } from "../_lib/media.ts";
 import {
   archiveInvitationAction,
+  moveGalleryPhotoAction,
   publishInvitationAction,
+  removeGalleryPhotoAction,
+  saveGalleryAltAction,
   saveInvitationContentAction,
   saveInvitationFeaturesAction,
   saveRsvpSettingsAction,
   unpublishInvitationAction,
+  uploadGalleryPhotoAction,
+  uploadMainPhotoAction,
 } from "../actions.ts";
 
 export const metadata: Metadata = {
@@ -94,6 +110,54 @@ function RsvpSectionBlock({
   ) : (
     <RsvpSettingsSummary view={view} />
   );
+}
+
+/**
+ * The «Galería» of one draft (M8 S3, S4): the section of a package that grants `GALLERY`, the note of one that does
+ * not, or the note of a media read that failed. The read is the owner's own media route, so it answers only this
+ * invitation's stored photos; an archived invitation shows them without any form, and a failed read never hides the
+ * rest of the draft.
+ */
+function GallerySectionBlock({
+  state,
+}: {
+  state: MediaSectionView | "unavailable" | "unreadable";
+}) {
+  if (state === "unavailable") {
+    return <GalleryUnavailable />;
+  }
+  if (state === "unreadable") {
+    return <GalleryUnreadable />;
+  }
+
+  return (
+    <GallerySection
+      actions={{
+        upload: uploadGalleryPhotoAction,
+        alt: saveGalleryAltAction,
+        move: moveGalleryPhotoAction,
+        remove: removeGalleryPhotoAction,
+      }}
+      view={state}
+    />
+  );
+}
+
+/**
+ * The media read of one draft, as the section renders it (M8 S4). The owner's media route answers only this
+ * invitation's stored photos; a refusal or an unexpected failure becomes the section's own short note, so a storage
+ * outage never hides the content the creator can still edit.
+ */
+async function gallerySection(
+  invitation: OwnedInvitation,
+): Promise<MediaSectionView | "unreadable"> {
+  try {
+    const assets = await media.list(invitation.id);
+
+    return assets.ok ? mediaSectionView(invitation, assets.value) : "unreadable";
+  } catch {
+    return "unreadable";
+  }
 }
 
 /**
@@ -167,6 +231,12 @@ export default async function InvitationDetailPage({
   const rsvp = features.showRsvp
     ? resolveRead(await attempt(() => invitations.readRsvp(invitation.id)))
     : undefined;
+  // The «Galería» is offered only when the package grants `GALLERY`, and it is read after the catalog because the
+  // owner read already names the gated keys (M8 S3, S4). A failed read keeps the rest of the draft editable.
+  const mediaState: MediaSectionView | "unavailable" | "unreadable" =
+    invitation.availableFeatures.includes("GALLERY")
+      ? await gallerySection(invitation)
+      : "unavailable";
   const pinned =
     templates === undefined
       ? undefined
@@ -217,6 +287,12 @@ export default async function InvitationDetailPage({
                 action={saveInvitationContentAction}
                 content={invitation.content}
                 id={invitation.id}
+                photoUpload={{
+                  id: invitation.id,
+                  formId: `media-main-photo-${invitation.id}`,
+                  currentUrl: mainPhotoUrl(invitation.content),
+                  action: uploadMainPhotoAction,
+                }}
                 sections={contentSections(pinned.fields)}
               />
             ) : (
@@ -224,6 +300,8 @@ export default async function InvitationDetailPage({
                 <ContentSummary content={invitation.content} rows={rows} />
               </div>
             )}
+
+            <GallerySectionBlock state={mediaState} />
 
             {features.editable ? (
               <FeaturesForm action={saveInvitationFeaturesAction} view={features} />

@@ -9,6 +9,17 @@ const SECRET = randomBytes(32).toString("base64url");
 const PROXY_SECRET = randomBytes(32).toString("base64url");
 const PRODUCTION_ORIGIN = "https://app.example.test";
 
+/** A valid production media configuration: production refuses the local driver, so every case needs a bucket. */
+const PRODUCTION_MEDIA: Readonly<Record<string, string>> = {
+  MEDIA_STORAGE_DRIVER: "s3",
+  MEDIA_PUBLIC_BASE_URL: "https://api.example.test",
+  MEDIA_S3_ENDPOINT: "https://account.r2.example.test",
+  MEDIA_S3_REGION: "auto",
+  MEDIA_S3_BUCKET: "invitame-media",
+  MEDIA_S3_ACCESS_KEY_ID: "test-access-key-id",
+  MEDIA_S3_SECRET_ACCESS_KEY: "test-secret-access-key",
+};
+
 function environmentWith(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const environment: Record<string, unknown> = {
     NODE_ENV: "test",
@@ -25,6 +36,12 @@ function environmentWith(overrides: Record<string, unknown> = {}): Record<string
       delete environment[name];
     } else {
       environment[name] = value;
+    }
+  }
+
+  if (environment.NODE_ENV === "production") {
+    for (const [name, value] of Object.entries(PRODUCTION_MEDIA)) {
+      environment[name] ??= value;
     }
   }
 

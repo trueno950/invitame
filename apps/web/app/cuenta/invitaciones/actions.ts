@@ -10,6 +10,14 @@ import {
   rotateGuestLink,
   updateGuestDetails,
 } from "../../../lib/customer/invitation-guests.ts";
+import {
+  type MediaActionsApi,
+  moveGalleryPhoto,
+  removeGalleryPhoto,
+  saveGalleryAlt,
+  uploadGalleryPhoto,
+  uploadMainPhoto,
+} from "../../../lib/customer/invitation-media.ts";
 import { saveRsvpSettings } from "../../../lib/customer/invitation-rsvp.ts";
 import {
   archiveInvitation,
@@ -22,6 +30,7 @@ import { guestShareUrl } from "../../../lib/public/guest-pass.ts";
 import { requestOrigin } from "../../../lib/server/request-origin.ts";
 import { guestLinkCookie, guestLinks } from "../../../lib/server/single-use-flash.ts";
 import { invitations } from "./_lib/api.ts";
+import { media } from "./_lib/media.ts";
 
 /**
  * The invitation server actions (M4 T5, M5 T5; S1, S6, S7, L8). CORS allows no `PUT` from a browser, so the
@@ -30,6 +39,47 @@ import { invitations } from "./_lib/api.ts";
  * without JavaScript and a reload never resubmits it. The API authorizes and validates every write;
  * `redirect` is called outside any `try`, as Next.js requires.
  */
+
+/**
+ * The media actions of the draft (M8 S2, S3, S4). Each one needs the media routes and the content path the editor
+ * already saves with, because the main photo's URL is written into the template's own photo field. Every call is
+ * logged once by its own module when it fails unexpectedly, with no alt text, file name, or id.
+ */
+function mediaApi(): MediaActionsApi {
+  return {
+    list: (id) => media.list(id),
+    upload: (id, upload) => media.upload(id, upload),
+    update: (id, assetId, patch) => media.update(id, assetId, patch),
+    remove: (id, assetId) => media.remove(id, assetId),
+    get: (id) => invitations.get(id),
+    replaceContent: (id, content) => invitations.replaceContent(id, content),
+  };
+}
+
+/** Uploads the invitation's main photo and writes its URL into the template's photo field (M8 S4). */
+export async function uploadMainPhotoAction(formData: FormData): Promise<void> {
+  redirect(await uploadMainPhoto(mediaApi(), formData));
+}
+
+/** Uploads one gallery photo of a package that grants `GALLERY` (M8 S3, S4). */
+export async function uploadGalleryPhotoAction(formData: FormData): Promise<void> {
+  redirect(await uploadGalleryPhoto(mediaApi(), formData));
+}
+
+/** Replaces the alt text of one gallery photo (M8 S4). */
+export async function saveGalleryAltAction(formData: FormData): Promise<void> {
+  redirect(await saveGalleryAlt(mediaApi(), formData));
+}
+
+/** Moves one gallery photo one place up or down (M8 S4). */
+export async function moveGalleryPhotoAction(formData: FormData): Promise<void> {
+  redirect(await moveGalleryPhoto(mediaApi(), formData));
+}
+
+/** Removes one gallery photo (M8 S4). */
+export async function removeGalleryPhotoAction(formData: FormData): Promise<void> {
+  redirect(await removeGalleryPhoto(mediaApi(), formData));
+}
 
 export async function createInvitationAction(formData: FormData): Promise<void> {
   redirect(await createInvitation(invitations, formData));

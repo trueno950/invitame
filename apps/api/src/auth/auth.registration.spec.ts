@@ -41,6 +41,14 @@ function productionEnvironment(previousSecret?: string): RuntimeEnvironment {
     AUTH_CLIENT_IP_HEADER: CLIENT_IP_HEADER,
     AUTH_PROXY_SECRET: PROXY_SECRET,
     AUTH_PROXY_SECRET_PREVIOUS: previousSecret,
+    // M8 S4: production has no local media driver, so a valid production environment names its bucket.
+    MEDIA_STORAGE_DRIVER: "s3",
+    MEDIA_PUBLIC_BASE_URL: "https://api.example.test",
+    MEDIA_S3_ENDPOINT: "https://account.r2.example.test",
+    MEDIA_S3_REGION: "auto",
+    MEDIA_S3_BUCKET: "invitame-media",
+    MEDIA_S3_ACCESS_KEY_ID: "test-access-key-id",
+    MEDIA_S3_SECRET_ACCESS_KEY: "test-secret-access-key",
   });
 }
 

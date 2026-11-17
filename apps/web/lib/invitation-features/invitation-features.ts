@@ -11,6 +11,7 @@
  * block, gated by `giftRegistry` (F7).
  */
 
+import type { GalleryPhoto } from "./gallery.ts";
 import type { MusicLink } from "./music.ts";
 
 /** The creator's WhatsApp contact of one invitation, stored in E.164. */
@@ -103,6 +104,11 @@ export interface InvitationFeatures {
    * says the package grants it, the layout says whether there is something to show.
    */
   readonly giftRegistry: boolean;
+  /**
+   * The photos the guest may see, in the creator's order (M8 S3, S4). Absent or empty renders no gallery, which is
+   * what a package without `GALLERY` answers; the block never invents a photo the API did not send.
+   */
+  readonly gallery?: readonly GalleryPhoto[];
   /** The open RSVP form of the guest page, or absent when the invitation has no open RSVP (G3; S4). */
   readonly rsvp?: RsvpBlockView;
   /** The personal block of one guest, or absent on a public page (G4; S4). */
@@ -132,6 +138,7 @@ export const INVITATION_FEATURE_KEYS = [
   "RSVP",
   "GUEST_LIST",
   "QR_PASS",
+  "GALLERY",
   "CALENDAR",
 ] as const;
 
@@ -157,6 +164,7 @@ export function hasAnyFeature(features: InvitationFeatures): boolean {
     features.calendar ||
     features.whatsapp !== null ||
     features.music !== null ||
+    (features.gallery !== undefined && features.gallery.length > 0) ||
     features.rsvp !== undefined ||
     features.guest !== undefined
   );

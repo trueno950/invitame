@@ -210,7 +210,9 @@ depends on media uploads before Milestone 8.
 
 ## Milestone 6 — Guests and RSVP
 
-**Status:** Planned.
+**Status:** Implemented (`odd/tasks/m6-guests-rsvp.md`, PR #66): open RSVP for packages with `RSVP`, a guest list with
+personal links for `GUEST_LIST`, a QR pass with owner check-in for `QR_PASS`, owner responses with CSV export, and an
+independent verification of ownership, tokens, rate limits, and privacy. No notifications are sent.
 
 ### Outcome
 

@@ -66,6 +66,14 @@ function testEnvironment(overrides: Record<string, unknown> = {}): Record<string
     BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
     // The public web origin (L33): one of the trusted origins. The listening port is ephemeral.
     AUTH_BASE_URL: TRUSTED_ORIGIN,
+    // M8 S4: production has no local media driver, so a valid production environment names its bucket.
+    MEDIA_STORAGE_DRIVER: "s3",
+    MEDIA_PUBLIC_BASE_URL: "https://api.example.test",
+    MEDIA_S3_ENDPOINT: "https://account.r2.example.test",
+    MEDIA_S3_REGION: "auto",
+    MEDIA_S3_BUCKET: "invitame-media",
+    MEDIA_S3_ACCESS_KEY_ID: "test-access-key-id",
+    MEDIA_S3_SECRET_ACCESS_KEY: "test-secret-access-key",
   };
 
   for (const [name, value] of Object.entries(overrides)) {
