@@ -42,6 +42,12 @@ export interface VersionRenderData {
   schema: unknown;
 }
 
+/** The price in force of one package: the amount in the smallest currency unit and its ISO code. */
+export interface CatalogCurrentPrice {
+  amountMinor: number;
+  currency: string;
+}
+
 /** What a package grants right now: its status and the feature keys it includes (S6, A1). */
 export interface CatalogPackageEntitlements {
   packageId: string;
@@ -109,6 +115,13 @@ export interface CatalogPublicReader {
 
   /** The status and included feature keys of a package; null when no package has this id. */
   findPackageEntitlements(packageId: string): Promise<CatalogPackageEntitlements | null>;
+
+  /**
+   * The price in force of one package, the row with no `retiredAt` (M7 S4): the amount a checkout copies into its
+   * payment snapshot. Null when no package has this id or it has no price in force, so a caller never has to guess an
+   * amount from a retired row.
+   */
+  findCurrentPackagePrice(packageId: string): Promise<CatalogCurrentPrice | null>;
 
   /**
    * Every template a creator may start from (S8), ordered by key: only a PUBLISHED template with a PUBLISHED

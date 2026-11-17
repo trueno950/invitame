@@ -20,8 +20,11 @@ and the nullable `RsvpResponse.guestId` reference. Every object is new or nullab
 nothing is deleted. Milestone 8 adds the additive `20261120120000_add_media_assets` migration: two enum types and
 the `MediaAsset` table with its checks, its unique storage key, its one-current-main-photo index, and its gallery
 index. Every object is new, so no row is rewritten and nothing is deleted; no binary is stored in PostgreSQL.
-Future payment and analytics design is documented separately in [`future-model.md`](future-model.md); that document
-does not add tables.
+Milestone 7 adds the additive `20261121120000_add_payments` migration: the `PaymentStatus` enum type, the `Payment`
+table (the checkout intent, the price snapshot, and the verified state), and the `PaymentEvent` table (one received
+provider event, its decision, and the digest of its payload — never the payload). Every object is new, so no row is
+rewritten and nothing is deleted. Future analytics design is documented separately in
+[`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
 | --- | --- |
@@ -43,6 +46,8 @@ does not add tables.
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
 | `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), and timestamps |
+| `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
+| `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
 
 ## Invariants
 
@@ -286,6 +291,57 @@ cleanup command are documented in [`../development/media-storage.md`](../develop
   feature data, guests, and RSVP answers are untouched. Stored objects then become orphans, and the deployment must
   empty the bucket or directory with its own tooling. Never edit the applied migration file.
 
+## Checkout and payments
+
+Current status: the `Payment` and `PaymentEvent` tables exist and the API reads and writes them (M7 S1, S3, S4). The
+state machine, the entitlement rule, and the event decision live in `apps/api/src/payments/domain/`; the side effects
+belong to the use cases in `apps/api/src/payments/application/`; the SQL is
+`apps/api/src/payments/infrastructure/prisma-payment.repository.ts`. The modes, the environment, and the signature
+scheme are documented in `docs/development/payments.md`, which arrives with the payment routes.
+
+- `Payment.invitationId` references `Invitation` and `Payment.packageId` references `Package`, both with
+  `ON DELETE RESTRICT`: an invitation is never hard-deleted and a payment outlives a retired catalog price, so
+  deleting either while a payment names it is refused. There is no owner column: the adapter reaches the owner
+  through the invitation and names `ownerId` in its own `WHERE`, so a foreign invitation answers exactly like an
+  unknown one (A4).
+- `Payment.amountMinor` and `Payment.currency` are the snapshot of the package's price at checkout, not a live read of
+  the catalog: `Payment_amountMinor_non_negative` checks `>= 0` and `Payment_currency_format` checks `^[A-Z]{3}$`,
+  the same rules `PackagePrice` carries. Retiring the catalog price and publishing another leaves every stored
+  payment's amount and currency untouched (S1 exit criterion).
+- `Payment.status` is the `PaymentStatus` enum with the stored labels `pending`, `paid`, `failed`, `expired`, and
+  `refunded`. The domain state machine allows only `pending -> paid | failed | expired` and `paid -> refunded`; every
+  other pair is ignored and recorded, so an out-of-order or replayed event can never move a payment backwards
+  (S1, S4). The transition statement is guarded by the status it was decided from, so two concurrent deliveries
+  cannot both apply theirs.
+- `Payment_paidAt_matches_status` keeps `paidAt` set exactly while the payment is `paid` or `refunded`: it is the
+  API's own receipt instant of the verified `paid` event, never a provider-supplied time in a money-relevant column.
+  A refund keeps it, because the payment was paid.
+- `Payment_idempotencyKey_key` is unique: the key is generated by the server for each checkout intent and passed to
+  the provider, so a retried request asks for the same session. `Payment_one_pending_key` is a partial unique index on
+  `("invitationId")` where `"status" = 'pending'`: at most one pending payment per invitation, which is what makes
+  two simultaneous checkouts converge on one row instead of two. `Payment_provider_providerReference_key` keeps one
+  provider reference per provider and leaves `NULL`s unconstrained, so a payment keeps no reference until its
+  adapter created one. `Payment_invitationId_status_idx` serves the gate and the owner read.
+- `PaymentEvent.paymentId` is nullable because a signed event about a provider reference this API does not know is
+  recorded and ignored rather than dropped. The reference is `ON DELETE RESTRICT`: a payment with recorded events
+  cannot be removed while they exist. `PaymentEvent_provider_providerEventId_key` is unique, so a retried or
+  duplicated delivery inserts nothing (`ON CONFLICT DO NOTHING`) and is answered as a no-op (S4).
+- `PaymentEvent.outcome` is one of `applied`, `ignored_transition`, `ignored_unknown_payment`, `refused_amount`, and
+  `refused_currency` (`PaymentEvent_outcome_allowed`), the domain's own vocabulary: every event that reached the
+  intake is recorded with its decision, whether it changed a payment or not. `PaymentEvent.type` is one of the four
+  normalized types (`PaymentEvent_type_allowed`); no provider vocabulary reaches the column.
+- The raw provider payload is never stored. `payloadSha256` is the lower-case SHA-256 hex digest of the raw body
+  (`PaymentEvent_payloadSha256_format`, `^[0-9a-f]{64}$`), which is what a replay investigation needs without keeping
+  a payer's name, e-mail address, or card metadata in the database.
+- The event row and the transition are one transaction: the intake inserts the event, applies the guarded
+  transition, and writes the decision, so a failure leaves nothing half-recorded and a retry is safe (S4).
+- Rollback / recovery of `20261121120000_add_payments`: the change is additive, so recovery is redeploying the
+  previous migration set or dropping the objects by hand — `DROP TABLE "PaymentEvent";` then `DROP TABLE "Payment";`
+  then `DROP TYPE "PaymentStatus";`. Only payment intents and the provider events they recorded are lost; invitations,
+  their content, feature data, guests, RSVP answers, and media rows are untouched. Paid invitations lose the verified
+  state publication was granted from, so a rollback must also restore `PAYMENTS_MODE=free` or stop publishing.
+  Never edit the applied migration file.
+
 ## Identity tables
 
 Current status: the API uses these tables at runtime. Better Auth, mounted at `/api/auth` with its Prisma adapter
@@ -326,7 +382,9 @@ catalog keys, lifecycle statuses, and fields used for querying remain normalized
 
 ## Deliberately absent
 
-There is no payment, analytics, or media table in the current schema. The `Invitation` table stores authoring,
-publication, and RSVP settings only — status, the publication marker, the not-yet-used expiry, the deadline, and the
-party limit — while `RsvpResponse` stores the answers and `Guest` stores the guest list with its personal link digest
-and check-in state. Payments, media, and analytics are later milestones.
+There is no analytics table in the current schema. The `Invitation` table stores authoring, publication, and RSVP
+settings only — status, the publication marker, the not-yet-used expiry, the deadline, and the party limit — while
+`RsvpResponse` stores the answers, `Guest` stores the guest list with its personal link digest and check-in state,
+`MediaAsset` names an object in the storage adapter, and `Payment`/`PaymentEvent` hold the checkout intent and the
+verified provider events. No card data, provider payload, accounting entry, or subscription is stored: those are
+Milestone 7 non-goals.

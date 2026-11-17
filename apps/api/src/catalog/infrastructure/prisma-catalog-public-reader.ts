@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import type {
+  CatalogCurrentPrice,
   CatalogPackageEntitlements,
   CatalogPublicContract,
   CreatorPackageSummary,
@@ -193,6 +194,20 @@ export class PrismaCatalogPublicReader implements CatalogPublicContract {
       select: PACKAGE_ENTITLEMENTS_SELECT,
     });
     return row === null ? null : toEntitlements(row);
+  }
+
+  /**
+   * The price in force (M7 S4): only the row with no `retiredAt`, so a checkout copies the amount the catalog offers
+   * right now and a retired row stays history. Null when the package has no price in force.
+   */
+  async findCurrentPackagePrice(packageId: string): Promise<CatalogCurrentPrice | null> {
+    const row = await this.prisma.packagePrice.findFirst({
+      where: { packageId, retiredAt: null },
+      select: { amountMinor: true, currency: true },
+      orderBy: { currency: "asc" },
+    });
+
+    return row === null ? null : { amountMinor: row.amountMinor, currency: row.currency };
   }
 
   async findVersionRenderData(versionId: string): Promise<VersionRenderData | null> {

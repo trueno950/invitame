@@ -57,6 +57,8 @@ function productionVariables(overrides: Record<string, unknown> = {}): Record<st
     AUTH_CLIENT_IP_HEADER: "x-real-ip",
     AUTH_PROXY_SECRET: randomBytes(32).toString("base64url"),
     MEDIA_PUBLIC_BASE_URL: "https://api.example.test",
+    // Payments have no default in production (M7 S4): every production case names its mode.
+    PAYMENTS_MODE: "free",
     ...s3Variables(),
     ...overrides,
   });

@@ -41,6 +41,8 @@ function productionEnvironment(previousSecret?: string): RuntimeEnvironment {
     AUTH_CLIENT_IP_HEADER: CLIENT_IP_HEADER,
     AUTH_PROXY_SECRET: PROXY_SECRET,
     AUTH_PROXY_SECRET_PREVIOUS: previousSecret,
+    // M7 S4: production names its payment mode explicitly; this suite charges nothing.
+    PAYMENTS_MODE: "free",
     // M8 S4: production has no local media driver, so a valid production environment names its bucket.
     MEDIA_STORAGE_DRIVER: "s3",
     MEDIA_PUBLIC_BASE_URL: "https://api.example.test",

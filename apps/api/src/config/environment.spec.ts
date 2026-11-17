@@ -18,6 +18,8 @@ const PRODUCTION_MEDIA: Readonly<Record<string, string>> = {
   MEDIA_S3_BUCKET: "invitame-media",
   MEDIA_S3_ACCESS_KEY_ID: "test-access-key-id",
   MEDIA_S3_SECRET_ACCESS_KEY: "test-secret-access-key",
+  // Payments have no default in production (M7 S4): the mode is one of the variables a deployment names.
+  PAYMENTS_MODE: "free",
 };
 
 function environmentWith(overrides: Record<string, unknown> = {}): Record<string, unknown> {

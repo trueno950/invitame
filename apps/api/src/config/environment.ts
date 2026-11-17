@@ -28,6 +28,34 @@ export type EmailEnvironment =
   | { transport: typeof EMAIL_TRANSPORT.MAILPIT; from: string; mailpitUrl: string }
   | { transport: typeof EMAIL_TRANSPORT.MEMORY; from: string };
 
+/**
+ * The payment modes (M7 S1, S4). `free` is the Milestone 5 behavior: publication needs no payment. `simulated` is
+ * the development and test provider that signs its own webhook events so the whole intake is exercised without a
+ * provider account. A real provider adds its own key here and one adapter behind the same port; the owner chooses
+ * it, so nothing in this milestone names one.
+ */
+export const PAYMENTS_MODE = {
+  FREE: "free",
+  SIMULATED: "simulated",
+} as const;
+
+export type PaymentsMode = (typeof PAYMENTS_MODE)[keyof typeof PAYMENTS_MODE];
+
+/**
+ * The payments settings of one deployment (M7 S4). Each variant carries only what its adapter needs: `free` needs
+ * nothing, and `simulated` needs the secret that signs its events and the web origin its redirect points at. In
+ * `free` mode neither variable is read, so an unused variable can never break a deployment that does not charge.
+ */
+export type PaymentsEnvironment =
+  | { mode: typeof PAYMENTS_MODE.FREE }
+  | {
+      mode: typeof PAYMENTS_MODE.SIMULATED;
+      /** HMAC key of the simulated adapter; never logged, echoed, or returned. */
+      secret: string;
+      /** The web origin the simulated provider redirects to; the return page lives under it. */
+      returnBaseUrl: string;
+    };
+
 /** How the API resolves a client IP for rate limiting, from the request header a trusted proxy sets. */
 export interface ClientIpEnvironment {
   /** Lower-case header name, from `AUTH_CLIENT_IP_HEADER`. */
@@ -110,6 +138,8 @@ export interface RuntimeEnvironment {
   AUTH_PROXY_SECRET_PREVIOUS: string | undefined;
   /** Invitation media storage and the public origin its URLs are built from (M8 S4). */
   MEDIA: MediaEnvironment;
+  /** Payment mode and, when it charges, the provider settings of that mode (M7 S1, S4). */
+  PAYMENTS: PaymentsEnvironment;
 }
 
 const DEFAULT_PORT = 3001;
@@ -133,6 +163,13 @@ const DEFAULT_EMAIL_TRANSPORT: Record<NodeEnvironment, EmailTransport> = {
 /** Reserved `.localhost` domain: this sender can never reach a real mailbox. */
 const LOCAL_EMAIL_FROM = "InvitaMe Local <no-reply@invitame.localhost>";
 const DEFAULT_MAILPIT_URL = "http://localhost:8025";
+/**
+ * The development web origin the simulated provider redirects to: the web app's own port, so a local checkout
+ * needs no new variable. Any other origin names the URL explicitly.
+ */
+const DEFAULT_PAYMENTS_RETURN_BASE_URL = "http://localhost:3000";
+/** The same floor as the other secrets in this file: shorter is refused, never echoed. */
+const MINIMUM_PAYMENTS_SECRET_LENGTH = 32;
 // A bare address or `Name <address>`; no whitespace, angle brackets, or line breaks in the address.
 const EMAIL_ADDRESS_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const NAMED_EMAIL_ADDRESS_PATTERN = /^([^<>\r\n]*)<([^<>]+)>$/;
@@ -478,6 +515,90 @@ function parseClientIpEnvironment(
   return { header, trustedProxies };
 }
 
+function isPaymentsMode(value: string): value is PaymentsMode {
+  return Object.values(PAYMENTS_MODE).some((mode) => mode === value);
+}
+
+/**
+ * Payments (M7 S1, S4). Production must name its mode explicitly — there is no silent default there, because that
+ * default would decide whether money is charged — and `simulated` is refused there: its adapter can mint a valid
+ * signature from a configuration value, so a deployment that used it could grant publication to an event the API
+ * itself produced. Development and test default to `free`, which is today's behavior and needs neither the
+ * migration nor a secret, so the running development server stays healthy with no new variable. Every message
+ * names a variable and never echoes its value, because one of them is a secret.
+ */
+function parsePaymentsEnvironment(
+  environment: Record<string, unknown>,
+  nodeEnvironment: NodeEnvironment,
+): PaymentsEnvironment {
+  const configured = readOptionalString(environment.PAYMENTS_MODE);
+
+  if (configured === undefined) {
+    if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION) {
+      throw new Error("PAYMENTS_MODE must be provided in production.");
+    }
+
+    return { mode: PAYMENTS_MODE.FREE };
+  }
+
+  if (!isPaymentsMode(configured)) {
+    throw new Error("PAYMENTS_MODE must be free or simulated.");
+  }
+
+  if (configured === PAYMENTS_MODE.FREE) {
+    return { mode: PAYMENTS_MODE.FREE };
+  }
+
+  if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION) {
+    throw new Error("PAYMENTS_MODE must not be simulated in production.");
+  }
+
+  const secret = readOptionalString(environment.PAYMENTS_SIMULATED_SECRET);
+  if (!secret) {
+    throw new Error("PAYMENTS_SIMULATED_SECRET must be provided when PAYMENTS_MODE is simulated.");
+  }
+  if (secret.length < MINIMUM_PAYMENTS_SECRET_LENGTH) {
+    throw new Error(
+      `PAYMENTS_SIMULATED_SECRET must be at least ${MINIMUM_PAYMENTS_SECRET_LENGTH} characters long.`,
+    );
+  }
+
+  return {
+    mode: PAYMENTS_MODE.SIMULATED,
+    secret,
+    returnBaseUrl: validateHttpOrigin(
+      "PAYMENTS_RETURN_BASE_URL",
+      readOptionalString(environment.PAYMENTS_RETURN_BASE_URL) ?? DEFAULT_PAYMENTS_RETURN_BASE_URL,
+    ),
+  };
+}
+
+/** The simulated secret must not also sign sessions or proxy requests (M7 S4, L36). */
+function validateDistinctPaymentsSecret(
+  payments: PaymentsEnvironment,
+  environment: {
+    BETTER_AUTH_SECRET: string;
+    AUTH_PROXY_SECRET: string | undefined;
+    AUTH_PROXY_SECRET_PREVIOUS: string | undefined;
+  },
+): void {
+  if (payments.mode !== PAYMENTS_MODE.SIMULATED) {
+    return;
+  }
+
+  const collision = (
+    [
+      ["BETTER_AUTH_SECRET", environment.BETTER_AUTH_SECRET],
+      ["AUTH_PROXY_SECRET", environment.AUTH_PROXY_SECRET],
+      ["AUTH_PROXY_SECRET_PREVIOUS", environment.AUTH_PROXY_SECRET_PREVIOUS],
+    ] as const
+  ).find(([, value]) => value === payments.secret);
+
+  if (collision) {
+    throw new Error(`PAYMENTS_SIMULATED_SECRET must differ from ${collision[0]}.`);
+  }
+}
+
 function isMediaStorageDriver(value: string): value is MediaStorageDriver {
   return Object.values(MEDIA_STORAGE_DRIVER).some((driver) => driver === value);
 }
@@ -605,6 +726,7 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     AUTH_PROXY_SECRET: parseProxySecret(environment, nodeEnvironment),
     AUTH_PROXY_SECRET_PREVIOUS: parsePreviousProxySecret(environment),
     MEDIA: parseMediaEnvironment(environment, nodeEnvironment),
+    PAYMENTS: parsePaymentsEnvironment(environment, nodeEnvironment),
   };
 
   // Cross-field rules run last, so every single-variable error keeps its precedence.
@@ -614,6 +736,7 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     validated.AUTH_PROXY_SECRET_PREVIOUS,
     validated.BETTER_AUTH_SECRET,
   );
+  validateDistinctPaymentsSecret(validated.PAYMENTS, validated);
 
   return validated;
 }
