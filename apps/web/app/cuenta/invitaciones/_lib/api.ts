@@ -98,6 +98,10 @@ export const invitations = {
   archive: (id: string) => logged((api) => api.archive(id)),
   publish: (id: string) => logged((api) => api.publish(id)),
   unpublish: (id: string) => logged((api) => api.unpublish(id)),
+  checkout: (id: string) => logged((api) => api.checkout(id)),
+  payment: (id: string) => logged((api) => api.payment(id)),
+  emitSimulatedPayment: (paymentId: string, outcome: "paid" | "failed") =>
+    logged((api) => api.emitSimulatedPayment(paymentId, outcome)),
   templates: () => logged((api) => api.templates()),
   packages: () => logged((api) => api.packages()),
 };

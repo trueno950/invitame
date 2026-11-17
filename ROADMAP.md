@@ -238,7 +238,9 @@ No broad CRM, open guest directory, marketing automation, or guaranteed WhatsApp
 
 ## Milestone 7 — Checkout and one payment provider
 
-**Status:** Planned.
+**Status:** Implemented without a real provider (`odd/tasks/m7-payments.md`): the provider-neutral payment core,
+price snapshots, the verified webhook intake, the publication gate, and a development-only simulated provider. The
+real provider adapter waits for the owner's choice; production runs `PAYMENTS_MODE=free` until then.
 
 ### Outcome
 
@@ -266,7 +268,9 @@ No multiple payment providers, subscriptions, tax invoicing, stored card data, o
 
 ## Milestone 8 — Media and invitation content delivery
 
-**Status:** Planned.
+**Status:** Implemented (`odd/tasks/m8-media.md`, PR #67): provider-neutral media storage (local for development, S3-compatible
+for production once the owner configures a bucket), validated and re-encoded photo uploads, the main photo and a
+gallery for `GALLERY`, owner/published serving rules, and an idempotent cleanup command.
 
 ### Outcome
 

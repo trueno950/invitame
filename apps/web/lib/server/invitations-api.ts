@@ -176,8 +176,20 @@ export interface CreatorPackage {
  * - `not-publishable`: 409 `INVITATION_NOT_PUBLISHABLE`, the readiness rule named the issues (S7, A1);
  * - `already-published`: 409 `INVITATION_ALREADY_PUBLISHED`, a repeated publish (A2, S7);
  * - `not-published`: 409 `INVITATION_NOT_PUBLISHED`, an unpublish of a draft (A2, S7);
- * - `payment-required`: 402 `INVITATION_PAYMENT_REQUIRED`, the publication gate asked for a payment
- *   that this milestone never requires (S6).
+ * - `payment-required`: 402 `INVITATION_PAYMENT_REQUIRED`, the publication gate refused because the invitation's
+ *   package still has to be paid (M7 S1, S4); the page sends the owner to «Pagar y publicar»;
+ * - `payments-disabled`: 409 `PAYMENTS_DISABLED`, the deployment runs `PAYMENTS_MODE=free` and sells nothing;
+ * - `payment-not-required`: 409 `PAYMENT_NOT_REQUIRED`, the package's current price is 0;
+ * - `payment-price-unavailable`: 409 `PAYMENT_PRICE_UNAVAILABLE`, the catalog cannot price the package;
+ * - `payment-already-paid`: 409 `PAYMENT_ALREADY_PAID`, this invitation already has a verified payment;
+ * - `payment-package-locked`: 409 `INVITATION_PACKAGE_LOCKED_BY_PAYMENT`, a paid payment belongs to another
+ *   package, so the money is never reused;
+ * - `payment-provider-unavailable`: 503 `PAYMENT_PROVIDER_UNAVAILABLE`, the provider could not open the checkout;
+ * - `simulated-payment-disabled`: 409 `PAYMENT_SIMULATED_DISABLED`, the emit was asked of a deployment that is not
+ *   running the simulated provider (M7 S4);
+ * - `payment-not-found`: 404 `PAYMENT_NOT_FOUND`, the payment is missing, foreign, or not a UUID;
+ * - `payment-redirect-refused`: the web's own refusal, never the API's: a checkout answered a redirect that leaves
+ *   this site's origin or names another invitation, so nothing is followed (M7 T2).
  *
  * Any other status, including the 503 `INVITATION_SLUG_UNAVAILABLE` the API answers when it cannot draw a
  * storable slug, fails closed: a 5xx (or a timeout) is `unavailable`, and any other status is `rejected`.
@@ -203,7 +215,16 @@ export type InvitationFailure =
   | "not-publishable"
   | "already-published"
   | "not-published"
-  | "payment-required";
+  | "payment-required"
+  | "payments-disabled"
+  | "payment-not-required"
+  | "payment-price-unavailable"
+  | "payment-already-paid"
+  | "payment-package-locked"
+  | "payment-provider-unavailable"
+  | "simulated-payment-disabled"
+  | "payment-not-found"
+  | "payment-redirect-refused";
 
 /**
  * A refused call, plus the readiness `issues` the API returned for a publish it refused: English
@@ -507,6 +528,109 @@ export function parseCreatorPackage(value: unknown): CreatorPackage | undefined 
 
 export function parseCreatorPackages(value: unknown): CreatorPackage[] | undefined {
   return mapAll(value, parseCreatorPackage);
+}
+
+// The payment routes of the owner (M7 S4): the checkout, the state the panel and the return page render, and the
+// development-only emit. Nothing here carries a provider payload, a signature, a secret, or an amount the API did
+// not read from its own stored payment.
+
+/** The payment states the API stores; the web renders each one and decides nothing about it (S4). */
+export const PAYMENT_STATUSES = ["pending", "paid", "failed", "expired", "refunded"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+/** The widest provider or simulated redirect this client keeps; longer text is not a URL it follows (T2). */
+const MAX_REDIRECT_URL_LENGTH = 2048;
+
+/** `POST /invitations/:id/checkout`: the payment, the redirect, and the snapshot the owner will pay (S4). */
+export interface Checkout {
+  readonly paymentId: string;
+  /** The provider's page; the caller allow-lists it before following it, never here (T2, S4). */
+  readonly redirectUrl: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+}
+
+/** `GET /invitations/:id/payment`: every fact the panel and the return page render (S4). */
+export interface InvitationPayment {
+  /** Whether the publication gate still asks for a payment; when false the panel is not rendered. */
+  readonly paymentRequired: boolean;
+  readonly status: PaymentStatus | null;
+  readonly amountMinor: number | null;
+  readonly currency: string | null;
+  readonly paidAt: string | null;
+}
+
+/** `POST /payments/simulated/:paymentId/emit`: `processed`, or `duplicate` for the same event twice (S4). */
+export interface PaymentEmit {
+  readonly outcome: "processed" | "duplicate";
+}
+
+function isPaymentStatus(value: unknown): value is PaymentStatus {
+  return PAYMENT_STATUSES.some((status) => status === value);
+}
+
+/** An optional amount: a non-negative whole number of minor units, or null when the API has none (S4). */
+function isOptionalAmount(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isSafeInteger(value) && value >= 0);
+}
+
+/**
+ * The checkout answer, refused whole when it is not the documented shape. The redirect is kept as text and its
+ * origin, protocol, path, query, and fragment are checked by `checkoutRedirectPath` before it is ever followed
+ * (T2): this parser only refuses a value that could not be a URL at all.
+ */
+export function parseCheckout(value: unknown): Checkout | undefined {
+  const checkout = record(value);
+
+  if (checkout === undefined) {
+    return undefined;
+  }
+
+  const { paymentId, redirectUrl, amountMinor, currency } = checkout;
+
+  if (
+    !isInvitationId(paymentId) ||
+    !isNonEmptyString(redirectUrl) ||
+    redirectUrl.length > MAX_REDIRECT_URL_LENGTH ||
+    typeof amountMinor !== "number" ||
+    !Number.isSafeInteger(amountMinor) ||
+    amountMinor < 0 ||
+    !isNonEmptyString(currency)
+  ) {
+    return undefined;
+  }
+
+  return { paymentId, redirectUrl, amountMinor, currency };
+}
+
+/** The owner's payment read, refused whole when any field is outside the contract (S4). */
+export function parseInvitationPayment(value: unknown): InvitationPayment | undefined {
+  const payment = record(value);
+
+  if (payment === undefined) {
+    return undefined;
+  }
+
+  const { paymentRequired, status, amountMinor, currency, paidAt } = payment;
+
+  if (
+    typeof paymentRequired !== "boolean" ||
+    !(status === null || isPaymentStatus(status)) ||
+    !isOptionalAmount(amountMinor) ||
+    !(currency === null || isNonEmptyString(currency)) ||
+    !(paidAt === null || isTimestamp(paidAt))
+  ) {
+    return undefined;
+  }
+
+  return { paymentRequired, status, amountMinor, currency, paidAt };
+}
+
+/** The emit's answer: `processed` or `duplicate`, and nothing else (S4). */
+export function parsePaymentEmit(value: unknown): PaymentEmit | undefined {
+  const outcome = record(value)?.outcome;
+
+  return outcome === "processed" || outcome === "duplicate" ? { outcome } : undefined;
 }
 
 /** Whether a value is a party limit the API accepts: an integer from 1 to 10 (S4). */
@@ -910,6 +1034,14 @@ export function parseGuestCheckIn(value: unknown): GuestCheckIn | undefined {
 
 const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVITATION_NOT_FOUND: "not-found",
+  PAYMENTS_DISABLED: "payments-disabled",
+  PAYMENT_NOT_REQUIRED: "payment-not-required",
+  PAYMENT_PRICE_UNAVAILABLE: "payment-price-unavailable",
+  PAYMENT_ALREADY_PAID: "payment-already-paid",
+  INVITATION_PACKAGE_LOCKED_BY_PAYMENT: "payment-package-locked",
+  PAYMENT_PROVIDER_UNAVAILABLE: "payment-provider-unavailable",
+  PAYMENT_SIMULATED_DISABLED: "simulated-payment-disabled",
+  PAYMENT_NOT_FOUND: "payment-not-found",
   INVALID_GUEST: "invalid-guest",
   GUEST_LIST_NOT_AVAILABLE: "guest-list-unavailable",
   GUEST_NOT_FOUND: "guest-not-found",
@@ -932,6 +1064,11 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
 
 const SIGNED_OUT: InvitationResult<never> = { ok: false, failure: "signed-out" };
 const NOT_FOUND: InvitationResult<never> = { ok: false, failure: "not-found" };
+/** The answer a payment route gives without a request: a payment id that is not a UUID names no payment. */
+const PAYMENT_NOT_FOUND_RESULT: InvitationResult<never> = {
+  ok: false,
+  failure: "payment-not-found",
+};
 /** The answer a guest route gives without a request: an id or a token that names no guest of this invitation. */
 const GUEST_NOT_FOUND_RESULT: InvitationResult<never> = { ok: false, failure: "guest-not-found" };
 
@@ -991,18 +1128,28 @@ function refusalOf(text: string | undefined): InvitationResult<never> | undefine
   return { ok: false, failure, ...(issues === undefined ? {} : { issues }) };
 }
 
+/**
+ * The statuses whose body this client reads. A 503 is read only so a documented provider refusal keeps its own
+ * failure instead of becoming a generic outage; every other 5xx stays unread, so a failure body never reaches this
+ * process's memory (M7 S4).
+ */
 const readsBody = (status: number): boolean =>
   (status >= 200 && status <= 299) ||
   status === 400 ||
   status === 402 ||
   status === 404 ||
-  status === 409;
+  status === 409 ||
+  status === 503;
+
+/** The statuses whose fixed code this client maps; anything else keeps its own default outcome. */
+const REFUSAL_STATUSES: readonly number[] = [400, 402, 404, 409, 503];
 
 /** The content type and the attachment filename the RSVP CSV route answers with (M6 G3; S4). */
 const RSVP_CSV_CONTENT_TYPE = "text/csv";
 const RSVP_CSV_DISPOSITION = /^attachment; filename="[A-Za-z0-9._-]{1,80}"$/;
 
 const INVITATIONS = "/invitations";
+const PAYMENTS = "/payments";
 
 /**
  * `readCookieHeader` supplies the current request's `Cookie` header at each call; the client keeps
@@ -1051,10 +1198,7 @@ export function createInvitationsClient(
 
     const failure = refusalOf(text);
 
-    if (
-      failure !== undefined &&
-      (status === 400 || status === 402 || status === 404 || status === 409)
-    ) {
+    if (failure !== undefined && REFUSAL_STATUSES.includes(status)) {
       return failure;
     }
     if (status === 404) {
@@ -1151,6 +1295,31 @@ export function createInvitationsClient(
     /** `GET /catalog/packages`: the ACTIVE packages with price and feature keys (S8). */
     packages: (): Promise<InvitationResult<CreatorPackage[]>> =>
       call("GET", "/catalog/packages", undefined, parseCreatorPackages),
+    /**
+     * `POST /invitations/:id/checkout`: creates or resumes the one pending payment of the invitation's package and
+     * answers the provider's redirect with the amount the owner will pay (M7 S4). The redirect is allow-listed by
+     * the caller before it is followed; this client only refuses a value that is not the documented shape.
+     */
+    checkout: (id: string): Promise<InvitationResult<Checkout>> =>
+      onDraft(id, "/checkout", (path) => call("POST", path, undefined, parseCheckout)),
+    /**
+     * `GET /invitations/:id/payment`: whether the gate still asks for a payment, its state, its snapshot, and when it
+     * was paid (M7 S4). The panel and the return page render this answer and never a query parameter.
+     */
+    payment: (id: string): Promise<InvitationResult<InvitationPayment>> =>
+      onDraft(id, "/payment", (path) => call("GET", path, undefined, parseInvitationPayment)),
+    /**
+     * `POST /payments/simulated/:paymentId/emit`: the development-only shortcut that signs an event and posts it
+     * through the same verified intake (M7 S4). The owner comes from the session, so a foreign or unknown payment is
+     * the same 404, and an id that is not a UUID names nothing and sends no request.
+     */
+    emitSimulatedPayment: (
+      paymentId: string,
+      outcome: "paid" | "failed",
+    ): Promise<InvitationResult<PaymentEmit>> =>
+      isInvitationId(paymentId)
+        ? call("POST", `${PAYMENTS}/simulated/${paymentId}/emit`, { outcome }, parsePaymentEmit)
+        : Promise.resolve(PAYMENT_NOT_FOUND_RESULT),
     /** `GET /invitations/:id/rsvp`: the settings, every response, and the totals (M6 G3; S1, S4). */
     readRsvp: (id: string): Promise<InvitationResult<RsvpRead>> =>
       onDraft(id, "/rsvp", (path) => call("GET", path, undefined, parseRsvpRead)),
