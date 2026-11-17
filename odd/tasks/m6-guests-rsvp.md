@@ -73,3 +73,12 @@ creators manage a guest list with personal links and an access QR, and check gue
   open-form rate limit (10 per hour per address per invitation) and dedupe, the check-in authorization, the per-process
   one-time link store (multi-replica caveat), and the `qrcode` 1.5.4 dependency. The baby shower «Confirma tu
   asistencia» heading on the contact field can be confused with the RSVP card.
+- L3 — G5 independent verification `mwkthe8b-1a-u9rz`: every point met, no blockers. It confirmed ownership in the
+  same statement for every creator write; 128-bit tokens with only the SHA-256 hash stored and rotation killing the old
+  link and QR; one identical 404 for unknown, revoked, and other-invitation tokens; the flash cookie is httpOnly,
+  SameSite=Strict, path-scoped, and single-use; the sign-in return was probed against 14 open-redirect cases; the
+  honeypot is indistinguishable; the 10-per-hour atomic limiter works; 20 concurrent submissions produce 1 row; the
+  check-in is owner-only and idempotent; the QR SVG cannot inject markup; the migrations are additive and their
+  checksums match. Its own probes passed 45 DB, 62 domain, and 30 web checks. Advisories: the check-in page uses the
+  dynamic `no-cache` header, not a literal `no-store`; the pass URL is `/cuenta/acceso/<slug>/<token>`, documented;
+  `90f6d34` changes MUSIC validation, which is intended.
