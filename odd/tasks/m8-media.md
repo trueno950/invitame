@@ -65,3 +65,15 @@ includes `GALLERY`, a small photo gallery; binaries live in object storage, neve
 - L1 — The parent fixed contract S4. Owner decisions for the end: the production storage provider and its cost; the
   limits (10 MB upload, 2000 px output, 12 gallery photos, 40 assets); the retention of archived invitations' media;
   and the two new dependencies.
+- L2 — M1 `5fdcc1e` (API: port with local and S3-compatible adapters, MediaAsset migration, sharp processing,
+  limits, serving, GALLERY gating, `media:cleanup`) and M2 `f20b3fb` (web: «Subir foto», «Galería» manager, guest
+  gallery), plus `1ab0874` (browser-test media base URL, checklist). The native review attempt on the API stopped with
+  `lens_context_budget_exceeded`. M3 independent verification `mwkyk87i-1d-vefx`: every point met, no blockers. Its
+  probes covered magic bytes and polyglots, the 10 MB and 8000 px bounds, GPS/XMP/ICC stripping, traversal
+  refusal, no credentials echoed, an identical 404, limits under concurrency, and the recovery order. Its advisories
+  were fixed in the next commit: A3, a cleanup grace period of one hour so in-flight uploads survive; A4, the
+  dimension message; A5, media URLs restricted to the API origin on the web; A2, one sharp decode at a time; A1, the
+  test-DB checksum corrected. API: 1490 unit and 355 db-specs pass. Web: 1442 tests pass. Owner decisions for the
+  end: the production provider (bucket, credentials, public base URL), the limits, and the retention of archived
+  invitations' media. Note: `.env.example` and the README env table could not be edited (the policy blocks `.env*`);
+  `docs/development/media-storage.md` lists every variable.
