@@ -7,25 +7,22 @@ import { connection } from "next/server";
 import { GUEST_PAGE_COPY, PUBLIC_INVITATION_COPY } from "../../../../../lib/customer/copy.ts";
 import type { GuestPageBlockView } from "../../../../../lib/invitation-features/invitation-features.ts";
 import { checkInUrl } from "../../../../../lib/public/guest-pass.ts";
+import { publicFeatureBlock } from "../../../../../lib/public/invitation-features.ts";
 import {
   guestGreeting,
   guestRsvpView,
   guestSeatsSentence,
 } from "../../../../../lib/public/invitation-guest-page.ts";
-import { publicFeatureBlock } from "../../../../../lib/public/invitation-features.ts";
-import { rsvpNotice } from "../../../../../lib/public/invitation-rsvp.ts";
 import { rendererAcceptsProps } from "../../../../../lib/public/invitation-render.ts";
+import { rsvpNotice } from "../../../../../lib/public/invitation-rsvp.ts";
 import { findRenderer } from "../../../../../lib/renderers/registry.ts";
 import { requestOrigin } from "../../../../../lib/server/request-origin.ts";
 import { textButton } from "../../../../_components/ui.ts";
 import { InvitationMessage } from "../../_components/invitation-message.tsx";
 import { RsvpNoticeNote } from "../../_components/rsvp-notice.tsx";
-import {
-  logPublicInvitation,
-  PUBLIC_INVITATION_LOG_EVENT,
-} from "../../_lib/public-api.ts";
-import { submitGuestRsvpAction } from "./actions.ts";
+import { logPublicInvitation, PUBLIC_INVITATION_LOG_EVENT } from "../../_lib/public-api.ts";
 import { loadGuestInvitation } from "./_lib/load.ts";
+import { submitGuestRsvpAction } from "./actions.ts";
 
 /**
  * `/i/[slug]/g/[token]` (M6 G4; S1, S4): one guest's personal page. It renders the same published invitation and the

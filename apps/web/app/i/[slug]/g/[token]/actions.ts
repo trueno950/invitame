@@ -20,11 +20,9 @@ import { submitPublicGuestRsvp } from "../../_lib/public-api.ts";
  */
 export async function submitGuestRsvpAction(formData: FormData): Promise<void> {
   const requestHeaders = await headers();
-  const target = await submitGuestRsvpForm(
-    { submitGuestRsvp: submitPublicGuestRsvp },
-    formData,
-    { clientAddress: clientAddressFor(requestHeaders, getWebServerConfig()) },
-  );
+  const target = await submitGuestRsvpForm({ submitGuestRsvp: submitPublicGuestRsvp }, formData, {
+    clientAddress: clientAddressFor(requestHeaders, getWebServerConfig()),
+  });
 
   redirect(target);
 }

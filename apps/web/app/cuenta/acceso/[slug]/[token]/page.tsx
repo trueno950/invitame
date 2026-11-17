@@ -33,7 +33,11 @@ export const metadata: Metadata = {
 /** The one way back of a refused or invalid pass. */
 function PlainShell({ heading, body, path }: { heading: string; body: string; path: string }) {
   return (
-    <CustomerWorkspaceShell eyebrow={CHECK_IN_COPY.eyebrow} heading={heading} intro={CHECK_IN_COPY.intro}>
+    <CustomerWorkspaceShell
+      eyebrow={CHECK_IN_COPY.eyebrow}
+      heading={heading}
+      intro={CHECK_IN_COPY.intro}
+    >
       <div className="flex flex-col gap-4">
         <p className={statusNote}>{body}</p>
         <div className="flex flex-wrap gap-3">
@@ -72,7 +76,9 @@ export default async function GuestCheckInPage({
   const signIn = afterSignInPath(slug, token);
 
   if (listed === "unavailable") {
-    return <PlainShell body={CHECK_IN_COPY.unavailable} heading={CHECK_IN_COPY.heading} path={path} />;
+    return (
+      <PlainShell body={CHECK_IN_COPY.unavailable} heading={CHECK_IN_COPY.heading} path={path} />
+    );
   }
   if (!listed.ok) {
     if (listed.failure === "signed-out") {
@@ -82,7 +88,9 @@ export default async function GuestCheckInPage({
     return (
       <PlainShell
         body={
-          listed.failure === "not-found" ? CHECK_IN_COPY.invitationNotFound : CHECK_IN_COPY.unavailable
+          listed.failure === "not-found"
+            ? CHECK_IN_COPY.invitationNotFound
+            : CHECK_IN_COPY.unavailable
         }
         heading={CHECK_IN_COPY.heading}
         path={INVITATION_PATHS.list}
@@ -111,13 +119,18 @@ export default async function GuestCheckInPage({
   const invitation = resolveRead(invitationRead);
 
   if (checkInRead === "unavailable") {
-    return <PlainShell body={CHECK_IN_COPY.unavailable} heading={CHECK_IN_COPY.heading} path={path} />;
+    return (
+      <PlainShell body={CHECK_IN_COPY.unavailable} heading={CHECK_IN_COPY.heading} path={path} />
+    );
   }
   if (!checkInRead.ok && checkInRead.failure === "signed-out") {
     redirect(signIn === undefined ? "/ingresar" : signIn);
   }
 
-  const view = checkInView(checkInRead, invitation.status === "ok" ? invitation.value.timeZone : "");
+  const view = checkInView(
+    checkInRead,
+    invitation.status === "ok" ? invitation.value.timeZone : "",
+  );
 
   if (view.status === "sign-in") {
     redirect(signIn === undefined ? "/ingresar" : signIn);
