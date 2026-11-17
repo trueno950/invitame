@@ -51,8 +51,9 @@ Production checklist for the owner (any of R2, S3, or MinIO; the provider and it
 2. Set the eight variables above, with `MEDIA_STORAGE_DRIVER=s3` and an `https` endpoint and public base URL.
 3. Run `pnpm db:migrate` so `20261120120000_add_media_assets` is applied, then start the API; it refuses to start
    without the bucket.
-4. Allow the public origin in the web deployment's image configuration, because the browser fetches `/media/<id>`
-   from the API origin, not from the web origin.
+4. Make sure the public base URL is reachable by guests' browsers: they fetch `/media/<id>` from the API origin with
+   plain `<img>` elements, so the web app needs no image configuration and sends no Content-Security-Policy today. If
+   a CSP is added later, its `img-src` must include this origin.
 
 ## Serving
 

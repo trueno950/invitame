@@ -38,6 +38,8 @@ const apiEnvironment = {
   // The API refuses Mailpit and plain http in production; development keeps every auth rule on.
   NODE_ENV: "development",
   PORT: String(API_PORT),
+  // Media URLs in browser tests must point at this run's API, not the development default.
+  MEDIA_PUBLIC_BASE_URL: API_ORIGIN,
   CORS_ORIGIN: WEB_ORIGIN,
   AUTH_BASE_URL: WEB_ORIGIN,
   DATABASE_URL: databaseUrl,
