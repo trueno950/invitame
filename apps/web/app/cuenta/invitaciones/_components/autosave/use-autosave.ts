@@ -103,6 +103,8 @@ export function useAutosave(options: UseAutosaveOptions): AutosaveApi {
   const state = useSyncExternalStore(queue.subscribe, queue.state, () => SERVER_STATE);
   const unsaved = state.kind === "dirty" || state.kind === "saving" || state.kind === "error";
 
+  // Unmounting sends what is still pending or failed instead of dropping it, and the browser asks before a full
+  // page leave while anything is unsaved (S2).
   useEffect(() => () => queue.dispose(), [queue]);
 
   // While anything is unsaved the browser asks before leaving: the queue's own saves may still be on their way, and

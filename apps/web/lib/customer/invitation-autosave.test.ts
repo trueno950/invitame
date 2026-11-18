@@ -296,6 +296,14 @@ describe("every refusal becomes a Spanish result the status line can show (S2, S
     });
   });
 
+  it("reports a content conflict with the sentence that says the invitation changed elsewhere", () => {
+    assert.deepEqual(refusal("content", "content-conflict"), {
+      ok: false,
+      reason: "refused",
+      message: INVITATION_ERROR_COPY["content-conflict"],
+    });
+  });
+
   it("maps the feature and RSVP issues to the field each one names", () => {
     assert.deepEqual(
       refusal("features", "features-invalid", [

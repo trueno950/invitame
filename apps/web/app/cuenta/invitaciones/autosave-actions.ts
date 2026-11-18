@@ -69,9 +69,20 @@ export async function autosaveContentAction(id: string, changes: unknown): Promi
     return savedResult(new Date().toISOString());
   }
 
-  const written = await sendInvitationCall(() =>
-    invitations.replaceContent(id, mergeContent(read.value.content, parsed.changes)),
-  );
+  // Versioned write: on `content-conflict` the same changes are merged once into the fresh content (R4-001).
+  const write = (stored: { content: Record<string, unknown>; updatedAt: string }) =>
+    sendInvitationCall(() =>
+      invitations.replaceContent(
+        id,
+        mergeContent(stored.content, parsed.changes),
+        stored.updatedAt,
+      ),
+    );
+  let written = await write(read.value);
+  if (!written.ok && written.failure === "content-conflict") {
+    const fresh = await sendInvitationCall(() => invitations.get(id));
+    written = fresh.ok ? await write(fresh.value) : fresh;
+  }
 
   return written.ok
     ? savedResult(new Date().toISOString())

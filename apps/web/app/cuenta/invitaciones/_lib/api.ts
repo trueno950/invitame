@@ -71,8 +71,8 @@ export const invitations = {
   list: () => logged((api) => api.list()),
   get: (id: string) => logged((api) => api.get(id)),
   create: (input: Parameters<InvitationsClient["create"]>[0]) => logged((api) => api.create(input)),
-  replaceContent: (id: string, content: Record<string, unknown>) =>
-    logged((api) => api.replaceContent(id, content)),
+  replaceContent: (id: string, content: Record<string, unknown>, expectedUpdatedAt?: string) =>
+    logged((api) => api.replaceContent(id, content, expectedUpdatedAt)),
   updateInvitationFeatures: (
     id: string,
     features: Parameters<InvitationsClient["updateInvitationFeatures"]>[1],

@@ -168,6 +168,20 @@ describe("the autosave queue debounces a change (S2, S4)", () => {
     assert.equal(queue.state().kind, "saved");
   });
 
+  it("sends what is pending or failed when the editor unmounts instead of dropping it (S2)", async () => {
+    const deferred = deferredSave();
+    const { queue, clock } = queueWith(deferred.save);
+    queue.change("content", { celebrantName: "Ana" });
+    queue.dispose();
+    assert.equal(clock.pending(), 0);
+    assert.deepEqual(deferred.started[0]?.request.fields, { celebrantName: "Ana" });
+
+    deferred.started[0]?.resolve({ ok: false, reason: "unavailable", message: "No disponible." });
+    await settle();
+    queue.dispose();
+    assert.equal(deferred.started.length, 2);
+  });
+
   it("stays usable after dispose, so a second mount of the editor keeps saving", async () => {
     const deferred = deferredSave();
     const { queue, clock } = queueWith(deferred.save);

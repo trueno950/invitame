@@ -66,9 +66,9 @@ export interface AutosaveQueue {
   state(): AutosaveQueueState;
   subscribe(listener: (state: AutosaveQueueState) => void): () => void;
   /**
-   * Stops the pending timer and drops every listener, which is what the editor does when it unmounts. The queue stays
-   * usable afterwards, so a second mount of the same editor (React's development double render, for one) keeps
-   * saving instead of facing a queue that silently ignores its fields.
+   * Sends what is still pending or failed and drops every listener, which is what the editor does when it unmounts:
+   * a debounced or failed change is not dropped by a client-side navigation (S2). The saves are already on their way,
+   * and the queue stays usable afterwards, so a second mount of the same editor keeps saving.
    */
   dispose(): void;
 }
@@ -334,7 +334,11 @@ export function createAutosaveQueue(options: AutosaveQueueOptions): AutosaveQueu
       };
     },
     dispose: () => {
-      cancelTimer();
+      // A failed channel keeps its changes pending, so clearing the failure is what makes the unmount send them.
+      for (const channel of CHANNELS) {
+        slots[channel].failure = undefined;
+      }
+      void flush();
       listeners.clear();
     },
   };

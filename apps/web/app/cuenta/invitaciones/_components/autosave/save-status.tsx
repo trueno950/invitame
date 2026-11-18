@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -20,8 +19,9 @@ import { focusRing } from "../../../../_components/ui.ts";
  *
  * `dirty` is the moment between a keystroke and its save: the line keeps the «Guardado hace…» it already showed,
  * because that is still the truth until the new save is answered. A failed save whose reason is an ended session
- * offers the sign-in page instead of a retry that could not work. The pending changes and the field values stay
- * where the creator left them: nothing is discarded to show the error.
+ * offers the sign-in page instead of a retry that could not work; that link is a plain `<a>` so it leaves the
+ * document and the browser asks before dropping the changes the queue still holds (S2). The pending changes and
+ * the field values stay where the creator left them: nothing is discarded to show the error.
  */
 
 /** How often the relative time is recomputed; the line itself is only announced when its text changes. */
@@ -128,9 +128,9 @@ export function SaveStatus({ state, onRetry, className }: SaveStatusProps) {
             <span className="text-muted">{`· ${state.failure.message}`}</span>
           </p>
           {state.failure.reason === "signed-out" ? (
-            <Link className={actionButton} href={CUSTOMER_SIGN_IN_PATH}>
+            <a className={actionButton} href={CUSTOMER_SIGN_IN_PATH}>
               {AUTOSAVE_COPY.signIn}
-            </Link>
+            </a>
           ) : (
             <button className={actionButton} onClick={onRetry} type="button">
               {AUTOSAVE_COPY.retry}

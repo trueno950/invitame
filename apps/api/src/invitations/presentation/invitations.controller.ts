@@ -156,7 +156,8 @@ export class InvitationsController {
 
   /**
    * Replaces the content of a DRAFT, validating every value against the pinned version's schema (S3, S7). `PUT`
-   * and not `PATCH`: the whole content is replaced, and the web client calls it from a server action.
+   * and not `PATCH`: the whole content is replaced, and the web client calls it from a server action. A body that
+   * names `expectedUpdatedAt` is a conditional write and answers 409 when another writer committed first (S2).
    */
   @Put(":id/content")
   async replaceContent(
@@ -166,7 +167,14 @@ export class InvitationsController {
   ): Promise<OwnedInvitationResponse> {
     try {
       return orOwnedInvitationNotFound(
-        await this.updateContent.execute({ ownerId: userId, id, content: body.content }),
+        await this.updateContent.execute({
+          ownerId: userId,
+          id,
+          content: body.content,
+          ...(body.expectedUpdatedAt === undefined
+            ? {}
+            : { expectedUpdatedAt: body.expectedUpdatedAt }),
+        }),
       );
     } catch (error) {
       return mapInvitationError(error);

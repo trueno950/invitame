@@ -66,6 +66,14 @@ export class InvalidInvitationContentError extends Error {
   }
 }
 
+/** Another writer committed between the read and the write, so a versioned content write stored nothing (S2). */
+export class InvitationContentConflictError extends Error {
+  constructor() {
+    super("The invitation changed since the content was read.");
+    this.name = "InvitationContentConflictError";
+  }
+}
+
 /**
  * The feature data a request asked for is not acceptable (F1; S4): the zone is not an allow-list member or the
  * phone is not a Mexican ten-digit or international number. `issues` are the deterministic English explanations

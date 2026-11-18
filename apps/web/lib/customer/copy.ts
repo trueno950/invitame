@@ -337,6 +337,8 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "payment-required":
     "Para publicar esta invitación primero tienes que pagar tu paquete: usa el botón «Pagar y publicar» de la invitación.",
   "content-invalid": "Revisa los datos: hay un campo que no cumple el formato de la plantilla.",
+  "content-conflict":
+    "Tu invitación cambió en otra pestaña o al subir una foto. Vuelve a intentarlo.",
   "content-unavailable":
     "No pudimos comprobar la plantilla de esta invitación. Inténtalo de nuevo en unos minutos.",
   "features-invalid": "Revisa las funcionalidades: hay un dato que no pudimos guardar.",

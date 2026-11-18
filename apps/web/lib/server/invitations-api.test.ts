@@ -219,6 +219,13 @@ describe("requests", () => {
         OWNED,
       ],
       [
+        () => api.replaceContent(ID, { celebrantName: "Ana" }, AT),
+        "PUT",
+        `/invitations/${ID}/content`,
+        { content: { celebrantName: "Ana" }, expectedUpdatedAt: AT },
+        OWNED,
+      ],
+      [
         () =>
           api.updateInvitationFeatures(ID, {
             timeZone: "America/Tijuana",
@@ -645,7 +652,7 @@ describe("errors", () => {
     );
   });
 
-  it("maps the 409 codes of an archived draft", async () => {
+  it("maps the 409 codes of a refused write", async () => {
     for (const [code, failure] of [
       ["INVITATION_NOT_EDITABLE", "not-editable"],
       ["INVITATION_ALREADY_ARCHIVED", "already-archived"],
@@ -653,6 +660,11 @@ describe("errors", () => {
       answer(409, { code });
       assert.deepEqual(await client().archive(ID), { ok: false, failure }, code);
     }
+
+    // A content write that named a version another writer already moved: nothing was stored.
+    answer(409, { code: "INVITATION_CONTENT_CONFLICT" });
+    const refused = await client().replaceContent(ID, {}, AT);
+    assert.deepEqual(refused, { ok: false, failure: "content-conflict" });
   });
 
   it("maps the 409 codes of a publication, with the readiness issues of a refused publish", async () => {

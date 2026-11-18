@@ -97,9 +97,16 @@ export interface InvitationRepository {
    * Replaces the content of a DRAFT or a PUBLISHED invitation, in one statement whose `WHERE` names the owner
    * and both editable statuses, so a published invitation changes live (S7) and an archived one is never
    * rewritten even by a concurrent archive (A2). Throws `InvitationNotEditableError` when the row is owned but
-   * no longer editable; null, changing nothing, when no row has this id or another owner has it (A4).
+   * no longer editable; null, changing nothing, when no row has this id or another owner has it (A4). A write
+   * that names `expectedUpdatedAt` carries it into the `WHERE` too, so a content merged from an older read never
+   * overwrites a newer write: it then throws `InvitationContentConflictError` (S2).
    */
-  updateContent(ownerId: string, id: string, content: JsonObject): Promise<InvitationRecord | null>;
+  updateContent(
+    ownerId: string,
+    id: string,
+    content: JsonObject,
+    expectedUpdatedAt?: Date,
+  ): Promise<InvitationRecord | null>;
 
   /**
    * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone and
