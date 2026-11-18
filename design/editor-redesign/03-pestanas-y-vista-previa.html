@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor de invitación — 03 Pestañas y vista previa</title>
+<style>
+  /* App-theme tokens, copied from apps/web/app/globals.css (design/system.md). No other color is used. */
+  :root {
+    --background: #fff7f5;
+    --surface: #ffffff;
+    --rose-50: #fdeef2;
+    --rose-100: #f8d7e0;
+    --ink: #3b1424;
+    --muted: #6b3a4c;
+    --placeholder: #8a6070;
+    --primary: #8c1c3a;
+    --primary-deep: #6e1530;
+    --on-primary: #ffffff;
+    --field-border: #a06e7e;
+    --rose: #e9a3b5;
+    --gold: #c29a54;
+    --leaf: #8faf8c;
+    --radius-field: 1rem;
+    --radius-panel: 1.6rem;
+    --radius-card: 2rem;
+    --shadow-soft: 0 2px 6px rgba(110, 21, 48, 0.05), 0 24px 60px -28px rgba(110, 21, 48, 0.3);
+    --shadow-button: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 14px 30px -12px rgba(140, 28, 58, 0.65);
+    --font-display: "Cormorant Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+    --font-sans: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--background);
+    background-image:
+      radial-gradient(70% 30% at 50% 0, var(--surface) 0%, rgba(255, 255, 255, 0) 70%),
+      linear-gradient(180deg, var(--rose-50), var(--background) 46%);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 8px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  .canvas { width: 1440px; margin: 0 auto; padding: 24px 0 32px; }
+  .canvas-head { padding: 0 18px 16px; }
+  .kicker { margin: 0; color: var(--primary); font-size: 11px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; }
+  .canvas-head h1 { margin: 6px 0 0; font-family: var(--font-display); font-size: 34px; font-weight: 600; line-height: 1.1; }
+  .lede { margin: 6px 0 0; max-width: 108ch; color: var(--muted); font-size: 14px; }
+
+  .stage { display: flex; gap: 24px; align-items: flex-start; padding: 0 18px; }
+  .device { flex: 0 0 auto; overflow: hidden; border-radius: 18px; background: var(--surface); box-shadow: 0 40px 70px -46px rgba(110, 21, 48, 0.55), inset 0 0 0 1.5px var(--rose-100); }
+  .device--desktop { width: 990px; }
+  .device--phone { width: 390px; }
+  .chrome { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; background: var(--rose-50); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .chrome-dots { display: flex; gap: 5px; }
+  .chrome-dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--rose-100); }
+  .url { display: flex; flex: 1; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--rose-100); color: var(--muted); font-size: 11px; }
+  .chrome-note { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }
+  .statusbar { display: flex; align-items: center; justify-content: space-between; height: 30px; padding: 0 16px; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 500; }
+  .statusbar .signal { display: flex; align-items: flex-end; gap: 4px; height: 12px; }
+  .statusbar .signal i { display: block; width: 3px; border-radius: 1px; background: var(--ink); }
+  .screen { display: flex; height: 860px; flex-direction: column; overflow: hidden; background: var(--background); }
+  .screen--phone { height: 870px; }
+
+  .appbar { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; height: 50px; padding: 0 24px; background: var(--surface); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .wordmark { color: var(--primary); font-size: 18px; font-weight: 500; letter-spacing: -0.01em; text-decoration: none; }
+  .wordmark em { font-family: var(--font-display); font-style: italic; font-size: 22px; }
+  .topnav { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+  .topnav a { color: var(--muted); text-decoration: none; }
+  .topnav a:hover { color: var(--primary); }
+  .topnav a[aria-current="page"] { color: var(--primary); font-weight: 500; }
+  .topnav .sep { width: 1px; height: 14px; background: var(--rose-100); }
+
+  .editor-head { display: flex; flex: 0 0 auto; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 12px 24px 10px; }
+  .back { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; color: var(--primary); font-size: 12.5px; font-weight: 500; text-decoration: none; }
+  .back:hover { text-decoration: underline; text-decoration-color: var(--rose); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .title { margin: 2px 0 0; font-family: var(--font-display); font-size: 25px; font-weight: 600; line-height: 1.15; letter-spacing: -0.005em; }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100); color: var(--muted); font-size: 11.5px; font-weight: 500; }
+  .badge--status { background: var(--rose-50); color: var(--primary); }
+  .badge--status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+
+  .body { display: flex; flex: 1 1 auto; gap: 18px; min-height: 0; padding: 0 24px 18px; }
+
+  /* Vertical tabs. */
+  .vrail { display: flex; flex: 0 0 auto; flex-direction: column; gap: 3px; width: 170px; }
+  .vtab { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 46px; padding: 0 12px; border: 0; border-radius: 14px; background: transparent; color: var(--ink); font-family: inherit; font-size: 13.5px; font-weight: 500; text-align: left; cursor: pointer; }
+  .vtab:hover { background: var(--surface); }
+  .vtab[aria-selected="true"] { background: var(--surface); box-shadow: inset 3px 0 0 var(--primary), inset 0 0 0 1.5px var(--rose-100), var(--shadow-soft); color: var(--primary); font-weight: 600; }
+  .vtab span.meta-mini { color: var(--muted); font-size: 10.5px; font-weight: 400; white-space: nowrap; }
+  .vrail-note { margin: 10px 0 0; padding: 11px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 0 0 1.5px var(--rose-100); color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+
+  /* Form column: autosave status on top, sticky. */
+  .formcol { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 0; overflow: hidden; border-radius: var(--radius-panel); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100), var(--shadow-soft); }
+  .statline { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-radius: var(--radius-panel) var(--radius-panel) 0 0; background: var(--rose-50); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .save-ok { display: inline-flex; align-items: center; gap: 7px; margin: 0; color: var(--ink); font-size: 12px; font-weight: 500; }
+  .save-ok .tick { display: grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: var(--primary); color: var(--on-primary); font-size: 10px; }
+  .save-when { color: var(--muted); font-weight: 400; }
+  .linkbtn { border: 0; border-radius: 999px; background: transparent; color: var(--primary); font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 10px; cursor: pointer; }
+  .linkbtn:hover { background: var(--rose-100); }
+  .formbody { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 12px; padding: 14px 16px 0; overflow: hidden; position: relative; }
+  .formbody h3 { margin: 0; font-family: var(--font-display); font-size: 21px; font-weight: 600; line-height: 1.2; }
+  .formhint { margin: -6px 0 0; color: var(--muted); font-size: 11.5px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 11px 12px; }
+  .span2 { grid-column: 1 / -1; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field > label { color: var(--ink); font-size: 12px; font-weight: 500; }
+  .opt { color: var(--muted); font-weight: 400; }
+  .input { width: 100%; min-height: 44px; padding: 9px 13px; border: 1.5px solid var(--field-border); border-radius: var(--radius-field); background: var(--surface); color: var(--ink); font-family: inherit; font-size: 14px; }
+  .input::placeholder { color: var(--placeholder); }
+  .input:hover { border-color: var(--primary); }
+  .textarea { min-height: 74px; resize: none; line-height: 1.45; }
+  .fade { position: relative; }
+  .fade::after { content: ""; position: absolute; inset: auto 0 0; height: 64px; pointer-events: none; background: linear-gradient(180deg, rgba(255, 255, 255, 0), var(--surface) 72%); }
+
+  /* Live preview of the invitation, at phone width. */
+  .preview { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; width: 334px; }
+  .preview-cap { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
+  .preview-cap b { color: var(--primary); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; font-size: 10px; }
+  .phone-mock { display: flex; flex-direction: column; overflow: hidden; border-radius: 26px; background: var(--surface); box-shadow: 0 26px 50px -34px rgba(110, 21, 48, 0.55), inset 0 0 0 6px var(--surface), inset 0 0 0 7.5px var(--rose-100); }
+  .mock-bar { display: flex; align-items: center; justify-content: space-between; height: 26px; padding: 0 22px; background: var(--rose-50); color: var(--muted); font-size: 9.5px; }
+  .mock-scroll { display: flex; flex-direction: column; gap: 12px; padding: 20px 20px 22px; background: linear-gradient(180deg, var(--rose-50) 0%, var(--background) 45%, var(--rose-50) 100%); }
+  .arch { position: relative; display: grid; place-items: end center; height: 132px; padding-bottom: 10px; overflow: hidden; border-radius: 999px 999px 12px 12px; background: linear-gradient(168deg, var(--rose-100) 0%, var(--rose) 46%, var(--gold) 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
+  .arch .ph { padding: 3px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.82); color: var(--muted); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .rule { display: flex; align-items: center; gap: 8px; color: var(--gold); }
+  .rule::before, .rule::after { content: ""; flex: 1; height: 1px; background: var(--gold); }
+  .rule svg { flex: 0 0 auto; }
+  .mock-name { margin: 0; color: var(--primary); font-family: var(--font-display); font-size: 34px; font-style: italic; font-weight: 600; line-height: 1; text-align: center; }
+  .mock-sub { margin: 0; color: var(--muted); font-size: 9.5px; letter-spacing: 0.24em; text-transform: uppercase; text-align: center; }
+  .mock-date { margin: 0; color: var(--ink); font-size: 11.5px; font-weight: 500; text-align: center; }
+  .mock-place { display: flex; flex-direction: column; gap: 1px; text-align: center; }
+  .mock-place b { color: var(--ink); font-size: 10.5px; font-weight: 600; }
+  .mock-place span { color: var(--muted); font-size: 9.5px; line-height: 1.4; }
+  .mock-cta { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; margin-top: 4px; border-radius: 999px; background: var(--primary); color: var(--on-primary); font-size: 10.5px; font-weight: 600; }
+  .preview-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+  /* Phone frame. */
+  .p-appbar { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; height: 50px; padding: 0 14px; background: var(--surface); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .p-appbar .icon-btn { display: grid; place-items: center; width: 44px; height: 44px; margin-left: -8px; border: 0; border-radius: 999px; background: transparent; color: var(--primary); cursor: pointer; }
+  .p-appbar .icon-btn:hover { background: var(--rose-50); }
+  .p-title { display: flex; flex: 1; min-width: 0; flex-direction: column; margin: 0; font-family: var(--font-display); font-size: 18px; font-weight: 600; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .p-theme { color: var(--muted); font-family: var(--font-sans); font-size: 10.5px; font-weight: 400; }
+  .tabs { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 7px; padding: 10px 14px 9px; background: var(--background); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .tab { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 13px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); color: var(--ink); font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .tab[aria-selected="true"] { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+  .tab--goal { margin-left: auto; box-shadow: inset 0 0 0 1.5px var(--primary); color: var(--primary); font-weight: 600; }
+  .p-body { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 10px; padding: 10px 12px 8px; overflow: hidden; }
+  .p-statusstrip { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 14px; background: var(--rose-50); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .save-busy { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: var(--ink); font-size: 12px; font-weight: 500; }
+  .spinner { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--rose-100); border-top-color: var(--primary); animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .p-card { display: flex; flex-direction: column; gap: 9px; padding: 13px 14px 16px; border-radius: var(--radius-panel); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .p-card h3 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 600; line-height: 1.2; }
+  .p-fields { display: flex; flex-direction: column; gap: 9px; }
+  .p-fields .input { min-height: 46px; font-size: 14.5px; }
+  .p-bar { display: flex; flex: 0 0 auto; flex-direction: column; gap: 6px; padding: 9px 12px 14px; background: var(--surface); box-shadow: inset 0 1px 0 var(--rose-100); }
+  .p-bar .btn { min-height: 48px; font-size: 15px; }
+  .p-bar-note { margin: 0; color: var(--muted); font-size: 11px; text-align: center; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 20px; border: 0; border-radius: 999px; font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; text-decoration: none; cursor: pointer; transition: background-color 0.15s ease; }
+  .btn--primary { background: var(--primary); color: var(--on-primary); box-shadow: var(--shadow-button); }
+  .btn--primary:hover { background: var(--primary-deep); }
+  .btn--quiet { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); color: var(--ink); }
+  .btn--quiet:hover { background: var(--rose-50); }
+  .btn--block { width: 100%; }
+
+  /* Inset: the three autosave states. */
+  .detail { display: flex; gap: 20px; align-items: flex-start; padding: 20px 18px 0; }
+  .inset { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; width: 470px; padding: 15px 17px; border-radius: var(--radius-card); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100), var(--shadow-soft); }
+  .inset h2 { margin: 0 0 2px; color: var(--primary); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .state-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border-radius: 14px; background: var(--background); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .fail { display: inline-flex; align-items: center; gap: 7px; margin: 0; color: var(--primary); font-size: 12px; font-weight: 600; }
+  .inset-cap { margin: 2px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  .notes { display: grid; flex: 1 1 auto; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .note { padding: 13px 15px; border-radius: var(--radius-panel); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .note h2 { margin: 0 0 5px; color: var(--primary); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .note p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+  .note ul { margin: 0; padding-left: 15px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <header class="canvas-head">
+    <p class="kicker">InvitaMe · editor de invitación · dirección 03</p>
+    <h1>Pestañas y vista previa</h1>
+    <p class="lede">Cinco pestañas a la izquierda, el formulario en medio y la invitación viva a la derecha. Cada campo se guarda solo, con una línea de estado que dice si se guardó, si está guardando o si falló y se puede reintentar.</p>
+  </header>
+
+  <div class="stage">
+    <!-- Desktop 990 × 900 -->
+    <section class="device device--desktop" aria-label="Editor en escritorio: pestaña Contenido y vista previa en vivo">
+      <div class="chrome">
+        <span class="chrome-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="url">invitame.mx/cuenta/invitaciones/204edb11</span>
+        <span class="chrome-note">escritorio · 990</span>
+      </div>
+      <div class="screen">
+        <header class="appbar">
+          <a class="wordmark" href="#"><em>Invita</em>Me</a>
+          <nav class="topnav" aria-label="Cuenta">
+            <a aria-current="page" href="#">Mis invitaciones</a>
+            <span aria-hidden="true" class="sep"></span>
+            <a href="#">Mi cuenta</a>
+          </nav>
+        </header>
+
+        <div class="editor-head">
+          <div>
+            <a class="back" href="#">← Mis invitaciones</a>
+            <h2 class="title">Ornamental · Terracota y salvia</h2>
+            <div class="meta">
+              <span class="badge badge--status">Borrador</span>
+              <span class="badge">Paquete Premium</span>
+              <span class="badge">$100.00 MXN · sin pagar</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="body">
+          <div class="vrail" role="tablist" aria-label="Secciones del editor">
+            <button aria-selected="true" class="vtab" role="tab" type="button">Contenido</button>
+            <button aria-selected="false" class="vtab" role="tab" type="button">Fotos <span class="meta-mini">4 de 12</span></button>
+            <button aria-selected="false" class="vtab" role="tab" type="button">Funciones <span class="meta-mini">3</span></button>
+            <button aria-selected="false" class="vtab" role="tab" type="button">Asistencia <span class="meta-mini">máx. 4</span></button>
+            <button aria-selected="false" class="vtab" role="tab" type="button">Publicar <span class="meta-mini">sin pagar</span></button>
+            <p class="vrail-note">La invitación de la derecha se actualiza con cada campo. Nada se manda hasta que el campo se termina de escribir.</p>
+          </div>
+
+          <div class="formcol">
+            <div class="statline">
+              <p class="save-ok"><span aria-hidden="true" class="tick">✓</span> Guardado hace un momento <span class="save-when">· 9:44</span></p>
+              <button class="linkbtn" type="button">Guardar ahora</button>
+            </div>
+            <div class="formbody fade">
+              <h3>Contenido</h3>
+              <p class="formhint">Los datos que verán tus invitados. Se guardan al salir de cada campo.</p>
+              <div class="grid2">
+                <div class="field span2">
+                  <label for="c-nombre">Quinceañera</label>
+                  <input class="input" id="c-nombre" type="text" value="Valentina Robles Aguilar">
+                </div>
+                <div class="field span2">
+                  <label for="c-padres">Padres</label>
+                  <input class="input" id="c-padres" type="text" value="Héctor Robles Martínez y Mariana Aguilar Soto">
+                </div>
+                <div class="field span2">
+                  <label for="c-padrinos">Padrinos <span class="opt">(opcional)</span></label>
+                  <input class="input" id="c-padrinos" type="text" value="Javier Aguilar Soto y Rocío Mendoza Lara">
+                </div>
+                <div class="field">
+                  <label for="c-fecha">Fecha</label>
+                  <input class="input" id="c-fecha" type="text" value="15/05/2027">
+                </div>
+                <div class="field">
+                  <label for="c-hora">Hora</label>
+                  <input class="input" id="c-hora" type="text" value="19:30">
+                </div>
+                <div class="field span2">
+                  <label for="c-lugar-misa">Lugar de la misa</label>
+                  <input class="input" id="c-lugar-misa" type="text" value="Parroquia de San Miguel Arcángel">
+                </div>
+                <div class="field span2">
+                  <label for="c-dir-misa">Dirección de la misa</label>
+                  <input class="input" id="c-dir-misa" type="text" value="Av. Juárez 145, Centro, Querétaro, Qro.">
+                </div>
+                <div class="field span2">
+                  <label for="c-lugar-recep">Lugar de la recepción</label>
+                  <input class="input" id="c-lugar-recep" type="text" value="Jardín Casa Robles">
+                </div>
+                <div class="field span2">
+                  <label for="c-dir-recep">Dirección de la recepción</label>
+                  <input class="input" id="c-dir-recep" type="text" value="Camino a La Cañada 220, Juriquilla, Qro.">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview">
+            <p class="preview-cap"><b>Vista previa</b> <span>Terracota y salvia</span></p>
+            <div class="phone-mock">
+              <div class="mock-bar"><span>9:44</span><span aria-hidden="true">▮▮▮</span></div>
+              <div class="mock-scroll">
+                <div aria-hidden="true" class="arch"><span class="ph">Foto principal</span></div>
+                <p class="mock-sub">Mis XV años</p>
+                <p class="mock-name">Valentina</p>
+                <div aria-hidden="true" class="rule"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2.5c1.9 2 2.9 3.9 2.9 5.5S9.9 12 8 13.5C6.1 12 5.1 9.8 5.1 8S6.1 4.5 8 2.5Z" stroke="currentColor" stroke-width="1.1"/></svg></div>
+                <p class="mock-date">Sábado 15 de mayo de 2027 · 19:30</p>
+                <div class="mock-place">
+                  <b>Misa</b>
+                  <span>Parroquia de San Miguel Arcángel<br>Av. Juárez 145, Centro, Querétaro</span>
+                </div>
+                <div class="mock-place">
+                  <b>Recepción</b>
+                  <span>Jardín Casa Robles<br>Camino a La Cañada 220, Juriquilla</span>
+                </div>
+                <div class="mock-cta">Confirmar asistencia</div>
+              </div>
+            </div>
+            <p class="preview-note">Es la misma invitación que verán tus invitados, a 334 px. Si algo se ve raro, se arregla aquí al lado.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Phone 390 × 900 -->
+    <section class="device device--phone" aria-label="Editor en teléfono: pestañas arriba y botón de vista previa">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span aria-hidden="true" class="signal"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:12px"></i></span>
+      </div>
+      <div class="screen screen--phone">
+        <header class="p-appbar">
+          <button aria-label="Volver a mis invitaciones" class="icon-btn" type="button">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <h2 class="p-title">Ornamental<span class="p-theme">Borrador · Premium · $100.00 MXN sin pagar</span></h2>
+        </header>
+
+        <div class="tabs" role="tablist" aria-label="Secciones del editor">
+          <button aria-selected="true" class="tab" role="tab" type="button">Contenido</button>
+          <button aria-selected="false" class="tab" role="tab" type="button">Fotos</button>
+          <button aria-selected="false" class="tab" role="tab" type="button">Funciones</button>
+          <button aria-selected="false" class="tab" role="tab" type="button">Asistencia</button>
+          <button aria-selected="false" class="tab tab--goal" role="tab" type="button">Publicar</button>
+        </div>
+
+        <div class="p-body">
+          <div class="p-statusstrip">
+            <p class="save-busy"><span aria-hidden="true" class="spinner"></span> Guardando…</p>
+            <button class="linkbtn" type="button">Guardar ahora</button>
+          </div>
+
+          <div class="p-card">
+            <h3>Contenido</h3>
+            <div class="p-fields">
+              <div class="field">
+                <label for="pp2-nombre">Quinceañera</label>
+                <input class="input" id="pp2-nombre" type="text" value="Valentina Robles Aguilar">
+              </div>
+              <div class="field">
+                <label for="pp2-padres">Padres</label>
+                <input class="input" id="pp2-padres" type="text" value="Héctor Robles Martínez y Mariana Aguilar Soto">
+              </div>
+              <div class="field">
+                <label for="pp2-fecha">Fecha</label>
+                <input class="input" id="pp2-fecha" type="text" value="15/05/2027">
+              </div>
+              <div class="field">
+                <label for="pp2-hora">Hora</label>
+                <input class="input" id="pp2-hora" type="text" value="19:30">
+              </div>
+              <div class="field">
+                <label for="pp2-lugar-misa">Lugar de la misa</label>
+                <input class="input" id="pp2-lugar-misa" type="text" value="Parroquia de San Miguel Arcángel">
+              </div>
+              <div class="field">
+                <label for="pp2-dir-misa">Dirección de la misa</label>
+                <input class="input" id="pp2-dir-misa" type="text" value="Av. Juárez 145, Centro, Querétaro">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-bar">
+          <button class="btn btn--primary btn--block" type="button">Ver vista previa</button>
+          <p class="p-bar-note">Se abre la invitación completa, tal como la verán tus invitados.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="detail">
+    <div class="inset">
+      <h2>Los tres estados del autoguardado</h2>
+      <div class="state-row">
+        <p class="save-busy"><span aria-hidden="true" class="spinner"></span> Guardando…</p>
+        <span class="preview-cap">al terminar un campo</span>
+      </div>
+      <div class="state-row">
+        <p class="save-ok"><span aria-hidden="true" class="tick">✓</span> Guardado hace un momento</p>
+        <span class="preview-cap">9:44</span>
+      </div>
+      <div class="state-row">
+        <p class="fail" style="flex: 0 0 auto;">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.8 15 14H1L8 1.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6v3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.6" r="0.9" fill="currentColor"/></svg>
+          No se pudo guardar
+        </p>
+        <span aria-hidden="true" class="preview-cap">·</span>
+        <button class="linkbtn" type="button">Reintentar</button>
+      </div>
+      <p class="inset-cap">Si un guardado falla, lo escrito sigue en el campo y la línea de estado lo dice con un botón para reintentar: nada se descarta y nada se da por guardado antes de tiempo.</p>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h2>S2 · nada se pierde en silencio</h2>
+        <p>El editor no navega al guardar: cada campo se manda solo y el resto del formulario sigue intacto. Un error de red deja el texto donde está y ofrece reintentar.</p>
+      </div>
+      <div class="note">
+        <h2>S3 · menos scroll</h2>
+        <p>Las pestañas cambian de sección sin recorrer la página y la vista previa evita abrir la invitación para revisarla. En el teléfono, «Ver vista previa» es la acción fija.</p>
+      </div>
+      <div class="note">
+        <h2>Estados y accesibilidad</h2>
+        <ul>
+          <li>Pestañas con <code>role="tab"</code> y <code>aria-selected</code>.</li>
+          <li>Estado en texto, no solo en color o ícono.</li>
+          <li>El giro se detiene con <code>prefers-reduced-motion</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

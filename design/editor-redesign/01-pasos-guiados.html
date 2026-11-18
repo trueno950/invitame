@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor de invitación — 01 Pasos guiados</title>
+<style>
+  /* App-theme tokens, copied from apps/web/app/globals.css (design/system.md). No other color is used. */
+  :root {
+    --background: #fff7f5;
+    --surface: #ffffff;
+    --rose-50: #fdeef2;
+    --rose-100: #f8d7e0;
+    --ink: #3b1424;
+    --muted: #6b3a4c;
+    --placeholder: #8a6070;
+    --primary: #8c1c3a;
+    --primary-deep: #6e1530;
+    --on-primary: #ffffff;
+    --field-border: #a06e7e;
+    --rose: #e9a3b5;
+    --gold: #c29a54;
+    --leaf: #8faf8c;
+    --radius-field: 1rem;
+    --radius-panel: 1.6rem;
+    --radius-card: 2rem;
+    /* `shadow-soft` / `shadow-button`: wine-tinted, the same recipe as globals.css. */
+    --shadow-soft: 0 2px 6px rgba(110, 21, 48, 0.05), 0 24px 60px -28px rgba(110, 21, 48, 0.3);
+    --shadow-button: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 14px 30px -12px rgba(140, 28, 58, 0.65);
+    --font-display: "Cormorant Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+    --font-sans: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--background);
+    background-image:
+      radial-gradient(70% 30% at 50% 0, var(--surface) 0%, rgba(255, 255, 255, 0) 70%),
+      linear-gradient(180deg, var(--rose-50), var(--background) 46%);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 8px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  .canvas { width: 1440px; margin: 0 auto; padding: 24px 0 32px; }
+  .canvas-head { padding: 0 18px 16px; }
+  .kicker { margin: 0; color: var(--primary); font-size: 11px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; }
+  .canvas-head h1 { margin: 6px 0 0; font-family: var(--font-display); font-size: 34px; font-weight: 600; line-height: 1.1; }
+  .lede { margin: 6px 0 0; max-width: 108ch; color: var(--muted); font-size: 14px; }
+
+  /* The two frames of the same editor state. */
+  .stage { display: flex; gap: 24px; align-items: flex-start; padding: 0 18px; }
+  .device { flex: 0 0 auto; overflow: hidden; border-radius: 18px; background: var(--surface); box-shadow: 0 40px 70px -46px rgba(110, 21, 48, 0.55), inset 0 0 0 1.5px var(--rose-100); }
+  .device--desktop { width: 990px; }
+  .device--phone { width: 390px; }
+  .chrome { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; background: var(--rose-50); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .chrome-dots { display: flex; gap: 5px; }
+  .chrome-dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--rose-100); }
+  .url { display: flex; flex: 1; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--rose-100); color: var(--muted); font-size: 11px; }
+  .chrome-note { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }
+  .statusbar { display: flex; align-items: center; justify-content: space-between; height: 30px; padding: 0 16px; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 500; }
+  .statusbar .signal { display: flex; align-items: center; gap: 5px; }
+  .statusbar .signal i { display: block; width: 3px; border-radius: 1px; background: var(--ink); }
+  .screen { display: flex; height: 750px; flex-direction: column; overflow: hidden; background: var(--background); }
+  .screen--phone { height: 830px; }
+  .frame-note { margin: 0; padding: 8px 4px 0; color: var(--muted); font-size: 11px; }
+
+  /* App chrome inside each frame. */
+  .appbar { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; height: 50px; padding: 0 24px; background: var(--surface); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .wordmark { color: var(--primary); font-size: 18px; font-weight: 500; letter-spacing: -0.01em; text-decoration: none; }
+  .wordmark em { font-family: var(--font-display); font-style: italic; font-size: 22px; }
+  .topnav { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+  .topnav a { color: var(--muted); text-decoration: none; }
+  .topnav a:hover { color: var(--primary); }
+  .topnav a[aria-current="page"] { color: var(--primary); font-weight: 500; }
+  .topnav .sep { width: 1px; height: 14px; background: var(--rose-100); }
+
+  .editor-head { display: flex; flex: 0 0 auto; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 14px 24px 12px; }
+  .back { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; color: var(--primary); font-size: 12.5px; font-weight: 500; text-decoration: none; }
+  .back:hover { text-decoration: underline; text-decoration-color: var(--rose); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .title { margin: 2px 0 0; font-family: var(--font-display); font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: -0.005em; }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 7px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100); color: var(--muted); font-size: 11.5px; font-weight: 500; }
+  .badge--status { background: var(--rose-50); box-shadow: inset 0 0 0 1.5px var(--rose-100); color: var(--primary); }
+  .badge--status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+  .save-state { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 4px; color: var(--muted); font-size: 12px; }
+  .save-state .tick { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--rose-50); color: var(--primary); font-size: 10px; }
+
+  .body { display: grid; flex: 1 1 auto; grid-template-columns: 232px minmax(0, 1fr); align-items: start; gap: 20px; min-height: 0; padding: 0 24px 20px; }
+  .body-col { display: flex; min-width: 0; flex-direction: column; gap: 10px; }
+  .after-step { margin: 0; padding-left: 4px; color: var(--muted); font-size: 12px; }
+  .after-step b { color: var(--ink); font-weight: 600; }
+
+  /* Left rail: the five steps, one current. */
+  .rail { display: flex; flex-direction: column; gap: 14px; padding: 14px 12px 14px; border-radius: var(--radius-panel); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .rail-label { margin: 0 0 8px; color: var(--primary); font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .progress { height: 6px; border-radius: 999px; background: var(--rose-100); overflow: hidden; }
+  .progress > span { display: block; width: 40%; height: 100%; border-radius: 999px; background: var(--primary); }
+  .steps { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+  .step { display: flex; align-items: flex-start; gap: 9px; min-height: 48px; padding: 7px 8px; border-radius: 14px; color: var(--ink); text-decoration: none; }
+  .step:hover { background: var(--rose-50); }
+  .step-num { display: grid; flex: 0 0 auto; place-items: center; width: 22px; height: 22px; margin-top: 2px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); color: var(--muted); font-size: 11px; font-weight: 600; }
+  .step-name { display: block; font-size: 13px; font-weight: 500; line-height: 1.3; }
+  .step-state { display: block; color: var(--muted); font-size: 11px; line-height: 1.4; }
+  .step--done .step-num { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+  .step--current { background: var(--rose-50); box-shadow: inset 0 0 0 1.5px var(--primary); }
+  .step--current .step-num { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+  .step--current .step-state { color: var(--primary); font-weight: 500; }
+  .rail-note { margin: 0; padding: 10px 10px 12px; border-radius: 14px; background: var(--rose-50); color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+
+  /* The step card: one step visible, its own save at the bottom. */
+  .stepcard { display: flex; flex-direction: column; padding: 20px 22px 0; border-radius: var(--radius-panel); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100), var(--shadow-soft); }
+  .stepcard h3 { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.2; }
+  .step-hint { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin: 16px 0 0; }
+
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .field > label { color: var(--ink); font-size: 12.5px; font-weight: 500; }
+  .req { margin-left: 6px; color: var(--muted); font-size: 11px; font-weight: 400; }
+  .input { width: 100%; min-height: 46px; padding: 10px 14px; border: 1.5px solid var(--field-border); border-radius: var(--radius-field); background: var(--surface); color: var(--ink); font-family: inherit; font-size: 14.5px; }
+  .input::placeholder { color: var(--placeholder); }
+  .input:hover { border-color: var(--primary); }
+  .field--error .input { border: 2px solid var(--primary); background: var(--rose-50); }
+  .field--error > label { color: var(--primary); }
+  .error { display: flex; align-items: flex-start; gap: 5px; margin: 1px 0 0; color: var(--primary); font-size: 12px; font-weight: 500; line-height: 1.45; }
+  .error svg { flex: 0 0 auto; margin-top: 1px; }
+  .hint { margin: 1px 0 0; color: var(--muted); font-size: 11.5px; }
+
+  .btn { display: inline-flex; white-space: nowrap; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 22px; border: 0; border-radius: 999px; font-family: inherit; font-size: 14.5px; font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color 0.15s ease; }
+  .btn--primary { background: var(--primary); color: var(--on-primary); box-shadow: var(--shadow-button); }
+  .btn--primary:hover { background: var(--primary-deep); }
+  .btn--quiet { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); color: var(--ink); }
+  .btn--quiet:hover { background: var(--rose-50); }
+  .btn--text { background: transparent; color: var(--primary); padding: 0 12px; }
+  .btn--text:hover { background: var(--rose-50); }
+
+  .stepfoot { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding: 14px 0 16px; box-shadow: inset 0 1px 0 var(--rose-100); }
+  .stepfoot-note { margin: 0; color: var(--muted); font-size: 12px; }
+  .stepfoot-note b { color: var(--primary); font-weight: 600; }
+  .stepfoot-actions { display: flex; align-items: center; gap: 10px; }
+
+  /* Phone frame: chips instead of the rail, stacked fields, sticky action bar. */
+  .p-appbar { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; height: 50px; padding: 0 14px; background: var(--surface); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .p-appbar .icon-btn { display: grid; place-items: center; width: 44px; height: 44px; margin-left: -8px; border: 0; border-radius: 999px; background: transparent; color: var(--primary); cursor: pointer; }
+  .p-appbar .icon-btn:hover { background: var(--rose-50); }
+  .p-title { display: flex; flex: 1; min-width: 0; flex-direction: column; margin: 0; font-family: var(--font-display); font-size: 18px; font-weight: 600; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .p-theme { color: var(--muted); font-family: var(--font-sans); font-size: 10.5px; font-weight: 400; }
+  .p-body { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 12px; padding: 12px 14px 8px; overflow: hidden; }
+  .p-pager { display: flex; flex-direction: column; gap: 8px; }
+  .p-pager-label { margin: 0; color: var(--muted); font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+  .chips { display: flex; gap: 8px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, #000 86%, transparent 100%); mask-image: linear-gradient(90deg, #000 86%, transparent 100%); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 44px; padding: 0 13px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); color: var(--ink); font-size: 12.5px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+  .chip--done { background: var(--rose-50); color: var(--primary); }
+  .chip[aria-current="step"] { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+  .p-card { display: flex; flex-direction: column; gap: 9px; padding: 13px 14px 14px; border-radius: var(--radius-panel); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .p-card h3 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 600; line-height: 1.2; }
+  .p-fields { display: flex; flex-direction: column; gap: 9px; }
+  .p-fields .field > label { font-size: 12px; }
+  .p-fields .input { min-height: 46px; font-size: 15px; }
+  .p-bar { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; padding: 10px 14px 18px; background: var(--surface); box-shadow: inset 0 1px 0 var(--rose-100); }
+  .p-bar .btn--quiet { flex: 0 0 auto; padding: 0 18px; }
+  .p-bar .btn--primary { flex: 1 1 auto; }
+  .p-bar-note { margin: 0 0 8px; color: var(--muted); font-size: 11px; }
+  .p-bar-wrap { display: flex; flex-direction: column; }
+
+  /* Inset: the dialog a step shows before it lets changes go. */
+  .detail { display: flex; gap: 24px; align-items: flex-start; padding: 20px 18px 0; }
+  .dialog { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; width: 460px; padding: 20px 20px 16px; border-radius: var(--radius-card); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100), var(--shadow-soft); }
+  .dialog-kicker { margin: 0; color: var(--primary); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .dialog-title { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 600; line-height: 1.2; }
+  .dialog-body { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+  .dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .dialog-caption { margin: 4px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  .notes { flex: 1 1 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .note { padding: 14px 16px; border-radius: var(--radius-panel); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .note h2 { margin: 0 0 6px; color: var(--primary); font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .note p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+  .note ul { margin: 0; padding-left: 16px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <header class="canvas-head">
+    <p class="kicker">InvitaMe · editor de invitación · dirección 01</p>
+    <h1>Pasos guiados</h1>
+    <p class="lede">El editor se parte en cinco pasos y solo uno está a la vista. «Guardar y continuar» guarda el paso completo; salir de un paso con cambios pregunta primero. Las dos pantallas muestran el mismo paso, «Fecha y lugares», con un campo en error.</p>
+  </header>
+
+  <div class="stage">
+    <!-- Desktop 990 × 900 -->
+    <section class="device device--desktop" aria-label="Editor en escritorio: paso Fecha y lugares">
+      <div class="chrome">
+        <span class="chrome-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="url">invitame.mx/cuenta/invitaciones/204edb11</span>
+        <span class="chrome-note">escritorio · 990</span>
+      </div>
+      <div class="screen">
+        <header class="appbar">
+          <a class="wordmark" href="#"><em>Invita</em>Me</a>
+          <nav class="topnav" aria-label="Cuenta">
+            <a aria-current="page" href="#">Mis invitaciones</a>
+            <span aria-hidden="true" class="sep"></span>
+            <a href="#">Mi cuenta</a>
+          </nav>
+        </header>
+
+        <div class="editor-head">
+          <div>
+            <a class="back" href="#">← Mis invitaciones</a>
+            <h2 class="title">Ornamental · Terracota y salvia</h2>
+            <div class="meta">
+              <span class="badge badge--status">Borrador</span>
+              <span class="badge">Paquete Premium</span>
+              <span class="badge">$100.00 MXN · sin pagar</span>
+            </div>
+          </div>
+          <p class="save-state"><span aria-hidden="true" class="tick">✓</span> Guardado a las 9:41</p>
+        </div>
+
+        <div class="body">
+          <nav class="rail" aria-label="Pasos del editor">
+            <div class="rail-top">
+              <p class="rail-label">Paso 2 de 5</p>
+              <div aria-label="40 por ciento completado" class="progress" role="img"><span></span></div>
+            </div>
+            <ol class="steps">
+              <li>
+                <a class="step step--done" href="#">
+                  <span aria-hidden="true" class="step-num">✓</span>
+                  <span><span class="step-name">Datos</span><span class="step-state">Completado · 9:38</span></span>
+                </a>
+              </li>
+              <li>
+                <a aria-current="step" class="step step--current" href="#">
+                  <span aria-hidden="true" class="step-num">2</span>
+                  <span><span class="step-name">Fecha y lugares</span><span class="step-state">En curso · 1 campo por revisar</span></span>
+                </a>
+              </li>
+              <li>
+                <a class="step" href="#">
+                  <span aria-hidden="true" class="step-num">3</span>
+                  <span><span class="step-name">Fotos</span><span class="step-state">Pendiente · principal y galería</span></span>
+                </a>
+              </li>
+              <li>
+                <a class="step" href="#">
+                  <span aria-hidden="true" class="step-num">4</span>
+                  <span><span class="step-name">Funciones y asistencia</span><span class="step-state">Pendiente · zona horaria, WhatsApp, música y asistencia</span></span>
+                </a>
+              </li>
+              <li>
+                <a class="step" href="#">
+                  <span aria-hidden="true" class="step-num">5</span>
+                  <span><span class="step-name">Revisar y publicar</span><span class="step-state">Pendiente · pago, publicar y archivar</span></span>
+                </a>
+              </li>
+            </ol>
+            <p class="rail-note">Nada se pierde al cambiar de paso: si sales con cambios sin guardar, te preguntamos antes de descartarlos.</p>
+          </nav>
+
+          <div class="body-col">
+          <section aria-labelledby="step2-title" class="stepcard">
+            <h3 id="step2-title">Fecha y lugares</h3>
+            <p class="step-hint">Cuándo y dónde será la celebración: esto es lo que verán tus invitados. Los seis campos son necesarios para publicar.</p>
+
+            <div class="grid2">
+              <div class="field">
+                <label for="d-fecha">Fecha</label>
+                <input class="input" id="d-fecha" type="text" value="15/05/2027">
+              </div>
+              <div class="field field--error">
+                <label for="d-hora">Hora</label>
+                <input aria-describedby="d-hora-error" aria-invalid="true" class="input" id="d-hora" type="text" value="8:00 pm">
+                <p class="error" id="d-hora-error" role="alert">
+                  <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.8 15 14H1L8 1.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6v3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.6" r="0.9" fill="currentColor"/></svg>
+                  Escribe la hora en 24 horas, por ejemplo 18:00.
+                </p>
+              </div>
+              <div class="field">
+                <label for="d-lugar-misa">Lugar de la misa</label>
+                <input class="input" id="d-lugar-misa" type="text" value="Parroquia de San Miguel Arcángel">
+              </div>
+              <div class="field">
+                <label for="d-dir-misa">Dirección de la misa</label>
+                <input class="input" id="d-dir-misa" type="text" value="Av. Juárez 145, Centro, Querétaro, Qro.">
+              </div>
+              <div class="field">
+                <label for="d-lugar-recep">Lugar de la recepción</label>
+                <input class="input" id="d-lugar-recep" type="text" value="Jardín Casa Robles">
+              </div>
+              <div class="field">
+                <label for="d-dir-recep">Dirección de la recepción</label>
+                <input class="input" id="d-dir-recep" type="text" value="Camino a La Cañada 220, Juriquilla, Qro.">
+                <p class="hint">Con esta dirección armamos el mapa de la invitación.</p>
+              </div>
+            </div>
+
+            <div class="stepfoot">
+              <p class="stepfoot-note"><b>1 campo por revisar.</b> El borrador se guarda con lo que tengas escrito.</p>
+              <div class="stepfoot-actions">
+                <button class="btn btn--quiet" type="button">Atrás</button>
+                <button class="btn btn--primary" type="button">Guardar y continuar</button>
+              </div>
+            </div>
+          </section>
+          <p class="after-step">Después sigue <b>3 · Fotos</b>. Puedes volver a este paso cuando quieras: lo que guardes te espera.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Phone 390 × 860 -->
+    <section class="device device--phone" aria-label="Editor en teléfono: paso Fecha y lugares">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span aria-hidden="true" class="signal"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span>
+      </div>
+      <div class="screen screen--phone">
+        <header class="p-appbar">
+          <button aria-label="Volver a mis invitaciones" class="icon-btn" type="button">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <h2 class="p-title">Ornamental<span class="p-theme">Terracota y salvia</span></h2>
+          <span class="badge badge--status">Borrador</span>
+        </header>
+
+        <div class="p-body">
+          <div class="p-pager">
+            <p class="p-pager-label">Paso 2 de 5 · Fecha y lugares</p>
+            <div aria-label="40 por ciento completado" class="progress" role="img"><span></span></div>
+            <nav aria-label="Pasos del editor" class="chips">
+              <a class="chip chip--done" href="#"><span aria-hidden="true">✓</span> Datos</a>
+              <a aria-current="step" class="chip" href="#">2 · Fecha y lugares</a>
+              <a class="chip" href="#">3 · Fotos</a>
+              <a class="chip" href="#">4 · Funciones</a>
+            </nav>
+          </div>
+
+          <section aria-labelledby="p-step2-title" class="p-card">
+            <h3 id="p-step2-title">Fecha y lugares</h3>
+            <div class="p-fields">
+              <div class="field">
+                <label for="p-fecha">Fecha</label>
+                <input class="input" id="p-fecha" type="text" value="15/05/2027">
+              </div>
+              <div class="field field--error">
+                <label for="p-hora">Hora</label>
+                <input aria-describedby="p-hora-error" aria-invalid="true" class="input" id="p-hora" type="text" value="8:00 pm">
+                <p class="error" id="p-hora-error" role="alert">
+                  <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.8 15 14H1L8 1.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6v3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.6" r="0.9" fill="currentColor"/></svg>
+                  Escribe la hora en 24 horas, por ejemplo 18:00.
+                </p>
+              </div>
+              <div class="field">
+                <label for="p-lugar-misa">Lugar de la misa</label>
+                <input class="input" id="p-lugar-misa" type="text" value="Parroquia de San Miguel Arcángel">
+              </div>
+              <div class="field">
+                <label for="p-dir-misa">Dirección de la misa</label>
+                <input class="input" id="p-dir-misa" type="text" value="Av. Juárez 145, Centro, Querétaro, Qro.">
+              </div>
+              <div class="field">
+                <label for="p-lugar-recep">Lugar de la recepción</label>
+                <input class="input" id="p-lugar-recep" type="text" value="Jardín Casa Robles">
+              </div>
+              <div class="field">
+                <label for="p-dir-recep">Dirección de la recepción</label>
+                <input class="input" id="p-dir-recep" type="text" value="Camino a La Cañada 220, Juriquilla, Qro.">
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="p-bar-wrap">
+          <p class="p-bar-note" style="padding: 0 14px;">Guardamos este paso al continuar · 1 campo por revisar</p>
+          <div class="p-bar">
+            <button class="btn btn--quiet" type="button">Atrás</button>
+            <button class="btn btn--primary" type="button">Guardar y continuar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="detail">
+    <div class="dialog" role="dialog" aria-labelledby="dialog-title" aria-describedby="dialog-body">
+      <p class="dialog-kicker">Al salir de un paso con cambios</p>
+      <p class="dialog-title" id="dialog-title">Tienes cambios sin guardar</p>
+      <p class="dialog-body" id="dialog-body">En «Fecha y lugares» hay 2 campos sin guardar. Si sales del paso ahora, esos cambios se pierden.</p>
+      <div class="dialog-actions">
+        <button class="btn btn--primary" type="button">Guardar</button>
+        <button class="btn btn--quiet" type="button">Descartar</button>
+        <button class="btn btn--text" type="button">Seguir editando</button>
+      </div>
+      <p class="dialog-caption">Se abre al tocar otro paso, «Atrás» o «Mis invitaciones». El foco entra al diálogo y «Seguir editando» lo devuelve al campo donde estabas.</p>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h2>S2 · nada se pierde en silencio</h2>
+        <p>Un paso = un guardado. Mientras un paso esté abierto, lo escrito en él no se envía solo y ninguna otra acción lo descarta: salir siempre pregunta primero.</p>
+      </div>
+      <div class="note">
+        <h2>S3 · menos scroll</h2>
+        <p>El paso entero cabe en la pantalla: seis campos en dos columnas en escritorio y en una columna en el teléfono (390 px), sin llegar al final de la página para guardar.</p>
+      </div>
+      <div class="note">
+        <h2>Estados y accesibilidad</h2>
+        <ul>
+          <li>Error junto al campo, con texto y no solo color.</li>
+          <li>Foco visible y campos de 46–48 px de alto.</li>
+          <li>El paso actual se anuncia con <code>aria-current="step"</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

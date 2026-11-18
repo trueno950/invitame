@@ -1,0 +1,28 @@
+{
+  "title": "Invitation draft editor — three directions",
+  "brief": "Redesign of the invitation draft editor `/cuenta/invitaciones/<id>` for the owner's real case (template «Ornamental · Terracota y salvia», XV años line, Premium package, draft status, $100.00 MXN not yet paid). Owner request S1: too much scrolling and too many fields, and pressing the last save button lost the data typed in the other forms. S2 needs every direction to make silent data loss on a save impossible; S3 needs noticeably less scrolling on desktop and on a 390 px phone while keeping every capability (content fields, main photo, gallery, features, RSVP settings and responses link, payment, publish, archive, public slug). Each artboard is one 1440 px file that shows the same editor state twice: a 990 px desktop frame and a 390 px phone frame, both with Spanish (tú) content from that real case, plus a component inset and review notes. App-theme tokens only, from design/system.md.",
+  "feature": "odd/tasks/editor-redesign.md",
+  "artboards": [
+    {
+      "file": "01-pasos-guiados.html",
+      "title": "Guided steps",
+      "tradeoff": "Covers S1-S3: the editor becomes five steps (Datos, Fecha y lugares, Fotos, Funciones y asistencia, Revisar y publicar) with only one visible, a progress rail on desktop, step chips on the phone and «Guardar y continuar» saving that step. S2 is closed by the dialog the inset shows: leaving a step with edits always offers Guardar / Descartar / Seguir editando, so no path drops typed input. S3 is closed by fitting the whole step in one screen (six fields, two columns on desktop, one column of 46 px fields on the phone); no scrolling to reach the save. Cost: the order is fixed, so jumping to a single field crosses the steps in between, and a step is a gate — every exit interrupts instead of saving quietly.",
+      "width": 1440,
+      "height": 1301
+    },
+    {
+      "file": "02-un-solo-guardado.html",
+      "title": "Single save",
+      "tradeoff": "Covers S1-S3: one page with six collapsible sections, one open at a time, each closed header showing a one-line summary and a count («3 de 4 completos»), plus a sticky bottom bar with «Cambios sin guardar · 4 campos» and one «Guardar todo» that posts every section together; publish, payment, slug and archive live in the side card. S2 is closed by removing every per-section save: nothing can be written alone, and the dirty count marks which collapsed sections hold unsaved fields, so a save never forgets the others. S3 is closed by the 54 px closed rows (six sections plus the bar fit one screen). Cost: it is the flattest of the three, every collapsed section costs a click to inspect a value, and a single global save invites pressing «Guardar todo» without reviewing what changed.",
+      "width": 1440,
+      "height": 1327
+    },
+    {
+      "file": "03-pestanas-y-vista-previa.html",
+      "title": "Tabs and live preview",
+      "tradeoff": "Covers S1-S3: tabs (Contenido, Fotos, Funciones, Asistencia, Publicar) on a left rail with the form in the middle and the invitation rendered live at phone width on the right; on the phone the tabs sit on top and «Ver vista previa» is the fixed action. Each field autosaves and one status line says Guardando… / Guardado hace un momento / No se pudo guardar · Reintentar (the inset shows the three). S2 is closed by never navigating on save: the form stays as typed, a failed save keeps the text in the field and offers a retry, and no state claims success before the API answers. S3 is closed because tabs replace page scrolling and the preview removes the trip to the public page to check a change. Cost: it is the most moving parts (per-field save states, a live render, tab state), the form is the narrowest column and the rest of it is hidden behind tabs, and a preview that re-renders on every field has to be debounced.",
+      "width": 1440,
+      "height": 1351
+    }
+  ]
+}
