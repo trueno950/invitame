@@ -675,6 +675,51 @@ export const AUTOSAVE_COPY = {
 } as const;
 
 /**
+ * The invitation editor's tabs, its live preview, and the notes each tab shows (T2c; S1-S4). The editor is five tabs
+ * on one page: the fields themselves, the photos, the features, the attendance settings, and the way to publish. The
+ * owner is addressed with "tú" like the rest of the customer pages, and every tab label stays short enough to read on
+ * a phone.
+ */
+export const EDITOR_COPY = {
+  /** The accessible name of the two tab lists (the rail on a wide screen, the row on a phone). */
+  tabListLabel: "Secciones del editor",
+  /** The five tabs, in the order they appear. */
+  tabs: {
+    contenido: "Contenido",
+    fotos: "Fotos",
+    funciones: "Funciones",
+    asistencia: "Asistencia",
+    publicar: "Publicar",
+  },
+  /** Why the rail says nothing is sent until a field is finished (S4). */
+  railNote:
+    "La vista previa se actualiza con cada campo. Nada se manda hasta que terminas de escribir un campo.",
+  /** Saves everything pending now, without waiting for the field to lose focus. */
+  saveNow: "Guardar ahora",
+  contentHint: "Los datos que verán tus invitados. Cada campo se guarda al terminar de escribirlo.",
+  photosHint: "La foto principal y la galería que verán tus invitados.",
+  /** The live preview, beside the fields on a wide screen and in a dialog on a phone (S3, S4). */
+  previewCaption: "Vista previa",
+  previewNote: "Así la verán tus invitados. Las respuestas no se pueden enviar desde aquí.",
+  previewFrameTitle: "Vista previa de tu invitación",
+  previewOpen: "Ver vista previa",
+  previewClose: "Cerrar la vista previa",
+  previewPhoneNote: "Se abre la invitación completa, tal como la verán tus invitados.",
+  /** The «Asistencia» tab of a package that grants neither RSVP nor the guest list. */
+  attendanceNoRsvp:
+    "Tu paquete no incluye la confirmación de asistencia. Se muestra con un paquete que la incluya.",
+  attendanceGuestListNote:
+    "Tu paquete incluye la lista de invitados: cada invitado responde desde su enlace personal.",
+  attendanceGuestListOpen: "Abrir la lista de invitados",
+  /** The «Publicar» tab: the state of the draft, its public link, and the one action that changes it. */
+  publishMeta: {
+    unpaid: "sin pagar",
+    paid: "pagado",
+    published: "publicada",
+  },
+} as const;
+
+/**
  * The guest's page of a published invitation (M5 T5; S1, S5, A3, A5). A guest is not a customer here: the
  * page shows the invitation and nothing about the owner's account, and it asks search engines to stay away.
  */
