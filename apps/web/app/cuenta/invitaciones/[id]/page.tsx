@@ -319,7 +319,7 @@ export default async function InvitationDetailPage({
       <div className="flex flex-col gap-4">
         <Notices error={notices.error} issues={notices.issues} notice={notices.notice} />
 
-        {editable && pinned !== undefined ? (
+        {!archived ? (
           <EditorShell
             actions={{
               publish: publishInvitationAction,
@@ -354,7 +354,15 @@ export default async function InvitationDetailPage({
             previewSrc={invitationPreviewPath(invitation.id)}
             publicHref={publicHref}
             rsvpView={rsvpView}
-            sections={contentSections(pinned.fields)}
+            readOnlyContent={
+              pinned === undefined ? (
+                <div className="flex flex-col gap-3">
+                  {readOnlyNote === undefined ? null : <p className={statusNote}>{readOnlyNote}</p>}
+                  <ContentSummary content={invitation.content} rows={rows} />
+                </div>
+              ) : undefined
+            }
+            sections={pinned === undefined ? [] : contentSections(pinned.fields)}
             slug={invitation.slug}
             status={invitation.status}
             statusLabel={statusLabel(invitation.status)}
@@ -371,7 +379,7 @@ export default async function InvitationDetailPage({
             }}
           />
         ) : (
-          /* The read-only draft: an archived invitation, or one whose pinned version left the catalog (A2, A3; S7). */
+          /* The read-only draft of an archived invitation (A3; S7). A retired pinned version keeps the editor (R3-001). */
           <div className="grid items-start gap-4 lg:grid-cols-3 lg:gap-6">
             <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
               {readOnlyNote === undefined ? null : <p className={statusNote}>{readOnlyNote}</p>}
