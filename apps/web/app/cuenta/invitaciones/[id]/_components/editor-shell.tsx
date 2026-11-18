@@ -142,6 +142,8 @@ export interface EditorShellProps {
   readonly mainPhoto: ReactNode;
   readonly gallery: ReactNode;
   readonly payment: ReactNode;
+  /** Shown in «Contenido» instead of the fields when the pinned version left the catalog (the rest stays editable). */
+  readonly readOnlyContent?: ReactNode;
   readonly actions: {
     readonly publish: (formData: FormData) => Promise<void>;
     readonly unpublish: (formData: FormData) => Promise<void>;
@@ -150,6 +152,7 @@ export interface EditorShellProps {
 }
 
 export function EditorShell({
+  readOnlyContent,
   invitationId,
   initialSection,
   sections,
@@ -410,14 +413,16 @@ export function EditorShell({
       default:
         return (
           <Panel heading={EDITOR_COPY.tabs.contenido} hint={EDITOR_COPY.contentHint}>
-            <ContentFields
-              idPrefix="content"
-              issues={issues}
-              onChange={changeContent}
-              onFlush={() => void autosave.flush()}
-              sections={sections}
-              values={values}
-            />
+            {readOnlyContent ?? (
+              <ContentFields
+                idPrefix="content"
+                issues={issues}
+                onChange={changeContent}
+                onFlush={() => void autosave.flush()}
+                sections={sections}
+                values={values}
+              />
+            )}
           </Panel>
         );
     }

@@ -1,4 +1,5 @@
 import { PAYMENT_COPY } from "../../../../lib/customer/copy.ts";
+import { editorSectionTarget } from "../../../../lib/customer/editor-sections.ts";
 import {
   PAYMENT_PATHS,
   type PaymentPanelView,
@@ -7,6 +8,7 @@ import {
 } from "../../../../lib/customer/invitation-payment.ts";
 import { INVITATION_PATHS } from "../../../../lib/customer/invitations.ts";
 import { primaryButton, quietButton, statusNote, textButton } from "../../../_components/ui.ts";
+import { GuardedForm } from "./autosave/navigation-guard.tsx";
 
 /**
  * The payment blocks of a creator's invitation (M7 T2; S1, S4). Every state is the API's answer: the panel shows
@@ -54,12 +56,12 @@ export function PaymentPanel({
           ) : (
             <>
               <p className="text-sm leading-6 text-muted">{view.hint}</p>
-              <form action={action}>
+              <GuardedForm action={action} section="publicar">
                 <input name="id" type="hidden" value={invitationId} />
                 <button className={primaryButton} type="submit">
                   {view.action}
                 </button>
-              </form>
+              </GuardedForm>
             </>
           )}
         </>
@@ -105,7 +107,10 @@ export function PaymentReturnBody({
           {view.paidOn === "" ? null : <span className="mt-1 block">{view.paidOn}</span>}
         </p>
         <p>
-          <a className={primaryButton} href={INVITATION_PATHS.detail(invitationId)}>
+          <a
+            className={primaryButton}
+            href={editorSectionTarget(INVITATION_PATHS.detail(invitationId), "publicar")}
+          >
             {PAYMENT_COPY.backToInvitation}
           </a>
         </p>

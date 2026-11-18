@@ -3,10 +3,17 @@ import Link from "next/link";
 import { connection } from "next/server";
 
 import {
+  EDITOR_COPY,
   INVITATION_COPY,
   INVITATION_ERROR_COPY,
   PAYMENT_COPY,
 } from "../../../../lib/customer/copy.ts";
+import {
+  attendanceTab,
+  EDITOR_SECTION_PARAM,
+  editorSnapshotKey,
+  parseEditorSection,
+} from "../../../../lib/customer/editor-sections.ts";
 import { featureSettingsView } from "../../../../lib/customer/invitation-features.ts";
 import {
   type MediaSectionView,
@@ -14,7 +21,8 @@ import {
   mediaSectionView,
 } from "../../../../lib/customer/invitation-media.ts";
 import { paymentPanelView } from "../../../../lib/customer/invitation-payment.ts";
-import { rsvpSettingsView } from "../../../../lib/customer/invitation-rsvp.ts";
+import { invitationPreviewPath } from "../../../../lib/customer/invitation-preview.ts";
+import { RSVP_PATHS, rsvpSettingsView } from "../../../../lib/customer/invitation-rsvp.ts";
 import {
   contentSections,
   fieldLabel,
@@ -36,21 +44,17 @@ import {
   textButton,
   textField,
 } from "../../../_components/ui.ts";
-import { ContentForm } from "../_components/content-form.tsx";
 import { ContentSummary } from "../_components/content-summary.tsx";
-import { FeaturesForm, FeaturesSummary } from "../_components/features-form.tsx";
+import { FeaturesSummary } from "../_components/features-form.tsx";
 import {
   GallerySection,
   GalleryUnavailable,
   GalleryUnreadable,
+  MainPhotoUpload,
 } from "../_components/media-section.tsx";
 import { Notices } from "../_components/notices.tsx";
 import { PaymentPanel } from "../_components/payment-panel.tsx";
-import {
-  RsvpSettingsForm,
-  RsvpSettingsSummary,
-  RsvpSettingsUnavailable,
-} from "../_components/rsvp-settings.tsx";
+import { RsvpSettingsSummary, RsvpSettingsUnavailable } from "../_components/rsvp-settings.tsx";
 import { StatusBadge } from "../_components/status-badge.tsx";
 import { invitations } from "../_lib/api.ts";
 import { attempt, type Loaded, resolveRead } from "../_lib/load.ts";
@@ -61,14 +65,12 @@ import {
   publishInvitationAction,
   removeGalleryPhotoAction,
   saveGalleryAltAction,
-  saveInvitationContentAction,
-  saveInvitationFeaturesAction,
-  saveRsvpSettingsAction,
   startCheckoutAction,
   unpublishInvitationAction,
   uploadGalleryPhotoAction,
   uploadMainPhotoAction,
 } from "../actions.ts";
+import { EditorShell } from "./_components/editor-shell.tsx";
 
 export const metadata: Metadata = {
   title: INVITATION_COPY.detailPageTitle,
@@ -93,9 +95,9 @@ function PlainShell({ heading, body, path }: { heading: string; body: string; pa
 }
 
 /**
- * The «Asistencia» section of the page: the form of a draft whose package includes RSVP, the read-only pair of an
- * archived one, or the note of a settings read that failed (M6 G3; S4). A missing invitation is not its own case
- * here: the page itself already answered not-found above.
+ * The «Asistencia» block of a draft that cannot be edited: the read-only pair of an archived invitation, or the note of
+ * a settings read that failed (M6 G3; S4). A missing invitation is not its own case here: the page itself already
+ * answered not-found above.
  */
 function RsvpSectionBlock({
   invitation,
@@ -111,13 +113,7 @@ function RsvpSectionBlock({
     return <RsvpSettingsUnavailable />;
   }
 
-  const view = rsvpSettingsView(invitation, loaded.value.settings);
-
-  return view.editable ? (
-    <RsvpSettingsForm action={saveRsvpSettingsAction} view={view} />
-  ) : (
-    <RsvpSettingsSummary view={view} />
-  );
+  return <RsvpSettingsSummary view={rsvpSettingsView(invitation, loaded.value.settings)} />;
 }
 
 /**
@@ -168,17 +164,26 @@ async function gallerySection(
   }
 }
 
+/** The count a tab shows beside its label, from the read the page already made (S4). */
+function tabMeta(state: MediaSectionView | "unavailable" | "unreadable"): string {
+  return typeof state === "object" ? `${state.photos.length} de ${state.photoLimit}` : "";
+}
+
 /**
- * `/cuenta/invitaciones/[id]` (M4 T5, T8; M5 T5; S1, S3, S7, S11): the invitation's own page, in the wide workspace.
- * The form takes the wide column and its fields are grouped into short sections with two columns from
- * `sm` up, so the draft is edited with little scrolling; the narrow side column holds the status, the
- * public slug as text, what is still missing, and archiving. The form has one input per property of the
- * pinned version's schema, which the creator catalog publishes with the version; the pin never changes in
- * M4 (A2), and a retired version is absent from that catalog, so its stored content is shown read-only
- * with a note instead of a guessed form, in the same layout. Saving and archiving post to server actions,
- * because the browser cannot send `PUT` to the API (L8). The side column also publishes a complete draft,
- * shows the public `/i/<slug>` link of a published one, and unpublishes it back to draft (S7): editing stays
- * available while published, because a guest reads the stored content on every request (A6).
+ * `/cuenta/invitaciones/[id]` (M4 T5, T8; M5 T5; M6 G3; M7 T2; M8 S2-S4; T2c: S1-S4): the owner's editor of one
+ * invitation.
+ *
+ * An editable draft opens in the tabbed editor of `design/editor-redesign/03-pestanas-y-vista-previa.html`: five tabs
+ * (Contenido, Fotos, Funciones, Asistencia, Publicar), the fields in the middle, and the invitation itself rendered
+ * live at phone width beside them. Every field saves on its own, one sticky status line says whether the work is on
+ * its way, and the tab is mirrored into `?seccion=` so an upload, a checkout, a publish, an archive, or a guest write
+ * lands back on the tab it came from.
+ *
+ * The page keeps the reads and the decisions: the API is asked for the invitation, the creator catalog, the packages,
+ * the media, and the payment state, and each answer only decides what renders. An archived invitation, and one whose
+ * pinned version left the catalog, keep the read-only summaries they had: no autosave, no tabs, and no way to write.
+ * The browser never sends `PUT` (L8), so the writes are server actions; the editor calls them from the browser through
+ * its client island, and the server actions still answer a redirect for every action that navigates.
  */
 export default async function InvitationDetailPage({
   params,
@@ -190,6 +195,7 @@ export default async function InvitationDetailPage({
   await connection();
   const [{ id }, parameters] = await Promise.all([params, searchParams]);
   const notices = invitationPageNotices(parameters);
+  const section = parseEditorSection(parameters[EDITOR_SECTION_PARAM]);
 
   if (!isInvitationId(id)) {
     return (
@@ -234,8 +240,8 @@ export default async function InvitationDetailPage({
   const packages =
     packageCatalog === "unavailable" || !packageCatalog.ok ? undefined : packageCatalog.value;
   const features = featureSettingsView(invitation, packages);
-  // The «Asistencia» section is offered only when the package includes RSVP, and it is read after the catalog
-  // because the package decides whether the page offers it at all (M6 G3; S4).
+  // The «Asistencia» tab is offered only when the package includes RSVP, and it is read after the catalog because the
+  // package decides whether the page offers it at all (M6 G3; S4).
   const rsvp = features.showRsvp
     ? resolveRead(await attempt(() => invitations.readRsvp(invitation.id)))
     : undefined;
@@ -278,6 +284,23 @@ export default async function InvitationDetailPage({
         ? INVITATION_ERROR_COPY["content-unavailable"]
         : INVITATION_COPY.readOnlyVersionNote
       : undefined;
+  const attendance = attendanceTab(invitation.availableFeatures);
+  const rsvpView =
+    rsvp?.status === "ok" ? rsvpSettingsView(invitation, rsvp.value.settings) : undefined;
+
+  /**
+   * The identity of the stored draft the editor starts from. A navigation that answered a different stored draft (the
+   * photo an upload wrote into the content, for one) remounts the fields with the fresh values; a save on its way
+   * never does, so nothing the owner is typing is reset.
+   */
+  const editorKey = editorSnapshotKey([
+    invitation.content,
+    invitation.timeZone,
+    invitation.featureSettings,
+    invitation.status,
+    rsvp?.status === "ok" ? rsvp.value.settings : null,
+    pinned?.template.publishedVersion.id ?? null,
+  ]);
 
   return (
     <CustomerWorkspaceShell
@@ -296,135 +319,189 @@ export default async function InvitationDetailPage({
       <div className="flex flex-col gap-4">
         <Notices error={notices.error} issues={notices.issues} notice={notices.notice} />
 
-        <div className="grid items-start gap-4 lg:grid-cols-3 lg:gap-6">
-          <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
-            {readOnlyNote === undefined ? null : <p className={statusNote}>{readOnlyNote}</p>}
-            {published && editable ? (
-              <p className={statusNote}>{INVITATION_COPY.publishedNote}</p>
-            ) : null}
-
-            {editable && pinned !== undefined ? (
-              <ContentForm
-                action={saveInvitationContentAction}
-                content={invitation.content}
-                id={invitation.id}
-                photoUpload={{
-                  id: invitation.id,
-                  formId: `media-main-photo-${invitation.id}`,
-                  currentUrl: mainPhotoUrl(invitation.content),
-                  action: uploadMainPhotoAction,
-                }}
-                sections={contentSections(pinned.fields)}
+        {!archived ? (
+          <EditorShell
+            actions={{
+              publish: publishInvitationAction,
+              unpublish: unpublishInvitationAction,
+              archive: archiveInvitationAction,
+            }}
+            attendance={attendance}
+            content={invitation.content}
+            featureView={features}
+            gallery={<GallerySectionBlock state={mediaState} />}
+            guestListHref={RSVP_PATHS.responses(invitation.id)}
+            initialSection={section}
+            invitationId={invitation.id}
+            key={editorKey}
+            mainPhoto={
+              <MainPhotoUpload
+                action={uploadMainPhotoAction}
+                currentUrl={mainPhotoUrl(invitation.content)}
+                invitationId={invitation.id}
               />
-            ) : (
+            }
+            payment={
+              paymentPanel === undefined ? null : (
+                <PaymentPanel
+                  action={startCheckoutAction}
+                  invitationId={invitation.id}
+                  view={paymentPanel}
+                />
+              )
+            }
+            paymentPending={paymentPending}
+            previewSrc={invitationPreviewPath(invitation.id)}
+            publicHref={publicHref}
+            rsvpView={rsvpView}
+            readOnlyContent={
+              pinned === undefined ? (
+                <div className="flex flex-col gap-3">
+                  {readOnlyNote === undefined ? null : <p className={statusNote}>{readOnlyNote}</p>}
+                  <ContentSummary content={invitation.content} rows={rows} />
+                </div>
+              ) : undefined
+            }
+            sections={pinned === undefined ? [] : contentSections(pinned.fields)}
+            slug={invitation.slug}
+            status={invitation.status}
+            statusLabel={statusLabel(invitation.status)}
+            tabMeta={{
+              fotos: tabMeta(mediaState),
+              funciones: String(features.automaticFeatures.length),
+              asistencia: rsvpView === undefined ? "" : `máx. ${rsvpView.partyLimit}`,
+              publicar:
+                invitation.status === "PUBLISHED"
+                  ? EDITOR_COPY.publishMeta.published
+                  : paymentPending
+                    ? EDITOR_COPY.publishMeta.unpaid
+                    : "",
+            }}
+          />
+        ) : (
+          /* The read-only draft of an archived invitation (A3; S7). A retired pinned version keeps the editor (R3-001). */
+          <div className="grid items-start gap-4 lg:grid-cols-3 lg:gap-6">
+            <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
+              {readOnlyNote === undefined ? null : <p className={statusNote}>{readOnlyNote}</p>}
+              {published && editable ? (
+                <p className={statusNote}>{INVITATION_COPY.publishedNote}</p>
+              ) : null}
+
               <div className="rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5">
                 <ContentSummary content={invitation.content} rows={rows} />
               </div>
-            )}
 
-            <GallerySectionBlock state={mediaState} />
+              <GallerySectionBlock state={mediaState} />
 
-            {features.editable ? (
-              <FeaturesForm action={saveInvitationFeaturesAction} view={features} />
-            ) : (
               <FeaturesSummary view={features} />
-            )}
 
-            {rsvp === undefined ? null : <RsvpSectionBlock invitation={invitation} loaded={rsvp} />}
-          </div>
-
-          <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">
-            <div className="flex flex-col gap-4 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5">
-              <div>
-                <BlockLabel>{INVITATION_COPY.statusLabel}</BlockLabel>
-                <p className="mt-1.5">
-                  <StatusBadge label={statusLabel(invitation.status)} />
-                </p>
-              </div>
-              <div>
-                <BlockLabel>
-                  {publicHref === null
-                    ? INVITATION_COPY.slugLabel
-                    : INVITATION_COPY.publicLinkLabel}
-                </BlockLabel>
-                {publicHref === null ? (
-                  <>
-                    <p className="mt-1.5 font-medium break-all text-ink">{invitation.slug}</p>
-                    <p className="mt-1 text-sm leading-6 text-muted">{INVITATION_COPY.slugHint}</p>
-                  </>
-                ) : (
-                  <div className="mt-1.5 flex flex-col gap-2">
-                    <Link className={textButton} href={publicHref} rel="noreferrer" target="_blank">
-                      {INVITATION_COPY.openPublic}
-                    </Link>
-                    {/* A read-only field is one click to select, so the link is easy to copy. */}
-                    <input
-                      aria-label={INVITATION_COPY.publicLinkLabel}
-                      className={textField}
-                      readOnly
-                      value={publicHref}
-                    />
-                    <p className="text-sm leading-6 text-muted">{INVITATION_COPY.publicLinkHint}</p>
-                  </div>
-                )}
-              </div>
-              {missing === null ? null : <p className={statusNote}>{missing}</p>}
+              {rsvp === undefined ? null : (
+                <RsvpSectionBlock invitation={invitation} loaded={rsvp} />
+              )}
             </div>
 
-            {paymentPanel === undefined || archived ? null : (
-              <PaymentPanel
-                action={startCheckoutAction}
-                invitationId={invitation.id}
-                view={paymentPanel}
-              />
-            )}
+            <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">
+              <div className="flex flex-col gap-4 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5">
+                <div>
+                  <BlockLabel>{INVITATION_COPY.statusLabel}</BlockLabel>
+                  <p className="mt-1.5">
+                    <StatusBadge label={statusLabel(invitation.status)} />
+                  </p>
+                </div>
+                <div>
+                  <BlockLabel>
+                    {publicHref === null
+                      ? INVITATION_COPY.slugLabel
+                      : INVITATION_COPY.publicLinkLabel}
+                  </BlockLabel>
+                  {publicHref === null ? (
+                    <>
+                      <p className="mt-1.5 font-medium break-all text-ink">{invitation.slug}</p>
+                      <p className="mt-1 text-sm leading-6 text-muted">
+                        {INVITATION_COPY.slugHint}
+                      </p>
+                    </>
+                  ) : (
+                    <div className="mt-1.5 flex flex-col gap-2">
+                      <Link
+                        className={textButton}
+                        href={publicHref}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {INVITATION_COPY.openPublic}
+                      </Link>
+                      {/* A read-only field is one click to select, so the link is easy to copy. */}
+                      <input
+                        aria-label={INVITATION_COPY.publicLinkLabel}
+                        className={textField}
+                        readOnly
+                        value={publicHref}
+                      />
+                      <p className="text-sm leading-6 text-muted">
+                        {INVITATION_COPY.publicLinkHint}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {missing === null ? null : <p className={statusNote}>{missing}</p>}
+              </div>
 
-            {invitation.status === "DRAFT" ? (
-              <form
-                action={publishInvitationAction}
-                className="flex flex-col gap-3 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5"
-              >
-                <input name="id" type="hidden" value={invitation.id} />
-                <BlockLabel>{INVITATION_COPY.publishHeading}</BlockLabel>
-                <p className="text-sm leading-6 text-muted">{INVITATION_COPY.publishHint}</p>
-                {paymentPending ? (
-                  <p className={fieldHint}>{PAYMENT_COPY.publishBlockedHint}</p>
-                ) : null}
-                <button className={primaryButton} disabled={paymentPending} type="submit">
-                  {INVITATION_COPY.publish}
-                </button>
-              </form>
-            ) : null}
+              {paymentPanel === undefined || archived ? null : (
+                <PaymentPanel
+                  action={startCheckoutAction}
+                  invitationId={invitation.id}
+                  view={paymentPanel}
+                />
+              )}
 
-            {published ? (
-              <form
-                action={unpublishInvitationAction}
-                className="flex flex-col gap-3 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5"
-              >
-                <input name="id" type="hidden" value={invitation.id} />
-                <BlockLabel>{INVITATION_COPY.unpublishHeading}</BlockLabel>
-                <p className="text-sm leading-6 text-muted">{INVITATION_COPY.unpublishHint}</p>
-                <button className={quietButton} type="submit">
-                  {INVITATION_COPY.unpublish}
-                </button>
-              </form>
-            ) : null}
+              {invitation.status === "DRAFT" ? (
+                <form
+                  action={publishInvitationAction}
+                  className="flex flex-col gap-3 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5"
+                >
+                  <input name="id" type="hidden" value={invitation.id} />
+                  <BlockLabel>{INVITATION_COPY.publishHeading}</BlockLabel>
+                  <p className="text-sm leading-6 text-muted">{INVITATION_COPY.publishHint}</p>
+                  {paymentPending ? (
+                    <p className={fieldHint}>{PAYMENT_COPY.publishBlockedHint}</p>
+                  ) : null}
+                  <button className={primaryButton} disabled={paymentPending} type="submit">
+                    {INVITATION_COPY.publish}
+                  </button>
+                </form>
+              ) : null}
 
-            {archived ? null : (
-              <form
-                action={archiveInvitationAction}
-                className="flex flex-col gap-3 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5"
-              >
-                <input name="id" type="hidden" value={invitation.id} />
-                <BlockLabel>{INVITATION_COPY.archiveHeading}</BlockLabel>
-                <p className="text-sm leading-6 text-muted">{INVITATION_COPY.archiveHint}</p>
-                <button className={quietButton} type="submit">
-                  {INVITATION_COPY.archive}
-                </button>
-              </form>
-            )}
-          </aside>
-        </div>
+              {published ? (
+                <form
+                  action={unpublishInvitationAction}
+                  className="flex flex-col gap-3 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5"
+                >
+                  <input name="id" type="hidden" value={invitation.id} />
+                  <BlockLabel>{INVITATION_COPY.unpublishHeading}</BlockLabel>
+                  <p className="text-sm leading-6 text-muted">{INVITATION_COPY.unpublishHint}</p>
+                  <button className={quietButton} type="submit">
+                    {INVITATION_COPY.unpublish}
+                  </button>
+                </form>
+              ) : null}
+
+              {archived ? null : (
+                <form
+                  action={archiveInvitationAction}
+                  className="flex flex-col gap-3 rounded-panel bg-surface/80 p-4 ring-1 ring-gold/45 sm:p-5"
+                >
+                  <input name="id" type="hidden" value={invitation.id} />
+                  <BlockLabel>{INVITATION_COPY.archiveHeading}</BlockLabel>
+                  <p className="text-sm leading-6 text-muted">{INVITATION_COPY.archiveHint}</p>
+                  <button className={quietButton} type="submit">
+                    {INVITATION_COPY.archive}
+                  </button>
+                </form>
+              )}
+            </aside>
+          </div>
+        )}
       </div>
     </CustomerWorkspaceShell>
   );

@@ -32,8 +32,8 @@ discards what was typed in the others. Design directions first, then implement t
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
 | T1 | Three design directions under `design/editor-redesign/` (desktop and phone in each) | S1-S3 | worker | |
-| T2a | Autosave: result-returning server actions (content fields merged into stored content, features, RSVP settings), a client save queue with debounce, one in-flight save, retry, and the status line; navigation guard while unsaved | S2, S4 | worker | |
-| T2b | Owner preview route `/cuenta/invitaciones/<id>/vista-previa` rendering the stored draft through the renderer registry (owner only, noindex) | S3, S4 | worker | |
+| T2a | Autosave: result-returning server actions (content fields merged into stored content, features, RSVP settings), a client save queue with debounce, one in-flight save, retry, and the status line; navigation guard while unsaved | S2, S4 | worker | `b12a488` |
+| T2b | Owner preview route `/cuenta/invitaciones/<id>/vista-previa` rendering the stored draft through the renderer registry (owner only, noindex) | S3, S4 | worker | `2b62658` |
 | T2c | Editor shell: tabs Contenido / Fotos / Funciones / Asistencia / Publicar, left rail and live preview pane on desktop, top tabs and «Ver vista previa» on the phone, existing sections moved into tabs | S1-S4 | worker, after T2a and T2b | |
 | T3 | Verify in a browser at 390 and 1280 px, including the S2 reproduction | S2, S3 | verify | |
 | T4 | Gates, review, PR, merge | S1-S3 | inline | |
@@ -45,3 +45,10 @@ discards what was typed in the others. Design directions first, then implement t
 - L2 — T1 design directions: design/editor-redesign/ with 01-pasos-guiados.html, 02-un-solo-guardado.html, 03-pestanas-y-vista-previa.html.
 - L3 — Owner chose `03-pestanas-y-vista-previa.html` (canvas handoff, status in_progress); the other two artboards are
   alternatives. T2 split into T2a (autosave), T2b (preview route), T2c (editor shell).
+- L4 — T2a `b12a488` (autosave: content changes merged server-side into the stored content, features and RSVP merged
+  with stored values, debounced queue with one save in flight per channel, `SaveStatus`, leave guard). T2b `2b62658`
+  (owner preview `/cuenta/invitaciones/<id>/vista-previa`, shared `GuestInvitation` layout with `/i/<slug>` unchanged).
+  Parent decisions: an unfilled required field shows the template's own sample in the preview so a new draft has a
+  preview (stored values always win); the preview's attendance card cannot submit, and the editor labels the frame as
+  a preview. Known gaps reported for later: the owner read lacks the music provider (the preview mirrors the API's
+  host allow-list), and no CSP restricts framing of the app by other origins.

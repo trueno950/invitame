@@ -2,13 +2,13 @@ import { randomInt, randomUUID } from "node:crypto";
 
 import {
   type BrowserContext,
-  type Cookie,
   test as base,
+  type Cookie,
   expect,
   type Page,
 } from "@playwright/test";
 
-import { SIGN_IN_COPY } from "../../lib/customer/copy.ts";
+import { AUTOSAVE_COPY, SIGN_IN_COPY } from "../../lib/customer/copy.ts";
 import { EDGE_CLIENT_IP_HEADER } from "./environment.ts";
 import { receiveSignInCode } from "./mailpit.ts";
 
@@ -87,4 +87,30 @@ export async function signIn(page: Page, email: string): Promise<void> {
 /** A 6-digit code that is certainly not `code`. */
 export function otherCode(code: string): string {
   return String((Number(code) + 1) % 1_000_000).padStart(6, "0");
+}
+
+/**
+ * The tabbed invitation editor (T2c; S1-S4). The editor saves each field on its own, so a test types into a field and
+ * waits for the one status line to say the work is stored; it opens a tab by its accessible name, which also carries
+ * what that tab still owes («Contenido · faltan 6»).
+ */
+
+/** Waits until the editor's status line says the last change is stored. */
+export async function waitForSaved(page: Page): Promise<void> {
+  await expect(page.getByRole("status", { name: AUTOSAVE_COPY.regionLabel })).toContainText(
+    AUTOSAVE_COPY.savedMoment,
+  );
+}
+
+/** Types into one field, leaves it (which flushes the save), and waits for the stored answer. */
+export async function fillAutosaved(page: Page, label: string, value: string): Promise<void> {
+  const field = page.getByLabel(label);
+  await field.fill(value);
+  await field.blur();
+  await waitForSaved(page);
+}
+
+/** Opens one of the editor's five tabs by its name, whichever list the viewport shows. */
+export async function openEditorSection(page: Page, name: string): Promise<void> {
+  await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
 }
