@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "03-pestanas-y-vista-previa.html",
+  "handoffs": {
+    "03-pestanas-y-vista-previa.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-18T00:42:44.395Z",
+      "startedAt": "2026-11-18T00:43:23.644Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/editor-redesign.md",
+      "note": "Implementing: tabs, autosave with status line, owner-only live preview."
+    }
+  }
+}
