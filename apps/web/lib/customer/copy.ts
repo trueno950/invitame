@@ -638,6 +638,41 @@ export const RSVP_SETTINGS_ISSUE_COPY = {
 } as const;
 
 /**
+ * The autosave status line of the invitation editor (T2a; S2, S4). Every field saves on its own, so one line says
+ * whether the work is on its way, already stored, or failed and can be retried; the creator is addressed with "tú"
+ * like the rest of the customer pages, and a refused field is named with the same label the editor shows.
+ */
+export const AUTOSAVE_COPY = {
+  /** The three visible states of the status line, in the words the artboard writes. */
+  saving: "Guardando…",
+  savedMoment: "Guardado hace un momento",
+  savedMinutes: (minutes: number) =>
+    `Guardado hace ${minutes} ${minutes === 1 ? "minuto" : "minutos"}`,
+  savedHours: (hours: number) => `Guardado hace ${hours} ${hours === 1 ? "hora" : "horas"}`,
+  savedDays: (days: number) => `Guardado hace ${days} ${days === 1 ? "día" : "días"}`,
+  failed: "No se pudo guardar",
+  retry: "Reintentar",
+  signIn: "Ingresar",
+  /** An ended session: the status line offers the way back instead of a retry that cannot work. */
+  signedOut: "Tu sesión terminó. Ingresa de nuevo para seguir editando tu invitación.",
+  /** A payload naming a field the pinned template does not declare, which only a stale page can send. */
+  unknownField:
+    "Ese dato no forma parte de esta plantilla. Recarga la página para ver los campos que puedes editar.",
+  /** One field the API refused, named with the label the editor shows for it. */
+  fieldIssue: (label: string) => `Revisa «${label}»: el valor no cumple lo que pide la plantilla.`,
+  /** Why a save whose payload could not be read is refused; nothing of it is sent. */
+  invalidPayload: "No pudimos guardar ese dato. Recarga la página y vuelve a intentarlo.",
+  /** Why the template's fields could not be checked, so no autosave can name an unknown field. */
+  catalogUnavailable:
+    "No pudimos comprobar los campos de tu invitación. Inténtalo de nuevo en unos minutos.",
+  /** The browser's own guard while a change is still on its way. */
+  leaveWarning:
+    "Todavía estamos guardando tus cambios. Si sales ahora podrías perder lo último que escribiste.",
+  /** What the status line is, for the live region's accessible name. */
+  regionLabel: "Estado del guardado",
+} as const;
+
+/**
  * The guest's page of a published invitation (M5 T5; S1, S5, A3, A5). A guest is not a customer here: the
  * page shows the invitation and nothing about the owner's account, and it asks search engines to stay away.
  */
