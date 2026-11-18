@@ -2,7 +2,7 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { saveInvitationFeatures } from "../../../lib/customer/invitation-features.ts";
+import { editorSectionTarget, sectionFromForm } from "../../../lib/customer/editor-sections.ts";
 import {
   createGuest,
   type GuestOutcome,
@@ -19,12 +19,10 @@ import {
   uploadMainPhoto,
 } from "../../../lib/customer/invitation-media.ts";
 import { emitSimulatedPayment, startCheckout } from "../../../lib/customer/invitation-payment.ts";
-import { saveRsvpSettings } from "../../../lib/customer/invitation-rsvp.ts";
 import {
   archiveInvitation,
   createInvitation,
   publishInvitation,
-  saveInvitationContent,
   unpublishInvitation,
 } from "../../../lib/customer/invitations.ts";
 import { guestShareUrl } from "../../../lib/public/guest-pass.ts";
@@ -40,6 +38,16 @@ import { media } from "./_lib/media.ts";
  * without JavaScript and a reload never resubmits it. The API authorizes and validates every write;
  * `redirect` is called outside any `try`, as Next.js requires.
  */
+
+/**
+ * The target a navigating action redirects to, with the editor tab the submitted form carried (T2c; S4). The editor
+ * mirrors its tab into `?seccion=`, and every form inside it submits that tab as a hidden field, so an upload, a
+ * checkout, a publish, an unpublish, or an archive comes back to the tab it came from instead of to the first one. A
+ * form outside the editor carries no tab, and its target is returned exactly as its command wrote it.
+ */
+function landed(formData: FormData, target: string): string {
+  return editorSectionTarget(target, sectionFromForm(formData));
+}
 
 /**
  * The media actions of the draft (M8 S2, S3, S4). Each one needs the media routes and the content path the editor
@@ -59,59 +67,45 @@ function mediaApi(): MediaActionsApi {
 
 /** Uploads the invitation's main photo and writes its URL into the template's photo field (M8 S4). */
 export async function uploadMainPhotoAction(formData: FormData): Promise<void> {
-  redirect(await uploadMainPhoto(mediaApi(), formData));
+  redirect(landed(formData, await uploadMainPhoto(mediaApi(), formData)));
 }
 
 /** Uploads one gallery photo of a package that grants `GALLERY` (M8 S3, S4). */
 export async function uploadGalleryPhotoAction(formData: FormData): Promise<void> {
-  redirect(await uploadGalleryPhoto(mediaApi(), formData));
+  redirect(landed(formData, await uploadGalleryPhoto(mediaApi(), formData)));
 }
 
 /** Replaces the alt text of one gallery photo (M8 S4). */
 export async function saveGalleryAltAction(formData: FormData): Promise<void> {
-  redirect(await saveGalleryAlt(mediaApi(), formData));
+  redirect(landed(formData, await saveGalleryAlt(mediaApi(), formData)));
 }
 
 /** Moves one gallery photo one place up or down (M8 S4). */
 export async function moveGalleryPhotoAction(formData: FormData): Promise<void> {
-  redirect(await moveGalleryPhoto(mediaApi(), formData));
+  redirect(landed(formData, await moveGalleryPhoto(mediaApi(), formData)));
 }
 
 /** Removes one gallery photo (M8 S4). */
 export async function removeGalleryPhotoAction(formData: FormData): Promise<void> {
-  redirect(await removeGalleryPhoto(mediaApi(), formData));
+  redirect(landed(formData, await removeGalleryPhoto(mediaApi(), formData)));
 }
 
 export async function createInvitationAction(formData: FormData): Promise<void> {
   redirect(await createInvitation(invitations, formData));
 }
 
-export async function saveInvitationContentAction(formData: FormData): Promise<void> {
-  redirect(await saveInvitationContent(invitations, formData));
-}
-
-/** Saves the invitation's time zone and WhatsApp contact (F3; S3, S4). */
-export async function saveInvitationFeaturesAction(formData: FormData): Promise<void> {
-  redirect(await saveInvitationFeatures(invitations, formData));
-}
-
-/** Saves the RSVP deadline and party limit of a draft or published invitation (M6 G3; S4). */
-export async function saveRsvpSettingsAction(formData: FormData): Promise<void> {
-  redirect(await saveRsvpSettings(invitations, formData));
-}
-
 export async function archiveInvitationAction(formData: FormData): Promise<void> {
-  redirect(await archiveInvitation(invitations, formData));
+  redirect(landed(formData, await archiveInvitation(invitations, formData)));
 }
 
 /** Publishes a complete draft, so its `/i/<slug>` page answers (M5 T5; S7, S9). */
 export async function publishInvitationAction(formData: FormData): Promise<void> {
-  redirect(await publishInvitation(invitations, formData));
+  redirect(landed(formData, await publishInvitation(invitations, formData)));
 }
 
 /** Returns a published invitation to draft, so its public page stops answering (M5 T5; S7). */
 export async function unpublishInvitationAction(formData: FormData): Promise<void> {
-  redirect(await unpublishInvitation(invitations, formData));
+  redirect(landed(formData, await unpublishInvitation(invitations, formData)));
 }
 
 /**
@@ -120,7 +114,9 @@ export async function unpublishInvitationAction(formData: FormData): Promise<voi
  * itself was served from; a refused answer comes back to the invitation as an error notice instead of leaving.
  */
 export async function startCheckoutAction(formData: FormData): Promise<void> {
-  redirect(await startCheckout(invitations, formData, requestOrigin(await headers())));
+  redirect(
+    landed(formData, await startCheckout(invitations, formData, requestOrigin(await headers()))),
+  );
 }
 
 /**

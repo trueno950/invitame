@@ -7,6 +7,7 @@ import {
   quietButton,
   textField,
 } from "../../../_components/ui.ts";
+import { GuardedForm } from "./autosave/navigation-guard.tsx";
 
 /**
  * The media of a draft (M8 S2, S3, S4). Two server-rendered pieces, each a plain form that posts to a server action, so
@@ -56,7 +57,7 @@ export function MainPhotoUpload({
           <figcaption className={fieldHint}>{MEDIA_COPY.mainPhotoCurrent}</figcaption>
         </figure>
       )}
-      <form action={action} className="mt-3 flex flex-col gap-2">
+      <GuardedForm action={action} className="mt-3 flex flex-col gap-2" section="fotos">
         <input name="id" type="hidden" value={invitationId} />
         <input name="kind" type="hidden" value="main-photo" />
         <label className={fieldLabel} htmlFor="media-main-photo">
@@ -76,7 +77,7 @@ export function MainPhotoUpload({
             {MEDIA_COPY.mainPhotoSubmit}
           </button>
         </div>
-      </form>
+      </GuardedForm>
     </div>
   );
 }
@@ -119,7 +120,7 @@ export function GallerySection({
       ) : null}
 
       {view.editable && !view.limitReached ? (
-        <form action={actions.upload} className="mt-4 flex flex-col gap-2">
+        <GuardedForm action={actions.upload} className="mt-4 flex flex-col gap-2" section="fotos">
           <input name="id" type="hidden" value={view.id} />
           <input name="kind" type="hidden" value="gallery" />
           <p className={fieldLabel}>{MEDIA_COPY.galleryUploadHeading}</p>
@@ -150,7 +151,7 @@ export function GallerySection({
               {MEDIA_COPY.galleryUploadSubmit}
             </button>
           </div>
-        </form>
+        </GuardedForm>
       ) : null}
 
       {view.photos.length === 0 ? (
@@ -177,7 +178,7 @@ export function GallerySection({
               </a>
               {view.editable ? (
                 <div className="flex min-w-0 flex-col gap-2">
-                  <form action={actions.alt} className="flex flex-col gap-1">
+                  <GuardedForm action={actions.alt} className="flex flex-col gap-1" section="fotos">
                     <input name="id" type="hidden" value={view.id} />
                     <input name="assetId" type="hidden" value={photo.id} />
                     <label className={fieldLabel} htmlFor={`media-alt-${photo.id}`}>
@@ -197,31 +198,31 @@ export function GallerySection({
                         {MEDIA_COPY.galleryAltSave}
                       </button>
                     </div>
-                  </form>
+                  </GuardedForm>
                   <div className="flex flex-wrap gap-2">
-                    <form action={actions.move}>
+                    <GuardedForm action={actions.move} section="fotos">
                       <input name="id" type="hidden" value={view.id} />
                       <input name="assetId" type="hidden" value={photo.id} />
                       <input name="direction" type="hidden" value="up" />
                       <button className={quietButton} disabled={!photo.canMoveUp} type="submit">
                         {MEDIA_COPY.galleryMoveUp}
                       </button>
-                    </form>
-                    <form action={actions.move}>
+                    </GuardedForm>
+                    <GuardedForm action={actions.move} section="fotos">
                       <input name="id" type="hidden" value={view.id} />
                       <input name="assetId" type="hidden" value={photo.id} />
                       <input name="direction" type="hidden" value="down" />
                       <button className={quietButton} disabled={!photo.canMoveDown} type="submit">
                         {MEDIA_COPY.galleryMoveDown}
                       </button>
-                    </form>
-                    <form action={actions.remove}>
+                    </GuardedForm>
+                    <GuardedForm action={actions.remove} section="fotos">
                       <input name="id" type="hidden" value={view.id} />
                       <input name="assetId" type="hidden" value={photo.id} />
                       <button className={quietButton} type="submit">
                         {MEDIA_COPY.galleryRemove}
                       </button>
-                    </form>
+                    </GuardedForm>
                   </div>
                 </div>
               ) : (
