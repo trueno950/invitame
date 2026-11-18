@@ -4,12 +4,15 @@ import {
   type IcsCalendarInput,
 } from "../invitation-features/calendar.ts";
 import { type EventFacts, eventFactsFor } from "../invitation-features/event-facts.ts";
+import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import {
   type GuestPageBlockView,
   hasAnyFeature,
   type InvitationFeatures,
   type RsvpBlockView,
+  type WhatsAppContact,
 } from "../invitation-features/invitation-features.ts";
+import type { MusicLink } from "../invitation-features/music.ts";
 import { isSupportedTimeZone, startInstant } from "../invitation-features/start-instant.ts";
 import type { PublicInvitation } from "../server/public-invitations-api.ts";
 import { publicInvitationPath } from "./invitation-page.ts";
@@ -64,52 +67,110 @@ export interface PublicFeatureBlock {
   readonly calendarHref: string;
 }
 
-/** The facts of a stored invitation, or undefined when its layout refuses the snapshot. */
-function factsOf(invitation: PublicInvitation): EventFacts | undefined {
+/** The facts of a rendered snapshot, or undefined when its layout refuses the content. */
+function factsOf(snapshot: { componentKey: string; content: unknown }): EventFacts | undefined {
   try {
-    return eventFactsFor(invitation.componentKey, invitation.content);
+    return eventFactsFor(snapshot.componentKey, snapshot.content);
   } catch {
     return undefined;
   }
 }
 
+/** What the shared features block renders: the features after the zone had its say, and the celebration. */
+export interface FeatureBlockParts {
+  readonly features: InvitationFeatures;
+  readonly facts: EventFacts;
+}
+
 /**
- * The features block of one published invitation, or undefined when the page has nothing to give the renderer.
- * Undefined is the same value the layouts read as "no features", so an invitation without features renders
- * exactly the markup it rendered before the block existed (S4). A gift registry that is gated on but has no other
- * feature still returns a block, because the layout reads `features.giftRegistry`: the block itself renders
- * nothing when it has no section (F7; S7). The `rsvp` block of an open invitation is part of the same block, so
- * every layout shows the same form in the same place (G3; S4).
+ * The features a page is willing to show, before the invitation's zone decides the two wall-clock ones: the API's
+ * gated flags on a guest page, the owner read's gated keys in the creator's preview. The calendar is always on for a
+ * published invitation, so the public read says `true` there; a preview that serves no `.ics` download keeps the
+ * flag the package grants, exactly like the countdown and the map.
+ */
+export interface GatedFeatures {
+  readonly countdown: boolean;
+  readonly map: boolean;
+  readonly calendar: boolean;
+  readonly whatsapp: WhatsAppContact | null;
+  readonly music: MusicLink | null;
+  readonly giftRegistry: boolean;
+  readonly gallery: readonly GalleryPhoto[];
+}
+
+/** Everything one page renders the shared features block from. */
+export interface FeatureBlockSource {
+  readonly componentKey: string;
+  readonly content: unknown;
+  /** The invitation's stored zone, which decides whether a wall clock can be shown at all. */
+  readonly timeZone: string;
+  /** The features this deployment is willing to show for the invitation, before the zone has its say. */
+  readonly gated: GatedFeatures;
+  /** The open attendance card, when this page shows one (G3; S4). */
+  readonly rsvp?: RsvpBlockView;
+  /** The personal block of one guest (G4), absent on every page that is not theirs. */
+  readonly guest?: GuestPageBlockView;
+}
+
+/**
+ * The parts of the features block for one rendered snapshot, or undefined when the page has nothing to give the
+ * renderer. Undefined is the same value the layouts read as "no features", so an invitation without features
+ * renders exactly the markup it rendered before the block existed (S4). A gift registry that is gated on but has no
+ * other feature still returns a block, because the layout reads `features.giftRegistry`: the block itself renders
+ * nothing when it has no section (F7; S7).
+ *
+ * This is the one place the gating rules live, and both pages that render an invitation read it: `/i/<slug>` from
+ * the API's public projection, and the owner's draft preview from the owner's read (T2b). Neither page decides a
+ * feature on its own, so the preview shows what the guest page would show.
+ */
+export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts | undefined {
+  const facts = factsOf(source);
+
+  if (facts === undefined) {
+    return undefined;
+  }
+
+  const zoned = isSupportedTimeZone(source.timeZone);
+  const features: InvitationFeatures = {
+    timeZone: source.timeZone,
+    countdown: source.gated.countdown && zoned,
+    map: source.gated.map,
+    calendar: source.gated.calendar && zoned,
+    whatsapp: source.gated.whatsapp,
+    music: source.gated.music,
+    giftRegistry: source.gated.giftRegistry,
+    // The API gates the gallery and answers it in the creator's order; the block renders it as it comes (M8 S4).
+    gallery: source.gated.gallery,
+    ...(source.rsvp === undefined ? {} : { rsvp: source.rsvp }),
+    ...(source.guest === undefined ? {} : { guest: source.guest }),
+  };
+
+  return hasAnyFeature(features) || features.giftRegistry ? { features, facts } : undefined;
+}
+
+/**
+ * The features block of one published invitation, or undefined when the page has nothing to give the renderer
+ * (F3, F6, F7; S4, S7). The block of this page carries the `.ics` download the public page owns; the owner's
+ * preview renders the same parts without it (`featureBlockParts`), because no download serves an unpublished
+ * draft.
  */
 export function publicFeatureBlock(
   invitation: PublicInvitation,
   rsvp?: RsvpBlockView,
   guest?: GuestPageBlockView,
 ): PublicFeatureBlock | undefined {
-  const facts = factsOf(invitation);
-
-  if (facts === undefined) {
-    return undefined;
-  }
-
-  const zoned = isSupportedTimeZone(invitation.timeZone);
-  const features: InvitationFeatures = {
+  const parts = featureBlockParts({
+    componentKey: invitation.componentKey,
+    content: invitation.content,
     timeZone: invitation.timeZone,
-    countdown: invitation.features.countdown && zoned,
-    map: invitation.features.map,
-    calendar: invitation.features.calendar && zoned,
-    whatsapp: invitation.features.whatsapp,
-    music: invitation.features.music,
-    giftRegistry: invitation.features.giftRegistry,
-    // The API gates the gallery and answers it in the creator's order; the block renders it as it comes (M8 S4).
-    gallery: invitation.features.gallery,
+    gated: invitation.features,
     ...(rsvp === undefined ? {} : { rsvp }),
     ...(guest === undefined ? {} : { guest }),
-  };
+  });
 
-  return hasAnyFeature(features) || features.giftRegistry
-    ? { features, facts, calendarHref: invitationCalendarPath(invitation.slug) }
-    : undefined;
+  return parts === undefined
+    ? undefined
+    : { ...parts, calendarHref: invitationCalendarPath(invitation.slug) };
 }
 
 /**

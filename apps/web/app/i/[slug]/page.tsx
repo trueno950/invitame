@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
@@ -9,7 +8,7 @@ import { invitationMetadata } from "../../../lib/public/invitation-page.ts";
 import { rendererAcceptsProps } from "../../../lib/public/invitation-render.ts";
 import { publicRsvpBlock, rsvpNotice } from "../../../lib/public/invitation-rsvp.ts";
 import { findRenderer } from "../../../lib/renderers/registry.ts";
-import { textButton } from "../../_components/ui.ts";
+import { GuestInvitation } from "./_components/guest-invitation.tsx";
 import { InvitationMessage } from "./_components/invitation-message.tsx";
 import { RsvpNoticeNote } from "./_components/rsvp-notice.tsx";
 import { loadPublicInvitation } from "./_lib/load.ts";
@@ -103,24 +102,19 @@ export default async function PublicInvitationPage({
   // the «Confirma tu asistencia» card to that same block, so every layout shows it in the same place (G3; S4).
   const rsvp = publicRsvpBlock(invitation.features.rsvp, invitation.slug, submitRsvpAction);
   const block = publicFeatureBlock(invitation, rsvp);
-  const rendererProps =
-    block === undefined
-      ? props
-      : { ...props, features: block.features, calendarHref: block.calendarHref };
   // The answer's notice, read from this page's own query and rendered on the server (G3; S4).
   const notice = rsvpNotice(parameters);
 
+  // The invitation itself is the guest view the owner's preview renders too (T2b), with the notice of this page.
   return (
-    <main className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-        {notice === undefined ? null : <RsvpNoticeNote notice={notice} />}
-        <Renderer {...rendererProps} />
-        <footer className="flex justify-center">
-          <Link className={textButton} href="/">
-            {PUBLIC_INVITATION_COPY.madeWith}
-          </Link>
-        </footer>
-      </div>
-    </main>
+    <GuestInvitation
+      componentKey={invitation.componentKey}
+      configuration={invitation.configuration}
+      content={invitation.content}
+      {...(block === undefined
+        ? {}
+        : { features: block.features, calendarHref: block.calendarHref })}
+      {...(notice === undefined ? {} : { notice: <RsvpNoticeNote notice={notice} /> })}
+    />
   );
 }
