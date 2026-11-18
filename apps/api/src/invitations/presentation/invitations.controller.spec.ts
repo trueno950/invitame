@@ -28,7 +28,10 @@ import {
   type NewGuest,
 } from "../application/guest.repository";
 import { guestTokenHash } from "../application/guest-token";
-import { InvitationSlugTakenError } from "../application/invitation.application.errors";
+import {
+  InvitationContentConflictError,
+  InvitationSlugTakenError,
+} from "../application/invitation.application.errors";
 import {
   INVITATION_REPOSITORY,
   type InvitationRecord,
@@ -166,6 +169,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     ownerId: string,
     id: string,
     content: JsonObject,
+    expectedUpdatedAt?: Date,
   ): Promise<InvitationRecord | null> {
     const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
     if (!row) {
@@ -174,6 +178,11 @@ class MemoryInvitationRepository implements InvitationRepository {
     // A DRAFT or a PUBLISHED invitation changes; a published one changes live (S7).
     if (row.status === "ARCHIVED") {
       throw new InvitationNotEditableError(row.status);
+    }
+    // Like the adapter's `WHERE updatedAt`, a write that names an older version changes nothing (S2).
+    const same = row.updatedAt.getTime() === expectedUpdatedAt?.getTime();
+    if (expectedUpdatedAt !== undefined && !same) {
+      throw new InvitationContentConflictError();
     }
     row.content = structuredClone(content);
     return structuredClone(row);
@@ -1267,6 +1276,27 @@ describe("invitations routes: /invitations", () => {
       const stored = repository.rows.find((row) => row.id === draft.id);
       assert.equal(stored?.status, "ARCHIVED");
       assert.deepEqual(stored?.content, {});
+    });
+
+    it("applies a content write only if the version it names is still the stored one (S2)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      const path = `${PATH}/${draft.id}/content`;
+      const stored = () => repository.rows.find((row) => row.id === draft.id);
+      const put = (title: string, expectedUpdatedAt: string) =>
+        send("PUT", path, cookie, { content: { title }, expectedUpdatedAt });
+
+      await send("PUT", path, cookie, { content: { title: "Ana" } });
+      const version = stored()?.updatedAt;
+      assert.ok(version !== undefined);
+      const stale = new Date(version.getTime() - 1_000).toISOString();
+      const conflict = await put("Otra", stale);
+      assert.equal(conflict.status, 409);
+      assert.deepEqual(await conflict.json(), { code: "INVITATION_CONTENT_CONFLICT" });
+      assert.deepEqual(stored()?.content, { title: "Ana" });
+
+      assert.equal((await put("Beatriz", version.toISOString())).status, 200);
+      assert.deepEqual(stored()?.content, { title: "Beatriz" });
     });
 
     it("answers 404 for another customer's invitation and changes nothing", async () => {

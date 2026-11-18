@@ -77,6 +77,8 @@ export interface UpdateContentInput {
   ownerId: string;
   id: string;
   content: unknown;
+  /** The `updatedAt` the caller read, which makes the write conditional on that version (S2). */
+  expectedUpdatedAt?: string;
 }
 
 /**
@@ -326,7 +328,8 @@ export class GetOwnInvitationUseCase {
  * The content is validated against the pinned version's schema, which is read regardless of the version's
  * status (S3). Throws `InvitationNotEditableError` for an archived invitation and
  * `InvalidInvitationContentError` with the issues for content the pinned schema refuses; either way nothing is
- * stored. Another owner's id answers null (A4).
+ * stored. Another owner's id answers null (A4). A request that names the version it read is a conditional write:
+ * `InvitationContentConflictError` when another writer committed since, and nothing is stored (S2).
  */
 export class UpdateInvitationContentUseCase {
   constructor(
@@ -351,7 +354,12 @@ export class UpdateInvitationContentUseCase {
       throw new InvalidInvitationContentError(validation.issues);
     }
 
-    const updated = await this.invitations.updateContent(input.ownerId, input.id, validation.value);
+    const updated = await this.invitations.updateContent(
+      input.ownerId,
+      input.id,
+      validation.value,
+      input.expectedUpdatedAt === undefined ? undefined : new Date(input.expectedUpdatedAt),
+    );
     if (updated === null) {
       return null;
     }

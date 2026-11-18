@@ -1,5 +1,7 @@
 import {
   IsDefined,
+  IsISO8601,
+  IsOptional,
   IsUUID,
   Validate,
   ValidatorConstraint,
@@ -48,6 +50,11 @@ export class CreateInvitationDto {
 export class UpdateInvitationContentDto {
   @IsDefined()
   content!: unknown;
+
+  /** The `updatedAt` the client read, so the write applies only while the row still has that instant (S2). */
+  @IsOptional()
+  @IsISO8601()
+  expectedUpdatedAt?: string;
 }
 
 /**

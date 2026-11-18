@@ -1,5 +1,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { InvitationSlugTakenError } from "../application/invitation.application.errors";
+import {
+  InvitationContentConflictError,
+  InvitationSlugTakenError,
+} from "../application/invitation.application.errors";
 import type {
   InvitationFeatureSettingsWrite,
   InvitationRecord,
@@ -132,6 +135,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
     ownerId: string,
     id: string,
     content: JsonObject,
+    expectedUpdatedAt?: Date,
   ): Promise<InvitationRecord | null> {
     return this.prisma.$transaction(async (tx) => {
       const stored = await tx.invitation.findFirst({
@@ -144,14 +148,18 @@ export class PrismaInvitationRepository implements InvitationRepository {
       // State the rule now so the caller gets the real reason, and again inside the write below.
       assertEditable(toRecord(stored).status);
 
+      // A write that names the version it read only applies while `updatedAt` still names it (S2).
+      const version = expectedUpdatedAt === undefined ? {} : { updatedAt: expectedUpdatedAt };
       const changed = await tx.invitation.updateMany({
         // A DRAFT or a PUBLISHED invitation changes; a published one changes live (S7).
-        where: { id, ownerId, status: { in: ["DRAFT", "PUBLISHED"] } },
+        where: { id, ownerId, status: { in: ["DRAFT", "PUBLISHED"] }, ...version },
         data: { content: content as Prisma.InputJsonObject },
       });
       if (changed.count !== 1) {
-        // The row stopped being editable after the read: the only other status is ARCHIVED.
-        throw new InvitationNotEditableError("ARCHIVED");
+        // The row stopped being editable after the read, or a versioned write met a newer row (S2).
+        throw expectedUpdatedAt === undefined
+          ? new InvitationNotEditableError("ARCHIVED")
+          : new InvitationContentConflictError();
       }
 
       return toRecord(

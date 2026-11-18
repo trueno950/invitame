@@ -172,6 +172,7 @@ export interface CreatorPackage {
  * - `qr-pass-unavailable`: 409 `QR_PASS_NOT_AVAILABLE`, the package does not grant the access pass (G4);
  * - `validation`: 400 without a known code, the API refused a field of the request;
  * - `not-editable`: 409 `INVITATION_NOT_EDITABLE`, the draft is archived (A3, S7);
+ * - `content-conflict`: 409 `INVITATION_CONTENT_CONFLICT`, a content write named a version another writer moved (S2);
  * - `already-archived`: 409 `INVITATION_ALREADY_ARCHIVED`;
  * - `not-publishable`: 409 `INVITATION_NOT_PUBLISHABLE`, the readiness rule named the issues (S7, A1);
  * - `already-published`: 409 `INVITATION_ALREADY_PUBLISHED`, a repeated publish (A2, S7);
@@ -211,6 +212,7 @@ export type InvitationFailure =
   | "qr-pass-unavailable"
   | "validation"
   | "not-editable"
+  | "content-conflict"
   | "already-archived"
   | "not-publishable"
   | "already-published"
@@ -1055,6 +1057,7 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVALID_INVITATION_FEATURES: "features-invalid",
   INVALID_RSVP_SETTINGS: "rsvp-settings-invalid",
   INVITATION_NOT_EDITABLE: "not-editable",
+  INVITATION_CONTENT_CONFLICT: "content-conflict",
   INVITATION_ALREADY_ARCHIVED: "already-archived",
   INVITATION_NOT_PUBLISHABLE: "not-publishable",
   INVITATION_ALREADY_PUBLISHED: "already-published",
@@ -1269,8 +1272,16 @@ export function createInvitationsClient(
     replaceContent: (
       id: string,
       content: Record<string, unknown>,
+      expectedUpdatedAt?: string,
     ): Promise<InvitationResult<OwnedInvitation>> =>
-      onDraft(id, "/content", (path) => call("PUT", path, { content }, parseOwnedInvitation)),
+      onDraft(id, "/content", (path) =>
+        call(
+          "PUT",
+          path,
+          expectedUpdatedAt === undefined ? { content } : { content, expectedUpdatedAt },
+          parseOwnedInvitation,
+        ),
+      ),
     /**
      * `PUT /invitations/:id/features`: the invitation's time zone, WhatsApp contact, and playlist link; called
      * from a server action (F3, F6; S3, S4, S7). Every field is always sent, because the API replaces all three.

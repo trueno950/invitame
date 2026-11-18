@@ -10,6 +10,7 @@ import {
 import {
   InvalidInvitationContentError,
   InvalidInvitationFeaturesError,
+  InvitationContentConflictError,
   InvitationPackageDoesNotFitError,
   InvitationPackageNotFoundError,
   InvitationPaymentRequiredError,
@@ -207,6 +208,7 @@ export function orInvitationSummaryNotFound(
  * - a package that does not fit is 400 with `INVITATION_PACKAGE_DOES_NOT_FIT`: the request is well formed, the
  *   API has no 422 anywhere, and a stable code is what the client branches on;
  * - content the pinned schema refuses is 400 with its issues (S3, S7);
+ * - a content write whose named version moved is 409 `INVITATION_CONTENT_CONFLICT`, and nothing was stored (S2);
  * - feature data the domain refuses is 400 `INVALID_INVITATION_FEATURES` with its issues (F1; S4);
  * - an archived invitation is 409 with `INVITATION_NOT_EDITABLE`, or `INVITATION_ALREADY_ARCHIVED` for a
  *   repeated archive (A3, S7);
@@ -235,6 +237,9 @@ export function mapInvitationError(error: unknown): never {
       code: "INVALID_INVITATION_CONTENT",
       issues: [...error.issues],
     });
+  }
+  if (error instanceof InvitationContentConflictError) {
+    throw new ConflictException({ code: "INVITATION_CONTENT_CONFLICT" });
   }
   if (error instanceof InvalidInvitationFeaturesError) {
     throw new BadRequestException({
