@@ -114,9 +114,9 @@ export async function unpublishInvitationAction(formData: FormData): Promise<voi
  * itself was served from; a refused answer comes back to the invitation as an error notice instead of leaving.
  */
 export async function startCheckoutAction(formData: FormData): Promise<void> {
-  redirect(
-    landed(formData, await startCheckout(invitations, formData, requestOrigin(await headers()))),
-  );
+  const target = await startCheckout(invitations, formData, requestOrigin(await headers()));
+  // Only a refusal that comes back to the editor carries the tab; the payment page is followed exactly as answered.
+  redirect(target.includes("/pago/") ? target : landed(formData, target));
 }
 
 /**

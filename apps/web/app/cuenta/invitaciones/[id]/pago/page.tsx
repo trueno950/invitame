@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 
 import { INVITATION_COPY, PAYMENT_COPY } from "../../../../../lib/customer/copy.ts";
+import { editorSectionTarget } from "../../../../../lib/customer/editor-sections.ts";
 import {
   PAYMENT_PATHS,
   paymentReturnView,
@@ -101,7 +102,10 @@ export default async function InvitationPaymentPage({
       actions={
         // The paid page carries its own primary way back to the invitation, so the header does not repeat it.
         view.kind === "paid" ? undefined : (
-          <Link className={quietButton} href={INVITATION_PATHS.detail(id)}>
+          <Link
+            className={quietButton}
+            href={editorSectionTarget(INVITATION_PATHS.detail(id), "publicar")}
+          >
             {PAYMENT_COPY.backToInvitation}
           </Link>
         )

@@ -1,4 +1,5 @@
 import { PAYMENT_COPY } from "../../../../lib/customer/copy.ts";
+import { editorSectionTarget } from "../../../../lib/customer/editor-sections.ts";
 import {
   PAYMENT_PATHS,
   type PaymentPanelView,
@@ -106,7 +107,10 @@ export function PaymentReturnBody({
           {view.paidOn === "" ? null : <span className="mt-1 block">{view.paidOn}</span>}
         </p>
         <p>
-          <a className={primaryButton} href={INVITATION_PATHS.detail(invitationId)}>
+          <a
+            className={primaryButton}
+            href={editorSectionTarget(INVITATION_PATHS.detail(invitationId), "publicar")}
+          >
             {PAYMENT_COPY.backToInvitation}
           </a>
         </p>
