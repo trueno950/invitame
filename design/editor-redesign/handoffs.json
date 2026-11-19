@@ -3,13 +3,14 @@
   "chosen": "03-pestanas-y-vista-previa.html",
   "handoffs": {
     "03-pestanas-y-vista-previa.html": {
-      "status": "in_progress",
+      "status": "implemented",
       "queued": false,
       "sentAt": "2026-11-18T00:42:44.395Z",
       "startedAt": "2026-11-18T00:43:23.644Z",
-      "implementedAt": null,
+      "implementedAt": "2026-11-19T02:16:08.593Z",
       "feature": "odd/tasks/editor-redesign.md",
-      "note": "Implementing: tabs, autosave with status line, owner-only live preview."
+      "note": "Merged in #73-#78: tabs, autosave with status line, live preview, versioned content writes.",
+      "previewUrl": "http://localhost:3000/cuenta/invitaciones/7d44d6ab-9665-4aef-bd6b-5130af3832fc"
     }
   }
 }

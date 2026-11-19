@@ -1,0 +1,28 @@
+{
+  "title": "Editor «Contenido» — three grouping directions",
+  "brief": "Three directions for the «Contenido» tab of the shipped invitation editor (`design/editor-redesign/03-pestanas-y-vista-previa.html`), for the owner's real case (S2): template «Ornamental · Azul medianoche y oro», Premium package, draft with 14 formal-baptism fields — 12 required to publish — and realistic Spanish values (Mateo Herrera Ruiz, Parroquia de San José, a draft with some fields filled and some missing: «Contenido · faltan 3»). Only the «Contenido» tab changes: the rail with its five tabs, the sticky autosave status line, the live phone-width preview and the phone's fixed «Ver vista previa» stay exactly as shipped. Every artboard is one 1440 px self-contained file showing the editor twice — a 990 px desktop frame and a 390 px phone frame — plus a component inset and review notes, and each one pairs date with time and place with address, names the optional fields, marks one field with an inline validation message, keeps 44 px targets, AA contrast, visible focus and reduced-motion. App-theme tokens only, from design/system.md.",
+  "feature": "odd/tasks/editor-content-grouping.md",
+  "artboards": [
+    {
+      "file": "01-tarjetas-resumen.html",
+      "title": "Tarjetas resumen",
+      "tradeoff": "Covers S1-S3: the 14 fields become five cards by meaning (Persona bautizada y familia · Ceremonia · Recepción · Mensaje y contacto · Extras opcionales), only one open at a time; each closed card keeps a one-line summary and its state («Completo», «Falta 1», «Faltan 2», «Opcional · 1 de 2»), the open card carries the inline validation of its missing field, and its footer names the next group («Siguiente: Ceremonia» from the first card, «Siguiente: Recepción» from Ceremonia). S3 stays closed by keeping the shell: rail with «Contenido · faltan 3», status line, live preview, phone tabs and fixed «Ver vista previa». Cost: only one group is readable at a time, so comparing two groups costs a tap and the closed summary truncates long names; the card stack is the heaviest of the three visually and, with five cards, the closed headers still occupy most of the column when nothing is open.",
+      "width": 1440,
+      "height": 1720
+    },
+    {
+      "file": "02-un-grupo-por-pantalla.html",
+      "title": "Un grupo por pantalla",
+      "tradeoff": "Covers S1-S3: «Contenido» becomes a sub-stepper of five groups of 2 to 4 fields, one per screen, with «Paso 2 de 5», a five-segment progress bar, «Anterior» / «Siguiente» and a jump list whose chips carry each group's state («3 Recepción · faltan 2»); the two optional fields sit together in the last step, labelled «Opcional», and do not count in «faltan 3». Date+time and place+address share a row on desktop and stack on the phone; the phone shows the inline validation that appears when a field is left empty. Cost: it is the most guided and the most gated of the three — the owner sees at most four of the fourteen fields and must page to reach anything, the strongest structure when the draft is new but the slowest when they only want to fix one value, and the jump list plus progress bar is the most chrome added inside a tab.",
+      "width": 1440,
+      "height": 1535
+    },
+    {
+      "file": "03-resumen-editable.html",
+      "title": "Resumen editable",
+      "tradeoff": "Covers S1-S3: «Contenido» reads like the invitation's own details list — eleven rows over five groups, each row showing its label and value, «Falta» in wine for what is missing, related pairs sharing a row («Fecha y hora», «Lugar y dirección»), optional fields saying «Opcional» with «Aún sin definir» instead of «Falta», and the three pending values repeated first on the phone. Tapping a row opens only that field — inline on desktop, a bottom sheet on the phone — with its validation message and no save button. Cost: it is the densest of the three and the least forgiving while typing a long value — every edit is open-then-edit, long messages and addresses are truncated in the row, and the phone adds a modal layer over the fixed «Ver vista previa», so the sheet has to return focus and never hide the autosave line.",
+      "width": 1440,
+      "height": 1756
+    }
+  ]
+}
