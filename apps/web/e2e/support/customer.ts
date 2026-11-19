@@ -110,6 +110,20 @@ export async function fillAutosaved(page: Page, label: string, value: string): P
   await waitForSaved(page);
 }
 
+/**
+ * Opens one card of the «Contenido» panel by the title its header shows (T2). A card that is already open is left as
+ * it is, because pressing its header again would close it: only one card is open at a time and a closed card mounts no
+ * field.
+ */
+export async function openContentCard(page: Page, title: string): Promise<void> {
+  const header = page.getByRole("button", { name: new RegExp(`^${title}`) });
+
+  if ((await header.getAttribute("aria-expanded")) !== "true") {
+    await header.click();
+  }
+  await expect(header).toHaveAttribute("aria-expanded", "true");
+}
+
 /** Opens one of the editor's five tabs by its name, whichever list the viewport shows. */
 export async function openEditorSection(page: Page, name: string): Promise<void> {
   await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();

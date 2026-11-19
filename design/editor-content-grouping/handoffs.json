@@ -3,12 +3,13 @@
   "chosen": "01-tarjetas-resumen.html",
   "handoffs": {
     "01-tarjetas-resumen.html": {
-      "status": "sent",
+      "status": "in_progress",
       "queued": false,
       "sentAt": "2026-11-19T03:08:44.013Z",
-      "startedAt": null,
+      "startedAt": "2026-11-19T03:09:33.823Z",
       "implementedAt": null,
-      "feature": "odd/tasks/editor-content-grouping.md"
+      "feature": "odd/tasks/editor-content-grouping.md",
+      "note": "Implementing the summary cards in the Contenido tab."
     }
   }
 }

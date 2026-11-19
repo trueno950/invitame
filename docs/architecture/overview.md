@@ -907,7 +907,17 @@ ephemeral filesystem in production.
   (`useAutosave`), so there is no «Guardar cambios» form left: `onChange` queues the field and `onBlur` flushes it, and
   a refusal arrives as `state.failure.fieldIssues`, shown under that field with `aria-describedby`. One sticky
   `SaveStatus` strip at the top of the form column is the only place that says whether the work is stored, and each tab
-  label counts what it still owes («Contenido · faltan 3») from the live values. From 1024 px up the form column is its
+  label counts what it still owes («Contenido · faltan 3») from the live values. «Contenido» itself is a stack of
+  cards (`apps/web/lib/customer/content-cards.ts`): the template's own sections in order, one card open at a time
+  (each header is a button with `aria-expanded` and `aria-controls`, and only the open card mounts its inputs), and the
+  tab opens on the first card that still owes a required field. A closed card keeps its title, one line of the values it
+  already holds and its state in words («Completo», «Falta 1», «Faltan 2», «Opcional · 1 de 2»), never color alone. A
+  date shares a row with its own time and a place with its own address from `sm` up, detected from the property names
+  and the control each schema property asks for, and every other field gets a row of its own. The open card's footer
+  names the next group («Siguiente: Ceremonia») and moves the focus to its header, opening another card flushes the
+  autosave queue without discarding anything typed, and the optional fields whose whole section is optional gather in a
+  last «Extras opcionales» card. The cards count their missing fields with `missingRequiredNames` itself, so a card is
+  never missing something the tab label does not count. From 1024 px up the form column is its
   own scroll area so that strip stays visible while the fields scroll, and the owner preview of T2b sits beside it as a
   phone-width frame that is reloaded only after a save the API accepted; on a phone the preview opens full screen in a
   `<dialog>` behind a fixed «Ver vista previa». Forms and links that still navigate go through `GuardedForm` /

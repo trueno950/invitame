@@ -37,3 +37,11 @@ The tabbed editor shipped in #73-#78 still shows every template field of «Conte
 - L1 — Owner request, verbatim: see S1.
 - L2 — T1 design directions: design/editor-content-grouping/ with 01-tarjetas-resumen.html, 02-un-grupo-por-pantalla.html, 03-resumen-editable.html.
 - L3 — Owner chose `01-tarjetas-resumen.html` (canvas handoff in progress); the other two artboards are alternatives.
+- L4 — T2 summary cards: pure card model `lib/customer/content-cards.ts` (cards from the template's own sections,
+  paired date/time and place/address rows, one-line summaries, states computed with `missingRequiredNames`, an
+  «Extras opcionales» card only for sections made entirely of optional fields), the accordion island
+  `content-cards.tsx` (one open card, «Siguiente: …» with focus move, flush on switching cards), required fields marked
+  with an asterisk and one legend line. Deviation from the artboard: a section's optional fields stay in their card
+  when the section also has required ones, so the baptism shows «Foto principal» and «Mesa de regalos» inside «Mensaje
+  y contacto». Web suite 1536 pass; browser check at 390 and 1280 px: states and counts agree, pairs stack on the phone
+  and share a row on desktop, nothing typed is lost when switching cards or reloading.

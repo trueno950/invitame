@@ -711,6 +711,40 @@ export const EDITOR_COPY = {
     paid: "pagado",
     published: "publicada",
   },
+  /**
+   * The cards of the «Contenido» tab (T2; S1-S4). The template's own sections become a short stack of cards, so the
+   * owner reads a few fields at a time instead of the whole form. A title is the section's own name (`INVITATION_COPY`)
+   * unless one of these reads better, and a card's state is always in words, never only in color.
+   */
+  cards: {
+    /** Explains the asterisk the card fields carry instead of a note under every label. */
+    requiredLegend: "* Necesario para publicar. Lo demás es opcional.",
+    /** The celebrant's card when the same section also holds the parents, the sponsors, or the hosts. */
+    celebrantFamily: "Festejado y familia",
+    /** A wedding, which announces two names instead of one. */
+    couple: "Pareja",
+    coupleFamily: "Pareja y familia",
+    /** A baby shower, whose main people are the ones who invite. */
+    hosts: "Anfitriones",
+    /** The sections that hold a pair: the date with its time, and the place with its address. */
+    when: "Fecha y hora",
+    where: "Lugar y dirección",
+    /** The «Contenido» section, named for what it actually holds in this template. */
+    contentMessage: "Mensaje",
+    contentPhoto: "Mensaje y foto",
+    contentContact: "Mensaje y contacto",
+    /** The last card: every optional field whose whole section is optional, so nothing there stops a publication. */
+    extras: "Extras opcionales",
+    /** What a closed card says it still owes, or that it owes nothing to publish. */
+    stateComplete: "Completo",
+    stateMissingOne: "Falta 1",
+    stateMissing: (count: number) => `Faltan ${count}`,
+    stateOptional: (filled: number, total: number) => `Opcional · ${filled} de ${total}`,
+    /** The one-line summary of a card whose fields are all still empty, instead of a value nobody wrote. */
+    summaryEmpty: "Aún sin datos",
+    /** The footer of the open card: the group that comes next, so the reading never stops at a closed card. */
+    next: (title: string) => `Siguiente: ${title}`,
+  },
 } as const;
 
 /**
