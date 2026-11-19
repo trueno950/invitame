@@ -32,6 +32,7 @@ const INVITATION: OwnedInvitation = {
   timeZone: "America/Mexico_City",
   featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["COUNTDOWN", "RSVP", "CALENDAR"],
+  places: {},
 };
 
 const SETTINGS: RsvpSettings = { deadline: DEADLINE, partyLimit: 4 };

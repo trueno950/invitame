@@ -324,6 +324,10 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
     "Esa versión de la plantilla ya no está publicada. Elige otra plantilla.",
   "package-not-found": "Ese paquete ya no está disponible. Elige otro.",
   "not-found": "No encontramos esa invitación.",
+  "place-query-invalid": "Escribe al menos tres letras de la dirección para buscar sugerencias.",
+  "place-search-rate-limited":
+    "Hicimos muchas búsquedas seguidas. Espera un momento o escribe la dirección a mano.",
+  "place-invalid": "No pudimos guardar esa ubicación. Vuelve a elegir una sugerencia de la lista.",
   "not-editable": "Esta invitación está archivada y ya no se puede editar.",
   "already-archived": "Esta invitación ya está archivada.",
   "already-published": "Esta invitación ya está publicada.",
@@ -664,6 +668,34 @@ export const AUTOSAVE_COPY = {
     "Todavía estamos guardando tus cambios. Si sales ahora podrías perder lo último que escribiste.",
   /** What the status line is, for the live region's accessible name. */
   regionLabel: "Estado del guardado",
+} as const;
+
+/**
+ * The address combobox of the editor (S1, S2). Two notes sit under an address field: the confirmation once a stored
+ * point matches the text, and the invitation to pick one otherwise. Every failure is quiet — the owner keeps typing,
+ * because the words they wrote are what the invitation shows — and never names a provider.
+ */
+export const PLACE_PICKER_COPY = {
+  /** The one note that says the address is precise: a pin and this sentence. */
+  confirmed: "Ubicación confirmada en el mapa",
+  /** The note under a field with no confirmed point. */
+  hint: "Elige una sugerencia para ubicarla con precisión",
+  /** The note while the suggestions are on their way. */
+  searching: "Buscando direcciones…",
+  /** A search that answered nothing. */
+  empty: "No encontramos esa dirección. Puedes escribirla a mano.",
+  /** A search that failed: the field stays editable, so this is a note and never a block. */
+  failed: "No pudimos buscar sugerencias. Puedes escribir la dirección a mano.",
+  /** A search the API limited: the same quiet note, naming the wait instead of a failure. */
+  limited: "Hicimos muchas búsquedas seguidas. Espera un momento o escribe la dirección a mano.",
+  /** A point that could not be stored: the address stays as written and the owner can try again. */
+  saveFailed: "No pudimos guardar la ubicación. Vuelve a elegir la sugerencia.",
+  /** The invitation a write named no longer exists, or is not this owner's. */
+  notFound: "No encontramos esa invitación. Recarga la página.",
+  /** The listbox's accessible name. */
+  listLabel: "Sugerencias de dirección",
+  /** What the field is, for the combobox's accessible name when its label is not enough. */
+  fieldHint: "Escribe la dirección y elige una sugerencia para ubicarla en el mapa.",
 } as const;
 
 /**

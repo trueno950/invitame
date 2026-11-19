@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { PlacePoint } from "../invitation-features/place-point.ts";
 import type {
   CreatorPackage,
   CreatorTemplate,
@@ -222,6 +223,7 @@ const OWNED: OwnedInvitation = {
   timeZone: "America/Mexico_City",
   featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
+  places: {},
 };
 
 const TEMPLATE: CreatorTemplate = {
@@ -738,6 +740,9 @@ describe("query codes", () => {
 });
 
 interface Answers {
+  searchPlaces?: () => Promise<InvitationResult<PlacePoint[]>>;
+  savePlace?: () => Promise<InvitationResult<OwnedInvitation>>;
+  clearPlace?: () => Promise<InvitationResult<OwnedInvitation>>;
   list?: () => Promise<InvitationResult<InvitationSummary[]>>;
   get?: () => Promise<InvitationResult<OwnedInvitation>>;
   create?: () => Promise<InvitationResult<OwnedInvitation>>;
@@ -769,6 +774,18 @@ function stub(answers: Answers = {}): Stub {
     get: (id) => {
       calls.push(`get:${id}`);
       return answers.get?.() ?? unexpected("get");
+    },
+    searchPlaces: (id, query) => {
+      calls.push(`searchPlaces:${id}:${query}`);
+      return answers.searchPlaces?.() ?? unexpected("searchPlaces");
+    },
+    savePlace: (id, field) => {
+      calls.push(`savePlace:${id}:${field}`);
+      return answers.savePlace?.() ?? unexpected("savePlace");
+    },
+    clearPlace: (id, field) => {
+      calls.push(`clearPlace:${id}:${field}`);
+      return answers.clearPlace?.() ?? unexpected("clearPlace");
     },
     create: (input) => {
       calls.push(`create:${input.templateVersionId}:${input.packageId}`);

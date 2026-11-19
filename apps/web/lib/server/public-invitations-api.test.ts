@@ -51,6 +51,9 @@ const PUBLIC: PublicInvitation = {
     gallery: [],
     rsvp: { mode: "open", deadline: "2026-12-01T18:00:00.000Z", partyLimit: 4, qrPass: false },
   },
+  // The precise-locations slice (S2): the points the API already filtered — MAP granted, and the label still equal to
+  // the address the content holds. A package without MAP answers an empty map.
+  places: {},
 };
 
 /** One guest's open RSVP answer, as the guest page posts it (M6 G3; S4). */
@@ -233,6 +236,34 @@ describe("parsePublicInvitation", () => {
     for (const value of broken) {
       assert.equal(parsePublicInvitation(value), undefined, JSON.stringify(value));
     }
+
+    // The playlist card's metadata (S2): a title and a cover on an allow-listed image host are kept, and a value
+    // this deployment does not accept is dropped without losing the link or the rest of the page.
+    const music = { url: "https://open.spotify.com/playlist/abc", provider: "spotify" };
+    const cover = "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07";
+
+    assert.deepEqual(
+      parsePublicInvitation({
+        ...PUBLIC,
+        features: { ...PUBLIC.features, music: { ...music, title: "La boda", coverUrl: cover } },
+      })?.features.music,
+      { ...music, title: "La boda", coverUrl: cover },
+    );
+    // A link saved before the lookup existed has neither field, and the card is today's card.
+    assert.deepEqual(
+      parsePublicInvitation({ ...PUBLIC, features: { ...PUBLIC.features, music } })?.features.music,
+      music,
+    );
+    assert.deepEqual(
+      parsePublicInvitation({
+        ...PUBLIC,
+        features: {
+          ...PUBLIC.features,
+          music: { ...music, title: "a".repeat(201), coverUrl: "https://evil.test/cover.jpg" },
+        },
+      })?.features.music,
+      music,
+    );
   });
 
   it("reads the stored zone and the gated features, and refuses any other shape (S4)", () => {
@@ -543,5 +574,41 @@ describe("the gallery of the public read (M8 S3, S4)", () => {
     for (const gallery of broken) {
       assert.equal(parsePublicInvitation(withGallery(gallery)), undefined, JSON.stringify(gallery));
     }
+  });
+});
+
+// The stored points of a guest page (S1, S2). The API decides which ones a guest may see; this client only reads the
+// documented shape, so a body that grows another key or a broken point is refused instead of being rendered.
+
+describe("the places of the public read (S1, S2)", () => {
+  const PARROQUIA = { label: "Parroquia de San José, Querétaro", lat: 20.588793, lng: -100.389888 };
+
+  it("reads the confirmed points keyed by address field", async () => {
+    answer(200, { ...PUBLIC, places: { address: PARROQUIA } });
+
+    const result = await client().getBySlug(PUBLIC.slug);
+
+    assert.deepEqual(result.ok && result.value.places, { address: PARROQUIA });
+  });
+
+  it("refuses a map keyed by anything but an address field, or holding a point outside its bounds", () => {
+    for (const places of [
+      undefined,
+      null,
+      [],
+      "Parroquia",
+      { celebrantName: PARROQUIA },
+      { address: { label: "Sin coordenadas" } },
+      { address: { label: "Lejos", lat: 20.5, lng: 181 } },
+      { address: { label: "", lat: 20.5, lng: -100 } },
+    ]) {
+      assert.equal(parsePublicInvitation({ ...PUBLIC, places }), undefined, JSON.stringify(places));
+    }
+  });
+
+  it("keeps a package without MAP on an empty map", () => {
+    const unconfirmed = parsePublicInvitation({ ...PUBLIC, places: {} });
+
+    assert.deepEqual(unconfirmed?.places, {});
   });
 });

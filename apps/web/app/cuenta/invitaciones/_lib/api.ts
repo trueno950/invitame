@@ -73,6 +73,10 @@ export const invitations = {
   create: (input: Parameters<InvitationsClient["create"]>[0]) => logged((api) => api.create(input)),
   replaceContent: (id: string, content: Record<string, unknown>, expectedUpdatedAt?: string) =>
     logged((api) => api.replaceContent(id, content, expectedUpdatedAt)),
+  searchPlaces: (id: string, query: string) => logged((api) => api.searchPlaces(id, query)),
+  savePlace: (id: string, field: string, point: Parameters<InvitationsClient["savePlace"]>[2]) =>
+    logged((api) => api.savePlace(id, field, point)),
+  clearPlace: (id: string, field: string) => logged((api) => api.clearPlace(id, field)),
   updateInvitationFeatures: (
     id: string,
     features: Parameters<InvitationsClient["updateInvitationFeatures"]>[1],

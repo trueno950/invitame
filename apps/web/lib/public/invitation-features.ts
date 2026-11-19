@@ -13,6 +13,7 @@ import {
   type WhatsAppContact,
 } from "../invitation-features/invitation-features.ts";
 import type { MusicLink } from "../invitation-features/music.ts";
+import { confirmedPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isSupportedTimeZone, startInstant } from "../invitation-features/start-instant.ts";
 import type { PublicInvitation } from "../server/public-invitations-api.ts";
 import { publicInvitationPath } from "./invitation-page.ts";
@@ -106,6 +107,12 @@ export interface FeatureBlockSource {
   readonly timeZone: string;
   /** The features this deployment is willing to show for the invitation, before the zone has its say. */
   readonly gated: GatedFeatures;
+  /**
+   * The points the read answered for this invitation, keyed by address field (S1, S2). The public read carries only
+   * the ones a guest may see; the owner read carries every stored one, so this source is filtered here by the same
+   * rule and the preview shows exactly the guest's map.
+   */
+  readonly places?: StoredPlaces;
   /** The open attendance card, when this page shows one (G3; S4). */
   readonly rsvp?: RsvpBlockView;
   /** The personal block of one guest (G4), absent on every page that is not theirs. */
@@ -131,6 +138,7 @@ export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts
   }
 
   const zoned = isSupportedTimeZone(source.timeZone);
+  const places = confirmedPlaces(source.places, source.content);
   const features: InvitationFeatures = {
     timeZone: source.timeZone,
     countdown: source.gated.countdown && zoned,
@@ -141,6 +149,7 @@ export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts
     giftRegistry: source.gated.giftRegistry,
     // The API gates the gallery and answers it in the creator's order; the block renders it as it comes (M8 S4).
     gallery: source.gated.gallery,
+    ...(Object.keys(places).length === 0 ? {} : { places }),
     ...(source.rsvp === undefined ? {} : { rsvp: source.rsvp }),
     ...(source.guest === undefined ? {} : { guest: source.guest }),
   };
@@ -164,6 +173,7 @@ export function publicFeatureBlock(
     content: invitation.content,
     timeZone: invitation.timeZone,
     gated: invitation.features,
+    places: invitation.places,
     ...(rsvp === undefined ? {} : { rsvp }),
     ...(guest === undefined ? {} : { guest }),
   });

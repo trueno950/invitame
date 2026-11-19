@@ -3,11 +3,18 @@ import { describe, it } from "node:test";
 
 import {
   isMusicProvider,
+  MUSIC_COVER_ALT,
+  MUSIC_COVER_HOSTS,
+  MUSIC_COVER_URL_MAX_LENGTH,
   MUSIC_PROVIDER_LABELS,
   MUSIC_PROVIDERS,
+  MUSIC_TITLE_MAX_LENGTH,
   musicButtonLabel,
+  musicCoverUrlOf,
   musicServiceOf,
+  musicTitleOf,
   PLAYLIST_URL_MAX_LENGTH,
+  withMusicMetadata,
 } from "./music.ts";
 
 // The music feature of a guest invitation (F6; S7). The API owns the host allow-list and stores only a link it
@@ -70,5 +77,84 @@ describe("the music services the web knows (S7)", () => {
     ]) {
       assert.equal(musicServiceOf(broken), undefined, JSON.stringify(broken));
     }
+  });
+
+  // The playlist card's metadata (S2): the API stores what the provider answered, and this deployment renders it
+  // only when it is a bounded title and a cover on an allow-listed image host over `https`.
+  const COVER = "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07";
+  const LINK = { url: "https://open.spotify.com/playlist/abc", provider: "spotify" } as const;
+
+  it("accepts a bounded, trimmed title and refuses anything else", () => {
+    assert.equal(musicTitleOf("  La boda  "), "La boda");
+    assert.equal(
+      musicTitleOf("a".repeat(MUSIC_TITLE_MAX_LENGTH)),
+      "a".repeat(MUSIC_TITLE_MAX_LENGTH),
+    );
+
+    for (const value of [
+      "",
+      "   ",
+      "a".repeat(MUSIC_TITLE_MAX_LENGTH + 1),
+      "<script>alert(1)</script>".repeat(20),
+      7,
+      null,
+      undefined,
+      ["La boda"],
+    ]) {
+      assert.equal(musicTitleOf(value), undefined, String(value));
+    }
+  });
+
+  it("accepts a cover only over https on an allow-listed image host", () => {
+    assert.equal(musicCoverUrlOf(COVER), COVER);
+    assert.equal(
+      musicCoverUrlOf("https://image-cdn-ak.spotifycdn.com/image/abc"),
+      "https://image-cdn-ak.spotifycdn.com/image/abc",
+    );
+    assert.equal(
+      musicCoverUrlOf("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"),
+      "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+    );
+    assert.deepEqual(MUSIC_COVER_HOSTS, ["i.scdn.co", "i.ytimg.com"]);
+
+    for (const value of [
+      "http://i.scdn.co/image/abc",
+      "https://evil.test/cover.jpg",
+      "https://i.scdn.co.evil.test/cover.jpg",
+      "https://user:secret@i.scdn.co/image/abc",
+      "https://i.scdn.co:8443/image/abc",
+      "javascript:alert(1)",
+      `https://i.scdn.co/${"a".repeat(MUSIC_COVER_URL_MAX_LENGTH)}`,
+      7,
+      null,
+    ]) {
+      assert.equal(musicCoverUrlOf(value), undefined, String(value));
+    }
+  });
+
+  it("attaches the metadata a link may carry, and nothing when the metadata is unusable", () => {
+    assert.deepEqual(withMusicMetadata(LINK, "La boda", COVER), {
+      ...LINK,
+      title: "La boda",
+      coverUrl: COVER,
+    });
+    // Only one of the two is enough: the card shows a cover with the generic alt, or a title with no cover.
+    assert.deepEqual(withMusicMetadata(LINK, null, COVER), { ...LINK, coverUrl: COVER });
+    assert.deepEqual(withMusicMetadata(LINK, "La boda", null), { ...LINK, title: "La boda" });
+    assert.deepEqual(withMusicMetadata(LINK, "", "https://evil.test/x.jpg"), LINK);
+    assert.equal(MUSIC_COVER_ALT, "Portada de la playlist");
+  });
+
+  it("reads the metadata of a public body with the same rules", () => {
+    assert.deepEqual(musicServiceOf({ ...LINK, title: "  La boda ", coverUrl: COVER }), {
+      ...LINK,
+      title: "La boda",
+      coverUrl: COVER,
+    });
+    // A value the deployment refuses is dropped and the link stays: losing the cover never loses the button.
+    assert.deepEqual(
+      musicServiceOf({ ...LINK, title: "a".repeat(201), coverUrl: "http://x.test/y" }),
+      LINK,
+    );
   });
 });

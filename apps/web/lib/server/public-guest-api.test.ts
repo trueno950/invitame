@@ -33,6 +33,7 @@ const GUEST_PAGE: PublicGuestInvitation = {
   componentKey: "birthday-poster-01",
   configuration: { componentKey: "birthday-poster-01", theme: "dinosaurs" },
   content: { celebrantName: "Ana", date: "2026-12-05", time: "16:30" },
+  places: {},
   publishedAt: AT,
   timeZone: "America/Mexico_City",
   features: {

@@ -29,9 +29,16 @@ import { parseXVOrnamentalContent } from "../renderers/xv-ornamental-01.ts";
  * renderer, and it returns fresh, frozen-in-spirit data without touching its input.
  */
 
-/** One place of the celebration, in the words the layout uses: «Lugar», «Ceremonia», «Recepción». */
+/**
+ * One place of the celebration, in the words the layout uses: «Lugar», «Ceremonia», «Recepción».
+ *
+ * `field` is the content property the address comes from — the schema's own name, `address` or one ending in
+ * `Address` — so the stored point of that field travels with the place and both the links and the map read the
+ * coordinates the owner confirmed (S1, S2). No layout name selects it: every mapping below names its own field.
+ */
 export interface EventPlace {
   readonly label: string;
+  readonly field: string;
   readonly name: string;
   readonly address: string;
 }
@@ -57,7 +64,9 @@ function birthdayFacts(content: BirthdayContent): EventFacts {
     title: `Cumpleaños de ${content.celebrantName}`,
     date: content.date,
     time: content.time,
-    places: [{ label: "Lugar", name: content.location, address: content.address }],
+    places: [
+      { label: "Lugar", field: "address", name: content.location, address: content.address },
+    ],
   };
 }
 
@@ -87,7 +96,9 @@ function babyShowerFacts(content: BabyShowerContent): EventFacts {
     title: `Baby shower de ${celebration}`,
     date: content.date,
     time: content.time,
-    places: [{ label: "Lugar", name: content.location, address: content.address }],
+    places: [
+      { label: "Lugar", field: "address", name: content.location, address: content.address },
+    ],
   };
 }
 
@@ -106,8 +117,18 @@ function baptismFacts(content: BaptismContent): EventFacts {
     date: content.date,
     time: content.ceremonyTime,
     places: [
-      { label: "Ceremonia", name: content.ceremonyPlace, address: content.ceremonyAddress },
-      { label: "Recepción", name: content.receptionPlace, address: content.receptionAddress },
+      {
+        label: "Ceremonia",
+        field: "ceremonyAddress",
+        name: content.ceremonyPlace,
+        address: content.ceremonyAddress,
+      },
+      {
+        label: "Recepción",
+        field: "receptionAddress",
+        name: content.receptionPlace,
+        address: content.receptionAddress,
+      },
     ],
   };
 }
@@ -127,8 +148,18 @@ function xvArchFacts(content: XVArchContent): EventFacts {
     date: content.date,
     time: content.ceremonyTime,
     places: [
-      { label: "Ceremonia", name: content.ceremonyPlace, address: content.ceremonyAddress },
-      { label: "Recepción", name: content.receptionPlace, address: content.receptionAddress },
+      {
+        label: "Ceremonia",
+        field: "ceremonyAddress",
+        name: content.ceremonyPlace,
+        address: content.ceremonyAddress,
+      },
+      {
+        label: "Recepción",
+        field: "receptionAddress",
+        name: content.receptionPlace,
+        address: content.receptionAddress,
+      },
     ],
   };
 }
@@ -145,8 +176,18 @@ function weddingArchFacts(content: WeddingArchContent): EventFacts {
     date: content.date,
     time: content.ceremonyTime,
     places: [
-      { label: "Ceremonia", name: content.ceremonyPlace, address: content.ceremonyAddress },
-      { label: "Recepción", name: content.receptionPlace, address: content.receptionAddress },
+      {
+        label: "Ceremonia",
+        field: "ceremonyAddress",
+        name: content.ceremonyPlace,
+        address: content.ceremonyAddress,
+      },
+      {
+        label: "Recepción",
+        field: "receptionAddress",
+        name: content.receptionPlace,
+        address: content.receptionAddress,
+      },
     ],
   };
 }

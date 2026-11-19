@@ -26,6 +26,7 @@ const FACTS: EventFacts = {
   places: [
     {
       label: "Lugar",
+      field: "address",
       name: "Jardín Los Arcos",
       address: "Av. de las Flores 214, Ciudad de México",
     },
@@ -39,11 +40,13 @@ const BAPTISM_FACTS: EventFacts = {
   places: [
     {
       label: "Ceremonia",
+      field: "ceremonyAddress",
       name: "Parroquia San Miguel",
       address: "Calle Hidalgo 45, Centro, Querétaro",
     },
     {
       label: "Recepción",
+      field: "receptionAddress",
       name: "Casa de los abuelos",
       address: "Av. de los Fresnos 210, Querétaro",
     },

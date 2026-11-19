@@ -17,14 +17,24 @@ import {
   type InvitationFeatures,
   type RsvpBlockView,
 } from "../../../lib/invitation-features/invitation-features.ts";
-import { googleMapsUrl, wazeUrl } from "../../../lib/invitation-features/map-links.ts";
-import { MUSIC_SECTION_TITLE, musicButtonLabel } from "../../../lib/invitation-features/music.ts";
+import {
+  googleMapsUrl,
+  type MapPlace,
+  wazeUrl,
+} from "../../../lib/invitation-features/map-links.ts";
+import {
+  MUSIC_COVER_ALT,
+  MUSIC_SECTION_TITLE,
+  musicButtonLabel,
+} from "../../../lib/invitation-features/music.ts";
+import { storedPlaceOf } from "../../../lib/invitation-features/place-point.ts";
 import { formatRsvpDeadline } from "../../../lib/invitation-features/rsvp-deadline.ts";
 import { startInstant } from "../../../lib/invitation-features/start-instant.ts";
 import { whatsappUrl } from "../../../lib/invitation-features/whatsapp.ts";
 import { guestPassDataUrl } from "../../../lib/server/guest-pass-qr.ts";
 import { DISPLAY_FONT } from "../renderers/themed/theme.ts";
 import { CountdownIsland } from "./countdown-island.ts";
+import { type MapMarker, PlaceMapIsland } from "./place-map-island.ts";
 
 /**
  * The features block of a guest invitation (S3, S4, S7): the countdown, «Cómo llegar», «Agregar al calendario»,
@@ -68,6 +78,10 @@ const ACTION =
 /** The counters sit on the softer theme surface so they read as a highlight, not as another card. */
 const COUNTDOWN_CARD = `${CARD} bg-(--inv-soft)`;
 const SURFACE_CARD = `${CARD} bg-(--inv-surface)`;
+/** The playlist cover: square, rounded like the card, and never wider than the card itself (S2). */
+const MUSIC_COVER = "mt-3 aspect-square w-full max-w-[18rem] rounded-xl object-cover";
+/** The playlist title the provider named, in the card's own ink (S2). */
+const MUSIC_TITLE = "mt-2 text-lg leading-tight font-medium break-words text-(color:--inv-ink)";
 
 // The RSVP form (M6 G3; S4): one card of the block, its fields drawn only with the theme's variables, and its
 // submit the same 44 px accent pill as every other action of the block. It needs no client script at all.
@@ -445,8 +459,20 @@ function guestPassSection(pass: GuestPassBlockView): ReactElement | null {
   );
 }
 
+/**
+ * The place as the links and the map read it: the layout's words plus the point the owner confirmed for that address
+ * field, when there is one (S1, S2). A place whose field stored no point keeps exactly the text links it had.
+ */
+function mapPlace(place: EventPlace, places: InvitationFeatures["places"]): MapPlace {
+  const point = storedPlaceOf(places, place.field);
+
+  return point === undefined
+    ? place
+    : { name: place.name, address: place.address, lat: point.lat, lng: point.lng };
+}
+
 /** The two «Cómo llegar» actions of one place, each with the accessible name that names its service. */
-function placeLinks(place: EventPlace): ReactElement {
+function placeLinks(place: MapPlace): ReactElement {
   return h(
     "div",
     { className: ACTIONS },
@@ -510,6 +536,17 @@ export function InvitationFeaturesBlock({
   }
 
   if (features.map) {
+    const places = facts.places.map((place) => mapPlace(place, features.places));
+    // One marker per place that has a confirmed point. A package without a point renders no map at all, and the links
+    // stay the only way to the place, exactly as before this slice (S1, S2).
+    const markers: MapMarker[] = facts.places.flatMap((place, index) => {
+      const point = places[index];
+
+      return point?.lat === undefined || point.lng === undefined
+        ? []
+        : [{ label: place.label, name: place.name, lat: point.lat, lng: point.lng }];
+    });
+
     sections.push(
       h(
         "div",
@@ -518,17 +555,18 @@ export function InvitationFeaturesBlock({
         h(
           "ul",
           { className: "mt-3 flex flex-col gap-3" },
-          facts.places.map((place) =>
+          facts.places.map((place, index) =>
             h(
               "li",
               { key: `${place.label}-${place.name}`, "data-place": place.label, className: PLACE },
               h("p", { className: PLACE_LABEL }, place.label),
               h("p", { className: PLACE_NAME, style: DISPLAY_FONT }, place.name),
               h("p", { className: PLACE_ADDRESS }, place.address),
-              placeLinks(place),
+              placeLinks(places[index] ?? place),
             ),
           ),
         ),
+        markers.length === 0 ? null : h(PlaceMapIsland, { places: markers }),
       ),
     );
   }
@@ -589,12 +627,32 @@ export function InvitationFeaturesBlock({
 
   if (features.music !== null) {
     // One external link that names the service, never an embedded player: the guest page loads no third-party
-    // script and the playlists a guest already owns keep their own session (S7).
+    // script and the playlists a guest already owns keep their own session (S7). The cover the API stored is a plain
+    // image the browser loads lazily from the provider's CDN, with no cookie of its own (`referrerpolicy`), and no
+    // cover renders today's card unchanged (S2).
+    const cover = features.music.coverUrl;
+    const title = features.music.title;
+
     sections.push(
       h(
         "div",
         { key: "music", "data-feature": "music", className: SURFACE_CARD },
         h("h3", { className: FEATURE_TITLE }, MUSIC_SECTION_TITLE),
+        cover === undefined
+          ? null
+          : h("img", {
+              src: cover,
+              // The dimensions a provider cover has, so the card reserves its space before the image arrives.
+              width: 300,
+              height: 300,
+              loading: "lazy",
+              alt: title ?? MUSIC_COVER_ALT,
+              // The lower-case attribute the guest page serves: the CDN learns nothing about where the guest came
+              // from, and the page sends it no cookie of its own (S2).
+              referrerpolicy: "no-referrer",
+              className: MUSIC_COVER,
+            }),
+        title === undefined ? null : h("p", { className: MUSIC_TITLE }, title),
         h("p", { className: HINT }, "La música que elegimos para esta celebración."),
         h(
           "div",

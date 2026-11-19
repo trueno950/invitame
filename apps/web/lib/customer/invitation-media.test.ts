@@ -39,6 +39,7 @@ const INVITATION: OwnedInvitation = {
   timeZone: "America/Mexico_City",
   featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["COUNTDOWN", "GALLERY", "CALENDAR"],
+  places: {},
 };
 
 function asset(overrides: Partial<MediaAsset> = {}): MediaAsset {
