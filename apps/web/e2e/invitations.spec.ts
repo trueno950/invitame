@@ -134,7 +134,7 @@ test.describe("customer invitation editor", () => {
     await zone.selectOption({ label: "Monterrey" });
     await zone.blur();
     await expect(page.getByRole("status", { name: AUTOSAVE_COPY.regionLabel })).toContainText(
-      AUTOSAVE_COPY.savedMoment,
+      new RegExp(`${AUTOSAVE_COPY.savedMoment}|${AUTOSAVE_COPY.allSaved}`),
     );
 
     await openEditorSection(page, "Contenido");

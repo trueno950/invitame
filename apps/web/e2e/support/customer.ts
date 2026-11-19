@@ -98,7 +98,7 @@ export function otherCode(code: string): string {
 /** Waits until the editor's status line says the last change is stored. */
 export async function waitForSaved(page: Page): Promise<void> {
   await expect(page.getByRole("status", { name: AUTOSAVE_COPY.regionLabel })).toContainText(
-    AUTOSAVE_COPY.savedMoment,
+    new RegExp(`${AUTOSAVE_COPY.savedMoment}|${AUTOSAVE_COPY.allSaved}`),
   );
 }
 

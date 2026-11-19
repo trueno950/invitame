@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   type AutosaveQueueState,
@@ -25,7 +25,7 @@ import { focusRing } from "../../../../_components/ui.ts";
  */
 
 /** How often the relative time is recomputed; the line itself is only announced when its text changes. */
-const RELATIVE_TIME_TICK_MS = 20_000;
+const RELATIVE_TIME_TICK_MS = 1_000;
 
 const strip =
   "flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-field bg-rose-50 px-4 py-2 text-sm leading-6 text-ink ring-1 ring-rose-100";
@@ -66,16 +66,9 @@ export interface SaveStatusProps {
 }
 
 export function SaveStatus({ state, onRetry, className }: SaveStatusProps) {
-  const saved = state.kind === "saved" ? state.savedAt : undefined;
-  const lastSaved = useRef<string | undefined>(undefined);
-
-  if (saved !== undefined) {
-    lastSaved.current = saved;
-  }
-
-  // While a change is only dirty, the line keeps saying when the work was last stored; while a save is in flight or
-  // has failed, the line says that instead.
-  const shownAt = state.kind === "dirty" ? (saved ?? lastSaved.current) : saved;
+  // Only a stored state is described: while a change is dirty, «Todo guardado» would no longer be true, so the line
+  // waits for the save that follows a moment later.
+  const shownAt = state.kind === "saved" ? state.savedAt : undefined;
   const [now, setNow] = useState<number | undefined>(undefined);
 
   useEffect(() => {

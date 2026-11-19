@@ -642,10 +642,8 @@ export const AUTOSAVE_COPY = {
   /** The three visible states of the status line, in the words the artboard writes. */
   saving: "Guardando…",
   savedMoment: "Guardado hace un momento",
-  savedMinutes: (minutes: number) =>
-    `Guardado hace ${minutes} ${minutes === 1 ? "minuto" : "minutos"}`,
-  savedHours: (hours: number) => `Guardado hace ${hours} ${hours === 1 ? "hora" : "horas"}`,
-  savedDays: (days: number) => `Guardado hace ${days} ${days === 1 ? "día" : "días"}`,
+  /** The settled line once the last save is a few seconds old: true until the next change. */
+  allSaved: "Todo guardado",
   failed: "No se pudo guardar",
   retry: "Reintentar",
   signIn: "Ingresar",
