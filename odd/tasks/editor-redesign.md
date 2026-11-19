@@ -52,3 +52,11 @@ discards what was typed in the others. Design directions first, then implement t
   preview (stored values always win); the preview's attendance card cannot submit, and the editor labels the frame as
   a preview. Known gaps reported for later: the owner read lacks the music provider (the preview mirrors the API's
   host allow-list), and no CSP restricts framing of the app by other origins.
+- L5 — Delivery as chained PRs, each reviewed natively and merged after green CI: #73 design and plan, #74 autosave
+  with versioned content writes (the review asked for optimistic concurrency on `PUT /invitations/:id/content` and for
+  pending changes to be sent when the editor unmounts), #75 owner preview, #76 editor components, #77 page wiring (the
+  review found that the return from checkout landed on «Contenido» and that a draft whose pinned version left the
+  catalog lost feature and attendance editing; both fixed), and this cleanup PR, which removes the old content form,
+  the old save actions, their library functions and tests, the old feature and RSVP forms, and their copy. One review
+  lineage became unverifiable because local `master` was moved while it was collecting; it was abandoned with the
+  owner's go-ahead and the candidate was reviewed again from scratch.

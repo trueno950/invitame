@@ -145,9 +145,6 @@ export const INVITATION_COPY = {
   chosen: "Elegido",
   /** Marks a field the pinned schema requires, as a note instead of the HTML `required` attribute. */
   fieldRequired: "Necesario para publicar",
-  /** Why no field is HTML-required: a draft may stay incomplete until publication (S7). */
-  fieldsHint:
-    "Puedes guardar el borrador con campos vacíos. Los campos marcados como «Necesario para publicar» hacen falta para publicar la invitación.",
   urlPlaceholder: "https://…",
   /** The short groups of the draft's form, in the order they appear. */
   sectionCelebrant: "Festejado",
@@ -166,7 +163,6 @@ export const INVITATION_COPY = {
   missingLabel: (names: string) => `Faltan: ${names}.`,
   /** One missing field, as the publish panel names it once the API refused the publication (S7). */
   missingOneLabel: (name: string) => `Falta: ${name}.`,
-  save: "Guardar cambios",
   archive: "Archivar",
   /** The block of the side column that archives the draft, and what archiving does (S7). */
   archiveHeading: "Archivar",
@@ -545,7 +541,6 @@ export const FEATURE_COPY = {
   giftRegistryNoteMany: (packageNames: string) =>
     `La mesa de regalos se muestra con los paquetes ${packageNames}.`,
   giftRegistryNoteAny: "La mesa de regalos se muestra con un paquete que la incluya.",
-  save: "Guardar funcionalidades",
   archivedNote:
     "Esta invitación está archivada: puedes consultar sus funcionalidades, pero ya no editarlas.",
 } as const;
@@ -563,7 +558,6 @@ export const RSVP_COPY = {
     "Después de esta fecha y hora la invitación deja de recibir respuestas. Se lee en la zona horaria de la invitación.",
   partyLimitLabel: "Personas por respuesta",
   partyLimitHint: "Cada invitado puede confirmar de 1 a este número de personas.",
-  save: "Guardar asistencia",
   archivedNote:
     "Esta invitación está archivada: puedes consultar la configuración de asistencia, pero ya no editarla.",
   unavailable:

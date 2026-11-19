@@ -1,16 +1,6 @@
-import {
-  deadlineInputValue,
-  deadlineInstant,
-  formatRsvpDeadline,
-} from "../invitation-features/rsvp-deadline.ts";
-import {
-  type InvitationTimeZone,
-  isInvitationTimeZone,
-} from "../invitation-features/time-zones.ts";
+import { deadlineInputValue, formatRsvpDeadline } from "../invitation-features/rsvp-deadline.ts";
 import {
   type InvitationResult,
-  type InvitationsClient,
-  isInvitationId,
   type OwnedInvitation,
   RSVP_PARTY_LIMIT_MAX,
   RSVP_PARTY_LIMIT_MIN,
@@ -19,24 +9,14 @@ import {
   type RsvpSettings,
 } from "../server/invitations-api.ts";
 import { GUEST_COPY, RSVP_COPY } from "./copy.ts";
-import {
-  INVITATION_PATHS,
-  invitationErrorTarget,
-  invitationFailureTarget,
-  invitationNoticeTarget,
-  sendInvitationCall,
-} from "./invitations.ts";
-import {
-  rsvpSettingsIssueCodes,
-  rsvpSettingsIssueMessages,
-  rsvpSettingsIssuesTarget,
-} from "./rsvp-issue.ts";
+import { INVITATION_PATHS } from "./invitations.ts";
+import { rsvpSettingsIssueMessages } from "./rsvp-issue.ts";
 
 /**
  * The creator's side of RSVP (M6 G3; S1, S4): the «Asistencia» section of a draft and the page that lists the
  * answers. The API owns the settings, the ownership boundary, and the CSV; these functions build what the pages
- * render, turn one submitted settings form into the API call and the redirect that follows it, and pass the
- * download's own headers through to the browser.
+ * render, and pass the download's own headers through to the browser. The settings themselves are written by the
+ * editor's own autosave (T2a, T2c), which fills the field the owner did not touch from what is stored.
  */
 
 /** The catalog key that decides whether the attendance page lists guests instead of open answers (M6 G4). */
@@ -103,107 +83,6 @@ export function rsvpSettingsView(
       ? GUEST_COPY.responsesHeading
       : RSVP_COPY.responsesLink,
   };
-}
-
-/** The settings a submitted form asks to save, or every issue that refuses it. */
-export type RsvpSettingsParse =
-  | {
-      readonly ok: true;
-      readonly deadline: string | null;
-      readonly partyLimit: number;
-      readonly timeZone: InvitationTimeZone;
-    }
-  | { readonly ok: false; readonly issues: readonly ("deadline" | "party" | "other")[] };
-
-/** A form value as text, or undefined when the field is missing or repeated. */
-function text(form: FormData, name: string): string | undefined {
-  const value = form.get(name);
-
-  return typeof value === "string" ? value : undefined;
-}
-
-/**
- * The settings one submitted form asks to save (S4). The deadline field is a wall clock in the invitation's zone,
- * which the form carries in its hidden `timeZone`, and the party limit is one of the offered numbers. The API
- * validates both again and refuses an archived invitation; this function only refuses what no request could fix.
- */
-export function parseRsvpSettingsForm(form: FormData): RsvpSettingsParse {
-  const submittedZone = text(form, "timeZone");
-  const timeZone =
-    submittedZone !== undefined && isInvitationTimeZone(submittedZone) ? submittedZone : undefined;
-
-  if (timeZone === undefined) {
-    // The hidden zone is written by the page itself; a form without it is not the form this page renders.
-    return { ok: false, issues: ["other"] };
-  }
-
-  const issues: Array<"deadline" | "party"> = [];
-  const submittedDeadline = text(form, "deadline") ?? "";
-  let deadline: string | null = null;
-
-  if (submittedDeadline.trim() !== "") {
-    const instant = deadlineInstant(submittedDeadline.trim(), timeZone);
-
-    if (instant === undefined) {
-      issues.push("deadline");
-    } else {
-      deadline = instant;
-    }
-  }
-
-  const submittedPartyLimit = text(form, "partyLimit") ?? "";
-  const partyLimit = /^\d{1,2}$/.test(submittedPartyLimit)
-    ? Number(submittedPartyLimit)
-    : Number.NaN;
-
-  if (
-    !Number.isInteger(partyLimit) ||
-    partyLimit < RSVP_PARTY_LIMIT_MIN ||
-    partyLimit > RSVP_PARTY_LIMIT_MAX
-  ) {
-    issues.push("party");
-  }
-
-  if (issues.length > 0 || !Number.isInteger(partyLimit)) {
-    return { ok: false, issues };
-  }
-
-  return { ok: true, deadline, partyLimit, timeZone };
-}
-
-/** The client calls this module makes, so a test can hand it a fake and see exactly what it sent. */
-export type RsvpSettingsClient = Pick<InvitationsClient, "updateRsvpSettings">;
-
-/**
- * Saves the deadline and the party limit through `PUT /invitations/:id/rsvp-settings` (S4). The API authorizes the
- * invitation, validates both values, and refuses an archived one; this function maps each outcome to the page's
- * query, with its own issue sentences for a refusal that names them.
- */
-export async function saveRsvpSettings(api: RsvpSettingsClient, form: FormData): Promise<string> {
-  const id = text(form, "id");
-
-  if (id === undefined || !isInvitationId(id)) {
-    return invitationErrorTarget(INVITATION_PATHS.list, "not-found");
-  }
-
-  const path = INVITATION_PATHS.detail(id);
-  const parsed = parseRsvpSettingsForm(form);
-
-  if (!parsed.ok) {
-    return rsvpSettingsIssuesTarget(path, parsed.issues);
-  }
-
-  const written = await sendInvitationCall(() =>
-    api.updateRsvpSettings(id, { deadline: parsed.deadline, partyLimit: parsed.partyLimit }),
-  );
-
-  if (written.ok) {
-    return invitationNoticeTarget(path, "rsvp-saved");
-  }
-  if (written.failure === "rsvp-settings-invalid") {
-    return rsvpSettingsIssuesTarget(path, rsvpSettingsIssueCodes(written.issues ?? []));
-  }
-  return invitationFailureTarget(path, written.failure);
 }
 
 /** One answer of the responses page, as the page renders it. */
@@ -300,5 +179,4 @@ export function rsvpCsvResponse(result: InvitationResult<RsvpCsv> | "unavailable
   return textAnswer(503, "No pudimos descargar el archivo. Inténtalo de nuevo en unos minutos.");
 }
 
-/** The Spanish sentences of a refused save, as the draft page shows them under its error. */
 export { rsvpSettingsIssueMessages };

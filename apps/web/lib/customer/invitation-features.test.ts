@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type {
-  CreatorPackage,
-  InvitationResult,
-  InvitationsClient,
-  OwnedInvitation,
-} from "../server/invitations-api.ts";
+import type { CreatorPackage, OwnedInvitation } from "../server/invitations-api.ts";
 import {
   FEATURE_COPY,
   FEATURE_ISSUE_COPY,
@@ -14,13 +9,7 @@ import {
   INVITATION_NOTICE_COPY,
 } from "./copy.ts";
 import { featureIssueCodes, featureIssueMessages, featureIssuesTarget } from "./feature-issues.ts";
-import {
-  featureSettingsView,
-  parseFeatureSettingsForm,
-  saveInvitationFeatures,
-  TIME_ZONE_CHOICES,
-  timeZoneLabel,
-} from "./invitation-features.ts";
+import { featureSettingsView, TIME_ZONE_CHOICES, timeZoneLabel } from "./invitation-features.ts";
 import { invitationPageNotices } from "./invitations.ts";
 
 // The creator's «Funcionalidades» section (F3; S3, S4): the time zone select with Spanish labels, the
@@ -68,61 +57,6 @@ function creatorPackage(
 
 const BASIC = creatorPackage(PACKAGE_ID, ["COUNTDOWN", "MAP", "WHATSAPP"]);
 const MAP_ONLY = creatorPackage(PACKAGE_ID, ["MAP"], "esencial");
-
-interface Answers {
-  updateInvitationFeatures?: () => Promise<InvitationResult<OwnedInvitation>>;
-}
-
-interface Stub {
-  api: InvitationsClient;
-  calls: string[];
-}
-
-function unexpected(name: string): Promise<never> {
-  return Promise.reject(new Error(`unexpected ${name}`));
-}
-
-function stub(answers: Answers = {}): Stub {
-  const calls: string[] = [];
-  const api: InvitationsClient = {
-    list: () => unexpected("list"),
-    get: () => unexpected("get"),
-    create: () => unexpected("create"),
-    replaceContent: () => unexpected("replaceContent"),
-    updateInvitationFeatures: (id, features) => {
-      calls.push(`updateInvitationFeatures:${id}:${JSON.stringify(features)}`);
-      return answers.updateInvitationFeatures?.() ?? unexpected("updateInvitationFeatures");
-    },
-    archive: () => unexpected("archive"),
-    publish: () => unexpected("publish"),
-    unpublish: () => unexpected("unpublish"),
-    templates: () => unexpected("templates"),
-    packages: () => unexpected("packages"),
-    readRsvp: () => unexpected("readRsvp"),
-    updateRsvpSettings: () => unexpected("updateRsvpSettings"),
-    rsvpCsv: () => unexpected("rsvpCsv"),
-    guests: () => unexpected("guests"),
-    createGuest: () => unexpected("createGuest"),
-    updateGuest: () => unexpected("updateGuest"),
-    removeGuest: () => unexpected("removeGuest"),
-    rotateGuestToken: () => unexpected("rotateGuestToken"),
-    checkInGuest: () => unexpected("checkInGuest"),
-    checkout: () => unexpected("checkout"),
-    payment: () => unexpected("payment"),
-    emitSimulatedPayment: () => unexpected("emitSimulatedPayment"),
-  };
-  return { api, calls };
-}
-
-function formData(entries: Record<string, string>): FormData {
-  const data = new FormData();
-  for (const [name, value] of Object.entries(entries)) {
-    data.set(name, value);
-  }
-  return data;
-}
-
-const DETAIL = `/cuenta/invitaciones/${ID}`;
 
 describe("the feature section's Spanish copy (S7)", () => {
   it("names the two batch-2 fields in Spanish", () => {
@@ -285,72 +219,6 @@ describe("featureSettingsView", () => {
   });
 });
 
-describe("parseFeatureSettingsForm", () => {
-  it("reads the submitted zone and trims a blank phone and link into null", () => {
-    assert.deepEqual(
-      parseFeatureSettingsForm(
-        formData({ timeZone: "America/Merida", whatsappPhone: "  ", playlistUrl: " " }),
-      ),
-      { ok: true, timeZone: "America/Merida", whatsappPhone: null, playlistUrl: null },
-    );
-    assert.deepEqual(
-      parseFeatureSettingsForm(
-        formData({
-          timeZone: "America/Merida",
-          whatsappPhone: "55 1234 5678",
-          playlistUrl: ` ${PLAYLIST} `,
-        }),
-      ),
-      {
-        ok: true,
-        timeZone: "America/Merida",
-        whatsappPhone: "55 1234 5678",
-        playlistUrl: PLAYLIST,
-      },
-    );
-  });
-
-  it("refuses a zone outside the list, a phone that cannot be one, and a link that is too long", () => {
-    assert.deepEqual(parseFeatureSettingsForm(formData({ whatsappPhone: "" })), {
-      ok: false,
-      issues: ["timezone"],
-    });
-    assert.deepEqual(
-      parseFeatureSettingsForm(
-        formData({ timeZone: "Europe/Madrid", whatsappPhone: "", playlistUrl: "" }),
-      ),
-      { ok: false, issues: ["timezone"] },
-    );
-    const tooLong = "5".repeat(40);
-    assert.deepEqual(
-      parseFeatureSettingsForm(
-        formData({ timeZone: "America/Merida", whatsappPhone: tooLong, playlistUrl: "" }),
-      ),
-      { ok: false, issues: ["phone"] },
-    );
-    assert.deepEqual(
-      parseFeatureSettingsForm(
-        formData({
-          timeZone: "America/Merida",
-          whatsappPhone: "",
-          playlistUrl: `https://open.spotify.com/${"a".repeat(500)}`,
-        }),
-      ),
-      { ok: false, issues: ["playlist"] },
-    );
-    assert.deepEqual(
-      parseFeatureSettingsForm(
-        formData({
-          timeZone: "America/Merida",
-          whatsappPhone: "5".repeat(40),
-          playlistUrl: "x".repeat(501),
-        }),
-      ),
-      { ok: false, issues: ["phone", "playlist"] },
-    );
-  });
-});
-
 describe("feature issues", () => {
   it("maps each documented English issue to one code, with an unknown one as other", () => {
     assert.deepEqual(
@@ -429,133 +297,5 @@ describe("feature notices", () => {
     assert.deepEqual(invitationPageNotices({ notice: "saved" }), {
       notice: INVITATION_NOTICE_COPY.saved,
     });
-  });
-});
-
-describe("saveInvitationFeatures", () => {
-  it("saves the zone and the phone and returns to the page with the confirmation", async () => {
-    const { api, calls } = stub({
-      updateInvitationFeatures: async () => ({ ok: true, value: OWNED }),
-    });
-
-    const target = await saveInvitationFeatures(
-      api,
-      formData({ id: ID, timeZone: "America/Merida", whatsappPhone: "55 1234 5678" }),
-    );
-
-    assert.equal(target, `${DETAIL}?notice=features-saved`);
-    assert.deepEqual(calls, [
-      `updateInvitationFeatures:${ID}:${JSON.stringify({
-        timeZone: "America/Merida",
-        whatsappPhone: "55 1234 5678",
-        playlistUrl: null,
-      })}`,
-    ]);
-  });
-
-  it("clears the phone when the field is submitted empty", async () => {
-    const { api, calls } = stub({
-      updateInvitationFeatures: async () => ({
-        ok: true,
-        value: { ...OWNED, featureSettings: { whatsappPhone: null, playlistUrl: null } },
-      }),
-    });
-
-    await saveInvitationFeatures(api, formData({ id: ID, timeZone: "America/Merida" }));
-
-    assert.deepEqual(calls, [
-      `updateInvitationFeatures:${ID}:${JSON.stringify({
-        timeZone: "America/Merida",
-        whatsappPhone: null,
-        playlistUrl: null,
-      })}`,
-    ]);
-  });
-
-  it("returns the Spanish features error with the codes of the issues the API named", async () => {
-    const { api } = stub({
-      updateInvitationFeatures: async () => ({
-        ok: false,
-        failure: "features-invalid",
-        issues: [
-          "timeZone must be one of the supported time zones",
-          "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
-        ],
-      }),
-    });
-
-    assert.equal(
-      await saveInvitationFeatures(
-        api,
-        formData({ id: ID, timeZone: "America/Tijuana", whatsappPhone: "12" }),
-      ),
-      `${DETAIL}?error=features-invalid&issues=timezone,phone`,
-    );
-  });
-
-  it("returns one generic features error when the API names no issue it knows", async () => {
-    const { api } = stub({
-      updateInvitationFeatures: async () => ({ ok: false, failure: "features-invalid" }),
-    });
-
-    assert.equal(
-      await saveInvitationFeatures(api, formData({ id: ID, timeZone: "America/Tijuana" })),
-      `${DETAIL}?error=features-invalid&issues=other`,
-    );
-  });
-
-  it("refuses an archived invitation like the content form does", async () => {
-    const { api } = stub({
-      updateInvitationFeatures: async () => ({ ok: false, failure: "not-editable" }),
-    });
-
-    assert.equal(
-      await saveInvitationFeatures(api, formData({ id: ID, timeZone: "America/Tijuana" })),
-      `${DETAIL}?error=not-editable`,
-    );
-  });
-
-  it("sends nothing for a zone or phone it refuses, and treats a throwing call as unavailable", async () => {
-    const { api, calls } = stub();
-
-    assert.equal(
-      await saveInvitationFeatures(api, formData({ id: ID, timeZone: "Europe/Madrid" })),
-      `${DETAIL}?error=features-invalid&issues=timezone`,
-    );
-    assert.equal(
-      await saveInvitationFeatures(
-        api,
-        formData({ id: ID, timeZone: "America/Tijuana", whatsappPhone: "5".repeat(40) }),
-      ),
-      `${DETAIL}?error=features-invalid&issues=phone`,
-    );
-    assert.equal(
-      await saveInvitationFeatures(api, formData({ id: "1", timeZone: "America/Tijuana" })),
-      "/cuenta/invitaciones?error=not-found",
-    );
-    assert.equal(
-      await saveInvitationFeatures(api, formData({ id: ID, timeZone: "America/Tijuana" })),
-      `${DETAIL}?error=unavailable`,
-    );
-    // Only the last submission reached the API; a zone, a phone, or an id refused here never does.
-    assert.equal(calls.length, 1);
-  });
-
-  it("sends an ended session to sign-in and a missing draft to its own error", async () => {
-    const ended = stub({
-      updateInvitationFeatures: async () => ({ ok: false, failure: "signed-out" }),
-    });
-    assert.equal(
-      await saveInvitationFeatures(ended.api, formData({ id: ID, timeZone: "America/Tijuana" })),
-      "/ingresar",
-    );
-
-    const missing = stub({
-      updateInvitationFeatures: async () => ({ ok: false, failure: "not-found" }),
-    });
-    assert.equal(
-      await saveInvitationFeatures(missing.api, formData({ id: ID, timeZone: "America/Tijuana" })),
-      `${DETAIL}?error=not-found`,
-    );
   });
 });
