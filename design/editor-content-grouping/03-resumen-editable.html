@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contenido · 03 Resumen editable</title>
+<style>
+  /* App-theme tokens, copied from apps/web/app/globals.css (design/system.md). No other color is used. */
+  :root {
+    --background: #fff7f5;
+    --surface: #ffffff;
+    --rose-50: #fdeef2;
+    --rose-100: #f8d7e0;
+    --ink: #3b1424;
+    --muted: #6b3a4c;
+    --placeholder: #8a6070;
+    --primary: #8c1c3a;
+    --primary-deep: #6e1530;
+    --on-primary: #ffffff;
+    --field-border: #a06e7e;
+    --rose: #e9a3b5;
+    --gold: #c29a54;
+    --leaf: #8faf8c;
+    --radius-field: 1rem;
+    --radius-panel: 1.6rem;
+    --radius-card: 2rem;
+    --shadow-soft: 0 2px 6px rgba(110, 21, 48, 0.05), 0 24px 60px -28px rgba(110, 21, 48, 0.3);
+    --shadow-button: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 14px 30px -12px rgba(140, 28, 58, 0.65);
+    --font-display: "Cormorant Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+    --font-sans: "Jost", "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--background);
+    background-image:
+      radial-gradient(70% 30% at 50% 0, var(--surface) 0%, rgba(255, 255, 255, 0) 70%),
+      linear-gradient(180deg, var(--rose-50), var(--background) 46%);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 8px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  .canvas { width: 1440px; margin: 0 auto; padding: 24px 0 32px; }
+  .canvas-head { padding: 0 18px 16px; }
+  .kicker { margin: 0; color: var(--primary); font-size: 11px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; }
+  .canvas-head h1 { margin: 6px 0 0; font-family: var(--font-display); font-size: 34px; font-weight: 600; line-height: 1.1; }
+  .lede { margin: 6px 0 0; max-width: 108ch; color: var(--muted); font-size: 14px; }
+
+  .stage { display: flex; gap: 24px; align-items: flex-start; padding: 0 18px; }
+  .device { flex: 0 0 auto; overflow: hidden; border-radius: 18px; background: var(--surface); box-shadow: 0 40px 70px -46px rgba(110, 21, 48, 0.55), inset 0 0 0 1.5px var(--rose-100); }
+  .device--desktop { width: 990px; }
+  .device--phone { width: 390px; }
+  .chrome { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; background: var(--rose-50); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .chrome-dots { display: flex; gap: 5px; }
+  .chrome-dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--rose-100); }
+  .url { display: flex; flex: 1; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--rose-100); color: var(--muted); font-size: 11px; }
+  .chrome-note { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }
+  .statusbar { display: flex; align-items: center; justify-content: space-between; height: 30px; padding: 0 16px; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 500; }
+  .statusbar .signal { display: flex; align-items: flex-end; gap: 4px; height: 12px; }
+  .statusbar .signal i { display: block; width: 3px; border-radius: 1px; background: var(--ink); }
+  .screen { position: relative; display: flex; height: 1220px; flex-direction: column; overflow: hidden; background: var(--background); }
+  .screen--phone { height: 920px; }
+
+  .appbar { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; height: 50px; padding: 0 24px; background: var(--surface); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .wordmark { color: var(--primary); font-size: 18px; font-weight: 500; letter-spacing: -0.01em; text-decoration: none; }
+  .wordmark em { font-family: var(--font-display); font-style: italic; font-size: 22px; }
+  .topnav { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+  .topnav a { color: var(--muted); text-decoration: none; }
+  .topnav a:hover { color: var(--primary); }
+  .topnav a[aria-current="page"] { color: var(--primary); font-weight: 500; }
+  .topnav .sep { width: 1px; height: 14px; background: var(--rose-100); }
+
+  .editor-head { display: flex; flex: 0 0 auto; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 12px 24px 10px; }
+  .back { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; color: var(--primary); font-size: 12.5px; font-weight: 500; text-decoration: none; }
+  .back:hover { text-decoration: underline; text-decoration-color: var(--rose); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  .title { margin: 2px 0 0; font-family: var(--font-display); font-size: 25px; font-weight: 600; line-height: 1.15; letter-spacing: -0.005em; }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100); color: var(--muted); font-size: 11.5px; font-weight: 500; }
+  .badge--status { background: var(--rose-50); color: var(--primary); }
+  .badge--status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+
+  .body { display: flex; flex: 1 1 auto; gap: 18px; min-height: 0; padding: 0 24px 18px; }
+
+  /* Vertical tabs. */
+  .vrail { display: flex; flex: 0 0 auto; flex-direction: column; gap: 3px; width: 170px; }
+  .vtab { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 46px; padding: 0 12px; border: 0; border-radius: 14px; background: transparent; color: var(--ink); font-family: inherit; font-size: 13.5px; font-weight: 500; text-align: left; cursor: pointer; }
+  .vtab:hover { background: var(--surface); }
+  .vtab[aria-selected="true"] { background: var(--surface); box-shadow: inset 3px 0 0 var(--primary), inset 0 0 0 1.5px var(--rose-100), var(--shadow-soft); color: var(--primary); font-weight: 600; }
+  .vtab span.meta-mini { color: var(--muted); font-size: 10.5px; font-weight: 400; white-space: nowrap; }
+  .vtab[aria-selected="true"] span.meta-mini { color: var(--primary-deep); font-weight: 500; }
+  .vrail-note { margin: 10px 0 0; padding: 11px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 0 0 1.5px var(--rose-100); color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+
+  /* Form column: autosave status on top, sticky. */
+  .formcol { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 0; overflow: hidden; border-radius: var(--radius-panel); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100), var(--shadow-soft); }
+  .statline { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-radius: var(--radius-panel) var(--radius-panel) 0 0; background: var(--rose-50); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .save-ok { display: inline-flex; align-items: center; gap: 7px; margin: 0; color: var(--ink); font-size: 12px; font-weight: 500; }
+  .save-ok .tick { display: grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: var(--primary); color: var(--on-primary); font-size: 10px; }
+  .save-when { color: var(--muted); font-weight: 400; }
+  .linkbtn { border: 0; border-radius: 999px; background: transparent; color: var(--primary); font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 10px; cursor: pointer; }
+  .linkbtn:hover { background: var(--rose-100); }
+  .formbody { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 8px; padding: 14px 16px 16px; overflow: hidden; }
+  .formhead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .formhead h3 { margin: 0; font-family: var(--font-display); font-size: 21px; font-weight: 600; line-height: 1.2; }
+  .tidbit { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 9px; border-radius: 999px; background: var(--rose-50); box-shadow: inset 0 0 0 1.5px var(--primary); color: var(--primary-deep); font-size: 11px; font-weight: 600; }
+  .formhint { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  .legend { margin: 0; color: var(--muted); font-size: 11px; }
+  .req { color: var(--primary); font-weight: 600; }
+  .opt { color: var(--muted); font-size: 11px; font-weight: 400; white-space: nowrap; }
+
+  /* Read rows. */
+  .rlist { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 8px; }
+  .rgroup { display: flex; flex-direction: column; }
+  .rgroup > h4 { display: flex; align-items: center; gap: 8px; margin: 1px 0 1px 4px; color: var(--primary); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .rgroup > h4 .tag { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; }
+  .rrow { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 3px 8px 3px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); font-family: inherit; text-align: left; cursor: pointer; }
+  .rrow:hover { background: var(--rose-50); }
+  .rrow--todo { box-shadow: inset 2.5px 0 0 var(--primary); }
+  .rrow--open { border-radius: 12px 12px 0 0; background: var(--rose-50); box-shadow: inset 2.5px 0 0 var(--primary), inset 0 0 0 1.5px var(--primary); }
+  .rlabel { flex: 0 0 41%; color: var(--muted); font-size: 12px; line-height: 1.3; }
+  .rvalue { flex: 1; min-width: 0; overflow: hidden; font-size: 13px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+  .rvalue .gap { color: var(--primary-deep); font-weight: 600; }
+  .rvalue--none { color: var(--primary-deep); font-weight: 600; }
+  .rvalue--later { color: var(--muted); font-style: italic; }
+  .rchev { flex: 0 0 auto; color: var(--primary); opacity: 0.8; }
+  .reditor { display: flex; flex-direction: column; gap: 6px; margin: 0 0 4px; padding: 10px 12px 11px; border-radius: 0 0 14px 14px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--primary); }
+  .reditor .field { display: flex; flex-direction: column; gap: 4px; }
+  .reditor label { color: var(--ink); font-size: 12px; font-weight: 500; }
+  .edit-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .input { width: 100%; min-height: 44px; padding: 9px 13px; border: 1.5px solid var(--field-border); border-radius: var(--radius-field); background: var(--surface); color: var(--ink); font-family: inherit; font-size: 14px; }
+  .input::placeholder { color: var(--placeholder); }
+  .input:hover { border-color: var(--primary); }
+  .field--error .input { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+  .refusal { display: flex; align-items: flex-start; gap: 5px; margin: 0; color: var(--primary-deep); font-size: 11.5px; font-weight: 600; line-height: 1.4; }
+  .refusal svg { flex: 0 0 auto; margin-top: 2px; }
+
+  /* Live preview of the invitation, at phone width. */
+  .preview { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; width: 334px; }
+  .preview-cap { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
+  .preview-cap b { color: var(--primary); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; font-size: 10px; }
+  .phone-mock { display: flex; flex-direction: column; overflow: hidden; border-radius: 26px; background: var(--surface); box-shadow: 0 26px 50px -34px rgba(110, 21, 48, 0.55), inset 0 0 0 6px var(--surface), inset 0 0 0 7.5px var(--rose-100); }
+  .mock-bar { display: flex; align-items: center; justify-content: space-between; height: 26px; padding: 0 22px; background: var(--rose-50); color: var(--muted); font-size: 9.5px; }
+  .mock-scroll { display: flex; flex-direction: column; gap: 12px; padding: 20px 20px 22px; background: linear-gradient(180deg, var(--rose-50) 0%, var(--background) 45%, var(--rose-50) 100%); }
+  .arch { position: relative; display: grid; place-items: end center; height: 132px; padding-bottom: 10px; overflow: hidden; border-radius: 999px 999px 12px 12px; background: linear-gradient(168deg, var(--rose-100) 0%, var(--rose) 46%, var(--gold) 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
+  .arch .ph { padding: 3px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.82); color: var(--muted); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .rule { display: flex; align-items: center; gap: 8px; color: var(--gold); }
+  .rule::before, .rule::after { content: ""; flex: 1; height: 1px; background: var(--gold); }
+  .rule svg { flex: 0 0 auto; }
+  .mock-name { margin: 0; color: var(--primary); font-family: var(--font-display); font-size: 34px; font-style: italic; font-weight: 600; line-height: 1; text-align: center; }
+  .mock-sub { margin: 0; color: var(--muted); font-size: 9.5px; letter-spacing: 0.24em; text-transform: uppercase; text-align: center; }
+  .mock-date { margin: 0; color: var(--ink); font-size: 11.5px; font-weight: 500; text-align: center; }
+  .mock-place { display: flex; flex-direction: column; gap: 1px; text-align: center; }
+  .mock-place b { color: var(--ink); font-size: 10.5px; font-weight: 600; }
+  .mock-place span { color: var(--muted); font-size: 9.5px; line-height: 1.4; }
+  .mock-cta { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; margin-top: 4px; border-radius: 999px; background: var(--primary); color: var(--on-primary); font-size: 10.5px; font-weight: 600; }
+  .preview-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+  /* Phone frame. */
+  .p-appbar { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; height: 50px; padding: 0 14px; background: var(--surface); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .p-appbar .icon-btn { display: grid; place-items: center; width: 44px; height: 44px; margin-left: -8px; border: 0; border-radius: 999px; background: transparent; color: var(--primary); cursor: pointer; }
+  .p-appbar .icon-btn:hover { background: var(--rose-50); }
+  .p-title { display: flex; flex: 1; min-width: 0; flex-direction: column; margin: 0; font-family: var(--font-display); font-size: 18px; font-weight: 600; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .p-theme { color: var(--muted); font-family: var(--font-sans); font-size: 10.5px; font-weight: 400; }
+  .tabs { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 7px; padding: 10px 14px 9px; background: var(--background); box-shadow: inset 0 -1px 0 var(--rose-100); }
+  .tab { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 13px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); color: var(--ink); font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .tab[aria-selected="true"] { background: var(--primary); box-shadow: none; color: var(--on-primary); }
+  .tab .meta-mini { color: var(--muted); font-size: 11px; font-weight: 400; }
+  .tab[aria-selected="true"] .meta-mini { color: var(--on-primary); }
+  .tab--goal { margin-left: auto; box-shadow: inset 0 0 0 1.5px var(--primary); color: var(--primary); font-weight: 600; }
+  .p-body { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 8px; padding: 10px 12px 8px; overflow: hidden; }
+  .p-statusstrip { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 14px; background: var(--rose-50); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .p-bar { display: flex; flex: 0 0 auto; flex-direction: column; gap: 6px; padding: 9px 12px 14px; background: var(--surface); box-shadow: inset 0 1px 0 var(--rose-100); }
+  .p-bar .btn { min-height: 48px; font-size: 15px; }
+  .p-bar-note { margin: 0; color: var(--muted); font-size: 11px; text-align: center; }
+
+  .missbar { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 14px; background: var(--rose-50); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .missbar .mtitle { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--primary-deep); font-size: 12px; font-weight: 600; }
+  .missbar .mtitle .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
+  .misschips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .misschip { display: inline-flex; align-items: center; min-height: 44px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); color: var(--ink); font-family: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer; }
+  .misschip:hover { background: var(--rose-50); }
+
+  .p-list { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 10px; overflow: hidden; }
+  .p-list .rgroup > h4 { font-size: 10px; }
+  .prow { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 54px; padding: 5px 8px 5px 10px; border: 0; border-radius: 12px; background: transparent; color: var(--ink); font-family: inherit; text-align: left; cursor: pointer; }
+  .prow:hover { background: var(--rose-50); }
+  .prow--todo { box-shadow: inset 2.5px 0 0 var(--primary); }
+  .prow-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 1px; }
+  .prow .rlabel { flex: 0 0 auto; font-size: 11px; }
+  .prow .rvalue { font-size: 13.5px; }
+
+  /* Bottom sheet over the phone. */
+  .sheetwrap { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; justify-content: flex-end; }
+  .scrim { position: absolute; inset: 0; background: rgba(59, 20, 36, 0.42); }
+  .sheet { position: relative; display: flex; flex-direction: column; gap: 9px; padding: 8px 16px 16px; border-radius: 22px 22px 0 0; background: var(--surface); box-shadow: 0 -14px 44px -20px rgba(110, 21, 48, 0.6); }
+  .grab { width: 40px; height: 4px; margin: 0 auto 4px; border-radius: 999px; background: var(--rose-100); }
+  .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .sheet-head h3 { margin: 0; font-family: var(--font-display); font-size: 19px; font-weight: 600; line-height: 1.2; }
+  .sheet-head .need { display: block; margin-top: 1px; color: var(--primary-deep); font-family: var(--font-sans); font-size: 11px; font-weight: 600; }
+  .sheet .field { display: flex; flex-direction: column; gap: 4px; }
+  .sheet label { color: var(--ink); font-size: 12.5px; font-weight: 500; }
+  .sheet .input { min-height: 48px; font-size: 15px; }
+  .sheet-actions { display: flex; gap: 8px; margin-top: 2px; }
+  .sheet-actions .btn { flex: 1; min-height: 48px; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 20px; border: 0; border-radius: 999px; font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; text-decoration: none; cursor: pointer; transition: background-color 0.15s ease; }
+  .btn--primary { background: var(--primary); color: var(--on-primary); box-shadow: var(--shadow-button); }
+  .btn--primary:hover { background: var(--primary-deep); }
+  .btn--quiet { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field-border); color: var(--ink); }
+  .btn--quiet:hover { background: var(--rose-50); }
+  .btn--block { width: 100%; }
+  .btn--sm { min-height: 44px; padding: 0 16px; font-size: 13px; }
+
+  /* Insets and notes. */
+  .detail { display: flex; gap: 20px; align-items: flex-start; padding: 20px 18px 0; }
+  .inset { display: flex; flex: 0 0 auto; flex-direction: column; gap: 4px; width: 470px; padding: 15px 17px; border-radius: var(--radius-card); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100), var(--shadow-soft); }
+  .inset h2 { margin: 0 0 4px; color: var(--primary); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .inset-cap { margin: 4px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  .notes { display: grid; flex: 1 1 auto; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .note { padding: 13px 15px; border-radius: var(--radius-panel); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--rose-100); }
+  .note h2 { margin: 0 0 5px; color: var(--primary); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .note p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+  .note ul { margin: 0; padding-left: 15px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+  code { font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <header class="canvas-head">
+    <p class="kicker">InvitaMe · editor de invitación · pestaña «Contenido» · dirección 03</p>
+    <h1>Resumen editable</h1>
+    <p class="lede">«Contenido» se lee como la lista de datos de la propia invitación: cada fila trae su etiqueta y su valor, y lo que falta dice «Falta» en vino. Tocar una fila abre solo ese dato —en línea en el escritorio, en una hoja inferior en el teléfono— y se vuelve a guardar solo. Los pares de la invitación comparten fila: «Fecha y hora», «Lugar y dirección». Pestañas, autoguardado, «Contenido · faltan 3» y vista previa quedan intactos.</p>
+  </header>
+
+  <div class="stage">
+    <!-- Desktop 990 -->
+    <section class="device device--desktop" aria-label="Editor en escritorio: resumen editable de Contenido con un dato abierto">
+      <div class="chrome">
+        <span class="chrome-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="url">invitame.mx/cuenta/invitaciones/b1491b14?seccion=contenido</span>
+        <span class="chrome-note">escritorio · 990</span>
+      </div>
+      <div class="screen">
+        <header class="appbar">
+          <a class="wordmark" href="#"><em>Invita</em>Me</a>
+          <nav class="topnav" aria-label="Cuenta">
+            <a aria-current="page" href="#">Mis invitaciones</a>
+            <span aria-hidden="true" class="sep"></span>
+            <a href="#">Mi cuenta</a>
+          </nav>
+        </header>
+
+        <div class="editor-head">
+          <div>
+            <a class="back" href="#">← Mis invitaciones</a>
+            <h2 class="title">Ornamental · Azul medianoche y oro</h2>
+            <div class="meta">
+              <span class="badge badge--status">Borrador</span>
+              <span class="badge">Paquete Premium</span>
+              <span class="badge">$100.00 MXN · sin pagar</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="body">
+          <div class="vrail" role="tablist" aria-label="Secciones del editor">
+            <button aria-selected="true" class="vtab" role="tab" type="button">Contenido <span class="meta-mini">· faltan 3</span></button>
+            <button aria-selected="false" class="vtab" role="tab" type="button">Fotos <span class="meta-mini">4 de 12</span></button>
+            <button aria-selected="false" class="vtab" role="tab" type="button">Funciones <span class="meta-mini">3</span></button>
+            <button aria-selected="false" class="vtab" role="tab" type="button">Asistencia <span class="meta-mini">máx. 4</span></button>
+            <button aria-selected="false" class="vtab" role="tab" type="button">Publicar <span class="meta-mini">sin pagar</span></button>
+            <p class="vrail-note">La invitación de la derecha se actualiza con cada campo. Nada se manda hasta que el campo se termina de escribir.</p>
+          </div>
+
+          <div class="formcol">
+            <div class="statline">
+              <p class="save-ok"><span aria-hidden="true" class="tick">✓</span> Guardado hace un momento <span class="save-when">· 9:44</span></p>
+              <button class="linkbtn" type="button">Guardar ahora</button>
+            </div>
+            <div class="formbody">
+              <div class="formhead">
+                <h3>Contenido</h3>
+                <span class="tidbit">Faltan 3 para publicar</span>
+              </div>
+              <p class="formhint">Toca un dato para abrirlo. Las filas con vino a la izquierda son lo que falta.</p>
+              <p class="legend"><span aria-hidden="true" class="req">*</span> Necesario para publicar. Los campos sin marca son opcionales.</p>
+
+              <div class="rlist">
+                <section aria-labelledby="rg1" class="rgroup">
+                  <h4 id="rg1">Persona bautizada y familia</h4>
+                  <button class="rrow" type="button">
+                    <span class="rlabel">Nombre de la persona bautizada <span aria-hidden="true" class="req">*</span></span>
+                    <span class="rvalue">Mateo Herrera Ruiz</span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                  <button class="rrow" type="button">
+                    <span class="rlabel">Padres <span aria-hidden="true" class="req">*</span></span>
+                    <span class="rvalue">Daniel Herrera Ortiz y Lucía Ruiz Salazar</span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                  <button class="rrow" type="button">
+                    <span class="rlabel">Padrinos <span aria-hidden="true" class="req">*</span></span>
+                    <span class="rvalue">Jorge Herrera Ortiz y Ana Salazar Vega</span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                </section>
+
+                <section aria-labelledby="rg2" class="rgroup">
+                  <h4 id="rg2">Ceremonia</h4>
+                  <button class="rrow rrow--todo" type="button">
+                    <span class="rlabel">Fecha y hora <span aria-hidden="true" class="req">*</span></span>
+                    <span class="rvalue">15 de mayo de 2027 · <span class="gap">falta la hora</span></span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                  <button class="rrow" type="button">
+                    <span class="rlabel">Lugar y dirección <span aria-hidden="true" class="req">*</span></span>
+                    <span class="rvalue">Parroquia de San José · Av. Hidalgo 210, Centro, Querétaro</span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                </section>
+
+                <section aria-labelledby="rg3" class="rgroup">
+                  <h4 id="rg3">Recepción</h4>
+                  <button aria-controls="edit-hora-rec" aria-expanded="true" class="rrow rrow--open" type="button">
+                    <span class="rlabel">Hora de la recepción <span aria-hidden="true" class="req">*</span></span>
+                    <span class="rvalue rvalue--none">Falta</span>
+                    <span aria-hidden="true" class="rchev">⌄</span>
+                  </button>
+                  <div class="reditor" id="edit-hora-rec">
+                    <div class="field field--error">
+                      <label for="r-hora-rec">Hora de la recepción <span aria-hidden="true" class="req">*</span></label>
+                      <input aria-describedby="r-hora-rec-error" aria-invalid="true" class="input" id="r-hora-rec" type="time">
+                      <p class="refusal" id="r-hora-rec-error">
+                        <svg aria-hidden="true" fill="none" height="12" viewBox="0 0 16 16" width="12"><path d="M8 1.8 15 14H1L8 1.8Z" stroke="currentColor" stroke-linejoin="round" stroke-width="1.5"/><path d="M8 6v3.4" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"/><circle cx="8" cy="11.6" fill="currentColor" r="0.9"/></svg>
+                        Falta la hora de la recepción: es necesaria para publicar.
+                      </p>
+                    </div>
+                    <p class="edit-hint">Se guarda al salir del campo y la fila vuelve a su resumen. Nada se manda mientras escribes.</p>
+                  </div>
+                  <button class="rrow rrow--todo" type="button">
+                    <span class="rlabel">Lugar y dirección <span aria-hidden="true" class="req">*</span></span>
+                    <span class="rvalue">Jardín Casa Herrera · <span class="gap">falta la dirección</span></span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                </section>
+
+                <section aria-labelledby="rg4" class="rgroup">
+                  <h4 id="rg4">Mensaje y contacto</h4>
+                  <button class="rrow" type="button">
+                    <span class="rlabel">Mensaje <span aria-hidden="true" class="req">*</span></span>
+                    <span class="rvalue">«Con la bendición de Dios y el cariño de nuestra familia, te esperamos…»</span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                  <button class="rrow" type="button">
+                    <span class="rlabel">Confirmación de asistencia <span aria-hidden="true" class="req">*</span></span>
+                    <span class="rvalue">Lucía Ruiz · 442 118 2043</span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                </section>
+
+                <section aria-labelledby="rg5" class="rgroup">
+                  <h4 id="rg5">Extras opcionales <span class="tag">No frenan la publicación</span></h4>
+                  <button class="rrow" type="button">
+                    <span class="rlabel">Foto principal (URL) <span class="opt">Opcional</span></span>
+                    <span class="rvalue">https://ejemplo.mx/fotos/mateo.jpg</span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                  <button class="rrow" type="button">
+                    <span class="rlabel">Mesa de regalos <span class="opt">Opcional</span></span>
+                    <span class="rvalue rvalue--later">Aún sin definir</span>
+                    <span aria-hidden="true" class="rchev">›</span>
+                  </button>
+                </section>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview">
+            <p class="preview-cap"><b>Vista previa</b> <span>Azul medianoche y oro</span></p>
+            <div class="phone-mock">
+              <div class="mock-bar"><span>9:44</span><span aria-hidden="true">▮▮▮</span></div>
+              <div class="mock-scroll">
+                <div aria-hidden="true" class="arch"><span class="ph">Foto principal</span></div>
+                <p class="mock-sub">Bautizo</p>
+                <p class="mock-name">Mateo</p>
+                <div aria-hidden="true" class="rule"><svg fill="none" height="12" viewBox="0 0 16 16" width="12"><path d="M8 2.5c1.9 2 2.9 3.9 2.9 5.5S9.9 12 8 13.5C6.1 12 5.1 9.8 5.1 8S6.1 4.5 8 2.5Z" stroke="currentColor" stroke-width="1.1"/></svg></div>
+                <p class="mock-date">Sábado 15 de mayo de 2027</p>
+                <div class="mock-place">
+                  <b>Ceremonia</b>
+                  <span>Parroquia de San José<br>Av. Hidalgo 210, Centro, Querétaro</span>
+                </div>
+                <div class="mock-place">
+                  <b>Recepción</b>
+                  <span>Jardín Casa Herrera</span>
+                </div>
+                <div class="mock-cta">Confirmar asistencia</div>
+              </div>
+            </div>
+            <p class="preview-note">La invitación se ve como la verán tus invitados: la hora de la ceremonia y la dirección de la recepción todavía no aparecen porque están vacías.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Phone 390 -->
+    <section class="device device--phone" aria-label="Editor en teléfono: resumen editable con hoja inferior para un solo dato">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span aria-hidden="true" class="signal"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:12px"></i></span>
+      </div>
+      <div class="screen screen--phone">
+        <header class="p-appbar">
+          <button aria-label="Volver a mis invitaciones" class="icon-btn" type="button">
+            <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 20 20" width="20"><path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg>
+          </button>
+          <h2 class="p-title">Ornamental<span class="p-theme">Borrador · Premium · $100.00 MXN sin pagar</span></h2>
+        </header>
+
+        <div class="tabs" role="tablist" aria-label="Secciones del editor">
+          <button aria-selected="true" class="tab" role="tab" type="button">Contenido <span class="meta-mini">· faltan 3</span></button>
+          <button aria-selected="false" class="tab" role="tab" type="button">Fotos</button>
+          <button aria-selected="false" class="tab" role="tab" type="button">Funciones</button>
+          <button aria-selected="false" class="tab" role="tab" type="button">Asistencia</button>
+          <button aria-selected="false" class="tab tab--goal" role="tab" type="button">Publicar</button>
+        </div>
+
+        <div class="p-body">
+          <div class="p-statusstrip">
+            <p class="save-ok"><span aria-hidden="true" class="tick">✓</span> Guardado hace un momento <span class="save-when">· 9:44</span></p>
+            <button class="linkbtn" type="button">Guardar ahora</button>
+          </div>
+
+          <div class="missbar">
+            <p class="mtitle"><span aria-hidden="true" class="dot"></span> Faltan 3 para publicar</p>
+            <div class="misschips">
+              <button class="misschip" type="button">Hora de la ceremonia</button>
+              <button class="misschip" type="button">Hora de la recepción</button>
+              <button class="misschip" type="button">Dirección de la recepción</button>
+            </div>
+          </div>
+
+          <div class="p-list">
+            <section aria-labelledby="prg1" class="rgroup">
+              <h4 id="prg1">Persona bautizada y familia</h4>
+              <button class="prow" type="button">
+                <span class="prow-text">
+                  <span class="rlabel">Nombre de la persona bautizada <span aria-hidden="true" class="req">*</span></span>
+                  <span class="rvalue">Mateo Herrera Ruiz</span>
+                </span>
+                <span aria-hidden="true" class="rchev">›</span>
+              </button>
+              <button class="prow" type="button">
+                <span class="prow-text">
+                  <span class="rlabel">Padres <span aria-hidden="true" class="req">*</span></span>
+                  <span class="rvalue">Daniel Herrera Ortiz y Lucía Ruiz Salazar</span>
+                </span>
+                <span aria-hidden="true" class="rchev">›</span>
+              </button>
+              <button class="prow" type="button">
+                <span class="prow-text">
+                  <span class="rlabel">Padrinos <span aria-hidden="true" class="req">*</span></span>
+                  <span class="rvalue">Jorge Herrera Ortiz y Ana Salazar Vega</span>
+                </span>
+                <span aria-hidden="true" class="rchev">›</span>
+              </button>
+            </section>
+
+            <section aria-labelledby="prg2" class="rgroup">
+              <h4 id="prg2">Ceremonia</h4>
+              <button class="prow prow--todo" type="button">
+                <span class="prow-text">
+                  <span class="rlabel">Fecha y hora <span aria-hidden="true" class="req">*</span></span>
+                  <span class="rvalue">15 de mayo de 2027 · <span class="gap">falta la hora</span></span>
+                </span>
+                <span aria-hidden="true" class="rchev">›</span>
+              </button>
+              <button class="prow" type="button">
+                <span class="prow-text">
+                  <span class="rlabel">Lugar y dirección <span aria-hidden="true" class="req">*</span></span>
+                  <span class="rvalue">Parroquia de San José · Av. Hidalgo 210</span>
+                </span>
+                <span aria-hidden="true" class="rchev">›</span>
+              </button>
+            </section>
+          </div>
+        </div>
+
+        <div class="p-bar">
+          <button class="btn btn--primary btn--block" type="button">Ver vista previa</button>
+          <p class="p-bar-note">Se abre la invitación completa, tal como la verán tus invitados.</p>
+        </div>
+
+        <div class="sheetwrap">
+          <div aria-hidden="true" class="scrim"></div>
+          <div aria-label="Hora de la recepción" aria-modal="true" class="sheet" role="dialog">
+            <span aria-hidden="true" class="grab"></span>
+            <div class="sheet-head">
+              <h3>Hora de la recepción<span class="need">Necesario para publicar</span></h3>
+            </div>
+            <div class="field field--error">
+              <label for="s-hora-rec">Hora de la recepción</label>
+              <input aria-describedby="s-hora-rec-error" aria-invalid="true" class="input" id="s-hora-rec" type="time">
+              <p class="refusal" id="s-hora-rec-error">
+                <svg aria-hidden="true" fill="none" height="12" viewBox="0 0 16 16" width="12"><path d="M8 1.8 15 14H1L8 1.8Z" stroke="currentColor" stroke-linejoin="round" stroke-width="1.5"/><path d="M8 6v3.4" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"/><circle cx="8" cy="11.6" fill="currentColor" r="0.9"/></svg>
+                Falta la hora de la recepción: es necesaria para publicar.
+              </p>
+            </div>
+            <p class="edit-hint">Se guarda al salir del campo. La hoja se cierra con «Listo» y la fila vuelve a su resumen.</p>
+            <div class="sheet-actions">
+              <button class="btn btn--quiet" type="button">Cerrar</button>
+              <button class="btn btn--primary" type="button">Listo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="detail">
+    <div class="inset">
+      <h2>Los estados de una fila</h2>
+      <button class="rrow" type="button">
+        <span class="rlabel">Nombre de la persona bautizada</span>
+        <span class="rvalue">Mateo Herrera Ruiz</span>
+        <span aria-hidden="true" class="rchev">›</span>
+      </button>
+      <button class="rrow rrow--todo" type="button">
+        <span class="rlabel">Hora de la recepción <span aria-hidden="true" class="req">*</span></span>
+        <span class="rvalue rvalue--none">Falta</span>
+        <span aria-hidden="true" class="rchev">›</span>
+      </button>
+      <button class="rrow" type="button">
+        <span class="rlabel">Mesa de regalos <span class="opt">Opcional</span></span>
+        <span class="rvalue rvalue--later">Aún sin definir</span>
+        <span aria-hidden="true" class="rchev">›</span>
+      </button>
+      <p class="inset-cap">«Falta» solo marca lo necesario para publicar; un opcional vacío dice «Aún sin definir» y no cuenta en «faltan 3». La fila abierta lleva <code>aria-expanded</code> y devuelve el foco al cerrarse.</p>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h2>S1 · catorce campos, once filas</h2>
+        <p>Se lee como la lista de datos de la invitación: nada de catorce cajas a la vez. Los pares que la invitación ya muestra juntos comparten fila («Fecha y hora», «Lugar y dirección»), y editar abre solo ese dato, así que el trabajo se hace de uno en uno sin perder el conjunto.</p>
+      </div>
+      <div class="note">
+        <h2>S3 · el contexto del editor no cambia</h2>
+        <p>Pestañas, «Contenido · faltan 3», línea de autoguardado, vista previa en vivo y «Ver vista previa» fijo en el teléfono. Cada fila abierta es el mismo campo de siempre: se guarda al salir de él, la fila vuelve a su resumen y lo escrito nunca se descarta si el guardado falla.</p>
+      </div>
+      <div class="note">
+        <h2>Accesibilidad y estados</h2>
+        <ul>
+          <li>Fila y botón son lo mismo: 44 px, foco visible, <code>aria-expanded</code> y <code>aria-controls</code>.</li>
+          <li>La hoja del teléfono es un diálogo modal con foco dentro, «Cerrar» y retorno del foco a la fila.</li>
+          <li>El campo con error usa <code>aria-invalid</code> y <code>aria-describedby</code>; el texto dice qué falta, no solo el color.</li>
+          <li>Contraste AA de los tokens y ninguna animación obligatoria; <code>prefers-reduced-motion</code> apaga transiciones.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

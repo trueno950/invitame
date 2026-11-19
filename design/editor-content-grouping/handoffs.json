@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chosen": "01-tarjetas-resumen.html",
+  "handoffs": {
+    "01-tarjetas-resumen.html": {
+      "status": "sent",
+      "queued": false,
+      "sentAt": "2026-11-19T03:08:44.013Z",
+      "startedAt": null,
+      "implementedAt": null,
+      "feature": "odd/tasks/editor-content-grouping.md"
+    }
+  }
+}
