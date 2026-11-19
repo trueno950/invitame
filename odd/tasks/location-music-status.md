@@ -33,7 +33,8 @@ Waze links when misspelled, and the music link shows no cover.
 | --- | --- | --- | --- | --- |
 | T1 | Save status settles on «✓ Todo guardado» | S1, S2 | inline | see L2 |
 | T2 | Map the current place, maps-link, music, and feature-storage code | S2, S3 | explore | |
-| T3 | Locations: geocoding port with a Photon adapter, stored coordinates, editor suggestions, coordinate links, guest map | S1-S3 | worker | |
+| T3a | Locations API: place search port with a Photon adapter, rate limit and cache, `InvitationPlace` storage, owner routes, gated `places` on both reads | S1-S3 | worker | see L4 |
+| T3b | Locations web: editor address combobox, coordinate Google Maps and Waze links, lazy MapLibre map island on the guest page, browser check | S1-S3 | worker | see L5 |
 | T4 | Music: oEmbed port (Spotify, YouTube), stored title and cover, guest cover card | S1-S3 | worker | |
 | T5 | Verification, gates, native review, PRs, CI, merge | S1-S3 | inline | |
 
@@ -43,3 +44,29 @@ Waze links when misspelled, and the music link shows no cover.
 - L2 — T1: `savedStatusLabel` says «Guardado hace un momento» for 5 s and then «Todo guardado» (no relative time);
   the line describes only a stored state, so it collapses while a change is pending; the ticker runs every second.
   RED observed on the new test, web suite 1536 pass.
+- L3 — T4 music cover: `MusicMetadataProvider` port with a strict oEmbed adapter (Spotify, YouTube; 3 s timeout, no
+  redirects, 16 KiB cap, cover hosts allow-listed), additive migration `20261122120000_add_invitation_feature_music_metadata`
+  (applied to test and dev), one lookup when the link changes, nulls on clear or failure, `features.music.{title,coverUrl}`
+  on both reads, and a guest card with the cover and title. `MUSIC_METADATA_LOOKUP` (`off` in test, so CI never calls
+  the network). API 1623 and db 380, web 1545 pass (parent re-run).
+- L4 — T3a locations API: `PlaceSearch` port with a Photon adapter (3 s timeout, no redirects, 64 KiB cap, Mexico
+  bias; the public instance refuses `lang=es`, so no `lang` is sent), owner routes `GET /invitations/:id/places/search`,
+  `PUT`/`DELETE /invitations/:id/places/:field` (address fields derived from the pinned schema), 60 searches per 10
+  minutes per owner on the shared `RateLimit` table, a bounded 3-minute in-process cache, additive migration
+  `20261123120000_add_invitation_places` (applied to test and dev), `places` on the owner read and, with `MAP` and only
+  while the stored label equals the content text, on the public read. API 1679 and db 390 pass (parent re-run). Known
+  limit: a place write that races a concurrent archive can store a point on a just-archived invitation (harmless:
+  archived invitations are read-only and not public). The web slice follows as T3b.
+- L5 — T3b locations web: owner and public `places` parsing, three server actions, an ARIA combobox on every address
+  field (350 ms debounce, 3 characters, 5 options, «Ubicación confirmada en el mapa» / «Elige una sugerencia para
+  ubicarla con precisión»), coordinate Google Maps and Waze links, and a lazy MapLibre island (`maplibre-gl` 6.19.0,
+  OpenFreeMap liberty, cooperative gestures, attribution) loaded only when the map scrolls into view; the worker URL is
+  set explicitly because the bundled client chunk hides MapLibre's own URL, and the production build emits the worker
+  asset. Web 1605 pass, format, lint, and `pnpm build` pass; browser check with live Photon suggestions, a confirmed
+  ceremony point, coordinate links, and the rendered map (screenshots in /private/tmp/invitame-hojas/mapa).
+- L6 — T5 delivery as chained PRs because the native review refuses candidates past its context budget: #81 save status
+  and music API (review-55aaee9a86c9f1b5); #82 place search port, Photon adapter, rate limit and cache
+  (review-6d5169b04dc242bc); #83 places storage, routes and gated reads (review-010e6182e8c79692, one critical
+  finding refuted); then guest web (music cover, place parsing, coordinate links, lazy map) and editor address
+  combobox with place actions. The last PR's tree equals the reference branch `feat/location-music-status` plus
+  this entry.
