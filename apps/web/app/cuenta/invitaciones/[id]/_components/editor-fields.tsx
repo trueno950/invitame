@@ -1,10 +1,42 @@
 "use client";
 
-import { FEATURE_COPY, INVITATION_COPY, RSVP_COPY } from "../../../../../lib/customer/copy.ts";
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  FEATURE_COPY,
+  INVITATION_COPY,
+  PLACE_PICKER_COPY,
+  RSVP_COPY,
+} from "../../../../../lib/customer/copy.ts";
 import type { FeatureSettingsView } from "../../../../../lib/customer/invitation-features.ts";
 import { timeZoneLabel } from "../../../../../lib/customer/invitation-features.ts";
 import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rsvp.ts";
 import type { ContentField } from "../../../../../lib/customer/invitations.ts";
+import {
+  activeOptionId,
+  dismissedSuggestions,
+  keyAction,
+  openedSuggestions,
+  optionId,
+  PLACE_SEARCH_DEBOUNCE_MS,
+  type PlacePickerState,
+  placeNoteKind,
+  placeSearchRequest,
+  resultMoved,
+  searchAnswered,
+  searchFailed,
+  searchIdle,
+  searchStarted,
+  suggestionsPicker,
+} from "../../../../../lib/customer/place-picker.ts";
+import type {
+  PlaceSearchResult,
+  PlaceWriteResult,
+} from "../../../../../lib/customer/place-search.ts";
+import {
+  type PlacePoint,
+  type StoredPlaces,
+  storedPlaceOf,
+} from "../../../../../lib/invitation-features/place-point.ts";
 import { fieldHint, fieldLabel, textButton, textField } from "../../../../_components/ui.ts";
 import { GuardedLink } from "../../_components/autosave/navigation-guard.tsx";
 
@@ -180,6 +212,283 @@ export function ContentFieldControl({
         ) : null}
       </label>
       {control}
+      <FieldRefusal id={messageId} message={issue} />
+    </div>
+  );
+}
+
+/** The pin that marks a confirmed location: the shape, not the color alone, says the address is precise. */
+function PinIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-4 shrink-0"
+      fill="none"
+      height="16"
+      viewBox="0 0 16 16"
+      width="16"
+    >
+      <path
+        d="M8 14s4.5-4.2 4.5-7.5a4.5 4.5 0 1 0-9 0C3.5 9.8 8 14 8 14Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.4"
+      />
+      <circle cx="8" cy="6.5" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+const optionBase =
+  "flex min-h-11 w-full cursor-pointer items-center px-3.5 text-left text-sm leading-5 text-ink";
+const optionActive = "bg-rose-50";
+const listBox =
+  "absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-field border-[1.5px] border-field-border bg-surface py-1 shadow-soft";
+
+/** The pinned note: the pin and the sentence, announced politely when the address becomes precise. */
+const confirmedNote = "mt-2 flex items-center gap-1.5 text-sm font-medium text-primary";
+const searchNoteText = "mt-1.5 text-sm leading-6 text-muted";
+
+/** What the address combobox needs from the editor: the stored points, the search, and the write (S1, S2). */
+export interface PlaceFieldHandlers {
+  /** Every stored point of the invitation, as the owner read answered them. */
+  readonly places: StoredPlaces;
+  /** The server action that asks the API for the places a text matches. */
+  readonly onSearch: (query: string) => Promise<PlaceSearchResult>;
+  /** The server action that stores the point of one field, answering the invitation's stored points. */
+  readonly onSavePlace: (field: string, point: PlacePoint) => Promise<PlaceWriteResult>;
+}
+
+/**
+ * One address field of the template, with the place search of the precise-locations slice (S1, S2). Typing asks the
+ * API — debounced, and only from three characters on — and a listbox of at most five real places opens under the
+ * field with the full ARIA combobox semantics: arrows move, Enter chooses, Escape closes, a click chooses, and the
+ * active option is named by `aria-activedescendant` so a screen reader reads it while the focus never leaves the
+ * input. Choosing a suggestion writes its label through the same autosave every field uses and stores its
+ * coordinates, so the guest's links and map use the precise point instead of the words.
+ *
+ * Free typing always works: a failed or limited search is one quiet note, the address the owner wrote is kept, and
+ * the field only says «Elige una sugerencia para ubicarla con precisión» until a stored label matches its text.
+ */
+export function AddressFieldControl({
+  field,
+  value,
+  issue,
+  idPrefix,
+  onChange,
+  onFlush,
+  place,
+}: {
+  field: ContentField;
+  value: unknown;
+  issue: string | undefined;
+  idPrefix: string;
+  onChange: (name: string, next: unknown) => void;
+  onFlush: () => void;
+  place: PlaceFieldHandlers;
+}) {
+  const { places, onSearch, onSavePlace } = place;
+  const id = `${idPrefix}-${field.name}`;
+  const listId = `${id}-listbox`;
+  const noteId = `${id}-place-note`;
+  const searchNoteId = `${id}-place-search`;
+  const messageId = `${id}-error`;
+  const text = textOf(value);
+  const [picker, setPicker] = useState<PlacePickerState>(suggestionsPicker);
+  const [searchNote, setSearchNote] = useState<string | undefined>(undefined);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const kind = placeNoteKind(storedPlaceOf(places, field.name), text);
+
+  const stopTimer = useCallback(() => {
+    if (timer.current !== undefined) {
+      clearTimeout(timer.current);
+      timer.current = undefined;
+    }
+  }, []);
+
+  // A field unmounted with a keystroke still pending never asks: the debounce dies with the field.
+  useEffect(() => stopTimer, [stopTimer]);
+
+  const ask = useCallback(
+    async (query: string, asked: string) => {
+      setPicker(searchStarted(asked));
+      try {
+        const result = await onSearch(query);
+        if (result.ok) {
+          setPicker((current) => searchAnswered(current, asked, result.suggestions));
+          setSearchNote(result.suggestions.length === 0 ? PLACE_PICKER_COPY.empty : undefined);
+          return;
+        }
+        setSearchNote(
+          result.failure === "rate-limited"
+            ? PLACE_PICKER_COPY.limited
+            : result.failure === "not-found"
+              ? PLACE_PICKER_COPY.notFound
+              : PLACE_PICKER_COPY.failed,
+        );
+      } catch {
+        setSearchNote(PLACE_PICKER_COPY.failed);
+      }
+      setPicker((current) => searchFailed(current, asked));
+    },
+    [onSearch],
+  );
+
+  const change = (next: string) => {
+    onChange(field.name, next);
+    setSearchNote(undefined);
+    stopTimer();
+    // A changed text closes the list at once: a suggestion of other words is never shown under these.
+    setPicker(searchIdle(next));
+    const request = placeSearchRequest(next);
+
+    if (request.kind === "wait") {
+      return;
+    }
+    timer.current = setTimeout(() => {
+      timer.current = undefined;
+      void ask(request.query, next);
+    }, PLACE_SEARCH_DEBOUNCE_MS);
+  };
+
+  const choose = (suggestion: PlacePoint) => {
+    stopTimer();
+    // The label travels through the autosave every field uses, so the content is written the moment it is chosen.
+    onChange(field.name, suggestion.label);
+    onFlush();
+    setPicker(suggestionsPicker);
+    setSearchNote(undefined);
+    void onSavePlace(field.name, suggestion)
+      .then((result) => {
+        if (!result.ok) {
+          setSearchNote(result.message);
+        }
+      })
+      .catch(() => setSearchNote(PLACE_PICKER_COPY.saveFailed));
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    const action = keyAction(picker, event.key);
+
+    switch (action.kind) {
+      case "open":
+        event.preventDefault();
+        setPicker((current) => openedSuggestions(current));
+        return;
+      case "move":
+        event.preventDefault();
+        setPicker((current) => resultMoved(current, action.delta));
+        return;
+      case "choose": {
+        const chosen = picker.suggestions[action.index];
+
+        if (chosen !== undefined) {
+          event.preventDefault();
+          choose(chosen);
+        }
+        return;
+      }
+      case "dismiss":
+        event.preventDefault();
+        setPicker((current) => dismissedSuggestions(current));
+        return;
+      default:
+        return;
+    }
+  };
+
+  const describedBy = [
+    noteId,
+    searchNote === undefined ? undefined : searchNoteId,
+    issue === undefined ? undefined : messageId,
+  ]
+    .filter((part) => part !== undefined)
+    .join(" ");
+
+  return (
+    <div className={field.input.kind === "textarea" ? "sm:col-span-2" : undefined}>
+      <label className={fieldLabel} htmlFor={id}>
+        {field.label}
+        {field.required ? (
+          <>
+            <span aria-hidden="true" className="ml-1 text-primary">
+              *
+            </span>
+            <span className="sr-only"> ({INVITATION_COPY.fieldRequired})</span>
+          </>
+        ) : null}
+      </label>
+      <div className="relative">
+        <input
+          aria-activedescendant={activeOptionId(picker, id)}
+          aria-autocomplete="list"
+          aria-controls={listId}
+          aria-describedby={describedBy}
+          aria-expanded={picker.open}
+          aria-invalid={issue === undefined ? undefined : true}
+          autoComplete="off"
+          className={textField}
+          id={id}
+          maxLength={field.input.kind === "text" ? field.input.maxLength : undefined}
+          name={field.name}
+          onBlur={() => {
+            onFlush();
+            setPicker((current) => dismissedSuggestions(current));
+          }}
+          onChange={(event) => change(event.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={PLACE_PICKER_COPY.fieldHint}
+          role="combobox"
+          type="text"
+          value={text}
+        />
+        {picker.open ? (
+          <div
+            aria-label={PLACE_PICKER_COPY.listLabel}
+            className={listBox}
+            id={listId}
+            role="listbox"
+          >
+            {picker.suggestions.map((suggestion, index) => (
+              <div
+                aria-selected={index === picker.activeIndex}
+                className={`${optionBase} ${index === picker.activeIndex ? optionActive : ""}`}
+                id={optionId(id, index)}
+                key={`${suggestion.label}-${String(suggestion.lat)}`}
+                // `mousedown` and not `click`: the field keeps its focus, so the choice is never lost to a blur.
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  choose(suggestion);
+                }}
+                role="option"
+                // Never a tab stop of its own: the focus stays in the input and `aria-activedescendant` names the option.
+                tabIndex={-1}
+              >
+                {suggestion.label}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <p
+        aria-live="polite"
+        className={kind === "confirmed" ? confirmedNote : fieldHint}
+        id={noteId}
+      >
+        {kind === "confirmed" ? (
+          <>
+            <PinIcon />
+            {PLACE_PICKER_COPY.confirmed}
+          </>
+        ) : (
+          PLACE_PICKER_COPY.hint
+        )}
+      </p>
+      {searchNote === undefined ? null : (
+        <p aria-live="polite" className={searchNoteText} id={searchNoteId}>
+          {searchNote}
+        </p>
+      )}
       <FieldRefusal id={messageId} message={issue} />
     </div>
   );

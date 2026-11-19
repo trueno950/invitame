@@ -24,6 +24,14 @@ import {
 import type { FeatureSettingsView } from "../../../../../lib/customer/invitation-features.ts";
 import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rsvp.ts";
 import type { ContentSection } from "../../../../../lib/customer/invitations.ts";
+import type {
+  PlaceSearchResult,
+  PlaceWriteResult,
+} from "../../../../../lib/customer/place-search.ts";
+import type {
+  PlacePoint,
+  StoredPlaces,
+} from "../../../../../lib/invitation-features/place-point.ts";
 import type { InvitationStatus } from "../../../../../lib/server/invitations-api.ts";
 import {
   fieldHint,
@@ -43,6 +51,7 @@ import {
 import { SaveStatus } from "../../_components/autosave/save-status.tsx";
 import { useAutosave } from "../../_components/autosave/use-autosave.ts";
 import { StatusBadge } from "../../_components/status-badge.tsx";
+import { savePlaceAction, searchPlacesAction } from "../../place-actions.ts";
 import { ContentCards } from "./content-cards.tsx";
 import {
   FeatureFields,
@@ -121,6 +130,8 @@ export interface EditorShellProps {
   readonly initialSection: EditorSection;
   readonly sections: readonly ContentSection[];
   readonly content: Record<string, unknown>;
+  /** Every stored point of the invitation, which the address fields read to say whether a location is confirmed. */
+  readonly places: StoredPlaces;
   readonly featureView: FeatureSettingsView;
   /** The attendance settings of a package that grants RSVP; undefined for every other package. */
   readonly rsvpView: RsvpSettingsView | undefined;
@@ -157,6 +168,7 @@ export function EditorShell({
   initialSection,
   sections,
   content,
+  places: storedPlaces,
   featureView,
   rsvpView,
   attendance,
@@ -177,6 +189,7 @@ export function EditorShell({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
   const [values, setValues] = useState<Record<string, unknown>>(() => ({ ...content }));
+  const [places, setPlaces] = useState<StoredPlaces>(() => ({ ...storedPlaces }));
   const [features, setFeatures] = useState<FeatureValues>(() => ({
     timeZone: featureView.timeZone,
     whatsappPhone: featureView.whatsappPhone,
@@ -264,6 +277,28 @@ export function EditorShell({
     setFeatures((current) => ({ ...current, ...next }));
     autosave.changeFeatures(next);
   };
+
+  // The place search of the address fields (S1, S2): the browser asks a server action, never the API, and a stored
+  // point answers the invitation's whole map so every address field's note is read back from one place.
+  const searchPlaces = useCallback(
+    (query: string): Promise<PlaceSearchResult> => searchPlacesAction(invitationId, query),
+    [invitationId],
+  );
+  const savePlace = useCallback(
+    async (field: string, point: PlacePoint): Promise<PlaceWriteResult> => {
+      const written = await savePlaceAction(invitationId, field, point);
+
+      if (written.ok) {
+        setPlaces(written.places);
+      }
+      return written;
+    },
+    [invitationId],
+  );
+  const place = useMemo(
+    () => ({ places, onSearch: searchPlaces, onSavePlace: savePlace }),
+    [places, searchPlaces, savePlace],
+  );
 
   const changeRsvp = (next: { deadline?: string | null; partyLimit?: number }) => {
     setRsvp((current) => ({
@@ -423,6 +458,7 @@ export function EditorShell({
                 issues={issues}
                 onChange={changeContent}
                 onFlush={() => void autosave.flush()}
+                place={place}
                 values={values}
               />
             )}

@@ -9,8 +9,14 @@ import {
   defaultOpenCardKey,
 } from "../../../../../lib/customer/content-cards.ts";
 import { EDITOR_COPY } from "../../../../../lib/customer/copy.ts";
+import { isAddressFieldName } from "../../../../../lib/invitation-features/place-point.ts";
 import { focusRing, quietButton } from "../../../../_components/ui.ts";
-import { ContentFieldControl, type FieldIssues } from "./editor-fields.tsx";
+import {
+  AddressFieldControl,
+  ContentFieldControl,
+  type FieldIssues,
+  type PlaceFieldHandlers,
+} from "./editor-fields.tsx";
 
 /**
  * The «Contenido» panel as a stack of cards (T2; S1-S4), following `design/editor-content-grouping/01-tarjetas-resumen.html`:
@@ -96,6 +102,7 @@ function CardRow({
   idPrefix,
   onChange,
   onFlush,
+  place,
 }: {
   readonly row: ContentCardRow;
   readonly values: Readonly<Record<string, unknown>>;
@@ -103,20 +110,36 @@ function CardRow({
   readonly idPrefix: string;
   readonly onChange: (name: string, next: unknown) => void;
   readonly onFlush: () => void;
+  readonly place: PlaceFieldHandlers;
 }) {
   return (
     <div className={row.fields.length === 2 ? "grid gap-x-3 gap-y-4 sm:grid-cols-2" : undefined}>
-      {row.fields.map((field) => (
-        <ContentFieldControl
-          field={field}
-          idPrefix={idPrefix}
-          issue={issues?.[field.name]}
-          key={field.name}
-          onChange={onChange}
-          onFlush={onFlush}
-          value={values[field.name]}
-        />
-      ))}
+      {row.fields.map((field) =>
+        // An address field is the one field with the place search of the precise-locations slice (S1, S2); the rule is
+        // the name the API also derives from the schema, never a label or a template.
+        isAddressFieldName(field.name) ? (
+          <AddressFieldControl
+            field={field}
+            idPrefix={idPrefix}
+            issue={issues?.[field.name]}
+            key={field.name}
+            onChange={onChange}
+            onFlush={onFlush}
+            place={place}
+            value={values[field.name]}
+          />
+        ) : (
+          <ContentFieldControl
+            field={field}
+            idPrefix={idPrefix}
+            issue={issues?.[field.name]}
+            key={field.name}
+            onChange={onChange}
+            onFlush={onFlush}
+            value={values[field.name]}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -128,6 +151,7 @@ export function ContentCards({
   idPrefix,
   onChange,
   onFlush,
+  place,
 }: {
   readonly cards: readonly ContentCard[];
   readonly values: Readonly<Record<string, unknown>>;
@@ -136,6 +160,8 @@ export function ContentCards({
   readonly idPrefix: string;
   readonly onChange: (name: string, next: unknown) => void;
   readonly onFlush: () => void;
+  /** The place search every address field of this panel uses (S1, S2). */
+  readonly place: PlaceFieldHandlers;
 }) {
   const [openKey, setOpenKey] = useState<string | undefined>(() => defaultOpenCardKey(cards));
   const toggles = useRef(new Map<string, HTMLButtonElement>());
@@ -226,6 +252,7 @@ export function ContentCards({
                         key={row.fields.map((field) => field.name).join("-")}
                         onChange={onChange}
                         onFlush={onFlush}
+                        place={place}
                         row={row}
                         values={values}
                       />

@@ -333,6 +333,7 @@ export default async function InvitationDetailPage({
             guestListHref={RSVP_PATHS.responses(invitation.id)}
             initialSection={section}
             invitationId={invitation.id}
+            places={invitation.places}
             key={editorKey}
             mainPhoto={
               <MainPhotoUpload

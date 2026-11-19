@@ -783,9 +783,9 @@ without an N+1 query pattern and must fail closed for unpublished, missing, or u
 
 ## Precise locations
 
-Current status: the API slice of the precise-locations work exists — the geocoding port, the stored points, the two
-owner routes, and the gated public read. The editor combobox, the coordinate-based maps links, and the guest map
-island are a separate, still-pending slice; until they exist a guest page keeps its text-search links and no map.
+Current status: the precise-locations work is complete end to end — the geocoding port, the stored points, the two
+owner routes, the gated public read, the editor's address combobox, the coordinate-based maps links, and the lazy
+guest map. An invitation that never confirmed a point keeps exactly the text-search links it had and renders no map.
 
 - Port: `apps/api/src/invitations/application/place-search.ts` states one provider-neutral question — the points a
   text matches — and `infrastructure/photon-place-search.ts` is the only file that names Photon. Photon is the
@@ -818,7 +818,44 @@ island are a separate, still-pending slice; until they exist a guest page keeps 
   label still equals the current content value of that field, so rewriting the address silently stops using the old
   coordinates. Public Nominatim is never used for typeahead.
 - Attribution: a rendered map shows `© OpenStreetMap contributors`, because both the search results and the tiles come
-  from OpenStreetMap data. The map tiles themselves are not part of this API slice.
+  from OpenStreetMap data. The tiles are served by OpenFreeMap (a MapLibre style with no key), not by this API.
+
+### Editor: the address combobox
+
+- The web client (`apps/web/lib/server/invitations-api.ts`) reads all three routes and parses `places` on the owner read
+  and on the public read with the same strict bounds the API stores; a body outside them is refused whole. The three
+  failures the editor distinguishes keep their own kind: 400 `INVALID_PLACE_QUERY` is `place-query-invalid`,
+  429 `PLACE_SEARCH_RATE_LIMITED` is `place-search-rate-limited`, and 400 `INVALID_INVITATION_PLACE` is
+  `place-invalid`. A query shorter than three characters is refused client-side and costs no request.
+- Server actions (`apps/web/app/cuenta/invitaciones/place-actions.ts`) answer small serializable results, so the browser
+  never reaches the API: a search answers suggestions or a quiet failure, and a write answers the invitation's stored
+  points or one message for the field. The payloads are untrusted: the field must be an address field name and the
+  point must satisfy the column bounds before anything is sent.
+- The combobox is every content field whose schema name is `address` or ends in `Address` (the same name rule the API
+  derives, never a label). Typing asks the server action after a 350 ms debounce and from three characters on, and a
+  listbox of at most five suggestions opens under the field with the full ARIA combobox semantics (`role="combobox"`,
+  `aria-expanded`, `aria-controls`, `aria-activedescendant`, `role="listbox"`/`option`, arrows, Enter, Escape, click,
+  44 px options). Choosing a suggestion writes its label into the content through the editor's own autosave and stores
+  its coordinates, so content and point travel by their own routes. Free typing always works: a failed or limited
+  search is one quiet note and never a block.
+- The note under the field says «Ubicación confirmada en el mapa», with a pin and `aria-live`, only while a stored
+  point's label equals the text the field holds; otherwise it says «Elige una sugerencia para ubicarla con precisión».
+  The pure rules live in `apps/web/lib/customer/place-picker.ts`.
+
+### Guest page: coordinates, links, and the lazy map
+
+- A place of `event-facts.ts` carries the content field its address comes from, so the block attaches the point of that
+  field. Google Maps asks `query=<lat>,<lng>` and Waze asks `ll=<lat>,<lng>` when the point exists, and both keep
+  today's text search otherwise.
+- The map is a deliberate client island (`app/_components/invitation-features/place-map-island.ts`) and the only
+  script a guest page loads for this feature: MapLibre GL and its stylesheet are imported dynamically only when the
+  reserved, fixed-height box scrolls into view (`IntersectionObserver`), so a guest who never reaches it downloads
+  neither. It draws one marker per confirmed place with its name, fits the bounds (a single place is shown at
+  neighbourhood zoom), uses `https://tiles.openfreemap.org/styles/liberty`, keeps `cooperativeGestures` so page scroll
+  is not trapped on touch, is `aria-hidden` (the links beside it are the accessible path and the no-script fallback),
+  and shows `© OpenStreetMap contributors · Mapas: OpenFreeMap`. The rest of the block stays server-rendered.
+- The owner's preview (`apps/web/lib/customer/invitation-preview.ts`) shows the same map from the owner read, filtered
+  by the same label-equality rule, and only for a package that grants `MAP`.
 
 ## Checkout and payments (current)
 
