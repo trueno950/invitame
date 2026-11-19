@@ -64,7 +64,8 @@ export type ContentFieldType = (typeof FIELD_TYPES)[number];
  * The control a field is edited with (M4 T8; S11), derived only from its own property of the pinned
  * schema: the JSON Schema `format`, `pattern`, `minimum`, `maximum`, and `maxLength`, never the
  * template's name or key. `min`/`max` become the input's own bounds, so a browser refuses a negative
- * age before anything is sent, and `parseContentForm` refuses it again on the server.
+ * age before anything is sent, and `parseContentChanges` (`invitation-autosave.ts`) refuses it again on
+ * the server when the field is saved.
  */
 export type FieldInput =
   | { kind: "checkbox" }
@@ -90,12 +91,6 @@ export interface ContentField {
 
 /** A string longer than this is edited in a multi-line field, not a single-line input. */
 export const TEXTAREA_THRESHOLD = 200;
-
-/** A full date as `input type="date"` submits it and as JSON Schema's `format: "date"` declares it. */
-const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/** A 24-hour time as `input type="time"` submits it, down to the minute. */
-const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -377,113 +372,6 @@ export function fieldValue(field: ContentField, content: Record<string, unknown>
   return typeof value === "boolean" ? String(value) : String(value);
 }
 
-export type ContentFormParse = { ok: true; content: Record<string, unknown> } | { ok: false };
-
-const INTEGER = /^-?\d+$/;
-const NUMBER = /^-?\d+(?:\.\d+)?$/;
-
-/** Whether the text is a real calendar day in the schema's `format: "date"` shape. */
-function isCalendarDate(text: string): boolean {
-  const match = ISO_DATE.exec(text);
-
-  if (match === null) {
-    return false;
-  }
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const date = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-  );
-}
-
-/**
- * Whether the control refuses the text on its own: a malformed date or time, or text longer than the
- * schema's `maxLength`. The browser applies the same rules from the input's attributes, so this is the
- * server's own check, and it refuses instead of trimming or clamping.
- */
-function stringRefused(input: FieldInput, text: string): boolean {
-  switch (input.kind) {
-    case "date":
-      return !isCalendarDate(text);
-    case "time":
-      return !TIME_OF_DAY.test(text);
-    case "text":
-    case "textarea":
-    case "url":
-      return input.maxLength !== undefined && [...text].length > input.maxLength;
-    default:
-      return false;
-  }
-}
-
-/** Whether a number is outside the `minimum`/`maximum` the schema declares (S7, S11). */
-function numberRefused(input: FieldInput, value: number): boolean {
-  if (input.kind !== "number") {
-    return false;
-  }
-  return (
-    (input.min !== undefined && value < input.min) || (input.max !== undefined && value > input.max)
-  );
-}
-
-/**
- * The content a submitted form asks to store. Only the fields of the pinned schema are read, so a
- * submitted key the schema does not declare is never sent (the API refuses one anyway). An empty input is
- * omitted, because a draft may stay partial (S7); an integer is converted here, because the API validates
- * an integer and a form sends text; a value the form cannot read, a number outside the schema's range, or
- * a malformed date or time refuses the whole submission instead of being dropped or clamped. A checkbox
- * is `true` when it was checked and `false` when it was not.
- */
-export function parseContentForm(
-  fields: readonly ContentField[],
-  form: FormData,
-): ContentFormParse {
-  const content: Record<string, unknown> = {};
-
-  for (const field of fields) {
-    const submitted = form.get(field.name);
-
-    if (submitted !== null && typeof submitted !== "string") {
-      return { ok: false };
-    }
-    if (field.type === "boolean") {
-      content[field.name] = submitted !== null;
-      continue;
-    }
-    if (submitted === null) {
-      continue;
-    }
-
-    const text = submitted.trim();
-    if (text === "") {
-      continue;
-    }
-    if (field.type === "string") {
-      if (stringRefused(field.input, text)) {
-        return { ok: false };
-      }
-      content[field.name] = text;
-      continue;
-    }
-
-    const whole = field.type === "integer";
-    if (!(whole ? INTEGER : NUMBER).test(text)) {
-      return { ok: false };
-    }
-    const value = Number(text);
-    if (!(whole ? Number.isSafeInteger(value) : Number.isFinite(value))) {
-      return { ok: false };
-    }
-    if (numberRefused(field.input, value)) {
-      return { ok: false };
-    }
-    content[field.name] = value;
-  }
-
-  return { ok: true, content };
-}
-
 const dateFormatter = new Intl.DateTimeFormat("es-MX", {
   dateStyle: "medium",
   timeZone: "America/Mexico_City",
@@ -689,53 +577,6 @@ export async function createInvitation(api: InvitationsClient, form: FormData): 
   return created.failure === "signed-out"
     ? CUSTOMER_SIGN_IN_PATH
     : failedCreateTarget(form, choice, created.failure);
-}
-
-/**
- * Saves the draft's content through `PUT /invitations/:id/content` (S3, S7). The fields come from the
- * creator catalog again, on the server, so the browser never decides which keys or types are sent; when
- * the pinned version is no longer in the catalog, nothing is sent and the page keeps the stored content.
- */
-export async function saveInvitationContent(
-  api: InvitationsClient,
-  form: FormData,
-): Promise<string> {
-  const id = text(form, "id");
-
-  if (id === undefined || !isInvitationId(id)) {
-    return invitationErrorTarget(INVITATION_PATHS.list, "not-found");
-  }
-
-  const path = INVITATION_PATHS.detail(id);
-  const read = await sendInvitationCall(() => api.get(id));
-
-  if (!read.ok) {
-    return invitationFailureTarget(path, read.failure);
-  }
-
-  const catalog = await sendInvitationCall(() => api.templates());
-
-  if (!catalog.ok) {
-    return invitationFailureTarget(path, catalog.failure);
-  }
-
-  const pinned = invitationFieldsFor(catalog.value, read.value.templateVersionId);
-
-  if (pinned === undefined) {
-    return invitationErrorTarget(path, "content-unavailable");
-  }
-
-  const parsed = parseContentForm(pinned.fields, form);
-
-  if (!parsed.ok) {
-    return invitationErrorTarget(path, "invalid-form");
-  }
-
-  const written = await sendInvitationCall(() => api.replaceContent(id, parsed.content));
-
-  return written.ok
-    ? invitationNoticeTarget(path, "saved")
-    : invitationFailureTarget(path, written.failure);
 }
 
 /** Archives a draft: it stays stored and becomes read-only (S7, A3). */

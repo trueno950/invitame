@@ -1,25 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type {
-  InvitationResult,
-  InvitationsClient,
-  OwnedInvitation,
-  RsvpRead,
-  RsvpSettings,
-} from "../server/invitations-api.ts";
+import type { OwnedInvitation, RsvpRead, RsvpSettings } from "../server/invitations-api.ts";
 import {
-  parseRsvpSettingsForm,
   RSVP_PATHS,
   rsvpCsvResponse,
   rsvpResponsesView,
   rsvpSettingsView,
-  saveRsvpSettings,
 } from "./invitation-rsvp.ts";
 
 // The creator's «Asistencia» section and its responses page (M6 G3; S1, S4): the settings view in the
-// invitation's own zone, the submitted form, the fold of one save into the page's query, the responses page's
-// data, and the CSV download the owner's session fetches.
+// invitation's own zone, the responses page's data, and the CSV download the owner's session fetches. The
+// writes live in the editor's autosave, which `invitation-autosave.test.ts` proves.
 
 const ID = "0b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e10";
 const AT = "2026-11-12T10:00:00.000Z";
@@ -74,42 +66,6 @@ const READ: RsvpRead = {
   totals: { attendingPeople: 2, declinedCount: 1, responses: 2 },
 };
 
-function form(entries: Record<string, string>): FormData {
-  const data = new FormData();
-
-  for (const [name, value] of Object.entries(entries)) {
-    data.set(name, value);
-  }
-  return data;
-}
-
-const SETTINGS_FORM = {
-  id: ID,
-  timeZone: "America/Mexico_City",
-  deadline: "2026-12-05T17:30",
-  partyLimit: "6",
-};
-
-function fakeClient(
-  result: InvitationResult<RsvpSettings> | InvitationResult<never> | Error = {
-    ok: true,
-    value: { deadline: DEADLINE, partyLimit: 6 },
-  },
-) {
-  const calls: Array<{ id: string; settings: RsvpSettings }> = [];
-
-  return {
-    calls,
-    async updateRsvpSettings(id: string, settings: RsvpSettings) {
-      calls.push({ id, settings });
-      if (result instanceof Error) {
-        throw result;
-      }
-      return result;
-    },
-  };
-}
-
 describe("rsvpSettingsView", () => {
   it("writes the stored deadline in the invitation's own zone and offers 1 to 10 people", () => {
     const view = rsvpSettingsView(INVITATION, SETTINGS);
@@ -135,105 +91,6 @@ describe("rsvpSettingsView", () => {
     assert.equal(view.deadlineValue, "");
     assert.equal(view.deadlineText, "");
     assert.equal(view.partyLimit, 10);
-  });
-});
-
-describe("parseRsvpSettingsForm", () => {
-  it("reads a wall clock of the invitation's zone as the instant the API stores", () => {
-    assert.deepEqual(parseRsvpSettingsForm(form(SETTINGS_FORM)), {
-      ok: true,
-      deadline: DEADLINE,
-      partyLimit: 6,
-      timeZone: "America/Mexico_City",
-    });
-  });
-
-  it("clears the deadline when the field is empty", () => {
-    const parsed = parseRsvpSettingsForm(form({ ...SETTINGS_FORM, deadline: "" }));
-
-    assert.deepEqual(parsed.ok && parsed.deadline, null);
-    assert.deepEqual(parsed.ok && parsed.partyLimit, 6);
-  });
-
-  it("refuses a deadline it cannot read and a party limit outside 1 to 10", () => {
-    for (const entries of [
-      { ...SETTINGS_FORM, deadline: "2026-02-30T17:30" },
-      { ...SETTINGS_FORM, deadline: "mañana" },
-      { ...SETTINGS_FORM, partyLimit: "0" },
-      { ...SETTINGS_FORM, partyLimit: "11" },
-      { ...SETTINGS_FORM, partyLimit: "cuatro" },
-      { ...SETTINGS_FORM, partyLimit: "2.5" },
-      { ...SETTINGS_FORM, timeZone: "Marte/Olimpo" },
-      { ...SETTINGS_FORM, timeZone: "" },
-    ]) {
-      assert.equal(parseRsvpSettingsForm(form(entries)).ok, false, JSON.stringify(entries));
-    }
-    assert.deepEqual(
-      parseRsvpSettingsForm(form({ ...SETTINGS_FORM, deadline: "mañana", partyLimit: "40" })),
-      { ok: false, issues: ["deadline", "party"] },
-    );
-  });
-});
-
-describe("saveRsvpSettings", () => {
-  it("saves the pair and comes back to the draft with its notice", async () => {
-    const client = fakeClient();
-
-    assert.equal(
-      await saveRsvpSettings(client, form(SETTINGS_FORM)),
-      `${RSVP_PATHS.detail(ID)}?notice=rsvp-saved`,
-    );
-    assert.deepEqual(client.calls, [{ id: ID, settings: { deadline: DEADLINE, partyLimit: 6 } }]);
-  });
-
-  it("comes back with the issue codes of a form it cannot read, and sends nothing", async () => {
-    const client = fakeClient();
-
-    assert.equal(
-      await saveRsvpSettings(client, form({ ...SETTINGS_FORM, partyLimit: "40" })),
-      `${RSVP_PATHS.detail(ID)}?error=rsvp-settings-invalid&issues=party`,
-    );
-    assert.deepEqual(client.calls, []);
-  });
-
-  it("maps the API's refusal and its issues, and an ended session, like every other save", async () => {
-    const refused = fakeClient({
-      ok: false,
-      failure: "rsvp-settings-invalid",
-      issues: ["deadline must be an ISO 8601 instant with an offset, or null"],
-    });
-    assert.equal(
-      await saveRsvpSettings(refused, form(SETTINGS_FORM)),
-      `${RSVP_PATHS.detail(ID)}?error=rsvp-settings-invalid&issues=deadline`,
-    );
-
-    const archived = fakeClient({ ok: false, failure: "not-editable" });
-    assert.equal(
-      await saveRsvpSettings(archived, form(SETTINGS_FORM)),
-      `${RSVP_PATHS.detail(ID)}?error=not-editable`,
-    );
-
-    const ended = fakeClient({ ok: false, failure: "signed-out" });
-    assert.equal(await saveRsvpSettings(ended, form(SETTINGS_FORM)), "/ingresar");
-  });
-
-  it("sends nothing for an id that is not an invitation id", async () => {
-    const client = fakeClient();
-
-    for (const id of ["", "1", "not-a-uuid"]) {
-      assert.equal(
-        await saveRsvpSettings(client, form({ ...SETTINGS_FORM, id })),
-        `${RSVP_PATHS.list}?error=not-found`,
-      );
-    }
-    assert.deepEqual(client.calls, []);
-  });
-
-  it("answers an outage of the API with the page's own notice", async () => {
-    assert.equal(
-      await saveRsvpSettings(fakeClient(new Error("unreachable")), form(SETTINGS_FORM)),
-      `${RSVP_PATHS.detail(ID)}?error=unavailable`,
-    );
   });
 });
 
@@ -303,6 +160,3 @@ describe("rsvpCsvResponse", () => {
     assert.equal(response.headers.get("cache-control"), "no-store");
   });
 });
-
-/** The client shape `saveRsvpSettings` needs, so a test can hand it a fake without the whole client. */
-export type RsvpSettingsClient = Pick<InvitationsClient, "updateRsvpSettings">;

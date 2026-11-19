@@ -1,31 +1,14 @@
-import {
-  INVITATION_TIME_ZONES,
-  type InvitationTimeZone,
-  isInvitationTimeZone,
-} from "../invitation-features/time-zones.ts";
-import {
-  type CreatorPackage,
-  type InvitationsClient,
-  isInvitationId,
-  type OwnedInvitation,
-} from "../server/invitations-api.ts";
+import { INVITATION_TIME_ZONES, isInvitationTimeZone } from "../invitation-features/time-zones.ts";
+import type { CreatorPackage, OwnedInvitation } from "../server/invitations-api.ts";
 import { FEATURE_COPY, INVITATION_TIME_ZONE_LABELS } from "./copy.ts";
-import { type FeatureIssueCode, featureIssueCodes, featureIssuesTarget } from "./feature-issues.ts";
-import {
-  INVITATION_PATHS,
-  invitationErrorTarget,
-  invitationFailureTarget,
-  invitationNoticeTarget,
-  sendInvitationCall,
-} from "./invitations.ts";
 
 /**
  * The creator's «Funcionalidades» section (F3, F6, F7; S3, S4, S7). The feature data belongs to the invitation,
  * not to the template: this module builds the time zone select with Spanish labels, decides whether the WhatsApp
  * and playlist fields are shown from the package's own included feature keys (never from `availableFeatures`,
  * which hides WhatsApp while no phone is stored and music while no link is stored), explains the gift registry of
- * a package that does not grant it, lists the automatic features the guests will see, and turns one submitted
- * form into the API call and the redirect that follows it.
+ * a package that does not grant it, and lists the automatic features the guests will see. The writes moved to the
+ * editor's own autosave (T2a, T2c), which fills the fields the owner did not touch from what is stored.
  */
 
 /** One option of the time zone select: the stored IANA id and the Spanish label of the place. */
@@ -165,108 +148,4 @@ export function featureSettingsView(
       (feature) => feature.key === CALENDAR_FEATURE_KEY || included.has(feature.key),
     ).map((feature) => feature.label),
   };
-}
-
-/** The most characters a submitted phone may carry, so a hostile form cannot grow the request. */
-const MAX_PHONE_TEXT_LENGTH = 32;
-
-/** The contract's own bound on a playlist link, mirrored so an oversized paste never reaches the API (S7). */
-const MAX_PLAYLIST_TEXT_LENGTH = 500;
-
-export type FeatureSettingsParse =
-  | {
-      readonly ok: true;
-      readonly timeZone: InvitationTimeZone;
-      readonly whatsappPhone: string | null;
-      readonly playlistUrl: string | null;
-    }
-  | { readonly ok: false; readonly issues: readonly FeatureIssueCode[] };
-
-/**
- * The feature data a submitted form asks to save. The zone must be one the API accepts, so nothing is sent
- * when it is not; a blank phone or link means "none", which is how the creator clears it (S4, S7). The phone
- * and the link travel as typed, because the API owns normalization and answers its own issue when it refuses.
- */
-export function parseFeatureSettingsForm(form: FormData): FeatureSettingsParse {
-  const submittedZone = form.get("timeZone");
-  const zone =
-    typeof submittedZone === "string" && isInvitationTimeZone(submittedZone)
-      ? submittedZone
-      : undefined;
-  const submittedPhone = form.get("whatsappPhone");
-  const submittedPlaylist = form.get("playlistUrl");
-  const issues: FeatureIssueCode[] = [];
-
-  if (zone === undefined) {
-    issues.push("timezone");
-  }
-
-  let whatsappPhone: string | null = null;
-
-  if (typeof submittedPhone === "string") {
-    const trimmed = submittedPhone.trim();
-    if ([...trimmed].length > MAX_PHONE_TEXT_LENGTH) {
-      issues.push("phone");
-    }
-    whatsappPhone = trimmed === "" ? null : trimmed;
-  } else if (submittedPhone !== null) {
-    issues.push("phone");
-  }
-
-  let playlistUrl: string | null = null;
-
-  if (typeof submittedPlaylist === "string") {
-    const trimmed = submittedPlaylist.trim();
-    if ([...trimmed].length > MAX_PLAYLIST_TEXT_LENGTH) {
-      issues.push("playlist");
-    }
-    playlistUrl = trimmed === "" ? null : trimmed;
-  } else if (submittedPlaylist !== null) {
-    issues.push("playlist");
-  }
-
-  if (issues.length > 0 || zone === undefined) {
-    return { ok: false, issues };
-  }
-  return { ok: true, timeZone: zone, whatsappPhone, playlistUrl };
-}
-
-/**
- * Saves the invitation's feature data through `PUT /invitations/:id/features` (S3, S4, S7). The API authorizes
- * the invitation, validates the zone, the phone, and the playlist link, and refuses an archived draft; this
- * function only maps each outcome to the page's query. An id that names nothing sends nothing, and a refusal that
- * names issues comes back as Spanish sentences through `featureIssueCodes`.
- */
-export async function saveInvitationFeatures(
-  api: InvitationsClient,
-  form: FormData,
-): Promise<string> {
-  const id = form.get("id");
-
-  if (typeof id !== "string" || !isInvitationId(id)) {
-    return invitationErrorTarget(INVITATION_PATHS.list, "not-found");
-  }
-
-  const path = INVITATION_PATHS.detail(id);
-  const parsed = parseFeatureSettingsForm(form);
-
-  if (!parsed.ok) {
-    return featureIssuesTarget(path, parsed.issues);
-  }
-
-  const written = await sendInvitationCall(() =>
-    api.updateInvitationFeatures(id, {
-      timeZone: parsed.timeZone,
-      whatsappPhone: parsed.whatsappPhone,
-      playlistUrl: parsed.playlistUrl,
-    }),
-  );
-
-  if (written.ok) {
-    return invitationNoticeTarget(path, "features-saved");
-  }
-  if (written.failure === "features-invalid") {
-    return featureIssuesTarget(path, featureIssueCodes(written.issues ?? []));
-  }
-  return invitationFailureTarget(path, written.failure);
 }
