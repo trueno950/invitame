@@ -34,7 +34,9 @@ import {
 } from "../application/invitation.application.errors";
 import {
   INVITATION_REPOSITORY,
+  type InvitationFeatureSettingsWrite,
   type InvitationRecord,
+  type InvitationRecordWithMusic,
   type InvitationRepository,
   type NewInvitation,
 } from "../application/invitation.repository";
@@ -52,6 +54,7 @@ import {
   type InvitationPaymentDecision,
   type InvitationPaymentGate,
 } from "../application/invitation-payment-gate";
+import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "../application/music-metadata";
 import {
   RSVP_REPOSITORY,
   type RsvpReadModel,
@@ -67,6 +70,7 @@ import {
   InvitationNotPublishedError,
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
+import type { PlaylistMetadata } from "../domain/invitation-features";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
 import { INVITATION_USE_CASES } from "../invitations.module";
@@ -117,12 +121,12 @@ type Row = Record<string, unknown>;
 
 /** The invitation port in memory: owner scoping, a unique slug, and the lifecycle writes the adapter runs. */
 class MemoryInvitationRepository implements InvitationRepository {
-  readonly rows: InvitationRecord[] = [];
+  readonly rows: InvitationRecordWithMusic[] = [];
   /** How many upcoming creates collide on the slug; the create use case retries and then answers 503. */
   slugCollisions = 0;
   private sequence = 0;
 
-  async create(input: NewInvitation): Promise<InvitationRecord> {
+  async create(input: NewInvitation): Promise<InvitationRecordWithMusic> {
     if (this.slugCollisions > 0) {
       this.slugCollisions -= 1;
       throw new InvitationSlugTakenError(input.slug);
@@ -132,7 +136,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     }
     this.sequence += 1;
     const at = new Date(Date.UTC(2026, 10, 11, 12, 0, this.sequence));
-    const row: InvitationRecord = {
+    const row: InvitationRecordWithMusic = {
       id: randomUUID(),
       ...input,
       content: structuredClone(input.content),
@@ -141,6 +145,8 @@ class MemoryInvitationRepository implements InvitationRepository {
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl: null,
+      playlistTitle: null,
+      playlistCoverUrl: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       archivedAt: null,
@@ -153,12 +159,12 @@ class MemoryInvitationRepository implements InvitationRepository {
     return structuredClone(row);
   }
 
-  async findOwned(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async findOwned(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
     return row ? structuredClone(row) : null;
   }
 
-  async listOwned(ownerId: string): Promise<InvitationRecord[]> {
+  async listOwned(ownerId: string): Promise<InvitationRecordWithMusic[]> {
     return this.rows
       .filter((row) => row.ownerId === ownerId)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
@@ -170,7 +176,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     id: string,
     content: JsonObject,
     expectedUpdatedAt?: Date,
-  ): Promise<InvitationRecord | null> {
+  ): Promise<InvitationRecordWithMusic | null> {
     const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
     if (!row) {
       return null;
@@ -191,8 +197,8 @@ class MemoryInvitationRepository implements InvitationRepository {
   async updateFeatures(
     ownerId: string,
     id: string,
-    features: { timeZone: string; whatsappPhone: string | null; playlistUrl: string | null },
-  ): Promise<InvitationRecord | null> {
+    features: InvitationFeatureSettingsWrite,
+  ): Promise<InvitationRecordWithMusic | null> {
     const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
     if (!row) {
       return null;
@@ -204,10 +210,12 @@ class MemoryInvitationRepository implements InvitationRepository {
     row.timeZone = features.timeZone;
     row.whatsappPhone = features.whatsappPhone;
     row.playlistUrl = features.playlistUrl;
+    row.playlistTitle = features.playlistTitle;
+    row.playlistCoverUrl = features.playlistCoverUrl;
     return structuredClone(row);
   }
 
-  async archive(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async archive(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
     if (!row) {
       return null;
@@ -222,7 +230,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     return structuredClone(row);
   }
 
-  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecord | null> {
+  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecordWithMusic | null> {
     const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
     if (!row) {
       return null;
@@ -239,7 +247,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     return structuredClone(row);
   }
 
-  async unpublish(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async unpublish(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
     if (!row) {
       return null;
@@ -255,7 +263,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     return structuredClone(row);
   }
 
-  async findPublishedBySlug(slug: string): Promise<InvitationRecord | null> {
+  async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
     const now = Date.now();
     const row = this.rows.find(
       (stored) =>
@@ -379,6 +387,26 @@ class MemoryPaymentGate implements InvitationPaymentGate {
     return this.refusalReason === null
       ? { required: false }
       : { required: true, reason: this.refusalReason };
+  }
+}
+
+/**
+ * The music metadata port in memory (S2): every lookup is counted and answered from `answer`, so a test proves a
+ * save asks at most once and that a link which did not change asks nothing.
+ */
+class MemoryMusicMetadataProvider implements MusicMetadataProvider {
+  answer: PlaylistMetadata | null = null;
+  readonly asked: Array<{ playlistUrl: string; provider: string }> = [];
+
+  /** Forgets every lookup and every answer, so one test's playlist save cannot leak into the next. */
+  reset(): void {
+    this.answer = null;
+    this.asked.length = 0;
+  }
+
+  async lookup(playlistUrl: string, provider: string): Promise<PlaylistMetadata | null> {
+    this.asked.push({ playlistUrl, provider });
+    return this.answer;
   }
 }
 
@@ -810,6 +838,7 @@ describe("invitations routes: /invitations", () => {
   const repository = new MemoryInvitationRepository();
   const catalog = new MemoryInvitationCatalog();
   const paymentGate = new MemoryPaymentGate();
+  const musicMetadata = new MemoryMusicMetadataProvider();
   const rsvpRepository = new MemoryRsvpRepository(repository);
   const guestRepository = new MemoryGuestRepository(repository);
   const rateLimiter = new MemoryRateLimiter();
@@ -837,6 +866,7 @@ describe("invitations routes: /invitations", () => {
         { provide: INVITATION_CATALOG, useValue: catalog },
         // Publication is free in Milestone 5; the publish use case asks this gate (S6).
         { provide: INVITATION_PAYMENT_GATE, useValue: paymentGate },
+        { provide: MUSIC_METADATA_PROVIDER, useValue: musicMetadata },
         { provide: RSVP_REPOSITORY, useValue: rsvpRepository },
         { provide: GUEST_REPOSITORY, useValue: guestRepository },
         { provide: RSVP_RATE_LIMITER, useValue: rateLimiter },
@@ -1007,7 +1037,12 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(body.content, {});
       assert.deepEqual(body.missingRequiredFields, ["title"]);
       assert.equal(body.timeZone, "America/Mexico_City");
-      assert.deepEqual(body.featureSettings, { whatsappPhone: null, playlistUrl: null });
+      assert.deepEqual(body.featureSettings, {
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+      });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
       for (const field of ["createdAt", "updatedAt"]) {
@@ -1170,7 +1205,12 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(body.content, {});
       assert.deepEqual(body.missingRequiredFields, ["title"]);
       assert.equal(body.timeZone, "America/Mexico_City");
-      assert.deepEqual(body.featureSettings, { whatsappPhone: null, playlistUrl: null });
+      assert.deepEqual(body.featureSettings, {
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+      });
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
     });
 
@@ -1331,7 +1371,12 @@ describe("invitations routes: /invitations", () => {
       const body = (await response.json()) as Row;
       assert.deepEqual(Object.keys(body).sort(), OWNED_KEYS);
       assert.equal(body.timeZone, "America/Tijuana");
-      assert.deepEqual(body.featureSettings, { whatsappPhone: PHONE, playlistUrl: PLAYLIST });
+      assert.deepEqual(body.featureSettings, {
+        whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+      });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
       assert.equal(body.ownerId, undefined);
@@ -1361,9 +1406,91 @@ describe("invitations routes: /invitations", () => {
         assert.deepEqual(((await response.json()) as Row).featureSettings, {
           whatsappPhone: null,
           playlistUrl: null,
+          playlistTitle: null,
+          playlistCoverUrl: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.whatsappPhone, null);
       }
+    });
+
+    it("stores and answers the playlist title and cover the provider named (S2)", async () => {
+      musicMetadata.reset();
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      musicMetadata.answer = {
+        title: "Today’s Top Hits",
+        coverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+      };
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: PLAYLIST,
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      // The owner reads the stored metadata, so the editor and the preview can show the same card a guest sees.
+      assert.deepEqual(body.featureSettings, {
+        whatsappPhone: null,
+        playlistUrl: PLAYLIST,
+        playlistTitle: "Today’s Top Hits",
+        playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+      });
+      assert.deepEqual(musicMetadata.asked, [{ playlistUrl: PLAYLIST, provider: "spotify" }]);
+
+      // Saving the same link again asks nothing and keeps what was stored for it (S2).
+      musicMetadata.answer = { title: "Otra lista", coverUrl: null };
+      const again = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Cancun",
+        whatsappPhone: null,
+        playlistUrl: PLAYLIST,
+      });
+
+      assert.equal(again.status, 200);
+      assert.equal(musicMetadata.asked.length, 1);
+      assert.deepEqual(((await again.json()) as Row).featureSettings, {
+        whatsappPhone: null,
+        playlistUrl: PLAYLIST,
+        playlistTitle: "Today’s Top Hits",
+        playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+      });
+
+      // A later owner read answers the same stored metadata, so the editor and the preview render it too (S2).
+      const stored = (await (await send("GET", `${PATH}/${draft.id}`, cookie)).json()) as Row;
+      assert.deepEqual(stored.featureSettings, {
+        whatsappPhone: null,
+        playlistUrl: PLAYLIST,
+        playlistTitle: "Today’s Top Hits",
+        playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+      });
+    });
+
+    it("clears the stored playlist title and cover with the link (S2)", async () => {
+      musicMetadata.reset();
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      musicMetadata.answer = { title: "La boda", coverUrl: "https://i.scdn.co/image/abc" };
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: PLAYLIST,
+      });
+
+      const cleared = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+      });
+
+      assert.equal(cleared.status, 200);
+      assert.deepEqual(((await cleared.json()) as Row).featureSettings, {
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+      });
+      assert.equal(musicMetadata.asked.length, 1);
     });
 
     it("clears the stored playlist link with null and with an empty value (F6; S7)", async () => {
@@ -1386,6 +1513,8 @@ describe("invitations routes: /invitations", () => {
         assert.deepEqual(((await response.json()) as Row).featureSettings, {
           whatsappPhone: PHONE,
           playlistUrl: null,
+          playlistTitle: null,
+          playlistCoverUrl: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.playlistUrl, null);
       }
@@ -1823,11 +1952,13 @@ describe("invitations routes: /invitations", () => {
       timeZone?: string;
       whatsappPhone?: string | null;
       playlistUrl?: string | null;
+      playlistTitle?: string | null;
+      playlistCoverUrl?: string | null;
       rsvpDeadline?: Date | null;
       rsvpPartyLimit?: number;
-    }): InvitationRecord {
+    }): InvitationRecordWithMusic {
       const at = new Date(Date.UTC(2026, 9, 12, 9, 0, 0));
-      const row: InvitationRecord = {
+      const row: InvitationRecordWithMusic = {
         id: randomUUID(),
         ownerId: randomUUID(),
         templateVersionId: overrides.templateVersionId ?? PUBLISHED_VERSION_ID,
@@ -1838,6 +1969,8 @@ describe("invitations routes: /invitations", () => {
         timeZone: overrides.timeZone ?? "America/Mexico_City",
         whatsappPhone: overrides.whatsappPhone ?? null,
         playlistUrl: overrides.playlistUrl ?? null,
+        playlistTitle: overrides.playlistTitle ?? null,
+        playlistCoverUrl: overrides.playlistCoverUrl ?? null,
         rsvpDeadline: overrides.rsvpDeadline ?? null,
         rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
         archivedAt: overrides.status === "ARCHIVED" ? at : null,
@@ -2039,12 +2172,58 @@ describe("invitations routes: /invitations", () => {
         map: true,
         calendar: true,
         whatsapp: { phone: PHONE },
-        music: { url: PLAYLIST, provider: "spotify" },
+        music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
         giftRegistry: true,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       assert.equal(JSON.stringify(body).includes(MUSIC_PACKAGE_ID), false);
+    });
+
+    it("answers the stored playlist title and cover to a guest, in the music feature (S2, A7)", async () => {
+      const row = seed({
+        slug: "invitacion-metada",
+        status: "PUBLISHED",
+        packageId: MUSIC_PACKAGE_ID,
+        playlistUrl: PLAYLIST,
+        playlistTitle: "Today’s Top Hits",
+        playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+      });
+
+      const response = await send("GET", `${PUBLIC_PATH}/${row.slug}`);
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), PUBLIC_KEYS);
+      assert.deepEqual((body.features as Row).music, {
+        url: PLAYLIST,
+        provider: "spotify",
+        title: "Today’s Top Hits",
+        coverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+      });
+    });
+
+    it("keeps a cover off the allow-list out of the guest page, and the link with it (S2)", async () => {
+      const row = seed({
+        slug: "invitacion-metad2",
+        status: "PUBLISHED",
+        packageId: MUSIC_PACKAGE_ID,
+        playlistUrl: PLAYLIST,
+        playlistTitle: "Today’s Top Hits",
+        playlistCoverUrl: "https://evil.test/cover.jpg",
+      });
+
+      const response = await send("GET", `${PUBLIC_PATH}/${row.slug}`);
+
+      assert.equal(response.status, 200);
+      const features = ((await response.json()) as Row).features as Row;
+      // The link and the title stay; the image host this deployment does not allow does not (S2, S3).
+      assert.deepEqual(features.music, {
+        url: PLAYLIST,
+        provider: "spotify",
+        title: "Today’s Top Hits",
+        coverUrl: null,
+      });
     });
 
     it("keeps a stored link private when the package does not grant music (F6; S7)", async () => {

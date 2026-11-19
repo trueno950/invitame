@@ -95,17 +95,13 @@ export function savedStatusLabel(savedAt: string, now: number): string {
   const at = Date.parse(savedAt);
   const elapsed = Number.isNaN(at) ? 0 : now - at;
 
-  if (elapsed < 60_000) {
-    return AUTOSAVE_COPY.savedMoment;
-  }
-  if (elapsed < 3_600_000) {
-    return AUTOSAVE_COPY.savedMinutes(Math.floor(elapsed / 60_000));
-  }
-  if (elapsed < 86_400_000) {
-    return AUTOSAVE_COPY.savedHours(Math.floor(elapsed / 3_600_000));
-  }
-  return AUTOSAVE_COPY.savedDays(Math.floor(elapsed / 86_400_000));
+  // A relative time ages forever on a page left open, so the line says «hace un momento» right after a save and then
+  // settles on a statement that stays true until the next change.
+  return elapsed < SAVED_SETTLE_MS ? AUTOSAVE_COPY.savedMoment : AUTOSAVE_COPY.allSaved;
 }
+
+/** How long «Guardado hace un momento» stays before the line settles on «Todo guardado». */
+export const SAVED_SETTLE_MS = 5_000;
 
 function emptySlot(): ChannelSlot {
   return { pending: new Map(), saving: false, savingPromise: undefined, failure: undefined };

@@ -5,7 +5,7 @@ import {
 } from "../application/invitation.application.errors";
 import type {
   InvitationFeatureSettingsWrite,
-  InvitationRecord,
+  InvitationRecordWithMusic,
   InvitationRepository,
   NewInvitation,
 } from "../application/invitation.repository";
@@ -34,8 +34,15 @@ const INVITATION_SELECT = {
   expiresAt: true,
   createdAt: true,
   updatedAt: true,
-  // The one-to-one feature data travels with the row, so an owned or public read stays one query (S4).
-  featureSettings: { select: { whatsappPhone: true, playlistUrl: true } },
+  // The one-to-one feature data travels with the row, so an owned or public read stays one query (S4, S2).
+  featureSettings: {
+    select: {
+      whatsappPhone: true,
+      playlistUrl: true,
+      playlistTitle: true,
+      playlistCoverUrl: true,
+    },
+  },
 } satisfies Prisma.InvitationSelect;
 
 type InvitationRow = Prisma.InvitationGetPayload<{ select: typeof INVITATION_SELECT }>;
@@ -45,7 +52,7 @@ function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function toRecord(row: InvitationRow): InvitationRecord {
+function toRecord(row: InvitationRow): InvitationRecordWithMusic {
   return {
     id: row.id,
     ownerId: row.ownerId,
@@ -60,6 +67,9 @@ function toRecord(row: InvitationRow): InvitationRecord {
     // No settings row yet means no feature data: the phone is null, never an empty string.
     whatsappPhone: row.featureSettings?.whatsappPhone ?? null,
     playlistUrl: row.featureSettings?.playlistUrl ?? null,
+    // A row written before the lookup existed, or one whose lookup failed, carries no metadata (S2).
+    playlistTitle: row.featureSettings?.playlistTitle ?? null,
+    playlistCoverUrl: row.featureSettings?.playlistCoverUrl ?? null,
     rsvpDeadline: row.rsvpDeadline,
     rsvpPartyLimit: row.rsvpPartyLimit,
     archivedAt: row.archivedAt,
@@ -90,7 +100,7 @@ function isPrismaError(error: unknown, code: string): boolean {
 export class PrismaInvitationRepository implements InvitationRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async create(input: NewInvitation): Promise<InvitationRecord> {
+  async create(input: NewInvitation): Promise<InvitationRecordWithMusic> {
     try {
       const created = await this.prisma.invitation.create({
         select: INVITATION_SELECT,
@@ -113,7 +123,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
     }
   }
 
-  async findOwned(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async findOwned(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     const stored = await this.prisma.invitation.findFirst({
       where: { id, ownerId },
       select: INVITATION_SELECT,
@@ -121,7 +131,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
     return stored === null ? null : toRecord(stored);
   }
 
-  async listOwned(ownerId: string): Promise<InvitationRecord[]> {
+  async listOwned(ownerId: string): Promise<InvitationRecordWithMusic[]> {
     const rows = await this.prisma.invitation.findMany({
       where: { ownerId },
       select: INVITATION_SELECT,
@@ -136,7 +146,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
     id: string,
     content: JsonObject,
     expectedUpdatedAt?: Date,
-  ): Promise<InvitationRecord | null> {
+  ): Promise<InvitationRecordWithMusic | null> {
     return this.prisma.$transaction(async (tx) => {
       const stored = await tx.invitation.findFirst({
         where: { id, ownerId },
@@ -178,7 +188,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
     ownerId: string,
     id: string,
     features: InvitationFeatureSettingsWrite,
-  ): Promise<InvitationRecord | null> {
+  ): Promise<InvitationRecordWithMusic | null> {
     return this.prisma.$transaction(async (tx) => {
       const stored = await tx.invitation.findFirst({
         where: { id, ownerId },
@@ -206,10 +216,16 @@ export class PrismaInvitationRepository implements InvitationRepository {
           invitationId: id,
           whatsappPhone: features.whatsappPhone,
           playlistUrl: features.playlistUrl,
+          playlistTitle: features.playlistTitle,
+          playlistCoverUrl: features.playlistCoverUrl,
         },
         update: {
           whatsappPhone: features.whatsappPhone,
           playlistUrl: features.playlistUrl,
+          // The metadata always travels with its link: a cleared or changed link writes its own, stale metadata
+          // never survives a change (S2).
+          playlistTitle: features.playlistTitle,
+          playlistCoverUrl: features.playlistCoverUrl,
         },
       });
 
@@ -219,7 +235,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
     });
   }
 
-  async archive(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async archive(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     return this.prisma.$transaction(async (tx) => {
       const stored = await tx.invitation.findFirst({
         where: { id, ownerId },
@@ -249,7 +265,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
     });
   }
 
-  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecord | null> {
+  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecordWithMusic | null> {
     return this.prisma.$transaction(async (tx) => {
       const stored = await tx.invitation.findFirst({
         where: { id, ownerId },
@@ -277,7 +293,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
     });
   }
 
-  async unpublish(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async unpublish(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     return this.prisma.$transaction(async (tx) => {
       const stored = await tx.invitation.findFirst({
         where: { id, ownerId },
@@ -304,7 +320,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
     });
   }
 
-  async findPublishedBySlug(slug: string): Promise<InvitationRecord | null> {
+  async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
     const now = new Date();
     // One query on the unique slug index: the status and the expiry are filtered there too, so a draft, an
     // archived, an expired, and an unknown slug are all a single miss (S2, A3, S8).

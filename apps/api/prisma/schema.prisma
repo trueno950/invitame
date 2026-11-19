@@ -324,16 +324,23 @@ model Invitation {
 // "InvitationFeatureSettings_whatsappPhone_format" check (NULL or an E.164 number, `^\+[1-9][0-9]{7,14}$`).
 // Migration 2026111*_add_invitation_features_playlist_url adds "playlistUrl" and its
 // "InvitationFeatureSettings_playlistUrl_https" check (NULL or a value that starts with `https://`).
+// Migration 20261122120000_add_invitation_feature_music_metadata adds "playlistTitle" and "playlistCoverUrl",
+// with "InvitationFeatureSettings_playlistCoverUrl_https" (NULL or a value that starts with `https://`).
 model InvitationFeatureSettings {
-  invitationId  String   @id @db.Uuid
+  invitationId     String   @id @db.Uuid
   // E.164: `+` and eight to fifteen digits. Null while the owner has not set one (S4).
-  whatsappPhone String?  @db.VarChar(16)
+  whatsappPhone    String?  @db.VarChar(16)
   // The playlist link the guest's music button opens (F6; S7): an `https` URL on an allow-listed music host,
   // at most 500 characters, or NULL while the owner has not pasted one. The host allow-list is the API
   // domain's (`domain/invitation-features.ts`); the column checks the scheme and the width.
-  playlistUrl   String?  @db.VarChar(500)
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  playlistUrl      String?  @db.VarChar(500)
+  // The title and the cover the provider's public oEmbed answer named when that link was saved, at most 200 and
+  // 500 characters, or NULL when the provider named none or the lookup did not run (S2). The image-host
+  // allow-list and the trimming are the API domain's; the cover column also checks the scheme.
+  playlistTitle    String?  @db.VarChar(200)
+  playlistCoverUrl String?  @db.VarChar(500)
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 
   invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
 }

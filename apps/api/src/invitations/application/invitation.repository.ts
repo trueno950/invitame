@@ -52,14 +52,19 @@ export interface InvitationRecord {
 }
 
 /**
- * The feature data one write stores (F1, F6; S4, S7): an allow-listed zone, an E.164 phone or null, and a
- * normalized playlist link or null. The application validates all three before the port is asked; the port only
- * persists them.
+ * The feature data one write stores (F1, F6; S4, S7; S2): an allow-listed zone, an E.164 phone or null, a
+ * normalized playlist link or null, and the playlist metadata the provider answered or null. The application
+ * validates all of them before the port is asked; the port only persists them, the metadata included, so a write
+ * always states every column it owns and no stale value survives a link change.
  */
 export interface InvitationFeatureSettingsWrite {
   timeZone: string;
   whatsappPhone: string | null;
   playlistUrl: string | null;
+  /** The title the provider answered, trimmed and bounded, or null when there is none (S2). */
+  playlistTitle: string | null;
+  /** The cover URL the provider answered, `https` on an allow-listed image host, or null (S2). */
+  playlistCoverUrl: string | null;
 }
 
 /** A new DRAFT: the owner from the session, the pinned snapshot, the chosen package, and a generated slug. */
@@ -69,6 +74,26 @@ export interface NewInvitation {
   packageId: string;
   slug: string;
   content: JsonObject;
+}
+
+/**
+ * One stored invitation as every read of this port answers it: the row itself plus the playlist metadata the
+ * oEmbed lookup saved (S2). The port's reads carry it, so a caller that renders the music card never needs a second
+ * query; `InvitationRecord` stays the shape a consumer that only reads the lifecycle fields (the publication
+ * payment gate, a media or guest write) already accepts.
+ */
+export interface InvitationRecordWithMusic extends InvitationRecord {
+  /**
+   * The playlist title the provider answered when the link was saved, or null when it answered none (S2). It
+   * travels flattened with the link, from the same settings row, so a read that answers the link also answers the
+   * metadata a layout renders with it.
+   */
+  playlistTitle: string | null;
+  /**
+   * The cover URL the provider answered, `https` on an allow-listed image host, or null (S2). A row written before
+   * the lookup existed, or one whose lookup failed, reads null and renders the link-only card.
+   */
+  playlistCoverUrl: string | null;
 }
 
 /**
@@ -85,13 +110,13 @@ export interface InvitationRepository {
    * holds this slug; every other failure propagates unchanged, so a caller can tell a slug collision from a
    * real error and retry only the former.
    */
-  create(input: NewInvitation): Promise<InvitationRecord>;
+  create(input: NewInvitation): Promise<InvitationRecordWithMusic>;
 
   /** The invitation while this owner has it; null when no row has this id or another owner has it (A4). */
-  findOwned(ownerId: string, id: string): Promise<InvitationRecord | null>;
+  findOwned(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null>;
 
   /** Every invitation of this owner, newest first; an owner with none gets an empty list. */
-  listOwned(ownerId: string): Promise<InvitationRecord[]>;
+  listOwned(ownerId: string): Promise<InvitationRecordWithMusic[]>;
 
   /**
    * Replaces the content of a DRAFT or a PUBLISHED invitation, in one statement whose `WHERE` names the owner
@@ -106,7 +131,7 @@ export interface InvitationRepository {
     id: string,
     content: JsonObject,
     expectedUpdatedAt?: Date,
-  ): Promise<InvitationRecord | null>;
+  ): Promise<InvitationRecordWithMusic | null>;
 
   /**
    * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone and
@@ -119,7 +144,7 @@ export interface InvitationRepository {
     ownerId: string,
     id: string,
     features: InvitationFeatureSettingsWrite,
-  ): Promise<InvitationRecord | null>;
+  ): Promise<InvitationRecordWithMusic | null>;
 
   /**
    * Sets `status` to ARCHIVED and `archivedAt` to the same instant in one statement, scoped by owner and by the
@@ -128,7 +153,7 @@ export interface InvitationRepository {
    * a repeated archive never looks like a change; null, changing nothing, for an id that is missing or belongs
    * to another owner (A4). The row is kept: an archived invitation is read-only, never deleted.
    */
-  archive(ownerId: string, id: string): Promise<InvitationRecord | null>;
+  archive(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null>;
 
   /**
    * Publishes a DRAFT in one statement whose `WHERE` names the owner and the DRAFT status, marking
@@ -137,7 +162,7 @@ export interface InvitationRepository {
    * its own signal and a repeated publish never looks like a change; null, changing nothing, for an id that is
    * missing or belongs to another owner (A4).
    */
-  publish(ownerId: string, id: string, at: Date): Promise<InvitationRecord | null>;
+  publish(ownerId: string, id: string, at: Date): Promise<InvitationRecordWithMusic | null>;
 
   /**
    * Returns a PUBLISHED invitation to DRAFT in one statement whose `WHERE` names the owner and the PUBLISHED
@@ -145,7 +170,7 @@ export interface InvitationRepository {
    * published and `InvitationAlreadyArchivedError` when it is archived; null, changing nothing, for an id that
    * is missing or belongs to another owner (A4).
    */
-  unpublish(ownerId: string, id: string): Promise<InvitationRecord | null>;
+  unpublish(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null>;
 
   /**
    * The public read (S2, A3): the one row with this slug, in one query, that is PUBLISHED and either has no
@@ -153,7 +178,7 @@ export interface InvitationRepository {
    * the guest sees one 404 for every case that must not render. Like every public read it carries no owner:
    * the slug is the only input, and it is the repository that decides what a guest may reach.
    */
-  findPublishedBySlug(slug: string): Promise<InvitationRecord | null>;
+  findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null>;
 }
 
 export const INVITATION_REPOSITORY = Symbol("InvitationRepository");

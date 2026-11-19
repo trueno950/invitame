@@ -23,7 +23,11 @@ index. Every object is new, so no row is rewritten and nothing is deleted; no bi
 Milestone 7 adds the additive `20261121120000_add_payments` migration: the `PaymentStatus` enum type, the `Payment`
 table (the checkout intent, the price snapshot, and the verified state), and the `PaymentEvent` table (one received
 provider event, its decision, and the digest of its payload — never the payload). Every object is new, so no row is
-rewritten and nothing is deleted. Future analytics design is documented separately in
+rewritten and nothing is deleted. The playlist metadata batch adds the additive
+`20261122120000_add_invitation_feature_music_metadata` migration: the nullable
+`InvitationFeatureSettings.playlistTitle` and `.playlistCoverUrl` columns and the
+`InvitationFeatureSettings_playlistCoverUrl_https` check. Both are nullable, so no row is rewritten and nothing is
+deleted. Future analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -45,7 +49,7 @@ rewritten and nothing is deleted. Future analytics design is documented separate
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
-| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), and timestamps |
+| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), and timestamps |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
 
@@ -128,6 +132,13 @@ normalization, the playlist link allow-list, and the gating — lives in
   `music.apple.com`, `music.youtube.com`, `www.youtube.com`, `youtube.com`, `youtu.be`, `www.deezer.com`,
   `deezer.com`, `soundcloud.com`), trims the surrounding spaces, and stores the `URL` parser's normalization. Like the
   phone, the database checks the shape and the domain owns the allow-list.
+- `InvitationFeatureSettings.playlistTitle` is `VARCHAR(200)` and nullable, and `.playlistCoverUrl` is `VARCHAR(500)` and
+  nullable: `NULL` means no metadata stored, which is what an invitation whose lookup never ran, or failed, reads. The
+  title arrives trimmed and bounded by the API domain, and `InvitationFeatureSettings_playlistCoverUrl_https`
+  (`"playlistCoverUrl" IS NULL OR starts_with("playlistCoverUrl", 'https://')`) accepts only an `https` cover. The
+  image-host allow-list (`i.scdn.co`, `image-cdn-*.spotifycdn.com`, `i.ytimg.com`) is the API's, like the music-host
+  allow-list; the database checks only the scheme the column can state. Both columns belong to the link: a changed or
+  cleared `playlistUrl` writes its metadata with it, so no stale cover describes a link the invitation no longer has.
 - The feature data belongs to the invitation, not to its template: the template version stays pinned and changing the
   template never touches these rows. A stored phone or link is kept even when the pinned package does not include
   `WHATSAPP` or `MUSIC`; the gate, not the write, decides whether a guest sees those buttons, so an upgrade later does
@@ -142,6 +153,11 @@ normalization, the playlist link allow-list, and the gating — lives in
   previous migration set or dropping the column by hand with
   `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "playlistUrl";`. Only the playlist links are lost; invitations,
   their content, their phone, and their lifecycle state are untouched. Never edit the applied migration file.
+- Rollback / recovery of `20261122120000_add_invitation_feature_music_metadata`: additive, so recovery is redeploying
+  the previous migration set or dropping both columns by hand with
+  `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "playlistCoverUrl", DROP COLUMN "playlistTitle";`. Only the
+  stored titles and covers are lost; the playlist links and everything else stay. Never edit the applied migration
+  file.
 
 ## RSVP data
 

@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { InvitationNotEditableError } from "../domain/invitation.errors";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
-import type { InvitationRecord, InvitationRepository } from "./invitation.repository";
+import type { InvitationRecordWithMusic, InvitationRepository } from "./invitation.repository";
 import type {
   CatalogPackageEntitlements,
   CatalogTemplateVersionSnapshot,
@@ -45,42 +45,42 @@ const SLUG = "invitacion-k7m2qx";
 
 /** The invitation port in memory: only the reads the RSVP use cases need. */
 class MemoryInvitationRepository implements InvitationRepository {
-  readonly rows: InvitationRecord[] = [];
+  readonly rows: InvitationRecordWithMusic[] = [];
 
   /** The rest of the port belongs to the invitation routes; an unexpected call is a test mistake. */
-  create(): Promise<InvitationRecord> {
+  create(): Promise<InvitationRecordWithMusic> {
     return Promise.reject(new Error("create is not used by the RSVP use cases"));
   }
 
-  listOwned(): Promise<InvitationRecord[]> {
+  listOwned(): Promise<InvitationRecordWithMusic[]> {
     return Promise.reject(new Error("listOwned is not used by the RSVP use cases"));
   }
 
-  updateContent(): Promise<InvitationRecord | null> {
+  updateContent(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("updateContent is not used by the RSVP use cases"));
   }
 
-  updateFeatures(): Promise<InvitationRecord | null> {
+  updateFeatures(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("updateFeatures is not used by the RSVP use cases"));
   }
 
-  archive(): Promise<InvitationRecord | null> {
+  archive(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("archive is not used by the RSVP use cases"));
   }
 
-  publish(): Promise<InvitationRecord | null> {
+  publish(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("publish is not used by the RSVP use cases"));
   }
 
-  unpublish(): Promise<InvitationRecord | null> {
+  unpublish(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("unpublish is not used by the RSVP use cases"));
   }
 
-  async findOwned(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async findOwned(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     return this.rows.find((row) => row.id === id && row.ownerId === ownerId) ?? null;
   }
 
-  async findPublishedBySlug(slug: string): Promise<InvitationRecord | null> {
+  async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
     const now = Date.now();
     return (
       this.rows.find(
@@ -92,9 +92,9 @@ class MemoryInvitationRepository implements InvitationRepository {
     );
   }
 
-  seed(overrides: SeedOptions = {}): InvitationRecord {
+  seed(overrides: SeedOptions = {}): InvitationRecordWithMusic {
     const at = new Date("2026-11-01T10:00:00.000Z");
-    const row: InvitationRecord = {
+    const row: InvitationRecordWithMusic = {
       id: randomUUID(),
       ownerId: overrides.ownerId ?? OWNER,
       templateVersionId: randomUUID(),
@@ -105,6 +105,8 @@ class MemoryInvitationRepository implements InvitationRepository {
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl: null,
+      playlistTitle: null,
+      playlistCoverUrl: null,
       rsvpDeadline: overrides.rsvpDeadline ?? null,
       rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
       archivedAt: overrides.status === "ARCHIVED" ? at : null,
@@ -326,7 +328,7 @@ function issuesOf(error: unknown): string[] {
 describe("UpdateRsvpSettingsUseCase (S4)", () => {
   it("stores the deadline and the party limit of the owner's invitation", async () => {
     const { invitations, rsvp } = seeded();
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
     const useCase = new UpdateRsvpSettingsUseCase(invitations, rsvp);
 
     const stored = await useCase.execute({
@@ -343,7 +345,7 @@ describe("UpdateRsvpSettingsUseCase (S4)", () => {
 
   it("clears the deadline with null", async () => {
     const { invitations, rsvp } = seeded({ rsvpDeadline: new Date("2026-12-31T00:00:00.000Z") });
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
     const useCase = new UpdateRsvpSettingsUseCase(invitations, rsvp);
 
     const stored = await useCase.execute({
@@ -359,7 +361,7 @@ describe("UpdateRsvpSettingsUseCase (S4)", () => {
 
   it("answers null for another owner's invitation, an unknown id, and a malformed id, and stores nothing", async () => {
     const { invitations, rsvp } = seeded();
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
     const useCase = new UpdateRsvpSettingsUseCase(invitations, rsvp);
 
     for (const id of [invitation.id, UNKNOWN_ID, MALFORMED_ID]) {
@@ -379,7 +381,7 @@ describe("UpdateRsvpSettingsUseCase (S4)", () => {
 
   it("refuses an archived invitation with InvitationNotEditableError and keeps its settings", async () => {
     const { invitations, rsvp } = seeded({ status: "ARCHIVED" });
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
     const useCase = new UpdateRsvpSettingsUseCase(invitations, rsvp);
 
     await assert.rejects(
@@ -397,7 +399,7 @@ describe("UpdateRsvpSettingsUseCase (S4)", () => {
 
   it("reports the domain issues of a request it refuses and stores nothing", async () => {
     const { invitations, rsvp } = seeded();
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
     const useCase = new UpdateRsvpSettingsUseCase(invitations, rsvp);
 
     await assert.rejects(
@@ -421,7 +423,7 @@ describe("UpdateRsvpSettingsUseCase (S4)", () => {
 
   it("reports the adapter's archived refusal when a concurrent archive wins", async () => {
     const { invitations, rsvp } = seeded();
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
     const useCase = new UpdateRsvpSettingsUseCase(invitations, rsvp);
     rsvp.refuseWrites = true;
 
@@ -444,7 +446,7 @@ describe("GetRsvpResponsesUseCase (S1, S4)", () => {
       rsvpDeadline: new Date("2026-12-31T23:59:59.000Z"),
       rsvpPartyLimit: 6,
     });
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
     const older = rsvp.seedResponse(invitation.id, {
       name: "Vieja",
       attending: true,
@@ -476,7 +478,7 @@ describe("GetRsvpResponsesUseCase (S1, S4)", () => {
 
   it("counts no people and no declines when nobody answered", async () => {
     const { invitations, rsvp } = seeded();
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
 
     const read = await new GetRsvpResponsesUseCase(invitations, rsvp).execute(OWNER, invitation.id);
 
@@ -486,7 +488,7 @@ describe("GetRsvpResponsesUseCase (S1, S4)", () => {
 
   it("answers null for another owner's invitation, an unknown id, and a malformed id", async () => {
     const { invitations, rsvp } = seeded();
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
     rsvp.seedResponse(invitation.id);
     const useCase = new GetRsvpResponsesUseCase(invitations, rsvp);
 
@@ -642,7 +644,7 @@ describe("SubmitPublicRsvpUseCase (S1, S4)", () => {
 
   it("refuses the write when the invitation stopped accepting it between the read and the insert", async () => {
     const { invitations, rsvp, submit } = seeded();
-    const invitation = invitations.rows[0] as InvitationRecord;
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
     // The read in the use case sees an open invitation; the write finds it archived.
     const writing = rsvp.upsertResponse.bind(rsvp);
     rsvp.upsertResponse = async (invitationId, response, at) => {

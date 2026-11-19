@@ -152,6 +152,8 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       ...row,
       whatsappPhone: settings?.whatsappPhone ?? null,
       playlistUrl: settings?.playlistUrl ?? null,
+      playlistTitle: settings?.playlistTitle ?? null,
+      playlistCoverUrl: settings?.playlistCoverUrl ?? null,
     };
   }
 

@@ -7,6 +7,9 @@ import {
 import {
   availableFeatureKeys,
   GALLERY_FEATURE_KEY,
+  isMusicCoverUrl,
+  musicProviderOf,
+  normalizePlaylistTitle,
   publicInvitationFeatures,
   validateInvitationFeatureSettings,
 } from "../domain/invitation-features";
@@ -37,6 +40,7 @@ import {
 } from "./invitation.application.errors";
 import type {
   InvitationRecord,
+  InvitationRecordWithMusic,
   InvitationRepository,
   NewInvitation,
 } from "./invitation.repository";
@@ -44,6 +48,7 @@ import type { InvitationCatalog } from "./invitation-catalog";
 import type { InvitationGalleryReader } from "./invitation-gallery";
 import type { InvitationPaymentGate } from "./invitation-payment-gate";
 import { type PublicInvitation, projectPublicContent } from "./invitation-public";
+import { type MusicMetadataProvider, NO_MUSIC_METADATA } from "./music-metadata";
 
 // The invitation use cases (M4 T3 and M5 T3; S1, S2, S3, S6, S7, S9, A1, A3, A4, A7). Creating and editing a
 // draft is free for any signed-in customer: the chosen package is only validated against the pinned version's
@@ -123,10 +128,16 @@ export interface OwnedInvitation extends InvitationSummary {
   /** The stored IANA zone (S4). */
   timeZone: string;
   /**
-   * The stored feature data; `whatsappPhone` is E.164 or null, and `playlistUrl` is a normalized `https` link on
-   * an allow-listed music host or null (S4, S7).
+   * The stored feature data; `whatsappPhone` is E.164 or null, `playlistUrl` is a normalized `https` link on an
+   * allow-listed music host or null, and `playlistTitle` and `playlistCoverUrl` are the metadata the provider
+   * answered when that link was saved, or null (S4, S7, S2).
    */
-  featureSettings: { whatsappPhone: string | null; playlistUrl: string | null };
+  featureSettings: {
+    whatsappPhone: string | null;
+    playlistUrl: string | null;
+    playlistTitle: string | null;
+    playlistCoverUrl: string | null;
+  };
   /**
    * The gated keys of the features this invitation will show, `CALENDAR` included (S4). The package's keys are
    * read at request time, because the gate is about what the catalog grants now.
@@ -160,7 +171,7 @@ function toSummary(record: InvitationRecord): InvitationSummary {
 
 /** The owner's view of one invitation, with the schema of the version it is pinned to and the gated features. */
 function toOwnedInvitation(
-  record: InvitationRecord,
+  record: InvitationRecordWithMusic,
   schema: unknown,
   includedFeatureKeys: readonly string[],
 ): OwnedInvitation {
@@ -172,11 +183,15 @@ function toOwnedInvitation(
     featureSettings: {
       whatsappPhone: record.whatsappPhone,
       playlistUrl: record.playlistUrl,
+      playlistTitle: record.playlistTitle,
+      playlistCoverUrl: record.playlistCoverUrl,
     },
     availableFeatures: availableFeatureKeys({
       includedFeatureKeys,
       whatsappPhone: record.whatsappPhone,
       playlistUrl: record.playlistUrl,
+      playlistTitle: record.playlistTitle,
+      playlistCoverUrl: record.playlistCoverUrl,
       rsvpDeadline: record.rsvpDeadline,
       rsvpPartyLimit: record.rsvpPartyLimit,
     }),
@@ -259,7 +274,7 @@ export class CreateInvitationDraftUseCase {
    */
   private async createWithGeneratedSlug(
     input: Omit<NewInvitation, "slug">,
-  ): Promise<InvitationRecord> {
+  ): Promise<InvitationRecordWithMusic> {
     for (let attempt = 1; attempt <= MAX_SLUG_ATTEMPTS; attempt += 1) {
       const slug = this.drawSlug();
       try {
@@ -371,7 +386,7 @@ export class UpdateInvitationContentUseCase {
 }
 
 /**
- * Stores the feature data of a DRAFT or a PUBLISHED invitation (F1, F6; S4, S7): the time zone the owner chose,
+ * Stores the feature data of a DRAFT or a PUBLISHED invitation (F1, F6; S4, S7; S2): the time zone the owner chose,
  * the WhatsApp phone, which normalizes to E.164 and is cleared by null or an empty value, and the playlist link,
  * which must be an `https` link on an allow-listed music host and is cleared the same way. Only the owner may
  * write: another customer's id answers null and changes nothing (A4). An archived invitation is refused
@@ -379,11 +394,18 @@ export class UpdateInvitationContentUseCase {
  * A phone or a link is stored even when the pinned package does not include its feature; the gate, not the write,
  * decides whether a guest sees it, so an upgrade later does not need the data typed again. The zone, the phone,
  * and the link are written in one transaction, so a refused request stores none of them.
+ *
+ * A new or changed playlist link is looked up once, before that transaction, and its title and cover are stored with
+ * it (S2). An unchanged link keeps the metadata already stored and costs no request, and a cleared link clears the
+ * metadata with it, so nothing stale can describe a link the invitation no longer has. The lookup fails open for
+ * the save and closed for the cover: a provider that is down, slow, or unknown stores nulls and the save succeeds.
  */
 export class UpdateInvitationFeaturesUseCase {
   constructor(
     private readonly invitations: InvitationRepository,
     private readonly catalog: InvitationCatalog,
+    /** The music metadata port (S2); the default answers nothing, so a caller that omits it stores no metadata. */
+    private readonly music: MusicMetadataProvider = NO_MUSIC_METADATA,
   ) {}
 
   async execute(input: UpdateFeaturesInput): Promise<OwnedInvitation | null> {
@@ -406,11 +428,13 @@ export class UpdateInvitationFeaturesUseCase {
       throw new InvalidInvitationFeaturesError(validation.issues);
     }
 
-    const updated = await this.invitations.updateFeatures(
-      input.ownerId,
-      input.id,
-      validation.value,
-    );
+    const metadata = await this.playlistMetadataOf(stored, validation.value.playlistUrl);
+
+    const updated = await this.invitations.updateFeatures(input.ownerId, input.id, {
+      ...validation.value,
+      playlistTitle: metadata.title,
+      playlistCoverUrl: metadata.coverUrl,
+    });
     if (updated === null) {
       return null;
     }
@@ -421,6 +445,44 @@ export class UpdateInvitationFeaturesUseCase {
     ]);
 
     return toOwnedInvitation(updated, snapshot?.schema ?? null, includedFeatureKeys);
+  }
+
+  /**
+   * The metadata that travels with the link being saved (S2): the stored one when the link did not change, nulls
+   * when it was cleared or names no provider this API can ask, and otherwise one lookup whose answer is bounded by
+   * the domain before it is stored. The lookup runs outside the write's transaction, so a slow provider delays this
+   * save and never holds a row lock.
+   */
+  private async playlistMetadataOf(
+    stored: InvitationRecordWithMusic,
+    playlistUrl: string | null,
+  ): Promise<{ title: string | null; coverUrl: string | null }> {
+    if (playlistUrl === null) {
+      return { title: null, coverUrl: null };
+    }
+    if (playlistUrl === stored.playlistUrl) {
+      // The same link keeps what was stored for it: saving the zone or the phone again costs no request (S2).
+      return { title: stored.playlistTitle, coverUrl: stored.playlistCoverUrl };
+    }
+
+    const provider = musicProviderOf(playlistUrl);
+    if (provider === null) {
+      return { title: null, coverUrl: null };
+    }
+
+    try {
+      const metadata = await this.music.lookup(playlistUrl, provider);
+
+      // The port is replaceable, so its answer is bounded here as well: a title the column cannot hold is cut, and
+      // a cover off the allow-list is dropped instead of being shown to a guest (S2).
+      return {
+        title: normalizePlaylistTitle(metadata?.title),
+        coverUrl: isMusicCoverUrl(metadata?.coverUrl) ? metadata.coverUrl : null,
+      };
+    } catch {
+      // Fail open for the save, closed for the cover: the link is stored without metadata (S2).
+      return { title: null, coverUrl: null };
+    }
   }
 }
 
@@ -584,7 +646,7 @@ export class GetPublicInvitationUseCase {
    * personal guest page composes this read with the guest's own block, so both pages share one definition of what a
    * guest may see. It throws `PublicInvitationNotRenderableError` exactly like `execute`.
    */
-  async project(published: InvitationRecord): Promise<PublicInvitation> {
+  async project(published: InvitationRecordWithMusic): Promise<PublicInvitation> {
     const render = await this.catalog.findVersionRenderData(published.templateVersionId);
     // Fail closed: with no pinned version or a renderer nobody implements there is nothing to render (A3).
     if (render === null || !this.catalog.isRendererRegistered(render.componentKey)) {
@@ -610,6 +672,8 @@ export class GetPublicInvitationUseCase {
           includedFeatureKeys,
           whatsappPhone: published.whatsappPhone,
           playlistUrl: published.playlistUrl,
+          playlistTitle: published.playlistTitle,
+          playlistCoverUrl: published.playlistCoverUrl,
           rsvpDeadline: published.rsvpDeadline,
           rsvpPartyLimit: published.rsvpPartyLimit,
         },

@@ -60,6 +60,7 @@ API (`apps/api/.env`):
 | `EMAIL_FROM` | Production | The sender, as `address` or `Name <address>`; `InvitaMe Local <no-reply@invitame.localhost>` outside production. |
 | `MAILPIT_URL` | No | `http://localhost:8025`; an `http` or `https` origin. |
 | `RESEND_API_KEY` | With `resend` | Required whenever `EMAIL_TRANSPORT` is `resend`, so always in production. Never commit it. |
+| `MUSIC_METADATA_LOOKUP` | No | `on` in development and production, `off` in test: whether a saved Spotify or YouTube playlist link is looked up once through the provider's public oEmbed to store its title and cover. |
 
 The API also refuses `BETTER_AUTH_TRUSTED_ORIGINS`, so `CORS_ORIGIN` stays the only list of trusted origins, and
 `BETTER_AUTH_SECRETS`, which Better Auth reads on its own and which would replace the validated

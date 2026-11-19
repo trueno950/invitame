@@ -389,17 +389,15 @@ describe("a failed autosave keeps the changes and offers retry (S2, S4)", () => 
 describe("the saved label of the status line (S4)", () => {
   const NOW = Date.parse(SAVED_AT);
 
-  it("says «Guardado hace un momento» for the first minute", () => {
+  it("says «Guardado hace un momento» for the first seconds after a save", () => {
     assert.equal(savedStatusLabel(SAVED_AT, NOW), "Guardado hace un momento");
-    assert.equal(savedStatusLabel(SAVED_AT, NOW + 59_000), "Guardado hace un momento");
+    assert.equal(savedStatusLabel(SAVED_AT, NOW + 4_999), "Guardado hace un momento");
   });
 
-  it("counts minutes, hours, and days after that, in Spanish", () => {
-    assert.equal(savedStatusLabel(SAVED_AT, NOW + 60_000), "Guardado hace 1 minuto");
-    assert.equal(savedStatusLabel(SAVED_AT, NOW + 3 * 60_000), "Guardado hace 3 minutos");
-    assert.equal(savedStatusLabel(SAVED_AT, NOW + 60 * 60_000), "Guardado hace 1 hora");
-    assert.equal(savedStatusLabel(SAVED_AT, NOW + 5 * 60 * 60_000), "Guardado hace 5 horas");
-    assert.equal(savedStatusLabel(SAVED_AT, NOW + 48 * 60 * 60_000), "Guardado hace 2 días");
+  it("settles on «Todo guardado» after that, with no time that ages", () => {
+    assert.equal(savedStatusLabel(SAVED_AT, NOW + 5_000), "Todo guardado");
+    assert.equal(savedStatusLabel(SAVED_AT, NOW + 3 * 60_000), "Todo guardado");
+    assert.equal(savedStatusLabel(SAVED_AT, NOW + 48 * 60 * 60_000), "Todo guardado");
   });
 
   it("falls back to «un momento» for a value it cannot read or a clock that went back", () => {

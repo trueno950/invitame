@@ -8,9 +8,14 @@ import {
   IMPLEMENTED_INVITATION_FEATURES,
   INVITATION_TIME_ZONES,
   isInvitationTimeZone,
+  isMusicCoverUrl,
+  MUSIC_COVER_HOSTS,
   musicProviderOf,
+  normalizePlaylistTitle,
   normalizePlaylistUrl,
   normalizeWhatsAppPhone,
+  PLAYLIST_COVER_URL_MAX_LENGTH,
+  PLAYLIST_TITLE_MAX_LENGTH,
   PLAYLIST_URL_LENGTH_ISSUE,
   PLAYLIST_URL_MAX_LENGTH,
   publicInvitationFeatures,
@@ -363,11 +368,15 @@ describe("feature gating (S4)", () => {
     includedFeatureKeys: readonly string[],
     whatsappPhone: string | null = PHONE,
     playlistUrl: string | null = PLAYLIST,
+    playlistTitle: string | null = null,
+    playlistCoverUrl: string | null = null,
   ) =>
     availableFeatureKeys({
       includedFeatureKeys,
       whatsappPhone,
       playlistUrl,
+      playlistTitle,
+      playlistCoverUrl,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     });
@@ -376,10 +385,14 @@ describe("feature gating (S4)", () => {
     includedFeatureKeys: readonly string[];
     whatsappPhone: string | null;
     playlistUrl: string | null;
+    playlistTitle?: string | null;
+    playlistCoverUrl?: string | null;
     rsvpDeadline?: Date | null;
     rsvpPartyLimit?: number;
   }) =>
     publicInvitationFeatures({
+      playlistTitle: null,
+      playlistCoverUrl: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       ...gate,
@@ -559,7 +572,7 @@ describe("feature gating (S4)", () => {
         map: false,
         calendar: true,
         whatsapp: null,
-        music: { url: PLAYLIST, provider: "spotify" },
+        music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
         giftRegistry: true,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -613,5 +626,71 @@ describe("feature gating (S4)", () => {
     assert.equal(qrPassOf(["RSVP", "GUEST_LIST"]), false);
     // A look-alike key never selects the pass.
     assert.equal(qrPassOf(["RSVP", "GUEST_LIST", "qr_pass"]), false);
+  });
+});
+
+describe("the playlist metadata bounds (S2)", () => {
+  it("trims the title and cuts it at the column width, and refuses a value that says nothing", () => {
+    assert.equal(normalizePlaylistTitle("  Today’s Top Hits "), "Today’s Top Hits");
+    // A longer title is cut, not refused: it is the provider's data and the card can show the beginning.
+    assert.equal(
+      normalizePlaylistTitle("a".repeat(PLAYLIST_TITLE_MAX_LENGTH + 40)),
+      "a".repeat(PLAYLIST_TITLE_MAX_LENGTH),
+    );
+    // Counted in characters, so a title of non-ASCII letters keeps the same width the column stores.
+    assert.equal(
+      [...(normalizePlaylistTitle("ñ".repeat(PLAYLIST_TITLE_MAX_LENGTH + 10)) ?? "")].length,
+      PLAYLIST_TITLE_MAX_LENGTH,
+    );
+
+    for (const value of ["", "   ", 7, null, undefined, {}, ["título"]]) {
+      assert.equal(normalizePlaylistTitle(value), null, String(value));
+    }
+  });
+
+  it("accepts a cover only over https on an allow-listed image host", () => {
+    for (const host of MUSIC_COVER_HOSTS) {
+      assert.equal(isMusicCoverUrl(`https://${host}/image/abc`), true, host);
+    }
+    assert.equal(isMusicCoverUrl("https://image-cdn-ak.spotifycdn.com/image/abc"), true);
+    assert.equal(isMusicCoverUrl("https://image-cdn-fa.spotifycdn.com/image/abc"), true);
+
+    for (const value of [
+      "http://i.scdn.co/image/abc",
+      "https://evil.test/image/abc",
+      "https://i.scdn.co.evil.test/image/abc",
+      "https://sub.i.scdn.co/image/abc",
+      "https://i.scdn.co:8443/image/abc",
+      "https://user:secret@i.scdn.co/image/abc",
+      "https://image-cdn.spotifycdn.com/image/abc",
+      "https://image-cdn-ak.spotifycdn.com.evil.test/image/abc",
+      "javascript:alert(1)",
+      `https://i.scdn.co/${"a".repeat(PLAYLIST_COVER_URL_MAX_LENGTH)}`,
+      7,
+      null,
+      undefined,
+    ]) {
+      assert.equal(isMusicCoverUrl(value), false, String(value));
+    }
+  });
+
+  it("never shows a stored cover the deployment does not allow, and keeps the link (S2)", () => {
+    const gate = {
+      includedFeatureKeys: ["MUSIC"],
+      whatsappPhone: null,
+      playlistUrl: PLAYLIST,
+      playlistTitle: "  La boda  ",
+      playlistCoverUrl: "https://evil.test/cover.jpg",
+      rsvpDeadline: null,
+      rsvpPartyLimit: 4,
+    };
+
+    // The title is trimmed and the off-list cover is dropped, so a row written around the API cannot reach a guest.
+    assert.deepEqual(publicInvitationFeatures(gate).music, {
+      url: PLAYLIST,
+      provider: "spotify",
+      title: "La boda",
+      coverUrl: null,
+    });
   });
 });

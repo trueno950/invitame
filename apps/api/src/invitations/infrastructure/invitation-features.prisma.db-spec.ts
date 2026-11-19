@@ -24,6 +24,9 @@ const UNKNOWN_ID = "00000000-0000-4000-8000-000000000000";
 const PHONE_FORMAT = /InvitationFeatureSettings_whatsappPhone_format/;
 const TIME_ZONE_FORMAT = /Invitation_timeZone_format/;
 const PLAYLIST_URL_HTTPS = /InvitationFeatureSettings_playlistUrl_https/;
+const PLAYLIST_COVER_URL_HTTPS = /InvitationFeatureSettings_playlistCoverUrl_https/;
+const PLAYLIST_COVER = "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07";
+const PLAYLIST_TITLE = "Today’s Top Hits";
 const PHONE = "+525512345678";
 const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
 
@@ -348,6 +351,115 @@ describe("invitation feature data (real PostgreSQL)", () => {
       assert.equal(cleared.whatsappPhone, null);
     });
 
+    it("adds a nullable playlistTitle of 200 characters and a nullable playlistCoverUrl with an https check (S2)", async () => {
+      const columns = await prisma.$queryRaw<
+        Array<{
+          column_name: string;
+          is_nullable: string;
+          character_maximum_length: number | null;
+          data_type: string;
+        }>
+      >`
+        SELECT column_name, is_nullable, character_maximum_length, data_type
+        FROM information_schema.columns
+        WHERE table_name = 'InvitationFeatureSettings'
+          AND column_name IN ('playlistTitle', 'playlistCoverUrl')
+        ORDER BY column_name
+      `;
+
+      // Both are additive and nullable: every row written before the migration reads NULL and renders today's card.
+      assert.deepEqual(
+        columns.map((column) => ({
+          column_name: column.column_name,
+          is_nullable: column.is_nullable,
+          character_maximum_length: column.character_maximum_length,
+          data_type: column.data_type,
+        })),
+        [
+          {
+            column_name: "playlistCoverUrl",
+            is_nullable: "YES",
+            character_maximum_length: 500,
+            data_type: "character varying",
+          },
+          {
+            column_name: "playlistTitle",
+            is_nullable: "YES",
+            character_maximum_length: 200,
+            data_type: "character varying",
+          },
+        ],
+      );
+
+      const invitation = await newDraft(SEEDED_PACKAGE_FEATURES.premium);
+      const created = await prisma.invitationFeatureSettings.create({
+        data: {
+          invitationId: invitation.invitation.id,
+          playlistUrl: PLAYLIST,
+          playlistTitle: PLAYLIST_TITLE,
+          playlistCoverUrl: PLAYLIST_COVER,
+        },
+      });
+      assert.equal(created.playlistTitle, PLAYLIST_TITLE);
+      assert.equal(created.playlistCoverUrl, PLAYLIST_COVER);
+
+      // The domain refuses a cover that is not https on an allow-listed host; the column refuses the scheme.
+      for (const bad of [
+        "http://i.scdn.co/image/abc",
+        "i.scdn.co/image/abc",
+        "//i.scdn.co/image/abc",
+        "HTTPS://i.scdn.co/image/abc",
+        "",
+      ]) {
+        await assert.rejects(
+          prisma.invitationFeatureSettings.update({
+            where: { invitationId: invitation.invitation.id },
+            data: { playlistCoverUrl: bad },
+          }),
+          PLAYLIST_COVER_URL_HTTPS,
+          bad,
+        );
+      }
+
+      // 201 characters: too wide for the column, and wider than the domain would store.
+      await assert.rejects(
+        prisma.invitationFeatureSettings.update({
+          where: { invitationId: invitation.invitation.id },
+          data: { playlistTitle: "a".repeat(201) },
+        }),
+        /too long|22001/,
+      );
+
+      // The repository writes both columns through the same upsert as the link, and a clear removes them together.
+      const { invitation: draft, ownerId } = await newDraft(SEEDED_PACKAGE_FEATURES.premium);
+      const stored = await repository.updateFeatures(ownerId, draft.id, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: PLAYLIST,
+        playlistTitle: PLAYLIST_TITLE,
+        playlistCoverUrl: PLAYLIST_COVER,
+      });
+      assert.equal(stored?.playlistTitle, PLAYLIST_TITLE);
+      assert.equal(stored?.playlistCoverUrl, PLAYLIST_COVER);
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: draft.id },
+          select: { playlistTitle: true, playlistCoverUrl: true },
+        }),
+        { playlistTitle: PLAYLIST_TITLE, playlistCoverUrl: PLAYLIST_COVER },
+      );
+
+      const cleared = await repository.updateFeatures(ownerId, draft.id, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+      });
+      assert.equal(cleared?.playlistTitle, null);
+      assert.equal(cleared?.playlistCoverUrl, null);
+    });
+
     it("refuses to delete an invitation that still carries feature settings", async () => {
       const { invitation, ownerId } = await newDraft(SEEDED_PACKAGE_FEATURES.basic);
       await prisma.invitationFeatureSettings.create({
@@ -379,6 +491,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
         timeZone: "America/Ojinaga",
         whatsappPhone: PHONE,
         playlistUrl: PLAYLIST,
+        playlistTitle: null,
+        playlistCoverUrl: null,
       });
 
       assert.equal(updated?.timeZone, "America/Ojinaga");
@@ -409,12 +523,16 @@ describe("invitation feature data (real PostgreSQL)", () => {
         timeZone: "America/Merida",
         whatsappPhone: PHONE,
         playlistUrl: PLAYLIST,
+        playlistTitle: null,
+        playlistCoverUrl: null,
       });
 
       const cleared = await repository.updateFeatures(invitation.ownerId, invitation.id, {
         timeZone: "America/Merida",
         whatsappPhone: null,
         playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
       });
 
       assert.equal(cleared?.whatsappPhone, null);
@@ -432,6 +550,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
         timeZone: "America/Cancun",
         whatsappPhone: PHONE,
         playlistUrl: PLAYLIST,
+        playlistTitle: null,
+        playlistCoverUrl: null,
       });
       await repository.archive(invitation.ownerId, invitation.id);
 
@@ -440,6 +560,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
           timeZone: "America/Tijuana",
           whatsappPhone: null,
           playlistUrl: null,
+          playlistTitle: null,
+          playlistCoverUrl: null,
         }),
         InvitationNotEditableError,
       );
@@ -464,6 +586,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
             timeZone: "America/Tijuana",
             whatsappPhone: PHONE,
             playlistUrl: PLAYLIST,
+            playlistTitle: null,
+            playlistCoverUrl: null,
           }),
           null,
         );
@@ -485,11 +609,17 @@ describe("invitation feature data (real PostgreSQL)", () => {
         timeZone: string;
         whatsappPhone: string | null;
         playlistUrl: string | null;
+        playlistTitle?: string | null;
+        playlistCoverUrl?: string | null;
       } | null,
     ) {
       const draft = await newDraft(featureKeys);
       if (features !== null) {
-        await repository.updateFeatures(draft.ownerId, draft.invitation.id, features);
+        await repository.updateFeatures(draft.ownerId, draft.invitation.id, {
+          playlistTitle: null,
+          playlistCoverUrl: null,
+          ...features,
+        });
       }
       const published = await repository.publish(
         draft.ownerId,
@@ -519,7 +649,10 @@ describe("invitation feature data (real PostgreSQL)", () => {
             map: true,
             calendar: true,
             whatsapp: { phone: PHONE },
-            music: packageKey === "basic" ? null : { url: PLAYLIST, provider: "spotify" },
+            music:
+              packageKey === "basic"
+                ? null
+                : { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
             giftRegistry: packageKey === "deluxe",
             gallery: [],
             // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form.
@@ -551,7 +684,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         map: true,
         calendar: true,
         whatsapp: null,
-        music: { url: PLAYLIST, provider: "spotify" },
+        music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
         giftRegistry: false,
         gallery: [],
         rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
@@ -584,6 +717,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
         timeZone: "America/Cancun",
         whatsappPhone: PHONE,
         playlistUrl: PLAYLIST,
+        playlistTitle: null,
+        playlistCoverUrl: null,
       });
 
       const page = await useCase.execute(slug);

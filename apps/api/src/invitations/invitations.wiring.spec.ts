@@ -49,6 +49,7 @@ import {
   SubmitPublicRsvpUseCase,
   UpdateRsvpSettingsUseCase,
 } from "./application/invitation-rsvp.use-cases";
+import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "./application/music-metadata";
 import { RSVP_REPOSITORY } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
@@ -196,6 +197,11 @@ describe("InvitationsModule wiring", () => {
       assert.ok(context.get(RSVP_RATE_LIMITER, { strict: false }) instanceof PrismaRsvpRateLimiter);
       // The guest list has its own adapter on the same Prisma client (M6 G2; S1, S4).
       assert.ok(context.get(GUEST_REPOSITORY, { strict: false }) instanceof PrismaGuestRepository);
+      // The music metadata port is bound for the lookup setting the configuration validated (S2). This test module
+      // runs `NODE_ENV=test`, whose default is `off`, so the bound adapter answers nothing and reaches no network.
+      const music = context.get<MusicMetadataProvider>(MUSIC_METADATA_PROVIDER, { strict: false });
+      assert.ok(music !== undefined);
+      assert.equal(await music.lookup("https://open.spotify.com/playlist/abc", "spotify"), null);
     } finally {
       await context.close();
     }
