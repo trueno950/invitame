@@ -82,6 +82,29 @@ export interface MusicEnvironment {
   lookup: MusicMetadataLookup;
 }
 
+/**
+ * Which geocoder the owner's address fields may ask while they type (S2): `photon` is the OpenStreetMap search
+ * service, and `off` is a deployment that offers no suggestion at all. The test environment defaults to `off`, so no
+ * suite and no CI job reaches the network.
+ */
+export const PLACE_SEARCH_PROVIDER = {
+  PHOTON: "photon",
+  OFF: "off",
+} as const;
+
+export type PlaceSearchProvider =
+  (typeof PLACE_SEARCH_PROVIDER)[keyof typeof PLACE_SEARCH_PROVIDER];
+
+/**
+ * The place-search settings of one deployment (S2, S3): the provider, and the instance to ask. The URL is the seam
+ * that lets a self-hosted Photon replace the public instance by configuration, with no code change.
+ */
+export interface PlaceSearchEnvironment {
+  provider: PlaceSearchProvider;
+  /** The Photon base URL the adapter appends its query to; https in a real deployment, http for a local instance. */
+  photonUrl: string;
+}
+
 /** The storage adapter that serves invitation media (M8 S4). */
 export const MEDIA_STORAGE_DRIVER = {
   LOCAL: "local",
@@ -158,6 +181,8 @@ export interface RuntimeEnvironment {
   MEDIA: MediaEnvironment;
   /** Whether a saved playlist link may ask its provider for a title and a cover (S2). */
   MUSIC: MusicEnvironment;
+  /** Which geocoder the owner's address fields may ask, and which instance (S2). */
+  PLACE_SEARCH: PlaceSearchEnvironment;
   /** Payment mode and, when it charges, the provider settings of that mode (M7 S1, S4). */
   PAYMENTS: PaymentsEnvironment;
 }
@@ -181,6 +206,14 @@ const DEFAULT_MUSIC_METADATA_LOOKUP: Record<NodeEnvironment, MusicMetadataLookup
   test: MUSIC_METADATA_LOOKUP.OFF,
   production: MUSIC_METADATA_LOOKUP.ON,
 };
+/** Place search is on wherever a real invitation is edited, and off in tests, so CI never reaches a geocoder (S2). */
+const DEFAULT_PLACE_SEARCH_PROVIDER: Record<NodeEnvironment, PlaceSearchProvider> = {
+  development: PLACE_SEARCH_PROVIDER.PHOTON,
+  test: PLACE_SEARCH_PROVIDER.OFF,
+  production: PLACE_SEARCH_PROVIDER.PHOTON,
+};
+/** The public Photon instance: keyless, OpenStreetMap-backed, and replaceable through `PLACE_SEARCH_PHOTON_URL`. */
+const DEFAULT_PLACE_SEARCH_PHOTON_URL = "https://photon.komoot.io/api/";
 const DEFAULT_EMAIL_TRANSPORT: Record<NodeEnvironment, EmailTransport> = {
   development: EMAIL_TRANSPORT.MAILPIT,
   test: EMAIL_TRANSPORT.MEMORY,
@@ -744,6 +777,66 @@ function parseMusicEnvironment(
   return { lookup: configured };
 }
 
+function isPlaceSearchProvider(value: string): value is PlaceSearchProvider {
+  return Object.values(PLACE_SEARCH_PROVIDER).some((provider) => provider === value);
+}
+
+function invalidPhotonUrl(): Error {
+  return new Error(
+    "PLACE_SEARCH_PHOTON_URL must be an http or https URL without credentials, query, or fragment.",
+  );
+}
+
+/**
+ * A URL the adapter may append its query to: http or https, with no credentials, query, or fragment of its own. A
+ * path is allowed, because Photon serves `/api/`; the message never echoes the value.
+ */
+function validatePhotonUrl(value: string): string {
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw invalidPhotonUrl();
+  }
+
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.search !== "" ||
+    url.hash !== ""
+  ) {
+    throw invalidPhotonUrl();
+  }
+
+  return value;
+}
+
+/**
+ * The place-search settings (S2): `PLACE_SEARCH_PROVIDER` is `photon` or `off` and defaults to `photon` in development
+ * and production and to `off` in tests, so no suite reaches a geocoder. A value outside the two is refused at startup,
+ * and neither message echoes the value.
+ */
+function parsePlaceSearchEnvironment(
+  environment: Record<string, unknown>,
+  nodeEnvironment: NodeEnvironment,
+): PlaceSearchEnvironment {
+  const configured =
+    readOptionalString(environment.PLACE_SEARCH_PROVIDER) ??
+    DEFAULT_PLACE_SEARCH_PROVIDER[nodeEnvironment];
+
+  if (!isPlaceSearchProvider(configured)) {
+    throw new Error("PLACE_SEARCH_PROVIDER must be photon or off.");
+  }
+
+  const photonUrl = validatePhotonUrl(
+    readOptionalString(environment.PLACE_SEARCH_PHOTON_URL) ?? DEFAULT_PLACE_SEARCH_PHOTON_URL,
+  );
+
+  return { provider: configured, photonUrl };
+}
+
 export function validateEnvironment(environment: Record<string, unknown>): RuntimeEnvironment {
   // No default (S56, L79): with `NODE_ENV` unset, every production rule would be off. A missing value
   // fails the startup, like an invalid one, and neither message echoes the value.
@@ -776,6 +869,7 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     AUTH_PROXY_SECRET_PREVIOUS: parsePreviousProxySecret(environment),
     MEDIA: parseMediaEnvironment(environment, nodeEnvironment),
     MUSIC: parseMusicEnvironment(environment, nodeEnvironment),
+    PLACE_SEARCH: parsePlaceSearchEnvironment(environment, nodeEnvironment),
     PAYMENTS: parsePaymentsEnvironment(environment, nodeEnvironment),
   };
 

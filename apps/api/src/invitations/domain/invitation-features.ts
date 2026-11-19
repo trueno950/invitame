@@ -73,6 +73,9 @@ export type ImplementedInvitationFeature = (typeof IMPLEMENTED_INVITATION_FEATUR
 /** The catalog key that grants confirmation of attendance (M6 S3). */
 export const RSVP_FEATURE_KEY = "RSVP";
 
+/** The catalog key that grants the guest page its map and precise place links (S1, S2). */
+export const MAP_FEATURE_KEY = "MAP";
+
 /** The catalog key that grants a managed guest list with personal links (M6 S3; G2 implements it). */
 export const GUEST_LIST_FEATURE_KEY = "GUEST_LIST";
 
