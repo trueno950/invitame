@@ -1,5 +1,12 @@
 import { ACCOUNT_COPY, INVITATION_COPY, PUBLIC_INVITATION_COPY } from "../lib/customer/copy.ts";
-import { expect, fillAutosaved, openEditorSection, signIn, test } from "./support/customer.ts";
+import {
+  expect,
+  fillAutosaved,
+  openContentCard,
+  openEditorSection,
+  signIn,
+  test,
+} from "./support/customer.ts";
 
 /**
  * The guest's page of a published invitation (M5 T5; S1, S5, S7, S9) and the editor that publishes it (T2c: S2, S4).
@@ -69,13 +76,17 @@ test.describe("public invitation", () => {
     await expect(page).toHaveURL(DRAFT_URL);
 
     // Every property of the pinned schema, so the API's completeness rule lets the draft publish (A1). The three that
-    // are filled last are not waited for: the publish below has to flush them itself (S2).
+    // are filled last are not waited for: the publish below has to flush them itself (S2). Each group of fields lives in
+    // its own card, so the card is opened before typing into it (T2).
     await fillAutosaved(page, "Nombre del festejado", "Lucía");
     await fillAutosaved(page, "Edad", "7");
+    await openContentCard(page, "Fecha y hora");
     await fillAutosaved(page, "Fecha", "2026-12-05");
     await fillAutosaved(page, "Hora", "16:30");
+    await openContentCard(page, "Lugar y dirección");
     await fillAutosaved(page, "Lugar", "Jardín Los Pinos");
     await page.getByLabel("Dirección").fill("Calle Reforma 123");
+    await openContentCard(page, "Mensaje y foto");
     await page.getByLabel("Foto principal (URL)").fill("https://example.com/lucia.jpg");
     await page.getByLabel("Mensaje").fill("Ven a celebrar conmigo.");
 

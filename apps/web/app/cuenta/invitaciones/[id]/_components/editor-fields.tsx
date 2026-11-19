@@ -4,7 +4,7 @@ import { FEATURE_COPY, INVITATION_COPY, RSVP_COPY } from "../../../../../lib/cus
 import type { FeatureSettingsView } from "../../../../../lib/customer/invitation-features.ts";
 import { timeZoneLabel } from "../../../../../lib/customer/invitation-features.ts";
 import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rsvp.ts";
-import type { ContentField, ContentSection } from "../../../../../lib/customer/invitations.ts";
+import type { ContentField } from "../../../../../lib/customer/invitations.ts";
 import { fieldHint, fieldLabel, textButton, textField } from "../../../../_components/ui.ts";
 import { GuardedLink } from "../../_components/autosave/navigation-guard.tsx";
 
@@ -42,7 +42,7 @@ function textOf(value: unknown): string {
 }
 
 /** One input of the template's content, with the native control its own schema property asks for (S11). */
-function ContentFieldControl({
+export function ContentFieldControl({
   field,
   value,
   issue,
@@ -171,61 +171,17 @@ function ContentFieldControl({
       >
         {field.label}
         {field.required ? (
-          <span className="ml-2 text-xs font-normal tracking-normal text-muted">
-            {INVITATION_COPY.fieldRequired}
-          </span>
+          <>
+            <span aria-hidden="true" className="ml-1 text-primary">
+              *
+            </span>
+            <span className="sr-only"> ({INVITATION_COPY.fieldRequired})</span>
+          </>
         ) : null}
       </label>
       {control}
       <FieldRefusal id={messageId} message={issue} />
     </div>
-  );
-}
-
-/**
- * Every content field of the pinned template, grouped in the template's own short sections. The groups are separated
- * by a hairline instead of a card each, because the form column is already one panel: the owner reads one page of
- * fields, not a stack of nested boxes.
- */
-export function ContentFields({
-  sections,
-  values,
-  issues,
-  idPrefix,
-  onChange,
-  onFlush,
-}: {
-  sections: readonly ContentSection[];
-  values: Readonly<Record<string, unknown>>;
-  issues: FieldIssues | undefined;
-  idPrefix: string;
-  onChange: (name: string, next: unknown) => void;
-  onFlush: () => void;
-}) {
-  return (
-    <>
-      {sections.map((section, index) => (
-        <fieldset
-          className={index === 0 ? undefined : "mt-6 border-t border-rose-100 pt-6"}
-          key={section.key}
-        >
-          <legend className="font-display text-xl font-semibold text-ink">{section.title}</legend>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            {section.fields.map((field) => (
-              <ContentFieldControl
-                field={field}
-                idPrefix={idPrefix}
-                issue={issues?.[field.name]}
-                key={field.name}
-                onChange={onChange}
-                onFlush={onFlush}
-                value={values[field.name]}
-              />
-            ))}
-          </div>
-        </fieldset>
-      ))}
-    </>
   );
 }
 

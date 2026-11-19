@@ -1,7 +1,14 @@
 import type { Page } from "@playwright/test";
 
 import { AUTOSAVE_COPY, EDITOR_COPY, INVITATION_COPY } from "../lib/customer/copy.ts";
-import { expect, fillAutosaved, openEditorSection, signIn, test } from "./support/customer.ts";
+import {
+  expect,
+  fillAutosaved,
+  openContentCard,
+  openEditorSection,
+  signIn,
+  test,
+} from "./support/customer.ts";
 
 /**
  * Invitation drafting in a real browser (M4 T5; M5 T5; T2c: S1-S4). The browser drives the production build of
@@ -69,22 +76,54 @@ test.describe("customer invitation editor", () => {
     await expect(age).toHaveAttribute("min", "1");
     await expect(age).toHaveAttribute("max", "120");
     expect(await age.getAttribute("required")).toBeNull();
+
+    // The tab is a stack of cards and opens on the first one that still owes something, so the other groups' fields are
+    // not on the page until their card is opened (T2).
+    await expect(page.getByRole("tab", { name: /^Contenido/ })).toContainText("faltan 8");
+    await expect(page.getByRole("button", { name: /^Festejado/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    await openContentCard(page, "Fecha y hora");
     await expect(page.getByLabel("Fecha")).toHaveAttribute("type", "date");
     await expect(page.getByLabel("Hora")).toHaveAttribute("type", "time");
+    await openContentCard(page, "Mensaje y foto");
     await expect(page.getByLabel("Foto principal (URL)")).toHaveAttribute("type", "url");
     await expect(page.getByLabel("Mensaje")).toHaveJSProperty("tagName", "TEXTAREA");
+
+    // The last card has no «Siguiente»: there is no group after it to open (T2).
+    await expect(page.getByRole("button", { name: /^Siguiente: / })).toHaveCount(0);
 
     // There is no «Guardar cambios» button any more: the field saves when it is finished (S2, S4).
     await expect(page.getByRole("button", { name: "Guardar cambios", exact: true })).toHaveCount(0);
 
+    await openContentCard(page, "Festejado");
     await fillAutosaved(page, "Nombre del festejado", "Ana");
     await fillAutosaved(page, "Edad", "7");
 
-    // The tab says what the draft still owes, computed from the fields as they are typed.
+    // The tab says what the draft still owes, computed from the fields as they are typed, and the closed card says it
+    // holds everything of its own (T2).
     await expect(page.getByRole("tab", { name: /^Contenido/ })).toContainText("faltan 6");
+    await expect(page.getByRole("button", { name: /^Festejado/ })).toContainText("Completo");
+    await expect(page.getByRole("button", { name: /^Festejado/ })).toContainText("Ana · 7");
 
-    // A reload reads what the API stored, so the save really happened.
+    // The footer of the open card names the next group and moves the focus to its header (T2).
+    await page.getByRole("button", { name: "Siguiente: Fecha y hora" }).click();
+    await expect(page.getByRole("button", { name: /^Fecha y hora/ })).toBeFocused();
+    await expect(page.getByRole("button", { name: /^Fecha y hora/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    // A reload reads what the API stored, so the save really happened, and the tab reopens on the card that still owes
+    // something instead of the one that is complete.
     await page.reload();
+    await expect(page.getByRole("button", { name: /^Fecha y hora/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await openContentCard(page, "Festejado");
     await expect(page.getByLabel("Nombre del festejado")).toHaveValue("Ana");
     await expect(page.getByLabel("Edad")).toHaveValue("7");
 
@@ -99,6 +138,7 @@ test.describe("customer invitation editor", () => {
     );
 
     await openEditorSection(page, "Contenido");
+    await openContentCard(page, "Festejado");
     await expect(page.getByLabel("Nombre del festejado")).toHaveValue("Ana");
     await expect(page.getByLabel("Edad")).toHaveValue("7");
 

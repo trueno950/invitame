@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { contentCards } from "../../../../../lib/customer/content-cards.ts";
 import {
   EDITOR_COPY,
   FEATURE_COPY,
@@ -43,8 +43,8 @@ import {
 import { SaveStatus } from "../../_components/autosave/save-status.tsx";
 import { useAutosave } from "../../_components/autosave/use-autosave.ts";
 import { StatusBadge } from "../../_components/status-badge.tsx";
+import { ContentCards } from "./content-cards.tsx";
 import {
-  ContentFields,
   FeatureFields,
   type FeatureValues,
   type FieldIssues,
@@ -244,6 +244,9 @@ export function EditorShell({
             .join(", "),
         );
   const issues = issuesOf(autosave.state);
+  // The cards of «Contenido» are recomputed from the values the browser holds, so a closed card's summary and its
+  // state follow every keystroke (T2).
+  const cards = useMemo(() => contentCards(sections, values), [sections, values]);
 
   const tabs: readonly EditorTabView[] = EDITOR_SECTIONS.map((candidate) => {
     const meta =
@@ -414,12 +417,12 @@ export function EditorShell({
         return (
           <Panel heading={EDITOR_COPY.tabs.contenido} hint={EDITOR_COPY.contentHint}>
             {readOnlyContent ?? (
-              <ContentFields
+              <ContentCards
+                cards={cards}
                 idPrefix="content"
                 issues={issues}
                 onChange={changeContent}
                 onFlush={() => void autosave.flush()}
-                sections={sections}
                 values={values}
               />
             )}
