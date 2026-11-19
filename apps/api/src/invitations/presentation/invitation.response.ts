@@ -10,12 +10,15 @@ import {
 import {
   InvalidInvitationContentError,
   InvalidInvitationFeaturesError,
+  InvalidInvitationPlaceError,
+  InvalidPlaceQueryError,
   InvitationContentConflictError,
   InvitationPackageDoesNotFitError,
   InvitationPackageNotFoundError,
   InvitationPaymentRequiredError,
   InvitationSlugUnavailableError,
   InvitationTemplateVersionNotPublishedError,
+  PlaceSearchRateLimitedError,
 } from "../application/invitation.application.errors";
 import type { InvitationSummary, OwnedInvitation } from "../application/invitation.use-cases";
 import type { PublicInvitation } from "../application/invitation-public";
@@ -28,6 +31,7 @@ import {
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
+import type { PlacePoint } from "../domain/invitation-place";
 
 // The stable REST shapes of an invitation (M4 T4 and M5 T4; S1, S3, S7, S9, A3, A4, A7). `ownerId` is
 // deliberately absent: it comes from the session and never belongs in a response (S9). An id that names nothing,
@@ -72,6 +76,11 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
   };
   /** The gated feature keys the guest will see, `CALENDAR` included (S4). */
   availableFeatures: string[];
+  /**
+   * The points the owner stored for the invitation's address fields, keyed by the content field each one belongs to
+   * (S2). Every stored point is answered, so the editor can say whether each location is still confirmed.
+   */
+  places: Record<string, PlacePoint>;
 }
 
 /**
@@ -121,6 +130,11 @@ export interface PublicInvitationResponse {
       qrPass: boolean;
     };
   };
+  /**
+   * The stored points a guest may see, keyed by the address field each one belongs to (S2): only while the package
+   * grants MAP and only while the address text still equals the label the point was stored with. Empty otherwise.
+   */
+  places: Record<string, PlacePoint>;
 }
 
 export function toInvitationSummaryResponse(stored: InvitationSummary): InvitationSummaryResponse {
@@ -150,6 +164,7 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
       playlistCoverUrl: stored.featureSettings.playlistCoverUrl,
     },
     availableFeatures: [...stored.availableFeatures],
+    places: { ...stored.places },
   };
 }
 
@@ -191,6 +206,7 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
         qrPass: stored.features.rsvp.qrPass,
       },
     },
+    places: { ...stored.places },
   };
 }
 
@@ -215,6 +231,14 @@ export function orOwnedInvitationNotFound(stored: OwnedInvitation | null): Owned
   return stored === null ? notFound() : toOwnedInvitationResponse(stored);
 }
 
+/**
+ * The place suggestions of one owned invitation, or the owner-facing 404 (S2, A4). A search is a read of the
+ * invitation's own address fields, so an id that names nothing and another customer's id answer the same 404.
+ */
+export function orPlaceSuggestionsNotFound(places: readonly PlacePoint[] | null): PlacePoint[] {
+  return places === null ? notFound() : [...places];
+}
+
 export function orInvitationSummaryNotFound(
   stored: InvitationSummary | null,
 ): InvitationSummaryResponse {
@@ -231,6 +255,9 @@ export function orInvitationSummaryNotFound(
  * - content the pinned schema refuses is 400 with its issues (S3, S7);
  * - a content write whose named version moved is 409 `INVITATION_CONTENT_CONFLICT`, and nothing was stored (S2);
  * - feature data the domain refuses is 400 `INVALID_INVITATION_FEATURES` with its issues (F1; S4);
+ * - a place query the domain refuses is 400 `INVALID_PLACE_QUERY` with its issues, and an owner over the search
+ *   limit is 429 `PLACE_SEARCH_RATE_LIMITED` (S2);
+ * - a place write the domain refuses is 400 `INVALID_INVITATION_PLACE` with its issues (S2, S3);
  * - an archived invitation is 409 with `INVITATION_NOT_EDITABLE`, or `INVITATION_ALREADY_ARCHIVED` for a
  *   repeated archive (A3, S7);
  * - a publication the lifecycle refuses is 409 with `INVITATION_ALREADY_PUBLISHED` or `INVITATION_NOT_PUBLISHED`,
@@ -261,6 +288,22 @@ export function mapInvitationError(error: unknown): never {
   }
   if (error instanceof InvitationContentConflictError) {
     throw new ConflictException({ code: "INVITATION_CONTENT_CONFLICT" });
+  }
+  if (error instanceof InvalidPlaceQueryError) {
+    throw new BadRequestException({
+      code: "INVALID_PLACE_QUERY",
+      issues: [...error.issues],
+    });
+  }
+  if (error instanceof InvalidInvitationPlaceError) {
+    throw new BadRequestException({
+      code: "INVALID_INVITATION_PLACE",
+      issues: [...error.issues],
+    });
+  }
+  if (error instanceof PlaceSearchRateLimitedError) {
+    // 429 is the one answer for "you asked too often"; the editor shows it as a quiet note, never as a failure.
+    throw new HttpException({ code: "PLACE_SEARCH_RATE_LIMITED" }, HttpStatus.TOO_MANY_REQUESTS);
   }
   if (error instanceof InvalidInvitationFeaturesError) {
     throw new BadRequestException({

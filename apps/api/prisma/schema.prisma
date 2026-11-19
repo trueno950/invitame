@@ -308,6 +308,7 @@ model Invitation {
   templateVersion TemplateVersion           @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
   package         Package                   @relation(fields: [packageId], references: [id], onDelete: Restrict)
   featureSettings InvitationFeatureSettings?
+  places          InvitationPlace[]
   rsvpResponses   RsvpResponse[]
   guests          Guest[]
   mediaAssets     MediaAsset[]
@@ -343,6 +344,32 @@ model InvitationFeatureSettings {
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 
   invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+}
+
+// The precise location of one address field of one invitation (S1, S2). The owner picks a suggestion from the
+// geocoder, the address text is stored in the template content as always, and this row remembers the point the text
+// referred to at that moment. It is keyed by the invitation and the content field name, so one address field has at
+// most one point: a second choice replaces the first instead of adding another row. The reference is ON DELETE
+// RESTRICT, because an invitation is never hard-deleted here (archiving is its only terminal lifecycle write).
+// Migration 20261123120000_add_invitation_places adds what Prisma cannot express: the CHECK constraints
+// "InvitationPlace_lat_range" (-90..90) and "InvitationPlace_lng_range" (-180..180). The public read shows a point
+// only while the address text still equals `label` (domain/invitation-place.ts), so no column is dropped on rewrite.
+model InvitationPlace {
+  invitationId String   @db.Uuid
+  // The content field name of the address, such as `address` or `ceremonyAddress` (S2); the API derives it from the
+  // pinned template version schema and never from a template name.
+  field        String   @db.VarChar(64)
+  // The label the geocoder answered when the owner chose the suggestion, at most 300 characters. It is the text the
+  // content field holds at that moment, which is what makes a later rewrite drop the point.
+  label        String   @db.VarChar(300)
+  // The point, range-checked by the migration's CHECK constraints; the domain refuses the same bounds first.
+  lat          Float    @db.DoublePrecision
+  lng          Float    @db.DoublePrecision
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+
+  @@id([invitationId, field])
 }
 
 // One guest's attendance answer to one invitation (M6 G1; S1, S4). The row is tied to the invitation, which is

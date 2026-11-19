@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import { after, before, describe, it, mock } from "node:test";
+import { after, before, beforeEach, describe, it, mock } from "node:test";
 
 import { type INestApplication, Logger, Module } from "@nestjs/common";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
@@ -35,6 +35,7 @@ import {
 import {
   INVITATION_REPOSITORY,
   type InvitationFeatureSettingsWrite,
+  type InvitationPlaceWrite,
   type InvitationRecord,
   type InvitationRecordWithMusic,
   type InvitationRepository,
@@ -55,6 +56,12 @@ import {
   type InvitationPaymentGate,
 } from "../application/invitation-payment-gate";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "../application/music-metadata";
+import { PLACE_SEARCH, type PlaceSearch } from "../application/place-search";
+import { InMemoryPlaceSearchCache } from "../application/place-search-cache";
+import {
+  PLACE_SEARCH_RATE_LIMITER,
+  type PlaceSearchRateLimiter,
+} from "../application/place-search-rate-limiter";
 import {
   RSVP_REPOSITORY,
   type RsvpReadModel,
@@ -72,6 +79,7 @@ import {
 import type { JsonObject } from "../domain/invitation-content";
 import type { PlaylistMetadata } from "../domain/invitation-features";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
+import type { PlacePoint } from "../domain/invitation-place";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
 import { INVITATION_USE_CASES } from "../invitations.module";
 import { InvitationsController } from "./invitations.controller";
@@ -107,6 +115,8 @@ const RSVP_PACKAGE_ID = "88888888-8888-4888-8888-888888888888";
 const GUEST_LIST_PACKAGE_ID = "99999999-9999-4999-8999-999999999999";
 /** The seeded Deluxe keys (M6 S3): the guest list and its access pass (G2). */
 const QR_PASS_PACKAGE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+/** A PUBLISHED version whose schema declares the address fields a place may belong to (S2). */
+const PLACE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const PHONE = "+525512345678";
 const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
 const RENDERER = "birthday-poster-01";
@@ -115,6 +125,17 @@ const SCHEMA = {
   type: "object",
   required: ["title"],
   properties: { title: { type: "string", maxLength: 120 } },
+};
+/** The address fields a place write validates against: `address` and `ceremonyAddress`, never `receptionPlace`. */
+const ADDRESS_SCHEMA = {
+  type: "object",
+  required: ["address"],
+  properties: {
+    location: { type: "string", maxLength: 120 },
+    address: { type: "string", maxLength: 240 },
+    ceremonyAddress: { type: "string", maxLength: 240 },
+    receptionPlace: { type: "string", maxLength: 120 },
+  },
 };
 
 type Row = Record<string, unknown>;
@@ -149,6 +170,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       playlistCoverUrl: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
+      places: {},
       archivedAt: null,
       publishedAt: null,
       expiresAt: null,
@@ -156,6 +178,42 @@ class MemoryInvitationRepository implements InvitationRepository {
       updatedAt: at,
     };
     this.rows.push(row);
+    return structuredClone(row);
+  }
+
+  async updatePlace(
+    ownerId: string,
+    id: string,
+    place: InvitationPlaceWrite,
+  ): Promise<InvitationRecordWithMusic | null> {
+    const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
+    if (!row) {
+      return null;
+    }
+    // A DRAFT or a PUBLISHED invitation changes; an archived one is read-only (A2, S7).
+    if (row.status === "ARCHIVED") {
+      throw new InvitationNotEditableError(row.status);
+    }
+    row.places = {
+      ...row.places,
+      [place.field]: { label: place.label, lat: place.lat, lng: place.lng },
+    };
+    return structuredClone(row);
+  }
+
+  async clearPlace(
+    ownerId: string,
+    id: string,
+    field: string,
+  ): Promise<InvitationRecordWithMusic | null> {
+    const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
+    if (!row) {
+      return null;
+    }
+    if (row.status === "ARCHIVED") {
+      throw new InvitationNotEditableError(row.status);
+    }
+    row.places = Object.fromEntries(Object.entries(row.places).filter(([key]) => key !== field));
     return structuredClone(row);
   }
 
@@ -287,6 +345,7 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     { published: boolean; schema: unknown; componentKey?: string }
   >([
     [PUBLISHED_VERSION_ID, { published: true, schema: SCHEMA }],
+    [PLACE_VERSION_ID, { published: true, schema: ADDRESS_SCHEMA }],
     [DRAFT_VERSION_ID, { published: false, schema: SCHEMA }],
     [
       UNRENDERABLE_VERSION_ID,
@@ -407,6 +466,31 @@ class MemoryMusicMetadataProvider implements MusicMetadataProvider {
   async lookup(playlistUrl: string, provider: string): Promise<PlaylistMetadata | null> {
     this.asked.push({ playlistUrl, provider });
     return this.answer;
+  }
+}
+
+/**
+ * The place search port in memory (S2): every search is recorded and answered from `answer`, so a test proves the
+ * route asks once, asks with the trimmed text, and answers from the cache the second time.
+ */
+class MemoryPlaceSearch implements PlaceSearch {
+  answer: PlacePoint[] = [];
+  readonly asked: string[] = [];
+
+  async search(query: string): Promise<readonly PlacePoint[]> {
+    this.asked.push(query);
+    return this.answer;
+  }
+}
+
+/** The owner's place-search limit in memory (S2): it counts and answers whatever a test chose, so 429 is observable. */
+class MemoryPlaceSearchLimiter implements PlaceSearchRateLimiter {
+  allow = true;
+  readonly consumed: string[] = [];
+
+  async consume(ownerId: string): Promise<boolean> {
+    this.consumed.push(ownerId);
+    return this.allow;
   }
 }
 
@@ -842,6 +926,8 @@ describe("invitations routes: /invitations", () => {
   const rsvpRepository = new MemoryRsvpRepository(repository);
   const guestRepository = new MemoryGuestRepository(repository);
   const rateLimiter = new MemoryRateLimiter();
+  const placeSearch = new MemoryPlaceSearch();
+  const placeSearchLimiter = new MemoryPlaceSearchLimiter();
   let app: INestApplication;
   let baseUrl: string;
   let userCounter = 0;
@@ -870,6 +956,9 @@ describe("invitations routes: /invitations", () => {
         { provide: RSVP_REPOSITORY, useValue: rsvpRepository },
         { provide: GUEST_REPOSITORY, useValue: guestRepository },
         { provide: RSVP_RATE_LIMITER, useValue: rateLimiter },
+        { provide: PLACE_SEARCH, useValue: placeSearch },
+        { provide: PLACE_SEARCH_RATE_LIMITER, useValue: placeSearchLimiter },
+        { provide: InMemoryPlaceSearchCache, useValue: new InMemoryPlaceSearchCache() },
       ],
     })
     class InvitationsTestModule {}
@@ -944,6 +1033,7 @@ describe("invitations routes: /invitations", () => {
     "timeZone",
     "featureSettings",
     "availableFeatures",
+    "places",
   ].sort();
 
   describe("access control", () => {
@@ -958,6 +1048,14 @@ describe("invitations routes: /invitations", () => {
         `${PATH}/${UNKNOWN_ID}/features`,
         { timeZone: "Europe/Madrid", whatsappPhone: "12345" },
       ],
+      ["place search", "GET", `${PATH}/${UNKNOWN_ID}/places/search?q=quer%C3%A9taro`],
+      [
+        "store place",
+        "PUT",
+        `${PATH}/${UNKNOWN_ID}/places/address`,
+        { label: "Parroquia de San José", lat: 20.5888, lng: -100.3899 },
+      ],
+      ["clear place", "DELETE", `${PATH}/${UNKNOWN_ID}/places/address`],
       ["archive", "POST", `${PATH}/${UNKNOWN_ID}/archive`],
       ["publish", "POST", `${PATH}/${UNKNOWN_ID}/publish`],
       ["unpublish", "POST", `${PATH}/${UNKNOWN_ID}/unpublish`],
@@ -1676,6 +1774,225 @@ describe("invitations routes: /invitations", () => {
     });
   });
 
+  describe("place routes (S1, S2, S3)", () => {
+    const SUGGESTION: PlacePoint = {
+      label: "Parroquia de San José, Calle Hidalgo 12, Querétaro, Querétaro",
+      lat: 20.5888,
+      lng: -100.3899,
+    };
+
+    /** A draft whose pinned version declares the address fields a place may belong to (S2). */
+    async function addressDraft(cookie: string) {
+      const response = await send("POST", PATH, cookie, {
+        templateVersionId: PLACE_VERSION_ID,
+        packageId: FEATURE_PACKAGE_ID,
+      });
+
+      assert.equal(response.status, 201);
+      return (await response.json()) as Row & { id: string };
+    }
+
+    /** The answer of the owner limit and of the geocoder, back to their defaults (S2). */
+    beforeEach(() => {
+      placeSearch.answer = [];
+      placeSearch.asked.length = 0;
+      placeSearchLimiter.allow = true;
+      placeSearchLimiter.consumed.length = 0;
+    });
+
+    it("answers the geocoder's suggestions for the trimmed text and counts one search", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await addressDraft(cookie);
+      placeSearch.answer = [SUGGESTION];
+
+      const response = await send(
+        "GET",
+        `${PATH}/${draft.id}/places/search?q=${encodeURIComponent("  Parroquia de San José  ")}`,
+        cookie,
+      );
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), [SUGGESTION]);
+      assert.deepEqual(placeSearch.asked, ["Parroquia de San José"]);
+      assert.equal(placeSearchLimiter.consumed.length, 1);
+    });
+
+    it("answers 400 INVALID_PLACE_QUERY for a missing, too short, or too long query, asking nothing", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await addressDraft(cookie);
+
+      for (const query of ["", "?q=ab", `?q=${"a".repeat(121)}`]) {
+        const response = await send("GET", `${PATH}/${draft.id}/places/search${query}`, cookie);
+
+        assert.equal(response.status, 400, query);
+        const body = (await response.json()) as { code: string; issues: string[] };
+        assert.equal(body.code, "INVALID_PLACE_QUERY");
+        assert.equal(body.issues.length, 1);
+      }
+      assert.deepEqual(placeSearch.asked, []);
+      assert.deepEqual(placeSearchLimiter.consumed, []);
+    });
+
+    it("answers 429 PLACE_SEARCH_RATE_LIMITED once the owner is over the limit", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await addressDraft(cookie);
+      placeSearchLimiter.allow = false;
+
+      const response = await send(
+        "GET",
+        `${PATH}/${draft.id}/places/search?q=${encodeURIComponent("Avenida Siempreviva 742")}`,
+        cookie,
+      );
+
+      assert.equal(response.status, 429);
+      assert.deepEqual(await response.json(), { code: "PLACE_SEARCH_RATE_LIMITED" });
+      assert.deepEqual(placeSearch.asked, []);
+    });
+
+    it("answers a repeated query from the cache, so the geocoder is asked once", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await addressDraft(cookie);
+      placeSearch.answer = [SUGGESTION];
+      const target = `${PATH}/${draft.id}/places/search?q=${encodeURIComponent("Calle Hidalgo 12")}`;
+
+      const first = await send("GET", target, cookie);
+      const second = await send("GET", target, cookie);
+
+      assert.equal(first.status, 200);
+      assert.equal(second.status, 200);
+      assert.deepEqual(await second.json(), [SUGGESTION]);
+      assert.deepEqual(placeSearch.asked, ["Calle Hidalgo 12"]);
+      // The cached answer costs the owner nothing: retyping the same address never spends the limit.
+      assert.equal(placeSearchLimiter.consumed.length, 1);
+    });
+
+    it("answers 404 for another owner's invitation and for an unknown id, asking nothing", async () => {
+      const owner = await signedInCustomer();
+      const stranger = await signedInCustomer();
+      const draft = await addressDraft(owner.cookie);
+
+      for (const [cookie, id] of [
+        [stranger.cookie, draft.id],
+        [owner.cookie, UNKNOWN_ID],
+      ] as const) {
+        const response = await send(
+          "GET",
+          `${PATH}/${id}/places/search?q=${encodeURIComponent("Querétaro")}`,
+          cookie,
+        );
+
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+      }
+      // A malformed id is refused by the global pipe, exactly like every other owner route.
+      assert.equal(
+        (
+          await send(
+            "GET",
+            `${PATH}/not-a-uuid/places/search?q=${encodeURIComponent("Querétaro")}`,
+            owner.cookie,
+          )
+        ).status,
+        400,
+      );
+      assert.deepEqual(placeSearch.asked, []);
+    });
+
+    it("stores the chosen point and answers the owned invitation with it", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await addressDraft(cookie);
+
+      const response = await send("PUT", `${PATH}/${draft.id}/places/address`, cookie, {
+        label: SUGGESTION.label,
+        lat: SUGGESTION.lat,
+        lng: SUGGESTION.lng,
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row & { places: Record<string, PlacePoint> };
+      assert.deepEqual(Object.keys(body).sort(), OWNED_KEYS);
+      assert.deepEqual(body.places, { address: SUGGESTION });
+    });
+
+    it("replaces the point of the same field instead of adding another", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await addressDraft(cookie);
+      const moved = { ...SUGGESTION, label: "Otra parroquia", lat: 19.4326, lng: -99.1332 };
+
+      await send("PUT", `${PATH}/${draft.id}/places/address`, cookie, SUGGESTION);
+      const response = await send("PUT", `${PATH}/${draft.id}/places/address`, cookie, moved);
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(((await response.json()) as Row).places, { address: moved });
+    });
+
+    it("refuses a field outside the pinned schema's address fields, and a point outside its bounds", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await addressDraft(cookie);
+
+      for (const [field, body] of [
+        ["receptionPlace", SUGGESTION],
+        ["title", SUGGESTION],
+        ["address", { ...SUGGESTION, lat: 91 }],
+        ["address", { ...SUGGESTION, lng: -181 }],
+        ["address", { ...SUGGESTION, label: "" }],
+      ] as const) {
+        const response = await send("PUT", `${PATH}/${draft.id}/places/${field}`, cookie, body);
+
+        assert.equal(response.status, 400, field);
+        const refused = (await response.json()) as { code: string; issues: string[] };
+        assert.equal(refused.code, "INVALID_INVITATION_PLACE");
+        assert.ok(refused.issues.length > 0);
+      }
+
+      // A body that does not state the whole point is a malformed request (the global pipe).
+      assert.equal(
+        (
+          await send("PUT", `${PATH}/${draft.id}/places/address`, cookie, {
+            label: "Solo la etiqueta",
+          })
+        ).status,
+        400,
+      );
+      assert.deepEqual(
+        ((await send("GET", `${PATH}/${draft.id}`, cookie).then((r) => r.json())) as Row).places,
+        {},
+      );
+    });
+
+    it("answers 409 INVITATION_NOT_EDITABLE for an archived invitation, and 404 for a foreign one", async () => {
+      const { cookie } = await signedInCustomer();
+      const stranger = await signedInCustomer();
+      const draft = await addressDraft(cookie);
+      await send("POST", `${PATH}/${draft.id}/archive`, cookie);
+
+      const archived = await send("PUT", `${PATH}/${draft.id}/places/address`, cookie, SUGGESTION);
+      assert.equal(archived.status, 409);
+      assert.deepEqual(await archived.json(), { code: "INVITATION_NOT_EDITABLE" });
+
+      const foreign = await send(
+        "PUT",
+        `${PATH}/${draft.id}/places/address`,
+        stranger.cookie,
+        SUGGESTION,
+      );
+      assert.equal(foreign.status, 404);
+      assert.deepEqual(await foreign.json(), { code: "INVITATION_NOT_FOUND" });
+    });
+
+    it("clears a stored point and leaves the address text alone", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await addressDraft(cookie);
+      await send("PUT", `${PATH}/${draft.id}/places/ceremonyAddress`, cookie, SUGGESTION);
+
+      const response = await send("DELETE", `${PATH}/${draft.id}/places/ceremonyAddress`, cookie);
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(((await response.json()) as Row).places, {});
+      assert.equal((await send("DELETE", `${PATH}/${draft.id}/places/title`, cookie)).status, 400);
+    });
+  });
+
   describe("POST /invitations/:id/archive", () => {
     it("archives a DRAFT and answers 200 with the summary", async () => {
       const { cookie } = await signedInCustomer();
@@ -1920,6 +2237,7 @@ describe("invitations routes: /invitations", () => {
       "configuration",
       "content",
       "features",
+      "places",
       "publishedAt",
       "slug",
       "timeZone",
@@ -1956,6 +2274,8 @@ describe("invitations routes: /invitations", () => {
       playlistCoverUrl?: string | null;
       rsvpDeadline?: Date | null;
       rsvpPartyLimit?: number;
+      places?: Record<string, { label: string; lat: number; lng: number }>;
+      content?: Record<string, unknown>;
     }): InvitationRecordWithMusic {
       const at = new Date(Date.UTC(2026, 9, 12, 9, 0, 0));
       const row: InvitationRecordWithMusic = {
@@ -1965,7 +2285,10 @@ describe("invitations routes: /invitations", () => {
         packageId: overrides.packageId ?? ACTIVE_PACKAGE_ID,
         slug: overrides.slug,
         status: overrides.status,
-        content: { title: "Cumpleaños de Ana", subtitle: "una nota que el esquema no declara" },
+        content: overrides.content ?? {
+          title: "Cumpleaños de Ana",
+          subtitle: "una nota que el esquema no declara",
+        },
         timeZone: overrides.timeZone ?? "America/Mexico_City",
         whatsappPhone: overrides.whatsappPhone ?? null,
         playlistUrl: overrides.playlistUrl ?? null,
@@ -1973,6 +2296,7 @@ describe("invitations routes: /invitations", () => {
         playlistCoverUrl: overrides.playlistCoverUrl ?? null,
         rsvpDeadline: overrides.rsvpDeadline ?? null,
         rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
+        places: overrides.places ?? {},
         archivedAt: overrides.status === "ARCHIVED" ? at : null,
         publishedAt: overrides.status === "PUBLISHED" ? at : null,
         expiresAt: overrides.expiresAt ?? null,
@@ -2317,6 +2641,51 @@ describe("invitations routes: /invitations", () => {
 
       assert.equal((await send("POST", `${PATH}/${draft.id}/publish`, cookie)).status, 200);
       assert.equal((await send("GET", `${PUBLIC_PATH}/${draft.slug}`)).status, 200);
+    });
+
+    it("shows the stored point only while the address text still carries its label (S2)", async () => {
+      const label = "Parroquia de San José, Calle Hidalgo 12, Querétaro, Querétaro";
+      const row = seed({
+        slug: "invitacion-place-confirmed",
+        status: "PUBLISHED",
+        templateVersionId: PLACE_VERSION_ID,
+        packageId: FEATURE_PACKAGE_ID,
+        content: { address: label, location: "Parroquia de San José" },
+        places: { address: { label, lat: 20.5888, lng: -100.3899 } },
+      });
+
+      const response = await send("GET", `${PUBLIC_PATH}/${row.slug}`);
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.equal((body.features as Row).map, true);
+      assert.deepEqual(body.places, { address: { label, lat: 20.5888, lng: -100.3899 } });
+    });
+
+    it("shows no point once the address text changed, and none for a package without MAP (S2)", async () => {
+      const label = "Parroquia de San José";
+      const stored = { address: { label, lat: 20.5888, lng: -100.3899 } };
+      const rewritten = seed({
+        slug: "invitacion-place-rewritten",
+        status: "PUBLISHED",
+        templateVersionId: PLACE_VERSION_ID,
+        packageId: FEATURE_PACKAGE_ID,
+        content: { address: "Otra dirección escrita a mano" },
+        places: stored,
+      });
+      const withoutMap = seed({
+        slug: "invitacion-place-no-map",
+        status: "PUBLISHED",
+        templateVersionId: PLACE_VERSION_ID,
+        packageId: ACTIVE_PACKAGE_ID,
+        content: { address: label },
+        places: stored,
+      });
+
+      for (const row of [rewritten, withoutMap]) {
+        const body = (await send("GET", `${PUBLIC_PATH}/${row.slug}`).then((r) => r.json())) as Row;
+        assert.deepEqual(body.places, {}, row.slug);
+      }
     });
   });
 
@@ -3406,6 +3775,7 @@ describe("invitations routes: /invitations", () => {
         "content",
         "features",
         "guest",
+        "places",
         "publishedAt",
         "slug",
         "timeZone",

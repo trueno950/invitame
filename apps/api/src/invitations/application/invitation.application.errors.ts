@@ -100,6 +100,41 @@ export class InvitationPaymentRequiredError extends Error {
 }
 
 /**
+ * The text the owner is typing cannot be searched (S2): it is not a string, or it is shorter than three or longer
+ * than 120 characters. `issues` are the deterministic English explanations the domain produced; the geocoder was
+ * never asked and no search was counted.
+ */
+export class InvalidPlaceQueryError extends Error {
+  constructor(readonly issues: readonly string[]) {
+    super("The place search query is not valid.");
+    this.name = "InvalidPlaceQueryError";
+  }
+}
+
+/**
+ * The stored place a request asked for is not acceptable (S2, S3): the field does not name an address field of the
+ * pinned template version, or the label or a coordinate is outside its bounds. `issues` are the deterministic
+ * English explanations the domain produced; nothing was stored and nothing was cleared.
+ */
+export class InvalidInvitationPlaceError extends Error {
+  constructor(readonly issues: readonly string[]) {
+    super("The invitation place is not valid.");
+    this.name = "InvalidInvitationPlaceError";
+  }
+}
+
+/**
+ * The owner reached the place-search limit (S2): more than 60 searches in ten minutes. Nothing was asked of the
+ * geocoder and nothing was stored; the limit rests by itself as the window ends.
+ */
+export class PlaceSearchRateLimitedError extends Error {
+  constructor() {
+    super("Too many place searches; retry when the window ends.");
+    this.name = "PlaceSearchRateLimitedError";
+  }
+}
+
+/**
  * A published invitation names a renderer the API cannot render (M5 T3; A3). This is an operational fault, not
  * a guest-facing "not found": the row is published and reachable, and only the deployed allow-list is missing
  * the code. It is a distinct type so the caller logs it as an operational error and still answers the guest

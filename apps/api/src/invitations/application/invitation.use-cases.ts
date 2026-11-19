@@ -8,6 +8,7 @@ import {
   availableFeatureKeys,
   GALLERY_FEATURE_KEY,
   isMusicCoverUrl,
+  MAP_FEATURE_KEY,
   musicProviderOf,
   normalizePlaylistTitle,
   publicInvitationFeatures,
@@ -20,6 +21,7 @@ import {
   publish,
   unpublish,
 } from "../domain/invitation-lifecycle";
+import { confirmedPlaces, type PlacePoint } from "../domain/invitation-place";
 import {
   generateInvitationSlug,
   isReservedSlug,
@@ -143,6 +145,12 @@ export interface OwnedInvitation extends InvitationSummary {
    * read at request time, because the gate is about what the catalog grants now.
    */
   availableFeatures: string[];
+  /**
+   * The points the owner stored for the address fields of the invitation, keyed by the content field each one
+   * belongs to (S2). Every stored point is answered, even one whose address text has since changed, so the editor can
+   * say whether the location is still confirmed; the guest read is the one that drops a stale point.
+   */
+  places: Record<string, PlacePoint>;
 }
 
 const INVITATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -170,7 +178,7 @@ function toSummary(record: InvitationRecord): InvitationSummary {
 }
 
 /** The owner's view of one invitation, with the schema of the version it is pinned to and the gated features. */
-function toOwnedInvitation(
+export function toOwnedInvitation(
   record: InvitationRecordWithMusic,
   schema: unknown,
   includedFeatureKeys: readonly string[],
@@ -195,6 +203,8 @@ function toOwnedInvitation(
       rsvpDeadline: record.rsvpDeadline,
       rsvpPartyLimit: record.rsvpPartyLimit,
     }),
+    // Every stored point, keyed by its address field: the editor decides what to say about each one (S2).
+    places: { ...record.places },
   };
 }
 
@@ -678,6 +688,13 @@ export class GetPublicInvitationUseCase {
           rsvpPartyLimit: published.rsvpPartyLimit,
         },
         gallery,
+      ),
+      // Only a package that grants MAP shows a point, and only while the address text still carries the label it
+      // was stored with (S2): the gate and the staleness rule live in the domain, never here.
+      places: confirmedPlaces(
+        published.places,
+        published.content,
+        includedFeatureKeys.includes(MAP_FEATURE_KEY),
       ),
     };
   }

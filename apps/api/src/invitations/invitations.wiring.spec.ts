@@ -45,16 +45,28 @@ import {
   type InvitationPaymentGate,
 } from "./application/invitation-payment-gate";
 import {
+  ClearInvitationPlaceUseCase,
+  SearchPlacesUseCase,
+  UpdateInvitationPlaceUseCase,
+} from "./application/invitation-place.use-cases";
+import {
   GetRsvpResponsesUseCase,
   SubmitPublicRsvpUseCase,
   UpdateRsvpSettingsUseCase,
 } from "./application/invitation-rsvp.use-cases";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "./application/music-metadata";
+import { NO_PLACE_SEARCH, PLACE_SEARCH } from "./application/place-search";
+import { InMemoryPlaceSearchCache } from "./application/place-search-cache";
+import {
+  PLACE_SEARCH_RATE_LIMITER,
+  type PlaceSearchRateLimiter,
+} from "./application/place-search-rate-limiter";
 import { RSVP_REPOSITORY } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
 import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
+import { PrismaPlaceSearchRateLimiter } from "./infrastructure/prisma-place-search-rate-limiter";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
 import { InvitationsModule } from "./invitations.module";
@@ -160,6 +172,9 @@ describe("InvitationsModule wiring", () => {
         SubmitGuestRsvpUseCase,
         CheckInGuestUseCase,
         GetAttendanceExportUseCase,
+        SearchPlacesUseCase,
+        UpdateInvitationPlaceUseCase,
+        ClearInvitationPlaceUseCase,
       ]) {
         assert.ok(context.get(useCase) instanceof useCase, useCase.name);
       }
@@ -202,6 +217,17 @@ describe("InvitationsModule wiring", () => {
       const music = context.get<MusicMetadataProvider>(MUSIC_METADATA_PROVIDER, { strict: false });
       assert.ok(music !== undefined);
       assert.equal(await music.lookup("https://open.spotify.com/playlist/abc", "spotify"), null);
+      // The place search port is bound for the provider the configuration validated (S2): this module runs
+      // `NODE_ENV=test`, whose default is `off`, so typing an address asks nobody.
+      assert.equal(context.get(PLACE_SEARCH, { strict: false }), NO_PLACE_SEARCH);
+      assert.ok(
+        context.get<PlaceSearchRateLimiter>(PLACE_SEARCH_RATE_LIMITER, { strict: false }) instanceof
+          PrismaPlaceSearchRateLimiter,
+      );
+      assert.ok(
+        context.get(InMemoryPlaceSearchCache, { strict: false }) instanceof
+          InMemoryPlaceSearchCache,
+      );
     } finally {
       await context.close();
     }
@@ -259,6 +285,13 @@ describe("AppModule invitation wiring", () => {
       ["PUT", `/invitations/${id}/rsvp-settings`, { deadline: null, partyLimit: 4 }],
       ["GET", `/invitations/${id}/rsvp`],
       ["GET", `/invitations/${id}/rsvp.csv`],
+      ["GET", `/invitations/${id}/places/search?q=quer%C3%A9taro`],
+      [
+        "PUT",
+        `/invitations/${id}/places/address`,
+        { label: "Parroquia de San José", lat: 20.5888, lng: -100.3899 },
+      ],
+      ["DELETE", `/invitations/${id}/places/address`],
       ["GET", `/invitations/${id}/guests`],
       ["POST", `/invitations/${id}/guests`, { name: "Ana", seats: 2, phone: null, note: null }],
       [

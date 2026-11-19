@@ -1,5 +1,6 @@
 import type { JsonObject } from "../domain/invitation-content";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
+import type { PlacePoint } from "../domain/invitation-place";
 
 /** One stored invitation; `content` is always a JSON object (the `Invitation_content_object` check). */
 export interface InvitationRecord {
@@ -84,6 +85,13 @@ export interface NewInvitation {
  */
 export interface InvitationRecordWithMusic extends InvitationRecord {
   /**
+   * The points the owner stored for this invitation's address fields, keyed by the content field each one belongs
+   * to (S2). It travels flattened with the row, so an owned or public read stays one query; an invitation without
+   * any reads an empty object. The public projection decides which of them a guest may see. It lives on the read
+   * shape and not on `InvitationRecord`, because a consumer that only reads the lifecycle fields needs no point.
+   */
+  places: Record<string, PlacePoint>;
+  /**
    * The playlist title the provider answered when the link was saved, or null when it answered none (S2). It
    * travels flattened with the link, from the same settings row, so a read that answers the link also answers the
    * metadata a layout renders with it.
@@ -94,6 +102,18 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
    * the lookup existed, or one whose lookup failed, reads null and renders the link-only card.
    */
   playlistCoverUrl: string | null;
+}
+
+/**
+ * One stored place to write (S2): the content field it belongs to, the label the geocoder answered, and the
+ * coordinates. The application validates all of them before the port is asked; the port only persists them.
+ */
+export interface InvitationPlaceWrite {
+  /** The content field name the address text lives in, such as `address` or `ceremonyAddress`. */
+  field: string;
+  label: string;
+  lat: number;
+  lng: number;
 }
 
 /**
@@ -145,6 +165,25 @@ export interface InvitationRepository {
     id: string,
     features: InvitationFeatureSettingsWrite,
   ): Promise<InvitationRecordWithMusic | null>;
+
+  /**
+   * Stores the coordinates of one address field of a DRAFT or a PUBLISHED invitation, in one statement whose `WHERE`
+   * names the owner, so another owner's id matches nothing (A4). One row per invitation and field: a second save of
+   * the same field replaces its label and coordinates instead of adding another row (S2). An archived invitation is
+   * refused with `InvitationNotEditableError` before anything is written (A2, S7).
+   */
+  updatePlace(
+    ownerId: string,
+    id: string,
+    place: InvitationPlaceWrite,
+  ): Promise<InvitationRecordWithMusic | null>;
+
+  /**
+   * Clears one stored place of a DRAFT or a PUBLISHED invitation, with the same owner scope and the same archived
+   * refusal as `updatePlace` (S2, A2, A4). Clearing a field that has no stored point changes nothing and is still a
+   * successful clear.
+   */
+  clearPlace(ownerId: string, id: string, field: string): Promise<InvitationRecordWithMusic | null>;
 
   /**
    * Sets `status` to ARCHIVED and `archivedAt` to the same instant in one statement, scoped by owner and by the

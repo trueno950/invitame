@@ -27,7 +27,10 @@ rewritten and nothing is deleted. The playlist metadata batch adds the additive
 `20261122120000_add_invitation_feature_music_metadata` migration: the nullable
 `InvitationFeatureSettings.playlistTitle` and `.playlistCoverUrl` columns and the
 `InvitationFeatureSettings_playlistCoverUrl_https` check. Both are nullable, so no row is rewritten and nothing is
-deleted. Future analytics design is documented separately in
+deleted. The precise-locations batch adds the additive `20261123120000_add_invitation_places` migration: the
+`InvitationPlace` table, keyed by `(invitationId, field)`, with the `InvitationPlace_lat_range` and
+`InvitationPlace_lng_range` checks. Every object is new, so no row is rewritten and nothing is deleted. Future
+analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -51,6 +54,7 @@ deleted. Future analytics design is documented separately in
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
 | `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), and timestamps |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
+| `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
 
 ## Invariants
@@ -158,6 +162,34 @@ normalization, the playlist link allow-list, and the gating — lives in
   `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "playlistCoverUrl", DROP COLUMN "playlistTitle";`. Only the
   stored titles and covers are lost; the playlist links and everything else stay. Never edit the applied migration
   file.
+
+## Invitation places
+
+Current status: the `InvitationPlace` table exists, the API writes and clears a point through
+`PUT`/`DELETE /invitations/:id/places/:field`, and both the owner read and the public read answer the stored points
+(`apps/api/src/invitations/domain/invitation-place.ts`, S2). The web editor and the guest map are a separate,
+still-pending slice.
+
+- `InvitationPlace.invitationId` and `.field` are the primary key together, so one address field of one invitation has
+  at most one point: choosing another suggestion replaces the previous label and coordinates instead of adding a row.
+- `InvitationPlace.field` is `VARCHAR(64)` and names a content property of the pinned `TemplateVersion` schema whose
+  name ends with `Address` or is exactly `address`. The API derives the allowed names from that schema; no template
+  name, package name, or feature key selects them, and a field outside them is refused with 400.
+- `InvitationPlace.label` is `VARCHAR(300)`: the label the geocoder answered when the owner chose the point, trimmed
+  and bounded by the API. It is the text written into the content field at that moment, which is what makes the
+  staleness rule below possible.
+- `InvitationPlace.lat` and `.lng` are `DOUBLE PRECISION NOT NULL`, bounded by `InvitationPlace_lat_range`
+  (`"lat" >= -90 AND "lat" <= 90`) and `InvitationPlace_lng_range` (`"lng" >= -180 AND "lng" <= 180`). The domain
+  refuses the same ranges with its own message before the write, so a refused request stores nothing.
+- The reference is `ON DELETE RESTRICT`, like every other invitation reference, because an invitation is never
+  hard-deleted here; test cleanup and any future deletion remove the place rows first.
+- The public read answers a stored point only while the pinned package grants `MAP` and the stored `label` still equals
+  the current content value of that field. Rewriting the address text therefore silently stops using the old
+  coordinates instead of sending a guest to the place the owner no longer means. The owner read answers every stored
+  point, so the editor can say whether each location is still confirmed.
+- Rollback / recovery of `20261123120000_add_invitation_places`: additive, so recovery is redeploying the previous
+  migration set or `DROP TABLE "InvitationPlace";` by hand. Only the stored points are lost; invitations, their
+  content, and their address text are untouched. Never edit the applied migration file.
 
 ## RSVP data
 

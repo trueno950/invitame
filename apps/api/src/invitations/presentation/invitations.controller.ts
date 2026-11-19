@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
   Res,
 } from "@nestjs/common";
 
@@ -33,14 +34,21 @@ import {
   UpdateGuestUseCase,
 } from "../application/invitation-guest.use-cases";
 import {
+  ClearInvitationPlaceUseCase,
+  SearchPlacesUseCase,
+  UpdateInvitationPlaceUseCase,
+} from "../application/invitation-place.use-cases";
+import {
   GetRsvpResponsesUseCase,
   UpdateRsvpSettingsUseCase,
 } from "../application/invitation-rsvp.use-cases";
+import type { PlacePoint } from "../domain/invitation-place";
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import {
   CreateInvitationDto,
   UpdateInvitationContentDto,
   UpdateInvitationFeaturesDto,
+  UpdateInvitationPlaceDto,
 } from "./dto/invitation.dtos";
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import { CheckInGuestDto, CreateGuestDto, UpdateGuestDto } from "./dto/invitation-guest.dtos";
@@ -53,6 +61,7 @@ import {
   type OwnedInvitationResponse,
   orInvitationSummaryNotFound,
   orOwnedInvitationNotFound,
+  orPlaceSuggestionsNotFound,
   toInvitationSummaryResponse,
   toOwnedInvitationResponse,
 } from "./invitation.response";
@@ -102,6 +111,11 @@ export class InvitationsController {
     private readonly updateContent: UpdateInvitationContentUseCase,
     @Inject(UpdateInvitationFeaturesUseCase)
     private readonly updateFeatures: UpdateInvitationFeaturesUseCase,
+    @Inject(SearchPlacesUseCase) private readonly searchPlaces: SearchPlacesUseCase,
+    @Inject(UpdateInvitationPlaceUseCase)
+    private readonly updatePlace: UpdateInvitationPlaceUseCase,
+    @Inject(ClearInvitationPlaceUseCase)
+    private readonly clearPlace: ClearInvitationPlaceUseCase,
     @Inject(ArchiveInvitationUseCase) private readonly archiveInvitation: ArchiveInvitationUseCase,
     @Inject(PublishInvitationUseCase) private readonly publishInvitation: PublishInvitationUseCase,
     @Inject(UnpublishInvitationUseCase)
@@ -202,6 +216,80 @@ export class InvitationsController {
           whatsappPhone: body.whatsappPhone,
           playlistUrl: body.playlistUrl,
         }),
+      );
+    } catch (error) {
+      return mapInvitationError(error);
+    }
+  }
+
+  /**
+   * The place suggestions for the text an owner is typing in an address field (S1, S2): 200 with at most five points,
+   * each a label and its coordinates, so the editor can write the label into the content and store the point.
+   * Creator-owned, exactly like every other route of this controller: another customer's id is 404
+   * `INVITATION_NOT_FOUND` and costs no geocoder request (A4). The query is read raw and validated by the domain, so
+   * a missing or too short `q` is 400 `INVALID_PLACE_QUERY` with its issue, and an owner over the search limit is 429
+   * `PLACE_SEARCH_RATE_LIMITED` (S2). The request carries no session data beyond the owner the guard attached.
+   */
+  @Get(":id/places/search")
+  async searchPlacesIn(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Query("q") query: unknown,
+  ): Promise<readonly PlacePoint[]> {
+    try {
+      return orPlaceSuggestionsNotFound(
+        await this.searchPlaces.execute({ ownerId: userId, id, query }),
+      );
+    } catch (error) {
+      return mapInvitationError(error);
+    }
+  }
+
+  /**
+   * Stores the point the owner chose for one address field of a DRAFT or a PUBLISHED invitation (S1, S2): 200 with
+   * the owned invitation, whose `places` carry the stored point. `:field` must name an address field of the pinned
+   * template version's schema; the label and both coordinates must satisfy the bounds the columns state, and anything
+   * else is 400 `INVALID_INVITATION_PLACE` with its issues. An archived invitation is 409 `INVITATION_NOT_EDITABLE`
+   * and a foreign id is 404 (A2, A4). `PUT` and not `PATCH`: the whole point is replaced.
+   */
+  @Put(":id/places/:field")
+  async replacePlace(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Param("field") field: string,
+    @Body() body: UpdateInvitationPlaceDto,
+  ): Promise<OwnedInvitationResponse> {
+    try {
+      return orOwnedInvitationNotFound(
+        await this.updatePlace.execute({
+          ownerId: userId,
+          id,
+          field,
+          label: body.label,
+          lat: body.lat,
+          lng: body.lng,
+        }),
+      );
+    } catch (error) {
+      return mapInvitationError(error);
+    }
+  }
+
+  /**
+   * Clears the stored point of one address field (S1, S2): 200 with the owned invitation, whose address text is
+   * untouched — the owner keeps the words they typed and only loses the coordinates. The same field rule, the same
+   * 409 for an archived invitation, and the same 404 for a foreign id as the write (A2, A4).
+   */
+  @Delete(":id/places/:field")
+  @HttpCode(200)
+  async clearPlaceOf(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Param("field") field: string,
+  ): Promise<OwnedInvitationResponse> {
+    try {
+      return orOwnedInvitationNotFound(
+        await this.clearPlace.execute({ ownerId: userId, id, field }),
       );
     } catch (error) {
       return mapInvitationError(error);
