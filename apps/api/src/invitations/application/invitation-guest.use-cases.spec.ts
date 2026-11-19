@@ -15,7 +15,11 @@ import type {
   NewGuest,
 } from "./guest.repository";
 import { guestTokenHash } from "./guest-token";
-import type { InvitationRecord, InvitationRepository } from "./invitation.repository";
+import type {
+  InvitationRecord,
+  InvitationRecordWithMusic,
+  InvitationRepository,
+} from "./invitation.repository";
 import { GetPublicInvitationUseCase } from "./invitation.use-cases";
 import type {
   CatalogPackageEntitlements,
@@ -72,42 +76,42 @@ const PACKAGE_KEYS: Readonly<Record<string, readonly string[]>> = {
 
 /** The invitation port in memory: only the reads the guest use cases need. */
 class MemoryInvitationRepository implements InvitationRepository {
-  readonly rows: InvitationRecord[] = [];
+  readonly rows: InvitationRecordWithMusic[] = [];
   private sequence = 0;
 
-  create(): Promise<InvitationRecord> {
+  create(): Promise<InvitationRecordWithMusic> {
     return Promise.reject(new Error("create is not used by the guest use cases"));
   }
 
-  listOwned(): Promise<InvitationRecord[]> {
+  listOwned(): Promise<InvitationRecordWithMusic[]> {
     return Promise.reject(new Error("listOwned is not used by the guest use cases"));
   }
 
-  updateContent(): Promise<InvitationRecord | null> {
+  updateContent(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("updateContent is not used by the guest use cases"));
   }
 
-  updateFeatures(): Promise<InvitationRecord | null> {
+  updateFeatures(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("updateFeatures is not used by the guest use cases"));
   }
 
-  archive(): Promise<InvitationRecord | null> {
+  archive(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("archive is not used by the guest use cases"));
   }
 
-  publish(): Promise<InvitationRecord | null> {
+  publish(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("publish is not used by the guest use cases"));
   }
 
-  unpublish(): Promise<InvitationRecord | null> {
+  unpublish(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("unpublish is not used by the guest use cases"));
   }
 
-  async findOwned(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async findOwned(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     return this.rows.find((row) => row.id === id && row.ownerId === ownerId) ?? null;
   }
 
-  async findPublishedBySlug(slug: string): Promise<InvitationRecord | null> {
+  async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
     const now = Date.now();
     return (
       this.rows.find(
@@ -119,11 +123,11 @@ class MemoryInvitationRepository implements InvitationRepository {
     );
   }
 
-  seed(overrides: SeedOptions = {}): InvitationRecord {
+  seed(overrides: SeedOptions = {}): InvitationRecordWithMusic {
     const at = new Date("2026-11-01T10:00:00.000Z");
     // The unique slug index is the database's: this double keeps every seeded row distinct so a slug names one row.
     this.sequence += 1;
-    const row: InvitationRecord = {
+    const row: InvitationRecordWithMusic = {
       id: randomUUID(),
       ownerId: overrides.ownerId ?? OWNER,
       templateVersionId: randomUUID(),
@@ -134,6 +138,8 @@ class MemoryInvitationRepository implements InvitationRepository {
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl: null,
+      playlistTitle: null,
+      playlistCoverUrl: null,
       rsvpDeadline: overrides.rsvpDeadline ?? null,
       rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
       archivedAt: overrides.status === "ARCHIVED" ? at : null,

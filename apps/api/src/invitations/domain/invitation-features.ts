@@ -1,10 +1,12 @@
 // Per-invitation feature data (F1, F6, F7; S3, S4, S7). The package decides which catalog keys an invitation may
-// show; this module decides what the API implements and what a guest sees. Four pure rules live here:
+// show; this module decides what the API implements and what a guest sees. Five pure rules live here:
 //
 // - the time zone allow-list: an invitation stores one IANA zone from this list, and the Spanish labels belong
 //   to the web, never to the domain;
 // - WhatsApp phone normalization: a Mexican ten-digit number or an international `+` number, stored as E.164;
 // - playlist link normalization: an `https` link on an allow-listed music host, at most 500 characters;
+// - playlist metadata bounds: the title the provider answered trimmed to 200 characters, and a cover only from an
+//   allow-listed image host over `https` (S2);
 // - feature gating: the package's feature keys intersected with the implemented allow-list, plus the add-to-
 //   calendar feature, which is not catalog data; WhatsApp also needs a stored phone, and music a usable link.
 //
@@ -186,6 +188,88 @@ export const PLAYLIST_URL_HOST_ISSUE =
 
 /** The message a playlist link wider than `PLAYLIST_URL_MAX_LENGTH` is refused with. */
 export const PLAYLIST_URL_LENGTH_ISSUE = "playlistUrl must be at most 500 characters";
+
+/**
+ * The longest playlist title an invitation may store (S2): the width of `InvitationFeatureSettings.playlistTitle`,
+ * counted in characters so a title with non-ASCII letters cannot overflow the column.
+ */
+export const PLAYLIST_TITLE_MAX_LENGTH = 200;
+
+/** The longest cover URL an invitation may store (S2): the width of `playlistCoverUrl`. */
+export const PLAYLIST_COVER_URL_MAX_LENGTH = 500;
+
+/**
+ * The image hosts a music provider's public oEmbed answer may point a cover at (S2): Spotify's `i.scdn.co` and
+ * YouTube's `i.ytimg.com`. The host is compared whole and case-insensitively, and a different port, userinfo, or
+ * scheme refuses the value, so a provider answer can never make a guest page load an image from somewhere else.
+ */
+export const MUSIC_COVER_HOSTS = ["i.scdn.co", "i.ytimg.com"] as const;
+
+/**
+ * Spotify's image CDN: `image-cdn-<label>.spotifycdn.com`. Spotify answers `i.scdn.co` today, and its newer CDN
+ * names a per-region label, so the host is matched by shape instead of by one literal.
+ */
+const SPOTIFY_IMAGE_CDN_HOST = /^image-cdn-[a-z0-9-]+\.spotifycdn\.com$/;
+
+const MUSIC_COVER_HOST_SET: ReadonlySet<string> = new Set(MUSIC_COVER_HOSTS);
+
+/**
+ * The playlist metadata a provider answered (S2): the title it named and the cover this API allows, each null
+ * when that provider named nothing usable. It carries no HTML, no player, and nothing else the provider sent.
+ */
+export interface PlaylistMetadata {
+  readonly title: string | null;
+  readonly coverUrl: string | null;
+}
+
+/**
+ * A stored playlist title (S2): the surrounding spaces trimmed and at most `PLAYLIST_TITLE_MAX_LENGTH`
+ * characters, or null when the value says nothing. A longer title is cut at the bound instead of being refused,
+ * because a provider's title is data the owner never typed; the column is the second bound.
+ */
+export function normalizePlaylistTitle(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return null;
+  }
+
+  const characters = [...trimmed];
+
+  return characters.length > PLAYLIST_TITLE_MAX_LENGTH
+    ? characters.slice(0, PLAYLIST_TITLE_MAX_LENGTH).join("").trimEnd()
+    : trimmed;
+}
+
+/**
+ * Whether a value is a cover URL this deployment renders (S2, S3): `https`, no port and no userinfo, and one of the
+ * allow-listed image hosts. Anything else is no cover at all, so a guest page never loads an image from a host the
+ * API did not allow and the stored value always satisfies the `playlistCoverUrl` https check.
+ */
+export function isMusicCoverUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > PLAYLIST_COVER_URL_MAX_LENGTH) {
+    return false;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol !== "https:" || parsed.port !== "") {
+    return false;
+  }
+  if (parsed.username !== "" || parsed.password !== "") {
+    return false;
+  }
+
+  return MUSIC_COVER_HOST_SET.has(parsed.hostname) || SPOTIFY_IMAGE_CDN_HOST.test(parsed.hostname);
+}
 
 /** A normalized playlist link: the stored URL, or null when the invitation has none. */
 export type PlaylistUrlNormalization =
@@ -369,6 +453,10 @@ export interface InvitationFeatureGate {
   readonly whatsappPhone: string | null;
   /** The stored playlist link; MUSIC stays off while it is null or names no allow-listed service (S7). */
   readonly playlistUrl: string | null;
+  /** The stored playlist title the provider answered, or null when there is none (S2). */
+  readonly playlistTitle: string | null;
+  /** The stored cover URL the provider answered, or null when there is none (S2). */
+  readonly playlistCoverUrl: string | null;
   /** The owner's RSVP deadline, or null for one that never closes (M6 S4). */
   readonly rsvpDeadline: Date | null;
   /** The owner's party limit, 1 to 10 (M6 S4). */
@@ -408,8 +496,17 @@ export interface PublicInvitationFeatures {
   readonly calendar: true;
   /** The E.164 phone the WhatsApp button dials, or null when the feature is not available. */
   readonly whatsapp: { readonly phone: string } | null;
-  /** The playlist link and the service it names, or null when the feature is not available (S7). */
-  readonly music: { readonly url: string; readonly provider: MusicProvider } | null;
+  /**
+   * The playlist link, the service it names, and the metadata the provider answered, or null when the feature is
+   * not available (S7, S2). `title` and `coverUrl` are null when no lookup stored one, so the shape is stable and
+   * a layout always reads the same keys.
+   */
+  readonly music: {
+    readonly url: string;
+    readonly provider: MusicProvider;
+    readonly title: string | null;
+    readonly coverUrl: string | null;
+  } | null;
   /** Whether the layouts render their gift registry block (S7); the content decides its value, not the API. */
   readonly giftRegistry: boolean;
   /**
@@ -453,6 +550,9 @@ export function publicInvitationFeatures(
   const keys = new Set(availableFeatureKeys(gate));
   const provider = keys.has("MUSIC") ? musicProviderOf(gate.playlistUrl) : null;
   const mode = rsvpModeOf(gate.includedFeatureKeys);
+  // A stored value the deployment does not allow is not shown, even if a row was written around the API (S2).
+  const title = normalizePlaylistTitle(gate.playlistTitle);
+  const coverUrl = isMusicCoverUrl(gate.playlistCoverUrl) ? gate.playlistCoverUrl : null;
 
   return {
     countdown: keys.has("COUNTDOWN"),
@@ -461,7 +561,9 @@ export function publicInvitationFeatures(
     whatsapp:
       keys.has("WHATSAPP") && gate.whatsappPhone !== null ? { phone: gate.whatsappPhone } : null,
     music:
-      provider === null || gate.playlistUrl === null ? null : { url: gate.playlistUrl, provider },
+      provider === null || gate.playlistUrl === null
+        ? null
+        : { url: gate.playlistUrl, provider, title, coverUrl },
     giftRegistry: keys.has("GIFT_REGISTRY"),
     // Only a package that grants GALLERY renders photos; the read passes none otherwise, and this repeats the gate.
     gallery: keys.has(GALLERY_FEATURE_KEY) ? galleryPhotos : [],

@@ -60,10 +60,16 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
   /** The stored IANA zone (S4). */
   timeZone: string;
   /**
-   * The stored feature data; `whatsappPhone` is E.164 or null, and `playlistUrl` is a normalized `https` link on
-   * an allow-listed music host or null (S4, S7).
+   * The stored feature data; `whatsappPhone` is E.164 or null, `playlistUrl` is a normalized `https` link on an
+   * allow-listed music host or null, and `playlistTitle` and `playlistCoverUrl` are the metadata the provider
+   * answered when that link was saved, or null (S4, S7, S2).
    */
-  featureSettings: { whatsappPhone: string | null; playlistUrl: string | null };
+  featureSettings: {
+    whatsappPhone: string | null;
+    playlistUrl: string | null;
+    playlistTitle: string | null;
+    playlistCoverUrl: string | null;
+  };
   /** The gated feature keys the guest will see, `CALENDAR` included (S4). */
   availableFeatures: string[];
 }
@@ -86,8 +92,16 @@ export interface PublicInvitationResponse {
     map: boolean;
     calendar: true;
     whatsapp: { phone: string } | null;
-    /** The playlist link and the service it names, or null when the feature is not available (S7). */
-    music: { url: string; provider: string } | null;
+    /**
+     * The playlist link, the service it names, and the metadata the provider answered, or null when the feature is
+     * not available (S7, S2). `title` and `coverUrl` are always present and null when no lookup stored one.
+     */
+    music: {
+      url: string;
+      provider: string;
+      title: string | null;
+      coverUrl: string | null;
+    } | null;
     /** Whether the layouts render their gift registry block (S7). */
     giftRegistry: boolean;
     /**
@@ -132,6 +146,8 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
     featureSettings: {
       whatsappPhone: stored.featureSettings.whatsappPhone,
       playlistUrl: stored.featureSettings.playlistUrl,
+      playlistTitle: stored.featureSettings.playlistTitle,
+      playlistCoverUrl: stored.featureSettings.playlistCoverUrl,
     },
     availableFeatures: [...stored.availableFeatures],
   };
@@ -155,7 +171,12 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
       music:
         stored.features.music === null
           ? null
-          : { url: stored.features.music.url, provider: stored.features.music.provider },
+          : {
+              url: stored.features.music.url,
+              provider: stored.features.music.provider,
+              title: stored.features.music.title,
+              coverUrl: stored.features.music.coverUrl,
+            },
       giftRegistry: stored.features.giftRegistry,
       gallery: stored.features.gallery.map((photo) => ({
         url: photo.url,

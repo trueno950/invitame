@@ -64,6 +64,24 @@ export interface ClientIpEnvironment {
   trustedProxies: readonly string[];
 }
 
+/**
+ * Whether the API may call a music provider's public oEmbed endpoint when an owner saves a playlist link (S2).
+ * `off` stores the link with no metadata, exactly like a provider that could not answer, and is what the test
+ * environment defaults to, so no suite and no CI job reaches the network.
+ */
+export const MUSIC_METADATA_LOOKUP = {
+  ON: "on",
+  OFF: "off",
+} as const;
+
+export type MusicMetadataLookup =
+  (typeof MUSIC_METADATA_LOOKUP)[keyof typeof MUSIC_METADATA_LOOKUP];
+
+/** The music settings of one deployment: only whether the lookup may run (S2). */
+export interface MusicEnvironment {
+  lookup: MusicMetadataLookup;
+}
+
 /** The storage adapter that serves invitation media (M8 S4). */
 export const MEDIA_STORAGE_DRIVER = {
   LOCAL: "local",
@@ -138,6 +156,8 @@ export interface RuntimeEnvironment {
   AUTH_PROXY_SECRET_PREVIOUS: string | undefined;
   /** Invitation media storage and the public origin its URLs are built from (M8 S4). */
   MEDIA: MediaEnvironment;
+  /** Whether a saved playlist link may ask its provider for a title and a cover (S2). */
+  MUSIC: MusicEnvironment;
   /** Payment mode and, when it charges, the provider settings of that mode (M7 S1, S4). */
   PAYMENTS: PaymentsEnvironment;
 }
@@ -155,6 +175,12 @@ const S3_BUCKET_PATTERN = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
 /** An S3 region name, such as `auto` (R2) or `us-east-1`. */
 const S3_REGION_PATTERN = /^[a-z0-9-]+$/;
 const BOOLEAN_VALUES: Readonly<Record<string, boolean>> = { true: true, false: false };
+/** A lookup is on wherever a real invitation is edited, and off in tests, so CI never reaches the network (S2). */
+const DEFAULT_MUSIC_METADATA_LOOKUP: Record<NodeEnvironment, MusicMetadataLookup> = {
+  development: MUSIC_METADATA_LOOKUP.ON,
+  test: MUSIC_METADATA_LOOKUP.OFF,
+  production: MUSIC_METADATA_LOOKUP.ON,
+};
 const DEFAULT_EMAIL_TRANSPORT: Record<NodeEnvironment, EmailTransport> = {
   development: EMAIL_TRANSPORT.MAILPIT,
   test: EMAIL_TRANSPORT.MEMORY,
@@ -695,6 +721,29 @@ export function validateMediaEnvironment(environment: Record<string, unknown>): 
   return parseMediaEnvironment(environment, nodeEnvironment);
 }
 
+function isMusicMetadataLookup(value: string): value is MusicMetadataLookup {
+  return Object.values(MUSIC_METADATA_LOOKUP).some((lookup) => lookup === value);
+}
+
+/**
+ * The music settings (S2): `MUSIC_METADATA_LOOKUP` is `on` or `off` and defaults to `on` in development and
+ * production and to `off` in tests. A value outside the two is refused at startup, and the message never echoes it.
+ */
+function parseMusicEnvironment(
+  environment: Record<string, unknown>,
+  nodeEnvironment: NodeEnvironment,
+): MusicEnvironment {
+  const configured =
+    readOptionalString(environment.MUSIC_METADATA_LOOKUP) ??
+    DEFAULT_MUSIC_METADATA_LOOKUP[nodeEnvironment];
+
+  if (!isMusicMetadataLookup(configured)) {
+    throw new Error("MUSIC_METADATA_LOOKUP must be on or off.");
+  }
+
+  return { lookup: configured };
+}
+
 export function validateEnvironment(environment: Record<string, unknown>): RuntimeEnvironment {
   // No default (S56, L79): with `NODE_ENV` unset, every production rule would be off. A missing value
   // fails the startup, like an invalid one, and neither message echoes the value.
@@ -726,6 +775,7 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     AUTH_PROXY_SECRET: parseProxySecret(environment, nodeEnvironment),
     AUTH_PROXY_SECRET_PREVIOUS: parsePreviousProxySecret(environment),
     MEDIA: parseMediaEnvironment(environment, nodeEnvironment),
+    MUSIC: parseMusicEnvironment(environment, nodeEnvironment),
     PAYMENTS: parsePaymentsEnvironment(environment, nodeEnvironment),
   };
 

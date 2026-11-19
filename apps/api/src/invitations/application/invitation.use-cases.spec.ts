@@ -10,9 +10,12 @@ import {
   InvitationNotPublishedError,
 } from "../domain/invitation.errors";
 import {
+  PLAYLIST_COVER_URL_MAX_LENGTH,
+  PLAYLIST_TITLE_MAX_LENGTH,
   PLAYLIST_URL_HOST_ISSUE,
   PLAYLIST_URL_LENGTH_ISSUE,
   PLAYLIST_URL_MAX_LENGTH,
+  type PlaylistMetadata,
 } from "../domain/invitation-features";
 import {
   InvalidInvitationContentError,
@@ -28,6 +31,7 @@ import {
 import type {
   InvitationFeatureSettingsWrite,
   InvitationRecord,
+  InvitationRecordWithMusic,
   InvitationRepository,
   NewInvitation,
 } from "./invitation.repository";
@@ -51,6 +55,7 @@ import type {
   InvitationCatalog,
 } from "./invitation-catalog";
 import type { InvitationPaymentDecision, InvitationPaymentGate } from "./invitation-payment-gate";
+import type { MusicMetadataProvider } from "./music-metadata";
 
 // The invitation application use cases (M4 T3 and M5 T3; S1, S2, S3, S6, S7, S9, A1, A3, A4, A7) on in-memory
 // ports: a draft starts empty and pinned to a published version, the package is only validated, every mutation
@@ -77,7 +82,7 @@ const SCHEMA = {
 
 /** An in-memory `InvitationRepository`: `rows` and `slugs` are public so a test can compare before and after. */
 class MemoryInvitationRepository implements InvitationRepository {
-  readonly rows: InvitationRecord[] = [];
+  readonly rows: InvitationRecordWithMusic[] = [];
   /** Every slug PostgreSQL would already hold, as the unique index sees it. */
   readonly slugs = new Set<string>();
   createCalls = 0;
@@ -90,7 +95,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     this.slugs.add(slug);
   }
 
-  async create(input: NewInvitation): Promise<InvitationRecord> {
+  async create(input: NewInvitation): Promise<InvitationRecordWithMusic> {
     this.createCalls += 1;
     if (this.slugs.has(input.slug)) {
       throw new InvitationSlugTakenError(input.slug);
@@ -98,7 +103,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     this.slugs.add(input.slug);
     this.clock += 1;
     const now = new Date(Date.UTC(2026, 10, 11, 10, 0, 0) + this.clock * 1000);
-    const created: InvitationRecord = {
+    const created: InvitationRecordWithMusic = {
       id: randomUUID(),
       status: "DRAFT",
       archivedAt: null,
@@ -110,6 +115,8 @@ class MemoryInvitationRepository implements InvitationRepository {
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl: null,
+      playlistTitle: null,
+      playlistCoverUrl: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       ...input,
@@ -119,12 +126,12 @@ class MemoryInvitationRepository implements InvitationRepository {
     return { ...created, content: { ...created.content } };
   }
 
-  async findOwned(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async findOwned(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     const stored = this.rows.find((row) => row.id === id && row.ownerId === ownerId);
     return stored ? { ...stored, content: { ...stored.content } } : null;
   }
 
-  async listOwned(ownerId: string): Promise<InvitationRecord[]> {
+  async listOwned(ownerId: string): Promise<InvitationRecordWithMusic[]> {
     return this.rows
       .filter((row) => row.ownerId === ownerId)
       .sort((first, second) => second.createdAt.getTime() - first.createdAt.getTime())
@@ -135,7 +142,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     ownerId: string,
     id: string,
     content: Record<string, unknown>,
-  ): Promise<InvitationRecord | null> {
+  ): Promise<InvitationRecordWithMusic | null> {
     const stored = this.rows.find((row) => row.id === id && row.ownerId === ownerId);
     if (!stored) {
       return null;
@@ -153,7 +160,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     ownerId: string,
     id: string,
     features: InvitationFeatureSettingsWrite,
-  ): Promise<InvitationRecord | null> {
+  ): Promise<InvitationRecordWithMusic | null> {
     const stored = this.rows.find((row) => row.id === id && row.ownerId === ownerId);
     if (!stored) {
       return null;
@@ -165,11 +172,13 @@ class MemoryInvitationRepository implements InvitationRepository {
     stored.timeZone = features.timeZone;
     stored.whatsappPhone = features.whatsappPhone;
     stored.playlistUrl = features.playlistUrl;
+    stored.playlistTitle = features.playlistTitle;
+    stored.playlistCoverUrl = features.playlistCoverUrl;
     stored.updatedAt = new Date(stored.updatedAt.getTime() + 1000);
     return { ...stored, content: { ...stored.content } };
   }
 
-  async archive(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async archive(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     const stored = this.rows.find((row) => row.id === id && row.ownerId === ownerId);
     if (!stored) {
       return null;
@@ -185,7 +194,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     return { ...stored, content: { ...stored.content } };
   }
 
-  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecord | null> {
+  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecordWithMusic | null> {
     const stored = this.rows.find((row) => row.id === id && row.ownerId === ownerId);
     if (!stored) {
       return null;
@@ -202,7 +211,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     return { ...stored, content: { ...stored.content } };
   }
 
-  async unpublish(ownerId: string, id: string): Promise<InvitationRecord | null> {
+  async unpublish(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     const stored = this.rows.find((row) => row.id === id && row.ownerId === ownerId);
     if (!stored) {
       return null;
@@ -219,7 +228,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     return { ...stored, content: { ...stored.content } };
   }
 
-  async findPublishedBySlug(slug: string): Promise<InvitationRecord | null> {
+  async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
     this.findPublishedBySlugCalls += 1;
     const now = Date.now();
     const stored = this.rows.find(
@@ -296,6 +305,25 @@ class MemoryInvitationCatalog implements InvitationCatalog {
 
   isRendererRegistered(componentKey: string): boolean {
     return this.registeredRenderers.has(componentKey);
+  }
+}
+
+/**
+ * The music metadata port in memory (S2): every lookup is counted and answered from `answers`, keyed by the playlist
+ * URL it was asked about, so a test proves when a save looks something up and when it does not.
+ */
+class MemoryMusicMetadataProvider implements MusicMetadataProvider {
+  readonly answers = new Map<string, PlaylistMetadata | null>();
+  readonly asked: Array<{ playlistUrl: string; provider: string }> = [];
+  /** When set, the next lookup rejects with it, which is what a broken provider looks like. */
+  failure: Error | null = null;
+
+  async lookup(playlistUrl: string, provider: string): Promise<PlaylistMetadata | null> {
+    this.asked.push({ playlistUrl, provider });
+    if (this.failure !== null) {
+      throw this.failure;
+    }
+    return this.answers.get(playlistUrl) ?? null;
   }
 }
 
@@ -385,9 +413,12 @@ function publicReader(fixture: ReturnType<typeof seeded>) {
   return new GetPublicInvitationUseCase(fixture.repository, fixture.catalog);
 }
 
-/** The feature update wired to the same in-memory ports (F1; S4). */
-function features(fixture: ReturnType<typeof seeded>) {
-  return new UpdateInvitationFeaturesUseCase(fixture.repository, fixture.catalog);
+/** The feature update wired to the same in-memory ports (F1; S4, S2). */
+function features(
+  fixture: ReturnType<typeof seeded>,
+  music: MusicMetadataProvider = new MemoryMusicMetadataProvider(),
+) {
+  return new UpdateInvitationFeaturesUseCase(fixture.repository, fixture.catalog, music);
 }
 
 /** The feature keys of every seeded package (prisma/catalog-seed.ts), by package key (S4). */
@@ -667,7 +698,12 @@ describe("GetOwnInvitationUseCase", () => {
     );
 
     assert.equal(stored?.timeZone, "America/Mexico_City");
-    assert.deepEqual(stored?.featureSettings, { whatsappPhone: null, playlistUrl: null });
+    assert.deepEqual(stored?.featureSettings, {
+      whatsappPhone: null,
+      playlistUrl: null,
+      playlistTitle: null,
+      playlistCoverUrl: null,
+    });
     // WhatsApp needs a stored phone, and no catalog feature outside the implemented list appears (S4).
     assert.deepEqual(stored?.availableFeatures, ["COUNTDOWN", "MAP", "CALENDAR"]);
   });
@@ -836,6 +872,8 @@ describe("UpdateInvitationFeaturesUseCase", () => {
     assert.deepEqual(updated?.featureSettings, {
       whatsappPhone: PHONE,
       playlistUrl: PLAYLIST,
+      playlistTitle: null,
+      playlistCoverUrl: null,
     });
     assert.deepEqual(updated?.availableFeatures, [
       "COUNTDOWN",
@@ -876,7 +914,12 @@ describe("UpdateInvitationFeaturesUseCase", () => {
 
       assert.deepEqual(
         updated?.featureSettings,
-        { whatsappPhone: null, playlistUrl: null },
+        {
+          whatsappPhone: null,
+          playlistUrl: null,
+          playlistTitle: null,
+          playlistCoverUrl: null,
+        },
         String(cleared),
       );
       assert.deepEqual(updated?.availableFeatures, ["COUNTDOWN", "MAP", "CALENDAR"]);
@@ -1036,6 +1079,178 @@ describe("UpdateInvitationFeaturesUseCase", () => {
     assert.equal(updated?.status, "PUBLISHED");
     assert.equal(updated?.timeZone, "America/Merida");
     assert.deepEqual(fixture.repository.rows[0]?.publishedAt, PUBLISHED_AT);
+  });
+
+  // The playlist metadata (S2): one lookup when the link appears or changes, none when it does not, and the stored
+  // metadata always describes the stored link.
+  const METADATA: PlaylistMetadata = {
+    title: "Today’s Top Hits",
+    coverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+  };
+
+  async function savePlaylist(
+    music: MemoryMusicMetadataProvider,
+    playlistUrl: string | null,
+    fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.premium }),
+  ) {
+    const created = await createDraft(fixture);
+    const useCase = features(fixture, music);
+    const updated = await useCase.execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl,
+    });
+
+    return { fixture, created, updated, useCase };
+  }
+
+  it("looks the provider up once when the playlist link is saved and stores its title and cover (S2)", async () => {
+    const music = new MemoryMusicMetadataProvider();
+    music.answers.set(PLAYLIST, METADATA);
+
+    const { fixture, created, updated } = await savePlaylist(music, PLAYLIST);
+
+    assert.deepEqual(music.asked, [{ playlistUrl: PLAYLIST, provider: "spotify" }]);
+    assert.deepEqual(updated?.featureSettings, {
+      whatsappPhone: null,
+      playlistUrl: PLAYLIST,
+      playlistTitle: METADATA.title,
+      playlistCoverUrl: METADATA.coverUrl,
+    });
+    // The metadata is stored with the link, so a later or public read answers it without a provider.
+    assert.equal(fixture.repository.rows[0]?.playlistTitle, METADATA.title);
+    assert.equal(fixture.repository.rows[0]?.playlistCoverUrl, METADATA.coverUrl);
+    assert.equal(fixture.repository.rows[0]?.id, created.id);
+  });
+
+  it("looks nothing up when the link did not change, and keeps what was stored for it (S2)", async () => {
+    const music = new MemoryMusicMetadataProvider();
+    music.answers.set(PLAYLIST, METADATA);
+    const { fixture, created, useCase } = await savePlaylist(music, PLAYLIST);
+    // A later answer that disagrees proves the save reused the stored metadata instead of asking again.
+    music.answers.set(PLAYLIST, { title: "Otra lista", coverUrl: null });
+
+    const again = await useCase.execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Cancun",
+      whatsappPhone: PHONE,
+      playlistUrl: PLAYLIST,
+    });
+
+    assert.equal(music.asked.length, 1);
+    assert.equal(again?.timeZone, "America/Cancun");
+    assert.equal(again?.featureSettings.playlistTitle, METADATA.title);
+    assert.equal(again?.featureSettings.playlistCoverUrl, METADATA.coverUrl);
+  });
+
+  it("clears the stored metadata with the link, and asks nobody for it (S2)", async () => {
+    const music = new MemoryMusicMetadataProvider();
+    music.answers.set(PLAYLIST, METADATA);
+    const { fixture, created, useCase } = await savePlaylist(music, PLAYLIST);
+
+    for (const cleared of [null, ""]) {
+      const updated = await useCase.execute({
+        ownerId: fixture.ownerId,
+        id: created.id,
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: cleared,
+      });
+
+      assert.equal(music.asked.length, 1, String(cleared));
+      assert.equal(updated?.featureSettings.playlistUrl, null);
+      assert.equal(updated?.featureSettings.playlistTitle, null);
+      assert.equal(updated?.featureSettings.playlistCoverUrl, null);
+    }
+    assert.equal(fixture.repository.rows[0]?.playlistTitle, null);
+    assert.equal(fixture.repository.rows[0]?.playlistCoverUrl, null);
+  });
+
+  it("stores nulls and still saves when the provider fails (S2)", async () => {
+    const music = new MemoryMusicMetadataProvider();
+    music.failure = new Error("provider is down");
+
+    const { fixture, created, updated } = await savePlaylist(music, PLAYLIST);
+
+    assert.equal(music.asked.length, 1);
+    // Fail open for the save: the link is stored and the request succeeds.
+    assert.equal(updated?.id, created.id);
+    assert.deepEqual(updated?.featureSettings, {
+      whatsappPhone: null,
+      playlistUrl: PLAYLIST,
+      playlistTitle: null,
+      playlistCoverUrl: null,
+    });
+    assert.equal(fixture.repository.rows[0]?.playlistUrl, PLAYLIST);
+  });
+
+  it("stores no metadata when the provider answers nothing, and asks no provider a link it cannot place (S2)", async () => {
+    const silent = new MemoryMusicMetadataProvider();
+    const unplaceable = new MemoryMusicMetadataProvider();
+
+    const quiet = await savePlaylist(silent, PLAYLIST);
+    assert.deepEqual(silent.asked, [{ playlistUrl: PLAYLIST, provider: "spotify" }]);
+    assert.equal(quiet.updated?.featureSettings.playlistTitle, null);
+    assert.equal(quiet.updated?.featureSettings.playlistCoverUrl, null);
+
+    // Apple Music is allow-listed for the link, and the adapter this deployment binds answers "no metadata" for it:
+    // the port decides who can be asked, so the use case only sees an empty answer (S2).
+    const apple = "https://music.apple.com/mx/playlist/pl.u-6mo4l3LT7g7k";
+    const answered = await savePlaylist(unplaceable, apple);
+    assert.deepEqual(unplaceable.asked, [{ playlistUrl: apple, provider: "apple_music" }]);
+    assert.equal(answered.updated?.featureSettings.playlistUrl, apple);
+    assert.equal(answered.updated?.featureSettings.playlistTitle, null);
+    assert.equal(answered.updated?.featureSettings.playlistCoverUrl, null);
+  });
+
+  it("bounds what a provider answer can store (S2): the title is cut and an off-list cover dropped", async () => {
+    const music = new MemoryMusicMetadataProvider();
+    music.answers.set(PLAYLIST, {
+      title: `  ${"a".repeat(PLAYLIST_TITLE_MAX_LENGTH + 50)}  `,
+      coverUrl: "https://evil.test/cover.jpg",
+    } as PlaylistMetadata);
+
+    const { updated } = await savePlaylist(music, PLAYLIST);
+
+    assert.equal(updated?.featureSettings.playlistTitle, "a".repeat(PLAYLIST_TITLE_MAX_LENGTH));
+    assert.equal(updated?.featureSettings.playlistCoverUrl, null);
+
+    const longCover = new MemoryMusicMetadataProvider();
+    longCover.answers.set(PLAYLIST, {
+      title: null,
+      coverUrl: `https://i.scdn.co/${"a".repeat(PLAYLIST_COVER_URL_MAX_LENGTH)}`,
+    });
+    const stored = await savePlaylist(longCover, PLAYLIST);
+    assert.equal(stored.updated?.featureSettings.playlistCoverUrl, null);
+  });
+
+  it("answers the stored title and cover to the public read, and nothing more (S2, A7)", async () => {
+    const music = new MemoryMusicMetadataProvider();
+    music.answers.set(PLAYLIST, METADATA);
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.premium });
+    const created = await publishableDraft(fixture);
+    await features(fixture, music).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: PLAYLIST,
+    });
+    await publisher(fixture).useCase.execute(fixture.ownerId, created.id);
+
+    const page = await publicReader(fixture).execute(created.slug);
+
+    assert.deepEqual(page?.features.music, {
+      url: PLAYLIST,
+      provider: "spotify",
+      title: METADATA.title,
+      coverUrl: METADATA.coverUrl,
+    });
+    // The provider's own answer (player HTML, author) never reaches a guest.
+    assert.equal(JSON.stringify(page).includes("<iframe"), false);
   });
 });
 
@@ -1479,7 +1694,10 @@ describe("GetPublicInvitationUseCase", () => {
           calendar: true,
           whatsapp: { phone: PHONE },
           // Basic grants no MUSIC; Premium and Deluxe do, and both get the service the link names.
-          music: packageKey === "basic" ? null : { url: PLAYLIST, provider: "spotify" },
+          music:
+            packageKey === "basic"
+              ? null
+              : { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
           giftRegistry: packageKey === "deluxe",
           gallery: [],
           rsvp: {
@@ -1526,7 +1744,7 @@ describe("GetPublicInvitationUseCase", () => {
       map: false,
       calendar: true,
       whatsapp: null,
-      music: { url: PLAYLIST, provider: "spotify" },
+      music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
       giftRegistry: false,
       gallery: [],
       rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },

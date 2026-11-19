@@ -1,10 +1,12 @@
 import { Module, type Provider } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
 import {
   CATALOG_PUBLIC_READER,
   type CatalogPublicContract,
 } from "../catalog/application/public/catalog-public-reader";
 import { CatalogModule } from "../catalog/catalog.module";
+import type { RuntimeEnvironment } from "../config/environment";
 import { PrismaService } from "../database/prisma.service";
 import { MediaModule } from "../media/media.module";
 import { PaymentsModule } from "../payments/payments.module";
@@ -49,9 +51,11 @@ import {
   SubmitPublicRsvpUseCase,
   UpdateRsvpSettingsUseCase,
 } from "./application/invitation-rsvp.use-cases";
+import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "./application/music-metadata";
 import { RSVP_REPOSITORY, type RsvpRepository } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER, type RsvpRateLimiter } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
+import { createMusicMetadataProvider } from "./infrastructure/create-music-metadata-provider";
 import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
@@ -96,7 +100,16 @@ export const INVITATION_USE_CASES: Provider[] = [
   useCase(CreateInvitationDraftUseCase),
   useCase(GetOwnInvitationUseCase),
   useCase(UpdateInvitationContentUseCase),
-  useCase(UpdateInvitationFeaturesUseCase),
+  {
+    provide: UpdateInvitationFeaturesUseCase,
+    // The feature save asks the music metadata port once when the playlist link changes (S2).
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      music: MusicMetadataProvider,
+    ) => new UpdateInvitationFeaturesUseCase(invitations, catalog, music),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, MUSIC_METADATA_PROVIDER],
+  },
   {
     provide: GetPublicInvitationUseCase,
     useFactory: (
@@ -241,7 +254,8 @@ export const INVITATION_USE_CASES: Provider[] = [
  * owner routes read the owner only from the session (S9); ownership itself is enforced by the repository queries
  * (A4). Milestone 7 moves the payment gate out of this module: `PaymentsModule` binds `INVITATION_PAYMENT_GATE`
  * (S3, S4), and this module imports it, so the publish use case keeps asking the same port. Milestone 6 G2 adds the
- * guest list behind the same ports.
+ * guest list behind the same ports. The music metadata port is bound here to the adapter `MUSIC_METADATA_LOOKUP`
+ * selects (S2), so the feature save calls one provider-neutral lookup and never names Spotify or YouTube.
  */
 @Module({
   imports: [CatalogModule, MediaModule, PaymentsModule],
@@ -252,6 +266,13 @@ export const INVITATION_USE_CASES: Provider[] = [
       provide: INVITATION_REPOSITORY,
       useFactory: (prisma: PrismaService) => new PrismaInvitationRepository(prisma),
       inject: [PrismaService],
+    },
+    {
+      provide: MUSIC_METADATA_PROVIDER,
+      // `MUSIC_METADATA_LOOKUP` decides whether a save may call a provider's oEmbed endpoint at all (S2).
+      useFactory: (config: ConfigService<RuntimeEnvironment, true>): MusicMetadataProvider =>
+        createMusicMetadataProvider(config.get("MUSIC", { infer: true })),
+      inject: [ConfigService],
     },
     {
       provide: INVITATION_CATALOG,
