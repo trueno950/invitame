@@ -16,6 +16,7 @@ import {
   xvArchEventFacts,
   xvOrnamentalEventFacts,
 } from "./event-facts.ts";
+import { isAddressFieldName } from "./place-point.ts";
 
 // The event facts of a layout (S4): the celebration title, when it starts, and the places a guest can be
 // sent to. Each layout reads them from its own parsed content through a pure function, and the allow-listed
@@ -99,6 +100,7 @@ describe("event facts per layout", () => {
       places: [
         {
           label: "Lugar",
+          field: "address",
           name: "Jardín Los Arcos",
           address: "Av. de las Flores 214, Ciudad de México",
         },
@@ -121,6 +123,7 @@ describe("event facts per layout", () => {
       places: [
         {
           label: "Lugar",
+          field: "address",
           name: "Jardín Las Palmas",
           address: "Av. de los Cedros 88, Ciudad de México",
         },
@@ -136,11 +139,13 @@ describe("event facts per layout", () => {
       places: [
         {
           label: "Ceremonia",
+          field: "ceremonyAddress",
           name: "Parroquia San Miguel",
           address: "Calle Hidalgo 45, Centro, Querétaro",
         },
         {
           label: "Recepción",
+          field: "receptionAddress",
           name: "Casa de los abuelos",
           address: "Av. de los Fresnos 210, Querétaro",
         },
@@ -156,11 +161,13 @@ describe("event facts per layout", () => {
       places: [
         {
           label: "Ceremonia",
+          field: "ceremonyAddress",
           name: "Parroquia de San Agustín",
           address: "Calle de los Fresnos 132, Ciudad de México",
         },
         {
           label: "Recepción",
+          field: "receptionAddress",
           name: "Jardín de los Olivos",
           address: "Camino Real a Santa Fe 41, Ciudad de México",
         },
@@ -173,11 +180,13 @@ describe("event facts per layout", () => {
       places: [
         {
           label: "Ceremonia",
+          field: "ceremonyAddress",
           name: "Parroquia de Santa Ana",
           address: "Av. Juárez 120, Centro, Querétaro",
         },
         {
           label: "Recepción",
+          field: "receptionAddress",
           name: "Hacienda San Gabriel",
           address: "Camino a la Hacienda 8, Querétaro",
         },
@@ -271,5 +280,39 @@ describe("event facts per layout", () => {
       name: "RendererPropsError",
       message: /baptism-ornamental-01/,
     });
+  });
+});
+
+describe("the address field of each place (S1, S2)", () => {
+  // The point of a place is stored under the content field the layout shows, so a place names that field and the
+  // public `places` map keys it. The name is the schema rule the API also applies, never a layout name.
+  it("names the content field each place comes from", () => {
+    for (const facts of [
+      birthdayPosterEventFacts(BIRTHDAY),
+      babyShowerEventFacts(BABY_SHOWER),
+      baptismEventFacts(BAPTISM),
+      xvArchEventFacts(XV),
+      weddingArchEventFacts(WEDDING),
+    ]) {
+      assert.equal(
+        facts.places.every((place) => isAddressFieldName(place.field)),
+        true,
+      );
+    }
+    assert.deepEqual(
+      baptismEventFacts(BAPTISM).places.map((place) => place.field),
+      ["ceremonyAddress", "receptionAddress"],
+    );
+    assert.deepEqual(
+      birthdayPosterEventFacts(BIRTHDAY).places.map((place) => place.field),
+      ["address"],
+    );
+  });
+
+  it("keeps the text each place already carried", () => {
+    const [ceremony] = baptismEventFacts(BAPTISM).places;
+
+    assert.equal(ceremony?.name, "Parroquia San Miguel");
+    assert.equal(ceremony?.address, "Calle Hidalgo 45, Centro, Querétaro");
   });
 });

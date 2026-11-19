@@ -37,6 +37,7 @@ const OWNED: OwnedInvitation = {
   timeZone: "America/Tijuana",
   featureSettings: { whatsappPhone: "+525512345678", playlistUrl: PLAYLIST },
   availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "CALENDAR"],
+  places: {},
 };
 
 function creatorPackage(

@@ -38,6 +38,7 @@ const FACTS: EventFacts = {
   places: [
     {
       label: "Lugar",
+      field: "address",
       name: "Jardín Los Arcos",
       address: "Av. de las Flores 214, Ciudad de México",
     },
@@ -51,11 +52,13 @@ const BAPTISM_FACTS: EventFacts = {
   places: [
     {
       label: "Ceremonia",
+      field: "ceremonyAddress",
       name: "Parroquia San Miguel",
       address: "Calle Hidalgo 45, Centro, Querétaro",
     },
     {
       label: "Recepción",
+      field: "receptionAddress",
       name: "Casa de los abuelos",
       address: "Av. de los Fresnos 210, Querétaro",
     },
@@ -369,6 +372,62 @@ describe("«Escucha nuestra playlist» in the features block (F6; S7)", () => {
   it("renders no playlist section when the invitation has no link", () => {
     assert.doesNotMatch(render(featuresOf({ calendar: true })), /playlist/i);
   });
+
+  // The card the provider's metadata makes (S2): a lazily loaded cover from the allow-listed CDN, the title it
+  // named, and the same button. Without metadata the card is exactly today's card.
+  const COVER = "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07";
+
+  it("shows the cover and the title the provider answered, with the same open button", () => {
+    const html = render(
+      featuresOf({ music: { ...MUSIC, title: "Today’s Top Hits", coverUrl: COVER } }),
+    );
+    const [image] = html.match(/<img[^>]*>/) ?? [];
+
+    assert.ok(image !== undefined, html);
+    assert.equal(attributeOf(image, "src"), COVER);
+    // The layout reserves the image's space and defers it, so a cover never delays the page.
+    assert.equal(attributeOf(image, "width"), "300");
+    assert.equal(attributeOf(image, "height"), "300");
+    assert.equal(attributeOf(image, "loading"), "lazy");
+    assert.equal(attributeOf(image, "alt"), "Today’s Top Hits");
+    // No referrer and no cookie leave the page for the CDN.
+    assert.match(image, /referrerpolicy="no-referrer"/);
+    assert.match(html, />Today’s Top Hits</);
+
+    const links = linksOf(html);
+    assert.equal(links.length, 1);
+    assert.match(links[0] ?? "", />Abrir en Spotify</);
+    assert.equal(attributeOf(links[0] ?? "", "href"), PLAYLIST);
+    // Still no player and no script: the cover is an image, not an embed.
+    assert.doesNotMatch(html, /<iframe|<script/i);
+  });
+
+  it("uses the generic alt text when the provider named no title", () => {
+    const html = render(featuresOf({ music: { ...MUSIC, coverUrl: COVER } }));
+    const [image] = html.match(/<img[^>]*>/) ?? [];
+
+    assert.ok(image !== undefined, html);
+    assert.equal(attributeOf(image, "alt"), "Portada de la playlist");
+    assert.doesNotMatch(html, /portada de la playlist</i);
+  });
+
+  it("renders today's card, with no image, when the link has no metadata", () => {
+    const html = render(featuresOf({ music: MUSIC }));
+
+    assert.match(html, /data-feature="music"/);
+    assert.doesNotMatch(html, /<img/i);
+    assert.match(html, />Abrir en Spotify</);
+    assert.match(html, />Escucha nuestra playlist</);
+  });
+
+  it("escapes a provider title so it cannot add markup", () => {
+    const html = render(
+      featuresOf({ music: { ...MUSIC, title: '<img src=x onerror="alert(1)">' } }),
+    );
+
+    assert.doesNotMatch(html, /<img src=x/);
+    assert.match(html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
+  });
 });
 
 describe("features block rendering rules", () => {
@@ -388,6 +447,7 @@ describe("features block rendering rules", () => {
       places: [
         {
           label: '"><img src=x onerror=alert(1)>',
+          field: "address",
           name: "<script>alert(2)</script>",
           address: "</p><script>alert(3)</script>",
         },
@@ -463,7 +523,11 @@ describe("features block rendering rules", () => {
 
     assert.deepEqual(
       clientComponents.map(({ file }) => file.replace(/^.*\/_components\//, "_components/")),
-      ["_components/invitation-features/countdown-island.ts"],
+      [
+        "_components/invitation-features/countdown-island.ts",
+        // The map is the second deliberate island (S1, S2): it loads only when a guest scrolls it into view.
+        "_components/invitation-features/place-map-island.ts",
+      ],
     );
   });
 });
@@ -732,5 +796,91 @@ describe("gallery in the features block", () => {
 
     assert.doesNotMatch(html, /<script/i);
     assert.doesNotMatch(html, /\son[a-z]+=/);
+  });
+});
+
+// The confirmed point of each place (S1, S2): a place carries the content field its address comes from, so the block
+// attaches the stored point of that field and both links ask for the coordinates. The map is the lazy island beside
+// them; the links stay the way to the place with no script at all.
+
+const PARROQUIA = {
+  label: "Calle Hidalgo 45, Centro, Querétaro",
+  lat: 20.588793,
+  lng: -100.389888,
+};
+
+describe("the confirmed point of a place (S1, S2)", () => {
+  it("keeps the text search and renders no map when no field has a point", () => {
+    const html = render(featuresOf({ map: true }));
+
+    assert.doesNotMatch(html, /data-place-map/);
+    assert.match(linksOf(html)[0] ?? "", /\?api=1&amp;query=Jard%C3%ADn%20Los%20Arcos/);
+    assert.match(linksOf(html)[1] ?? "", /ul\?q=Jard%C3%ADn%20Los%20Arcos/);
+  });
+
+  it("asks both services for the coordinates a confirmed address stored", () => {
+    const html = render(
+      featuresOf({ map: true, places: { ceremonyAddress: PARROQUIA } }),
+      BAPTISM_FACTS,
+    );
+    const links = linksOf(html);
+
+    assert.equal(links.length, 4);
+    assert.equal(
+      new URL(
+        (attributeOf(links[0] ?? "", "href") ?? "").replaceAll("&amp;", "&"),
+      ).searchParams.get("query"),
+      "20.588793,-100.389888",
+    );
+    assert.equal(
+      new URL(
+        (attributeOf(links[1] ?? "", "href") ?? "").replaceAll("&amp;", "&"),
+      ).searchParams.get("ll"),
+      "20.588793,-100.389888",
+    );
+    // The reception has no point of its own, so it keeps the text search: one confirmed place never invents another.
+    assert.equal(
+      new URL(
+        (attributeOf(links[2] ?? "", "href") ?? "").replaceAll("&amp;", "&"),
+      ).searchParams.get("query"),
+      "Casa de los abuelos, Av. de los Fresnos 210, Querétaro",
+    );
+  });
+
+  it("renders the map island beside the links, with the attribution the data asks for", () => {
+    const html = render(
+      featuresOf({ map: true, places: { ceremonyAddress: PARROQUIA } }),
+      BAPTISM_FACTS,
+    );
+
+    assert.match(html, /data-place-map/);
+    assert.match(html, /© OpenStreetMap contributors/);
+    assert.match(html, /OpenFreeMap/);
+    // The canvas is decorative; the places it draws are named for a reader who cannot see it.
+    assert.match(html, /aria-hidden="true"/);
+    // Only the place with a confirmed point is drawn, and the line names exactly that one.
+    assert.match(html, /Mapa de Parroquia San Miguel\./);
+    assert.doesNotMatch(html, /Mapa de .*Recepción/);
+    // The links are still there, so a failed map never strands a guest.
+    assert.equal(linksOf(html).length, 4);
+  });
+
+  it("reserves the height of the box before the map exists, so nothing jumps", () => {
+    const html = render(featuresOf({ map: true, places: { address: PARROQUIA } }));
+
+    // The height is the box's own class, so it is painted before MapLibre is ever imported.
+    assert.match(html, /class="relative h-56 w-full overflow-hidden rounded-xl/);
+    // The attribution is outside the box, so its clip never hides it.
+    assert.match(
+      html,
+      /class="relative h-56 w-full overflow-hidden rounded-xl[^"]*"><div class="h-56 w-full"><\/div><\/div><p class="sr-only/,
+    );
+  });
+
+  it("renders no map for a package without MAP, even when a point is stored", () => {
+    const html = render(featuresOf({ places: { address: PARROQUIA } }));
+
+    assert.doesNotMatch(html, /data-place-map/);
+    assert.equal(html, "");
   });
 });

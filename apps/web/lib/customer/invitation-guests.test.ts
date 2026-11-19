@@ -44,6 +44,7 @@ const INVITATION: OwnedInvitation = {
   timeZone: "America/Mexico_City",
   featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["RSVP", "GUEST_LIST", "QR_PASS", "CALENDAR"],
+  places: {},
 };
 
 function guest(overrides: Partial<GuestItem> = {}): GuestItem {

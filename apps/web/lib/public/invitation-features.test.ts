@@ -42,6 +42,7 @@ const PUBLIC: PublicInvitation = {
     gallery: [],
     rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
   },
+  places: {},
 };
 
 const NOW = new Date("2026-11-13T10:00:00.000Z");
@@ -50,7 +51,9 @@ const FACTS = {
   title: "Cumpleaños de Ana",
   date: "2026-12-05",
   time: "16:30",
-  places: [{ label: "Lugar", name: "Jardín Los Pinos", address: "Calle Reforma 123" }],
+  places: [
+    { label: "Lugar", field: "address", name: "Jardín Los Pinos", address: "Calle Reforma 123" },
+  ],
 };
 
 describe("publicFeatureBlock", () => {
@@ -239,5 +242,34 @@ describe("invitationCalendarFile", () => {
   it("answers nothing, which the route turns into a 404, when the calendar cannot be built", () => {
     assert.equal(invitationCalendarFile({ ...PUBLIC, timeZone: "Mars/Olympus" }, NOW), undefined);
     assert.equal(invitationCalendarFile({ ...PUBLIC, content: {} }, NOW), undefined);
+  });
+});
+
+// The confirmed points a guest page may use (S1, S2): the public read already filtered them on the API side, so they
+// travel to the block as they came, and a point whose field no longer holds its label never reaches a guest.
+
+describe("the places of a guest page (S1, S2)", () => {
+  const PARROQUIA = { label: "Calle Reforma 123", lat: 19.432608, lng: -99.133209 };
+
+  it("carries the confirmed points to the block, keyed by address field", () => {
+    const block = publicFeatureBlock({ ...PUBLIC, places: { address: PARROQUIA } });
+
+    assert.deepEqual(block?.features.places, { address: PARROQUIA });
+  });
+
+  it("keeps the block exactly as it was when no field has a point", () => {
+    const block = publicFeatureBlock(PUBLIC);
+
+    assert.equal(block === undefined ? "none" : Object.hasOwn(block.features, "places"), false);
+  });
+
+  it("drops a point whose label the content rewrote", () => {
+    const block = publicFeatureBlock({
+      ...PUBLIC,
+      content: { ...PUBLIC.content, address: "Otra dirección" },
+      places: { address: PARROQUIA },
+    });
+
+    assert.deepEqual(block?.features.places, undefined);
   });
 });

@@ -14,6 +14,7 @@ import {
   parseInvitationPayment,
   parseInvitationSummaries,
   parseOwnedInvitation,
+  parsePlaceSuggestions,
   parseRsvpRead,
   parseRsvpSettings,
 } from "./invitations-api.ts";
@@ -46,8 +47,15 @@ const OWNED = {
   content: { celebrantName: "Ana", age: 7 },
   missingRequiredFields: ["date", "time"],
   timeZone: "America/Mexico_City",
-  featureSettings: { whatsappPhone: null, playlistUrl: null },
+  featureSettings: {
+    whatsappPhone: null,
+    playlistUrl: null,
+    playlistTitle: null,
+    playlistCoverUrl: null,
+  },
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
+  // The precise-locations slice (S2): every stored point, keyed by the address field it belongs to.
+  places: {},
 };
 
 /** The same draft after its feature settings were saved (F3; S4). */
@@ -57,6 +65,8 @@ const FEATURED = {
   featureSettings: {
     whatsappPhone: "+525512345678",
     playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+    playlistTitle: "Today’s Top Hits",
+    playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
   },
   availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "MUSIC", "GIFT_REGISTRY", "CALENDAR"],
 };
@@ -818,6 +828,47 @@ describe("validators", () => {
     assert.deepEqual(parseOwnedInvitation(FEATURED), FEATURED);
   });
 
+  it("reads the stored playlist title and cover, and drops a value it does not accept (S2)", () => {
+    const cover = "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07";
+    const base = { whatsappPhone: null, playlistUrl: "https://open.spotify.com/playlist/abc" };
+    const parse = (featureSettings: unknown) =>
+      parseOwnedInvitation({ ...OWNED, featureSettings })?.featureSettings;
+
+    // The metadata the API stored travels with the link, so the editor and the preview can render it.
+    assert.deepEqual(parse({ ...base, playlistTitle: "La boda", playlistCoverUrl: cover }), {
+      ...base,
+      playlistTitle: "La boda",
+      playlistCoverUrl: cover,
+    });
+    // A body written before the metadata existed, and one whose lookup stored nothing, both read as "none".
+    assert.deepEqual(parse(base), { ...base, playlistTitle: null, playlistCoverUrl: null });
+    assert.deepEqual(parse({ ...base, playlistTitle: null, playlistCoverUrl: null }), {
+      ...base,
+      playlistTitle: null,
+      playlistCoverUrl: null,
+    });
+
+    // A title of 201 characters and a cover off the allow-list never reach the card, and never refuse the
+    // invitation either: the link itself is still the owner's playlist.
+    assert.deepEqual(parse({ ...base, playlistTitle: "a".repeat(201), playlistCoverUrl: cover }), {
+      ...base,
+      playlistTitle: null,
+      playlistCoverUrl: cover,
+    });
+    for (const playlistCoverUrl of [
+      "http://i.scdn.co/image/abc",
+      "https://evil.test/cover.jpg",
+      "https://i.scdn.co.evil.test/cover.jpg",
+      7,
+    ]) {
+      assert.deepEqual(
+        parse({ ...base, playlistTitle: "La boda", playlistCoverUrl }),
+        { ...base, playlistTitle: "La boda", playlistCoverUrl: null },
+        JSON.stringify(playlistCoverUrl),
+      );
+    }
+  });
+
   it("accepts the guest list and the QR pass in an owned invitation's features (M6 G2; S4)", () => {
     // A Deluxe package gates both keys, so a parser that lacked either would refuse the whole body and the
     // owner's page would stop loading.
@@ -943,5 +994,174 @@ describe("validators", () => {
     for (const value of ["", "123", `${ID} `, null, 7]) {
       assert.equal(isInvitationId(value), false, String(value));
     }
+  });
+});
+
+// The precise locations of one invitation (S1, S2): the search an owner types into, the point each address field
+// stores, and the read that carries every stored point. The editor reads all three through this client, so each
+// documented status keeps its own failure and nothing typed reaches a log.
+
+const PARROQUIA = {
+  label: "Parroquia de San José, Querétaro",
+  lat: 20.588793,
+  lng: -100.389888,
+};
+const JARDIN = { label: "Jardín de los Olivos, Querétaro", lat: 20.6, lng: -100.4 };
+const WITH_PLACE = { ...OWNED, places: { address: PARROQUIA } };
+
+describe("place routes of the owner (S1, S2)", () => {
+  it("searches with the trimmed text as one encoded query parameter", async () => {
+    answer(200, [PARROQUIA, JARDIN]);
+
+    assert.deepEqual(await client().searchPlaces(ID, "  Parroquia de San José  "), {
+      ok: true,
+      value: [PARROQUIA, JARDIN],
+    });
+    const request = received[0];
+    assert.equal(request?.method, "GET");
+    assert.equal(
+      request?.url,
+      `/invitations/${ID}/places/search?q=${encodeURIComponent("Parroquia de San José")}`,
+    );
+    assert.equal(request?.headers.cookie, SESSION_COOKIE);
+    assert.equal(request?.body, "");
+  });
+
+  it("sends no request for a text the API would refuse", async () => {
+    const api = client();
+
+    assert.deepEqual(await api.searchPlaces(ID, "Sa"), {
+      ok: false,
+      failure: "place-query-invalid",
+    });
+    assert.deepEqual(await api.searchPlaces(ID, "   "), {
+      ok: false,
+      failure: "place-query-invalid",
+    });
+    assert.deepEqual(await api.searchPlaces(ID, "x".repeat(121)), {
+      ok: false,
+      failure: "place-query-invalid",
+    });
+    assert.deepEqual(received, []);
+  });
+
+  it("keeps the API's own refusal of a query and of the search limit apart", async () => {
+    answer(400, { code: "INVALID_PLACE_QUERY", issues: ["q must be 3 to 120 characters"] });
+    assert.deepEqual(await client().searchPlaces(ID, "San"), {
+      ok: false,
+      failure: "place-query-invalid",
+    });
+
+    answer(429, { code: "PLACE_SEARCH_RATE_LIMITED" });
+    assert.deepEqual(await client().searchPlaces(ID, "San"), {
+      ok: false,
+      failure: "place-search-rate-limited",
+    });
+  });
+
+  it("answers not-found for a foreign, unknown, or malformed id without asking the geocoder", async () => {
+    answer(404, { code: "INVITATION_NOT_FOUND" });
+
+    assert.deepEqual(await client().searchPlaces(ID, "San"), { ok: false, failure: "not-found" });
+    assert.equal(received.length, 1);
+    assert.deepEqual(await client().searchPlaces("not-a-uuid", "San"), {
+      ok: false,
+      failure: "not-found",
+    });
+    assert.equal(received.length, 1);
+  });
+
+  it("stores the point the owner chose and answers the invitation with its points", async () => {
+    answer(200, WITH_PLACE);
+
+    assert.deepEqual(await client().savePlace(ID, "address", PARROQUIA), {
+      ok: true,
+      value: WITH_PLACE,
+    });
+    const request = received[0];
+    assert.equal(request?.method, "PUT");
+    assert.equal(request?.url, `/invitations/${ID}/places/address`);
+    assert.deepEqual(JSON.parse(request?.body ?? ""), PARROQUIA);
+  });
+
+  it("clears the point of one field with a DELETE of the same path", async () => {
+    answer(200, OWNED);
+
+    assert.deepEqual(await client().clearPlace(ID, "ceremonyAddress"), {
+      ok: true,
+      value: OWNED,
+    });
+    assert.equal(received[0]?.method, "DELETE");
+    assert.equal(received[0]?.url, `/invitations/${ID}/places/ceremonyAddress`);
+    assert.equal(received[0]?.body, "");
+  });
+
+  it("refuses a field that names no address field before anything is sent", async () => {
+    const api = client();
+
+    assert.deepEqual(await api.savePlace(ID, "celebrantName", PARROQUIA), {
+      ok: false,
+      failure: "not-found",
+    });
+    assert.deepEqual(await api.clearPlace(ID, "constructor"), {
+      ok: false,
+      failure: "not-found",
+    });
+    assert.deepEqual(received, []);
+  });
+
+  it("keeps the API's refusals of a point and of an archived invitation", async () => {
+    answer(400, {
+      code: "INVALID_INVITATION_PLACE",
+      issues: ["lat must be a number between -90 and 90"],
+    });
+    assert.deepEqual(await client().savePlace(ID, "address", PARROQUIA), {
+      ok: false,
+      failure: "place-invalid",
+    });
+
+    answer(409, { code: "INVITATION_NOT_EDITABLE" });
+    assert.deepEqual(await client().savePlace(ID, "address", PARROQUIA), {
+      ok: false,
+      failure: "not-editable",
+    });
+    assert.deepEqual(await client().clearPlace(ID, "address"), {
+      ok: false,
+      failure: "not-editable",
+    });
+  });
+
+  it("refuses an answer whose points are not the documented shape", async () => {
+    for (const places of [
+      undefined,
+      null,
+      [],
+      { celebrantName: PARROQUIA },
+      { address: { label: "Sin coordenadas" } },
+      { address: { label: "", lat: 1, lng: 1 } },
+      { address: { label: "Lejos", lat: 91, lng: 0 } },
+    ]) {
+      answer(200, { ...OWNED, places });
+      await assert.rejects(client().get(ID), (error: unknown) => {
+        assert.equal((error as ApiClientError).kind, "invalid-response");
+        return true;
+      });
+    }
+  });
+});
+
+describe("parsePlaceSuggestions (S1, S2)", () => {
+  it("reads at most five points and refuses anything else", () => {
+    assert.deepEqual(parsePlaceSuggestions([PARROQUIA]), [PARROQUIA]);
+    assert.equal(
+      parsePlaceSuggestions([PARROQUIA, PARROQUIA, PARROQUIA, PARROQUIA, PARROQUIA])?.length,
+      5,
+    );
+    assert.equal(
+      parsePlaceSuggestions([PARROQUIA, PARROQUIA, PARROQUIA, PARROQUIA, PARROQUIA, PARROQUIA]),
+      undefined,
+    );
+    assert.equal(parsePlaceSuggestions([{ label: "Sin punto" }]), undefined);
+    assert.equal(parsePlaceSuggestions({ places: [PARROQUIA] }), undefined);
   });
 });

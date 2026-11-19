@@ -113,8 +113,14 @@ function invitation(overrides: Partial<OwnedInvitation> = {}): OwnedInvitation {
     content: { celebrantName: "Ana Sofía" },
     missingRequiredFields: [],
     timeZone: "America/Mexico_City",
-    featureSettings: { whatsappPhone: null, playlistUrl: null },
+    featureSettings: {
+      whatsappPhone: null,
+      playlistUrl: null,
+      playlistTitle: null,
+      playlistCoverUrl: null,
+    },
     availableFeatures: [],
+    places: {},
     ...overrides,
   };
 }
@@ -324,7 +330,12 @@ describe("invitationPreviewView: the features the guest page would show", () => 
     const view = rendered({
       invitation: invitation({
         availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR", "WHATSAPP", "MUSIC", "GIFT_REGISTRY"],
-        featureSettings: { whatsappPhone: "+525512345678", playlistUrl: PLAYLIST },
+        featureSettings: {
+          whatsappPhone: "+525512345678",
+          playlistUrl: PLAYLIST,
+          playlistTitle: "Today’s Top Hits",
+          playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+        },
       }),
       templates: [xvTemplate()],
       media: [],
@@ -337,8 +348,14 @@ describe("invitationPreviewView: the features the guest page would show", () => 
     assert.equal(view.features?.map, true);
     assert.equal(view.features?.calendar, true);
     assert.deepEqual(view.features?.whatsapp, { phone: "+525512345678" });
-    // The service the stored link names, so the block shows «Abrir en Spotify».
-    assert.deepEqual(view.features?.music, { url: PLAYLIST, provider: "spotify" });
+    // The service the stored link names, so the block shows «Abrir en Spotify», with the cover and the title the
+    // owner read answered: the preview shows the same card a guest sees (S2).
+    assert.deepEqual(view.features?.music, {
+      url: PLAYLIST,
+      provider: "spotify",
+      title: "Today’s Top Hits",
+      coverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+    });
     assert.equal(view.features?.giftRegistry, true);
   });
 
@@ -377,7 +394,12 @@ describe("invitationPreviewView: the features the guest page would show", () => 
     const view = rendered({
       invitation: invitation({
         availableFeatures: ["MAP", "WHATSAPP", "MUSIC"],
-        featureSettings: { whatsappPhone: null, playlistUrl: null },
+        featureSettings: {
+          whatsappPhone: null,
+          playlistUrl: null,
+          playlistTitle: null,
+          playlistCoverUrl: null,
+        },
       }),
       templates: [xvTemplate()],
       media: [],
@@ -398,6 +420,8 @@ describe("invitationPreviewView: the features the guest page would show", () => 
         featureSettings: {
           whatsappPhone: null,
           playlistUrl: "https://playlists.example.com/mia",
+          playlistTitle: null,
+          playlistCoverUrl: null,
         },
       }),
       templates: [xvTemplate()],
@@ -533,5 +557,52 @@ describe("invitationPreviewView: the attendance card", () => {
     });
 
     assert.equal(view.features?.rsvp, undefined);
+  });
+});
+
+// The owner's preview of the guest's map (S1, S2): the owner read answers every stored point, so the preview applies
+// the same rule the API applies to a guest — a point belongs to its field only while the address text still equals the
+// label it was stored with — and shows the map the guest will see.
+
+describe("invitationPreviewView: the confirmed points of the map (S1, S2)", () => {
+  const CEREMONY = {
+    label: "Calle de los Fresnos 132, San Pedro de los Pinos, Ciudad de México",
+    lat: 19.4,
+    lng: -99.17,
+  };
+
+  function previewWith(places: Record<string, unknown>, availableFeatures = ["MAP"]) {
+    return rendered({
+      invitation: invitation({
+        content: COMPLETE_CONTENT,
+        places: places as OwnedInvitation["places"],
+        availableFeatures,
+      }),
+      templates: [xvTemplate()],
+      media: [],
+      rsvp: undefined,
+      origin: ORIGIN,
+      now: NOW,
+    });
+  }
+
+  it("carries a point whose label is still the address the layout shows", () => {
+    const view = previewWith({ ceremonyAddress: CEREMONY });
+
+    assert.deepEqual(view.features?.places, { ceremonyAddress: CEREMONY });
+  });
+
+  it("drops a point the owner retyped, and keeps the map itself", () => {
+    const view = previewWith({ receptionAddress: { ...CEREMONY, label: "Una dirección vieja" } });
+
+    assert.equal(view.features?.places, undefined);
+    assert.equal(view.features?.map, true);
+  });
+
+  it("carries them only for a package that grants MAP", () => {
+    const view = previewWith({ ceremonyAddress: CEREMONY }, ["CALENDAR"]);
+
+    assert.equal(view.features?.map, false);
+    assert.equal(view.features?.places, undefined);
   });
 });

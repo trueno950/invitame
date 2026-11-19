@@ -13,6 +13,7 @@
 
 import type { GalleryPhoto } from "./gallery.ts";
 import type { MusicLink } from "./music.ts";
+import type { StoredPlaces } from "./place-point.ts";
 
 /** The creator's WhatsApp contact of one invitation, stored in E.164. */
 export interface WhatsAppContact {
@@ -97,7 +98,10 @@ export interface InvitationFeatures {
   readonly calendar: boolean;
   /** The stored contact, or null when the invitation has no WhatsApp number. */
   readonly whatsapp: WhatsAppContact | null;
-  /** The stored playlist link and the service it names, or null when music is not gated on (S7). */
+  /**
+   * The stored playlist link, the service it names, and the title and cover the API stored for it, or null when music
+   * is not gated on (S7, S2).
+   */
   readonly music: MusicLink | null;
   /**
    * Whether the layouts render their own gift registry block (F7; S7). The content decides its value: the gate
@@ -109,6 +113,12 @@ export interface InvitationFeatures {
    * what a package without `GALLERY` answers; the block never invents a photo the API did not send.
    */
   readonly gallery?: readonly GalleryPhoto[];
+  /**
+   * The confirmed points of this invitation, keyed by the address field each one belongs to (S1, S2). Only a point
+   * whose stored label still equals the text the field holds is here, so the block attaches a coordinate to exactly
+   * the places a guest may be sent to. Absent or empty renders the map links of every layout unchanged.
+   */
+  readonly places?: StoredPlaces;
   /** The open RSVP form of the guest page, or absent when the invitation has no open RSVP (G3; S4). */
   readonly rsvp?: RsvpBlockView;
   /** The personal block of one guest, or absent on a public page (G4; S4). */

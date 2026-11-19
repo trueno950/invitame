@@ -1,5 +1,18 @@
 import { isE164Phone, isInvitationFeatureKey } from "../invitation-features/invitation-features.ts";
-import { PLAYLIST_URL_MAX_LENGTH } from "../invitation-features/music.ts";
+import {
+  musicCoverUrlOf,
+  musicTitleOf,
+  PLAYLIST_URL_MAX_LENGTH,
+} from "../invitation-features/music.ts";
+import {
+  isAddressFieldName,
+  PLACE_QUERY_MAX_LENGTH,
+  PLACE_QUERY_MIN_LENGTH,
+  type PlacePoint,
+  parsePlacePoints,
+  parseStoredPlaces,
+  type StoredPlaces,
+} from "../invitation-features/place-point.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import {
   ApiClientError,
@@ -53,12 +66,27 @@ export interface OwnedInvitation extends InvitationSummary {
    * The stored feature data: a phone is E.164, and the playlist link is an `https` URL on an allow-listed music
    * host; each is null when the invitation has none (S4, S7).
    */
-  featureSettings: { whatsappPhone: string | null; playlistUrl: string | null };
+  /**
+   * The stored feature data: the E.164 phone, the playlist link, and the title and cover the API stored for that link
+   * (S4, S7, S2). The metadata is absent from a body written before the lookup existed and null when it stored
+   * nothing, so a reader treats both as "no metadata".
+   */
+  featureSettings: {
+    whatsappPhone: string | null;
+    playlistUrl: string | null;
+    playlistTitle?: string | null;
+    playlistCoverUrl?: string | null;
+  };
   /**
    * The gated feature keys the guest page will show, `CALENDAR` included (S4). The package's other keys are
    * never here, and a key this deployment does not implement is refused by the parser.
    */
   availableFeatures: string[];
+  /**
+   * Every point the owner stored, keyed by the content field it belongs to (S1, S2). The editor reads it to say
+   * whether an address is still confirmed; the guest page never sees this read.
+   */
+  places: StoredPlaces;
 }
 
 /** The feature data a creator saves: `PUT /invitations/:id/features` (F1, F3, F6; S3, S4, S7). */
@@ -163,6 +191,12 @@ export interface CreatorPackage {
  *   `issues` names why (M6 G3; S4);
  * - `invalid-guest`: 400 `INVALID_GUEST`, the guest's name, seats, phone, or note was refused and `issues`
  *   names why (M6 G4; S4);
+ * - `place-query-invalid`: 400 `INVALID_PLACE_QUERY`, the text is not the 3 to 120 characters a search asks about
+ *   (S1, S2), refused here already so a short text never costs a request;
+ * - `place-search-rate-limited`: 429 `PLACE_SEARCH_RATE_LIMITED`, the owner used up the searches of the window, so
+ *   the field shows a quiet note and keeps accepting text (S2);
+ * - `place-invalid`: 400 `INVALID_INVITATION_PLACE`, the field is not an address field of the pinned schema or the
+ *   point breaks the bounds of the columns (S2);
  * - `guest-list-unavailable`: 409 `GUEST_LIST_NOT_AVAILABLE`, the package does not grant the guest list (G4);
  * - `guest-not-found`: 404 `GUEST_NOT_FOUND`, the guest is not part of this invitation (G4);
  * - `guest-not-confirmed`: 409 `GUEST_NOT_CONFIRMED`, the guest has not confirmed, so there is no party to
@@ -204,6 +238,9 @@ export type InvitationFailure =
   | "content-invalid"
   | "features-invalid"
   | "rsvp-settings-invalid"
+  | "place-query-invalid"
+  | "place-search-rate-limited"
+  | "place-invalid"
   | "invalid-guest"
   | "guest-list-unavailable"
   | "guest-not-found"
@@ -375,9 +412,7 @@ function parseAllowedNames(
  * `https` URL of bounded length or null. The API stores nothing else, so another shape means the response is not
  * the contract this client reads and the whole body is refused.
  */
-function parseFeatureSettings(
-  value: unknown,
-): { whatsappPhone: string | null; playlistUrl: string | null } | undefined {
+function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"] | undefined {
   const settings = record(value);
 
   if (settings === undefined) {
@@ -401,7 +436,19 @@ function parseFeatureSettings(
     return undefined;
   }
 
-  return { whatsappPhone: phone, playlistUrl: playlist };
+  // The stored metadata follows the same rules the guest page applies to a public body (S2): a title of at most 200
+  // characters and a cover on an allow-listed image host over `https`. A value this deployment does not accept is
+  // dropped to null instead of refusing the whole invitation, because the link is still the owner's playlist.
+  return {
+    whatsappPhone: phone,
+    playlistUrl: playlist,
+    playlistTitle:
+      settings.playlistTitle == null ? null : (musicTitleOf(settings.playlistTitle) ?? null),
+    playlistCoverUrl:
+      settings.playlistCoverUrl == null
+        ? null
+        : (musicCoverUrlOf(settings.playlistCoverUrl) ?? null),
+  };
 }
 
 /** The price in force, `null` when the package has none, or `undefined` when the value is unreadable. */
@@ -433,12 +480,14 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
   const missing = parseNames(owned.missingRequiredFields);
   const featureSettings = parseFeatureSettings(owned.featureSettings);
   const availableFeatures = parseAllowedNames(owned.availableFeatures, isInvitationFeatureKey);
+  const places = parseStoredPlaces(owned.places);
 
   if (
     content === undefined ||
     missing === undefined ||
     featureSettings === undefined ||
     availableFeatures === undefined ||
+    places === undefined ||
     !isInvitationTimeZone(owned.timeZone)
   ) {
     return undefined;
@@ -451,8 +500,15 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     timeZone: owned.timeZone,
     featureSettings,
     availableFeatures,
+    places,
   };
 }
+
+/**
+ * The suggestions of one search (S1, S2): at most five points, refused whole when any entry is not one. It is the
+ * same reading the stored map uses, so a suggestion and a stored point have exactly one shape in this process.
+ */
+export const parsePlaceSuggestions = parsePlacePoints;
 
 export function parseCreatorTemplate(value: unknown): CreatorTemplate | undefined {
   const template = record(value);
@@ -1056,6 +1112,9 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVALID_INVITATION_CONTENT: "content-invalid",
   INVALID_INVITATION_FEATURES: "features-invalid",
   INVALID_RSVP_SETTINGS: "rsvp-settings-invalid",
+  INVALID_PLACE_QUERY: "place-query-invalid",
+  PLACE_SEARCH_RATE_LIMITED: "place-search-rate-limited",
+  INVALID_INVITATION_PLACE: "place-invalid",
   INVITATION_NOT_EDITABLE: "not-editable",
   INVITATION_CONTENT_CONFLICT: "content-conflict",
   INVITATION_ALREADY_ARCHIVED: "already-archived",
@@ -1071,6 +1130,11 @@ const NOT_FOUND: InvitationResult<never> = { ok: false, failure: "not-found" };
 const PAYMENT_NOT_FOUND_RESULT: InvitationResult<never> = {
   ok: false,
   failure: "payment-not-found",
+};
+/** The answer a search gives without a request: a text the API would refuse anyway, so it costs nothing (S2). */
+const PLACE_QUERY_REFUSED: InvitationResult<never> = {
+  ok: false,
+  failure: "place-query-invalid",
 };
 /** The answer a guest route gives without a request: an id or a token that names no guest of this invitation. */
 const GUEST_NOT_FOUND_RESULT: InvitationResult<never> = { ok: false, failure: "guest-not-found" };
@@ -1142,10 +1206,11 @@ const readsBody = (status: number): boolean =>
   status === 402 ||
   status === 404 ||
   status === 409 ||
+  status === 429 ||
   status === 503;
 
 /** The statuses whose fixed code this client maps; anything else keeps its own default outcome. */
-const REFUSAL_STATUSES: readonly number[] = [400, 402, 404, 409, 503];
+const REFUSAL_STATUSES: readonly number[] = [400, 402, 404, 409, 429, 503];
 
 /** The content type and the attachment filename the RSVP CSV route answers with (M6 G3; S4). */
 const RSVP_CSV_CONTENT_TYPE = "text/csv";
@@ -1219,6 +1284,17 @@ export function createInvitationsClient(
     return isInvitationId(id) ? `${INVITATIONS}/${id}${suffix}` : undefined;
   }
 
+  /**
+   * The path of one address field's point (S1, S2), or undefined when the field is not an address field name: the
+   * API derives the same rule from the pinned schema, so this client refuses a name no schema could declare instead
+   * of letting it become a path segment.
+   */
+  function placePath(id: string, field: string): string | undefined {
+    return isAddressFieldName(field)
+      ? draftPath(id, `/places/${encodeURIComponent(field)}`)
+      : undefined;
+  }
+
   async function onDraft<T>(
     id: string,
     suffix: string,
@@ -1260,6 +1336,48 @@ export function createInvitationsClient(
     /** `GET /invitations/:id`: one own draft with its content and missing fields (S7). */
     get: (id: string): Promise<InvitationResult<OwnedInvitation>> =>
       onDraft(id, "", (path) => call("GET", path, undefined, parseOwnedInvitation)),
+    /**
+     * `GET /invitations/:id/places/search?q=`: at most five points the text matches (S1, S2). Called from a server
+     * action while the owner types, so the browser never reaches the geocoder directly. A text shorter than three
+     * characters, or longer than an address, is refused here and sends no request.
+     */
+    searchPlaces: (id: string, query: string): Promise<InvitationResult<PlacePoint[]>> => {
+      const text = query.trim();
+      const length = [...text].length;
+
+      return length < PLACE_QUERY_MIN_LENGTH || length > PLACE_QUERY_MAX_LENGTH
+        ? Promise.resolve(PLACE_QUERY_REFUSED)
+        : onDraft(id, `/places/search?q=${encodeURIComponent(text)}`, (path) =>
+            call("GET", path, undefined, parsePlaceSuggestions),
+          );
+    },
+    /**
+     * `PUT /invitations/:id/places/:field`: stores the point the owner chose for one address field and answers the
+     * invitation with its stored points (S1, S2). Called from a server action; `PUT` because the whole point is
+     * replaced.
+     */
+    savePlace: (
+      id: string,
+      field: string,
+      point: PlacePoint,
+    ): Promise<InvitationResult<OwnedInvitation>> => {
+      const path = placePath(id, field);
+
+      return path === undefined
+        ? Promise.resolve(NOT_FOUND)
+        : call("PUT", path, point, parseOwnedInvitation);
+    },
+    /**
+     * `DELETE /invitations/:id/places/:field`: clears the point of one address field and keeps the words the owner
+     * typed (S1, S2). The same field rule and the same 404 as the write.
+     */
+    clearPlace: (id: string, field: string): Promise<InvitationResult<OwnedInvitation>> => {
+      const path = placePath(id, field);
+
+      return path === undefined
+        ? Promise.resolve(NOT_FOUND)
+        : call("DELETE", path, undefined, parseOwnedInvitation);
+    },
     /** `POST /invitations`: a free draft pinned to a PUBLISHED version (S1, S6). */
     create: (input: InvitationInput): Promise<InvitationResult<OwnedInvitation>> =>
       call(

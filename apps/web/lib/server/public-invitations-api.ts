@@ -1,6 +1,7 @@
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import { isE164Phone } from "../invitation-features/invitation-features.ts";
-import { type MusicProvider, musicServiceOf } from "../invitation-features/music.ts";
+import { type MusicLink, musicServiceOf } from "../invitation-features/music.ts";
+import { parseStoredPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import { ApiClientError, type ApiClientOptions, sendApiRequest } from "./api-client.ts";
 import {
@@ -52,8 +53,12 @@ export interface PublicInvitationFeatures {
   /** Add-to-calendar is always on for a published invitation, so the read always says `true` (S4). */
   readonly calendar: true;
   readonly whatsapp: { readonly phone: string } | null;
-  /** The playlist link and the service it names, or null when music is not gated on (S7). */
-  readonly music: { readonly url: string; readonly provider: MusicProvider } | null;
+  /**
+   * The playlist link, the service it names, and the title and cover the API stored for it, or null when music is not
+   * gated on (S7, S2). The title and the cover are absent when the API stored none, or when this deployment refuses
+   * the value, so the card renders what it can.
+   */
+  readonly music: MusicLink | null;
   /** Whether the layouts render their gift registry block (S7). */
   readonly giftRegistry: boolean;
   /**
@@ -78,6 +83,12 @@ export interface PublicInvitation {
   timeZone: string;
   /** The gated guest features; nothing about the package itself is here (S4). */
   features: PublicInvitationFeatures;
+  /**
+   * The stored points a guest may use, keyed by the address field each one belongs to (S1, S2). The API answers only
+   * the ones a guest may see — the package grants `MAP` and the address text still equals the stored label — so this
+   * client never decides a point's visibility; it only refuses a shape no write could have stored.
+   */
+  places: StoredPlaces;
 }
 
 export type PublicInvitationResult =
@@ -267,6 +278,7 @@ export function parsePublicInvitation(
   const content = record(invitation.content);
   const componentKey = invitation.componentKey;
   const features = parsePublicFeatures(invitation.features, apiOrigin);
+  const places = parseStoredPlaces(invitation.places);
 
   if (
     !isInvitationSlug(invitation.slug) ||
@@ -276,6 +288,7 @@ export function parsePublicInvitation(
     configuration === undefined ||
     content === undefined ||
     features === undefined ||
+    places === undefined ||
     !isInvitationTimeZone(invitation.timeZone) ||
     !(invitation.publishedAt === null || isTimestamp(invitation.publishedAt))
   ) {
@@ -290,6 +303,7 @@ export function parsePublicInvitation(
     publishedAt: invitation.publishedAt,
     timeZone: invitation.timeZone,
     features,
+    places,
   };
 }
 

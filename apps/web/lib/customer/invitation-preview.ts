@@ -5,7 +5,11 @@ import {
   isInvitationFeatureKey,
   type RsvpBlockView,
 } from "../invitation-features/invitation-features.ts";
-import type { MusicLink, MusicProvider } from "../invitation-features/music.ts";
+import {
+  type MusicLink,
+  type MusicProvider,
+  withMusicMetadata,
+} from "../invitation-features/music.ts";
 import { featureBlockParts, type GatedFeatures } from "../public/invitation-features.ts";
 import { rendererAcceptsProps } from "../public/invitation-render.ts";
 import { publicRsvpBlock } from "../public/invitation-rsvp.ts";
@@ -86,8 +90,16 @@ const PLAYLIST_HOSTS: Readonly<Record<string, MusicProvider>> = {
   "soundcloud.com": "soundcloud",
 };
 
-/** The service one stored playlist link names, or undefined when it names none this deployment shows (S7). */
-export function previewMusicLink(playlistUrl: string | null): MusicLink | undefined {
+/**
+ * The service one stored playlist link names, or undefined when it names none this deployment shows (S7). The title
+ * and the cover the owner read answered are attached with the same rules a guest page applies (S2), so the preview
+ * shows the card the guest will see.
+ */
+export function previewMusicLink(
+  playlistUrl: string | null,
+  playlistTitle: string | null = null,
+  playlistCoverUrl: string | null = null,
+): MusicLink | undefined {
   if (playlistUrl === null) {
     return undefined;
   }
@@ -108,7 +120,9 @@ export function previewMusicLink(playlistUrl: string | null): MusicLink | undefi
     ? PLAYLIST_HOSTS[url.hostname]
     : undefined;
 
-  return provider === undefined ? undefined : { url: playlistUrl, provider };
+  return provider === undefined
+    ? undefined
+    : withMusicMetadata({ url: playlistUrl, provider }, playlistTitle, playlistCoverUrl);
 }
 
 /** Whether a stored value says something: a blank string, a missing value, and a non-finite number say nothing. */
@@ -173,8 +187,11 @@ function gatedFeatures(
   media: readonly MediaAsset[] | undefined,
 ): GatedFeatures {
   const gated = new Set(invitation.availableFeatures.filter(isInvitationFeatureKey));
-  const { whatsappPhone, playlistUrl } = invitation.featureSettings;
-  const music = gated.has("MUSIC") ? previewMusicLink(playlistUrl) : undefined;
+  const { whatsappPhone, playlistUrl, playlistTitle, playlistCoverUrl } =
+    invitation.featureSettings;
+  const music = gated.has("MUSIC")
+    ? previewMusicLink(playlistUrl, playlistTitle, playlistCoverUrl)
+    : undefined;
 
   return {
     countdown: gated.has("COUNTDOWN"),
@@ -287,6 +304,10 @@ export function invitationPreviewView(input: InvitationPreviewInput): Invitation
     content,
     timeZone: invitation.timeZone,
     gated: gatedFeatures(invitation, input.media),
+    // The owner read answers every stored point, so the preview applies the guest's own rule here: a point belongs to
+    // a place only while the address text still equals the label it was stored with (S1, S2), and only a package that
+    // grants MAP shows a map at all.
+    places: invitation.availableFeatures.includes("MAP") ? invitation.places : {},
     ...(rsvp === undefined ? {} : { rsvp }),
   });
 
