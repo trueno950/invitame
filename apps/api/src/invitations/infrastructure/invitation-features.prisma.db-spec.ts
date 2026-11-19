@@ -763,6 +763,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "configuration",
         "content",
         "features",
+        "places",
         "publishedAt",
         "slug",
         "timeZone",
@@ -789,13 +790,15 @@ describe("invitation feature data (real PostgreSQL)", () => {
         ).execute(slug);
 
         assert.equal(page?.slug, slug);
-        // Six bounded reads and not one more, whatever the package includes: the slug read (the invitation and
-        // its one-to-one settings), the pinned version's render data, and the package entitlements (the package,
+        // Seven bounded reads and not one more, whatever the package includes: the slug read (the invitation and
+        // its one-to-one settings plus its stored points, each one relation query regardless of how many points or
+        // feature keys the row has), the pinned version's render data, and the package entitlements (the package,
         // its feature links, and their feature keys). Nothing here grows with the number of feature keys.
-        assert.equal(queries.length, 6, queries.join("\n---\n"));
+        assert.equal(queries.length, 7, queries.join("\n---\n"));
         for (const table of [
           "Invitation",
           "InvitationFeatureSettings",
+          "InvitationPlace",
           "TemplateVersion",
           "Package",
           "PackageFeature",

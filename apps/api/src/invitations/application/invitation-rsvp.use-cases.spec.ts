@@ -76,6 +76,15 @@ class MemoryInvitationRepository implements InvitationRepository {
     return Promise.reject(new Error("unpublish is not used by the RSVP use cases"));
   }
 
+  /** The place writes are not part of this suite; the place use cases prove them (see invitation-place.use-cases.spec.ts). */
+  async updatePlace(): Promise<InvitationRecordWithMusic | null> {
+    throw new Error("not used");
+  }
+
+  async clearPlace(): Promise<InvitationRecordWithMusic | null> {
+    throw new Error("not used");
+  }
+
   async findOwned(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
     return this.rows.find((row) => row.id === id && row.ownerId === ownerId) ?? null;
   }
@@ -109,6 +118,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       playlistCoverUrl: null,
       rsvpDeadline: overrides.rsvpDeadline ?? null,
       rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
+      places: {},
       archivedAt: overrides.status === "ARCHIVED" ? at : null,
       publishedAt: overrides.status === "PUBLISHED" ? at : null,
       expiresAt: overrides.expiresAt ?? null,

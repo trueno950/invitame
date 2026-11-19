@@ -119,11 +119,21 @@ class MemoryInvitationRepository implements InvitationRepository {
       playlistCoverUrl: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
+      places: {},
       ...input,
       content: { ...input.content },
     };
     this.rows.push(created);
     return { ...created, content: { ...created.content } };
+  }
+
+  /** The place writes are not part of this suite; the place use cases prove them (see invitation-place.use-cases.spec.ts). */
+  async updatePlace(): Promise<InvitationRecordWithMusic | null> {
+    throw new Error("not used");
+  }
+
+  async clearPlace(): Promise<InvitationRecordWithMusic | null> {
+    throw new Error("not used");
   }
 
   async findOwned(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {
@@ -1560,6 +1570,8 @@ describe("GetPublicInvitationUseCase", () => {
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
+      // The fixture stored no point, and its package grants no MAP (S2).
+      places: {},
     });
     // Nothing outside the allow-list leaks: no owner, package, price, id, or status (A7).
     assert.deepEqual(Object.keys(page ?? {}).sort(), [
@@ -1567,6 +1579,7 @@ describe("GetPublicInvitationUseCase", () => {
       "configuration",
       "content",
       "features",
+      "places",
       "publishedAt",
       "slug",
       "timeZone",

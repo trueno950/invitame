@@ -154,6 +154,8 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       playlistUrl: settings?.playlistUrl ?? null,
       playlistTitle: settings?.playlistTitle ?? null,
       playlistCoverUrl: settings?.playlistCoverUrl ?? null,
+      // No place row yet means no stored point, which is the empty object the port answers (S2).
+      places: {},
     };
   }
 

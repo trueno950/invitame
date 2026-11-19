@@ -1,5 +1,6 @@
 import type { JsonObject } from "../domain/invitation-content";
 import type { PublicInvitationFeatures } from "../domain/invitation-features";
+import type { PlacePoint } from "../domain/invitation-place";
 
 // The public projection of a published invitation (M5 T3; S2, S3, A7). A guest page receives exactly the
 // allow-listed renderer identity, its configuration, the content keys the pinned schema declares, the slug, and
@@ -28,6 +29,12 @@ export interface PublicInvitation {
    * Nothing about the package itself — its keys, id, or name — is here.
    */
   features: PublicInvitationFeatures;
+  /**
+   * The stored points a guest may see, keyed by the address field each one belongs to (S2). A point reaches a guest
+   * only while the package grants MAP and the address text in the content still equals the label it was stored with;
+   * an empty object is what every other case answers, so a layout always reads the same shape.
+   */
+  places: Record<string, PlacePoint>;
 }
 
 /** A JSON object read from a `Json` column; arrays, null, and primitives are not objects. */

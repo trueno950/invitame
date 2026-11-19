@@ -5,6 +5,7 @@ import {
 } from "../application/invitation.application.errors";
 import type {
   InvitationFeatureSettingsWrite,
+  InvitationPlaceWrite,
   InvitationRecordWithMusic,
   InvitationRepository,
   NewInvitation,
@@ -43,6 +44,15 @@ const INVITATION_SELECT = {
       playlistCoverUrl: true,
     },
   },
+  // The stored points travel with the row too (S2): the public projection decides which of them a guest may see.
+  places: {
+    select: {
+      field: true,
+      label: true,
+      lat: true,
+      lng: true,
+    },
+  },
 } satisfies Prisma.InvitationSelect;
 
 type InvitationRow = Prisma.InvitationGetPayload<{ select: typeof INVITATION_SELECT }>;
@@ -72,6 +82,13 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     playlistCoverUrl: row.featureSettings?.playlistCoverUrl ?? null,
     rsvpDeadline: row.rsvpDeadline,
     rsvpPartyLimit: row.rsvpPartyLimit,
+    // The points are keyed by their content field, which is the name the layout's address field carries (S2).
+    places: Object.fromEntries(
+      row.places.map((place) => [
+        place.field,
+        { label: place.label, lat: place.lat, lng: place.lng },
+      ]),
+    ),
     archivedAt: row.archivedAt,
     publishedAt: row.publishedAt,
     expiresAt: row.expiresAt,
@@ -228,6 +245,65 @@ export class PrismaInvitationRepository implements InvitationRepository {
           playlistCoverUrl: features.playlistCoverUrl,
         },
       });
+
+      return toRecord(
+        await tx.invitation.findUniqueOrThrow({ where: { id }, select: INVITATION_SELECT }),
+      );
+    });
+  }
+
+  /**
+   * Stores the point of one address field of a DRAFT or a PUBLISHED invitation in one transaction whose first read
+   * names the owner, so another owner's id matches nothing (A4) and an archived invitation is refused before anything
+   * is written (A2, S7). The upsert is keyed by the pair `(invitationId, field)`, so a second choice for the same
+   * field replaces its label and coordinates instead of adding a row (S2).
+   */
+  async updatePlace(
+    ownerId: string,
+    id: string,
+    place: InvitationPlaceWrite,
+  ): Promise<InvitationRecordWithMusic | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const stored = await tx.invitation.findFirst({
+        where: { id, ownerId },
+        select: INVITATION_SELECT,
+      });
+      if (stored === null) {
+        return null;
+      }
+      // State the rule now so the caller gets the real reason: only an archived invitation is refused (A2, S7).
+      assertEditable(toRecord(stored).status);
+
+      const point = { label: place.label, lat: place.lat, lng: place.lng };
+      await tx.invitationPlace.upsert({
+        where: { invitationId_field: { invitationId: id, field: place.field } },
+        create: { invitationId: id, field: place.field, ...point },
+        update: point,
+      });
+
+      return toRecord(
+        await tx.invitation.findUniqueOrThrow({ where: { id }, select: INVITATION_SELECT }),
+      );
+    });
+  }
+
+  /** Clears the stored point of one address field, with the same owner scope and archived refusal (S2, A2, A4). */
+  async clearPlace(
+    ownerId: string,
+    id: string,
+    field: string,
+  ): Promise<InvitationRecordWithMusic | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const stored = await tx.invitation.findFirst({
+        where: { id, ownerId },
+        select: INVITATION_SELECT,
+      });
+      if (stored === null) {
+        return null;
+      }
+      assertEditable(toRecord(stored).status);
+
+      await tx.invitationPlace.deleteMany({ where: { invitationId: id, field } });
 
       return toRecord(
         await tx.invitation.findUniqueOrThrow({ where: { id }, select: INVITATION_SELECT }),

@@ -77,3 +77,20 @@ export class UpdateInvitationFeaturesDto {
   @IsProvided()
   playlistUrl!: unknown;
 }
+
+/**
+ * `PUT /invitations/:id/places/:field` body (S2, S3). The label the geocoder answered and the two coordinates that
+ * make it precise. Only presence is checked here: the domain owns the label bounds and the coordinate ranges, so a
+ * value it refuses reaches the client as 400 `INVALID_INVITATION_PLACE` with its issues. A missing or null field is a
+ * malformed request (400 from the global pipe), because a `PUT` states the whole point.
+ */
+export class UpdateInvitationPlaceDto {
+  @IsDefined()
+  label!: unknown;
+
+  @IsDefined()
+  lat!: unknown;
+
+  @IsDefined()
+  lng!: unknown;
+}

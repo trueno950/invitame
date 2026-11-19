@@ -47,17 +47,30 @@ import {
   type InvitationPaymentGate,
 } from "./application/invitation-payment-gate";
 import {
+  ClearInvitationPlaceUseCase,
+  SearchPlacesUseCase,
+  UpdateInvitationPlaceUseCase,
+} from "./application/invitation-place.use-cases";
+import {
   GetRsvpResponsesUseCase,
   SubmitPublicRsvpUseCase,
   UpdateRsvpSettingsUseCase,
 } from "./application/invitation-rsvp.use-cases";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "./application/music-metadata";
+import { PLACE_SEARCH, type PlaceSearch } from "./application/place-search";
+import { InMemoryPlaceSearchCache } from "./application/place-search-cache";
+import {
+  PLACE_SEARCH_RATE_LIMITER,
+  type PlaceSearchRateLimiter,
+} from "./application/place-search-rate-limiter";
 import { RSVP_REPOSITORY, type RsvpRepository } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER, type RsvpRateLimiter } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
 import { createMusicMetadataProvider } from "./infrastructure/create-music-metadata-provider";
+import { createPlaceSearch } from "./infrastructure/create-place-search";
 import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
+import { PrismaPlaceSearchRateLimiter } from "./infrastructure/prisma-place-search-rate-limiter";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
 import { InvitationsController } from "./presentation/invitations.controller";
@@ -99,6 +112,25 @@ export const INVITATION_USE_CASES: Provider[] = [
   },
   useCase(CreateInvitationDraftUseCase),
   useCase(GetOwnInvitationUseCase),
+  // The place use cases (S1, S2): the search asks the geocoder port under the owner's own limit and cache, and both
+  // writes validate the field against the pinned schema before storing the point.
+  {
+    provide: SearchPlacesUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      places: PlaceSearch,
+      rateLimiter: PlaceSearchRateLimiter,
+      cache: InMemoryPlaceSearchCache,
+    ) => new SearchPlacesUseCase(invitations, places, rateLimiter, cache),
+    inject: [
+      INVITATION_REPOSITORY,
+      PLACE_SEARCH,
+      PLACE_SEARCH_RATE_LIMITER,
+      InMemoryPlaceSearchCache,
+    ],
+  },
+  useCase(UpdateInvitationPlaceUseCase),
+  useCase(ClearInvitationPlaceUseCase),
   useCase(UpdateInvitationContentUseCase),
   {
     provide: UpdateInvitationFeaturesUseCase,
@@ -255,7 +287,9 @@ export const INVITATION_USE_CASES: Provider[] = [
  * (A4). Milestone 7 moves the payment gate out of this module: `PaymentsModule` binds `INVITATION_PAYMENT_GATE`
  * (S3, S4), and this module imports it, so the publish use case keeps asking the same port. Milestone 6 G2 adds the
  * guest list behind the same ports. The music metadata port is bound here to the adapter `MUSIC_METADATA_LOOKUP`
- * selects (S2), so the feature save calls one provider-neutral lookup and never names Spotify or YouTube.
+ * selects (S2), so the feature save calls one provider-neutral lookup and never names Spotify or YouTube. The place
+ * search port is bound the same way through `PLACE_SEARCH_PROVIDER` (S2), and its rate limit counts on the shared
+ * `RateLimit` table, so an owner cannot exhaust the free public geocoder.
  */
 @Module({
   imports: [CatalogModule, MediaModule, PaymentsModule],
@@ -265,6 +299,25 @@ export const INVITATION_USE_CASES: Provider[] = [
     {
       provide: INVITATION_REPOSITORY,
       useFactory: (prisma: PrismaService) => new PrismaInvitationRepository(prisma),
+      inject: [PrismaService],
+    },
+    {
+      provide: PLACE_SEARCH,
+      // `PLACE_SEARCH_PROVIDER` decides whether an address field may ask a geocoder at all, and which instance (S2).
+      useFactory: (config: ConfigService<RuntimeEnvironment, true>): PlaceSearch =>
+        createPlaceSearch(config.get("PLACE_SEARCH", { infer: true })),
+      inject: [ConfigService],
+    },
+    {
+      // One cache per process: bounded and expiring, so a typing session's repetitions cost the instance nothing.
+      provide: InMemoryPlaceSearchCache,
+      useFactory: () => new InMemoryPlaceSearchCache(),
+      inject: [],
+    },
+    {
+      provide: PLACE_SEARCH_RATE_LIMITER,
+      // The same `RateLimit` table Better Auth and the RSVP form use; only the key prefix and the window are place's.
+      useFactory: (prisma: PrismaService) => new PrismaPlaceSearchRateLimiter(prisma),
       inject: [PrismaService],
     },
     {
