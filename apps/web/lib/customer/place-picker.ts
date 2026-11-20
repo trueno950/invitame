@@ -4,6 +4,8 @@ import {
   PLACE_QUERY_MIN_LENGTH,
   type PlacePoint,
 } from "../invitation-features/place-point.ts";
+import { PLACE_PICKER_COPY } from "./copy.ts";
+import type { PlaceSearchFailure } from "./place-search.ts";
 
 /**
  * The address combobox of the invitation editor (S1, S2). The owner types an address; while they type, the editor
@@ -26,9 +28,14 @@ export type PlaceSearchRequest =
   | { readonly kind: "wait" }
   | { readonly kind: "search"; readonly query: string };
 
-/** The normalized query of a text, or undefined when it is not worth asking about. */
-export function placeQuery(text: string): string | undefined {
-  const query = text.trim();
+/** The normalized query of a text, or undefined when it is not worth asking about. The value is untrusted: the server
+ * action applies this same rule to whatever the browser sends, so nothing else reaches the API. */
+export function placeQuery(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const query = value.trim();
   const length = [...query].length;
 
   return length < PLACE_QUERY_MIN_LENGTH || length > PLACE_QUERY_MAX_LENGTH ? undefined : query;
@@ -44,7 +51,7 @@ export function placeSearchRequest(text: string): PlaceSearchRequest {
 /**
  * What the field shows: the suggestions of the text it holds, or the state of the search for it. `text` is the text
  * the state answers for, so an answer that arrives after another keystroke is dropped instead of being shown under
- * words it does not match.
+ * words it does not match — and the note of that answer goes with it.
  */
 export interface PlacePickerState {
   readonly status: "idle" | "searching" | "ready" | "failed";
@@ -53,6 +60,8 @@ export interface PlacePickerState {
   /** The option the keyboard would choose, or -1 while none is active. */
   readonly activeIndex: number;
   readonly open: boolean;
+  /** The one quiet note under the field, kept with the answer it belongs to; the next keystroke clears it (S2). */
+  readonly note: string | undefined;
 }
 
 /** The field before its owner typed anything. */
@@ -62,16 +71,45 @@ export const suggestionsPicker: PlacePickerState = {
   suggestions: [],
   activeIndex: -1,
   open: false,
+  note: undefined,
 };
 
 /** The field while its text is too short to ask about: nothing is on its way and no list is shown. */
 export function searchIdle(text: string): PlacePickerState {
-  return { status: "idle", text, suggestions: [], activeIndex: -1, open: false };
+  return { status: "idle", text, suggestions: [], activeIndex: -1, open: false, note: undefined };
 }
 
 /** The field while the answer for `text` is on its way; the list of another text is not shown. */
 export function searchStarted(text: string): PlacePickerState {
-  return { status: "searching", text, suggestions: [], activeIndex: -1, open: false };
+  return {
+    status: "searching",
+    text,
+    suggestions: [],
+    activeIndex: -1,
+    open: false,
+    note: undefined,
+  };
+}
+
+/**
+ * The note a list of suggestions leaves under the field: nothing to add for real places, and the quiet empty note for
+ * an answer without one, so the owner knows free typing still works.
+ */
+export function searchAnswerNote(suggestions: readonly PlacePoint[]): string | undefined {
+  return suggestions.length === 0 ? PLACE_PICKER_COPY.empty : undefined;
+}
+
+/** The note a refused search leaves: one quiet sentence per failure, and never a block of the field. */
+export function searchFailureNote(failure: PlaceSearchFailure): string {
+  switch (failure) {
+    case "rate-limited":
+      return PLACE_PICKER_COPY.limited;
+    case "not-found":
+      return PLACE_PICKER_COPY.notFound;
+    case "invalid-query":
+    case "unavailable":
+      return PLACE_PICKER_COPY.failed;
+  }
 }
 
 /** The answer for `text`, opened with its first option active while there is one. */
@@ -90,14 +128,41 @@ export function searchAnswered(
     suggestions: [...suggestions],
     activeIndex: suggestions.length === 0 ? -1 : 0,
     open: suggestions.length > 0,
+    note: searchAnswerNote(suggestions),
   };
 }
 
 /** A search that failed or was limited: a quiet note, an empty list, and the field still editable. */
-export function searchFailed(state: PlacePickerState, text: string): PlacePickerState {
+export function searchFailed(
+  state: PlacePickerState,
+  text: string,
+  failure: PlaceSearchFailure,
+): PlacePickerState {
   return state.text === text
-    ? { status: "failed", text, suggestions: [], activeIndex: -1, open: false }
+    ? {
+        status: "failed",
+        text,
+        suggestions: [],
+        activeIndex: -1,
+        open: false,
+        note: searchFailureNote(failure),
+      }
     : state;
+}
+
+/**
+ * The field lost the focus: the list closes, and the state stops answering any text, so an answer that arrives after
+ * the owner moved on is dropped instead of opening a list under a field that no longer has the focus (S2).
+ */
+export function blurredPicker(state: PlacePickerState): PlacePickerState {
+  return state.text === "" && !state.open
+    ? state
+    : { ...state, status: "idle", text: "", open: false };
+}
+
+/** The note a refused save leaves under the field, keeping the list and the text as they are. */
+export function notedPicker(state: PlacePickerState, note: string): PlacePickerState {
+  return state.note === note ? state : { ...state, note };
 }
 
 /** The answered list opened again, keeping the text and its suggestions. */

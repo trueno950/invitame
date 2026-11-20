@@ -31,9 +31,9 @@ feature documents; this one records the decisions and fixes the rest.
 | T2 | Sticky phone save-status strip | S2 | worker (editor UI) | see L6 |
 | T3 | Publish copy only promises no cost for a free package | S3 | worker (editor UI) | see L6 |
 | T4 | API review follow-ups (#81-#83) | S4 | worker (API) | see L7 |
-| T5 | Web review follow-ups (#84, #85) | S4 | worker (web places) | |
+| T5 | Web review follow-ups (#84, #85) | S4 | worker (web places) | see L8 |
 | T6 | Delete merged temporary branches and the stash | S5 | inline | no commit (git state, L4) |
-| T7 | Record the decisions and the admin configuration panel in `ROADMAP.md` | S6 | inline | pending commit |
+| T7 | Record the decisions and the admin configuration panel in `ROADMAP.md` | S6 | inline | 5242c8d |
 
 ### Review advisory findings (S4)
 
@@ -93,3 +93,10 @@ concrete weakness, and fixes it with a test or records why it is not a defect.
   warning (`place-search-failed`, category, status) without the query; #83 R4-002 a failed lookup is no longer cached
   as an empty answer; #83 R4-003 the repository keeps only stored rows the domain accepts. API 1688 unit and 144
   invitations db-specs pass.
+- L8 — T5 (worker): fixed with tests #85 R1-002 (the search action applies `placeQuery` to untrusted text before any
+  API call), R2-001 (one note per search failure), R2-003 (the floor assertion really steps twice), R4-001 (the note is
+  text-guarded picker state, so a stale answer cannot repaint it), R4-002 (blur stops the debounce and a late answer
+  opens no list); fixed structurally #84 R4-002 (a map that cannot load hides its panel and attribution), #85 R1-001
+  (the combobox keeps the schema's `maxLength` for any input kind), R2-002 (one `writeFailure` mapping). Not a defect:
+  #84 R4-001 — refusing a whole malformed `places` body is the web's fail-closed contract, pinned by the read-module
+  tests, and the API now skips malformed rows itself (L7). Web 1615 pass.

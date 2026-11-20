@@ -2,6 +2,7 @@
 
 import { PLACE_PICKER_COPY } from "../../../lib/customer/copy.ts";
 import { sendInvitationCall } from "../../../lib/customer/invitations.ts";
+import { placeQuery } from "../../../lib/customer/place-picker.ts";
 import type {
   PlaceSearchFailure,
   PlaceSearchResult,
@@ -50,20 +51,31 @@ function searchFailureOf(failure: string): PlaceSearchFailure {
 
 /**
  * `GET /invitations/:id/places/search`: at most five points the typed text matches (S1, S2). The editor calls it after
- * the debounce, never per keystroke, and a text shorter than three characters never leaves the browser.
+ * the debounce, never per keystroke, and a text shorter than three characters never leaves the browser. The text is
+ * untrusted here too: the same normalization the browser applies is applied again, so no other shape or length is
+ * asked of the API on behalf of this action.
  */
 export async function searchPlacesAction(id: string, query: unknown): Promise<PlaceSearchResult> {
   if (!isInvitationId(id)) {
     return { ok: false, failure: "not-found" };
   }
 
-  const read = await sendInvitationCall(() =>
-    invitations.searchPlaces(id, typeof query === "string" ? query : ""),
-  );
+  const asked = placeQuery(query);
+
+  if (asked === undefined) {
+    return { ok: false, failure: "invalid-query" };
+  }
+
+  const read = await sendInvitationCall(() => invitations.searchPlaces(id, asked));
 
   return read.ok
     ? { ok: true, suggestions: read.value }
     : { ok: false, failure: searchFailureOf(read.failure) };
+}
+
+/** The message a refused write leaves under its field: the invitation is gone, or the write did not happen. */
+function writeFailure(failure: string): PlaceWriteResult {
+  return { ok: false, message: failure === "not-found" ? NOT_FOUND : SAVE_FAILED };
 }
 
 /** Whether a value is a point the API would store: the same bounds its own domain checks. */
@@ -98,12 +110,7 @@ export async function savePlaceAction(
 
   const written = await sendInvitationCall(() => invitations.savePlace(id, field, point));
 
-  return written.ok
-    ? { ok: true, places: written.value.places }
-    : {
-        ok: false,
-        message: written.failure === "not-found" ? NOT_FOUND : SAVE_FAILED,
-      };
+  return written.ok ? { ok: true, places: written.value.places } : writeFailure(written.failure);
 }
 
 /**
@@ -117,10 +124,5 @@ export async function clearPlaceAction(id: string, field: unknown): Promise<Plac
 
   const cleared = await sendInvitationCall(() => invitations.clearPlace(id, field));
 
-  return cleared.ok
-    ? { ok: true, places: cleared.value.places }
-    : {
-        ok: false,
-        message: cleared.failure === "not-found" ? NOT_FOUND : SAVE_FAILED,
-      };
+  return cleared.ok ? { ok: true, places: cleared.value.places } : writeFailure(cleared.failure);
 }
