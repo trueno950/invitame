@@ -43,7 +43,7 @@ security-sensitive design before implementation; this document is that reviewed 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
 | T1 | Env + port changes (query on webhook, refund method) + Mercado Pago adapter with fake-HTTP specs | S1, S2, S4 | worker | see L4 |
-| T2 | Refund rule: admin route, never-published check, provider refund call | S3, S4 | worker | |
+| T2 | Refund rule: admin route, never-published check, provider refund call | S3, S4 | worker | see L5 |
 | T3 | Web: Checkout Pro redirect and return page states; admin refund button | S1, S3 | worker | |
 | T4 | Docs (README env rows, payments docs, ROADMAP M7), native review, PRs, CI, merge | S1-S4 | inline | |
 
@@ -76,3 +76,9 @@ security-sensitive design before implementation; this document is that reviewed 
   statuses, converts exact cents, and refunds in full; specs run against an in-process fake server. RED observed per
   rule; API 1730 unit and 24 payments db-specs pass; a differential run against the base showed the simulated and
   free modes unchanged.
+- L5 — T2: additive `Invitation.firstPublishedAt` (migration `20261124120000_add_invitation_first_published_at`,
+  backfilled from `publishedAt`, CHECK `Invitation_firstPublishedAt_when_published`), set by the first publish and
+  never cleared; a separate `PaymentRefundRepository` port; admin-only `GET /admin/payments` (bounded paid read with
+  a `refundable` flag) and `POST /admin/payments/:paymentId/refund` (409 unless `paid` and never published, 503 when
+  the provider refuses; `refunded` only from the verified notification). Evidence: typecheck, lint, format pass; API
+  1751 unit and 401 db-specs (disposable database) pass.

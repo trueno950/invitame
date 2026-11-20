@@ -4,12 +4,15 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { databaseErrorCode } from "../../users/domain/database-error-code";
 import type {
+  AdminPaymentRow,
   InsertEventResult,
   NewPendingPayment,
   PaymentEventTransaction,
   PaymentRecord,
+  PaymentRefundRepository,
   PaymentRepository,
   PaymentTarget,
+  RefundTarget,
 } from "../application/payment.repository";
 import type { PaymentStatus } from "../domain/payment";
 
@@ -137,7 +140,7 @@ class PrismaPaymentEventTransaction implements PaymentEventTransaction {
   }
 }
 
-export class PrismaPaymentRepository implements PaymentRepository {
+export class PrismaPaymentRepository implements PaymentRepository, PaymentRefundRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async findOwnedInvitation(ownerId: string, invitationId: string): Promise<PaymentTarget | null> {
@@ -226,6 +229,61 @@ export class PrismaPaymentRepository implements PaymentRepository {
 
   async transaction<T>(work: (transaction: PaymentEventTransaction) => Promise<T>): Promise<T> {
     return this.prisma.$transaction((tx) => work(new PrismaPaymentEventTransaction(tx)));
+  }
+
+  async findRefundTarget(paymentId: string): Promise<RefundTarget | null> {
+    // One query reads the payment and the invitation history the refund rule needs, so the decision is never taken
+    // from two reads that could disagree (T2, S3).
+    const row = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: {
+        id: true,
+        invitationId: true,
+        provider: true,
+        providerReference: true,
+        status: true,
+        invitation: { select: { firstPublishedAt: true } },
+      },
+    });
+
+    return row === null
+      ? null
+      : {
+          paymentId: row.id,
+          invitationId: row.invitationId,
+          provider: row.provider,
+          providerReference: row.providerReference,
+          status: row.status as PaymentStatus,
+          firstPublishedAt: row.invitation.firstPublishedAt,
+        };
+  }
+
+  async listPaidForAdmin(limit: number): Promise<AdminPaymentRow[]> {
+    const rows = await this.prisma.payment.findMany({
+      where: { status: "paid" },
+      select: {
+        id: true,
+        invitationId: true,
+        amountMinor: true,
+        currency: true,
+        status: true,
+        paidAt: true,
+        invitation: { select: { slug: true, firstPublishedAt: true } },
+      },
+      orderBy: [{ paidAt: "desc" }, { id: "desc" }],
+      take: limit,
+    });
+
+    return rows.map((row) => ({
+      paymentId: row.id,
+      invitationId: row.invitationId,
+      invitationSlug: row.invitation.slug,
+      status: row.status as PaymentStatus,
+      amountMinor: row.amountMinor,
+      currency: row.currency,
+      paidAt: row.paidAt,
+      firstPublishedAt: row.invitation.firstPublishedAt,
+    }));
   }
 
   private async findPending(invitationId: string): Promise<PaymentRecord | null> {

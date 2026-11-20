@@ -345,7 +345,7 @@ describe("invitation places (real PostgreSQL)", () => {
       });
       await prisma.invitation.update({
         where: { id: draft.invitation.id },
-        data: { status: "PUBLISHED", publishedAt: new Date() },
+        data: { status: "PUBLISHED", publishedAt: new Date(), firstPublishedAt: new Date() },
       });
       return draft.invitation.slug;
     }

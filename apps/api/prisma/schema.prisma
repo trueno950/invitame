@@ -299,6 +299,11 @@ model Invitation {
   archivedAt        DateTime?        @db.Timestamptz(6)
   // Set exactly while the status is PUBLISHED: unpublishing and archiving clear it (S7, A2).
   publishedAt       DateTime?        @db.Timestamptz(6)
+  // The first instant this invitation was ever published, or NULL while it never was (T2, S3). Unlike
+  // `publishedAt`, nothing clears it: the refund rule reads it to refuse «Sin reembolso tras publicar» after an
+  // unpublish or an archive. Migration 20261124120000_add_invitation_first_published_at adds it and the CHECK
+  // constraint Prisma cannot express, `Invitation_firstPublishedAt_when_published`.
+  firstPublishedAt  DateTime?        @db.Timestamptz(6)
   // Expiry the database carries but Milestone 5 never sets; the rule arrives in a later milestone (S8).
   expiresAt         DateTime?        @db.Timestamptz(6)
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)

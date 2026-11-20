@@ -22,6 +22,7 @@ import { MercadoPagoPaymentProvider } from "./infrastructure/mercadopago-payment
 import { PaymentGate } from "./infrastructure/payment-gate";
 import { PrismaPaymentRepository } from "./infrastructure/prisma-payment.repository";
 import { PaymentsModule } from "./payments.module";
+import { AdminPaymentsController } from "./presentation/admin-payments.controller";
 
 // PaymentsModule composition (M7 S1, S3, S4): the module provides the provider, the payment repository, the catalog
 // price read, and the publication gate, exports the gate the invitations module asks, and registers the owner and
@@ -75,6 +76,7 @@ describe("PaymentsModule wiring", () => {
           rsvpPartyLimit: 4,
           archivedAt: null,
           publishedAt: null,
+          firstPublishedAt: null,
           expiresAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -88,10 +90,11 @@ describe("PaymentsModule wiring", () => {
     }
   });
 
-  it("registers the owner and public payment controllers", () => {
+  it("registers the owner, public, and administrator payment controllers", () => {
     const controllers: unknown = Reflect.getMetadata("controllers", PaymentsModule) ?? [];
 
-    assert.equal((controllers as unknown[]).length, 2);
+    assert.equal((controllers as unknown[]).length, 3);
+    assert.ok((controllers as unknown[]).includes(AdminPaymentsController));
   });
 
   it("binds the Mercado Pago adapter when the mode selects it (T1)", async () => {
@@ -153,6 +156,8 @@ describe("AppModule payment routes in a development default", () => {
       ["POST", `/invitations/${id}/checkout`],
       ["GET", `/invitations/${id}/payment`],
       ["POST", `/payments/simulated/${id}/emit`],
+      ["GET", "/admin/payments?status=paid&limit=10"],
+      ["POST", `/admin/payments/${id}/refund`],
     ];
 
     for (const [method, path] of ownerRoutes) {

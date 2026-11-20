@@ -44,6 +44,12 @@ export interface InvitationRecord {
    */
   publishedAt: Date | null;
   /**
+   * The first instant the invitation was ever published, or null while it never was (T2, S3). Unlike
+   * `publishedAt`, nothing clears it: an unpublish or an archive keeps the fact that the invitation was once
+   * public, which is what the refund rule «Sin reembolso tras publicar» reads.
+   */
+  firstPublishedAt: Date | null;
+  /**
    * The expiry the database carries and Milestone 5 never sets (S8). It is part of the record because the
    * column exists and the public read must already refuse an elapsed one; no write in this milestone sets it.
    */
@@ -196,7 +202,8 @@ export interface InvitationRepository {
 
   /**
    * Publishes a DRAFT in one statement whose `WHERE` names the owner and the DRAFT status, marking
-   * `publishedAt` with the given instant (S7). Throws `InvitationAlreadyPublishedError` when the row is owned
+   * `publishedAt` with the given instant and, only for the first publication, `firstPublishedAt` with the same
+   * instant (S7, T2). Throws `InvitationAlreadyPublishedError` when the row is owned
    * and already published and `InvitationAlreadyArchivedError` when it is archived, so each wrong status has
    * its own signal and a repeated publish never looks like a change; null, changing nothing, for an id that is
    * missing or belongs to another owner (A4).

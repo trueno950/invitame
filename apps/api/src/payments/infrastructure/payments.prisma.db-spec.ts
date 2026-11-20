@@ -8,15 +8,20 @@ import { requireLocalDatabaseUrl } from "../../../test/database";
 import { PrismaCatalogPublicReader } from "../../catalog/infrastructure/prisma-catalog-public-reader";
 import { PAYMENTS_MODE } from "../../config/environment";
 import type { InvitationRecord } from "../../invitations/application/invitation.repository";
+import { PrismaInvitationRepository } from "../../invitations/infrastructure/prisma-invitation.repository";
 import {
   InvitationPackageLockedByPaymentError,
   PaymentAlreadyPaidError,
+  PaymentInvitationAlreadyPublishedError,
+  PaymentNotRefundableError,
 } from "../application/payment.errors";
 import {
   GetInvitationPaymentUseCase,
   StartCheckoutUseCase,
 } from "../application/payment.use-cases";
+import type { NormalizedPaymentEvent, PaymentProvider } from "../application/payment-provider.port";
 import { HandlePaymentWebhookUseCase } from "../application/payment-webhook.use-case";
+import { ListAdminPaymentsUseCase, RefundPaymentUseCase } from "../application/refund.use-cases";
 import { CatalogPaymentPrices } from "./catalog-payment-prices";
 import { PaymentGate } from "./payment-gate";
 import { PrismaPaymentRepository } from "./prisma-payment.repository";
@@ -158,7 +163,7 @@ describe("payments on real PostgreSQL (M7 S1, S4)", () => {
     });
     invitationIds.push(created.id);
 
-    return { id: created.id, ownerId, packageId };
+    return { id: created.id, ownerId, packageId, slug: created.slug };
   }
 
   function invitationRecordOf(row: {
@@ -181,6 +186,7 @@ describe("payments on real PostgreSQL (M7 S1, S4)", () => {
       rsvpPartyLimit: 4,
       archivedAt: null,
       publishedAt: null,
+      firstPublishedAt: null,
       expiresAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -799,6 +805,204 @@ describe("payments on real PostgreSQL (M7 S1, S4)", () => {
       assert.deepEqual(await freeGate.publicationPaymentRequired(invitationRecordOf(invitation)), {
         required: false,
       });
+    });
+  });
+
+  describe("refund rule and publication history (T2, S3)", () => {
+    const invitations = new PrismaInvitationRepository(prisma);
+    const refund = new RefundPaymentUseCase(repository, provider);
+    const adminList = new ListAdminPaymentsUseCase(repository);
+    const FIRST_PUBLISHED_AT = new Date("2026-11-24T10:00:00.000Z");
+    const REPUBLISHED_AT = new Date("2026-11-25T11:00:00.000Z");
+
+    /** A stored payment in the state the test names; `paidAt` follows the database's own check. */
+    async function newPayment(
+      invitation: { id: string; packageId: string },
+      options: {
+        status?: "pending" | "paid" | "refunded";
+        paidAt?: Date;
+        providerReference?: string;
+      } = {},
+    ) {
+      const status = options.status ?? "paid";
+      return prisma.payment.create({
+        data: {
+          invitationId: invitation.id,
+          packageId: invitation.packageId,
+          amountMinor: PRICE.amountMinor,
+          currency: PRICE.currency,
+          status,
+          provider: "simulated",
+          providerReference: options.providerReference ?? `simulated-${randomUUID()}`,
+          idempotencyKey: `${runId}-${randomUUID()}`,
+          paidAt: status === "pending" ? null : (options.paidAt ?? new Date()),
+        },
+      });
+    }
+
+    it("sets firstPublishedAt on the first publish and keeps it through unpublish and archive", async () => {
+      const invitation = await newInvitation();
+
+      const published = await invitations.publish(
+        invitation.ownerId,
+        invitation.id,
+        FIRST_PUBLISHED_AT,
+      );
+      assert.deepEqual(published?.publishedAt, FIRST_PUBLISHED_AT);
+      assert.deepEqual(published?.firstPublishedAt, FIRST_PUBLISHED_AT);
+
+      const draft = await invitations.unpublish(invitation.ownerId, invitation.id);
+      assert.equal(draft?.publishedAt, null);
+      assert.deepEqual(draft?.firstPublishedAt, FIRST_PUBLISHED_AT);
+
+      const republished = await invitations.publish(
+        invitation.ownerId,
+        invitation.id,
+        REPUBLISHED_AT,
+      );
+      assert.deepEqual(republished?.publishedAt, REPUBLISHED_AT);
+      assert.deepEqual(republished?.firstPublishedAt, FIRST_PUBLISHED_AT);
+
+      const archived = await invitations.archive(invitation.ownerId, invitation.id);
+      assert.equal(archived?.publishedAt, null);
+      assert.deepEqual(archived?.firstPublishedAt, FIRST_PUBLISHED_AT);
+
+      const row = await prisma.invitation.findUniqueOrThrow({ where: { id: invitation.id } });
+      assert.deepEqual(row.firstPublishedAt, FIRST_PUBLISHED_AT);
+    });
+
+    it("refuses a stored row that is published without a first publication", async () => {
+      const invitation = await newInvitation();
+
+      await assert.rejects(
+        prisma.invitation.update({
+          where: { id: invitation.id },
+          data: { status: "PUBLISHED", publishedAt: new Date() },
+        }),
+        /Invitation_firstPublishedAt_when_published/,
+      );
+      const row = await prisma.invitation.findUniqueOrThrow({ where: { id: invitation.id } });
+      assert.equal(row.status, "DRAFT");
+      assert.equal(row.firstPublishedAt, null);
+    });
+
+    it("holds the backfill invariant: every published row reads a first publication", async () => {
+      const missing = await prisma.invitation.count({
+        where: { publishedAt: { not: null }, firstPublishedAt: null },
+      });
+
+      assert.equal(missing, 0);
+    });
+
+    it("refunds a paid, never-published invitation through the provider and leaves the row paid", async () => {
+      const invitation = await newInvitation();
+      const payment = await newPayment(invitation);
+
+      const result = await refund.execute({ paymentId: payment.id });
+
+      assert.deepEqual(result, { outcome: "requested" });
+      const stored = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      assert.equal(stored.status, "paid");
+      assert.deepEqual(stored.paidAt, payment.paidAt);
+      assert.equal(await prisma.paymentEvent.count({ where: { paymentId: payment.id } }), 0);
+    });
+
+    it("refuses a refund once the invitation was published, even after it returned to DRAFT", async () => {
+      const invitation = await newInvitation();
+      const payment = await newPayment(invitation);
+      await invitations.publish(invitation.ownerId, invitation.id, FIRST_PUBLISHED_AT);
+      await invitations.unpublish(invitation.ownerId, invitation.id);
+
+      await assert.rejects(refund.execute({ paymentId: payment.id }), {
+        name: PaymentInvitationAlreadyPublishedError.name,
+      });
+      const stored = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      assert.equal(stored.status, "paid");
+    });
+
+    it("refuses a refund unless the payment is paid", async () => {
+      const invitation = await newInvitation();
+      const pending = await newPayment(invitation, { status: "pending" });
+
+      await assert.rejects(refund.execute({ paymentId: pending.id }), {
+        name: PaymentNotRefundableError.name,
+      });
+    });
+
+    it("moves to refunded only from the verified notification, and then refuses a second refund", async () => {
+      const invitation = await newInvitation();
+      const payment = await newPayment(invitation);
+      let notification: NormalizedPaymentEvent | null = null;
+      const notifier: PaymentProvider = {
+        key: "simulated",
+        createCheckout: async () => {
+          throw new Error("createCheckout is not this suite's boundary");
+        },
+        verifyWebhook: async () => ({ ok: true, event: notification }),
+        refund: async () => ({ ok: true }),
+      };
+      notification = {
+        eventId: `${runId}-refunded-${payment.id}`,
+        type: "refunded",
+        providerReference: payment.providerReference ?? "",
+        amountMinor: payment.amountMinor,
+        currency: payment.currency,
+        occurredAt: new Date(),
+      };
+
+      await new HandlePaymentWebhookUseCase(repository, notifier).execute({
+        provider: "simulated",
+        rawBody: "{}",
+        headers: {},
+        receivedAt: new Date(),
+      });
+
+      const stored = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      assert.equal(stored.status, "refunded");
+      await assert.rejects(refund.execute({ paymentId: payment.id }), {
+        name: PaymentNotRefundableError.name,
+      });
+    });
+
+    it("lists the newest paid payments with the invitation slug and no payer data", async () => {
+      // The read is global, so these rows sort above any other suite's by construction (year 2100).
+      const older = await newInvitation();
+      const olderPayment = await newPayment(older, {
+        paidAt: new Date("2100-01-01T09:00:00.000Z"),
+      });
+      const newer = await newInvitation();
+      await invitations.publish(newer.ownerId, newer.id, FIRST_PUBLISHED_AT);
+      const newerPayment = await newPayment(newer, {
+        paidAt: new Date("2100-01-02T09:00:00.000Z"),
+      });
+      const pending = await newInvitation();
+      await newPayment(pending, { status: "pending" });
+
+      const rows = await adminList.execute({ limit: 50 });
+      const ours = rows.filter(
+        (row) => row.paymentId === olderPayment.id || row.paymentId === newerPayment.id,
+      );
+
+      assert.deepEqual(
+        ours.map((row) => row.paymentId),
+        [newerPayment.id, olderPayment.id],
+      );
+      assert.equal(ours[0]?.invitationSlug, newer.slug);
+      assert.equal(ours[0]?.refundable, false);
+      assert.equal(ours[1]?.invitationSlug, older.slug);
+      assert.equal(ours[1]?.refundable, true);
+      assert.deepEqual(Object.keys(ours[0] ?? {}).sort(), [
+        "amountMinor",
+        "currency",
+        "invitationId",
+        "invitationSlug",
+        "paidAt",
+        "paymentId",
+        "refundable",
+        "status",
+      ]);
+      assert.ok(rows.every((row) => row.status === "paid"));
+      assert.equal((await adminList.execute({ limit: 1 })).length, 1);
     });
   });
 });

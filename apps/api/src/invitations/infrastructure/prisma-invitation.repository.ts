@@ -37,6 +37,7 @@ const INVITATION_SELECT = {
   rsvpPartyLimit: true,
   archivedAt: true,
   publishedAt: true,
+  firstPublishedAt: true,
   expiresAt: true,
   createdAt: true,
   updatedAt: true,
@@ -106,6 +107,7 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     places: toStoredPlaces(row.places),
     archivedAt: row.archivedAt,
     publishedAt: row.publishedAt,
+    firstPublishedAt: row.firstPublishedAt,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -365,13 +367,21 @@ export class PrismaInvitationRepository implements InvitationRepository {
       if (stored === null) {
         return null;
       }
+      const current = toRecord(stored);
       // The domain states the transition and gives each wrong status its own error: an already published
       // invitation and an archived one are not the same outcome (S7, A2).
-      const next = publish(toRecord(stored).status);
+      const next = publish(current.status);
 
       const changed = await tx.invitation.updateMany({
         where: { id, ownerId, status: "DRAFT" },
-        data: { status: next, publishedAt: at },
+        data: {
+          status: next,
+          publishedAt: at,
+          // Only the first publication writes the history the refund rule reads; a publish after an unpublish keeps
+          // the original instant (T2, S3). The transition is guarded by DRAFT, so this read cannot have gone stale:
+          // nothing else writes this row while it is a draft.
+          ...(current.firstPublishedAt === null ? { firstPublishedAt: at } : {}),
+        },
       });
       if (changed.count !== 1) {
         // A concurrent publish or archive won; nothing was published by this request.

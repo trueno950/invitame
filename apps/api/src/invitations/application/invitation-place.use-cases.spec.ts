@@ -73,6 +73,7 @@ function record(overrides: Partial<InvitationRecordWithMusic> = {}): InvitationR
     rsvpPartyLimit: 4,
     archivedAt: null,
     publishedAt: null,
+    firstPublishedAt: null,
     expiresAt: null,
     createdAt: AT,
     updatedAt: AT,

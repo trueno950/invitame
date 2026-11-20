@@ -130,4 +130,49 @@ export interface PaymentRepository {
   transaction<T>(work: (transaction: PaymentEventTransaction) => Promise<T>): Promise<T>;
 }
 
+/**
+ * What the refund rule needs from a payment and its invitation (T2, S3). The invitation's `firstPublishedAt` is the
+ * history `publishedAt` cannot answer: `publishedAt` is cleared on unpublish and archive, `firstPublishedAt` is not.
+ * `providerReference` is null only for a payment whose checkout never reached the provider, which is not refundable.
+ */
+export interface RefundTarget {
+  paymentId: string;
+  invitationId: string;
+  provider: string;
+  providerReference: string | null;
+  status: PaymentStatus;
+  firstPublishedAt: Date | null;
+}
+
+/**
+ * One row of the administrator's bounded paid read (T2, S3). It carries the invitation's slug and no payer datum:
+ * the admin catalog pages already show the same non-personal fields and nothing more.
+ */
+export interface AdminPaymentRow {
+  paymentId: string;
+  invitationId: string;
+  invitationSlug: string;
+  status: PaymentStatus;
+  amountMinor: number;
+  currency: string;
+  paidAt: Date | null;
+  firstPublishedAt: Date | null;
+}
+
+/**
+ * The administrator refund port (T2, S3, S4). It is separate from `PaymentRepository` on purpose: the refund rule is
+ * the only reader of `Invitation.firstPublishedAt` and the only global payment read in the product, and keeping it
+ * apart means no owner-scoped use case can reach it by accident. Nothing here writes a payment: a refund is a
+ * provider command, and `refunded` arrives only from the verified notification.
+ */
+export interface PaymentRefundRepository {
+  /** The payment and its invitation's first publication, or null when no payment has this id. */
+  findRefundTarget(paymentId: string): Promise<RefundTarget | null>;
+
+  /** The newest `paid` payments, at most `limit`, newest first: the administrator's bounded read. */
+  listPaidForAdmin(limit: number): Promise<AdminPaymentRow[]>;
+}
+
 export const PAYMENT_REPOSITORY = Symbol("PaymentRepository");
+
+export const PAYMENT_REFUND_REPOSITORY = Symbol("PaymentRefundRepository");

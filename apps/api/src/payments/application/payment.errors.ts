@@ -89,3 +89,26 @@ export class PaymentProviderUnavailableError extends Error {
     this.name = "PaymentProviderUnavailableError";
   }
 }
+
+/**
+ * The payment exists but is not in the one state a refund starts from (`paid`), or it has no provider reference
+ * to refund (T2, S3). One error for both: from outside, neither state is refundable and the answer is the same 409.
+ */
+export class PaymentNotRefundableError extends Error {
+  constructor() {
+    super("The payment is not refundable.");
+    this.name = "PaymentNotRefundableError";
+  }
+}
+
+/**
+ * The refund rule «Sin reembolso tras publicar» (T2, S3): an invitation that was ever published is refused, even
+ * after it returned to DRAFT or was archived. The payments module owns this error because the rule belongs to the
+ * refund, not to the invitation lifecycle.
+ */
+export class PaymentInvitationAlreadyPublishedError extends Error {
+  constructor() {
+    super("The invitation has already been published.");
+    this.name = "PaymentInvitationAlreadyPublishedError";
+  }
+}

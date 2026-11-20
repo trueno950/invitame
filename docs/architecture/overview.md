@@ -911,10 +911,21 @@ guest map. An invitation that never confirmed a point keeps exactly the text-sea
   `mercadopago-<mpPaymentId>-<status>` so a redelivery is a duplicate. A failed re-read answers 400 so Mercado Pago
   retries. Every request has a five-second timeout, no redirect, a 64 KiB body cap, and one structured failure report
   that never carries a token, a secret, a body, or a payer datum.
-- Refund port (T1): `PaymentProvider.refund(providerReference, idempotencyKey)` searches
+- Refund rule (T2, S3, S4): «Sin reembolso tras publicar». `POST /admin/payments/:paymentId/refund` is
+  `@AdminOnly()` and refuses unless the payment exists (`PAYMENT_NOT_FOUND`, 404), its status is `paid`
+  (`PAYMENT_NOT_REFUNDABLE`, 409), and its invitation's `firstPublishedAt` is null (`INVITATION_ALREADY_PUBLISHED`, 409).
+  On success it calls `PaymentProvider.refund(providerReference, "refund-<paymentId>")` — a key derived from the payment,
+  so a double click cannot refund twice — and answers 200 `{ outcome: "requested" }`; a provider that refuses or cannot
+  be reached answers 503 `PAYMENT_PROVIDER_UNAVAILABLE`, like a checkout. It never writes a payment: `refunded` arrives
+  only from the verified provider notification, so no admin click is a payment state. A publish racing a refund needs
+  no lock: publishing asks the gate, which counts `refunded` as unpaid, and the refund reads the first-publication
+  history, so a publish that won is refused by the never-published rule. The administrator's read is
+  `GET /admin/payments?status=paid&limit=<1..50>`: the newest `paid` payments with `paymentId`, `invitationId`, the
+  invitation slug, `status`, `amountMinor`, `currency`, `paidAt`, and a `refundable` flag (paid and never published).
+  `status` is the closed set `paid` and `limit` defaults to 20, so the read is bounded; no payer datum travels. The
+  port is `PaymentProvider.refund(providerReference, idempotencyKey)`: the Mercado Pago adapter searches
   `/v1/payments/search?external_reference=<our paymentId>` for the approved payment and posts
-  `/v1/payments/<id>/refunds` with `X-Idempotency-Key` and no amount, so it is a full refund. The admin route and the
-  never-published rule are the refund milestone (S3); **planned**.
+  `/v1/payments/<id>/refunds` with `X-Idempotency-Key` and no amount, so it is a full refund.
 - Publication gate: `PaymentGate` answers for `free` exactly what Milestone 5 answered. In every mode that charges it
   requires a `paid` payment for this invitation and its current package, or a package whose current price is 0, and
   fails closed (`PAYMENT_PRICE_UNAVAILABLE`) when the catalog cannot answer the price. The publish use case and the
@@ -923,8 +934,9 @@ guest map. An invitation that never confirmed a point keeps exactly the text-sea
   later change, so there is no package-change route; checkout and the gate both refuse a `paid` payment for another
   package (`INVITATION_PACKAGE_LOCKED_BY_PAYMENT`), so a payment can never be silently lost or reused.
 - Tests: `src/payments/**/*.spec.ts` (state-machine table, signature scheme, use cases with in-memory ports, the gate,
-  and the HTTP contract through the shared app boundary) and `src/payments/infrastructure/payments.prisma.db-spec.ts`
-  (migration constraints, snapshot immutability, checkout and delivery concurrency, the real transaction).
+  the refund rule and the administrator read, and the HTTP contract through the shared app boundary) and
+  `src/payments/infrastructure/payments.prisma.db-spec.ts` (migration constraints, the first-publication history,
+  snapshot immutability, the refund rule over stored rows, checkout and delivery concurrency, the real transaction).
 - Web routes (M7 T2; S1, S4): `/cuenta/invitaciones/<id>` carries the «Pagar y publicar» panel in its side column and
   disables its publish button while the API says a payment is due; `/cuenta/invitaciones/<id>/pago` is the return page
   the provider sends the browser back to; `/cuenta/invitaciones/<id>/pago/simulado/<paymentId>` is the development-only

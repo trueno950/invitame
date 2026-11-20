@@ -173,6 +173,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       places: {},
       archivedAt: null,
       publishedAt: null,
+      firstPublishedAt: null,
       expiresAt: null,
       createdAt: at,
       updatedAt: at,
@@ -301,6 +302,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     }
     row.status = "PUBLISHED";
     row.publishedAt = at;
+    row.firstPublishedAt ??= at;
     row.updatedAt = at;
     return structuredClone(row);
   }
@@ -2299,6 +2301,7 @@ describe("invitations routes: /invitations", () => {
         places: overrides.places ?? {},
         archivedAt: overrides.status === "ARCHIVED" ? at : null,
         publishedAt: overrides.status === "PUBLISHED" ? at : null,
+        firstPublishedAt: overrides.status === "PUBLISHED" ? at : null,
         expiresAt: overrides.expiresAt ?? null,
         createdAt: at,
         updatedAt: at,
