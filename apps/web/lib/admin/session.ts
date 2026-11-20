@@ -10,8 +10,8 @@ import type { AuthSessionUser } from "../server/auth-session.ts";
  * - anonymous: the sign-in page;
  * - customer: `/cuenta`, the customer's own page;
  * - pending administrator (role ADMIN, `twoFactorEnabled` not true): the enrollment page;
- * - administrator (enrolled): the panel, the catalog pages under `/admin/catalogo` (M3 T8a; S1), and the refund
- *   list under `/admin/pagos` (M7 T3; S3);
+ * - administrator (enrolled): the panel, the catalog pages under `/admin/catalogo` (M3 T8a; S1), the refund
+ *   list under `/admin/pagos` (M7 T3; S3), and the invitation status pages under `/admin/invitaciones` (M9 T3; S1);
  * - unavailable (the read failed): the page renders a retry notice, or the sign-in form.
  */
 
@@ -26,7 +26,7 @@ export type AdminView =
   | { kind: "anonymous" | "customer" | "pending-administrator" | "unavailable" }
   | { kind: "administrator"; email: string };
 
-export type AdminPage = "panel" | "sign-in" | "enrollment" | "catalog" | "payments";
+export type AdminPage = "panel" | "sign-in" | "enrollment" | "catalog" | "payments" | "invitations";
 
 /** The page each kind of visitor belongs on. An `unavailable` read has none: every page renders. */
 const HOME: Record<Exclude<SessionKind, "unavailable">, string> = {
@@ -38,8 +38,8 @@ const HOME: Record<Exclude<SessionKind, "unavailable">, string> = {
 
 /**
  * The one kind of visitor each page renders for. `catalog` stands for every page under
- * `/admin/catalogo` and `payments` for every page under `/admin/pagos`: they all require an enrolled
- * administrator, like the panel.
+ * `/admin/catalogo`, `payments` for every page under `/admin/pagos`, and `invitations` for every page
+ * under `/admin/invitaciones`: they all require an enrolled administrator, like the panel.
  */
 const AUDIENCE: Record<AdminPage, Exclude<SessionKind, "unavailable">> = {
   panel: "administrator",
@@ -47,6 +47,7 @@ const AUDIENCE: Record<AdminPage, Exclude<SessionKind, "unavailable">> = {
   enrollment: "pending-administrator",
   catalog: "administrator",
   payments: "administrator",
+  invitations: "administrator",
 };
 
 export async function loadAdminView(
