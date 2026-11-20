@@ -17,12 +17,18 @@ import { createConfigModule } from "../../config/config.module";
 import { EmailDeliveryService } from "../../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../../email/infrastructure/system-email-delivery-runtime";
-import type {
-  AdminPaymentRow,
-  PaymentRefundRepository,
-  RefundTarget,
+import { GetAdminPaymentDetailUseCase } from "../application/admin-payment-detail.use-cases";
+import {
+  ADMIN_PAYMENT_DETAIL_READER,
+  ADMIN_PAYMENT_EVENT_LIMIT,
+  PAYMENT_REFUND_REPOSITORY,
+  type AdminPaymentDetail,
+  type AdminPaymentDetailReader,
+  type AdminPaymentEventRecord,
+  type AdminPaymentRow,
+  type PaymentRefundRepository,
+  type RefundTarget,
 } from "../application/payment.repository";
-import { PAYMENT_REFUND_REPOSITORY } from "../application/payment.repository";
 import { PaymentInvitationAlreadyPublishedError } from "../application/payment.errors";
 import type {
   CheckoutIntent,
@@ -51,14 +57,25 @@ const PAID_AT = new Date("2026-11-23T09:00:00.000Z");
 
 type Row = Record<string, unknown>;
 
-/** The refund persistence port over the same in-memory payments the other suites use. */
-class RefundRepository extends MemoryPaymentRepository implements PaymentRefundRepository {
+/**
+ * The administrator persistence ports over the same in-memory payments the other suites use: the refund repository of
+ * the list and the command, and the detail reader of the one payment (M9 T7; S4).
+ */
+class RefundRepository
+  extends MemoryPaymentRepository
+  implements PaymentRefundRepository, AdminPaymentDetailReader
+{
   private readonly firstPublishedAt = new Map<string, Date>();
   private readonly slugs = new Map<string, string>();
   readonly requestedAt = new Map<string, Date>();
+  private readonly detailEvents = new Map<string, AdminPaymentEventRecord[]>();
 
   setSlug(invitationId: string, slug: string): void {
     this.slugs.set(invitationId, slug);
+  }
+
+  addEvent(paymentId: string, event: AdminPaymentEventRecord): void {
+    this.detailEvents.set(paymentId, [...(this.detailEvents.get(paymentId) ?? []), event]);
   }
 
   markPublished(invitationId: string): void {
@@ -127,6 +144,28 @@ class RefundRepository extends MemoryPaymentRepository implements PaymentRefundR
         firstPublishedAt: this.firstPublishedAt.get(payment.invitationId) ?? null,
         refundRequestedAt: this.requestedAt.get(payment.invitationId) ?? null,
       }));
+  }
+
+  async findForAdmin(paymentId: string): Promise<AdminPaymentDetail | null> {
+    const payment = this.payments.find((stored) => stored.id === paymentId);
+    if (payment === undefined) {
+      return null;
+    }
+
+    return {
+      paymentId: payment.id,
+      invitationId: payment.invitationId,
+      invitationSlug: this.slugs.get(payment.invitationId) ?? "",
+      status: payment.status,
+      amountMinor: payment.amountMinor,
+      currency: payment.currency,
+      provider: payment.provider,
+      createdAt: payment.createdAt,
+      paidAt: payment.paidAt,
+      events: [...(this.detailEvents.get(payment.id) ?? [])]
+        .sort((left, right) => right.receivedAt.getTime() - left.receivedAt.getTime())
+        .slice(0, ADMIN_PAYMENT_EVENT_LIMIT),
+    };
   }
 }
 
@@ -204,6 +243,7 @@ async function startHarness(): Promise<Harness> {
     controllers: [AdminPaymentsController],
     providers: [
       { provide: PAYMENT_REFUND_REPOSITORY, useValue: repository },
+      { provide: ADMIN_PAYMENT_DETAIL_READER, useValue: repository },
       { provide: PAYMENT_PROVIDER, useValue: provider },
       {
         provide: RefundPaymentUseCase,
@@ -212,6 +252,10 @@ async function startHarness(): Promise<Harness> {
       {
         provide: ListAdminPaymentsUseCase,
         useValue: new ListAdminPaymentsUseCase(repository),
+      },
+      {
+        provide: GetAdminPaymentDetailUseCase,
+        useValue: new GetAdminPaymentDetailUseCase(repository),
       },
     ],
   })
@@ -285,6 +329,7 @@ describe("admin payment routes (T2, S3, S4)", () => {
     it("answers 401 without a session and reaches no port", async () => {
       for (const [method, path] of [
         ["GET", `${PATH}?status=paid&limit=10`],
+        ["GET", `${PATH}/${UNKNOWN_ID}`],
         ["POST", `${PATH}/${UNKNOWN_ID}/refund`],
       ] as const) {
         const response = await harness.send(method, path);
@@ -298,6 +343,7 @@ describe("admin payment routes (T2, S3, S4)", () => {
     it("answers 403 to a signed-in customer", async () => {
       for (const [method, path] of [
         ["GET", `${PATH}?status=paid&limit=10`],
+        ["GET", `${PATH}/${UNKNOWN_ID}`],
         ["POST", `${PATH}/${UNKNOWN_ID}/refund`],
       ] as const) {
         const response = await harness.send(method, path, { cookie: customerCookie });
@@ -308,11 +354,14 @@ describe("admin payment routes (T2, S3, S4)", () => {
     });
 
     it("answers 400 for an id that is not a UUID, before reaching a port", async () => {
-      const response = await harness.send("POST", `${PATH}/not-a-uuid/refund`, {
-        cookie: adminCookie,
-      });
+      for (const [method, path] of [
+        ["POST", `${PATH}/not-a-uuid/refund`],
+        ["GET", `${PATH}/not-a-uuid`],
+      ] as const) {
+        const response = await harness.send(method, path, { cookie: adminCookie });
 
-      assert.equal(response.status, 400);
+        assert.equal(response.status, 400, `${method} ${path}`);
+      }
       assert.deepEqual(harness.provider.refunds, []);
     });
 
@@ -439,6 +488,106 @@ describe("admin payment routes (T2, S3, S4)", () => {
 
       assert.equal(response.status, 200);
       assert.equal(((await response.json()) as Row[]).length, 1);
+    });
+  });
+
+  describe("payment detail read (T7, S4)", () => {
+    it("answers 404 PAYMENT_NOT_FOUND for a payment no row answers", async () => {
+      const response = await harness.send("GET", `${PATH}/${UNKNOWN_ID}`, {
+        cookie: adminCookie,
+      });
+
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { code: "PAYMENT_NOT_FOUND" });
+    });
+
+    it("answers the stored payment with its newest events and no provider datum", async () => {
+      const { invitation, payment } = harness.repository.seed();
+      const later = new Date("2026-11-23T09:05:00.000Z");
+      const laterProcessed = new Date("2026-11-23T09:05:01.000Z");
+      harness.repository.addEvent(payment.id, {
+        type: "paid",
+        outcome: "applied",
+        receivedAt: PAID_AT,
+        processedAt: PAID_AT,
+      });
+      harness.repository.addEvent(payment.id, {
+        type: "failed",
+        outcome: "ignored_transition",
+        receivedAt: later,
+        processedAt: laterProcessed,
+      });
+
+      const response = await harness.send("GET", `${PATH}/${payment.id}`, { cookie: adminCookie });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      // The whole body is asserted: no payer datum, provider reference, idempotency key, payload digest, or provider
+      // event id can travel without this test changing.
+      assert.deepEqual(body, {
+        paymentId: payment.id,
+        invitationId: invitation.id,
+        invitationSlug: "cumple-ana",
+        status: "paid",
+        amountMinor: payment.amountMinor,
+        currency: "MXN",
+        provider: "mercadopago",
+        createdAt: payment.createdAt.toISOString(),
+        paidAt: PAID_AT.toISOString(),
+        events: [
+          {
+            type: "failed",
+            outcome: "ignored_transition",
+            receivedAt: later.toISOString(),
+            processedAt: laterProcessed.toISOString(),
+          },
+          {
+            type: "paid",
+            outcome: "applied",
+            receivedAt: PAID_AT.toISOString(),
+            processedAt: PAID_AT.toISOString(),
+          },
+        ],
+      });
+
+      const text = JSON.stringify(body);
+      for (const forbidden of [
+        `ref-${invitation.id}`,
+        payment.idempotencyKey,
+        "providerReference",
+        "idempotencyKey",
+        "payloadSha256",
+        "providerEventId",
+      ]) {
+        assert.equal(text.includes(forbidden), false, forbidden);
+      }
+    });
+
+    it("answers a payment whose events the intake never completed with a null processed instant", async () => {
+      const { payment } = harness.repository.seed({ status: "pending" });
+      harness.repository.addEvent(payment.id, {
+        type: "paid",
+        outcome: "ignored_unknown_payment",
+        receivedAt: PAID_AT,
+        processedAt: null,
+      });
+
+      const response = await harness.send("GET", `${PATH}/${payment.id}`, { cookie: adminCookie });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as {
+        paidAt: string | null;
+        events: Array<Row>;
+      };
+      assert.equal(body.paidAt, null);
+      assert.deepEqual(body.events, [
+        {
+          type: "paid",
+          outcome: "ignored_unknown_payment",
+          receivedAt: PAID_AT.toISOString(),
+          processedAt: null,
+        },
+      ]);
     });
   });
 });

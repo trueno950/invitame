@@ -68,4 +68,7 @@ export const adminPayments = {
   list: () => logged((api) => api.list()),
   refund: (paymentId: Parameters<AdminPaymentsClient["refund"]>[0]) =>
     logged((api) => api.refund(paymentId)),
+  /** `GET /admin/payments/:paymentId`: one payment and its newest events (M9 T7; S4). */
+  detail: (paymentId: Parameters<AdminPaymentsClient["detail"]>[0]) =>
+    logged((api) => api.detail(paymentId)),
 };

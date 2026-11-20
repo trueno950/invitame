@@ -10,12 +10,15 @@ import { PAYMENTS_MODE } from "../../config/environment";
 import type { InvitationRecord } from "../../invitations/application/invitation.repository";
 import { InvitationPaymentRequiredError } from "../../invitations/application/invitation.application.errors";
 import { PrismaInvitationRepository } from "../../invitations/infrastructure/prisma-invitation.repository";
+import { GetAdminPaymentDetailUseCase } from "../application/admin-payment-detail.use-cases";
 import {
   InvitationPackageLockedByPaymentError,
   PaymentAlreadyPaidError,
   PaymentInvitationAlreadyPublishedError,
+  PaymentNotFoundError,
   PaymentNotRefundableError,
 } from "../application/payment.errors";
+import { ADMIN_PAYMENT_EVENT_LIMIT } from "../application/payment.repository";
 import {
   GetInvitationPaymentUseCase,
   StartCheckoutUseCase,
@@ -1033,6 +1036,149 @@ describe("payments on real PostgreSQL (M7 S1, S4)", () => {
       ]);
       assert.ok(rows.every((row) => row.status === "paid"));
       assert.equal((await adminList.execute({ limit: 1 })).length, 1);
+    });
+  });
+
+  describe("administrator payment detail read (T7, S4)", () => {
+    const detailRead = new GetAdminPaymentDetailUseCase(repository);
+    const PAID_AT = new Date("2026-11-23T09:00:00.000Z");
+
+    /** A stored payment of a fresh invitation, with the provider reference and key the pages must never see. */
+    async function newDetailPayment() {
+      const invitation = await newInvitation();
+      const payment = await prisma.payment.create({
+        data: {
+          invitationId: invitation.id,
+          packageId: invitation.packageId,
+          amountMinor: PRICE.amountMinor,
+          currency: PRICE.currency,
+          status: "paid",
+          provider: "simulated",
+          providerReference: `simulated-${randomUUID()}`,
+          idempotencyKey: `${runId}-${randomUUID()}`,
+          paidAt: PAID_AT,
+        },
+      });
+
+      return { invitation, payment };
+    }
+
+    /** One stored event of the payment, written the way the intake writes it. */
+    async function newEvent(
+      paymentId: string,
+      options: {
+        type: "paid" | "failed" | "expired" | "refunded";
+        outcome: string;
+        receivedAt: Date;
+        processedAt?: Date | null;
+      },
+    ) {
+      return prisma.paymentEvent.create({
+        data: {
+          paymentId,
+          provider: "simulated",
+          providerEventId: eventId(),
+          type: options.type,
+          outcome: options.outcome,
+          receivedAt: options.receivedAt,
+          processedAt: options.processedAt === undefined ? options.receivedAt : options.processedAt,
+          payloadSha256: "a".repeat(64),
+        },
+      });
+    }
+
+    it("answers the payment's own fields and no provider reference, key, or payload digest", async () => {
+      const { invitation, payment } = await newDetailPayment();
+
+      const read = await detailRead.execute({ paymentId: payment.id });
+      assert.ok(read);
+
+      assert.deepEqual(Object.keys(read).sort(), [
+        "amountMinor",
+        "createdAt",
+        "currency",
+        "events",
+        "invitationId",
+        "invitationSlug",
+        "paidAt",
+        "paymentId",
+        "provider",
+        "status",
+      ]);
+      assert.deepEqual(read, {
+        paymentId: payment.id,
+        invitationId: invitation.id,
+        invitationSlug: invitation.slug,
+        status: "paid",
+        amountMinor: PRICE.amountMinor,
+        currency: PRICE.currency,
+        provider: "simulated",
+        createdAt: payment.createdAt,
+        paidAt: PAID_AT,
+        events: [],
+      });
+      const text = JSON.stringify(read);
+      assert.equal(text.includes(payment.idempotencyKey), false);
+      assert.equal(text.includes(payment.providerReference ?? "simulated-none"), false);
+      assert.equal(text.includes("payloadSha256"), false);
+      assert.equal(text.includes("providerEventId"), false);
+    });
+
+    it("answers the events newest first with their type, outcome, and instants", async () => {
+      const { payment } = await newDetailPayment();
+      const earlier = await newEvent(payment.id, {
+        type: "failed",
+        outcome: "ignored_transition",
+        receivedAt: new Date("2026-11-23T09:00:00.000Z"),
+      });
+      const later = await newEvent(payment.id, {
+        type: "paid",
+        outcome: "applied",
+        receivedAt: new Date("2026-11-23T09:01:00.000Z"),
+        processedAt: new Date("2026-11-23T09:01:02.000Z"),
+      });
+
+      const read = await detailRead.execute({ paymentId: payment.id });
+
+      assert.deepEqual(read?.events, [
+        {
+          type: "paid",
+          outcome: "applied",
+          receivedAt: later.receivedAt,
+          processedAt: new Date("2026-11-23T09:01:02.000Z"),
+        },
+        {
+          type: "failed",
+          outcome: "ignored_transition",
+          receivedAt: earlier.receivedAt,
+          processedAt: earlier.receivedAt,
+        },
+      ]);
+    });
+
+    it("answers at most the fifty newest events of a payment with more", async () => {
+      const { payment } = await newDetailPayment();
+      // 55 events, each one minute apart: the newest fifty are minutes 5..54.
+      const receivedAt = (minute: number) => new Date(Date.UTC(2026, 10, 23, 9, minute));
+      for (let minute = 0; minute < 55; minute += 1) {
+        await newEvent(payment.id, {
+          type: "failed",
+          outcome: "ignored_transition",
+          receivedAt: receivedAt(minute),
+        });
+      }
+
+      const read = await detailRead.execute({ paymentId: payment.id });
+
+      assert.equal(read?.events.length, ADMIN_PAYMENT_EVENT_LIMIT);
+      assert.deepEqual(read?.events[0]?.receivedAt, receivedAt(54));
+      assert.deepEqual(read?.events.at(-1)?.receivedAt, receivedAt(5));
+    });
+
+    it("refuses a payment no row answers, and reads no event", async () => {
+      await assert.rejects(detailRead.execute({ paymentId: randomUUID() }), {
+        name: PaymentNotFoundError.name,
+      });
     });
   });
 });

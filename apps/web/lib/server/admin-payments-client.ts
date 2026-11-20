@@ -29,6 +29,31 @@ export const PAYMENT_STATUSES = ["pending", "paid", "failed", "expired", "refund
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 /**
+ * The event types the verified intake writes (`PAYMENT_EVENT_TYPE` in the API's `payments/domain/payment.ts`), read
+ * from the rules that store them. The labels in `lib/admin/payments/copy.ts` cover exactly this set; an event whose
+ * type is outside it still reaches the page and renders with a neutral label, because a support read must not fail
+ * on a value the API added later.
+ */
+export const PAYMENT_EVENT_TYPES = ["paid", "failed", "expired", "refunded"] as const;
+export type PaymentEventType = (typeof PAYMENT_EVENT_TYPES)[number];
+
+/**
+ * What one event decided (`PAYMENT_EVENT_OUTCOME` in the same API file): every delivery the intake recorded, whether
+ * it changed the payment or not (S4).
+ */
+export const PAYMENT_EVENT_OUTCOMES = [
+  "applied",
+  "ignored_transition",
+  "ignored_unknown_payment",
+  "refused_amount",
+  "refused_currency",
+] as const;
+export type PaymentEventOutcome = (typeof PAYMENT_EVENT_OUTCOMES)[number];
+
+/** The most events one detail read answers: the API's own bound (`ADMIN_PAYMENT_EVENT_LIMIT`, S4). */
+export const ADMIN_PAYMENT_EVENT_LIMIT = 50;
+
+/**
  * The rows one read asks for: the API's own maximum (`ADMIN_PAYMENT_MAX_LIMIT`). The read is bounded even so, and a
  * page that needs more asks again later rather than growing an unbounded list.
  */
@@ -50,6 +75,37 @@ export interface AdminPayment {
 /** `POST /admin/payments/:paymentId/refund`: the provider was asked and no payment state changed (S3). */
 export interface RefundRequested {
   readonly outcome: "requested";
+}
+
+/**
+ * One event of `GET /admin/payments/:paymentId` (M9 T7; S4): what the intake decided and when. `type` and `outcome`
+ * are the API's closed sets (`PaymentEventType`, `PaymentEventOutcome`), kept as text so a value this client does not
+ * know yet is rendered with a neutral label instead of failing the whole read.
+ */
+export interface AdminPaymentEvent {
+  readonly type: string;
+  readonly outcome: string;
+  readonly receivedAt: string;
+  /** Null only for an event row the intake never completed; the page says so rather than inventing an instant. */
+  readonly processedAt: string | null;
+}
+
+/**
+ * `GET /admin/payments/:paymentId`: one payment, its invitation, and its newest events, newest first (S4). It carries
+ * no payer datum, provider reference, idempotency key, or payload digest, and the page renders none.
+ */
+export interface AdminPaymentDetail {
+  readonly paymentId: string;
+  readonly invitationId: string;
+  readonly invitationSlug: string;
+  readonly status: PaymentStatus;
+  readonly amountMinor: number;
+  readonly currency: string;
+  /** The adapter key the API stored, such as `mercadopago`; never a credential. */
+  readonly provider: string;
+  readonly createdAt: string;
+  readonly paidAt: string | null;
+  readonly events: readonly AdminPaymentEvent[];
 }
 
 /**
@@ -175,6 +231,91 @@ export function parseRefundRequested(value: unknown): RefundRequested | undefine
   return record(value)?.outcome === "requested" ? { outcome: "requested" } : undefined;
 }
 
+/** The stored event vocabulary is `VARCHAR(40)` in both columns, so nothing longer could be one. */
+const MAX_EVENT_LABEL_LENGTH = 40;
+/** `Payment.provider` is a `VARCHAR(40)` adapter key. */
+const MAX_PROVIDER_LENGTH = 40;
+
+function isLabel(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_EVENT_LABEL_LENGTH;
+}
+
+function parseAdminPaymentEvent(value: unknown): AdminPaymentEvent | undefined {
+  const event = record(value);
+
+  if (
+    event === undefined ||
+    !isLabel(event.type) ||
+    !isLabel(event.outcome) ||
+    !isTimestamp(event.receivedAt) ||
+    !(event.processedAt === null || isTimestamp(event.processedAt))
+  ) {
+    return undefined;
+  }
+
+  return {
+    type: event.type,
+    outcome: event.outcome,
+    receivedAt: event.receivedAt,
+    processedAt: event.processedAt,
+  };
+}
+
+/**
+ * One payment's detail, refused whole when a field or an event is outside the contract. Only the fields the page
+ * renders are kept: a response that carried a provider reference, an idempotency key, or a payload digest (it must
+ * not) would drop them here, so none of them can reach a component.
+ */
+export function parseAdminPaymentDetail(value: unknown): AdminPaymentDetail | undefined {
+  const detail = record(value);
+
+  if (
+    detail === undefined ||
+    !isCatalogId(detail.paymentId) ||
+    !isCatalogId(detail.invitationId) ||
+    typeof detail.invitationSlug !== "string" ||
+    detail.invitationSlug.length === 0 ||
+    !isPaymentStatus(detail.status) ||
+    typeof detail.amountMinor !== "number" ||
+    !Number.isSafeInteger(detail.amountMinor) ||
+    detail.amountMinor < 0 ||
+    detail.amountMinor > MAX_AMOUNT_MINOR ||
+    typeof detail.currency !== "string" ||
+    detail.currency.length === 0 ||
+    typeof detail.provider !== "string" ||
+    detail.provider.length === 0 ||
+    detail.provider.length > MAX_PROVIDER_LENGTH ||
+    !isTimestamp(detail.createdAt) ||
+    !(detail.paidAt === null || isTimestamp(detail.paidAt)) ||
+    !Array.isArray(detail.events) ||
+    detail.events.length > ADMIN_PAYMENT_EVENT_LIMIT
+  ) {
+    return undefined;
+  }
+
+  const events: AdminPaymentEvent[] = [];
+  for (const row of detail.events) {
+    const event = parseAdminPaymentEvent(row);
+    if (event === undefined) {
+      return undefined;
+    }
+    events.push(event);
+  }
+
+  return {
+    paymentId: detail.paymentId,
+    invitationId: detail.invitationId,
+    invitationSlug: detail.invitationSlug,
+    status: detail.status,
+    amountMinor: detail.amountMinor,
+    currency: detail.currency,
+    provider: detail.provider,
+    createdAt: detail.createdAt,
+    paidAt: detail.paidAt,
+    events,
+  };
+}
+
 /**
  * The status line of a refusal is never kept: only a `code` from the fixed set is read. An unknown code is no failure
  * here, so the caller can classify the status itself.
@@ -273,6 +414,14 @@ export function createAdminPaymentsClient(
     refund: (paymentId: string): Promise<PaymentsResult<RefundRequested>> =>
       isCatalogId(paymentId)
         ? call("POST", `/admin/payments/${paymentId}/refund`, parseRefundRequested)
+        : Promise.resolve(NOT_FOUND),
+    /**
+     * `GET /admin/payments/:paymentId`: one payment with its invitation slug and its newest fifty events, newest first
+     * (S4). Read-only and never audited (S6, L9). An id that is not a UUID names nothing, so no request is sent.
+     */
+    detail: (paymentId: string): Promise<PaymentsResult<AdminPaymentDetail>> =>
+      isCatalogId(paymentId)
+        ? call("GET", `/admin/payments/${paymentId}`, parseAdminPaymentDetail)
         : Promise.resolve(NOT_FOUND),
   };
 }

@@ -182,6 +182,7 @@ answers the same 404 as an unknown one.
 | `GET /invitations/:id/payment` | `200 { paymentRequired, status, amountMinor, currency, paidAt }` | `404 INVITATION_NOT_FOUND` |
 | `POST /payments/webhooks/:provider` (public) | `200 { outcome: "processed" }`, `200 { outcome: "duplicate" }`, `200 { outcome: "ignored" }` | `400 PAYMENT_WEBHOOK_REJECTED` (no detail), `404 PAYMENT_PROVIDER_NOT_FOUND` |
 | `GET /admin/payments?status=paid&limit=<1..50>` (admin) | `200` newest paid payments with the invitation slug and `refundable` | `401`, `403`, `400` for another status or limit |
+| `GET /admin/payments/:paymentId` (admin) | `200 { paymentId, invitationId, invitationSlug, status, amountMinor, currency, provider, createdAt, paidAt, events: [{ type, outcome, receivedAt, processedAt }] }`, newest 50 events first; read-only and not audited | `401`, `403`, `400` for an id that is not a UUID, `404 PAYMENT_NOT_FOUND` |
 | `POST /admin/payments/:paymentId/refund` (admin) | `200 { outcome: "requested" }`; the state changes only from the notification | `401`, `403`, `404 PAYMENT_NOT_FOUND`, `409 PAYMENT_NOT_REFUNDABLE`, `409 INVITATION_ALREADY_PUBLISHED`, `503 PAYMENT_PROVIDER_UNAVAILABLE` |
 | `POST /payments/simulated/:paymentId/emit` (owner) | `200 { outcome: "processed" }`, `200 { outcome: "duplicate" }` | `409 PAYMENT_SIMULATED_DISABLED`, `404 PAYMENT_NOT_FOUND`, `400` for an outcome other than `paid` or `failed` |
 
@@ -240,6 +241,11 @@ client value can never make a page say "paid", and the API's publication gate st
   API marks `refundable`. The server action calls `POST /admin/payments/:paymentId/refund`, says the refund was
   requested and that the state updates when Mercado Pago confirms it, and maps each refusal code to its own Spanish
   sentence. The API's admin guard is what authorizes the refund; the hidden button is not.
+- **Admin payment detail** (`/admin/pagos/<id>`, M9 T7; S4, S6): each row of the refund list links to its payment's
+  read-only detail (`GET /admin/payments/:paymentId`), which shows the state, the amount, the adapter key, the created
+  and paid instants, and the newest fifty events the verified intake stored — with a Spanish label for each event type
+  and outcome, newest first — plus a link to `/admin/invitaciones/<invitationId>`. It shows no card data and no payer
+  datum, because the API sends none, and viewing a payment writes no `AdminAction` row (L9).
 - **Simulated page** (`/cuenta/invitaciones/<id>/pago/simulado/<paymentId>`): the development-only page the simulated
   checkout redirects to, under `/cuenta` so the session proxy covers it. It shows «Pago de prueba», says that no real
   charge happens, and offers «Pagar» and «Simular rechazo», each one a server action that calls

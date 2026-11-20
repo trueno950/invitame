@@ -14,7 +14,12 @@ import {
 import { PrismaService } from "../database/prisma.service";
 import { INVITATION_PAYMENT_READER } from "../invitations/application/invitation-payment-summary";
 import { INVITATION_PAYMENT_GATE } from "../invitations/application/invitation-payment-gate";
-import { PAYMENT_REFUND_REPOSITORY, PAYMENT_REPOSITORY } from "./application/payment.repository";
+import { GetAdminPaymentDetailUseCase } from "./application/admin-payment-detail.use-cases";
+import {
+  ADMIN_PAYMENT_DETAIL_READER,
+  PAYMENT_REFUND_REPOSITORY,
+  PAYMENT_REPOSITORY,
+} from "./application/payment.repository";
 import {
   EmitSimulatedPaymentUseCase,
   GetInvitationPaymentUseCase,
@@ -103,6 +108,13 @@ function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
       useFactory: (prisma: PrismaService) => new PrismaPaymentRepository(prisma),
     },
     {
+      // The administrator's payment detail read (M9 T7; S4): a global read by payment id, bound apart from every
+      // owner-scoped port so no owner use case can reach a payment it does not own. The adapter is stateless.
+      provide: ADMIN_PAYMENT_DETAIL_READER,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PrismaPaymentRepository(prisma),
+    },
+    {
       // The payment facet of the administrator's invitation status view (M9 T2; S1): the invitations module declares
       // the port and this module implements it, so the status view reads no payment table. Separate from every other
       // payment port, because it answers summaries and never a provider datum.
@@ -165,6 +177,11 @@ function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
       provide: ListAdminPaymentsUseCase,
       inject: [PAYMENT_REFUND_REPOSITORY],
       useFactory: (payments: PrismaPaymentRepository) => new ListAdminPaymentsUseCase(payments),
+    },
+    {
+      provide: GetAdminPaymentDetailUseCase,
+      inject: [ADMIN_PAYMENT_DETAIL_READER],
+      useFactory: (payments: PrismaPaymentRepository) => new GetAdminPaymentDetailUseCase(payments),
     },
     {
       provide: INVITATION_PAYMENT_GATE,

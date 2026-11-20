@@ -26,8 +26,9 @@ import {
 } from "../application/payment.errors";
 import type { CheckoutResult, InvitationPaymentStatus } from "../application/payment.use-cases";
 import type { PaymentWebhookResult } from "../application/payment-webhook.use-case";
+import type { AdminPaymentDetail } from "../application/payment.repository";
 import type { AdminPaymentSummary, RefundRequested } from "../application/refund.use-cases";
-import type { PaymentStatus } from "../domain/payment";
+import type { PaymentEventOutcome, PaymentEventType, PaymentStatus } from "../domain/payment";
 
 /** `POST /invitations/:id/checkout`: the payment, the provider's redirect, and the snapshot the owner will pay. */
 export interface CheckoutResponse {
@@ -103,6 +104,55 @@ export function toAdminPaymentResponse(payment: AdminPaymentSummary): AdminPayme
     currency: payment.currency,
     paidAt: payment.paidAt?.toISOString() ?? null,
     refundable: payment.refundable,
+  };
+}
+
+/** One event of `GET /admin/payments/:paymentId` (M9 T7; S4): what the intake decided and when (S4). */
+export interface AdminPaymentEventResponse {
+  type: PaymentEventType;
+  outcome: PaymentEventOutcome;
+  receivedAt: string;
+  /** Null only for an event whose row the intake never completed; the page says so instead of inventing an instant. */
+  processedAt: string | null;
+}
+
+/**
+ * `GET /admin/payments/:paymentId`: one payment and its newest fifty events (M9 T7; S4). The shape is exactly the S4
+ * design and nothing more: no payer datum, no provider reference, no idempotency key, and no payload digest, so a
+ * support read cannot expose a card, a provider secret, or a replay digest (S6, L9).
+ */
+export interface AdminPaymentDetailResponse {
+  paymentId: string;
+  invitationId: string;
+  invitationSlug: string;
+  status: PaymentStatus;
+  amountMinor: number;
+  currency: string;
+  provider: string;
+  createdAt: string;
+  paidAt: string | null;
+  events: AdminPaymentEventResponse[];
+}
+
+export function toAdminPaymentDetailResponse(
+  detail: AdminPaymentDetail,
+): AdminPaymentDetailResponse {
+  return {
+    paymentId: detail.paymentId,
+    invitationId: detail.invitationId,
+    invitationSlug: detail.invitationSlug,
+    status: detail.status,
+    amountMinor: detail.amountMinor,
+    currency: detail.currency,
+    provider: detail.provider,
+    createdAt: detail.createdAt.toISOString(),
+    paidAt: detail.paidAt?.toISOString() ?? null,
+    events: detail.events.map((event) => ({
+      type: event.type,
+      outcome: event.outcome,
+      receivedAt: event.receivedAt.toISOString(),
+      processedAt: event.processedAt?.toISOString() ?? null,
+    })),
   };
 }
 

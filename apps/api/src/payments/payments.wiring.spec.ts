@@ -164,6 +164,7 @@ describe("AppModule payment routes in a development default", () => {
       ["GET", `/invitations/${id}/payment`],
       ["POST", `/payments/simulated/${id}/emit`],
       ["GET", "/admin/payments?status=paid&limit=10"],
+      ["GET", `/admin/payments/${id}`],
       ["POST", `/admin/payments/${id}/refund`],
     ];
 

@@ -3,22 +3,26 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { databaseErrorCode } from "../../users/domain/database-error-code";
-import type {
-  AdminPaymentRow,
-  InsertEventResult,
-  NewPendingPayment,
-  PaymentEventTransaction,
-  PaymentRecord,
-  PaymentRefundRepository,
-  PaymentRepository,
-  PaymentTarget,
-  RefundTarget,
+import {
+  ADMIN_PAYMENT_EVENT_LIMIT,
+  type AdminPaymentDetail,
+  type AdminPaymentDetailReader,
+  type AdminPaymentEventRecord,
+  type AdminPaymentRow,
+  type InsertEventResult,
+  type NewPendingPayment,
+  type PaymentEventTransaction,
+  type PaymentRecord,
+  type PaymentRefundRepository,
+  type PaymentRepository,
+  type PaymentTarget,
+  type RefundTarget,
 } from "../application/payment.repository";
 import {
   PaymentInvitationAlreadyPublishedError,
   PaymentNotRefundableError,
 } from "../application/payment.errors";
-import type { PaymentStatus } from "../domain/payment";
+import type { PaymentEventOutcome, PaymentEventType, PaymentStatus } from "../domain/payment";
 
 // The payments repository on PostgreSQL (M7 S1, S4). Two statements are the whole concurrency story of this
 // milestone, and both are the database's: the partial unique index `Payment_one_pending_key` makes the second of two
@@ -144,7 +148,9 @@ class PrismaPaymentEventTransaction implements PaymentEventTransaction {
   }
 }
 
-export class PrismaPaymentRepository implements PaymentRepository, PaymentRefundRepository {
+export class PrismaPaymentRepository
+  implements PaymentRepository, PaymentRefundRepository, AdminPaymentDetailReader
+{
   constructor(private readonly prisma: PrismaClient) {}
 
   async findOwnedInvitation(ownerId: string, invitationId: string): Promise<PaymentTarget | null> {
@@ -318,6 +324,53 @@ export class PrismaPaymentRepository implements PaymentRepository, PaymentRefund
       firstPublishedAt: row.invitation.firstPublishedAt,
       refundRequestedAt: row.invitation.refundRequestedAt,
     }));
+  }
+
+  async findForAdmin(paymentId: string): Promise<AdminPaymentDetail | null> {
+    // One query reads the payment, its invitation's slug, and the newest events the intake kept. The digest and the
+    // provider's event id are not selected at all, so they cannot become part of a response by accident (M9 T7; S4).
+    const row = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: {
+        id: true,
+        invitationId: true,
+        amountMinor: true,
+        currency: true,
+        status: true,
+        provider: true,
+        createdAt: true,
+        paidAt: true,
+        invitation: { select: { slug: true } },
+        events: {
+          select: { type: true, outcome: true, receivedAt: true, processedAt: true },
+          // Newest first; the id breaks a tie between two deliveries of the same instant deterministically.
+          orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+          take: ADMIN_PAYMENT_EVENT_LIMIT,
+        },
+      },
+    });
+
+    return row === null
+      ? null
+      : {
+          paymentId: row.id,
+          invitationId: row.invitationId,
+          invitationSlug: row.invitation.slug,
+          status: row.status as PaymentStatus,
+          amountMinor: row.amountMinor,
+          currency: row.currency,
+          provider: row.provider,
+          createdAt: row.createdAt,
+          paidAt: row.paidAt,
+          events: row.events.map(
+            (event): AdminPaymentEventRecord => ({
+              type: event.type as PaymentEventType,
+              outcome: event.outcome as PaymentEventOutcome,
+              receivedAt: event.receivedAt,
+              processedAt: event.processedAt,
+            }),
+          ),
+        };
   }
 
   private async findPending(invitationId: string): Promise<PaymentRecord | null> {
