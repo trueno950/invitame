@@ -34,6 +34,10 @@ import {
   type InvitationOwnerEmailReader,
 } from "./application/invitation-owner-email";
 import {
+  INVITATION_OWNER_STATUS_READER,
+  type InvitationOwnerStatusReader,
+} from "./application/invitation-owner-status";
+import {
   INVITATION_PAYMENT_READER,
   type InvitationPaymentReader,
 } from "./application/invitation-payment-summary";
@@ -262,6 +266,14 @@ describe("InvitationsModule wiring", () => {
       assert.ok(owners !== undefined);
       // An empty page reads nothing: the port answers a batch, and the status view asks with the ids it has.
       assert.deepEqual(await owners.emailsFor([]), new Map());
+      // The detail's owner account state (T9; S4) is a sibling read the users module implements, not a second query
+      // inside the owner-email port, so the list's «solo el correo» contract (L3) stays as it was.
+      const ownerStatuses = context.get<InvitationOwnerStatusReader>(
+        INVITATION_OWNER_STATUS_READER,
+        { strict: false },
+      );
+      assert.ok(ownerStatuses !== undefined);
+      assert.deepEqual(await ownerStatuses.statusesFor([]), new Map());
       // The owner-scoped read is still its own binding: the two ports are not the same object.
       assert.ok(
         context.get<AdminInvitationRepository>(ADMIN_INVITATION_REPOSITORY, {

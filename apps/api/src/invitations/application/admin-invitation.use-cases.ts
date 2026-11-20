@@ -4,6 +4,7 @@ import type { AdminInvitationRepository, AdminInvitationRow } from "./admin-invi
 import { decodeInvitationCursor, encodeInvitationCursor } from "./invitation-cursor";
 import type { InvitationMediaCounts, InvitationMediaCountReader } from "./invitation-media-counts";
 import type { InvitationOwnerEmailReader } from "./invitation-owner-email";
+import type { InvitationOwnerStatusReader, OwnerAccountStatus } from "./invitation-owner-status";
 import {
   INVITATION_PAYMENT_DETAIL_LIMIT,
   type InvitationPaymentReader,
@@ -68,6 +69,12 @@ export interface AdminInvitationDetail extends AdminInvitationSummary {
    * it is an identifier, never personal data like the display name the view never answers.
    */
   ownerId: string;
+  /**
+   * The owner account's stored status (T9; S4): the one additive field the support card needs to offer «Desactivar
+   * cuenta» or «Reactivar cuenta» and the sign-in-code resend. It is a closed state, never a role, a name, or a
+   * session. Null only when no stored owner answers for the invitation, which the reference prevents in practice.
+   */
+  ownerStatus: OwnerAccountStatus | null;
   packageId: string;
   templateVersionId: string;
   /** The newest payments, at most `ADMIN_INVITATION_DETAIL_PAYMENT_LIMIT`, newest first. */
@@ -177,6 +184,7 @@ export class GetAdminInvitationUseCase {
     private readonly payments: InvitationPaymentReader,
     private readonly media: InvitationMediaCountReader,
     private readonly owners: InvitationOwnerEmailReader,
+    private readonly ownerStatuses: InvitationOwnerStatusReader,
   ) {}
 
   async execute(invitationId: string): Promise<AdminInvitationDetail | null> {
@@ -185,10 +193,13 @@ export class GetAdminInvitationUseCase {
       return null;
     }
 
-    const [payments, counts, emails] = await Promise.all([
+    const [payments, counts, emails, statuses] = await Promise.all([
       this.payments.listForInvitation(invitationId, ADMIN_INVITATION_DETAIL_PAYMENT_LIMIT),
       this.media.countsFor([invitationId]),
       this.owners.emailsFor([row.ownerId]),
+      // The support card addresses the owner's account (T9; S4), so the detail asks the sibling read once, for its own
+      // owner, and never widens what a page of rows reads.
+      this.ownerStatuses.statusesFor([row.ownerId]),
     ]);
 
     return {
@@ -196,6 +207,7 @@ export class GetAdminInvitationUseCase {
       // The newest payment of the bounded list is the same one the summary's `latestPayment` states.
       latestPayment: payments[0] ?? null,
       ownerId: row.ownerId,
+      ownerStatus: statuses.get(row.ownerId) ?? null,
       packageId: row.packageId,
       templateVersionId: row.templateVersionId,
       payments,

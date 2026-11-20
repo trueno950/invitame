@@ -36,6 +36,8 @@ import type {
 import { INVITATION_MEDIA_COUNT_READER } from "../application/invitation-media-counts";
 import type { InvitationOwnerEmailReader } from "../application/invitation-owner-email";
 import { INVITATION_OWNER_EMAIL_READER } from "../application/invitation-owner-email";
+import type { InvitationOwnerStatusReader } from "../application/invitation-owner-status";
+import { INVITATION_OWNER_STATUS_READER } from "../application/invitation-owner-status";
 import type {
   InvitationPaymentReader,
   InvitationPaymentSummary,
@@ -181,11 +183,28 @@ class StubOwnerReader implements InvitationOwnerEmailReader {
   }
 }
 
+/** The owner's account state (M9 T9; S4): the sibling read the detail answers as `ownerStatus`. */
+class StubOwnerStatusReader implements InvitationOwnerStatusReader {
+  readonly statuses = new Map<string, "ACTIVE" | "DISABLED">([[OWNER, "ACTIVE"]]);
+
+  async statusesFor(ownerIds: readonly string[]) {
+    const found = new Map<string, "ACTIVE" | "DISABLED">();
+    for (const id of ownerIds) {
+      const status = this.statuses.get(id);
+      if (status !== undefined) {
+        found.set(id, status);
+      }
+    }
+    return found;
+  }
+}
+
 interface Harness {
   app: INestApplication;
   repository: StubAdminInvitationRepository;
   payments: StubPaymentReader;
   media: StubMediaCountReader;
+  ownerStatuses: StubOwnerStatusReader;
   /** The ids of the accounts the suite signed in, in order, so a spec can name the session's actor. */
   signedInUserIds: string[];
   signIn(role: "CUSTOMER" | "ADMIN"): Promise<string>;
@@ -222,6 +241,7 @@ async function startHarness(): Promise<Harness> {
   const payments = new StubPaymentReader();
   const media = new StubMediaCountReader();
   const owners = new StubOwnerReader();
+  const ownerStatuses = new StubOwnerStatusReader();
 
   @Module({
     imports: [
@@ -241,19 +261,20 @@ async function startHarness(): Promise<Harness> {
       { provide: INVITATION_PAYMENT_READER, useValue: payments },
       { provide: INVITATION_MEDIA_COUNT_READER, useValue: media },
       { provide: INVITATION_OWNER_EMAIL_READER, useValue: owners },
+      { provide: INVITATION_OWNER_STATUS_READER, useValue: ownerStatuses },
       {
         provide: ListAdminInvitationsUseCase,
         useValue: new ListAdminInvitationsUseCase(repository, payments, media, owners),
       },
       {
         provide: GetAdminInvitationUseCase,
-        useValue: new GetAdminInvitationUseCase(repository, payments, media, owners),
+        useValue: new GetAdminInvitationUseCase(repository, payments, media, owners, ownerStatuses),
       },
       {
         provide: UnpublishAdminInvitationUseCase,
         useValue: new UnpublishAdminInvitationUseCase(
           repository,
-          new GetAdminInvitationUseCase(repository, payments, media, owners),
+          new GetAdminInvitationUseCase(repository, payments, media, owners, ownerStatuses),
         ),
       },
     ],
@@ -270,6 +291,7 @@ async function startHarness(): Promise<Harness> {
     repository,
     payments,
     media,
+    ownerStatuses,
     signedInUserIds,
     async signIn(role): Promise<string> {
       counter += 1;
@@ -532,6 +554,7 @@ describe("admin invitation status routes (M9 T2; S1)", () => {
         "media",
         "ownerEmail",
         "ownerId",
+        "ownerStatus",
         "packageId",
         "payments",
         "publishedAt",
@@ -541,6 +564,7 @@ describe("admin invitation status routes (M9 T2; S1)", () => {
         "templateVersionId",
       ]);
       assert.equal(body.ownerId, OWNER);
+      assert.equal(body.ownerStatus, "ACTIVE");
       assert.equal(body.packageId, row.packageId);
       assert.equal(body.templateVersionId, row.templateVersionId);
       assert.deepEqual(body.media, { mainPhoto: false, galleryCount: 4 });
@@ -676,6 +700,7 @@ describe("admin invitation unpublish (M9 T8; S4, S6)", () => {
       assert.equal(body.firstPublishedAt, PUBLISHED_AT);
       assert.equal(body.ownerId, row.ownerId);
       assert.equal(body.ownerEmail, OWNER_EMAIL);
+      assert.equal(body.ownerStatus, "ACTIVE");
       assert.deepEqual(Object.keys(body).sort(), [
         "archivedAt",
         "createdAt",
@@ -685,6 +710,7 @@ describe("admin invitation unpublish (M9 T8; S4, S6)", () => {
         "media",
         "ownerEmail",
         "ownerId",
+        "ownerStatus",
         "packageId",
         "payments",
         "publishedAt",
