@@ -16,6 +16,26 @@ import { createConfigModule } from "../config/config.module";
 import { PrismaService } from "../database/prisma.service";
 import { PaymentGate } from "../payments/infrastructure/payment-gate";
 import { GUEST_REPOSITORY } from "./application/guest.repository";
+import {
+  ADMIN_INVITATION_REPOSITORY,
+  type AdminInvitationRepository,
+} from "./application/admin-invitation.repository";
+import {
+  GetAdminInvitationUseCase,
+  ListAdminInvitationsUseCase,
+} from "./application/admin-invitation.use-cases";
+import {
+  INVITATION_MEDIA_COUNT_READER,
+  type InvitationMediaCountReader,
+} from "./application/invitation-media-counts";
+import {
+  INVITATION_OWNER_EMAIL_READER,
+  type InvitationOwnerEmailReader,
+} from "./application/invitation-owner-email";
+import {
+  INVITATION_PAYMENT_READER,
+  type InvitationPaymentReader,
+} from "./application/invitation-payment-summary";
 import { INVITATION_REPOSITORY, type InvitationRecord } from "./application/invitation.repository";
 import {
   ArchiveInvitationUseCase,
@@ -64,12 +84,14 @@ import {
 import { RSVP_REPOSITORY } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
+import { PrismaAdminInvitationRepository } from "./infrastructure/prisma-admin-invitation.repository";
 import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { PrismaPlaceSearchRateLimiter } from "./infrastructure/prisma-place-search-rate-limiter";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
 import { InvitationsModule } from "./invitations.module";
+import { AdminInvitationsController } from "./presentation/admin-invitations.controller";
 import { InvitationsController } from "./presentation/invitations.controller";
 import { PublicInvitationsController } from "./presentation/public-invitations.controller";
 
@@ -176,6 +198,8 @@ describe("InvitationsModule wiring", () => {
         SearchPlacesUseCase,
         UpdateInvitationPlaceUseCase,
         ClearInvitationPlaceUseCase,
+        ListAdminInvitationsUseCase,
+        GetAdminInvitationUseCase,
       ]) {
         assert.ok(context.get(useCase) instanceof useCase, useCase.name);
       }
@@ -208,6 +232,40 @@ describe("InvitationsModule wiring", () => {
       assert.deepEqual(await paymentGate.publicationPaymentRequired(invitationRecord()), {
         required: false,
       });
+      // The administrator's status view (M9 T2; S1) binds its own global read port, separate from the owner-scoped
+      // repository, and asks the three facets through the ports the payments, media, and users modules implement.
+      assert.ok(
+        context.get(ADMIN_INVITATION_REPOSITORY, { strict: false }) instanceof
+          PrismaAdminInvitationRepository,
+      );
+      assert.ok(context.get(INVITATION_PAYMENT_READER, { strict: false }) !== undefined);
+      assert.ok(
+        (
+          context.get<InvitationPaymentReader>(INVITATION_PAYMENT_READER, { strict: false }) as {
+            latestFor?: unknown;
+          }
+        ).latestFor instanceof Function,
+      );
+      assert.ok(context.get(INVITATION_MEDIA_COUNT_READER, { strict: false }) !== undefined);
+      assert.ok(
+        (
+          context.get<InvitationMediaCountReader>(INVITATION_MEDIA_COUNT_READER, {
+            strict: false,
+          }) as { countsFor?: unknown }
+        ).countsFor instanceof Function,
+      );
+      const owners = context.get<InvitationOwnerEmailReader>(INVITATION_OWNER_EMAIL_READER, {
+        strict: false,
+      });
+      assert.ok(owners !== undefined);
+      // An empty page reads nothing: the port answers a batch, and the status view asks with the ids it has.
+      assert.deepEqual(await owners.emailsFor([]), new Map());
+      // The owner-scoped read is still its own binding: the two ports are not the same object.
+      assert.ok(
+        context.get<AdminInvitationRepository>(ADMIN_INVITATION_REPOSITORY, {
+          strict: false,
+        }) !== context.get(INVITATION_REPOSITORY, { strict: false }),
+      );
       // RSVP data and its rate limit have their own adapters, both on the shared Prisma client (M6 G1; S4).
       assert.ok(context.get(RSVP_REPOSITORY, { strict: false }) instanceof PrismaRsvpRepository);
       assert.ok(context.get(RSVP_RATE_LIMITER, { strict: false }) instanceof PrismaRsvpRateLimiter);
@@ -237,7 +295,11 @@ describe("InvitationsModule wiring", () => {
   it("registers the owner and the public invitation controllers", () => {
     const controllers: unknown = Reflect.getMetadata("controllers", InvitationsModule) ?? [];
 
-    assert.deepEqual(controllers, [InvitationsController, PublicInvitationsController]);
+    assert.deepEqual(controllers, [
+      InvitationsController,
+      PublicInvitationsController,
+      AdminInvitationsController,
+    ]);
   });
 });
 
@@ -303,6 +365,9 @@ describe("AppModule invitation wiring", () => {
       ["DELETE", `/invitations/${id}/guests/${id}`],
       ["POST", `/invitations/${id}/guests/${id}/token`],
       ["POST", `/invitations/${id}/guests/check-in`, { token: "A".repeat(22) }],
+      // The administrator's status view (M9 T2; S1): behind the guard and `@AdminOnly()`.
+      ["GET", "/admin/invitations?slug=boda&status=PUBLISHED&limit=10"],
+      ["GET", `/admin/invitations/${id}`],
     ];
 
     for (const [method, path, body] of routes) {
