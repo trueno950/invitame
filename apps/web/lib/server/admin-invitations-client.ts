@@ -41,6 +41,14 @@ export type AdminActionReason = (typeof ADMIN_ACTION_REASONS)[number];
 /** The widest note the API stores (`AdminAction.note`, a `VARCHAR(500)` with a matching CHECK). */
 export const ADMIN_ACTION_NOTE_MAX_LENGTH = 500;
 
+/**
+ * The stored `User.status` labels the administrator's pages read, and nothing else about an account: the invitation
+ * detail answers the owner's status (T9; S4) so the support card knows whether to offer disable or reactivate, and the
+ * account actions answer the status they left behind. It is the API's own closed set, not a free string.
+ */
+export const ACCOUNT_STATUSES = ["ACTIVE", "DISABLED"] as const;
+export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
+
 /** The page size the list asks for: the API's own default, so a page needs more only by asking again. */
 export const ADMIN_INVITATION_LIST_LIMIT = 20;
 
@@ -120,6 +128,12 @@ export interface AdminInvitationDetail extends AdminInvitationSummary {
    * identifier, never the display name the status view does not answer.
    */
   readonly ownerId: string;
+  /**
+   * The owner account's stored status (T9; S4): the additive field the support card reads to offer «Desactivar
+   * cuenta» or «Reactivar cuenta» and the sign-in-code resend. `null` only when the API answers no stored owner, which
+   * its reference prevents in practice.
+   */
+  readonly ownerStatus: AccountStatus | null;
   readonly packageId: string;
   readonly templateVersionId: string;
   readonly payments: readonly AdminInvitationPayment[];
@@ -218,6 +232,10 @@ function isAmountMinor(value: unknown): value is number {
 
 function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isAccountStatus(value: unknown): value is AccountStatus {
+  return ACCOUNT_STATUSES.some((status) => status === value);
 }
 
 function isInvitationStatus(value: unknown): value is AdminInvitationStatus {
@@ -380,6 +398,7 @@ export function parseAdminInvitationDetail(value: unknown): AdminInvitationDetai
 
   if (
     !isCatalogId(detail.ownerId) ||
+    !(detail.ownerStatus === null || isAccountStatus(detail.ownerStatus)) ||
     !isCatalogId(detail.packageId) ||
     !isCatalogId(detail.templateVersionId) ||
     payments === undefined
@@ -390,6 +409,7 @@ export function parseAdminInvitationDetail(value: unknown): AdminInvitationDetai
   return {
     ...summary,
     ownerId: detail.ownerId,
+    ownerStatus: detail.ownerStatus,
     packageId: detail.packageId,
     templateVersionId: detail.templateVersionId,
     payments,

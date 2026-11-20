@@ -41,7 +41,12 @@ import {
   adminTextarea,
 } from "../../_components/admin-ui.ts";
 import { InvitationsNotice } from "../_components/invitations-notice.tsx";
-import { unpublishInvitationAction } from "../actions.ts";
+import {
+  disableOwnerAccountAction,
+  reactivateOwnerAccountAction,
+  resendOwnerSignInCodeAction,
+  unpublishInvitationAction,
+} from "../actions.ts";
 
 export const metadata: Metadata = { title: INVITATION_DETAIL_COPY.pageTitle };
 
@@ -51,9 +56,12 @@ export const metadata: Metadata = { title: INVITATION_DETAIL_COPY.pageTitle };
  * invitation is published — its public link. The owner appears as «solo el correo» (L3); the content, the owner's name,
  * and the guest data are never shown, because the API does not send them.
  *
- * The «Acciones de soporte» card offers the administrator's unpublish while the invitation is published: one server
- * action form with the reason select and the note, so it works without JavaScript. The form is a convenience, never a
- * guard — the API authorizes the call, applies the transition, and writes the audit row in the same transaction.
+ * The «Acciones de soporte» card offers the administrator's unpublish while the invitation is published, and the owner
+ * account's actions (T9; S4, L8, L9): «Desactivar cuenta» while the owner is active, «Reactivar cuenta» while the account
+ * is disabled, and «Reenviar código de acceso» while the owner may sign in by code. Each is one server action form with
+ * the same reason select and note, so every form works without JavaScript. A form is a convenience, never a guard — the
+ * API authorizes the call, applies the change, and writes the audit row in the same transaction — and the card never
+ * promises the resend was delivered: it says the code was requested.
  *
  * The session read only chooses the page: the API answers `@AdminOnly()` and decides what a detail contains.
  */
@@ -311,6 +319,164 @@ export default async function AdminInvitationDetailPage({
                     </div>
                   </form>
                 ) : null}
+                <div className="flex flex-col gap-4 border-t border-admin-border pt-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-admin-ink">
+                      {INVITATION_SUPPORT_COPY.ownerHeading}
+                    </h3>
+                    <p className="mt-1 text-sm text-admin-ink">
+                      {INVITATION_SUPPORT_COPY.ownerStatusLabel}:{" "}
+                      <span className="font-medium">{support.owner.statusLabel}</span>
+                    </p>
+                    {support.owner.hint === undefined ? null : (
+                      <p className={adminHint}>{support.owner.hint}</p>
+                    )}
+                  </div>
+                  {support.owner.canDisable ? (
+                    <form
+                      action={disableOwnerAccountAction}
+                      className="flex flex-col gap-4 border-t border-admin-border pt-4"
+                    >
+                      <input name="invitationId" type="hidden" value={detail.invitationId} />
+                      <input name="userId" type="hidden" value={detail.ownerId} />
+                      <div>
+                        <h4 className="text-sm font-medium text-admin-ink">
+                          {INVITATION_SUPPORT_COPY.disableHeading}
+                        </h4>
+                        <p className={adminHint}>{INVITATION_SUPPORT_COPY.disableHint}</p>
+                      </div>
+                      <div>
+                        <label className={adminLabel} htmlFor="owner-disable-reason">
+                          {INVITATION_SUPPORT_COPY.reasonLabel}
+                        </label>
+                        <AdminSelect defaultValue="" id="owner-disable-reason" name="reason">
+                          <option value="">{INVITATION_SUPPORT_COPY.reasonPlaceholder}</option>
+                          {support.reasons.map((reason) => (
+                            <option key={reason.value} value={reason.value}>
+                              {reason.label}
+                            </option>
+                          ))}
+                        </AdminSelect>
+                      </div>
+                      <div>
+                        <label className={adminLabel} htmlFor="owner-disable-note">
+                          {INVITATION_SUPPORT_COPY.noteLabel}
+                        </label>
+                        <textarea
+                          className={adminTextarea}
+                          id="owner-disable-note"
+                          maxLength={support.noteMaxLength}
+                          name="note"
+                          rows={3}
+                        />
+                        <p className={adminHint}>{INVITATION_SUPPORT_COPY.noteHint}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs leading-5 text-admin-muted">
+                          {INVITATION_SUPPORT_COPY.invitationsStayPublished}
+                        </p>
+                        <button className={adminButton} type="submit">
+                          {INVITATION_SUPPORT_COPY.disable}
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
+                  {support.owner.canReactivate ? (
+                    <form
+                      action={reactivateOwnerAccountAction}
+                      className="flex flex-col gap-4 border-t border-admin-border pt-4"
+                    >
+                      <input name="invitationId" type="hidden" value={detail.invitationId} />
+                      <input name="userId" type="hidden" value={detail.ownerId} />
+                      <div>
+                        <h4 className="text-sm font-medium text-admin-ink">
+                          {INVITATION_SUPPORT_COPY.reactivateHeading}
+                        </h4>
+                        <p className={adminHint}>{INVITATION_SUPPORT_COPY.reactivateHint}</p>
+                      </div>
+                      <div>
+                        <label className={adminLabel} htmlFor="owner-reactivate-reason">
+                          {INVITATION_SUPPORT_COPY.reasonLabel}
+                        </label>
+                        <AdminSelect defaultValue="" id="owner-reactivate-reason" name="reason">
+                          <option value="">{INVITATION_SUPPORT_COPY.reasonPlaceholder}</option>
+                          {support.reasons.map((reason) => (
+                            <option key={reason.value} value={reason.value}>
+                              {reason.label}
+                            </option>
+                          ))}
+                        </AdminSelect>
+                      </div>
+                      <div>
+                        <label className={adminLabel} htmlFor="owner-reactivate-note">
+                          {INVITATION_SUPPORT_COPY.noteLabel}
+                        </label>
+                        <textarea
+                          className={adminTextarea}
+                          id="owner-reactivate-note"
+                          maxLength={support.noteMaxLength}
+                          name="note"
+                          rows={3}
+                        />
+                        <p className={adminHint}>{INVITATION_SUPPORT_COPY.noteHint}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-3">
+                        <button className={adminButton} type="submit">
+                          {INVITATION_SUPPORT_COPY.reactivate}
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
+                  {support.owner.canResendSignInCode ? (
+                    <form
+                      action={resendOwnerSignInCodeAction}
+                      className="flex flex-col gap-4 border-t border-admin-border pt-4"
+                    >
+                      <input name="invitationId" type="hidden" value={detail.invitationId} />
+                      <input name="userId" type="hidden" value={detail.ownerId} />
+                      <div>
+                        <h4 className="text-sm font-medium text-admin-ink">
+                          {INVITATION_SUPPORT_COPY.resendHeading}
+                        </h4>
+                        <p className={adminHint}>{INVITATION_SUPPORT_COPY.resendHint}</p>
+                      </div>
+                      <div>
+                        <label className={adminLabel} htmlFor="owner-resend-reason">
+                          {INVITATION_SUPPORT_COPY.reasonLabel}
+                        </label>
+                        <AdminSelect defaultValue="" id="owner-resend-reason" name="reason">
+                          <option value="">{INVITATION_SUPPORT_COPY.reasonPlaceholder}</option>
+                          {support.reasons.map((reason) => (
+                            <option key={reason.value} value={reason.value}>
+                              {reason.label}
+                            </option>
+                          ))}
+                        </AdminSelect>
+                      </div>
+                      <div>
+                        <label className={adminLabel} htmlFor="owner-resend-note">
+                          {INVITATION_SUPPORT_COPY.noteLabel}
+                        </label>
+                        <textarea
+                          className={adminTextarea}
+                          id="owner-resend-note"
+                          maxLength={support.noteMaxLength}
+                          name="note"
+                          rows={3}
+                        />
+                        <p className={adminHint}>{INVITATION_SUPPORT_COPY.noteHint}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs leading-5 text-admin-muted">
+                          {INVITATION_SUPPORT_COPY.resendNoticeHint}
+                        </p>
+                        <button className={adminButton} type="submit">
+                          {INVITATION_SUPPORT_COPY.resend}
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
+                </div>
               </div>
             </AdminCard>
           </>

@@ -6,6 +6,11 @@ import {
   type InvitationsResult,
   isAdminActionReason,
 } from "../../server/admin-invitations-client.ts";
+import type {
+  AccountResult,
+  AdminUserActionCommand,
+  AdminUsersClient,
+} from "../../server/admin-users-client.ts";
 import { SIGN_IN_PATH } from "../catalog/commands.ts";
 import { INVITATIONS_PATHS, invitationDetailPath } from "./copy.ts";
 import { invitationsErrorTarget, invitationsNoticeTarget } from "./notices.ts";
@@ -112,4 +117,96 @@ export async function unpublishInvitation(
   }
 
   return invitationsErrorTarget(detailPath, result.failure);
+}
+
+/**
+ * The one command body the three owner account actions share (M9 T9; S4, S6, L9): the form carries the invitation the
+ * card belongs to and the owner's account id, both as UUIDs, plus the same reason and note as the unpublish. It calls
+ * the account client once, and answers the invitation's page with the outcome as a code. Nothing here decides whether
+ * the action may run — the API authorizes it, applies the change, and writes the audit row in one transaction — and a
+ * hidden button is no guard, so a refusal the page did not expect is still its own message.
+ */
+async function ownerAccountAction(
+  api: AdminUsersClient,
+  form: FormData,
+  action: {
+    notice: "account-disabled" | "account-reactivated" | "sign-in-code-requested";
+    call: (
+      api: AdminUsersClient,
+      userId: string,
+      command: AdminUserActionCommand,
+    ) => Promise<AccountResult<unknown>>;
+  },
+): Promise<string> {
+  const invitationId = text(form, "invitationId");
+  if (invitationId === undefined || !isCatalogId(invitationId)) {
+    return invitationsErrorTarget(INVITATIONS_PATHS.index, "invalid-form");
+  }
+
+  const detailPath = invitationDetailPath(invitationId);
+  const userId = text(form, "userId");
+
+  if (userId === undefined || !isCatalogId(userId)) {
+    return invitationsErrorTarget(detailPath, "invalid-form");
+  }
+
+  const reason = text(form, "reason");
+  if (reason === undefined || !isAdminActionReason(reason)) {
+    return invitationsErrorTarget(detailPath, "invalid-form");
+  }
+
+  const note = noteOf(form, reason);
+  if (note === undefined) {
+    return invitationsErrorTarget(detailPath, "invalid-form");
+  }
+
+  let result: AccountResult<unknown>;
+  try {
+    result = await action.call(api, userId, { reason, note });
+  } catch {
+    return invitationsErrorTarget(detailPath, "unavailable");
+  }
+
+  if (result.ok) {
+    return invitationsNoticeTarget(detailPath, action.notice);
+  }
+  if (result.failure === "signed-out") {
+    return SIGN_IN_PATH;
+  }
+  if (result.failure === "forbidden") {
+    return "/cuenta";
+  }
+
+  return invitationsErrorTarget(detailPath, result.failure);
+}
+
+/**
+ * «Desactivar cuenta»: blocks the owner's access, revoking their sessions, with the audit row the API writes in the same
+ * transaction (S4). The owner's invitations stay published (L8), so the card says so.
+ */
+export function disableOwnerAccount(api: AdminUsersClient, form: FormData): Promise<string> {
+  return ownerAccountAction(api, form, {
+    notice: "account-disabled",
+    call: (client, userId, command) => client.disable(userId, command),
+  });
+}
+
+/** «Reactivar cuenta»: restores the owner's access with its audit row (L9). */
+export function reactivateOwnerAccount(api: AdminUsersClient, form: FormData): Promise<string> {
+  return ownerAccountAction(api, form, {
+    notice: "account-reactivated",
+    call: (client, userId, command) => client.reactivate(userId, command),
+  });
+}
+
+/**
+ * «Reenviar código de acceso»: records the request and asks the API for a new sign-in code (S4). The notice says the
+ * code was requested — never that it arrived, because delivery is the API's own background task and the per-email limit
+ * may still drop it.
+ */
+export function resendOwnerSignInCode(api: AdminUsersClient, form: FormData): Promise<string> {
+  return ownerAccountAction(api, form, {
+    notice: "sign-in-code-requested",
+    call: (client, userId, command) => client.resendSignInCode(userId, command),
+  });
 }

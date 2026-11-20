@@ -61,6 +61,8 @@ const PAYMENT = {
 const DETAIL = {
   ...INVITATION,
   ownerId: OWNER_ID,
+  // The owner's stored account status (T9; S4): the support card reads it to offer disable or reactivate.
+  ownerStatus: "ACTIVE",
   packageId: PACKAGE_ID,
   templateVersionId: TEMPLATE_VERSION_ID,
   payments: [PAYMENT],
@@ -219,6 +221,30 @@ describe("requests", () => {
     });
   });
 
+  it("keeps the owner's account status in the detail, and only there (T9; S4)", async () => {
+    answer(200, DETAIL);
+    const detail = await client().detail(INVITATION_ID);
+    assert.ok(detail.ok);
+    assert.equal(detail.value.ownerStatus, "ACTIVE");
+
+    answer(200, { ...DETAIL, ownerStatus: "DISABLED" });
+    const disabled = await client().detail(INVITATION_ID);
+    assert.ok(disabled.ok);
+    assert.equal(disabled.value.ownerStatus, "DISABLED");
+
+    // No stored owner answers: the detail says so instead of inventing a state.
+    answer(200, { ...DETAIL, ownerStatus: null });
+    const unknown = await client().detail(INVITATION_ID);
+    assert.ok(unknown.ok);
+    assert.equal(unknown.value.ownerStatus, null);
+
+    // A list row still answers no owner status: the status view keeps «solo el correo» (L3).
+    answer(200, { items: [{ ...INVITATION, ownerStatus: "ACTIVE" }], nextCursor: null });
+    const page = await client().list();
+    assert.ok(page.ok);
+    assert.equal("ownerStatus" in (page.value.items[0] ?? {}), false);
+  });
+
   it("answers signed out without calling the API when there is no session cookie", async () => {
     for (const cookie of [null, "", "theme=dark"]) {
       const api = client(cookie);
@@ -307,6 +333,8 @@ describe("requests", () => {
       { ...DETAIL, ownerId: undefined },
       { ...DETAIL, ownerId: "no-es-un-uuid" },
       { ...DETAIL, ownerId: null },
+      { ...DETAIL, ownerStatus: "SUSPENDED" },
+      { ...DETAIL, ownerStatus: undefined },
       { ...DETAIL, payments: undefined },
       { ...DETAIL, payments: [{ ...PAYMENT, paymentId: "x" }] },
       { ...DETAIL, payments: [{ ...PAYMENT, status: "approved" }] },
