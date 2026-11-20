@@ -236,6 +236,60 @@ async function startHarness(paymentsEnvironment: Record<string, unknown>): Promi
   };
 }
 
+describe("payments controller webhook request mapping (T1, S4)", () => {
+  function controllerWith() {
+    const received: Array<Record<string, unknown>> = [];
+    const webhook = {
+      execute: async (input: Record<string, unknown>) => {
+        received.push(input);
+        return { outcome: "ignored" as const };
+      },
+    };
+    const emit = { execute: async () => ({ outcome: "processed" as const }) };
+
+    return {
+      controller: new PaymentsController(
+        webhook as unknown as HandlePaymentWebhookUseCase,
+        emit as unknown as EmitSimulatedPaymentUseCase,
+      ),
+      received,
+    };
+  }
+
+  it("passes the parsed query, the raw body, and the headers of one delivery", async () => {
+    const { controller, received } = controllerWith();
+    const headers = { "x-signature": "ts=1,v1=abc", "x-request-id": "req-1" };
+
+    const response = await controller.receiveWebhook("mercadopago", {
+      headers,
+      rawBody: Buffer.from('{"type":"payment"}'),
+      // Express hands repeated query parameters over as an array; the adapter signs one value per key.
+      query: { "data.id": "123456", type: ["payment", "merchant_order"], empty: "" },
+    } as unknown as never);
+
+    assert.deepEqual(response, { outcome: "ignored" });
+    const [input] = received;
+    assert.ok(input);
+    assert.equal(input.provider, "mercadopago");
+    assert.equal(input.rawBody, '{"type":"payment"}');
+    assert.deepEqual(input.headers, headers);
+    assert.deepEqual(input.query, { "data.id": "123456", type: "payment", empty: "" });
+    assert.ok(input.receivedAt instanceof Date);
+  });
+
+  it("passes an empty query when the request carries none", async () => {
+    const { controller, received } = controllerWith();
+
+    const response = await controller.receiveWebhook("mercadopago", {
+      headers: {},
+      rawBody: "",
+    } as unknown as never);
+
+    assert.deepEqual(response, { outcome: "ignored" });
+    assert.deepEqual(received[0]?.query, {});
+  });
+});
+
 describe("payments routes with a simulated deployment (M7 S1, S4)", () => {
   let harness: Harness;
   let ownerCookie: string;

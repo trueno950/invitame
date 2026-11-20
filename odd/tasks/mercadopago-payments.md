@@ -42,7 +42,7 @@ security-sensitive design before implementation; this document is that reviewed 
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | Env + port changes (query on webhook, refund method) + Mercado Pago adapter with fake-HTTP specs | S1, S2, S4 | worker | |
+| T1 | Env + port changes (query on webhook, refund method) + Mercado Pago adapter with fake-HTTP specs | S1, S2, S4 | worker | see L4 |
 | T2 | Refund rule: admin route, never-published check, provider refund call | S3, S4 | worker | |
 | T3 | Web: Checkout Pro redirect and return page states; admin refund button | S1, S3 | worker | |
 | T4 | Docs (README env rows, payments docs, ROADMAP M7), native review, PRs, CI, merge | S1-S4 | inline | |
@@ -61,3 +61,18 @@ security-sensitive design before implementation; this document is that reviewed 
   mercadopago.com.mx developers docs for preferences, webhooks, payments, and refunds).
 - L2 — Owner approval of the design: «Sí, impleméntalo» (build it against a fake HTTP server; production keeps
   charging nothing until the owner sets the Mercado Pago credentials; no sandbox credentials yet).
+- L3 — Implementation decisions inside the approved design: (a) `providerReference` keeps our `paymentId` (the
+  `external_reference` Mercado Pago echoes), so the refund finds the Mercado Pago payment through
+  `GET /v1/payments/search?external_reference=<paymentId>` instead of a new column; (b) "never published" needs
+  history the schema lacks — `Invitation.publishedAt` is cleared on unpublish and archive — so T2 adds an additive,
+  never-cleared `firstPublishedAt`, backfilled from `publishedAt` (the product is pre-launch, so no once-published,
+  now-unpublished row exists outside development data); (c) T1 runs as one worker on `apps/api/src/payments/**` and
+  the environment, T2 follows on its result, T3 (web) last.
+- L4 — T1 (worker): `PAYMENTS_MODE=mercadopago` with fail-closed startup validation of the access token, the
+  notification signature key, `PAYMENTS_WEBHOOK_BASE_URL`, and the optional `MERCADOPAGO_API_BASE_URL` (https in
+  production; the two credentials distinct and never echoed). The port gains the webhook query, an async
+  `verifyWebhook`, an authentic-but-ignored answer (`event: null` → 200 `{ outcome: "ignored" }`, nothing written),
+  and `refund`. The adapter creates the Checkout Pro preference, verifies `x-signature`, re-reads the payment, maps
+  statuses, converts exact cents, and refunds in full; specs run against an in-process fake server. RED observed per
+  rule; API 1730 unit and 24 payments db-specs pass; a differential run against the base showed the simulated and
+  free modes unchanged.

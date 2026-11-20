@@ -25,6 +25,7 @@ import { HandlePaymentWebhookUseCase } from "./application/payment-webhook.use-c
 import { PAYMENTS_MODE_TOKEN, type PaymentsModeSetting } from "./application/payments-mode";
 import { CatalogPaymentPrices } from "./infrastructure/catalog-payment-prices";
 import { DisabledPaymentProvider } from "./infrastructure/disabled-payment-provider";
+import { MercadoPagoPaymentProvider } from "./infrastructure/mercadopago-payment-provider";
 import { PaymentGate } from "./infrastructure/payment-gate";
 import { PrismaPaymentRepository } from "./infrastructure/prisma-payment.repository";
 import { SimulatedPaymentProvider } from "./infrastructure/simulated-payment-provider";
@@ -32,9 +33,9 @@ import { InvitationPaymentsController } from "./presentation/invitation-payments
 import { PaymentsController } from "./presentation/payments.controller";
 
 /**
- * The provider adapter of the validated mode (M7 S4). `free` binds an adapter that refuses to charge, and `simulated`
- * binds the development provider with its validated secret and return origin; a real provider adds one case here and
- * one adapter file, and nothing else in the application changes.
+ * The provider adapter of the validated mode (M7 S4; Mercado Pago T1). `free` binds an adapter that refuses to charge,
+ * `simulated` binds the development provider with its validated secret and return origin, and `mercadopago` binds the
+ * real provider with its validated credentials and origins. Nothing else in the application branches on the mode.
  */
 function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
   switch (payments.mode) {
@@ -44,6 +45,15 @@ function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
       return new SimulatedPaymentProvider({
         secret: payments.secret,
         returnBaseUrl: payments.returnBaseUrl,
+      });
+    case PAYMENTS_MODE.MERCADOPAGO:
+      return new MercadoPagoPaymentProvider({
+        accessToken: payments.accessToken,
+        webhookSecret: payments.webhookSecret,
+        // Checkout Pro returns the browser to the web's own return page, under the invitation it pays for.
+        returnBaseUrl: payments.returnBaseUrl,
+        webhookBaseUrl: payments.webhookBaseUrl,
+        apiBaseUrl: payments.apiBaseUrl,
       });
   }
 }

@@ -6,14 +6,15 @@ import type { PaymentEventTransaction, PaymentRepository } from "./payment.repos
 import type { PaymentProvider } from "./payment-provider.port";
 // The verified webhook intake (M7 S1, S4). This is the only path that changes a payment's status, and it is reached
 // from the public route and from the development emit alike. In order: the route's provider must be the configured
-// one, the adapter must verify the signature over the raw body, the event row and the transition must be written in
-// one transaction, and a duplicate `(provider, eventId)` must change nothing. The raw payload is hashed, never
-// stored: a provider payload can carry a payer's name or card metadata, and the normalized event plus the digest is
-// what a replay investigation needs.
+// one, the adapter must verify the signature over the raw body and the query it signs, the event row and the
+// transition must be written in one transaction, and a duplicate `(provider, eventId)` must change nothing. The raw
+// payload is hashed, never stored: a provider payload can carry a payer's name or card metadata, and the normalized
+// event plus the digest is what a replay investigation needs. A delivery the adapter proves authentic but that
+// decides nothing answers `ignored` with 200, so the provider stops retrying, and writes nothing (T1).
 
-/** What the intake answered: it stored and applied the event, or it was already stored. */
+/** What the intake answered: it stored and applied the event, it was already stored, or there was nothing to act on. */
 export interface PaymentWebhookResult {
-  outcome: "processed" | "duplicate";
+  outcome: "processed" | "duplicate" | "ignored";
 }
 
 export class HandlePaymentWebhookUseCase {
@@ -26,6 +27,8 @@ export class HandlePaymentWebhookUseCase {
     provider: string;
     rawBody: string;
     headers: Readonly<Record<string, string | string[] | undefined>>;
+    /** The parsed query of the delivery; an internal caller (the simulated emit) carries none. */
+    query?: Readonly<Record<string, string>>;
     receivedAt: Date;
   }): Promise<PaymentWebhookResult> {
     // A route that names another provider is not a request this deployment can verify, and it never reaches the
@@ -34,15 +37,21 @@ export class HandlePaymentWebhookUseCase {
       throw new PaymentProviderNotFoundError();
     }
 
-    const verification = this.provider.verifyWebhook({
+    const verification = await this.provider.verifyWebhook({
       rawBody: input.rawBody,
       headers: input.headers,
+      query: input.query ?? {},
       receivedAt: input.receivedAt,
     });
     // One refusal for a missing header, a stale timestamp, a forged signature, and a malformed body: the caller
     // learns nothing about which check failed (S4).
     if (!verification.ok) {
       throw new PaymentWebhookRejectedError();
+    }
+
+    // Authentic, but it names nothing this API acts on (another topic, an unmapped status): 200 and no write.
+    if (verification.event === null) {
+      return { outcome: "ignored" };
     }
 
     const event = verification.event;

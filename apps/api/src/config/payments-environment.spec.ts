@@ -12,6 +12,19 @@ import { PAYMENTS_MODE, validateEnvironment } from "./environment";
 
 const SECRET = randomBytes(32).toString("base64url");
 const SIMULATED_SECRET = randomBytes(32).toString("base64url");
+const ACCESS_TOKEN = randomBytes(32).toString("base64url");
+const WEBHOOK_SECRET = randomBytes(32).toString("base64url");
+
+/** The variables Mercado Pago needs on top of the base environment (T1). */
+function mercadopago(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    PAYMENTS_MODE: "mercadopago",
+    MERCADOPAGO_ACCESS_TOKEN: ACCESS_TOKEN,
+    MERCADOPAGO_WEBHOOK_SECRET: WEBHOOK_SECRET,
+    PAYMENTS_WEBHOOK_BASE_URL: "https://api.example.test",
+    ...overrides,
+  };
+}
 
 function environmentWith(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const environment: Record<string, unknown> = {
@@ -111,8 +124,8 @@ describe("payments environment (M7 S1, S4)", () => {
   });
 
   it("refuses an unknown mode without echoing it", () => {
-    for (const PAYMENTS_MODE of ["mercadopago", "FREE", "test"]) {
-      assertRejected({ PAYMENTS_MODE }, "PAYMENTS_MODE must be free or simulated.");
+    for (const PAYMENTS_MODE of ["MERCADOPAGO", "FREE", "test"]) {
+      assertRejected({ PAYMENTS_MODE }, "PAYMENTS_MODE must be free, simulated, or mercadopago.");
     }
   });
 
@@ -170,6 +183,195 @@ describe("payments environment (M7 S1, S4)", () => {
         message,
       );
     }
+  });
+
+  describe("mercadopago (T1, S1, S2, S4)", () => {
+    it("accepts mercadopago in production, where money is charged, with the default API origin", () => {
+      const environment = validateEnvironment(
+        environmentWith(
+          mercadopago({
+            NODE_ENV: "production",
+            CORS_ORIGIN: "https://web.example.test",
+            AUTH_BASE_URL: "https://web.example.test",
+            PAYMENTS_RETURN_BASE_URL: "https://web.example.test",
+          }),
+        ),
+      );
+
+      assert.deepEqual(environment.PAYMENTS, {
+        mode: PAYMENTS_MODE.MERCADOPAGO,
+        accessToken: ACCESS_TOKEN,
+        webhookSecret: WEBHOOK_SECRET,
+        webhookBaseUrl: "https://api.example.test",
+        apiBaseUrl: "https://api.mercadopago.com",
+        returnBaseUrl: "https://web.example.test",
+      });
+    });
+
+    it("accepts mercadopago outside production and reads an explicit API origin, trailing slash trimmed", () => {
+      const environment = validateEnvironment(
+        environmentWith(
+          mercadopago({
+            NODE_ENV: "development",
+            PAYMENTS_WEBHOOK_BASE_URL: "http://localhost:3001/",
+            MERCADOPAGO_API_BASE_URL: "http://127.0.0.1:4599/",
+          }),
+        ),
+      );
+
+      assert.deepEqual(environment.PAYMENTS, {
+        mode: PAYMENTS_MODE.MERCADOPAGO,
+        accessToken: ACCESS_TOKEN,
+        webhookSecret: WEBHOOK_SECRET,
+        webhookBaseUrl: "http://localhost:3001",
+        apiBaseUrl: "http://127.0.0.1:4599",
+        returnBaseUrl: "http://localhost:3000",
+      });
+    });
+
+    it("trims the two secrets it reads", () => {
+      const environment = validateEnvironment(
+        environmentWith(
+          mercadopago({
+            MERCADOPAGO_ACCESS_TOKEN: `  ${ACCESS_TOKEN}\t`,
+            MERCADOPAGO_WEBHOOK_SECRET: `\n${WEBHOOK_SECRET}  `,
+          }),
+        ),
+      );
+
+      assert.equal(
+        environment.PAYMENTS.mode === PAYMENTS_MODE.MERCADOPAGO
+          ? environment.PAYMENTS.accessToken
+          : null,
+        ACCESS_TOKEN,
+      );
+      assert.equal(
+        environment.PAYMENTS.mode === PAYMENTS_MODE.MERCADOPAGO
+          ? environment.PAYMENTS.webhookSecret
+          : null,
+        WEBHOOK_SECRET,
+      );
+    });
+
+    it("requires the access token, the webhook secret, and the public webhook origin", () => {
+      const cases: ReadonlyArray<readonly [Record<string, unknown>, string]> = [
+        [
+          { MERCADOPAGO_ACCESS_TOKEN: undefined },
+          "MERCADOPAGO_ACCESS_TOKEN must be provided when PAYMENTS_MODE is mercadopago.",
+        ],
+        [
+          { MERCADOPAGO_ACCESS_TOKEN: "   " },
+          "MERCADOPAGO_ACCESS_TOKEN must be provided when PAYMENTS_MODE is mercadopago.",
+        ],
+        [
+          { MERCADOPAGO_WEBHOOK_SECRET: "" },
+          "MERCADOPAGO_WEBHOOK_SECRET must be provided when PAYMENTS_MODE is mercadopago.",
+        ],
+        [
+          { PAYMENTS_WEBHOOK_BASE_URL: undefined },
+          "PAYMENTS_WEBHOOK_BASE_URL must be provided when PAYMENTS_MODE is mercadopago.",
+        ],
+      ];
+
+      for (const [overrides, message] of cases) {
+        assertRejected(mercadopago(overrides), message);
+      }
+    });
+
+    it("refuses a webhook origin or an API origin that is not an http origin", () => {
+      const cases: ReadonlyArray<readonly [Record<string, unknown>, string]> = [
+        [
+          { PAYMENTS_WEBHOOK_BASE_URL: "not-a-url" },
+          "PAYMENTS_WEBHOOK_BASE_URL must be a valid HTTP origin.",
+        ],
+        [
+          { PAYMENTS_WEBHOOK_BASE_URL: "ftp://example.test" },
+          "PAYMENTS_WEBHOOK_BASE_URL must use HTTP or HTTPS.",
+        ],
+        [
+          { PAYMENTS_WEBHOOK_BASE_URL: "https://example.test/api" },
+          "PAYMENTS_WEBHOOK_BASE_URL must not include a path, query, or fragment.",
+        ],
+        [
+          { MERCADOPAGO_API_BASE_URL: "api.mercadopago.com" },
+          "MERCADOPAGO_API_BASE_URL must be a valid HTTP origin.",
+        ],
+        [
+          { MERCADOPAGO_API_BASE_URL: "https://api.mercadopago.com/v1" },
+          "MERCADOPAGO_API_BASE_URL must not include a path, query, or fragment.",
+        ],
+      ];
+
+      for (const [overrides, message] of cases) {
+        assertRejected(mercadopago(overrides), message);
+      }
+    });
+
+    it("requires https for both origins in production", () => {
+      assertRejected(
+        mercadopago({
+          NODE_ENV: "production",
+          PAYMENTS_WEBHOOK_BASE_URL: "http://api.example.test",
+        }),
+        "PAYMENTS_WEBHOOK_BASE_URL must use HTTPS in production.",
+      );
+      assertRejected(
+        mercadopago({
+          NODE_ENV: "production",
+          MERCADOPAGO_API_BASE_URL: "http://api.mercadopago.com",
+        }),
+        "MERCADOPAGO_API_BASE_URL must use HTTPS in production.",
+      );
+    });
+
+    it("requires an https return page origin in production, so the browser is never sent back over http", () => {
+      assertRejected(
+        mercadopago({
+          NODE_ENV: "production",
+          CORS_ORIGIN: "https://web.example.test",
+          AUTH_BASE_URL: "https://web.example.test",
+          PAYMENTS_RETURN_BASE_URL: "http://web.example.test",
+        }),
+        "PAYMENTS_RETURN_BASE_URL must use HTTPS in production.",
+      );
+    });
+
+    it("refuses the two Mercado Pago secrets when they are the same value", () => {
+      assertRejected(
+        mercadopago({ MERCADOPAGO_WEBHOOK_SECRET: ACCESS_TOKEN }),
+        "MERCADOPAGO_WEBHOOK_SECRET must differ from MERCADOPAGO_ACCESS_TOKEN.",
+      );
+    });
+
+    it("refuses a Mercado Pago secret that is one of the other secrets, naming which one", () => {
+      assertRejected(
+        mercadopago({ MERCADOPAGO_ACCESS_TOKEN: SECRET }),
+        "MERCADOPAGO_ACCESS_TOKEN must differ from BETTER_AUTH_SECRET.",
+      );
+
+      const proxySecret = randomBytes(32).toString("base64url");
+      assertRejected(
+        mercadopago({
+          NODE_ENV: "development",
+          AUTH_PROXY_SECRET: proxySecret,
+          MERCADOPAGO_WEBHOOK_SECRET: proxySecret,
+        }),
+        "MERCADOPAGO_WEBHOOK_SECRET must differ from AUTH_PROXY_SECRET.",
+      );
+    });
+
+    it("never echoes a Mercado Pago secret in an error message", () => {
+      assert.throws(
+        () =>
+          validateEnvironment(environmentWith(mercadopago({ MERCADOPAGO_ACCESS_TOKEN: SECRET }))),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal(error.message.includes(SECRET), false);
+          assert.equal(error.message.includes(WEBHOOK_SECRET), false);
+          return true;
+        },
+      );
+    });
   });
 
   it("never echoes a secret in an error message", () => {

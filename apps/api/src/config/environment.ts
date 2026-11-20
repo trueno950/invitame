@@ -29,22 +29,25 @@ export type EmailEnvironment =
   | { transport: typeof EMAIL_TRANSPORT.MEMORY; from: string };
 
 /**
- * The payment modes (M7 S1, S4). `free` is the Milestone 5 behavior: publication needs no payment. `simulated` is
- * the development and test provider that signs its own webhook events so the whole intake is exercised without a
- * provider account. A real provider adds its own key here and one adapter behind the same port; the owner chooses
- * it, so nothing in this milestone names one.
+ * The payment modes (M7 S1, S4; Mercado Pago T1). `free` is the Milestone 5 behavior: publication needs no payment.
+ * `simulated` is the development and test provider that signs its own webhook events so the whole intake is exercised
+ * without a provider account. `mercadopago` is the real provider: Checkout Pro for the money and a signed notification
+ * the API re-reads from Mercado Pago before it trusts it. The owner chose it, so it is the only real mode here.
  */
 export const PAYMENTS_MODE = {
   FREE: "free",
   SIMULATED: "simulated",
+  MERCADOPAGO: "mercadopago",
 } as const;
 
 export type PaymentsMode = (typeof PAYMENTS_MODE)[keyof typeof PAYMENTS_MODE];
 
 /**
- * The payments settings of one deployment (M7 S4). Each variant carries only what its adapter needs: `free` needs
- * nothing, and `simulated` needs the secret that signs its events and the web origin its redirect points at. In
- * `free` mode neither variable is read, so an unused variable can never break a deployment that does not charge.
+ * The payments settings of one deployment (M7 S4; Mercado Pago T1). Each variant carries only what its adapter
+ * needs: `free` needs nothing, `simulated` needs the secret that signs its events and the web origin its redirect
+ * points at, and `mercadopago` needs the server-only access token, the webhook signature secret, the public origin
+ * the provider calls back to, and the provider API origin. In `free` mode none of those variables is read, so an
+ * unused variable can never break a deployment that does not charge.
  */
 export type PaymentsEnvironment =
   | { mode: typeof PAYMENTS_MODE.FREE }
@@ -53,6 +56,19 @@ export type PaymentsEnvironment =
       /** HMAC key of the simulated adapter; never logged, echoed, or returned. */
       secret: string;
       /** The web origin the simulated provider redirects to; the return page lives under it. */
+      returnBaseUrl: string;
+    }
+  | {
+      mode: typeof PAYMENTS_MODE.MERCADOPAGO;
+      /** Mercado Pago API credential; server-only, and never logged, echoed, or returned. */
+      accessToken: string;
+      /** The signature secret of the Mercado Pago panel; never logged, echoed, or returned. */
+      webhookSecret: string;
+      /** The public API origin Mercado Pago calls back to, from `PAYMENTS_WEBHOOK_BASE_URL`. */
+      webhookBaseUrl: string;
+      /** The Mercado Pago API origin, from `MERCADOPAGO_API_BASE_URL`. */
+      apiBaseUrl: string;
+      /** The web origin Checkout Pro returns the browser to, from `PAYMENTS_RETURN_BASE_URL`. */
       returnBaseUrl: string;
     };
 
@@ -227,6 +243,11 @@ const DEFAULT_MAILPIT_URL = "http://localhost:8025";
  * needs no new variable. Any other origin names the URL explicitly.
  */
 const DEFAULT_PAYMENTS_RETURN_BASE_URL = "http://localhost:3000";
+/**
+ * The public Mercado Pago API; `MERCADOPAGO_API_BASE_URL` is the seam a spec or a sandbox proxy uses instead, with
+ * no code change.
+ */
+const DEFAULT_MERCADOPAGO_API_BASE_URL = "https://api.mercadopago.com";
 /** The same floor as the other secrets in this file: shorter is refused, never echoed. */
 const MINIMUM_PAYMENTS_SECRET_LENGTH = 32;
 // A bare address or `Name <address>`; no whitespace, angle brackets, or line breaks in the address.
@@ -579,12 +600,13 @@ function isPaymentsMode(value: string): value is PaymentsMode {
 }
 
 /**
- * Payments (M7 S1, S4). Production must name its mode explicitly — there is no silent default there, because that
- * default would decide whether money is charged — and `simulated` is refused there: its adapter can mint a valid
- * signature from a configuration value, so a deployment that used it could grant publication to an event the API
- * itself produced. Development and test default to `free`, which is today's behavior and needs neither the
- * migration nor a secret, so the running development server stays healthy with no new variable. Every message
- * names a variable and never echoes its value, because one of them is a secret.
+ * Payments (M7 S1, S4; Mercado Pago T1). Production must name its mode explicitly — there is no silent default
+ * there, because that default would decide whether money is charged — and `simulated` is refused there: its adapter
+ * can mint a valid signature from a configuration value, so a deployment that used it could grant publication to an
+ * event the API itself produced. `mercadopago` is allowed in production, because it is the real provider, and it
+ * fails closed without its own credentials. Development and test default to `free`, which is today's behavior and
+ * needs neither the migration nor a secret, so the running development server stays healthy with no new variable.
+ * Every message names a variable and never echoes its value, because some of them are secrets.
  */
 function parsePaymentsEnvironment(
   environment: Record<string, unknown>,
@@ -601,11 +623,15 @@ function parsePaymentsEnvironment(
   }
 
   if (!isPaymentsMode(configured)) {
-    throw new Error("PAYMENTS_MODE must be free or simulated.");
+    throw new Error("PAYMENTS_MODE must be free, simulated, or mercadopago.");
   }
 
   if (configured === PAYMENTS_MODE.FREE) {
     return { mode: PAYMENTS_MODE.FREE };
+  }
+
+  if (configured === PAYMENTS_MODE.MERCADOPAGO) {
+    return parseMercadoPagoEnvironment(environment, nodeEnvironment);
   }
 
   if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION) {
@@ -632,7 +658,74 @@ function parsePaymentsEnvironment(
   };
 }
 
-/** The simulated secret must not also sign sessions or proxy requests (M7 S4, L36). */
+/**
+ * The Mercado Pago settings (T1, S1, S2, S4). Production allows this mode, because it is the real provider, and it
+ * fails closed until both credentials and the public webhook origin are configured: the access token is what the
+ * provider charges and refunds with, the webhook secret is what proves a notification came from the provider, and
+ * the origin is what the notification is sent back to. Every origin it reads must be https in production, because
+ * the notification carries the payment facts, the access token travels to the API origin, and the browser is returned
+ * to the web. Every message names a variable and never echoes its value, because two of them are secrets.
+ */
+function parseMercadoPagoEnvironment(
+  environment: Record<string, unknown>,
+  nodeEnvironment: NodeEnvironment,
+): PaymentsEnvironment {
+  const accessToken = readOptionalString(environment.MERCADOPAGO_ACCESS_TOKEN);
+  if (!accessToken) {
+    throw new Error("MERCADOPAGO_ACCESS_TOKEN must be provided when PAYMENTS_MODE is mercadopago.");
+  }
+
+  const webhookSecret = readOptionalString(environment.MERCADOPAGO_WEBHOOK_SECRET);
+  if (!webhookSecret) {
+    throw new Error(
+      "MERCADOPAGO_WEBHOOK_SECRET must be provided when PAYMENTS_MODE is mercadopago.",
+    );
+  }
+
+  const configuredWebhookBaseUrl = readOptionalString(environment.PAYMENTS_WEBHOOK_BASE_URL);
+  if (!configuredWebhookBaseUrl) {
+    throw new Error(
+      "PAYMENTS_WEBHOOK_BASE_URL must be provided when PAYMENTS_MODE is mercadopago.",
+    );
+  }
+
+  const webhookBaseUrl = validateHttpOrigin("PAYMENTS_WEBHOOK_BASE_URL", configuredWebhookBaseUrl);
+  const apiBaseUrl = validateHttpOrigin(
+    "MERCADOPAGO_API_BASE_URL",
+    readOptionalString(environment.MERCADOPAGO_API_BASE_URL) ?? DEFAULT_MERCADOPAGO_API_BASE_URL,
+  );
+
+  if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION && !usesHttps(webhookBaseUrl)) {
+    throw new Error("PAYMENTS_WEBHOOK_BASE_URL must use HTTPS in production.");
+  }
+
+  if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION && !usesHttps(apiBaseUrl)) {
+    throw new Error("MERCADOPAGO_API_BASE_URL must use HTTPS in production.");
+  }
+
+  const returnBaseUrl = validateHttpOrigin(
+    "PAYMENTS_RETURN_BASE_URL",
+    readOptionalString(environment.PAYMENTS_RETURN_BASE_URL) ?? DEFAULT_PAYMENTS_RETURN_BASE_URL,
+  );
+
+  if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION && !usesHttps(returnBaseUrl)) {
+    throw new Error("PAYMENTS_RETURN_BASE_URL must use HTTPS in production.");
+  }
+
+  return {
+    mode: PAYMENTS_MODE.MERCADOPAGO,
+    accessToken,
+    webhookSecret,
+    webhookBaseUrl,
+    apiBaseUrl,
+    returnBaseUrl,
+  };
+}
+
+/**
+ * No payments secret may also sign sessions or proxy requests (M7 S4, L36). The Mercado Pago variant adds one rule
+ * of its own: its two secrets must differ, so a leaked access token is not also the webhook signature secret.
+ */
 function validateDistinctPaymentsSecret(
   payments: PaymentsEnvironment,
   environment: {
@@ -641,20 +734,34 @@ function validateDistinctPaymentsSecret(
     AUTH_PROXY_SECRET_PREVIOUS: string | undefined;
   },
 ): void {
-  if (payments.mode !== PAYMENTS_MODE.SIMULATED) {
-    return;
+  const secrets: ReadonlyArray<readonly [string, string]> =
+    payments.mode === PAYMENTS_MODE.SIMULATED
+      ? [["PAYMENTS_SIMULATED_SECRET", payments.secret]]
+      : payments.mode === PAYMENTS_MODE.MERCADOPAGO
+        ? [
+            ["MERCADOPAGO_ACCESS_TOKEN", payments.accessToken],
+            ["MERCADOPAGO_WEBHOOK_SECRET", payments.webhookSecret],
+          ]
+        : [];
+
+  if (payments.mode === PAYMENTS_MODE.MERCADOPAGO) {
+    if (payments.webhookSecret === payments.accessToken) {
+      throw new Error("MERCADOPAGO_WEBHOOK_SECRET must differ from MERCADOPAGO_ACCESS_TOKEN.");
+    }
   }
 
-  const collision = (
-    [
-      ["BETTER_AUTH_SECRET", environment.BETTER_AUTH_SECRET],
-      ["AUTH_PROXY_SECRET", environment.AUTH_PROXY_SECRET],
-      ["AUTH_PROXY_SECRET_PREVIOUS", environment.AUTH_PROXY_SECRET_PREVIOUS],
-    ] as const
-  ).find(([, value]) => value === payments.secret);
+  for (const [name, value] of secrets) {
+    const collision = (
+      [
+        ["BETTER_AUTH_SECRET", environment.BETTER_AUTH_SECRET],
+        ["AUTH_PROXY_SECRET", environment.AUTH_PROXY_SECRET],
+        ["AUTH_PROXY_SECRET_PREVIOUS", environment.AUTH_PROXY_SECRET_PREVIOUS],
+      ] as const
+    ).find(([, candidate]) => candidate === value);
 
-  if (collision) {
-    throw new Error(`PAYMENTS_SIMULATED_SECRET must differ from ${collision[0]}.`);
+    if (collision) {
+      throw new Error(`${name} must differ from ${collision[0]}.`);
+    }
   }
 }
 
