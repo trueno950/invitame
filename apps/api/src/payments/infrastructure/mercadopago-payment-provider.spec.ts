@@ -240,6 +240,8 @@ describe("Mercado Pago checkout (T1, S1)", () => {
       "https://evil.example.test/checkout",
       "http://www.mercadopago.com.mx/checkout",
       "https://www.mercadopago.com.mx.evil.test/checkout",
+      "https://www.mercadopago.evil.com/checkout",
+      "https://mercadolibre.attacker.co/checkout",
       "not-a-url",
     ]) {
       await withServer(
