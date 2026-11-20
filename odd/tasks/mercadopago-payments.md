@@ -88,3 +88,11 @@ security-sensitive design before implementation; this document is that reviewed 
   adapter) accepted `www.mercadopago.evil.com`; both now allow only `mercadopago`/`mercadolibre` on `.com` or
   `.com.mx` (RED observed in both specs). T4: `docs/development/payments.md` and `ROADMAP.md` M7. Evidence: API 1751
   and web 1655 tests, typecheck, lint, format, docs:check, and diff-check pass.
+- L7 — Delivery shape: three chained PRs — `feat/mercadopago-1-adapter` (4a1636c), `feat/mercadopago-2-refund`
+  (87a6b4f, d16d776, 67840dd), `feat/mercadopago-3-web` (70a7964, 562c154). Slice 1 native review
+  `review-a3aaf74ba7e41093` approved and acknowledged; advisories kept for a follow-up: refund events carry the approval
+  time, a refund retry after the provider already refunded cannot confirm it, and a signed notification without a topic
+  is ignored instead of refused. Slice 2 review `review-242ad9e08d5e50ef` found a publish/refund race (CRITICAL);
+  67840dd claims `Invitation.refundRequestedAt` on the row before the provider call and publish requires it NULL
+  (API 1752 unit and 403 db-specs pass). Its provider route is `recover` (scope_changed), which the facade refuses in
+  this session (`input must be a string`).
