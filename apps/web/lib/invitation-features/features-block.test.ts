@@ -386,7 +386,9 @@ describe("«Escucha nuestra playlist» in the features block (F6; S7)", () => {
     };
     let html: string;
     try {
-      html = render(featuresOf({ music: { ...MUSIC, title: "Today’s Top Hits", coverUrl: COVER } }));
+      html = render(
+        featuresOf({ music: { ...MUSIC, title: "Today’s Top Hits", coverUrl: COVER } }),
+      );
     } finally {
       console.error = consoleError;
     }
