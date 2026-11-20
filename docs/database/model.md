@@ -36,9 +36,13 @@ batch (T2) adds the additive `20261124120000_add_invitation_first_published_at` 
 the backfill of already-published rows rewrites only that new column, and nothing is deleted. The support-action
 slice adds the additive `20261127120000_add_admin_actions` migration: two enum types and the `AdminAction` table with
 its checks, its three indexes, its three `RESTRICT` references, and its append-only trigger. Every object is new, so
-no row is rewritten and nothing is deleted. Future
-analytics design is documented separately in
-[`future-model.md`](future-model.md); that document does not add tables.
+no row is rewritten and nothing is deleted. The analytics slice adds two additive migrations:
+`20261128120000_add_invitation_views` creates the `InvitationViewSource` enum and the `InvitationView` table (one counted
+opening per invitation, calendar day, and link) with its composite primary key, its day index, its `RESTRICT`
+reference, and its non-negative-count check, and `20261128130000_add_analytics_indexes` adds the three funnel indexes
+`Payment(createdAt)`, `Payment(paidAt)`, and `Invitation(firstPublishedAt)`. Every object is new, so no row is rewritten
+and nothing is deleted. Future analytics design is documented separately in [`future-model.md`](future-model.md); that
+document does not add tables.
 
 | Model | Role |
 | --- | --- |
@@ -63,6 +67,7 @@ analytics design is documented separately in
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
+| `InvitationView` | One counted opening of one invitation's link: the invitation reference, the calendar `day` in `America/Mexico_City`, the `source` (`PUBLIC` or `GUEST`), and the `count` of openings that pair counted; the composite primary key is `(invitationId, day, source)`. No IP address, user agent, referrer, cookie, session, token, or slug |
 | `AdminAction` | One append-only audit row of one state-changing support action: the `adminUserId` who acted, the `action` (`INVITATION_UNPUBLISHED`, `ACCOUNT_DISABLED`, `ACCOUNT_REACTIVATED`, `SIGN_IN_CODE_RESENT`), the `reason` (`ABUSE`, `OWNER_REQUEST`, `PAYMENT_ERROR`, `OTHER`), the optional `note` (up to 500 characters, required for `OTHER`), and exactly one target (`targetUserId` or `invitationId`), with `createdAt`. No email address, client address, or provider payload |
 
 ## Invariants
@@ -503,11 +508,54 @@ JSONB. The template schema is a validated form contract and configuration is a v
 invitation's content is the bounded form data validated against its pinned version. Renderer identity, relationships,
 catalog keys, lifecycle statuses, and fields used for querying remain normalized columns.
 
+## Analytics data
+
+Current status: the `InvitationView` table exists and `apps/api/src/invitations` owns it (M9 T11; S2, S3, S7, L12). It
+is the only analytics table: the purchase funnel and the RSVP totals are computed on read from columns the existing rows
+already carry, so there is no second writer that could drift from the truth and no stored aggregate to correct.
+
+- One row is one counted pair: an invitation, one calendar day in `America/Mexico_City`, and one of the two links a
+  guest can open (`PUBLIC` for the plain public page, `GUEST` for a personal guest link). `count` is how many openings
+  that pair counted, so a day of one link is one row that grows, not one row per opening.
+- `InvitationView_pkey` is `(invitationId, day, source)` and is the upsert's conflict target: one opening is
+  `INSERT … ON CONFLICT ("invitationId", "day", "source") DO UPDATE SET "count" = "count" + 1`, so a retry and two
+  concurrent requests both increment instead of duplicating. `InvitationView_count_non_negative` keeps the counter at
+  zero or above, because the API only ever increments it.
+- No visitor column exists: no IP address, user agent, referrer, cookie, session, token, or slug. A count cannot be
+  traced back to a person, which is what lets it be kept at all (S2, S7).
+- `InvitationView.invitationId` references `Invitation` with `ON DELETE RESTRICT`, like every other invitation
+  reference, so a counted invitation cannot be removed while its counts exist; a database suite deletes its view rows
+  before its invitation fixtures.
+- `InvitationView_day_idx` serves both reads and the retention delete: the analytics reads scan one window of days and
+  the command deletes `day < cutoff`, which the primary key — leading with the invitation — cannot serve.
+- Retention: rows whose day is older than ninety days are deleted by `pnpm analytics:retention` (S3), idempotently and
+  with a `--dry-run` that counts without deleting. The cutoff is the last kept day, so a row of exactly ninety days
+  stays. See [`../development/analytics-retention.md`](../development/analytics-retention.md).
+- The funnel needs no table. Drafts created are `Invitation.createdAt`, checkouts started `Payment.createdAt`,
+  approved payments `Payment.paidAt` where the status is `paid`, and first publications
+  `Invitation.firstPublishedAt`, each aggregated per day in `America/Mexico_City`. Migration
+  `20261128130000_add_analytics_indexes` adds `Payment(createdAt)`, `Payment(paidAt)`, and
+  `Invitation(firstPublishedAt)` so each read is a range scan. The migration builds them without `CONCURRENTLY`: Prisma
+  sends a migration file as one simple query, so a file with several statements runs inside an implicit transaction and
+  PostgreSQL refuses a concurrent build there (the single-statement `20261126120000_add_invitation_created_at_id_index`
+  is the one shape that can run concurrently). The build is therefore atomic and briefly takes a `SHARE` lock on
+  `Payment` and `Invitation`; when either table grows, an index can be rebuilt concurrently from its own
+  single-statement migration.
+- The RSVP totals of one invitation are a bounded aggregate over `RsvpResponse`: the sum of the attending party sizes,
+  the number of declining responses, and the number of rows — the same semantics the owner read's `rsvpTotalsOf`
+  applies, answered from SQL instead of from the response list.
+- Rollback / recovery of `20261128120000_add_invitation_views`: additive, so recovery is redeploying the previous
+  migration set or dropping the objects by hand — `DROP TABLE "InvitationView";` then
+  `DROP TYPE "InvitationViewSource";`. Only the counted openings are lost; invitations, content, guests, RSVP answers,
+  payments, and media are untouched. Rollback of `20261128130000_add_analytics_indexes` drops
+  `"Payment_createdAt_idx"`, `"Payment_paidAt_idx"`, and `"Invitation_firstPublishedAt_idx"`, which costs the funnel its
+  range scans and nothing else. Never edit an applied migration file.
+
 ## Deliberately absent
 
-There is no analytics table in the current schema. The `Invitation` table stores authoring, publication, and RSVP
-settings only — status, the publication marker, the not-yet-used expiry, the deadline, and the party limit — while
-`RsvpResponse` stores the answers, `Guest` stores the guest list with its personal link digest and check-in state,
-`MediaAsset` names an object in the storage adapter, and `Payment`/`PaymentEvent` hold the checkout intent and the
-verified provider events. No card data, provider payload, accounting entry, or subscription is stored: those are
-Milestone 7 non-goals.
+There is no stored aggregate, event stream, or per-visitor analytics table. The `Invitation` table stores authoring,
+publication, and RSVP settings only — status, the publication marker, the not-yet-used expiry, the deadline, and the
+party limit — while `RsvpResponse` stores the answers, `Guest` stores the guest list with its personal link digest and
+check-in state, `MediaAsset` names an object in the storage adapter, `Payment`/`PaymentEvent` hold the checkout intent
+and the verified provider events, and `InvitationView` holds the counted openings of one link per day. No card data,
+provider payload, accounting entry, or subscription is stored: those are Milestone 7 non-goals.
