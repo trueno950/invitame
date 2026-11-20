@@ -27,13 +27,13 @@ feature documents; this one records the decisions and fixes the rest.
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | `referrerPolicy` camel-case property on the music cover; test fails on any React console error | S1 | inline | |
+| T1 | `referrerPolicy` camel-case property on the music cover; test fails on any React console error | S1 | inline | 2271770 |
 | T2 | Sticky phone save-status strip | S2 | worker (editor UI) | |
 | T3 | Publish copy only promises no cost for a free package | S3 | worker (editor UI) | |
 | T4 | API review follow-ups (#81-#83) | S4 | worker (API) | |
 | T5 | Web review follow-ups (#84, #85) | S4 | worker (web places) | |
-| T6 | Delete merged temporary branches and the stash | S5 | inline | |
-| T7 | Record the decisions and the admin configuration panel in `ROADMAP.md` | S6 | inline | |
+| T6 | Delete merged temporary branches and the stash | S5 | inline | no commit (git state, L4) |
+| T7 | Record the decisions and the admin configuration panel in `ROADMAP.md` | S6 | inline | pending commit |
 
 ### Review advisory findings (S4)
 
@@ -71,3 +71,14 @@ concrete weakness, and fixes it with a test or records why it is not a defect.
 - L3 — T1 root cause: the cover `img` passed the lower-case `referrerpolicy` prop to `createElement`; React DOM wants
   `referrerPolicy` and warns in development. RED: the cover test now fails on any `console.error` during render
   (observed the warning); GREEN with `referrerPolicy`; the rendered attribute is unchanged (case-insensitive).
+- L4 — T6: dropped `stash@{0}` (a copy of b2dcca6's web tree, already in master); deleted 97 local branches and 85
+  remote branches. Every one was an ancestor of master except six superseded reference branches, checked by tree:
+  `feat/m7-payments` and `feat/m7-payments-split` equal master at #72 (`7ff470d`); `feat/lms-1-status-music` equals
+  `b78f8f2`, inside `feat/location-music-status`, whose tree equals master minus Log L6; `feat/editor-redesign`,
+  `tmp-t2c-full`, and `feat/m7-payments-a` are earlier states of work master holds with its review corrections.
+  Kept: `master` and `fix/owner-followups`.
+- L5 — T7: `ROADMAP.md` now records Mercado Pago and the refund rule under Milestone 7, Cloudflare R2 under
+  Milestone 8, and the admin configuration panel under Milestone 9. Evidence: package prices are already editable in
+  the admin catalog (`apps/web/app/admin/catalogo/paquetes/[id]/page.tsx`), and the S3 driver already supports R2
+  (`apps/api/src/media/infrastructure/s3-media-storage.ts`, `MEDIA_S3_REGION=auto`), so R2 is configuration plus a
+  bucket, not code.
