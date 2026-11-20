@@ -323,6 +323,9 @@ model Invitation {
   payments        Payment[]
 
   @@index([ownerId])
+  // The administrator's status view (M9 T2; S1) reads a page newest first, optionally filtered by one status, so
+  // migration 20261125120000_add_invitation_status_created_at_index adds this index for exactly that read.
+  @@index([status, createdAt])
 }
 
 // Feature data of one invitation, stored apart from the template (F1; S3, S4): changing the template never

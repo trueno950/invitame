@@ -10,6 +10,7 @@ import { Global, type INestApplication, Module } from "@nestjs/common";
 import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
 import { PrismaService } from "../database/prisma.service";
+import { INVITATION_PAYMENT_READER } from "../invitations/application/invitation-payment-summary";
 import { INVITATION_REPOSITORY } from "../invitations/application/invitation.repository";
 import type { InvitationPaymentGate } from "../invitations/application/invitation-payment-gate";
 import { INVITATION_PAYMENT_GATE } from "../invitations/application/invitation-payment-gate";
@@ -20,6 +21,7 @@ import { CatalogPaymentPrices } from "./infrastructure/catalog-payment-prices";
 import { DisabledPaymentProvider } from "./infrastructure/disabled-payment-provider";
 import { MercadoPagoPaymentProvider } from "./infrastructure/mercadopago-payment-provider";
 import { PaymentGate } from "./infrastructure/payment-gate";
+import { PrismaInvitationPaymentReader } from "./infrastructure/prisma-invitation-payment-reader";
 import { PrismaPaymentRepository } from "./infrastructure/prisma-payment.repository";
 import { PaymentsModule } from "./payments.module";
 import { AdminPaymentsController } from "./presentation/admin-payments.controller";
@@ -56,6 +58,11 @@ describe("PaymentsModule wiring", () => {
       assert.ok(app.get(PAYMENT_REPOSITORY, { strict: false }) instanceof PrismaPaymentRepository);
       assert.ok(app.get(PAYMENT_CATALOG, { strict: false }) instanceof CatalogPaymentPrices);
       assert.ok(app.get(PAYMENT_PROVIDER, { strict: false }) instanceof DisabledPaymentProvider);
+      // The payment facet of the administrator's invitation status view (M9 T2; S1) is its own port and adapter.
+      assert.ok(
+        app.get(INVITATION_PAYMENT_READER, { strict: false }) instanceof
+          PrismaInvitationPaymentReader,
+      );
 
       const gate = app.get<InvitationPaymentGate>(INVITATION_PAYMENT_GATE, { strict: false });
       assert.ok(gate instanceof PaymentGate);

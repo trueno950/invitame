@@ -12,6 +12,7 @@ import {
   type RuntimeEnvironment,
 } from "../config/environment";
 import { PrismaService } from "../database/prisma.service";
+import { INVITATION_PAYMENT_READER } from "../invitations/application/invitation-payment-summary";
 import { INVITATION_PAYMENT_GATE } from "../invitations/application/invitation-payment-gate";
 import { PAYMENT_REFUND_REPOSITORY, PAYMENT_REPOSITORY } from "./application/payment.repository";
 import {
@@ -28,6 +29,7 @@ import { CatalogPaymentPrices } from "./infrastructure/catalog-payment-prices";
 import { DisabledPaymentProvider } from "./infrastructure/disabled-payment-provider";
 import { MercadoPagoPaymentProvider } from "./infrastructure/mercadopago-payment-provider";
 import { PaymentGate } from "./infrastructure/payment-gate";
+import { PrismaInvitationPaymentReader } from "./infrastructure/prisma-invitation-payment-reader";
 import { PrismaPaymentRepository } from "./infrastructure/prisma-payment.repository";
 import { SimulatedPaymentProvider } from "./infrastructure/simulated-payment-provider";
 import { AdminPaymentsController } from "./presentation/admin-payments.controller";
@@ -101,6 +103,14 @@ function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
       useFactory: (prisma: PrismaService) => new PrismaPaymentRepository(prisma),
     },
     {
+      // The payment facet of the administrator's invitation status view (M9 T2; S1): the invitations module declares
+      // the port and this module implements it, so the status view reads no payment table. Separate from every other
+      // payment port, because it answers summaries and never a provider datum.
+      provide: INVITATION_PAYMENT_READER,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PrismaInvitationPaymentReader(prisma),
+    },
+    {
       provide: PAYMENT_CATALOG,
       inject: [CATALOG_PUBLIC_READER],
       useFactory: (catalog: CatalogPublicContract) => new CatalogPaymentPrices(catalog),
@@ -166,6 +176,6 @@ function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
       ) => new PaymentGate(mode, catalog, payments),
     },
   ],
-  exports: [INVITATION_PAYMENT_GATE],
+  exports: [INVITATION_PAYMENT_GATE, INVITATION_PAYMENT_READER],
 })
 export class PaymentsModule {}
