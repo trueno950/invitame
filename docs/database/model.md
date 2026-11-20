@@ -121,12 +121,23 @@ analytics design is documented separately in
   draft row reads `NULL`.
 - The public read by slug needs no extra index: `Invitation_slug_key` is already unique, so `WHERE slug = $1` reads at
   most one row through it and the status is filtered on that row. No partial index on published rows is added.
-- `Invitation_status_createdAt_idx` on `(status, createdAt)` is the administrator's status view index (M9 T2; S1),
-  added additively by `20261125120000_add_invitation_status_created_at_index` with no rewrite, default, or data
-  change: `GET /admin/invitations` reads one page newest first, optionally filtered by one status, and its key-set
-  cursor continues on `(createdAt desc, id desc)`. The leading `status` serves the filtered page and the unfiltered
-  page reads the same index's `createdAt` order, so the read never scans the table; the descending `id` tie-break is
-  answered by the sort, so no second index is added.
+- `Invitation_status_createdAt_idx` on `(status, createdAt)` is the administrator's status view index for its
+  **status-filtered** page (M9 T2; S1), added additively by `20261125120000_add_invitation_status_created_at_index`
+  with no rewrite, default, or data change.
+- `Invitation_createdAt_id_idx` on `(createdAt, id)` is the same view's **unfiltered** page index (M9 T5), added
+  additively by `20261126120000_add_invitation_created_at_id_index`. `GET /admin/invitations` reads the whole table
+  newest first whenever no status is sent, and `(status, createdAt)` cannot answer that order because its leading
+  column is not the sort key; `(createdAt, id)` is the sort's own order, and its second key is also the key-set
+  cursor's tie-break. The migration builds it with `CREATE INDEX CONCURRENTLY`, which was verified through
+  `prisma migrate deploy` on PostgreSQL 17 (it applies the file outside a transaction block and left a valid index),
+  so the build takes no `SHARE` lock on `Invitation`; on a large live table the same statement can be run by hand
+  first, which is the safe order if a deployment ever wraps migrations in a transaction.
+- Verified on 20 000 seeded rows with `EXPLAIN`: the unfiltered page (`ORDER BY "createdAt" DESC, "id" DESC
+  LIMIT 21`) is `Index Scan Backward using "Invitation_createdAt_id_idx"`, and the page with a cursor reads the same
+  index backwards. The key-set predicate is the row comparison `("createdAt", "id") < (…, …)`, which PostgreSQL
+  answers as an `Index Cond` on that backward scan (21 heap fetches, 0 rows filtered in the sample). The earlier `OR`
+  form of the same predicate was a `Filter` that walked every row before the cursor (7 040 rows removed for a
+  7 040-row offset).
 - The columns the application may update are `status`, `content`, `publishedAt`, `archivedAt`, `timeZone`,
   `rsvpDeadline`, `rsvpPartyLimit`, and `updatedAt`; publish and unpublish write `publishedAt`, only the RSVP
   settings route writes the two RSVP columns, nothing writes `expiresAt`, and the pinned fields can never change.

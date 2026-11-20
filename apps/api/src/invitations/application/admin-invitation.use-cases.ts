@@ -3,9 +3,10 @@ import type { AdminInvitationRepository, AdminInvitationRow } from "./admin-invi
 import { decodeInvitationCursor, encodeInvitationCursor } from "./invitation-cursor";
 import type { InvitationMediaCounts, InvitationMediaCountReader } from "./invitation-media-counts";
 import type { InvitationOwnerEmailReader } from "./invitation-owner-email";
-import type {
-  InvitationPaymentReader,
-  InvitationPaymentSummary,
+import {
+  INVITATION_PAYMENT_DETAIL_LIMIT,
+  type InvitationPaymentReader,
+  type InvitationPaymentSummary,
 } from "./invitation-payment-summary";
 
 // The administrator's invitation status view (M9 T2; S1, L3, L4): search one invitation's operational state — its
@@ -16,8 +17,11 @@ import type {
 // owner's email), so these use cases never query another module's tables. One page asks each port once with every id
 // it needs, so a page of twenty rows costs three reads, never sixty.
 
-/** How many payments the detail view shows: the newest twenty, which is enough to explain a state (S1). */
-export const ADMIN_INVITATION_DETAIL_PAYMENT_LIMIT = 20;
+/**
+ * How many payments the detail view shows: the newest twenty, which is enough to explain a state (S1). It is the
+ * port's own documented maximum, so the view that asks and the adapter that clamps cannot drift apart.
+ */
+export const ADMIN_INVITATION_DETAIL_PAYMENT_LIMIT = INVITATION_PAYMENT_DETAIL_LIMIT;
 
 /**
  * The cursor a client sent cannot have been written by this API: it is not base64url, not the JSON this module

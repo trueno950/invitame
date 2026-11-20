@@ -1076,24 +1076,34 @@ lifecycle dates, payment, and photo counts — with no personal data beyond the 
   defaults to 20, `slug` is a case-insensitive prefix of at most 60 characters whose `%` and `_` are matched
   literally (escaped, with `ESCAPE '\'`), and `status` is the closed lifecycle set. Paging is key-set, never an
   offset, and the cursor is an opaque base64url of `(createdAt, id)`; a cursor this API did not write answers 400
-  `INVALID_CURSOR` before the database is read, and any other unknown or malformed query answers 400.
+  `INVALID_CURSOR` before the database is read, and any other unknown or malformed query answers 400. That refusal
+  covers a canonical instant outside the years a stored `createdAt` can have (1970..9999): JavaScript `Date` reaches
+  ±275760 and writes those years in an expanded six-digit form PostgreSQL cannot read as a `timestamptz` at all, so
+  such a cursor is malformed here instead of a database error later.
 - `GET /admin/invitations/:invitationId` answers 200 with `AdminInvitationDetail` (the same fields plus `packageId`,
-  `templateVersionId`, and the newest 20 payments) or 404 `INVITATION_NOT_FOUND`.
+  `templateVersionId`, and the newest 20 payments) or 404 `INVITATION_NOT_FOUND`. The payment port documents that
+  bound and the adapter clamps every request into `1..20`, so no caller widens the read; the detail read answers the
+  404 for an id that is not a UUID too, instead of a cast error.
 - Privacy (S1, L3): a summary is `{ invitationId, slug, status, ownerEmail, createdAt, publishedAt,
   firstPublishedAt, archivedAt, refundRequestedAt, latestPayment: { status, amountMinor, currency, paidAt } | null,
   media: { mainPhoto, galleryCount } }`; a detail adds the pinned references and `payments: { paymentId, status,
   amountMinor, currency, createdAt, paidAt }[]`. No invitation `content`, no owner display name or id, no guests or
   RSVP answer, and no provider payload or payer datum is read, mapped, or logged — the adapter's `SELECT` is the
   rule, and the mappers project only the contract's fields.
-- Migration `20261125120000_add_invitation_status_created_at_index` adds `Invitation(status, createdAt)`
-  additively (no rewrite, no default, no data change) for exactly this read; see
+- Migration `20261125120000_add_invitation_status_created_at_index` adds `Invitation(status, createdAt)` additively
+  (no rewrite, no default, no data change) for the status-filtered page, and
+  `20261126120000_add_invitation_created_at_id_index` adds `Invitation(createdAt, id)` the same way for the unfiltered
+  page, built concurrently so it takes no `SHARE` lock on the table; see
   [`../database/model.md`](../database/model.md).
 - Tests: `src/invitations/application/admin-invitation.use-cases.spec.ts` (fakes: key-set paging over equal
-  `createdAt`, one batched read per facet, the cursor's contract, the payment bound, the exact field set),
-  `src/invitations/presentation/admin-invitations.controller.spec.ts` (401/403/400/404 and the response shape
-  through the shared app boundary), and `src/invitations/infrastructure/admin-invitations.prisma.db-spec.ts` (the
-  index, paging across pages with one identical `createdAt`, the slug prefix with `%` and `_`, the status filter, the
-  batched payment, media, and owner reads, and that nothing outside the contract is answered).
+  `createdAt`, one batched read per facet, the cursor's contract and its instant window, the payment bound, the exact
+  field set), `src/invitations/presentation/admin-invitations.controller.spec.ts` (401/403/400/404 and the response
+  shape through the shared app boundary, including 400 `INVALID_CURSOR` for an out-of-window instant),
+  `src/invitations/infrastructure/prisma-admin-invitation.repository.spec.ts` (a non-UUID detail id answers null
+  without a query), `src/payments/infrastructure/prisma-invitation-payment-reader.spec.ts` (the adapter clamps to
+  `1..20`), and `src/invitations/infrastructure/admin-invitations.prisma.db-spec.ts` (both indexes, the cursor
+  refusal against PostgreSQL, paging across pages with one identical `createdAt`, the slug prefix with `%` and `_`,
+  the status filter, the batched payment, media, and owner reads, and that nothing outside the contract is answered).
 
 ## Playlist metadata (current)
 

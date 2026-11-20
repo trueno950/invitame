@@ -161,6 +161,14 @@ function harness(): Harness {
   };
 }
 
+/**
+ * The cursor this module writes, built here from a raw instant so a spec can name the stored shape directly —
+ * including a canonical instant the encoder would faithfully copy from a `Date` that carries it.
+ */
+function cursorOf(createdAt: string, id: string = randomUUID()): string {
+  return Buffer.from(JSON.stringify({ createdAt, id }), "utf8").toString("base64url");
+}
+
 function payment(overrides: Partial<InvitationPaymentSummary> = {}): InvitationPaymentSummary {
   return {
     paymentId: randomUUID(),
@@ -363,6 +371,42 @@ describe("ListAdminInvitationsUseCase (M9 T2; S1)", () => {
         cursor,
       );
       assert.deepEqual(test.repository.queries, [], cursor);
+    }
+  });
+
+  it("refuses a canonical instant outside the years a stored createdAt can have, before any read", async () => {
+    // PostgreSQL's `timestamptz` spans 4713 BC to 294276 AD, but this product's read only needs the window the cursor
+    // module documents (1970..9999). JavaScript accepts every instant below, so without the window each one reaches a
+    // query PostgreSQL answers with an error instead of the 400 a malformed cursor earns.
+    const refused = [
+      "+010000-01-01T00:00:00.000Z", // one second after the last accepted year
+      "+275760-09-13T00:00:00.000Z", // JavaScript's own maximum, and PostgreSQL's too
+      "1969-12-31T23:59:59.999Z", // one instant before the first accepted year
+      "-271821-04-20T00:00:00.000Z", // JavaScript's own minimum
+    ];
+
+    for (const createdAt of refused) {
+      const test = harness();
+      await assert.rejects(
+        test.list.execute({ slug: null, status: null, limit: 20, cursor: cursorOf(createdAt) }),
+        InvalidInvitationCursorError,
+        createdAt,
+      );
+      assert.deepEqual(test.repository.queries, [], createdAt);
+    }
+  });
+
+  it("accepts both edges of that window", async () => {
+    for (const createdAt of ["1970-01-01T00:00:00.000Z", "9999-12-31T23:59:59.999Z"]) {
+      const test = harness();
+
+      await test.list.execute({ slug: null, status: null, limit: 20, cursor: cursorOf(createdAt) });
+
+      assert.equal(
+        test.repository.queries[0]?.after?.createdAt.toISOString(),
+        createdAt,
+        createdAt,
+      );
     }
   });
 

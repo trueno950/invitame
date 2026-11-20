@@ -330,6 +330,27 @@ describe("admin invitation status routes (M9 T2; S1)", () => {
       assert.deepEqual(harness.repository.queries, [], "a refused query reads nothing");
     });
 
+    it("answers 400 INVALID_CURSOR, not 500, for a canonical instant outside the stored range", async () => {
+      // `+275760-09-13T00:00:00.000Z` is JavaScript's own maximum instant and PostgreSQL refuses it, so the cursor is
+      // refused as malformed and the request never reaches a port.
+      for (const createdAt of [
+        "+275760-09-13T00:00:00.000Z",
+        "+010000-01-01T00:00:00.000Z",
+        "1969-12-31T23:59:59.999Z",
+      ]) {
+        const cursor = Buffer.from(JSON.stringify({ createdAt, id: UNKNOWN_ID }), "utf8").toString(
+          "base64url",
+        );
+        const response = await harness.send(`${PATH}?cursor=${encodeURIComponent(cursor)}`, {
+          cookie: adminCookie,
+        });
+
+        assert.equal(response.status, 400, createdAt);
+        assert.deepEqual(await response.json(), { code: "INVALID_CURSOR" }, createdAt);
+      }
+      assert.deepEqual(harness.repository.queries, [], "a refused cursor reads nothing");
+    });
+
     it("answers 400 for an id that is not a UUID, before reaching a port", async () => {
       const response = await harness.send(`${PATH}/not-a-uuid`, { cookie: adminCookie });
 
