@@ -18,6 +18,12 @@ export interface InvitationPaymentSummary {
   paidAt: Date | null;
 }
 
+/**
+ * The port's own maximum for one detail read: the newest twenty payments. An adapter clamps every request into
+ * `1..INVITATION_PAYMENT_DETAIL_LIMIT`, so no caller can widen the read and none can ask for an empty page.
+ */
+export const INVITATION_PAYMENT_DETAIL_LIMIT = 20;
+
 /** The payment source of the administrator's status view. */
 export interface InvitationPaymentReader {
   /**
@@ -26,7 +32,10 @@ export interface InvitationPaymentReader {
    */
   latestFor(invitationIds: readonly string[]): Promise<Map<string, InvitationPaymentSummary>>;
 
-  /** The newest `limit` payments of one invitation, newest first, for the detail read (at most 20). */
+  /**
+   * The newest payments of one invitation, newest first, for the detail read: at most
+   * `INVITATION_PAYMENT_DETAIL_LIMIT`, whatever `limit` asks, and at least one row.
+   */
   listForInvitation(invitationId: string, limit: number): Promise<InvitationPaymentSummary[]>;
 }
 

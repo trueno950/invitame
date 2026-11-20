@@ -324,8 +324,11 @@ model Invitation {
 
   @@index([ownerId])
   // The administrator's status view (M9 T2; S1) reads a page newest first, optionally filtered by one status, so
-  // migration 20261125120000_add_invitation_status_created_at_index adds this index for exactly that read.
+  // migration 20261125120000_add_invitation_status_created_at_index adds this index for the filtered page.
   @@index([status, createdAt])
+  // The same view with no status filter reads the whole table newest first, and the key-set cursor continues on
+  // `id`, so migration 20261126120000_add_invitation_created_at_id_index adds this second index for that page (T5).
+  @@index([createdAt, id])
 }
 
 // Feature data of one invitation, stored apart from the template (F1; S3, S4): changing the template never

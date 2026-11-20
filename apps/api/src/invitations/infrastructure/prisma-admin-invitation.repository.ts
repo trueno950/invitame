@@ -5,6 +5,7 @@ import type {
   AdminInvitationRepository,
   AdminInvitationRow,
 } from "../application/admin-invitation.repository";
+import { isInvitationId } from "../application/invitation-cursor";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 
 // The administrator's invitation read on PostgreSQL (M9 T2; S1). Two rules shape this adapter:
@@ -101,12 +102,13 @@ export class PrismaAdminInvitationRepository implements AdminInvitationRepositor
       );
     }
     if (query.after !== null) {
-      // The exact key-set predicate: a strictly older instant, or the same instant with a smaller id. UUIDs compare
-      // byte-wise in PostgreSQL, which is the same order the `ORDER BY` uses, so no row is skipped or repeated.
-      conditions.push(Prisma.sql`(
-        "createdAt" < ${query.after.createdAt}::timestamptz
-        OR ("createdAt" = ${query.after.createdAt}::timestamptz AND "id" < ${query.after.id}::uuid)
-      )`);
+      // The exact key-set predicate as a row comparison: a strictly older instant, or the same instant with a smaller
+      // id. It is lexicographic, the same order the `ORDER BY "createdAt" DESC, "id" DESC` uses, so no row is skipped or
+      // repeated, and PostgreSQL turns it into an index condition on `Invitation(createdAt, id)` instead of filtering
+      // every row before the cursor (T5).
+      conditions.push(
+        Prisma.sql`("createdAt", "id") < (${query.after.createdAt}::timestamptz, ${query.after.id}::uuid)`,
+      );
     }
 
     const where = conditions.length === 0 ? Prisma.sql`TRUE` : Prisma.join(conditions, " AND ");
@@ -121,6 +123,13 @@ export class PrismaAdminInvitationRepository implements AdminInvitationRepositor
   }
 
   async findForAdmin(invitationId: string): Promise<AdminInvitationRow | null> {
+    // The route already refuses a parameter that is not a UUID, so this guard is for a direct caller (a command, a
+    // later internal read): PostgreSQL would refuse the comparison with a cast error, and "no such row" is the same
+    // null the route maps to its one 404. It costs no query.
+    if (!isInvitationId(invitationId)) {
+      return null;
+    }
+
     const row = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
       select: FIND_COLUMNS,

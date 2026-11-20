@@ -13,6 +13,7 @@ import { PrismaInvitationOwnerEmailReader } from "../../users/infrastructure/pri
 import type { AdminInvitationRow } from "../application/admin-invitation.repository";
 import {
   GetAdminInvitationUseCase,
+  InvalidInvitationCursorError,
   ListAdminInvitationsUseCase,
 } from "../application/admin-invitation.use-cases";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
@@ -202,6 +203,39 @@ describe("admin invitation status view on real PostgreSQL (M9 T2; S1)", () => {
     `;
 
     assert.equal(rows.length, 1);
+  });
+
+  it("applies the index the unfiltered page reads", async () => {
+    const rows = await prisma.$queryRaw<Array<{ indexdef: string }>>`
+      SELECT "indexdef" FROM "pg_indexes"
+      WHERE "tablename" = 'Invitation' AND "indexname" = 'Invitation_createdAt_id_idx'
+    `;
+
+    assert.equal(rows.length, 1);
+    // PostgreSQL deparses the stored key list, quoting only the names that need it: the second key is the cursor's
+    // own tie-break, so the index serves the whole `(createdAt desc, id desc)` order.
+    assert.match(rows[0]?.indexdef ?? "", /USING btree \("createdAt", id\)/);
+  });
+
+  it("refuses a cursor outside the years a stored createdAt can have, before any query", async () => {
+    // JavaScript accepts every instant below and PostgreSQL refuses each one: were the cursor accepted, the paginated
+    // read would answer a database error instead of the 400 the route maps INVALID_CURSOR to.
+    for (const createdAt of [
+      "+275760-09-13T00:00:00.000Z",
+      "+010000-01-01T00:00:00.000Z",
+      "1969-12-31T23:59:59.999Z",
+      "-271821-04-20T00:00:00.000Z",
+    ]) {
+      const cursor = Buffer.from(JSON.stringify({ createdAt, id: randomUUID() }), "utf8").toString(
+        "base64url",
+      );
+
+      await assert.rejects(
+        list.execute({ slug: null, status: null, limit: 20, cursor }),
+        InvalidInvitationCursorError,
+        createdAt,
+      );
+    }
   });
 
   it("pages newest first across rows that share one createdAt instant", async () => {
@@ -432,6 +466,14 @@ describe("admin invitation status view on real PostgreSQL (M9 T2; S1)", () => {
       stored.payments.map((payment) => payment.amountMinor),
       Array.from({ length: 20 }, (_, index) => 1000 + 21 - index),
     );
+
+    // The bound is the port's, not the caller's: the adapter clamps whatever the read asks for.
+    const asked = await payments.listForInvitation(invitationId, 100);
+    assert.equal(asked.length, 20, "the adapter clamps to the port's maximum");
+    assert.deepEqual(
+      asked.map((payment) => payment.amountMinor),
+      stored.payments.map((payment) => payment.amountMinor),
+    );
   });
 
   it("counts the stored main photo and gallery assets of a whole page in one batched read", async () => {
@@ -502,6 +544,15 @@ describe("admin invitation status view on real PostgreSQL (M9 T2; S1)", () => {
   it("answers null for an invitation no row has", async () => {
     assert.equal(await repository.findForAdmin(randomUUID()), null);
     assert.equal(await detail.execute(randomUUID()), null);
+  });
+
+  it("answers null for an id that is not a UUID instead of a database error", async () => {
+    // The route's ParseUUIDPipe already refuses such a parameter over HTTP; a direct caller gets the same "no row"
+    // the route maps to 404, never a PostgreSQL cast error.
+    for (const id of ["not-a-uuid", "1111", `${randomUUID()}-x`]) {
+      assert.equal(await repository.findForAdmin(id), null, id);
+      assert.equal(await detail.execute(id), null, id);
+    }
   });
 
   it("keeps the admin row shape the list answers free of content", async () => {

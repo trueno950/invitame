@@ -4,6 +4,7 @@ import type {
   InvitationPaymentReader,
   InvitationPaymentSummary,
 } from "../../invitations/application/invitation-payment-summary";
+import { INVITATION_PAYMENT_DETAIL_LIMIT } from "../../invitations/application/invitation-payment-summary";
 import type { PaymentStatus } from "../domain/payment";
 
 // The administrator's payment facet of the invitation status view (M9 T2; S1), on PostgreSQL. The invitations module
@@ -84,8 +85,9 @@ export class PrismaInvitationPaymentReader implements InvitationPaymentReader {
       where: { invitationId },
       select: SUMMARY_COLUMNS,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      // The bound is the port's: the detail view shows at most twenty payments, whatever the caller asks.
-      take: limit,
+      // The bound is the port's, not the caller's: the detail view shows at most twenty payments, so a larger request
+      // is clamped instead of widening the read, and a request for fewer than one row still reads one.
+      take: Math.min(Math.max(limit, 1), INVITATION_PAYMENT_DETAIL_LIMIT),
     });
 
     return rows.map(toSummary);
