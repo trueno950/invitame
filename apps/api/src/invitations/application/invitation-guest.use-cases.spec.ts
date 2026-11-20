@@ -154,6 +154,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       places: {},
       archivedAt: overrides.status === "ARCHIVED" ? at : null,
       publishedAt: overrides.status === "PUBLISHED" ? at : null,
+      firstPublishedAt: overrides.status === "PUBLISHED" ? at : null,
       expiresAt: null,
       createdAt: at,
       updatedAt: at,

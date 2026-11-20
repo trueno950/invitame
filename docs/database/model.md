@@ -29,7 +29,11 @@ rewritten and nothing is deleted. The playlist metadata batch adds the additive
 `InvitationFeatureSettings_playlistCoverUrl_https` check. Both are nullable, so no row is rewritten and nothing is
 deleted. The precise-locations batch adds the additive `20261123120000_add_invitation_places` migration: the
 `InvitationPlace` table, keyed by `(invitationId, field)`, with the `InvitationPlace_lat_range` and
-`InvitationPlace_lng_range` checks. Every object is new, so no row is rewritten and nothing is deleted. Future
+`InvitationPlace_lng_range` checks. Every object is new, so no row is rewritten and nothing is deleted. The refund
+batch (T2) adds the additive `20261124120000_add_invitation_first_published_at` migration: one nullable
+`Invitation.firstPublishedAt` column, a one-time backfill from `publishedAt`, and the
+`Invitation_firstPublishedAt_when_published` check. It appends a nullable column, so every existing row stays valid;
+the backfill of already-published rows rewrites only that new column, and nothing is deleted. Future
 analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
@@ -48,7 +52,7 @@ analytics design is documented separately in
 | `PackagePrice` | Append-only price history of a package: integer `amountMinor` in the smallest currency unit plus an ISO `currency`; the row with no `retiredAt` is the current price |
 | `Template` | Mutable template master metadata and category relation |
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
-| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the unused-nullable expiry `expiresAt`, JSONB `content`, the archive marker, the IANA `timeZone`, and the RSVP settings `rsvpDeadline` and `rsvpPartyLimit` |
+| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the never-cleared first publication `firstPublishedAt`, the unused-nullable expiry `expiresAt`, JSONB `content`, the archive marker, the IANA `timeZone`, and the RSVP settings `rsvpDeadline` and `rsvpPartyLimit` |
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
@@ -98,6 +102,13 @@ analytics design is documented separately in
   it is publishing, and unpublishing back to `DRAFT` or archiving clears it (S7, A2). The check compares
   `status::text` rather than an enum literal because a value appended to the enum in the same transaction cannot be
   used in that transaction; invitation status labels are never renamed, so the comparison stays exact.
+- `Invitation.firstPublishedAt` is a nullable `TIMESTAMPTZ(6)` that the first publication writes and nothing clears,
+  unlike `publishedAt`: unpublishing and archiving clear `publishedAt` and keep `firstPublishedAt`, so an invitation
+  that returned to `DRAFT` or was archived still says it was once public. That history is what the refund rule
+  «Sin reembolso tras publicar» reads (T2, S3). `Invitation_firstPublishedAt_when_published` makes a stored row
+  unable to have `publishedAt` without a `firstPublishedAt` (`publishedAt IS NULL OR firstPublishedAt IS NOT NULL`),
+  and a `DRAFT` that was published before may carry one. The migration backfilled `firstPublishedAt = publishedAt`
+  for the rows published at that moment, the only publication history the schema kept before this column.
 - `Invitation_archivedAt_matches_status` from `20261111214752` is unchanged and still correct for three statuses:
   `("status" = 'ARCHIVED') = ("archivedAt" IS NOT NULL)` holds for a `DRAFT` (both false), a `PUBLISHED` (both
   false), and an `ARCHIVED` row (both true), so `archivedAt` still marks exactly the archived state.

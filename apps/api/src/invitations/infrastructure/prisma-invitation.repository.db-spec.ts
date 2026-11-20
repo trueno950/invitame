@@ -144,7 +144,8 @@ describe("Prisma invitation repository on PostgreSQL", () => {
     return created;
   }
 
-  const stored = (id: string) => prisma.invitation.findUniqueOrThrow({ where: { id } });
+  const stored = (id: string) =>
+    prisma.invitation.findUniqueOrThrow({ where: { id }, omit: { refundRequestedAt: true } });
 
   /** The stored row as the repository reports it: the port flattens the one-to-one feature settings row (F1, F6). */
   async function storedRecord(id: string) {

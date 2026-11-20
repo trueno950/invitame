@@ -15,6 +15,7 @@ import { requireLocalDatabaseUrl } from "../../../test/database";
 // those rows are removed.
 
 const PUBLISHED_AT_MATCHES_STATUS = /Invitation_publishedAt_matches_status/;
+const FIRST_PUBLISHED_AT_WHEN_PUBLISHED = /Invitation_firstPublishedAt_when_published/;
 const ARCHIVED_AT_MATCHES_STATUS = /Invitation_archivedAt_matches_status/;
 const PINNED_IMMUTABLE = /Invitation pinned fields are immutable/;
 
@@ -139,9 +140,38 @@ describe("invitation publication schema (real PostgreSQL)", () => {
     newInvitation(await newFixture(), {
       status: "PUBLISHED",
       publishedAt: new Date("2026-11-12T08:00:00.000Z"),
+      firstPublishedAt: new Date("2026-11-12T08:00:00.000Z"),
     });
 
   describe("insert", () => {
+    it("refuses a PUBLISHED row without firstPublishedAt and stores nothing", async () => {
+      const fixture = await newFixture();
+
+      await assert.rejects(
+        newInvitation(fixture, {
+          status: "PUBLISHED",
+          publishedAt: new Date("2026-11-12T08:00:00.000Z"),
+        }),
+        FIRST_PUBLISHED_AT_WHEN_PUBLISHED,
+      );
+
+      assert.equal(await prisma.invitation.count({ where: { ownerId: fixture.ownerId } }), 0);
+    });
+
+    it("keeps firstPublishedAt on a DRAFT that was published before", async () => {
+      const published = await newPublished();
+      const firstPublishedAt = new Date("2026-11-12T08:00:00.000Z");
+
+      const updated = await prisma.invitation.update({
+        where: { id: published.id },
+        data: { status: "DRAFT", publishedAt: null },
+      });
+
+      assert.equal(updated.status, "DRAFT");
+      assert.equal(updated.publishedAt, null);
+      assert.deepEqual(updated.firstPublishedAt, firstPublishedAt);
+    });
+
     it("refuses PUBLISHED without publishedAt and stores nothing", async () => {
       const fixture = await newFixture();
 
@@ -157,7 +187,11 @@ describe("invitation publication schema (real PostgreSQL)", () => {
       const fixture = await newFixture();
 
       await assert.rejects(
-        newInvitation(fixture, { status: "DRAFT", publishedAt: new Date() }),
+        newInvitation(fixture, {
+          status: "DRAFT",
+          publishedAt: new Date(),
+          firstPublishedAt: new Date(),
+        }),
         PUBLISHED_AT_MATCHES_STATUS,
       );
 
@@ -172,6 +206,7 @@ describe("invitation publication schema (real PostgreSQL)", () => {
           status: "ARCHIVED",
           archivedAt: new Date("2026-11-12T09:00:00.000Z"),
           publishedAt: new Date("2026-11-12T08:00:00.000Z"),
+          firstPublishedAt: new Date("2026-11-12T08:00:00.000Z"),
         }),
         PUBLISHED_AT_MATCHES_STATUS,
       );
@@ -198,6 +233,7 @@ describe("invitation publication schema (real PostgreSQL)", () => {
       const published = await newInvitation(await newFixture(), {
         status: "PUBLISHED",
         publishedAt: new Date("2026-11-12T08:00:00.000Z"),
+        firstPublishedAt: new Date("2026-11-12T08:00:00.000Z"),
         expiresAt,
       });
 
@@ -214,7 +250,7 @@ describe("invitation publication schema (real PostgreSQL)", () => {
 
       const updated = await prisma.invitation.update({
         where: { id: invitation.id },
-        data: { status: "PUBLISHED", publishedAt },
+        data: { status: "PUBLISHED", publishedAt, firstPublishedAt: publishedAt },
       });
 
       assert.equal(updated.status, "PUBLISHED");

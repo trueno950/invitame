@@ -4,13 +4,20 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { databaseErrorCode } from "../../users/domain/database-error-code";
 import type {
+  AdminPaymentRow,
   InsertEventResult,
   NewPendingPayment,
   PaymentEventTransaction,
   PaymentRecord,
+  PaymentRefundRepository,
   PaymentRepository,
   PaymentTarget,
+  RefundTarget,
 } from "../application/payment.repository";
+import {
+  PaymentInvitationAlreadyPublishedError,
+  PaymentNotRefundableError,
+} from "../application/payment.errors";
 import type { PaymentStatus } from "../domain/payment";
 
 // The payments repository on PostgreSQL (M7 S1, S4). Two statements are the whole concurrency story of this
@@ -137,7 +144,7 @@ class PrismaPaymentEventTransaction implements PaymentEventTransaction {
   }
 }
 
-export class PrismaPaymentRepository implements PaymentRepository {
+export class PrismaPaymentRepository implements PaymentRepository, PaymentRefundRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async findOwnedInvitation(ownerId: string, invitationId: string): Promise<PaymentTarget | null> {
@@ -226,6 +233,91 @@ export class PrismaPaymentRepository implements PaymentRepository {
 
   async transaction<T>(work: (transaction: PaymentEventTransaction) => Promise<T>): Promise<T> {
     return this.prisma.$transaction((tx) => work(new PrismaPaymentEventTransaction(tx)));
+  }
+
+  async findRefundTarget(paymentId: string): Promise<RefundTarget | null> {
+    // One query reads the payment and the invitation history the refund rule needs, so the decision is never taken
+    // from two reads that could disagree (T2, S3).
+    const row = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: {
+        id: true,
+        invitationId: true,
+        provider: true,
+        providerReference: true,
+        status: true,
+        invitation: { select: { firstPublishedAt: true } },
+      },
+    });
+
+    return row === null
+      ? null
+      : {
+          paymentId: row.id,
+          invitationId: row.invitationId,
+          provider: row.provider,
+          providerReference: row.providerReference,
+          status: row.status as PaymentStatus,
+          firstPublishedAt: row.invitation.firstPublishedAt,
+        };
+  }
+
+  async claimRefund(paymentId: string, at: Date): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.findUnique({
+        where: { id: paymentId },
+        select: { invitationId: true, status: true, providerReference: true },
+      });
+      if (payment === null || payment.status !== "paid" || payment.providerReference === null) {
+        throw new PaymentNotRefundableError();
+      }
+
+      const { count } = await tx.invitation.updateMany({
+        // `firstPublishedAt: null` is "never published" (the CHECK constraint pairs both columns), and the claim is
+        // written only when it is not stored yet, so a retry keeps the first instant.
+        where: { id: payment.invitationId, firstPublishedAt: null, refundRequestedAt: null },
+        data: { refundRequestedAt: at },
+      });
+      if (count === 0) {
+        // A stored claim stays (the retry re-sends the same refund); any other miss means it was published.
+        const invitation = await tx.invitation.findUniqueOrThrow({
+          where: { id: payment.invitationId },
+          select: { refundRequestedAt: true },
+        });
+        if (invitation.refundRequestedAt === null) {
+          throw new PaymentInvitationAlreadyPublishedError();
+        }
+      }
+    });
+  }
+
+  async listPaidForAdmin(limit: number): Promise<AdminPaymentRow[]> {
+    const rows = await this.prisma.payment.findMany({
+      where: { status: "paid" },
+      select: {
+        id: true,
+        invitationId: true,
+        amountMinor: true,
+        currency: true,
+        status: true,
+        paidAt: true,
+        invitation: { select: { slug: true, firstPublishedAt: true, refundRequestedAt: true } },
+      },
+      orderBy: [{ paidAt: "desc" }, { id: "desc" }],
+      take: limit,
+    });
+
+    return rows.map((row) => ({
+      paymentId: row.id,
+      invitationId: row.invitationId,
+      invitationSlug: row.invitation.slug,
+      status: row.status as PaymentStatus,
+      amountMinor: row.amountMinor,
+      currency: row.currency,
+      paidAt: row.paidAt,
+      firstPublishedAt: row.invitation.firstPublishedAt,
+      refundRequestedAt: row.invitation.refundRequestedAt,
+    }));
   }
 
   private async findPending(invitationId: string): Promise<PaymentRecord | null> {

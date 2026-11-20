@@ -32,6 +32,7 @@ function invitationOf(): InvitationRecord {
     rsvpPartyLimit: 4,
     archivedAt: null,
     publishedAt: null,
+    firstPublishedAt: null,
     expiresAt: null,
     createdAt: new Date("2026-11-21T10:00:00.000Z"),
     updatedAt: new Date("2026-11-21T10:00:00.000Z"),

@@ -108,6 +108,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       status: "DRAFT",
       archivedAt: null,
       publishedAt: null,
+      firstPublishedAt: null,
       expiresAt: null,
       createdAt: now,
       updatedAt: now,
@@ -217,6 +218,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     }
     stored.status = "PUBLISHED";
     stored.publishedAt = at;
+    stored.firstPublishedAt ??= at;
     stored.updatedAt = at;
     return { ...stored, content: { ...stored.content } };
   }

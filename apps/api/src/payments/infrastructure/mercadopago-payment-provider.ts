@@ -65,9 +65,12 @@ const SHA256_HEX_PATTERN = /^[0-9a-fA-F]{64}$/;
 const TIMESTAMP_PATTERN = /^\d{10,15}$/;
 /** A millisecond clock has this many digits; see `secondsOf`. */
 const MILLISECOND_TIMESTAMP_DIGITS = 13;
-/** An absolute https URL on a Mercado Pago or Mercado Libre host is a checkout this API may send a browser to. */
+/**
+ * An absolute https URL on a Mercado Pago or Mercado Libre host is a checkout this API may send a browser to. The
+ * registrable domain is exact (`.com` or `.com.mx`, the MXN market), so `www.mercadopago.evil.com` is refused.
+ */
 const CHECKOUT_HOST_PATTERN =
-  /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*(?:mercadopago|mercadolibre)\.[a-z]{2,}(?:\.[a-z]{2,})?$/;
+  /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*(?:mercadopago|mercadolibre)\.com(?:\.mx)?$/;
 
 /** The ways a request to Mercado Pago answers nothing (S4): a bounded category each, and never a body or a secret. */
 export const MERCADOPAGO_FAILURE = {
