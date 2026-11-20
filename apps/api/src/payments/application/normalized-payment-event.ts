@@ -14,6 +14,16 @@ const IDENTIFIER_PATTERN = /^[A-Za-z0-9_.:-]{1,200}$/;
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 
+/**
+ * Whether a value is an ISO instant the domain can store. It is the one accepted shape of an event time, shared with
+ * the adapters, so a provider's date field is either a real instant or is not used at all.
+ */
+export function isIsoInstant(value: unknown): value is string {
+  return (
+    typeof value === "string" && ISO_INSTANT.test(value) && !Number.isNaN(new Date(value).getTime())
+  );
+}
+
 /** Whether a value is the normalized event an adapter must answer, with no field left unchecked. */
 export function parseNormalizedPaymentEvent(value: unknown): NormalizedPaymentEvent | null {
   if (typeof value !== "object" || value === null) {
@@ -43,12 +53,7 @@ export function parseNormalizedPaymentEvent(value: unknown): NormalizedPaymentEv
   if (typeof currency !== "string" || !CURRENCY_PATTERN.test(currency)) {
     return null;
   }
-  if (typeof occurredAt !== "string" || !ISO_INSTANT.test(occurredAt)) {
-    return null;
-  }
-
-  const instant = new Date(occurredAt);
-  if (Number.isNaN(instant.getTime())) {
+  if (!isIsoInstant(occurredAt)) {
     return null;
   }
 
@@ -58,6 +63,6 @@ export function parseNormalizedPaymentEvent(value: unknown): NormalizedPaymentEv
     providerReference,
     amountMinor,
     currency,
-    occurredAt: instant,
+    occurredAt: new Date(occurredAt),
   };
 }

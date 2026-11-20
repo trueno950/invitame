@@ -139,6 +139,7 @@ function paymentOf(overrides: Record<string, unknown> = {}): Record<string, unkn
     currency_id: "MXN",
     date_approved: "2026-11-21T11:59:00.000-04:00",
     date_last_updated: "2026-11-21T11:59:30.000-04:00",
+    date_created: "2026-11-21T11:58:00.000-04:00",
     payer: { email: "payer@example.test", first_name: "Ada" },
     ...overrides,
   };
@@ -366,6 +367,61 @@ describe("Mercado Pago payment re-read (T1, S2, S4)", () => {
     );
   });
 
+  it("carries the refund or failure instant instead of the approval instant (R3-001)", async () => {
+    for (const status of ["refunded", "charged_back", "rejected", "cancelled"]) {
+      await withServer(
+        () => ({ body: JSON.stringify(paymentOf({ status })) }),
+        async (server) => {
+          const { provider } = providerFor(server.baseUrl);
+
+          const verification = await provider.verifyWebhook(signedDelivery());
+
+          assert.deepEqual(
+            verification.ok ? verification.event?.occurredAt : null,
+            new Date("2026-11-21T11:59:30.000-04:00"),
+            status,
+          );
+        },
+      );
+    }
+  });
+
+  it("falls back from the update to the creation instant, and refuses a payment with no instant (R3-001)", async () => {
+    const cases: ReadonlyArray<readonly [Record<string, unknown>, Date | null]> = [
+      [
+        paymentOf({ status: "refunded", date_last_updated: null }),
+        new Date("2026-11-21T11:58:00.000-04:00"),
+      ],
+      [
+        paymentOf({ date_approved: null, date_last_updated: null }),
+        new Date("2026-11-21T11:58:00.000-04:00"),
+      ],
+      [
+        paymentOf({ status: "refunded", date_last_updated: "not-a-date", date_created: null }),
+        null,
+      ],
+      [paymentOf({ date_approved: null, date_last_updated: null, date_created: null }), null],
+    ];
+
+    for (const [payment, expected] of cases) {
+      await withServer(
+        () => ({ body: JSON.stringify(payment) }),
+        async (server) => {
+          const { provider } = providerFor(server.baseUrl);
+
+          const verification = await provider.verifyWebhook(signedDelivery());
+
+          if (expected === null) {
+            assert.deepEqual(verification, { ok: false });
+            return;
+          }
+
+          assert.deepEqual(verification.ok ? verification.event?.occurredAt : null, expected);
+        },
+      );
+    }
+  });
+
   it("refuses an amount that is not exact cents, or a payment this API cannot identify", async () => {
     for (const payment of [
       paymentOf({ transaction_amount: 250.005 }),
@@ -384,6 +440,36 @@ describe("Mercado Pago payment re-read (T1, S2, S4)", () => {
         },
       );
     }
+  });
+
+  it("refuses a signed delivery that names no topic, and ignores another known topic (R4-002)", async () => {
+    await withServer(
+      () => ({ body: JSON.stringify(paymentOf()) }),
+      async (server) => {
+        const { provider } = providerFor(server.baseUrl);
+
+        // Neither the body nor the query names a topic: a malformed delivery the provider has to send again.
+        assert.deepEqual(
+          await provider.verifyWebhook(
+            signedDelivery({
+              body: { action: "payment.updated", data: { id: MP_PAYMENT_ID } },
+              query: {},
+            }),
+          ),
+          { ok: false },
+        );
+        assert.equal(server.requests.length, 0);
+
+        // An authentic delivery of another topic the provider sends still decides nothing.
+        assert.deepEqual(
+          await provider.verifyWebhook(
+            signedDelivery({ body: { type: "merchant_order", data: { id: MP_PAYMENT_ID } } }),
+          ),
+          { ok: true, event: null },
+        );
+        assert.equal(server.requests.length, 0);
+      },
+    );
   });
 
   it("answers a failure the provider can retry when the re-read fails", async () => {
@@ -440,6 +526,40 @@ describe("Mercado Pago refund (T1, S3)", () => {
         assert.deepEqual(JSON.parse(refund.body), {});
       },
     );
+  });
+
+  it("answers the refund's success without refunding again when the payment is already refunded (R4-001)", async () => {
+    for (const status of ["refunded", "charged_back"]) {
+      await withServer(
+        () => ({ body: JSON.stringify({ results: [{ id: 222, status }] }) }),
+        async (server) => {
+          const { provider } = providerFor(server.baseUrl);
+
+          assert.deepEqual(await provider.refund(PAYMENT_ID, "idem-9"), { ok: true }, status);
+          assert.equal(server.requests.length, 1, status);
+          assert.equal(server.requests[0]?.url.startsWith("/v1/payments/search"), true, status);
+        },
+      );
+    }
+  });
+
+  it("still refuses to refund a payment in another status (R4-001)", async () => {
+    for (const results of [
+      [{ id: 111, status: "pending" }],
+      [{ id: 111, status: "in_process" }],
+      [{ id: 111, status: "cancelled" }],
+      [],
+    ]) {
+      await withServer(
+        () => ({ body: JSON.stringify({ results }) }),
+        async (server) => {
+          const { provider } = providerFor(server.baseUrl);
+
+          assert.deepEqual(await provider.refund(PAYMENT_ID, "idem-9"), { ok: false });
+          assert.equal(server.requests.length, 1);
+        },
+      );
+    }
   });
 
   it("answers a failure without refunding when no approved payment answers the reference", async () => {

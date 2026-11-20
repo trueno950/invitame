@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { Logger } from "@nestjs/common";
 
-import { parseNormalizedPaymentEvent } from "../application/normalized-payment-event";
+import { isIsoInstant, parseNormalizedPaymentEvent } from "../application/normalized-payment-event";
 import type {
   CheckoutIntent,
   CheckoutSession,
@@ -28,7 +28,8 @@ import type { PaymentEventType } from "../domain/payment";
 //   guessed at — money in particular: an amount that is not exact cents is not this API's amount;
 // - the signature comparison is constant-time, its timestamp is bounded to ±5 minutes against the instant the API
 //   received the delivery, and an authentic delivery that decides nothing answers `event: null` (200, nothing stored)
-//   so a retry of it stops instead of repeating forever;
+//   so a retry of it stops instead of repeating forever, while a delivery that names no topic at all is refused so it
+//   is retried rather than dropped;
 // - every failure is reported as one structured category and never as a body, a token, a secret, or a payer datum.
 //
 // The API origin is configuration (`MERCADOPAGO_API_BASE_URL`), so a spec or a sandbox proxy replaces the real one with
@@ -390,24 +391,77 @@ function checkoutRedirectUrlOf(value: unknown): string | null {
   return url.protocol === "https:" && CHECKOUT_HOST_PATTERN.test(url.hostname) ? url.href : null;
 }
 
-/** The id of the approved payment of a search answer, or null when it names none. */
-function approvedPaymentIdOf(answer: unknown): string | null {
+/**
+ * The id of one payment of a search answer, or null when it names none; the provider answers it as a number or a string.
+ */
+function paymentIdOf(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return stringField(value);
+}
+
+/** The provider statuses of a payment whose money already went back to the payer (S3). */
+const ALREADY_REFUNDED_STATUSES: ReadonlySet<string> = new Set(["refunded", "charged_back"]);
+
+/**
+ * What a search answer for our external reference allows: the payment to refund, a payment the provider already
+ * refunded, or nothing this API may act on (S3). An approved payment wins, because that is the one the refund is
+ * asked of; only when the reference answers none does an already refunded one confirm the retried action (R4-001).
+ */
+type RefundTarget =
+  | { readonly kind: "refund"; readonly paymentId: string }
+  | { readonly kind: "already-refunded" }
+  | null;
+
+/** The refund target of a search answer, or null when it holds no payment this API may refund (S3, R4-001). */
+function refundTargetOf(answer: unknown): RefundTarget {
   if (!isRecord(answer) || !Array.isArray(answer.results)) {
     return null;
   }
 
+  let alreadyRefunded = false;
+
   for (const result of answer.results) {
-    if (!isRecord(result) || result.status !== "approved") {
+    if (!isRecord(result)) {
       continue;
     }
 
-    if (typeof result.id === "number" && Number.isFinite(result.id)) {
-      return String(result.id);
+    if (result.status === "approved") {
+      const paymentId = paymentIdOf(result.id);
+      if (paymentId !== null) {
+        return { kind: "refund", paymentId };
+      }
+      continue;
     }
 
-    const id = stringField(result.id);
-    if (id !== null) {
-      return id;
+    if (typeof result.status === "string" && ALREADY_REFUNDED_STATUSES.has(result.status)) {
+      alreadyRefunded = true;
+    }
+  }
+
+  return alreadyRefunded ? { kind: "already-refunded" } : null;
+}
+
+/**
+ * The instant the event one payment answer names happened (R3-001): an approval is stamped by `date_approved`, while a
+ * refusal, a refund, and a chargeback happen later and are stamped by the payment's own last update — reading the
+ * approval instant there would date a refund at the moment the charge happened. The creation instant is the last
+ * deterministic fallback, and a payment that carries no usable instant is refused instead of (mis)dated.
+ */
+function occurredAtOf(
+  payment: Record<string, unknown>,
+  statusType: PaymentEventType,
+): string | null {
+  const candidates: readonly unknown[] =
+    statusType === "paid"
+      ? [payment.date_approved, payment.date_last_updated, payment.date_created]
+      : [payment.date_last_updated, payment.date_created];
+
+  for (const candidate of candidates) {
+    if (isIsoInstant(candidate)) {
+      return candidate;
     }
   }
 
@@ -435,7 +489,7 @@ function normalizePayment(payment: unknown, dataId: string): WebhookVerification
 
   const providerReference = stringField(payment.external_reference);
   const currency = stringField(payment.currency_id);
-  const occurredAt = stringField(payment.date_approved) ?? stringField(payment.date_last_updated);
+  const occurredAt = occurredAtOf(payment, statusType);
   const amountMinor = minorUnitsOf(payment.transaction_amount);
 
   if (
@@ -580,7 +634,13 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
     }
 
     const topic = topicOf(request);
-    if (topic === null || topic.toLowerCase() !== MERCADOPAGO_PAYMENT_TOPIC) {
+    // A delivery that names no topic cannot be decided: it is refused exactly like the other malformed deliveries, so
+    // the route answers 400 and the provider sends it again instead of the API dropping it silently (R4-002).
+    if (topic === null) {
+      return { ok: false };
+    }
+
+    if (topic.toLowerCase() !== MERCADOPAGO_PAYMENT_TOPIC) {
       return { ok: true, event: null };
     }
 
@@ -610,7 +670,9 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
   /**
    * Asks for a full refund of the approved payment of one of ours (S3): the search finds it by our external reference,
    * and the refund request carries the idempotency key of the admin action and no amount, so it is the whole payment.
-   * Accepting it changes no stored state: the payment moves only from the verified notification that follows.
+   * A payment the search already shows as refunded answers the same success without asking for it again, so a retried
+   * admin action confirms the refund that landed instead of failing (R4-001). Accepting it changes no stored state: the
+   * payment moves only from the verified notification that follows.
    */
   async refund(providerReference: string, idempotencyKey: string): Promise<RefundResult> {
     const search = await this.#request(
@@ -619,8 +681,8 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
       MERCADOPAGO_OPERATION.REFUND,
     );
 
-    const paymentId = search.ok ? approvedPaymentIdOf(search.body) : null;
-    if (!search.ok || paymentId === null) {
+    const target = search.ok ? refundTargetOf(search.body) : null;
+    if (!search.ok || target === null) {
       if (search.ok) {
         this.#report({
           event: "mercadopago-request-failed",
@@ -631,8 +693,12 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
       return { ok: false };
     }
 
+    if (target.kind === "already-refunded") {
+      return { ok: true };
+    }
+
     const refund = await this.#request(
-      `/v1/payments/${encodeURIComponent(paymentId)}/refunds`,
+      `/v1/payments/${encodeURIComponent(target.paymentId)}/refunds`,
       {
         method: "POST",
         headers: {

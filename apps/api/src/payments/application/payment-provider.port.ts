@@ -58,7 +58,8 @@ export interface WebhookRequest {
  *
  * The third answer is a delivery the adapter proved authentic but that decides nothing: another notification topic,
  * or a payment status the domain does not map. `event: null` answers 200 so the provider stops retrying, and writes
- * nothing — it is not the same answer as a forged delivery, which is refused (T1, S4).
+ * nothing — it is not the same answer as a forged delivery, which is refused (T1, S4). A delivery that names no topic
+ * at all is malformed rather than undecided, so it is refused like any other unverifiable one and can be retried.
  */
 export type WebhookVerification =
   | { readonly ok: true; readonly event: NormalizedPaymentEvent }
@@ -92,8 +93,10 @@ export interface PaymentProvider {
 
   /**
    * Asks the provider for a full refund of one payment of ours (T1, S3). `providerReference` is the reference stored at
-   * checkout and `idempotencyKey` makes a retried request the same refund. Accepting a refund changes nothing by
-   * itself: the payment moves only from the verified notification that follows, so no admin click is a payment state.
+   * checkout and `idempotencyKey` makes a retried request the same refund. A provider that already refunded that
+   * payment answers the same success without a second refund request, so a retried action confirms the refund instead
+   * of failing. Accepting a refund changes nothing by itself: the payment moves only from the verified notification
+   * that follows, so no admin click is a payment state.
    */
   refund(providerReference: string, idempotencyKey: string): Promise<RefundResult>;
 }
