@@ -39,6 +39,8 @@ const SUMMARY = {
 const DETAIL: AdminInvitationDetail = {
   ...SUMMARY,
   ownerId: OWNER_ID,
+  // The owner's stored account status (T9; S4), the support card's one additive field.
+  ownerStatus: "ACTIVE",
   packageId: PACKAGE_ID,
   templateVersionId: TEMPLATE_VERSION_ID,
   payments: [

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { AdminInvitationDetail } from "../../server/admin-invitations-client.ts";
-import { INVITATION_SUPPORT_COPY, INVITATION_UNPUBLISH_REASON_LABELS } from "./copy.ts";
+import {
+  INVITATION_SUPPORT_COPY,
+  INVITATION_UNPUBLISH_REASON_LABELS,
+  OWNER_ACCOUNT_STATUS_LABELS,
+} from "./copy.ts";
 import {
   invitationPageNotices,
   invitationsErrorTarget,
@@ -29,6 +33,8 @@ const DETAIL: AdminInvitationDetail = {
   latestPayment: null,
   media: { mainPhoto: false, galleryCount: 0 },
   ownerId: "9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19",
+  // The owner's stored account status (T9; S4), the support card's one additive field.
+  ownerStatus: "ACTIVE",
   packageId: "2b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e12",
   templateVersionId: "3b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e13",
   payments: [],
@@ -82,6 +88,60 @@ describe("invitationSupportView", () => {
   });
 });
 
+describe("the owner's account section (M9 T9; S4, L8, L9)", () => {
+  it("offers the disable and the resend while the owner is active", () => {
+    const { owner } = invitationSupportView(DETAIL);
+
+    assert.equal(owner.status, "ACTIVE");
+    assert.equal(owner.statusLabel, "Activa");
+    assert.equal(owner.canDisable, true);
+    assert.equal(owner.canReactivate, false);
+    assert.equal(owner.canResendSignInCode, true);
+    assert.equal(owner.hint, undefined);
+  });
+
+  it("offers only the reactivate while the account is disabled, and says why no code is sent", () => {
+    const { owner } = invitationSupportView({ ...DETAIL, ownerStatus: "DISABLED" });
+
+    assert.equal(owner.statusLabel, "Desactivada");
+    assert.equal(owner.canDisable, false);
+    assert.equal(owner.canReactivate, true);
+    assert.equal(owner.canResendSignInCode, false);
+    assert.equal(owner.hint, INVITATION_SUPPORT_COPY.ownerDisabledHint);
+  });
+
+  it("offers no account action when the API answered no stored owner", () => {
+    const { owner } = invitationSupportView({ ...DETAIL, ownerStatus: null });
+
+    assert.equal(owner.status, null);
+    assert.equal(owner.statusLabel, INVITATION_SUPPORT_COPY.ownerUnknownHint);
+    assert.equal(owner.canDisable, false);
+    assert.equal(owner.canReactivate, false);
+    assert.equal(owner.canResendSignInCode, false);
+  });
+
+  it("names the two stored account states in Spanish", () => {
+    assert.deepEqual(OWNER_ACCOUNT_STATUS_LABELS, { ACTIVE: "Activa", DISABLED: "Desactivada" });
+  });
+
+  it("says the notice states the request, never the delivery, and that invitations stay published", () => {
+    assert.match(INVITATION_SUPPORT_COPY.notice["sign-in-code-requested"], /Pedimos un código/);
+    assert.match(
+      INVITATION_SUPPORT_COPY.notice["sign-in-code-requested"],
+      /No podemos confirmar su entrega/,
+    );
+    assert.doesNotMatch(
+      INVITATION_SUPPORT_COPY.notice["sign-in-code-requested"],
+      /Enviamos|entregamos/i,
+    );
+    assert.equal(
+      INVITATION_SUPPORT_COPY.invitationsStayPublished,
+      "Desactivar la cuenta no despublica sus invitaciones.",
+    );
+    assert.match(INVITATION_SUPPORT_COPY.disableHint, /siguen publicadas/);
+  });
+});
+
 describe("the support card's page messages", () => {
   it("shows the notice of a completed unpublish and each refusal's own sentence", () => {
     assert.equal(
@@ -91,11 +151,28 @@ describe("the support card's page messages", () => {
     assert.deepEqual(invitationPageNotices({ notice: "unpublished" }), {
       notice: INVITATION_SUPPORT_COPY.notice.unpublished,
     });
+    for (const code of [
+      "account-disabled",
+      "account-reactivated",
+      "sign-in-code-requested",
+    ] as const) {
+      assert.equal(
+        invitationsNoticeTarget("/admin/invitaciones/x", code),
+        `/admin/invitaciones/x?notice=${code}`,
+      );
+      assert.deepEqual(invitationPageNotices({ notice: code }), {
+        notice: INVITATION_SUPPORT_COPY.notice[code],
+      });
+    }
 
     for (const code of [
       "not-found",
       "not-published",
       "already-archived",
+      "admin-protected",
+      "already-disabled",
+      "already-active",
+      "cannot-sign-in-by-code",
       "validation",
       "invalid-form",
       "unavailable",

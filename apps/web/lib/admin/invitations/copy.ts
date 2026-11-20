@@ -1,4 +1,5 @@
 import type {
+  AccountStatus,
   AdminActionReason,
   AdminInvitationStatus,
 } from "../../server/admin-invitations-client.ts";
@@ -141,6 +142,15 @@ export const INVITATION_UNPUBLISH_REASON_LABELS = {
 } satisfies Record<AdminActionReason, string>;
 
 /**
+ * The owner's account state as the support card states it (M9 T9; S4). It is the stored `User.status` in Spanish, and
+ * it is the whole of what the page says about the account: never a role, a display name, or a session.
+ */
+export const OWNER_ACCOUNT_STATUS_LABELS = {
+  ACTIVE: "Activa",
+  DISABLED: "Desactivada",
+} satisfies Record<AccountStatus, string>;
+
+/**
  * `/admin/invitaciones/<id>`: the «Acciones de soporte» card (M9 T8; S4, S6). The form is offered only while the
  * invitation is published, the reason is the API's closed set, and the note is as wide as the column. The card says in
  * the page that unpublishing creates no refund, because a support person must never promise one.
@@ -163,11 +173,44 @@ export const INVITATION_SUPPORT_COPY = {
   noRefund: "Despublicar no genera un reembolso.",
   unpublish: "Despublicar",
   /**
+   * The owner's account section of the card (T9; S4, L8, L9). It offers «Desactivar cuenta» while the account is
+   * active, «Reactivar cuenta» while it is disabled, and «Reenviar código de acceso» while the owner may sign in by
+   * code; each is fixed by what the detail answered, and the API still decides.
+   */
+  ownerHeading: "Cuenta del dueño",
+  ownerStatusLabel: "Estado de la cuenta",
+  disableHeading: "Desactivar cuenta",
+  disableHint:
+    "El dueño pierde el acceso de inmediato y se cierran sus sesiones. Sus invitaciones siguen publicadas.",
+  disable: "Desactivar cuenta",
+  reactivateHeading: "Reactivar cuenta",
+  reactivateHint:
+    "El dueño recupera el acceso y vuelve a entrar con un código nuevo enviado a su correo.",
+  reactivate: "Reactivar cuenta",
+  resendHeading: "Reenviar código de acceso",
+  resendHint:
+    "Le mandamos un código de inicio de sesión a su correo. Aplican los mismos límites que a cualquier usuario.",
+  /** Said before the request, so nobody promises a message that delivery or the per-email limit may drop (S4). */
+  resendNoticeHint: "El aviso confirma la solicitud del código, no su entrega.",
+  resend: "Reenviar código de acceso",
+  /** Why no control is offered: a disabled account cannot sign in by code, and an unknown owner has no account. */
+  ownerDisabledHint: "La cuenta está desactivada, así que no recibe códigos de acceso.",
+  ownerUnknownHint:
+    "No encontramos la cuenta del dueño, así que no se ofrecen las acciones de su cuenta.",
+  /** The one fact a support person must not promise away (L8). */
+  invitationsStayPublished: "Desactivar la cuenta no despublica sus invitaciones.",
+  /**
    * The outcomes of the unpublish form that are not a refusal: the API answered the new detail, so the page shows the
-   * invitation as a draft. It never says the invitation was deleted, because it was not.
+   * invitation as a draft. It never says the invitation was deleted, because it was not. The account actions' notices
+   * state what the API answered: a new status, and — for the code — that it was requested.
    */
   notice: {
     unpublished: "Despublicamos la invitación. Su enlace público ya no está disponible.",
+    "account-disabled": "Desactivamos la cuenta del dueño. Sus invitaciones siguen publicadas.",
+    "account-reactivated":
+      "Reactivamos la cuenta del dueño. Ya puede volver a entrar con un código.",
+    "sign-in-code-requested":
+      "Pedimos un código de acceso nuevo para el dueño. No podemos confirmar su entrega ni que lo haya recibido.",
   },
   /**
    * The refusals of the unpublish form, each with its own Spanish sentence: the three codes of
@@ -177,9 +220,16 @@ export const INVITATION_SUPPORT_COPY = {
    * (`unavailable`). The three API refusals exist one to one, so a new code cannot be shown as another one.
    */
   error: {
-    "not-found": "No encontramos esa invitación. Vuelve a la lista.",
+    "not-found": "No encontramos esa invitación ni la cuenta de su dueño. Vuelve a la lista.",
     "not-published": "La invitación no está publicada, así que no hay nada que despublicar.",
     "already-archived": "La invitación está archivada, así que ya no se puede despublicar.",
+    /** The account refusals of the support card (T9; S4, L9), one sentence per code, never one for another. */
+    "admin-protected":
+      "Esa cuenta es de administración, así que no se puede desactivar desde aquí.",
+    "already-disabled": "La cuenta ya estaba desactivada.",
+    "already-active": "La cuenta ya estaba activa.",
+    "cannot-sign-in-by-code":
+      "Esa cuenta no puede iniciar sesión con un código: está desactivada o es de administración.",
     validation: "No pudimos leer la solicitud. Revisa el motivo y la nota.",
     "invalid-form": "No pudimos leer la solicitud. Revisa el motivo y la nota.",
     unavailable: "No pudimos completar la solicitud. Inténtalo de nuevo en unos minutos.",
