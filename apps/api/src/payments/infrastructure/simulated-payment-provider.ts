@@ -4,6 +4,7 @@ import type {
   CheckoutSession,
   NormalizedPaymentEvent,
   PaymentProvider,
+  RefundResult,
   SimulatedWebhookEmitter,
   WebhookRequest,
   WebhookVerification,
@@ -56,7 +57,7 @@ export class SimulatedPaymentProvider implements PaymentProvider, SimulatedWebho
   }
 
   /** Verifies the HMAC-SHA256 signature and parses the normalized body; any failure answers `{ ok: false }`. */
-  verifyWebhook(request: WebhookRequest): WebhookVerification {
+  async verifyWebhook(request: WebhookRequest): Promise<WebhookVerification> {
     const header = request.headers[SIMULATED_SIGNATURE_HEADER];
     const verified = verifySimulatedSignature({
       secret: this.options.secret,
@@ -78,6 +79,15 @@ export class SimulatedPaymentProvider implements PaymentProvider, SimulatedWebho
     const event = parseNormalizedPaymentEvent(payload);
 
     return event === null ? { ok: false } : { ok: true, event };
+  }
+
+  /**
+   * The simulated provider refunds nothing, because there is nothing to refund: it answers ok so the development
+   * flow can exercise the admin refund path end to end, and it emits no event — the payment state does not move from
+   * a refund request, here or with a real provider (T1, S3).
+   */
+  async refund(_providerReference: string, _idempotencyKey: string): Promise<RefundResult> {
+    return { ok: true };
   }
 
   /**

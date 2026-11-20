@@ -18,6 +18,7 @@ import { PAYMENT_CATALOG } from "./application/payment-catalog";
 import { PAYMENT_PROVIDER } from "./application/payment-provider.port";
 import { CatalogPaymentPrices } from "./infrastructure/catalog-payment-prices";
 import { DisabledPaymentProvider } from "./infrastructure/disabled-payment-provider";
+import { MercadoPagoPaymentProvider } from "./infrastructure/mercadopago-payment-provider";
 import { PaymentGate } from "./infrastructure/payment-gate";
 import { PrismaPaymentRepository } from "./infrastructure/prisma-payment.repository";
 import { PaymentsModule } from "./payments.module";
@@ -91,6 +92,32 @@ describe("PaymentsModule wiring", () => {
     const controllers: unknown = Reflect.getMetadata("controllers", PaymentsModule) ?? [];
 
     assert.equal((controllers as unknown[]).length, 2);
+  });
+
+  it("binds the Mercado Pago adapter when the mode selects it (T1)", async () => {
+    const app = await createApp(
+      AppModule.forRoot({
+        environment: {
+          NODE_ENV: "development",
+          CORS_ORIGIN: "http://localhost:3000",
+          DATABASE_URL: "postgresql://unused:unused@127.0.0.1:1/unused",
+          BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
+          AUTH_BASE_URL: "http://localhost:3000",
+          PAYMENTS_MODE: "mercadopago",
+          MERCADOPAGO_ACCESS_TOKEN: "test-access-token-not-a-real-credential",
+          MERCADOPAGO_WEBHOOK_SECRET: "test-webhook-secret-not-a-real-credential",
+          PAYMENTS_WEBHOOK_BASE_URL: "https://api.example.test",
+        },
+        database: StubDatabaseModule,
+      }),
+      { logger: false, abortOnError: false },
+    );
+
+    try {
+      assert.ok(app.get(PAYMENT_PROVIDER, { strict: false }) instanceof MercadoPagoPaymentProvider);
+    } finally {
+      await app.close();
+    }
   });
 });
 

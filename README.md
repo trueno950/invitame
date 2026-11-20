@@ -63,6 +63,13 @@ API (`apps/api/.env`):
 | `MUSIC_METADATA_LOOKUP` | No | `on` in development and production, `off` in test: whether a saved Spotify or YouTube playlist link is looked up once through the provider's public oEmbed to store its title and cover. |
 | `PLACE_SEARCH_PROVIDER` | No | `photon` in development and production, `off` in test: whether an address field may ask the OpenStreetMap Photon search for suggestions while the owner types. |
 | `PLACE_SEARCH_PHOTON_URL` | No | `https://photon.komoot.io/api/`: the Photon instance the place search asks, so a self-hosted Photon is a configuration change. Never a Nominatim endpoint. |
+| `PAYMENTS_MODE` | Production | `free`, `simulated`, or `mercadopago`; `free` in development and test. Production must name it and refuses `simulated`, whose adapter can sign its own events. |
+| `PAYMENTS_SIMULATED_SECRET` | With `simulated` | The HMAC key that signs the simulated provider's events: 32 characters or more, different from `BETTER_AUTH_SECRET` and the proxy secrets. Never commit it. |
+| `PAYMENTS_RETURN_BASE_URL` | No | `http://localhost:3000`: the web origin the provider returns the browser to, as an `http` or `https` origin. `https` in production. |
+| `PAYMENTS_WEBHOOK_BASE_URL` | With `mercadopago` | The public API origin Mercado Pago notifies, as an origin with no path; the notification URL is `<PAYMENTS_WEBHOOK_BASE_URL>/payments/webhooks/mercadopago`. `https` in production. |
+| `MERCADOPAGO_ACCESS_TOKEN` | With `mercadopago` | The Mercado Pago API credential, sent as a Bearer token and never logged. It must differ from every other secret here. Never commit it. |
+| `MERCADOPAGO_WEBHOOK_SECRET` | With `mercadopago` | The webhook signature secret from the Mercado Pago panel, which proves a notification. It must differ from `MERCADOPAGO_ACCESS_TOKEN` and from every auth secret. Never commit it. |
+| `MERCADOPAGO_API_BASE_URL` | No | `https://api.mercadopago.com`: the provider API origin, as an origin with no path, so a sandbox proxy is a configuration change. `https` in production. |
 
 The API also refuses `BETTER_AUTH_TRUSTED_ORIGINS`, so `CORS_ORIGIN` stays the only list of trusted origins, and
 `BETTER_AUTH_SECRETS`, which Better Auth reads on its own and which would replace the validated

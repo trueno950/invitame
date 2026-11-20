@@ -43,6 +43,11 @@ export interface NormalizedPaymentEvent {
 export interface WebhookRequest {
   rawBody: string;
   headers: Readonly<Record<string, string | string[] | undefined>>;
+  /**
+   * The query string the delivery carried, one value per name (the first, when a name repeats). Mercado Pago signs
+   * the notification id it sends there, so the adapter has to see it exactly as the API parsed it (T1, S4).
+   */
+  query: Readonly<Record<string, string>>;
   /** The instant the API received the request; the adapter's timestamp tolerance is measured against it. */
   receivedAt: Date;
 }
@@ -50,12 +55,26 @@ export interface WebhookRequest {
 /**
  * The outcome of verifying a webhook. A refusal carries no detail, so the route can never tell a caller whether the
  * signature was missing, stale, or forged (S4).
+ *
+ * The third answer is a delivery the adapter proved authentic but that decides nothing: another notification topic,
+ * or a payment status the domain does not map. `event: null` answers 200 so the provider stops retrying, and writes
+ * nothing — it is not the same answer as a forged delivery, which is refused (T1, S4).
  */
 export type WebhookVerification =
   | { readonly ok: true; readonly event: NormalizedPaymentEvent }
+  | { readonly ok: true; readonly event: null }
   | { readonly ok: false };
 
-/** The provider port. One adapter per mode that charges; `free` binds an adapter that refuses to charge. */
+/** What a refund answers: the provider accepted a full refund, or it did not (T1, S3). */
+export type RefundResult =
+  | { readonly ok: true }
+  /** The provider refused it or could not be reached; nothing was asked of it twice, and nothing changed. */
+  | { readonly ok: false };
+
+/**
+ * The provider port. One adapter per mode that charges; `free` binds an adapter that refuses to charge. Neither
+ * method ever reports a provider payload: the adapter maps its own vocabulary to these answers.
+ */
 export interface PaymentProvider {
   /** The stable adapter key, stored in `Payment.provider` and compared with the webhook route's `:provider`. */
   readonly key: string;
@@ -64,10 +83,19 @@ export interface PaymentProvider {
   createCheckout(intent: CheckoutIntent): Promise<CheckoutSession>;
 
   /**
-   * Verifies the signature of one delivery and parses its normalized event. It answers `{ ok: false }` for
-   * anything it cannot verify or parse, and never throws for a bad request.
+   * Verifies the signature of one delivery and parses its normalized event, or answers `event: null` for an authentic
+   * delivery that decides nothing. It answers `{ ok: false }` for anything it cannot verify or parse, and never throws
+   * for a bad request. It is asynchronous because a real provider is verified against configuration and, for the
+   * event itself, against the provider's own API (T1, S2, S4).
    */
-  verifyWebhook(request: WebhookRequest): WebhookVerification;
+  verifyWebhook(request: WebhookRequest): Promise<WebhookVerification>;
+
+  /**
+   * Asks the provider for a full refund of one payment of ours (T1, S3). `providerReference` is the reference stored at
+   * checkout and `idempotencyKey` makes a retried request the same refund. Accepting a refund changes nothing by
+   * itself: the payment moves only from the verified notification that follows, so no admin click is a payment state.
+   */
+  refund(providerReference: string, idempotencyKey: string): Promise<RefundResult>;
 }
 
 export const PAYMENT_PROVIDER = Symbol("PaymentProvider");

@@ -3,6 +3,7 @@ import type {
   CheckoutIntent,
   CheckoutSession,
   PaymentProvider,
+  RefundResult,
   WebhookVerification,
 } from "../application/payment-provider.port";
 
@@ -21,7 +22,12 @@ export class DisabledPaymentProvider implements PaymentProvider {
     throw new PaymentsDisabledError();
   }
 
-  verifyWebhook(): WebhookVerification {
+  async verifyWebhook(): Promise<WebhookVerification> {
     return { ok: false };
+  }
+
+  /** A deployment that sells nothing has no provider refund to ask either (T1, S3). */
+  async refund(_providerReference: string, _idempotencyKey: string): Promise<RefundResult> {
+    throw new PaymentsDisabledError();
   }
 }

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 import { MemoryPaymentCatalog, MemoryPaymentRepository } from "../../../test/memory-payments";
 import { PAYMENT_STATUS } from "../domain/payment";
+import { DisabledPaymentProvider } from "../infrastructure/disabled-payment-provider";
 import { SimulatedPaymentProvider } from "../infrastructure/simulated-payment-provider";
 import {
   InvitationPackageLockedByPaymentError,
@@ -87,8 +88,13 @@ class FakePaymentProvider implements PaymentProvider {
     };
   }
 
-  verifyWebhook(): WebhookVerification {
+  async verifyWebhook(): Promise<WebhookVerification> {
     return this.verification;
+  }
+
+  /** The intake never refunds here; the use cases that do are the refund rule's own suite (T1). */
+  async refund(): Promise<{ ok: true }> {
+    return { ok: true };
   }
 }
 
@@ -468,6 +474,27 @@ describe("payment use cases (M7 S1, S3, S4)", () => {
       assert.equal(repository.events[0]?.paymentId, null);
       assert.equal(repository.events[0]?.outcome, "ignored_unknown_payment");
     });
+
+    it("answers a verified delivery that decides nothing as ignored, writing nothing", async () => {
+      const { repository, provider, useCase } = intake();
+      const payment = repository.seedPayment();
+      // A provider answers this for a delivery it proved authentic but that names nothing this API acts on: another
+      // notification topic, or a payment status that is not one of the normalized ones (T1, S4).
+      provider.verification = { ok: true, event: null };
+
+      const result = await useCase.execute({
+        provider: "simulated",
+        rawBody: "{}",
+        headers: {},
+        receivedAt: NOW,
+      });
+
+      // 200 so the provider stops retrying, and nothing stored or moved: it is not a refused delivery.
+      assert.deepEqual(result, { outcome: "ignored" });
+      assert.equal(payment.status, "pending");
+      assert.equal(repository.events.length, 0);
+      assert.equal(repository.transactions, 0);
+    });
   });
 
   describe("simulated emit", () => {
@@ -566,6 +593,23 @@ describe("payment use cases (M7 S1, S3, S4)", () => {
         repository.events.map((event) => event.outcome),
         ["applied", "ignored_transition"],
       );
+    });
+  });
+
+  describe("refund port (T1, S3)", () => {
+    it("answers ok from the simulated provider, which has no network and emits nothing", async () => {
+      const provider = new SimulatedPaymentProvider({
+        secret: "local-simulated-payments-secret-of-32-chars",
+        returnBaseUrl: "http://localhost:3000",
+      });
+
+      assert.deepEqual(await provider.refund("simulated-0", "idem-1"), { ok: true });
+    });
+
+    it("refuses a refund in a deployment that sells nothing", async () => {
+      await assert.rejects(new DisabledPaymentProvider().refund("none-0", "idem-1"), {
+        name: PaymentsDisabledError.name,
+      });
     });
   });
 });

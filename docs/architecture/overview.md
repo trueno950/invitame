@@ -31,7 +31,7 @@ apps/web ── REST/JSON ──► apps/api (NestJS)
                               ├── media port ──► local directory or S3-compatible bucket
                               ├── music metadata port ──► public oEmbed (Spotify, YouTube) or nothing
                               ├── place search port ──► Photon (public instance or a self-hosted one) or nothing
-                              └── payment port ──► simulated adapter (a real provider adapter is the owner's choice)
+                              └── payment port ──► simulated adapter, Mercado Pago Checkout Pro, or nothing
 ```
 
 `apps/web` never imports Prisma or connects to PostgreSQL. The API is the persistence boundary. Turborepo
@@ -866,9 +866,9 @@ guest map. An invitation that never confirmed a point keeps exactly the text-sea
   publication gate. The module imports only the catalog's public contract and implements the invitations module's
   `INVITATION_PAYMENT_GATE`, so no module reads another module's tables through its internals.
 - `PAYMENTS_MODE` selects the mode and binds the adapter: `free` keeps Milestone 5's behavior (publication needs no
-  payment), `simulated` runs the development provider, and a provider key will be added with the first real adapter.
-  Production must name the mode and refuses `simulated`; development and test default to `free`, so nothing new is
-  required locally. See [`../development/payments.md`](../development/payments.md).
+  payment), `simulated` runs the development provider, and `mercadopago` charges through Checkout Pro. Production must
+  name the mode and refuses `simulated`; development and test default to `free`, so nothing new is required locally.
+  See [`../development/payments.md`](../development/payments.md).
 - Checkout: `POST /invitations/:id/checkout` (owner, not archived) copies the package's current price into the
   payment row — `amountMinor` and `currency` are the snapshot, never re-read — with a server-generated idempotency key,
   and answers `{ paymentId, redirectUrl, amountMinor, currency }`. One `pending` payment per invitation exists by
@@ -877,18 +877,44 @@ guest map. An invitation that never confirmed a point keeps exactly the text-sea
 - Owner read: `GET /invitations/:id/payment` answers `{ paymentRequired, status, amountMinor, currency, paidAt }`,
   where `paymentRequired` comes from the same entitlement rule the publication gate asks, so the web panel cannot say
   "paid" while the gate still refuses.
-- Webhook intake: `POST /payments/webhooks/:provider` is `@Public()` and reads the raw body (`createApp` keeps it on
-  the request). The adapter verifies the signature, the payload becomes a normalized event
-  (`eventId`, `type`, `providerReference`, `amountMinor`, `currency`, `occurredAt`), and one transaction inserts the
-  event and applies the transition guarded by the status it was decided from. A duplicate `(provider, eventId)` is
+- Webhook intake: `POST /payments/webhooks/:provider` is `@Public()` and reads the raw body and the parsed query
+  (`createApp` keeps the raw body on the request). The adapter verifies the signature, the payload becomes a normalized
+  event (`eventId`, `type`, `providerReference`, `amountMinor`, `currency`, `occurredAt`), and one transaction inserts
+  the event and applies the transition guarded by the status it was decided from. A duplicate `(provider, eventId)` is
   200 `duplicate` and changes nothing; a duplicate concurrent delivery applies one transition; an out-of-order event is
   recorded as `ignored_transition` and ignored; an amount or currency that differs from the snapshot is recorded as
-  `refused_amount`/`refused_currency` and changes nothing. The raw payload is never stored, only its SHA-256 digest.
+  `refused_amount`/`refused_currency` and changes nothing. An authentic delivery the adapter proves but that decides
+  nothing (another notification topic, a status the domain does not map) is 200 `ignored` and writes nothing, so the
+  provider stops retrying; a delivery that does not verify is one 400 with no detail. The raw payload is never stored,
+  only its SHA-256 digest.
 - Simulated provider (development and test only): checkout redirects to the web's
   `/cuenta/invitaciones/<invitationId>/pago/simulado/<paymentId>` page,
   and `POST /payments/simulated/<paymentId>/emit` (owner session, refused unless the mode is `simulated`) builds and
   signs `x-invitame-signature: t=<unix>,v1=<hex>` (HMAC-SHA256 over `<t>.<raw body>`, five-minute tolerance,
-  constant-time compare) and posts it through the same intake.
+  constant-time compare) and posts it through the same intake. Its `refund` answers ok and emits nothing, so the
+  development flow can exercise the refund command without a provider.
+- Mercado Pago (mode `mercadopago`, allowed in production): `MERCADOPAGO_ACCESS_TOKEN` and
+  `MERCADOPAGO_WEBHOOK_SECRET` are validated at startup, must differ from each other and from the auth secrets, and
+  `PAYMENTS_WEBHOOK_BASE_URL` is the public API origin Mercado Pago notifies; `MERCADOPAGO_API_BASE_URL` defaults to
+  `https://api.mercadopago.com`, which is the seam a spec or a sandbox proxy replaces. Checkout posts one preference
+  (`items` at the snapshot amount in MXN, `external_reference` = our `paymentId`, `back_urls` to
+  `/cuenta/invitaciones/<id>/pago`, `auto_return: "approved"`, `notification_url` =
+  `<PAYMENTS_WEBHOOK_BASE_URL>/payments/webhooks/mercadopago`, `X-Idempotency-Key` = our idempotency key) and redirects
+  to `init_point`, which must be an https Mercado Pago or Mercado Libre URL; `providerReference` stores our `paymentId`.
+  The notification is verified as `x-signature` (`ts`, `v1`, in either order) = HMAC-SHA256 of
+  `id:<data.id>;request-id:<x-request-id>;ts:<ts>;` with the webhook secret, constant-time compared, inside ±5 minutes
+  of the receipt instant (a 13-or-more-digit timestamp is read as milliseconds), with `data.id` taken from the query and
+  lower-cased when it is alphanumeric. Only then is `GET /v1/payments/<data.id>` read with the access token, and only
+  `external_reference`, `status`, `transaction_amount` (exact cents), `currency_id`, and `date_approved` /
+  `date_last_updated` are normalized: `approved` → `paid`, `rejected`/`cancelled` → `failed`,
+  `refunded`/`charged_back` → `refunded`, anything else is verified and ignored, and `eventId` is
+  `mercadopago-<mpPaymentId>-<status>` so a redelivery is a duplicate. A failed re-read answers 400 so Mercado Pago
+  retries. Every request has a five-second timeout, no redirect, a 64 KiB body cap, and one structured failure report
+  that never carries a token, a secret, a body, or a payer datum.
+- Refund port (T1): `PaymentProvider.refund(providerReference, idempotencyKey)` searches
+  `/v1/payments/search?external_reference=<our paymentId>` for the approved payment and posts
+  `/v1/payments/<id>/refunds` with `X-Idempotency-Key` and no amount, so it is a full refund. The admin route and the
+  never-published rule are the refund milestone (S3); **planned**.
 - Publication gate: `PaymentGate` answers for `free` exactly what Milestone 5 answered. In every mode that charges it
   requires a `paid` payment for this invitation and its current package, or a package whose current price is 0, and
   fails closed (`PAYMENT_PRICE_UNAVAILABLE`) when the catalog cannot answer the price. The publish use case and the
