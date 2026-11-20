@@ -855,6 +855,8 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
       const page = await readGuest.execute(first.invitation.slug, first.token);
 
       assert.equal(page?.page.slug, first.invitation.slug);
+      // The internal id lets the route count this opening as a GUEST one (M9 T11; S7); no response carries it.
+      assert.equal(page?.page.invitationId, first.invitation.id);
       assert.equal(page?.page.features.rsvp.mode, "guest-list");
       assert.equal(page?.guest.name, "Ana");
       assert.equal(page?.guest.seats, 3);
@@ -866,7 +868,7 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
       // Deluxe grants the QR pass, and this guest confirmed: the page offers it.
       assert.equal(page?.guest.qrPass, true);
       const text = JSON.stringify(page);
-      for (const secret of ["Beto", first.token, first.invitation.ownerId, first.invitation.id]) {
+      for (const secret of ["Beto", first.token, first.invitation.ownerId]) {
         assert.equal(text.includes(secret), false, secret);
       }
     });

@@ -11,6 +11,11 @@ import type { PlacePoint } from "../domain/invitation-place";
 
 /** What the public page of a published invitation renders (A7, A8); nothing outside these keys is exposed. */
 export interface PublicInvitation {
+  /**
+   * The stored id of the invitation that was served. It is here so the public read can count one opening against it
+   * (M9 T11; S2, S7); the REST mapper builds the guest's body field by field, so this id never reaches a response.
+   */
+  invitationId: string;
   slug: string;
   componentKey: string;
   configuration: unknown;

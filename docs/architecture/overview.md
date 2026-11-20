@@ -1240,6 +1240,68 @@ sign-in code, and each state change writes one append-only `AdminAction` row in 
   `lib/admin/invitations/commands.test.ts` (the three commands' forms and redirections), and
   `lib/admin/invitations/support.test.ts` (the owner section's controls and its Spanish copy).
 
+## Administrator analytics (current)
+
+Implemented by Milestone 9 T11 (S2, S3, S7, L12): the administrator's view of how many times invitations were opened and
+of the purchase funnel, plus the retention of the view counts. Only views need a table; the funnel and the RSVP totals
+are computed on read.
+
+- Module ownership: the `invitations` module owns `InvitationView` and serves both analytics routes on the
+  administrator's side. Its own adapter (`ADMIN_ANALYTICS_REPOSITORY`, `PrismaAdminAnalyticsRepository`) answers the
+  views, the top invitations, the invitation steps of the funnel, and one invitation's retained views with its RSVP
+  totals; the payment steps arrive through a narrow port the invitations module declares
+  (`INVITATION_FUNNEL_PAYMENT_READER`) and the payments module implements in one batched read of the window — the
+  `INVITATION_PAYMENT_READER` precedent — so no module reads another module's tables.
+- Counting rule (S2, S7, L12): one view is «cada apertura del enlace» — every served public invitation, reloads and the
+  owner's own visit included — reported as «aperturas», never «personas». The plain public page counts `PUBLIC` and a
+  guest's personal link counts `GUEST`, counted together and separately. A view is counted only after the invitation
+  resolved **and** its renderer exists, so a 404, a draft, an archived invitation, and an unrenderable one count
+  nothing; an RSVP submission is not an opening, and the owner's own preview (the owner-scoped read) is not counted.
+  The write is one upsert (`INSERT … ON CONFLICT ("invitationId", "day", "source") DO UPDATE SET "count" = "count" + 1`)
+  with the day computed by PostgreSQL as `(at AT TIME ZONE 'America/Mexico_City')::date`, and it is fire-and-forget: the
+  public read never awaits it, and a failure is one structured line `{ event: "invitation_view_count_failed" }` with no
+  slug, no id, and nothing about the visitor, so the guest's page is identical whether the counter is healthy or not.
+- Window (S2, S3): a day is the calendar day in `America/Mexico_City`; both bounds are `YYYY-MM-DD` and optional, `to`
+  defaults to today in the zone and `from` to thirty days ending there, the window may not be reversed, and it may hold
+  at most ninety days. A day that is not a real calendar day is a validation 400 from the DTO; a reversed or over-wide
+  window is 400 `INVALID_ANALYTICS_WINDOW` from the use case, before any query. Both reads answer every day of the
+  window exactly once, ascending, with zeros where nothing was counted, so the page never has a gap to guess.
+- `GET /admin/analytics/views?from&to` → 200 `{ days: [{ day, public, guest }], topInvitations: [{ invitationId, slug,
+  public, guest }] }`, the top list at most twenty invitations ordered by the total of both links descending and then by
+  slug. `GET /admin/analytics/funnel?from&to` → 200 `{ days: [{ day, draftsCreated, checkoutsStarted,
+  paymentsApproved, firstPublications }] }`. Both are `@AdminOnly()` (401 without a session, 403 for a customer, before
+  any validation) and read-only.
+- Funnel and RSVP totals need no table (S2): drafts created are `Invitation."createdAt"`, checkouts started
+  `Payment."createdAt"`, approved payments `Payment."paidAt"` where the status is `paid`, and first publications
+  `Invitation."firstPublishedAt"`, each grouped by the zone's day in SQL. The admin invitation detail gains
+  `views: { public, guest }` (the retained window, the last ninety days) and `rsvpTotals: { attendingPeople, declined,
+  responses }`, a bounded aggregate over `RsvpResponse` with the owner read's own semantics (`rsvpTotalsOf`): attending
+  people is the sum of the attending party sizes, declined counts the declining rows, and responses counts every row.
+  Both are always objects of non-negative integers — zeros for an invitation with no activity — never null.
+- Privacy allow-list (S2, S7): a counted view stores `invitationId`, `day`, `source`, and `count` only. No IP address,
+  user agent, referrer, cookie, session, token, or slug is stored, read, or answered, and no analytics response names a
+  visitor, a guest, an owner, or a payment. An invitation appears only as its id and its public slug, exactly like the
+  status view, and the funnel answers totals, never a row.
+- Retention (S3, S7, L12): `pnpm analytics:retention` deletes the rows older than ninety days, idempotently and with a
+  `--dry-run`; it prints counts only and exits non-zero on failure. The Railway schedule is a production change the
+  owner approves separately. See [`../development/analytics-retention.md`](../development/analytics-retention.md).
+- Migrations: `20261128120000_add_invitation_views` (the enum and the table, additive) and
+  `20261128130000_add_analytics_indexes` (`Payment(createdAt)`, `Payment(paidAt)`,
+  `Invitation(firstPublishedAt)`, additive; built without `CONCURRENTLY` because Prisma sends a multi-statement
+  migration as one implicit transaction). See [`../database/model.md`](../database/model.md).
+- Tests: `src/invitations/domain/analytics-window.spec.ts` (the zone's day cut, day arithmetic, the default window, the
+  refusals, the retention cutoff), `src/invitations/application/admin-analytics.use-cases.spec.ts` (zero-filled asc
+  days, the top list bounded at twenty, the funnel merge, the window refusals), `invitation-views.spec.ts` and
+  `invitation-view-retention.spec.ts` (the counted source and the clock, the dry run and the idempotent delete),
+  `src/invitations/presentation/admin-analytics.controller.spec.ts` (401/403, 400 for each bad window, the exact shapes,
+  the full day coverage and the UUID top list), `admin-invitations.controller.spec.ts` (the detail always answers both
+  analytics objects, zeros included), and `src/invitations/infrastructure/analytics.prisma.db-spec.ts` (the upsert
+  counting two openings as two, the two sources apart, the zone-midnight buckets of all four funnel steps, the RSVP
+  aggregate equal to the owner totals, the top order, the three indexes, and the retention cutoff with a dry run that
+  deletes nothing). The public counting rule is pinned in `src/invitations/presentation/invitations.controller.spec.ts`
+  (one `PUBLIC` opening, one `GUEST` opening, nothing for a 404 or an RSVP submission or the owner preview, and the same
+  page when the counter fails).
+
 ## Playlist metadata (current)
 
 The music feature shows the playlist's cover and title next to the button that opens it. The metadata comes from the

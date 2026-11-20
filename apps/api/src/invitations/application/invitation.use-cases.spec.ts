@@ -1555,6 +1555,9 @@ describe("GetPublicInvitationUseCase", () => {
     const page = await useCase.execute(created.slug);
 
     assert.deepEqual(page, {
+      // The invitation id is internal to the application (M9 T11; S7): the public read counts one opening with it and the
+      // REST mapper never answers it.
+      invitationId: created.id,
       slug: created.slug,
       componentKey: "birthday-poster-01",
       configuration: { componentKey: "birthday-poster-01" },
@@ -1575,12 +1578,14 @@ describe("GetPublicInvitationUseCase", () => {
       // The fixture stored no point, and its package grants no MAP (S2).
       places: {},
     });
-    // Nothing outside the allow-list leaks: no owner, package, price, id, or status (A7).
+    // Nothing outside the allow-list leaks: no owner, package, price, status, or any id but the internal one the public
+    // read needs to count the opening (A7; M9 T11).
     assert.deepEqual(Object.keys(page ?? {}).sort(), [
       "componentKey",
       "configuration",
       "content",
       "features",
+      "invitationId",
       "places",
       "publishedAt",
       "slug",

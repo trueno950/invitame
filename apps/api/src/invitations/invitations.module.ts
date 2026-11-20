@@ -24,6 +24,16 @@ import {
   UnpublishAdminInvitationUseCase,
 } from "./application/admin-invitation.use-cases";
 import {
+  ADMIN_ANALYTICS_REPOSITORY,
+  type AdminAnalyticsRepository,
+  INVITATION_FUNNEL_PAYMENT_READER,
+  type InvitationFunnelPaymentReader,
+} from "./application/admin-analytics";
+import {
+  GetAdminFunnelAnalyticsUseCase,
+  GetAdminViewsAnalyticsUseCase,
+} from "./application/admin-analytics.use-cases";
+import {
   INVITATION_MEDIA_COUNT_READER,
   type InvitationMediaCountReader,
 } from "./application/invitation-media-counts";
@@ -43,6 +53,12 @@ import {
   INVITATION_REPOSITORY,
   type InvitationRepository,
 } from "./application/invitation.repository";
+import {
+  type InvitationViewRepository,
+  INVITATION_VIEW_REPOSITORY,
+  RecordInvitationViewUseCase,
+} from "./application/invitation-views";
+import { INVITATION_VIEW_RETENTION_REPOSITORY } from "./application/invitation-view-retention";
 import {
   ArchiveInvitationUseCase,
   CreateInvitationDraftUseCase,
@@ -97,12 +113,15 @@ import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-rea
 import { createMusicMetadataProvider } from "./infrastructure/create-music-metadata-provider";
 import { createPlaceSearch } from "./infrastructure/create-place-search";
 import { PrismaAdminInvitationRepository } from "./infrastructure/prisma-admin-invitation.repository";
+import { PrismaAdminAnalyticsRepository } from "./infrastructure/prisma-admin-analytics.repository";
+import { PrismaInvitationViewRepository } from "./infrastructure/prisma-invitation-view.repository";
 import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { PrismaPlaceSearchRateLimiter } from "./infrastructure/prisma-place-search-rate-limiter";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
 import { InvitationsController } from "./presentation/invitations.controller";
+import { AdminAnalyticsController } from "./presentation/admin-analytics.controller";
 import { AdminInvitationsController } from "./presentation/admin-invitations.controller";
 import { PublicInvitationsController } from "./presentation/public-invitations.controller";
 
@@ -140,7 +159,9 @@ export const ADMIN_INVITATION_USE_CASES: Provider[] = [
     ],
   },
   {
-    // The detail also reads the owner's account status (T9; S4), through the sibling port the users module implements.
+    // The detail also reads the owner's account status (T9; S4), through the sibling port the users module implements,
+    // and its own analytics facet (M9 T11; S2): the retained views of the last ninety days and the RSVP totals, through
+    // this module's own repository, never the owner read.
     provide: GetAdminInvitationUseCase,
     useFactory: (
       invitations: AdminInvitationRepository,
@@ -148,13 +169,16 @@ export const ADMIN_INVITATION_USE_CASES: Provider[] = [
       media: InvitationMediaCountReader,
       owners: InvitationOwnerEmailReader,
       ownerStatuses: InvitationOwnerStatusReader,
-    ) => new GetAdminInvitationUseCase(invitations, payments, media, owners, ownerStatuses),
+      analytics: AdminAnalyticsRepository,
+    ) =>
+      new GetAdminInvitationUseCase(invitations, payments, media, owners, ownerStatuses, analytics),
     inject: [
       ADMIN_INVITATION_REPOSITORY,
       INVITATION_PAYMENT_READER,
       INVITATION_MEDIA_COUNT_READER,
       INVITATION_OWNER_EMAIL_READER,
       INVITATION_OWNER_STATUS_READER,
+      ADMIN_ANALYTICS_REPOSITORY,
     ],
   },
   {
@@ -164,6 +188,26 @@ export const ADMIN_INVITATION_USE_CASES: Provider[] = [
     useFactory: (invitations: AdminInvitationRepository, detail: GetAdminInvitationUseCase) =>
       new UnpublishAdminInvitationUseCase(invitations, detail),
     inject: [ADMIN_INVITATION_REPOSITORY, GetAdminInvitationUseCase],
+  },
+];
+
+/**
+ * The administrator's analytics (M9 T11; S2, S3, S7): the views read and the funnel read over the same repository, and
+ * the payment steps of the funnel through the port the payments module implements. Both use cases resolve their own
+ * window from the request, so nothing here depends on the clock.
+ */
+export const ADMIN_ANALYTICS_USE_CASES: Provider[] = [
+  {
+    provide: GetAdminViewsAnalyticsUseCase,
+    useFactory: (analytics: AdminAnalyticsRepository) =>
+      new GetAdminViewsAnalyticsUseCase(analytics),
+    inject: [ADMIN_ANALYTICS_REPOSITORY],
+  },
+  {
+    provide: GetAdminFunnelAnalyticsUseCase,
+    useFactory: (analytics: AdminAnalyticsRepository, payments: InvitationFunnelPaymentReader) =>
+      new GetAdminFunnelAnalyticsUseCase(analytics, payments),
+    inject: [ADMIN_ANALYTICS_REPOSITORY, INVITATION_FUNNEL_PAYMENT_READER],
   },
 ];
 
@@ -235,6 +279,12 @@ export const INVITATION_USE_CASES: Provider[] = [
       INVITATION_CATALOG,
       { token: INVITATION_GALLERY_READER, optional: true },
     ],
+  },
+  {
+    // Counting one served opening (M9 T11; S2, S7): one statement, started by the public read and never awaited by it.
+    provide: RecordInvitationViewUseCase,
+    useFactory: (views: InvitationViewRepository) => new RecordInvitationViewUseCase(views),
+    inject: [INVITATION_VIEW_REPOSITORY],
   },
   {
     provide: PublishInvitationUseCase,
@@ -384,10 +434,32 @@ export const INVITATION_USE_CASES: Provider[] = [
  */
 @Module({
   imports: [AdminModule, CatalogModule, MediaModule, PaymentsModule, UsersModule],
-  controllers: [InvitationsController, PublicInvitationsController, AdminInvitationsController],
+  controllers: [
+    InvitationsController,
+    PublicInvitationsController,
+    AdminInvitationsController,
+    AdminAnalyticsController,
+  ],
   providers: [
     ...INVITATION_USE_CASES,
     ...ADMIN_INVITATION_USE_CASES,
+    ...ADMIN_ANALYTICS_USE_CASES,
+    {
+      // The analytics reads of this module: the views table, the invitation funnel steps, and one invitation's
+      // retained views with its RSVP totals (M9 T11; S2).
+      provide: ADMIN_ANALYTICS_REPOSITORY,
+      useFactory: (prisma: PrismaService) => new PrismaAdminAnalyticsRepository(prisma),
+      inject: [PrismaService],
+    },
+    {
+      // One adapter for the views table: the counted upsert the public reads run and the two bounded statements of the
+      // retention command (M9 T11; S2, S3, S7).
+      provide: PrismaInvitationViewRepository,
+      useFactory: (prisma: PrismaService) => new PrismaInvitationViewRepository(prisma),
+      inject: [PrismaService],
+    },
+    { provide: INVITATION_VIEW_REPOSITORY, useExisting: PrismaInvitationViewRepository },
+    { provide: INVITATION_VIEW_RETENTION_REPOSITORY, useExisting: PrismaInvitationViewRepository },
     {
       // The administrator's one global invitation read and its one write, on the same client; the write also asks the
       // `admin` module's recorder, injected here so no other module reaches the audit table (T8; S6).

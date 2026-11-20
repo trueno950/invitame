@@ -8,6 +8,13 @@ import {
   InvitationNotPublishedError,
 } from "../domain/invitation.errors";
 import type {
+  AdminAnalyticsRepository,
+  AdminInvitationAnalytics,
+  InvitationFunnelDay,
+  TopInvitationView,
+  ViewsByDay,
+} from "./admin-analytics";
+import type {
   AdminInvitationQuery,
   AdminInvitationRepository,
   AdminInvitationRow,
@@ -186,12 +193,43 @@ class FakeOwnerStatusReader implements InvitationOwnerStatusReader {
   }
 }
 
+/**
+ * The detail's analytics facet (M9 T11; S2, S7): zeros until a case sets them, exactly like an invitation with no
+ * activity, and the window it was asked for, so the retained read is observed.
+ */
+class FakeAnalyticsRepository implements AdminAnalyticsRepository {
+  detail: AdminInvitationAnalytics = {
+    views: { public: 0, guest: 0 },
+    rsvpTotals: { attendingPeople: 0, declined: 0, responses: 0 },
+  };
+  readonly calls: Array<{ invitationId: string; from: string; to: string }> = [];
+
+  async viewsByDay(): Promise<Map<string, ViewsByDay>> {
+    return new Map();
+  }
+
+  async topInvitationViews(): Promise<TopInvitationView[]> {
+    return [];
+  }
+
+  async invitationFunnelByDay(): Promise<Map<string, InvitationFunnelDay>> {
+    return new Map();
+  }
+
+  async invitationAnalytics(invitationId: string, window: { from: string; to: string }) {
+    this.calls.push({ invitationId, from: window.from, to: window.to });
+
+    return this.detail;
+  }
+}
+
 interface Harness {
   repository: FakeAdminInvitationRepository;
   payments: FakePaymentReader;
   media: FakeMediaCountReader;
   owners: FakeOwnerReader;
   ownerStatuses: FakeOwnerStatusReader;
+  analytics: FakeAnalyticsRepository;
   list: ListAdminInvitationsUseCase;
   detail: GetAdminInvitationUseCase;
   unpublish: UnpublishAdminInvitationUseCase;
@@ -203,7 +241,15 @@ function harness(): Harness {
   const media = new FakeMediaCountReader();
   const owners = new FakeOwnerReader();
   const ownerStatuses = new FakeOwnerStatusReader();
-  const detail = new GetAdminInvitationUseCase(repository, payments, media, owners, ownerStatuses);
+  const analytics = new FakeAnalyticsRepository();
+  const detail = new GetAdminInvitationUseCase(
+    repository,
+    payments,
+    media,
+    owners,
+    ownerStatuses,
+    analytics,
+  );
 
   return {
     repository,
@@ -211,6 +257,7 @@ function harness(): Harness {
     media,
     owners,
     ownerStatuses,
+    analytics,
     list: new ListAdminInvitationsUseCase(repository, payments, media, owners),
     detail,
     unpublish: new UnpublishAdminInvitationUseCase(repository, detail),
@@ -504,6 +551,7 @@ describe("GetAdminInvitationUseCase (M9 T2; S1)", () => {
     assert.ok(detail);
 
     assert.deepEqual(Object.keys(detail).sort(), [
+      "analytics",
       "archivedAt",
       "createdAt",
       "firstPublishedAt",
@@ -538,6 +586,15 @@ describe("GetAdminInvitationUseCase (M9 T2; S1)", () => {
       ),
     );
     assert.equal(test.payments.listCalls[0]?.limit, ADMIN_INVITATION_DETAIL_PAYMENT_LIMIT);
+    // The analytics facet (M9 T11; S2, S7) is read once, for this invitation, over the retained window.
+    const analyticsCall = test.analytics.calls[0];
+    assert.equal(analyticsCall?.invitationId, row.invitationId);
+    assert.match(String(analyticsCall?.from), /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(String(analyticsCall?.to), /^\d{4}-\d{2}-\d{2}$/);
+    assert.deepEqual(detail.analytics, {
+      views: { public: 0, guest: 0 },
+      rsvpTotals: { attendingPeople: 0, declined: 0, responses: 0 },
+    });
   });
 
   it("answers null for an id no row has, so the route answers one 404", async () => {
