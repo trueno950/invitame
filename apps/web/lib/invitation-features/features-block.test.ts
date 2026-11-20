@@ -378,9 +378,19 @@ describe("«Escucha nuestra playlist» in the features block (F6; S7)", () => {
   const COVER = "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07";
 
   it("shows the cover and the title the provider answered, with the same open button", () => {
-    const html = render(
-      featuresOf({ music: { ...MUSIC, title: "Today’s Top Hits", coverUrl: COVER } }),
-    );
+    // React reports a misspelled DOM property (such as a lower-case `referrerpolicy`) through console.error.
+    const errors: unknown[][] = [];
+    const consoleError = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args);
+    };
+    let html: string;
+    try {
+      html = render(featuresOf({ music: { ...MUSIC, title: "Today’s Top Hits", coverUrl: COVER } }));
+    } finally {
+      console.error = consoleError;
+    }
+    assert.deepEqual(errors, []);
     const [image] = html.match(/<img[^>]*>/) ?? [];
 
     assert.ok(image !== undefined, html);
@@ -391,7 +401,7 @@ describe("«Escucha nuestra playlist» in the features block (F6; S7)", () => {
     assert.equal(attributeOf(image, "loading"), "lazy");
     assert.equal(attributeOf(image, "alt"), "Today’s Top Hits");
     // No referrer and no cookie leave the page for the CDN.
-    assert.match(image, /referrerpolicy="no-referrer"/);
+    assert.match(image, /referrerpolicy="no-referrer"/i);
     assert.match(html, />Today’s Top Hits</);
 
     const links = linksOf(html);
