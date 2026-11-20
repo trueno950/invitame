@@ -69,6 +69,25 @@ enum PaymentStatus {
   refunded @map("refunded")
 }
 
+// The four state-changing support actions the administrator audit records (M9 T6; S4, S6, L9). Viewing a payment is
+// deliberately absent: S6 decided that reading a payment writes no row. The labels are the domain's own
+// (`domain/admin-action.ts`, `ADMIN_ACTION`), stored verbatim; migration 20261127120000_add_admin_actions creates the
+// type, so any other value is unstorable.
+enum AdminActionType {
+  INVITATION_UNPUBLISHED
+  ACCOUNT_DISABLED
+  ACCOUNT_REACTIVATED
+  SIGN_IN_CODE_RESENT
+}
+
+// The closed set of reasons an administrator gives (L8, L9, S6). `OTHER` is the one value that requires the note.
+enum AdminActionReason {
+  ABUSE
+  OWNER_REQUEST
+  PAYMENT_ERROR
+  OTHER
+}
+
 // Better Auth `user` model. Better Auth's `name` field is mapped onto `displayName`.
 // `role` is server-side only and never accepted as client input.
 model User {
@@ -87,6 +106,9 @@ model User {
   accounts    Account[]
   twoFactor   TwoFactor?
   invitations Invitation[]
+  // The audit rows this account took as an administrator, and the ones that changed it (M9 T6; S6).
+  adminActionsTaken   AdminAction[] @relation("AdminActionActor")
+  adminActionsAgainst AdminAction[] @relation("AdminActionTarget")
 }
 
 // Better Auth `session` model: database sessions carried by the API cookie.
@@ -321,6 +343,7 @@ model Invitation {
   guests          Guest[]
   mediaAssets     MediaAsset[]
   payments        Payment[]
+  adminActions    AdminAction[]
 
   @@index([ownerId])
   // The administrator's status view (M9 T2; S1) reads a page newest first, optionally filtered by one status, so
@@ -546,4 +569,39 @@ model PaymentEvent {
 
   @@unique([provider, providerEventId])
   @@index([paymentId])
+}
+
+// One append-only audit row per state-changing support action (M9 T6; S4, S6, L9): who acted, what they did, why, and
+// which one target they changed. It carries no email address, client address, or provider payload. The `admin` module
+// owns this table and only `AdminActionRecorder.record(tx, entry)` writes it, through the caller's own transaction, so
+// the change and its audit row commit together (L9 «Misma transacción»); the webhook-style side effect of resending
+// a code is recorded before the request, never after it.
+// Migration 20261127120000_add_admin_actions adds what Prisma cannot express: the CHECK constraints
+// "AdminAction_note_length", "AdminAction_note_required_for_other", "AdminAction_exactly_one_target", and
+// "AdminAction_target_matches_action", plus the "AdminAction_append_only" trigger, which refuses every UPDATE and
+// DELETE so that a stored row is final.
+model AdminAction {
+  id           String            @id @default(uuid()) @db.Uuid
+  // The administrator who took the action, taken from the session and never from client input. ON DELETE RESTRICT:
+  // the audit history outlives any attempt to remove the account that wrote it.
+  adminUserId  String            @db.Uuid
+  action       AdminActionType
+  reason       AdminActionReason
+  // Optional and trimmed, at most 500 characters; required and non-blank while the reason is OTHER.
+  note         String?           @db.VarChar(500)
+  // The account the three account actions changed; NULL for INVITATION_UNPUBLISHED. The CHECK constraints keep it
+  // XOR with `invitationId` and keep the pair matching `action`.
+  targetUserId String?           @db.Uuid
+  // The invitation INVITATION_UNPUBLISHED changed; NULL for the three account actions.
+  invitationId String?           @db.Uuid
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
+
+  adminUser  User        @relation("AdminActionActor", fields: [adminUserId], references: [id], onDelete: Restrict)
+  targetUser User?       @relation("AdminActionTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  invitation Invitation? @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+
+  // The audit view reads newest first and continues on `id`; the two target indexes serve the per-target history.
+  @@index([createdAt, id])
+  @@index([targetUserId])
+  @@index([invitationId])
 }

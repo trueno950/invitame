@@ -33,7 +33,10 @@ deleted. The precise-locations batch adds the additive `20261123120000_add_invit
 batch (T2) adds the additive `20261124120000_add_invitation_first_published_at` migration: one nullable
 `Invitation.firstPublishedAt` column, a one-time backfill from `publishedAt`, and the
 `Invitation_firstPublishedAt_when_published` check. It appends a nullable column, so every existing row stays valid;
-the backfill of already-published rows rewrites only that new column, and nothing is deleted. Future
+the backfill of already-published rows rewrites only that new column, and nothing is deleted. The support-action
+slice adds the additive `20261127120000_add_admin_actions` migration: two enum types and the `AdminAction` table with
+its checks, its three indexes, its three `RESTRICT` references, and its append-only trigger. Every object is new, so
+no row is rewritten and nothing is deleted. Future
 analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
@@ -60,6 +63,7 @@ analytics design is documented separately in
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
+| `AdminAction` | One append-only audit row of one state-changing support action: the `adminUserId` who acted, the `action` (`INVITATION_UNPUBLISHED`, `ACCOUNT_DISABLED`, `ACCOUNT_REACTIVATED`, `SIGN_IN_CODE_RESENT`), the `reason` (`ABUSE`, `OWNER_REQUEST`, `PAYMENT_ERROR`, `OTHER`), the optional `note` (up to 500 characters, required for `OTHER`), and exactly one target (`targetUserId` or `invitationId`), with `createdAt`. No email address, client address, or provider payload |
 
 ## Invariants
 
@@ -420,6 +424,46 @@ scheme are documented in [`../development/payments.md`](../development/payments.
   their content, feature data, guests, RSVP answers, and media rows are untouched. Paid invitations lose the verified
   state publication was granted from, so a rollback must also restore `PAYMENTS_MODE=free` or stop publishing.
   Never edit the applied migration file.
+
+## Support-action audit
+
+Current status: the `AdminAction` table exists and `apps/api/src/admin` owns it (M9 T6; S4, S6, L9). The additive
+`20261127120000_add_admin_actions` migration creates both enum types, the table, the checks, the indexes, the
+references, and the trigger; the row is written by `AdminActionRecorder.record(tx, entry)`, nothing else writes the
+table, and the administrator routes that call it arrive in later tasks.
+
+- One row records one state-changing support action: who acted, what they did, why, and which single target they
+  changed. `adminUserId` is the signed-in administrator and never client input; `action` is the
+  `AdminActionType` enum (`INVITATION_UNPUBLISHED`, `ACCOUNT_DISABLED`, `ACCOUNT_REACTIVATED`,
+  `SIGN_IN_CODE_RESENT`) and `reason` is the `AdminActionReason` enum (`ABUSE`, `OWNER_REQUEST`,
+  `PAYMENT_ERROR`, `OTHER`), so no other value is storable. Viewing a payment is not an action and writes no row.
+- `note` is `VARCHAR(500)` and nullable. `AdminAction_note_length` states the bound, and
+  `AdminAction_note_required_for_other` requires a present, non-blank note while the reason is `OTHER`; every other
+  reason may carry one or not. The domain trims the note before it is stored, so a note of spaces is not a note.
+- `AdminAction_exactly_one_target` (`num_nonnulls("targetUserId", "invitationId") = 1`) keeps one target per row, and
+  `AdminAction_target_matches_action` keeps that target the one the action means: `INVITATION_UNPUBLISHED` names
+  `invitationId`, and the three account actions name `targetUserId`. A row with no target, with two, or with the
+  other action's target is refused.
+- All three references are `ON DELETE RESTRICT`. An actor's history outlives an attempt to remove the account that
+  wrote it, and an audited target cannot be removed while the row that names it exists. No production path deletes a
+  `User` or an `Invitation` today (disabling and archiving are their terminal writes), so the new references refuse
+  nothing that already runs; a database suite's cleanup must delete any such fixture only while no audit row names
+  it.
+- The audit is append-only: the `AdminAction_append_only` trigger, on `BEFORE UPDATE OR DELETE`, raises on every row,
+  so a stored row is final and no later statement can rewrite why an administrator acted or remove the record that
+  they did. It follows the `Invitation_pinned_fields_immutable` pattern: refuse the write, never filter it. The table
+  therefore grows and is never corrected in place; a mistake is answered with a new row, not an edit.
+- `AdminActionRecorder.record(tx, entry)` takes the caller's own Prisma transaction client, so the module that owns
+  the change writes its change and the audit row in one transaction (L9 «Misma transacción»): a refused change leaves
+  no audit row and a refused audit entry leaves no change. The entry is validated by the domain before any statement
+  runs, and the checks above stay the guards behind it.
+- Indexes: `(createdAt, id)` for the audit read newest first and its key-set pages, `(targetUserId)` and
+  `(invitationId)` for one target's history.
+- Rollback / recovery of `20261127120000_add_admin_actions`: additive, so recovery is redeploying the previous
+  migration set or dropping the objects by hand — `DROP TABLE "AdminAction";` then `DROP TYPE "AdminActionReason";`
+  and `DROP TYPE "AdminActionType";`, plus `DROP FUNCTION "prevent_admin_action_mutation"();` after the table. Only
+  audit history is lost; accounts, invitations, payments, and media are untouched. Never edit the applied migration
+  file.
 
 ## Identity tables
 
