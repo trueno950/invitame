@@ -1,7 +1,7 @@
-# Mercado Pago payments and the refund rule (plan, awaiting owner approval)
+# Mercado Pago payments and the refund rule
 
-Status: design only. AGENTS.md requires a human review of security-sensitive design before implementation; this
-document is that proposal. Nothing here is implemented yet. Owner decisions: `odd/tasks/owner-followups.md` L2.
+Status: design approved by the owner (L2); implementation pending. AGENTS.md requires a human review of
+security-sensitive design before implementation; this document is that reviewed design. Owner decisions: `odd/tasks/owner-followups.md` L2.
 
 ## Specs
 
@@ -59,3 +59,5 @@ document is that proposal. Nothing here is implemented yet. Owner decisions: `od
   L2). Map of the current payment core and Mercado Pago docs: explorer handoff in this session (port
   `apps/api/src/payments/application/payment-provider.port.ts`, intake `payment-webhook.use-case.ts`, sources:
   mercadopago.com.mx developers docs for preferences, webhooks, payments, and refunds).
+- L2 — Owner approval of the design: «Sí, impleméntalo» (build it against a fake HTTP server; production keeps
+  charging nothing until the owner sets the Mercado Pago credentials; no sandbox credentials yet).
