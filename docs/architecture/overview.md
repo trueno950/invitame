@@ -41,16 +41,19 @@ The current API tree is intentionally small:
 
 ```text
 apps/api/src/
-  admin/        the append-only support-action audit: the `AdminAction` domain rules and the one public
-                `AdminActionRecorder` contract that writes a row inside the caller's transaction
-  auth/         Better Auth instance factory, integration registration, access control, and sign-in code delivery
+  admin/        the append-only support-action audit: the `AdminAction` domain rules, the one public
+                `AdminActionRecorder` contract that writes a row inside the caller's transaction, and the request
+                body rule both audited-action routes share
+  auth/         Better Auth instance factory, integration registration, access control, sign-in code delivery, and
+                the narrow `SignInCodeResender` port the account support actions trigger
   config/       startup environment validation and the configuration module
   database/     Prisma module and service
   email/        email delivery port, retry/alert policy, and Resend, Mailpit, and in-memory adapters
   health/       database-backed health endpoint and tests
-  users/        own profile (`GET /me`, `PATCH /me`), the disable-user, create-administrator, and
-                reset-second-factor use cases, their Prisma adapters, and the `user:disable`, `admin:create`, and
-                `admin:reset-second-factor` commands
+  users/        own profile (`GET /me`, `PATCH /me`), the account support routes (`POST /admin/users/:userId/…`),
+                the disable-user, create-administrator, and reset-second-factor use cases, their Prisma adapters,
+                the owner ports the administrator's invitation view asks, and the `user:disable`, `admin:create`,
+                and `admin:reset-second-factor` commands
   app.module.ts Nest composition root
   app.setup.ts  shared app creation: body parser off, Helmet, CORS, validation, shutdown hooks
   main.ts       HTTP bootstrap through the shared app creation
@@ -1084,9 +1087,13 @@ with no personal data beyond the owner's email, and may unpublish one invitation
   ±275760 and writes those years in an expanded six-digit form PostgreSQL cannot read as a `timestamptz` at all, so
   such a cursor is malformed here instead of a database error later.
 - `GET /admin/invitations/:invitationId` answers 200 with `AdminInvitationDetail` (the same fields plus `ownerId`,
-  `packageId`, `templateVersionId`, and the newest 20 payments) or 404 `INVITATION_NOT_FOUND`. `ownerId` is the
-  additive reference T8 adds so a support action can address the owner's account; it is an identifier, never the
-  display name the view does not answer, and the list keeps «solo el correo» (L3). The payment port documents the
+  `ownerStatus`, `packageId`, `templateVersionId`, and the newest 20 payments) or 404 `INVITATION_NOT_FOUND`.
+  `ownerId` is the additive reference T8 adds so a support action can address the owner's account; `ownerStatus`
+  (`ACTIVE | DISABLED | null`) is T9's additive field so the support card knows whether to offer «Desactivar
+  cuenta» or «Reactivar cuenta». They are identifiers and a closed state, never the display name the view does not
+  answer, and the list keeps «solo el correo» (L3). The detail reads the status through a sibling port
+  (`INVITATION_OWNER_STATUS_READER`, implemented by the users module) rather than widening
+  `INVITATION_OWNER_EMAIL_READER`, so a page of rows still reads exactly one owner field. The payment port documents the
   payment bound and the adapter clamps every request into `1..20`, so no caller widens the read; the detail read
   answers the 404 for an id that is not a UUID too, instead of a cast error.
 - `POST /admin/invitations/:invitationId/unpublish` (T8; S4, S6) is `@AdminOnly()` and takes the actor from
@@ -1158,6 +1165,63 @@ why. This slice is the audit foundation only; the routes that write it arrive in
   `src/admin/infrastructure/admin-action.prisma.db-spec.ts` (the migration's enums, columns, checks, indexes, and
   references; a row written with the caller's transaction and rolled back with its change; each CHECK refusing its
   bad case; the trigger refusing UPDATE and DELETE; and the three `RESTRICT` refusals).
+
+## Account support actions (current)
+
+Implemented by Milestone 9 T9 (S4, S6, L8, L9): an administrator disables an account, reactivates it, or resends its
+sign-in code, and each state change writes one append-only `AdminAction` row in the same transaction.
+
+- Module ownership: the `users` module owns `User` and serves the three routes on one `@AdminOnly()` controller
+  (`apps/api/src/users/presentation/admin-users.controller.ts`); `apps/api/src/admin` keeps owning the audit table.
+  A separate port (`ADMIN_USER_ACCOUNT_REPOSITORY`, `PrismaAdminUserAccountRepository`) performs each change, so the
+  `user:disable` command's `disableAndRevokeSessions` keeps its own behaviour unchanged: keyed by email, idempotent,
+  and not audited.
+- Routes (401 without a session and 403 for a customer, both before any validation; an id that is not a UUID is 400
+  before any port; the actor is `@SessionUserId()` and the body is `{ reason, note? }`, the same closed reason set and
+  note rule the unpublish states, now declared once in `apps/api/src/admin/admin-action.dto.ts`):
+  - `POST /admin/users/:userId/disable` → 200 `{ status: "DISABLED", revokedSessions }`, 404 `USER_NOT_FOUND`, 409
+    `ACCOUNT_ALREADY_DISABLED`, 409 `ADMIN_ACCOUNT_PROTECTED`. One Prisma interactive transaction reads the account,
+    refuses an administrator's, runs the guarded `updateMany({ where: { id, status: "ACTIVE" } })`, deletes every
+    session of the account, and records `ACCOUNT_DISABLED` through the injected recorder. The owner's invitations are
+    untouched (L8: «Siguen publicadas»).
+  - `POST /admin/users/:userId/reactivate` → 200 `{ status: "ACTIVE" }`, 404 `USER_NOT_FOUND`, 409
+    `ACCOUNT_ALREADY_ACTIVE`, 409 `ADMIN_ACCOUNT_PROTECTED`, with `ACCOUNT_REACTIVATED` in the same transaction
+    (L9). Sessions stay as they are — disabling revoked them — so the customer signs in again with a new code.
+  - `POST /admin/users/:userId/sign-in-code` → 202 `{ outcome: "requested" }`, 404 `USER_NOT_FOUND`, 409
+    `USER_CANNOT_SIGN_IN_BY_CODE` (a `DISABLED` account or an administrator's). Its own transaction reads the account,
+    refuses what may not sign in by code, and writes `SIGN_IN_CODE_RESENT`; only then does the use case ask the auth
+    module's narrow `SignInCodeResender` port, which calls Better Auth's own
+    `auth.api.sendVerificationOTP({ body: { email, type: "sign-in" } })`. The audit row records the request, never a
+    delivery, and the answer never says a code arrived.
+- The resend's limits, unchanged: the per-email quota (`EMAIL_CODE_QUOTA`, five per hour), the hashed storage, the
+  expiry, the wrong-attempt cap, and the sender's own refusals all apply, because the request goes through the same
+  endpoint and the same background sender. The per-IP limit does **not** apply to this path: Better Auth's rate
+  limiter and the email-OTP plugin's `rateLimit` rules run in the router's `onRequest` (`api/index.mjs`), which only
+  the HTTP handler invokes, while `auth.api.*` enters at `toAuthEndpoints` → `dispatchAuthEndpoint`. An administrator
+  is therefore not throttled per IP on this one in-process request: their `@AdminOnly()` session is the guard, and
+  the per-email quota still bounds how many codes an account can receive. The db-spec pins both halves (six requests
+  are all accepted, five are delivered).
+- Web (`/admin/invitaciones/<id>`): the «Acciones de soporte» card gains the owner's account section, built from the
+  detail's `ownerStatus`: «Desactivar cuenta» while it is active, «Reactivar cuenta» while it is disabled, and
+  «Reenviar código de acceso» while the owner may sign in by code. Each is a server action form
+  (`app/admin/invitaciones/actions.ts` → `lib/admin/invitations/commands.ts`) with the same reason select and note as
+  the unpublish, redirecting after POST with `?notice=` or `?error=` and a code from a fixed list. The client
+  (`lib/server/admin-users-client.ts`) maps each refusal — `not-found`, `admin-protected`, `already-disabled`,
+  `already-active`, `cannot-sign-in-by-code`, `validation`, `unavailable` — to its own outcome, its Spanish sentence,
+  and the resend's notice says the code was **requested**, never that it was delivered. A hidden form is a
+  convenience: the API authorizes every action.
+- Tests: `src/users/domain/account-support.spec.ts` (the transitions and the administrator's protection, from a
+  table), `src/users/application/admin-user-account.use-cases.spec.ts` (the audit entry each action builds, the
+  resend's record-then-request order, every refusal passed through), `src/users/infrastructure/prisma-admin-user-account.repository.spec.ts`
+  (the guarded statements, the recorder's own transaction client, no statement on a refusal or on a malformed id),
+  `src/users/presentation/admin-users.controller.spec.ts` (401/403/400/404/409 and the 200/202 shapes through the
+  shared app boundary, with the session's own actor), and `src/users/infrastructure/admin-user-accounts.prisma.db-spec.ts`
+  (each change committing with its audit row, refusals writing nothing, an administrator account protected, a disable
+  revoking sessions while the owner's invitations stay published, a reactivate restoring a code sign-in, the resend
+  recording every request while the existing per-email quota drops the sixth, and a refused audit entry rolling the
+  disable back). On the web: `lib/server/admin-users-client.test.ts` (the requests and every outcome),
+  `lib/admin/invitations/commands.test.ts` (the three commands' forms and redirections), and
+  `lib/admin/invitations/support.test.ts` (the owner section's controls and its Spanish copy).
 
 ## Playlist metadata (current)
 

@@ -22,6 +22,7 @@ import {
 } from "./admin-invitation.use-cases";
 import type { InvitationMediaCountReader, InvitationMediaCounts } from "./invitation-media-counts";
 import type { InvitationOwnerEmailReader } from "./invitation-owner-email";
+import type { InvitationOwnerStatusReader } from "./invitation-owner-status";
 import type {
   InvitationPaymentReader,
   InvitationPaymentSummary,
@@ -167,11 +168,30 @@ class FakeOwnerReader implements InvitationOwnerEmailReader {
   }
 }
 
+/** The owner's account state (M9 T9; S4): only the detail asks, once, for its own owner. */
+class FakeOwnerStatusReader implements InvitationOwnerStatusReader {
+  readonly calls: ReadonlyArray<string>[] = [];
+  readonly statuses = new Map<string, "ACTIVE" | "DISABLED">();
+
+  async statusesFor(ownerIds: readonly string[]) {
+    this.calls.push(ownerIds);
+    const found = new Map<string, "ACTIVE" | "DISABLED">();
+    for (const id of ownerIds) {
+      const status = this.statuses.get(id);
+      if (status !== undefined) {
+        found.set(id, status);
+      }
+    }
+    return found;
+  }
+}
+
 interface Harness {
   repository: FakeAdminInvitationRepository;
   payments: FakePaymentReader;
   media: FakeMediaCountReader;
   owners: FakeOwnerReader;
+  ownerStatuses: FakeOwnerStatusReader;
   list: ListAdminInvitationsUseCase;
   detail: GetAdminInvitationUseCase;
   unpublish: UnpublishAdminInvitationUseCase;
@@ -182,13 +202,15 @@ function harness(): Harness {
   const payments = new FakePaymentReader();
   const media = new FakeMediaCountReader();
   const owners = new FakeOwnerReader();
-  const detail = new GetAdminInvitationUseCase(repository, payments, media, owners);
+  const ownerStatuses = new FakeOwnerStatusReader();
+  const detail = new GetAdminInvitationUseCase(repository, payments, media, owners, ownerStatuses);
 
   return {
     repository,
     payments,
     media,
     owners,
+    ownerStatuses,
     list: new ListAdminInvitationsUseCase(repository, payments, media, owners),
     detail,
     unpublish: new UnpublishAdminInvitationUseCase(repository, detail),
@@ -471,6 +493,7 @@ describe("GetAdminInvitationUseCase (M9 T2; S1)", () => {
     const test = harness();
     const row = test.repository.add({ status: "ARCHIVED", archivedAt: new Date() });
     test.owners.emails.set(OWNER, "duena@example.test");
+    test.ownerStatuses.statuses.set(OWNER, "DISABLED");
     test.media.counts.set(row.invitationId, { mainPhoto: true, galleryCount: 1 });
     test.payments.detail.set(row.invitationId, [
       payment(),
@@ -489,6 +512,7 @@ describe("GetAdminInvitationUseCase (M9 T2; S1)", () => {
       "media",
       "ownerEmail",
       "ownerId",
+      "ownerStatus",
       "packageId",
       "payments",
       "publishedAt",
@@ -497,6 +521,9 @@ describe("GetAdminInvitationUseCase (M9 T2; S1)", () => {
       "status",
       "templateVersionId",
     ]);
+    // The support card's one additive field (T9; S4): the owner's stored status, read once for the detail's owner.
+    assert.equal(detail.ownerStatus, "DISABLED");
+    assert.deepEqual(test.ownerStatuses.calls, [[row.ownerId]]);
     assert.equal(detail.packageId, row.packageId);
     assert.equal(detail.templateVersionId, row.templateVersionId);
     assert.deepEqual(

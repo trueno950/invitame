@@ -32,6 +32,10 @@ import {
   type InvitationOwnerEmailReader,
 } from "./application/invitation-owner-email";
 import {
+  INVITATION_OWNER_STATUS_READER,
+  type InvitationOwnerStatusReader,
+} from "./application/invitation-owner-status";
+import {
   INVITATION_PAYMENT_READER,
   type InvitationPaymentReader,
 } from "./application/invitation-payment-summary";
@@ -136,18 +140,21 @@ export const ADMIN_INVITATION_USE_CASES: Provider[] = [
     ],
   },
   {
+    // The detail also reads the owner's account status (T9; S4), through the sibling port the users module implements.
     provide: GetAdminInvitationUseCase,
     useFactory: (
       invitations: AdminInvitationRepository,
       payments: InvitationPaymentReader,
       media: InvitationMediaCountReader,
       owners: InvitationOwnerEmailReader,
-    ) => new GetAdminInvitationUseCase(invitations, payments, media, owners),
+      ownerStatuses: InvitationOwnerStatusReader,
+    ) => new GetAdminInvitationUseCase(invitations, payments, media, owners, ownerStatuses),
     inject: [
       ADMIN_INVITATION_REPOSITORY,
       INVITATION_PAYMENT_READER,
       INVITATION_MEDIA_COUNT_READER,
       INVITATION_OWNER_EMAIL_READER,
+      INVITATION_OWNER_STATUS_READER,
     ],
   },
   {
@@ -371,7 +378,9 @@ export const INVITATION_USE_CASES: Provider[] = [
  *
  * Milestone 9 T8 adds the administrator's unpublish to the same port: the module imports `AdminModule` and injects its
  * `ADMIN_ACTION_RECORDER`, so the transition and its audit row share one transaction (S6, L9) and this module never
- * writes `AdminAction` itself.
+ * writes `AdminAction` itself. T9 adds the owner's account status to the detail through
+ * `INVITATION_OWNER_STATUS_READER`, a sibling of the owner-email port that the users module implements, so the support
+ * card can offer the account actions without this module reading a user table.
  */
 @Module({
   imports: [AdminModule, CatalogModule, MediaModule, PaymentsModule, UsersModule],

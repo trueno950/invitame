@@ -8,6 +8,7 @@ import type {
 } from "../application/admin-invitation.use-cases";
 import { InvalidInvitationCursorError } from "../application/admin-invitation.use-cases";
 import type { InvitationPaymentSummary } from "../application/invitation-payment-summary";
+import type { OwnerAccountStatus } from "../application/invitation-owner-status";
 import {
   InvitationAlreadyArchivedError,
   InvitationNotPublishedError,
@@ -64,6 +65,12 @@ export interface AdminInvitationSummaryResponse {
 export interface AdminInvitationDetailResponse extends AdminInvitationSummaryResponse {
   /** The owner's id: the additive reference T8 adds so the support card can address the owner's account (S4). */
   ownerId: string;
+  /**
+   * The owner account's stored status (T9; S4): the additive field the support card reads to offer «Desactivar cuenta»
+   * or «Reactivar cuenta» and the sign-in-code resend. Null only when no stored owner answers, which the reference
+   * prevents in practice.
+   */
+  ownerStatus: OwnerAccountStatus | null;
   packageId: string;
   templateVersionId: string;
   /** The newest payments, at most 20, newest first. */
@@ -120,6 +127,7 @@ export function toAdminInvitationDetailResponse(
   return {
     ...toAdminInvitationSummaryResponse(stored),
     ownerId: stored.ownerId,
+    ownerStatus: stored.ownerStatus,
     packageId: stored.packageId,
     templateVersionId: stored.templateVersionId,
     payments: stored.payments.map(toPayment),

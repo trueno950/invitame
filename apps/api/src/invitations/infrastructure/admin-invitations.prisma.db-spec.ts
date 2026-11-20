@@ -11,6 +11,7 @@ import { MEDIA_MIME, storageKeyFor } from "../../media/domain/media-asset";
 import { PrismaInvitationMediaCountReader } from "../../media/infrastructure/prisma-invitation-media-count-reader";
 import { PrismaInvitationPaymentReader } from "../../payments/infrastructure/prisma-invitation-payment-reader";
 import { PrismaInvitationOwnerEmailReader } from "../../users/infrastructure/prisma-invitation-owner-email-reader";
+import { PrismaInvitationOwnerStatusReader } from "../../users/infrastructure/prisma-invitation-owner-status-reader";
 import type { AdminInvitationRow } from "../application/admin-invitation.repository";
 import {
   GetAdminInvitationUseCase,
@@ -37,8 +38,9 @@ describe("admin invitation status view on real PostgreSQL (M9 T2; S1)", () => {
   const payments = new PrismaInvitationPaymentReader(prisma);
   const media = new PrismaInvitationMediaCountReader(prisma);
   const owners = new PrismaInvitationOwnerEmailReader(prisma);
+  const ownerStatuses = new PrismaInvitationOwnerStatusReader(prisma);
   const list = new ListAdminInvitationsUseCase(repository, payments, media, owners);
-  const detail = new GetAdminInvitationUseCase(repository, payments, media, owners);
+  const detail = new GetAdminInvitationUseCase(repository, payments, media, owners, ownerStatuses);
   const runId = randomUUID().replaceAll("-", "").slice(0, 12);
   const userIds: string[] = [];
   const categoryIds: string[] = [];
@@ -399,6 +401,9 @@ describe("admin invitation status view on real PostgreSQL (M9 T2; S1)", () => {
     // The additive `ownerId` of T8 (S4) is the one owner reference the detail answers: an identifier the support card
     // needs to address the account. The list keeps «solo el correo» (L3), so its rows still answer no owner id.
     assert.equal(stored.ownerId, ownerId);
+    // T9 adds the owner's account state as the detail's other additive owner field (S4): a closed status the support
+    // card reads to offer disable or reactivate, and the only owner field the list still does not answer.
+    assert.equal(stored.ownerStatus, "ACTIVE");
     const page = await list.execute({
       slug: `m9-fields-${runId}`,
       status: null,
