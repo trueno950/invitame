@@ -5,8 +5,8 @@
 //   to the web, never to the domain;
 // - WhatsApp phone normalization: a Mexican ten-digit number or an international `+` number, stored as E.164;
 // - playlist link normalization: an `https` link on an allow-listed music host, at most 500 characters;
-// - playlist metadata bounds: the title the provider answered trimmed to 200 characters, and a cover only from an
-//   allow-listed image host over `https` (S2);
+// - playlist metadata bounds: the title the provider answered as one bounded line of visible text, and a cover
+//   only from an allow-listed image host over `https` (S2);
 // - feature gating: the package's feature keys intersected with the implemented allow-list, plus the add-to-
 //   calendar feature, which is not catalog data; WhatsApp also needs a stored phone, and music a usable link.
 //
@@ -217,6 +217,54 @@ const SPOTIFY_IMAGE_CDN_HOST = /^image-cdn-[a-z0-9-]+\.spotifycdn\.com$/;
 const MUSIC_COVER_HOST_SET: ReadonlySet<string> = new Set(MUSIC_COVER_HOSTS);
 
 /**
+ * A whitespace or control character in a cover URL (S2). The URL parser trims spaces and drops tabs and line breaks,
+ * but the column stores and the guest page renders the value the provider gave verbatim, and the column's own check
+ * requires it to start with `https://`. A value the parser accepts after such a change is no cover this API can
+ * store, so it is refused instead of failing the whole save on a constraint.
+ */
+const URL_UNSTORABLE_CHARACTERS = /[\p{Cc}\s]/u;
+
+/**
+ * The control characters a provider title must not carry into the column or the card (S2): a line break, a tab, and
+ * a NUL all become one space, because a playlist title is a single line the card renders.
+ */
+const TITLE_CONTROL_CHARACTERS = /\p{Cc}+/gu;
+
+/**
+ * The invisible format characters a title must not carry (S2): bidi controls, zero-width spaces and joiners that only
+ * reorder or hide text. U+200D stays, because an emoji sequence legitimately joins with it.
+ */
+const TITLE_INVISIBLE_CHARACTERS =
+  /[\u00ad\u061c\u180e\u200b\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff]/gu;
+
+/** A run of whitespace, including the non-breaking space a provider may answer (S2). */
+const TITLE_WHITESPACE_RUN = /\s+/gu;
+
+/** The grapheme boundaries of the installed ICU data, so a cut never answers half of a rendered character (S2). */
+const TITLE_GRAPHEMES = new Intl.Segmenter("es", { granularity: "grapheme" });
+
+/**
+ * The first `PLAYLIST_TITLE_MAX_LENGTH` code points of a text, cut at a grapheme boundary. The width is counted in
+ * code points because that is what the column stores; the cut follows a boundary so a title never ends in half of an
+ * accent, a variation selector, or a joined emoji.
+ */
+function cutPlaylistTitle(text: string): string {
+  let kept = "";
+  let width = 0;
+
+  for (const { segment } of TITLE_GRAPHEMES.segment(text)) {
+    const segmentWidth = [...segment].length;
+    if (width + segmentWidth > PLAYLIST_TITLE_MAX_LENGTH) {
+      break;
+    }
+    kept += segment;
+    width += segmentWidth;
+  }
+
+  return kept;
+}
+
+/**
  * The playlist metadata a provider answered (S2): the title it named and the cover this API allows, each null
  * when that provider named nothing usable. It carries no HTML, no player, and nothing else the provider sent.
  */
@@ -226,34 +274,42 @@ export interface PlaylistMetadata {
 }
 
 /**
- * A stored playlist title (S2): the surrounding spaces trimmed and at most `PLAYLIST_TITLE_MAX_LENGTH`
- * characters, or null when the value says nothing. A longer title is cut at the bound instead of being refused,
- * because a provider's title is data the owner never typed; the column is the second bound.
+ * A stored playlist title (S2): one line of visible text, trimmed and at most `PLAYLIST_TITLE_MAX_LENGTH` characters,
+ * or null when the value says nothing. A provider's line break, tab, NUL, bidi control, or zero-width character never
+ * reaches the column or the guest page, and a run of spaces is one space. A longer title is cut at the bound instead
+ * of being refused, because a provider's title is data the owner never typed; the column is the second bound.
  */
 export function normalizePlaylistTitle(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
 
-  const trimmed = value.trim();
-  if (trimmed === "") {
+  const normalized = value
+    .replace(TITLE_CONTROL_CHARACTERS, " ")
+    .replace(TITLE_INVISIBLE_CHARACTERS, "")
+    .replace(TITLE_WHITESPACE_RUN, " ")
+    .trim();
+
+  if (normalized === "") {
     return null;
   }
 
-  const characters = [...trimmed];
+  const cut = cutPlaylistTitle(normalized);
 
-  return characters.length > PLAYLIST_TITLE_MAX_LENGTH
-    ? characters.slice(0, PLAYLIST_TITLE_MAX_LENGTH).join("").trimEnd()
-    : trimmed;
+  return cut === "" ? null : cut.trimEnd();
 }
 
 /**
- * Whether a value is a cover URL this deployment renders (S2, S3): `https`, no port and no userinfo, and one of the
- * allow-listed image hosts. Anything else is no cover at all, so a guest page never loads an image from a host the
- * API did not allow and the stored value always satisfies the `playlistCoverUrl` https check.
+ * Whether a value is a cover URL this deployment renders (S2, S3): `https`, no port and no userinfo, one of the
+ * allow-listed image hosts, and no whitespace or control character. Anything else is no cover at all, so a guest
+ * page never loads an image from a host the API did not allow and the stored value always satisfies the
+ * `playlistCoverUrl` https check.
  */
 export function isMusicCoverUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.length > PLAYLIST_COVER_URL_MAX_LENGTH) {
+    return false;
+  }
+  if (URL_UNSTORABLE_CHARACTERS.test(value)) {
     return false;
   }
 

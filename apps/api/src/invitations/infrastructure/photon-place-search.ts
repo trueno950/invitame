@@ -1,3 +1,5 @@
+import { Logger } from "@nestjs/common";
+
 import type { PlaceSearch } from "../application/place-search";
 import {
   composePlaceLabel,
@@ -21,7 +23,10 @@ import {
 //   namesake elsewhere, while a place outside the country still answers;
 // - no `lang` is asked for, because the public instance accepts only `default`, `de`, `en`, and `fr` and answers 400
 //   to `es`. The default language is the one a Mexican address wants: the local name of the place, its street, and
-//   its city, exactly as OpenStreetMap stores them.
+//   its city, exactly as OpenStreetMap stores them;
+// - every way a lookup can answer nothing is reported as one structured operational fact: a bounded category and,
+//   for a refused answer, the status. The fact never carries the query text, because the request URL names the
+//   address the owner is typing, so a provider that stops answering is visible without logging anyone's data.
 //
 // The public instance is best effort, and `PLACE_SEARCH_PHOTON_URL` is the seam that lets a self-hosted Photon
 // replace it without a code change. Public Nominatim is never used for typeahead (S2).
@@ -51,6 +56,41 @@ export const DEFAULT_PHOTON_URL = "https://photon.komoot.io/api/";
 
 const HTTP_OK = 200;
 
+/** The ways a lookup answers nothing (S2, S3): a bounded category each, and never the text that was typed. */
+export const PLACE_SEARCH_FAILURE = {
+  TIMEOUT: "timeout",
+  NETWORK: "network",
+  HTTP_STATUS: "http-status",
+  BODY_REJECTED: "body-rejected",
+  INVALID_JSON: "invalid-json",
+} as const;
+
+export type PlaceSearchFailureCategory =
+  (typeof PLACE_SEARCH_FAILURE)[keyof typeof PLACE_SEARCH_FAILURE];
+
+/**
+ * One operational fact about a lookup that answered nothing (S2, S3): what went wrong and, for a refused answer, the
+ * status. It carries no query text and no body, because the request URL names the address an owner is typing.
+ */
+export interface PlaceSearchFailure {
+  readonly event: "place-search-failed";
+  readonly category: PlaceSearchFailureCategory;
+  readonly status?: number;
+}
+
+/** Where a failed lookup is reported; the default writes one structured warning through Nest's logger. */
+export type PlaceSearchFailureReporter = (failure: PlaceSearchFailure) => void;
+
+const logger = new Logger("PlaceSearch");
+
+/** The default report, so a provider that stops answering leaves a trace instead of failing silently (S3). */
+const logPlaceSearchFailure: PlaceSearchFailureReporter = (failure) => logger.warn(failure);
+
+/** Whether the error is the abandoned request of the timeout, rather than a connection that never answered (S2). */
+function isTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
 export interface PhotonPlaceSearchOptions {
   /** The instance to ask; `PLACE_SEARCH_PHOTON_URL`, or the public one (S2). */
   readonly baseUrl?: string;
@@ -59,6 +99,8 @@ export interface PhotonPlaceSearchOptions {
   /** Overridable so a test observes the timeout without waiting for it. */
   readonly timeoutMs?: number;
   readonly maxBodyBytes?: number;
+  /** Overridable so a test observes the report without Nest's logger; the default warns once per failure. */
+  readonly reportFailure?: PlaceSearchFailureReporter;
 }
 
 /** Releases a response body the adapter does not read, or a reader it gave up on. */
@@ -176,12 +218,14 @@ export class PhotonPlaceSearch implements PlaceSearch {
   readonly #fetch: typeof fetch;
   readonly #timeoutMs: number;
   readonly #maxBodyBytes: number;
+  readonly #reportFailure: PlaceSearchFailureReporter;
 
   constructor(options: PhotonPlaceSearchOptions = {}) {
     this.#baseUrl = options.baseUrl ?? DEFAULT_PHOTON_URL;
     this.#fetch = options.fetch ?? fetch;
     this.#timeoutMs = options.timeoutMs ?? PHOTON_TIMEOUT_MS;
     this.#maxBodyBytes = options.maxBodyBytes ?? PHOTON_MAX_BODY_BYTES;
+    this.#reportFailure = options.reportFailure ?? logPlaceSearchFailure;
   }
 
   async search(query: string): Promise<readonly PlacePoint[]> {
@@ -205,24 +249,42 @@ export class PhotonPlaceSearch implements PlaceSearch {
 
       if (response.status !== HTTP_OK) {
         await discardBody(response);
+        this.#reportFailure({
+          event: "place-search-failed",
+          category: PLACE_SEARCH_FAILURE.HTTP_STATUS,
+          status: response.status,
+        });
         return [];
       }
 
       text = await readBoundedBody(response, this.#maxBodyBytes);
-    } catch {
-      // A timeout, a network failure, or an unreadable body: no suggestion. Nothing is logged, because the request
-      // URL carries the address text the owner is typing.
+    } catch (error) {
+      // A timeout, a network failure, or an unreadable body: no suggestion, and one operational fact. Nothing
+      // carries the query text, because the request URL names the address the owner is typing.
+      this.#reportFailure({
+        event: "place-search-failed",
+        category: isTimeout(error) ? PLACE_SEARCH_FAILURE.TIMEOUT : PLACE_SEARCH_FAILURE.NETWORK,
+      });
       return [];
     }
 
     if (text === null) {
+      // No body at all, or one that grew past the bound: the instance is not answering what this API expects.
+      this.#reportFailure({
+        event: "place-search-failed",
+        category: PLACE_SEARCH_FAILURE.BODY_REJECTED,
+      });
       return [];
     }
 
     try {
       return photonPlaces(JSON.parse(text));
     } catch {
-      // The instance answered something that is not JSON: nothing to suggest.
+      // The instance answered something that is not JSON: nothing to suggest, and one operational fact.
+      this.#reportFailure({
+        event: "place-search-failed",
+        category: PLACE_SEARCH_FAILURE.INVALID_JSON,
+      });
       return [];
     }
   }

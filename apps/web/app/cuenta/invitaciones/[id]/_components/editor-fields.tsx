@@ -13,8 +13,10 @@ import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rs
 import type { ContentField } from "../../../../../lib/customer/invitations.ts";
 import {
   activeOptionId,
+  blurredPicker,
   dismissedSuggestions,
   keyAction,
+  notedPicker,
   openedSuggestions,
   optionId,
   PLACE_SEARCH_DEBOUNCE_MS,
@@ -295,8 +297,9 @@ export function AddressFieldControl({
   const messageId = `${id}-error`;
   const text = textOf(value);
   const [picker, setPicker] = useState<PlacePickerState>(suggestionsPicker);
-  const [searchNote, setSearchNote] = useState<string | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // The note belongs to the state that answers one text, so an answer for other words never repaints it.
+  const note = picker.note;
   const kind = placeNoteKind(storedPlaceOf(places, field.name), text);
 
   const stopTimer = useCallback(() => {
@@ -314,29 +317,22 @@ export function AddressFieldControl({
       setPicker(searchStarted(asked));
       try {
         const result = await onSearch(query);
-        if (result.ok) {
-          setPicker((current) => searchAnswered(current, asked, result.suggestions));
-          setSearchNote(result.suggestions.length === 0 ? PLACE_PICKER_COPY.empty : undefined);
-          return;
-        }
-        setSearchNote(
-          result.failure === "rate-limited"
-            ? PLACE_PICKER_COPY.limited
-            : result.failure === "not-found"
-              ? PLACE_PICKER_COPY.notFound
-              : PLACE_PICKER_COPY.failed,
+        // The state answers one text, so a slow answer for words the field no longer holds — list and note both —
+        // leaves what the owner reads untouched.
+        setPicker((current) =>
+          result.ok
+            ? searchAnswered(current, asked, result.suggestions)
+            : searchFailed(current, asked, result.failure),
         );
       } catch {
-        setSearchNote(PLACE_PICKER_COPY.failed);
+        setPicker((current) => searchFailed(current, asked, "unavailable"));
       }
-      setPicker((current) => searchFailed(current, asked));
     },
     [onSearch],
   );
 
   const change = (next: string) => {
     onChange(field.name, next);
-    setSearchNote(undefined);
     stopTimer();
     // A changed text closes the list at once: a suggestion of other words is never shown under these.
     setPicker(searchIdle(next));
@@ -357,14 +353,13 @@ export function AddressFieldControl({
     onChange(field.name, suggestion.label);
     onFlush();
     setPicker(suggestionsPicker);
-    setSearchNote(undefined);
     void onSavePlace(field.name, suggestion)
       .then((result) => {
         if (!result.ok) {
-          setSearchNote(result.message);
+          setPicker((current) => notedPicker(current, result.message));
         }
       })
-      .catch(() => setSearchNote(PLACE_PICKER_COPY.saveFailed));
+      .catch(() => setPicker((current) => notedPicker(current, PLACE_PICKER_COPY.saveFailed)));
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -399,7 +394,7 @@ export function AddressFieldControl({
 
   const describedBy = [
     noteId,
-    searchNote === undefined ? undefined : searchNoteId,
+    note === undefined ? undefined : searchNoteId,
     issue === undefined ? undefined : messageId,
   ]
     .filter((part) => part !== undefined)
@@ -429,11 +424,18 @@ export function AddressFieldControl({
           autoComplete="off"
           className={textField}
           id={id}
-          maxLength={field.input.kind === "text" ? field.input.maxLength : undefined}
+          maxLength={
+            // The declared bound of the schema, whatever control its type asks for: the combobox is one line, but a
+            // field declared wider than a text input is still held to its own width before the API refuses it.
+            "maxLength" in field.input ? field.input.maxLength : undefined
+          }
           name={field.name}
           onBlur={() => {
             onFlush();
-            setPicker((current) => dismissedSuggestions(current));
+            // The focus is what a search answers: a keystroke still waiting is dropped, and an answer for a field the
+            // owner left opens no list under it.
+            stopTimer();
+            setPicker(blurredPicker);
           }}
           onChange={(event) => change(event.target.value)}
           onKeyDown={onKeyDown}
@@ -484,9 +486,9 @@ export function AddressFieldControl({
           PLACE_PICKER_COPY.hint
         )}
       </p>
-      {searchNote === undefined ? null : (
+      {note === undefined ? null : (
         <p aria-live="polite" className={searchNoteText} id={searchNoteId}>
-          {searchNote}
+          {note}
         </p>
       )}
       <FieldRefusal id={messageId} message={issue} />

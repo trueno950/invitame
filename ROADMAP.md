@@ -239,8 +239,11 @@ No broad CRM, open guest directory, marketing automation, or guaranteed WhatsApp
 ## Milestone 7 — Checkout and one payment provider
 
 **Status:** Implemented without a real provider (`odd/tasks/m7-payments.md`): the provider-neutral payment core,
-price snapshots, the verified webhook intake, the publication gate, and a development-only simulated provider. The
-real provider adapter waits for the owner's choice; production runs `PAYMENTS_MODE=free` until then.
+price snapshots, the verified webhook intake, the publication gate, and a development-only simulated provider.
+Production runs `PAYMENTS_MODE=free` until the real adapter ships. Owner decisions (`odd/tasks/owner-followups.md`,
+L2): the provider is Mercado Pago (Checkout Pro, MXN), and refunds follow «Sin reembolso tras publicar»: a full
+refund only for an invitation that was never published. The Mercado Pago adapter and that refund rule are the next
+payments slice.
 
 ### Outcome
 
@@ -270,7 +273,9 @@ No multiple payment providers, subscriptions, tax invoicing, stored card data, o
 
 **Status:** Implemented (`odd/tasks/m8-media.md`, PR #67): provider-neutral media storage (local for development, S3-compatible
 for production once the owner configures a bucket), validated and re-encoded photo uploads, the main photo and a
-gallery for `GALLERY`, owner/published serving rules, and an idempotent cleanup command.
+gallery for `GALLERY`, owner/published serving rules, and an idempotent cleanup command. Owner decision
+(`odd/tasks/owner-followups.md`, L2): production photos live in Cloudflare R2 through the existing S3-compatible
+driver (`docs/development/media-storage.md`).
 
 ### Outcome
 
@@ -305,6 +310,9 @@ Provide the minimum operational tools and privacy-bounded product signals needed
 ### Key scope
 
 - admin catalog and support actions with explicit authorization;
+- an admin configuration panel for everything the owner may tune without a deploy (package prices are already
+  editable under `/admin/catalogo/paquetes`; the panel gathers them with the other configurable catalog and
+  operational settings), requested by the owner in `odd/tasks/owner-followups.md` L2;
 - invitation/payment/media operational status views;
 - bounded analytics events or aggregates with retention rules;
 - structured operational logging without secrets or unnecessary personal data; and

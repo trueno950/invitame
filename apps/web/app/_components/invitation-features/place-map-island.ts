@@ -65,6 +65,8 @@ function textAlternative(places: readonly MapMarker[]): string {
 export function PlaceMapIsland({ places }: { readonly places: readonly MapMarker[] }) {
   const canvas = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  // Whether the engine and its tiles could not be loaded: the box then keeps no empty panel a guest cannot use.
+  const [unavailable, setUnavailable] = useState(false);
 
   // The box asks to be loaded when it first comes into view, and stops observing at once: the map is loaded once.
   useEffect(() => {
@@ -95,6 +97,9 @@ export function PlaceMapIsland({ places }: { readonly places: readonly MapMarker
     if (!visible || container === null) {
       return;
     }
+
+    // A box that comes back — the places of the invitation changed — tries the engine again instead of staying blank.
+    setUnavailable(false);
 
     let cancelled = false;
     let map: { remove(): void; resize(): void } | undefined;
@@ -158,7 +163,9 @@ export function PlaceMapIsland({ places }: { readonly places: readonly MapMarker
             .addTo(instance);
         }
       } catch {
-        // A map that cannot be loaded leaves the box empty: the links beside it still take the guest to the place.
+        // A map that cannot be loaded is not left as an empty box: the «Cómo llegar» links beside it are the way to
+        // the place, so the island hides the panel and the line below it rather than showing a blank one.
+        setUnavailable(true);
       }
     })();
 
@@ -170,21 +177,27 @@ export function PlaceMapIsland({ places }: { readonly places: readonly MapMarker
   }, [visible, places]);
 
   // The box of the map holds the canvas and nothing else: its height is reserved from the first paint, and the
-  // attribution sits below it, outside the clip, so it is always readable (S2).
+  // attribution sits below it, outside the clip, so it is always readable (S2). A box whose engine could not be
+  // loaded keeps its canvas mounted for a later attempt, but the panel is no longer shown and it credits no tiles it
+  // never received: the «Cómo llegar» links are the whole map for that guest.
   return createElement(
     "div",
     { "data-place-map": "", className: WRAPPER },
     // The canvas is decorative: the links beside it and the line below are what a guest reads.
     createElement(
       "div",
-      { "aria-hidden": "true", className: BOX },
+      { "aria-hidden": "true", className: unavailable ? `${BOX} hidden` : BOX },
       createElement("div", { className: CANVAS, ref: canvas }),
     ),
-    createElement("p", { className: "sr-only" }, textAlternative(places)),
-    createElement(
-      "p",
-      { className: ATTRIBUTION },
-      "© OpenStreetMap contributors · Mapas: OpenFreeMap",
-    ),
+    ...(unavailable
+      ? []
+      : [
+          createElement("p", { className: "sr-only", key: "places" }, textAlternative(places)),
+          createElement(
+            "p",
+            { className: ATTRIBUTION, key: "attribution" },
+            "© OpenStreetMap contributors · Mapas: OpenFreeMap",
+          ),
+        ]),
   );
 }

@@ -996,7 +996,10 @@ ephemeral filesystem in production.
   autosave queue without discarding anything typed, and the optional fields whose whole section is optional gather in a
   last «Extras opcionales» card. The cards count their missing fields with `missingRequiredNames` itself, so a card is
   never missing something the tab label does not count. From 1024 px up the form column is its
-  own scroll area so that strip stays visible while the fields scroll, and the owner preview of T2b sits beside it as a
+  own scroll area so that strip stays visible while the fields scroll; below 1024 px the customer frame clips its
+  ornaments with `overflow: clip` instead of `hidden` (`globals.css`, keyed by `data-editor-shell`), so the sticky
+  strip pins to the top of the viewport while the page scrolls. The «Publicar» hint promises «Publicar no tiene costo.»
+  only when the payment read proves the package free (`publishHintFor`, `lib/customer/publish-copy.ts`), and the owner preview of T2b sits beside it as a
   phone-width frame that is reloaded only after a save the API accepted; on a phone the preview opens full screen in a
   `<dialog>` behind a fixed «Ver vista previa». Forms and links that still navigate go through `GuardedForm` /
   `GuardedLink` (`_components/autosave/navigation-guard.tsx`): they wait for the flush, and a failed save stops the

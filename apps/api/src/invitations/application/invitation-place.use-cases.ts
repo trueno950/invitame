@@ -28,8 +28,9 @@ import type { PlaceSearchRateLimiter } from "./place-search-rate-limiter";
 // - `SearchPlacesUseCase` answers the suggestions for the text an owner is typing. Ownership is checked first, so a
 //   foreign invitation costs no provider request (A4); the query is bounded before anything else happens; a repeated
 //   query answers from the short-lived cache and costs no request and no limit; a first query counts once against
-//   the owner's own limit and asks the port once. A provider that is unavailable answers no suggestion, so typing
-//   still works and the editor shows nothing intrusive (S2, S3).
+//   the owner's own limit and asks the port once, and only an answer the provider really gave is cached — a lookup
+//   that failed says nothing about the place, so it is never remembered as "no suggestion". A provider that is
+//   unavailable answers no suggestion, so typing still works and the editor shows nothing intrusive (S2, S3).
 // - `UpdateInvitationPlaceUseCase` stores the point the owner chose. `field` must name an address field of the pinned
 //   template version's schema — read from the schema, never from a template name — and the label and both
 //   coordinates must satisfy the bounds the columns also state.
@@ -58,6 +59,14 @@ function usableSuggestions(places: readonly PlacePoint[]): PlacePoint[] {
     .slice(0, PLACE_RESULT_LIMIT)
     .map((place) => ({ label: place.label.trim(), lat: place.lat, lng: place.lng }));
 }
+
+/**
+ * The answer of one bounded request (S2, S3): the suggestions, or the fact that the provider did not answer at all.
+ * Nothing is cached when the provider failed.
+ */
+type PlaceSearchAnswer =
+  | { readonly ok: true; readonly places: PlacePoint[] }
+  | { readonly ok: false };
 
 /** The values of one search: the owner from the session, the invitation, and the raw text of the field (S9). */
 export interface SearchPlacesInput {
@@ -105,19 +114,24 @@ export class SearchPlacesUseCase {
       throw new PlaceSearchRateLimitedError();
     }
 
-    const suggestions = await this.ask(validation.query);
-    this.cache.set(key, suggestions);
+    const answer = await this.ask(validation.query);
+    // A provider that failed says nothing about the place, so its failure is not an empty answer: only an answer
+    // the provider really gave is cached, and the next identical query asks again (S2, S3).
+    if (!answer.ok) {
+      return [];
+    }
+    this.cache.set(key, answer.places);
 
-    return suggestions;
+    return answer.places;
   }
 
   /** One bounded request: the port answers nothing for a provider that is slow, down, or unusable (S2, S3). */
-  private async ask(query: string): Promise<PlacePoint[]> {
+  private async ask(query: string): Promise<PlaceSearchAnswer> {
     try {
-      return usableSuggestions(await this.places.search(query));
+      return { ok: true, places: usableSuggestions(await this.places.search(query)) };
     } catch {
       // The editor shows no suggestion rather than an error: the owner can keep typing the address by hand.
-      return [];
+      return { ok: false };
     }
   }
 }

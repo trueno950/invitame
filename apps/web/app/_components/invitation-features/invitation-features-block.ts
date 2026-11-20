@@ -628,7 +628,7 @@ export function InvitationFeaturesBlock({
   if (features.music !== null) {
     // One external link that names the service, never an embedded player: the guest page loads no third-party
     // script and the playlists a guest already owns keep their own session (S7). The cover the API stored is a plain
-    // image the browser loads lazily from the provider's CDN, with no cookie of its own (`referrerpolicy`), and no
+    // image the browser loads lazily from the provider's CDN, with no referrer (`referrerPolicy`), and no
     // cover renders today's card unchanged (S2).
     const cover = features.music.coverUrl;
     const title = features.music.title;
@@ -647,9 +647,9 @@ export function InvitationFeaturesBlock({
               height: 300,
               loading: "lazy",
               alt: title ?? MUSIC_COVER_ALT,
-              // The lower-case attribute the guest page serves: the CDN learns nothing about where the guest came
-              // from, and the page sends it no cookie of its own (S2).
-              referrerpolicy: "no-referrer",
+              // React's camel-case property for the `referrerpolicy` attribute: the CDN learns nothing about where
+              // the guest came from (S2).
+              referrerPolicy: "no-referrer",
               className: MUSIC_COVER,
             }),
         title === undefined ? null : h("p", { className: MUSIC_TITLE }, title),

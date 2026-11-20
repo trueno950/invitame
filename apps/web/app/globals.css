@@ -158,6 +158,20 @@
 }
 
 /*
+ * The phone editor keeps its save-status strip at the top of the screen while the owner scrolls the fields (T2; S2).
+ * The customer frame is `overflow-hidden`, and an `overflow: hidden` box is a scroll container of its own that never
+ * scrolls, which makes `position: sticky` inside it inert against the document. `overflow: clip` clips the corner
+ * flowers exactly as before without creating that scroll container, so the strip sticks to the viewport instead. The
+ * rule is unlayered on purpose, so it wins over the utility, and it stops at `lg`: from there the form column is its
+ * own scroll area and the strip already sticks inside it.
+ */
+@media (width < 64rem) {
+  .paper-wash:has([data-editor-shell]) {
+    overflow: clip;
+  }
+}
+
+/*
  * Motion is decoration: with reduced motion, transitions and animations end at once. The rule is
  * unlayered on purpose, so it wins over Tailwind's layered utilities without `!important`.
  */

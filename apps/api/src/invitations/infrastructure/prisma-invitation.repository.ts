@@ -18,6 +18,11 @@ import {
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
 import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
+import {
+  isAddressFieldName,
+  isStoredPlacePoint,
+  type PlacePoint,
+} from "../domain/invitation-place";
 
 const INVITATION_SELECT = {
   id: true,
@@ -44,7 +49,8 @@ const INVITATION_SELECT = {
       playlistCoverUrl: true,
     },
   },
-  // The stored points travel with the row too (S2): the public projection decides which of them a guest may see.
+  // The stored points travel with the row too (S2): the public projection decides which of them a guest may see, and
+  // both reads answer only the ones the domain still accepts.
   places: {
     select: {
       field: true,
@@ -56,6 +62,20 @@ const INVITATION_SELECT = {
 } satisfies Prisma.InvitationSelect;
 
 type InvitationRow = Prisma.InvitationGetPayload<{ select: typeof INVITATION_SELECT }>;
+
+/**
+ * The stored points of one row, keyed by their content field (S2, S3). Only a point the domain still accepts is
+ * answered: a row written around the API — a field that is not an address field, a blank or oversized label, a
+ * coordinate outside the range — degrades to "no stored point" instead of reaching the editor or a guest as a value
+ * no rule validated.
+ */
+function toStoredPlaces(rows: InvitationRow["places"]): Record<string, PlacePoint> {
+  return Object.fromEntries(
+    rows
+      .filter((place) => isAddressFieldName(place.field) && isStoredPlacePoint(place))
+      .map((place) => [place.field, { label: place.label, lat: place.lat, lng: place.lng }]),
+  );
+}
 
 /** The shape of a JSON object as PostgreSQL returns it; arrays, null, and primitives are not objects. */
 function isJsonObject(value: unknown): value is JsonObject {
@@ -83,12 +103,7 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     rsvpDeadline: row.rsvpDeadline,
     rsvpPartyLimit: row.rsvpPartyLimit,
     // The points are keyed by their content field, which is the name the layout's address field carries (S2).
-    places: Object.fromEntries(
-      row.places.map((place) => [
-        place.field,
-        { label: place.label, lat: place.lat, lng: place.lng },
-      ]),
-    ),
+    places: toStoredPlaces(row.places),
     archivedAt: row.archivedAt,
     publishedAt: row.publishedAt,
     expiresAt: row.expiresAt,

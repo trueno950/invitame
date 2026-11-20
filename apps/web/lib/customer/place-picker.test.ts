@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { PLACE_PICKER_COPY } from "./copy.ts";
 import {
   activeOptionId,
   activeSuggestion,
+  blurredPicker,
   dismissedSuggestions,
   keyAction,
+  notedPicker,
   openedSuggestions,
   PLACE_SEARCH_DEBOUNCE_MS,
   placeNoteKind,
@@ -13,7 +16,9 @@ import {
   placeSearchRequest,
   resultMoved,
   searchAnswered,
+  searchAnswerNote,
   searchFailed,
+  searchFailureNote,
   searchIdle,
   searchStarted,
   suggestionsPicker,
@@ -34,6 +39,13 @@ describe("the text of an address field", () => {
     assert.equal(placeQuery("   "), undefined);
     assert.equal(placeQuery(""), undefined);
     assert.equal(placeQuery("x".repeat(121)), undefined);
+  });
+
+  it("is not a query when the value is not a text, as an untrusted caller may send", () => {
+    // The server action applies this same rule to what the browser sends, so no other shape reaches the API.
+    assert.equal(placeQuery(7), undefined);
+    assert.equal(placeQuery(null), undefined);
+    assert.equal(placeQuery({ query: "San" }), undefined);
   });
 
   it("asks nothing while the text is too short, and the query once it is not", () => {
@@ -90,11 +102,54 @@ describe("the state of the listbox", () => {
   });
 
   it("keeps a failed search quiet: the note is a status, never a block", () => {
-    const state = searchFailed(searchStarted("Parroquia"), "Parroquia");
+    const state = searchFailed(searchStarted("Parroquia"), "Parroquia", "unavailable");
 
     assert.equal(state.status, "failed");
     assert.equal(state.open, false);
     assert.deepEqual(state.suggestions, []);
+    assert.equal(state.note, PLACE_PICKER_COPY.failed);
+  });
+
+  it("carries the note of an answer with the text it answers", () => {
+    assert.equal(searchAnswered(searchStarted("Nada"), "Nada", []).note, PLACE_PICKER_COPY.empty);
+    assert.equal(searchAnswered(searchStarted("Q"), "Q", [PARROQUIA]).note, undefined);
+    assert.equal(
+      searchFailed(searchStarted("Parroquia"), "Parroquia", "rate-limited").note,
+      PLACE_PICKER_COPY.limited,
+    );
+  });
+
+  it("keeps the note of the current words when a slower answer for other words arrives", () => {
+    const answered = searchAnswered(searchStarted("Jardín"), "Jardín", [JARDIN]);
+    const late = searchFailed(answered, "Parroquia", "rate-limited");
+
+    assert.equal(late, answered, "an answer for other words leaves the field as it was");
+    assert.equal(late.note, undefined);
+  });
+
+  it("closes the list when the field loses the focus and opens nothing after it", () => {
+    const answered = searchAnswered(searchStarted("Q"), "Q", [PARROQUIA]);
+    const blurred = blurredPicker(answered);
+
+    assert.equal(blurred.open, false);
+    assert.equal(
+      searchAnswered(blurred, "Q", [PARROQUIA]),
+      blurred,
+      "an answer that arrives after the owner left opens no list",
+    );
+    assert.equal(
+      blurredPicker(answered).suggestions.length,
+      1,
+      "the answered list is kept, not asked again",
+    );
+  });
+
+  it("keeps a refused save's message under the field until the owner types", () => {
+    const noted = notedPicker(suggestionsPicker, PLACE_PICKER_COPY.saveFailed);
+
+    assert.equal(noted.note, PLACE_PICKER_COPY.saveFailed);
+    assert.equal(noted.open, false);
+    assert.equal(searchIdle("Parroquia").note, undefined);
   });
 
   it("ignores an answer that belongs to another text", () => {
@@ -118,7 +173,11 @@ describe("the keyboard model", () => {
     assert.deepEqual(keyAction(answered, "ArrowDown"), { kind: "move", delta: 1 });
     assert.deepEqual(keyAction(answered, "ArrowUp"), { kind: "move", delta: -1 });
     assert.equal(resultMoved(answered, 1).activeIndex, 1);
-    assert.equal(resultMoved(answered, 1).activeIndex, 1, "the last option is the floor");
+    assert.equal(
+      resultMoved(resultMoved(answered, 1), 1).activeIndex,
+      1,
+      "a second step down stays on the last option",
+    );
     assert.equal(resultMoved(answered, -1).activeIndex, 0);
     assert.equal(resultMoved(suggestionsPicker, 1).activeIndex, -1, "nothing to move");
   });
@@ -141,6 +200,20 @@ describe("the keyboard model", () => {
     assert.equal(closed.open, false);
     assert.equal(closed.suggestions.length, 2);
     assert.equal(openedSuggestions(closed).open, true);
+  });
+});
+
+describe("the note under the field", () => {
+  it("names no note for a list of places and the empty note for a list without one", () => {
+    assert.equal(searchAnswerNote([PARROQUIA]), undefined);
+    assert.equal(searchAnswerNote([]), PLACE_PICKER_COPY.empty);
+  });
+
+  it("gives each refused search its own quiet sentence", () => {
+    assert.equal(searchFailureNote("rate-limited"), PLACE_PICKER_COPY.limited);
+    assert.equal(searchFailureNote("not-found"), PLACE_PICKER_COPY.notFound);
+    assert.equal(searchFailureNote("invalid-query"), PLACE_PICKER_COPY.failed);
+    assert.equal(searchFailureNote("unavailable"), PLACE_PICKER_COPY.failed);
   });
 });
 

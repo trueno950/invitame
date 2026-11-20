@@ -147,6 +147,11 @@ export interface EditorShellProps {
   readonly slug: string;
   /** Whether publishing still waits for a payment, which the API's own gate decides. */
   readonly paymentPending: boolean;
+  /**
+   * What the publish block says about the price (T3; S3): the page keeps «Publicar no tiene costo.» for a free
+   * package only, so the shell never decides the promise by itself.
+   */
+  readonly publishHint: string;
   /** The count of the tabs the page already knows, such as «4 de 12» or «máx. 4». */
   readonly tabMeta: Partial<Record<EditorSection, string>>;
   /** The server-rendered blocks: the photo upload, the gallery, and the payment panel. */
@@ -179,6 +184,7 @@ export function EditorShell({
   publicHref,
   slug,
   paymentPending,
+  publishHint,
   tabMeta,
   mainPhoto,
   gallery,
@@ -405,7 +411,7 @@ export function EditorShell({
               >
                 <input name="id" type="hidden" value={invitationId} />
                 <p className={miniLabel}>{INVITATION_COPY.publishHeading}</p>
-                <p className="text-sm leading-6 text-muted">{INVITATION_COPY.publishHint}</p>
+                <p className="text-sm leading-6 text-muted">{publishHint}</p>
                 {paymentPending ? (
                   <p className={fieldHint}>{PAYMENT_COPY.publishBlockedHint}</p>
                 ) : null}
@@ -469,7 +475,15 @@ export function EditorShell({
 
   return (
     <AutosaveBridgeProvider bridge={bridge}>
-      <div className="grid gap-4 pb-28 lg:grid-cols-[9.5rem_minmax(0,1fr)_20rem] lg:items-start lg:gap-5 lg:pb-0 xl:grid-cols-[11rem_minmax(0,1fr)_24.5rem]">
+      {/*
+        `data-editor-shell` is the hook `app/globals.css` uses to let the phone's save-status strip stick: the customer
+        frame is `overflow-hidden`, which is a scroll container that never scrolls, and this page's frame is clipped
+        instead (T2; S2).
+      */}
+      <div
+        className="grid gap-4 pb-28 lg:grid-cols-[9.5rem_minmax(0,1fr)_20rem] lg:items-start lg:gap-5 lg:pb-0 xl:grid-cols-[11rem_minmax(0,1fr)_24.5rem]"
+        data-editor-shell=""
+      >
         <div className="lg:hidden">
           <EditorTabList
             active={section}
@@ -501,8 +515,9 @@ export function EditorShell({
           {/*
             The form column is its own scroll area from `lg` up, so the status line below can be sticky inside it: the
             page shell that wraps every customer page is `overflow-hidden`, which would make `position: sticky` inert
-            against the document. On a phone the column keeps the page's own scrolling, and the status line stays at its
-            top, right under the tabs.
+            against the document. On a phone the column keeps the page's own scrolling, and the frame of this page is
+            clipped instead of hidden (`app/globals.css`, keyed on `data-editor-shell`), so the same strip sticks to the
+            top of the screen while the fields scroll under it (T2; S2).
           */}
           <div className="rounded-panel bg-surface/90 ring-1 ring-gold/45 lg:max-h-[calc(100dvh-19rem)] lg:overflow-y-auto lg:overscroll-contain">
             {/*
