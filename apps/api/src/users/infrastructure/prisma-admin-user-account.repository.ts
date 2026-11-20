@@ -14,16 +14,23 @@ import {
   mayRequestSignInCode,
   reactivateTransition,
   refuseProtectedAdministrator,
+  SUPPORT_ACCOUNT_STATUS,
+  type SupportAccountState,
   type SupportAccountStatus,
 } from "../domain/account-support";
-import { UserCannotSignInByCodeError } from "../domain/account-support.errors";
+import {
+  AccountAlreadyActiveError,
+  AccountAlreadyDisabledError,
+  UserCannotSignInByCodeError,
+} from "../domain/account-support.errors";
 
 // The account support port on PostgreSQL (M9 T9; S4, S6, L8, L9). Three rules shape this adapter:
 //
 // 1. Every action is one interactive transaction. The account is read first, so an administrator account is refused
 //    before any statement changes it; the status change is a guarded `updateMany` whose conditions are the whole
-//    transition, so a concurrent request that already moved the status makes this one a refusal instead of a second
-//    change; and the `AdminAction` row is written through the injected recorder with this same transaction client, so
+//    transition — the target status and the customer role, so an account promoted between the read and the update is
+//    never disabled or reactivated — and a zero count is re-read into the refusal it names, never an unexpected
+//    failure; and the `AdminAction` row is written through the injected recorder with this same transaction client, so
 //    the change and its record commit together or not at all (L9 «Misma transacción»).
 // 2. Disabling deletes every session in that same transaction, exactly like `disableAndRevokeSessions` does for the
 //    `user:disable` command, so the account loses access at once. The account's invitations are never touched: L8
@@ -59,22 +66,18 @@ export class PrismaAdminUserAccountRepository implements AdminUserAccountReposit
   ) {}
 
   /**
-   * The refusal of a guarded disable that matched nothing: the domain transition names it (an ACTIVE account has
-   * nothing to disable), so the route keeps its 409 code. A DISABLED row is the only status the guarded update misses
-   * on its own, so the trailing throw is unreachable.
+   * The refusal of a guarded transition that matched no row (M9 T10; R1-001, R4-001). The update's conditions are the
+   * whole transition, so a zero count means another transaction moved the row after this call's read, and the re-read
+   * names what it is now: an account promoted in that window is an administrator's, refused as one; a DISABLED row has
+   * nothing to disable and an ACTIVE one has nothing to reactivate. Every branch answers a typed conflict the route
+   * maps to its 409 codes, so no observation here can reach an unexpected 500.
    */
-  private static refusedDisable(status: SupportAccountStatus): never {
-    disableTransition(status);
-    throw new Error("A guarded disable matched no row while the account was ACTIVE.");
-  }
-
-  /**
-   * The refusal of a guarded reactivate that matched nothing: the domain transition names it (a DISABLED account has
-   * nothing to reactivate), so the route keeps its 409 code.
-   */
-  private static refusedReactivate(status: SupportAccountStatus): never {
-    reactivateTransition(status);
-    throw new Error("A guarded reactivate matched no row while the account was DISABLED.");
+  private static refusedTransition(account: SupportAccountState): never {
+    refuseProtectedAdministrator(account);
+    if (account.status === SUPPORT_ACCOUNT_STATUS.DISABLED) {
+      throw new AccountAlreadyDisabledError();
+    }
+    throw new AccountAlreadyActiveError();
   }
 
   async disableForAdmin(
@@ -98,7 +101,9 @@ export class PrismaAdminUserAccountRepository implements AdminUserAccountReposit
       refuseProtectedAdministrator(stateOf(account));
 
       const { count: disabledByThisCall } = await tx.user.updateMany({
-        where: { id: userId, status: "ACTIVE" },
+        // The customer role is part of the guard: a promotion committed after the read must not be undone here
+        // (M9 T10; R1-001).
+        where: { id: userId, status: "ACTIVE", role: "CUSTOMER" },
         data: { status: disableTransition(stateOf(account).status) },
       });
 
@@ -108,7 +113,7 @@ export class PrismaAdminUserAccountRepository implements AdminUserAccountReposit
         if (stored === null) {
           return null;
         }
-        return PrismaAdminUserAccountRepository.refusedDisable(stateOf(stored).status);
+        return PrismaAdminUserAccountRepository.refusedTransition(stateOf(stored));
       }
 
       const { count: revokedSessions } = await tx.session.deleteMany({ where: { userId } });
@@ -144,7 +149,8 @@ export class PrismaAdminUserAccountRepository implements AdminUserAccountReposit
       refuseProtectedAdministrator(stateOf(account));
 
       const { count: activatedByThisCall } = await tx.user.updateMany({
-        where: { id: userId, status: "DISABLED" },
+        // The same role guard as the disable (M9 T10; R1-001).
+        where: { id: userId, status: "DISABLED", role: "CUSTOMER" },
         data: { status: reactivateTransition(stateOf(account).status) },
       });
 
@@ -153,7 +159,7 @@ export class PrismaAdminUserAccountRepository implements AdminUserAccountReposit
         if (stored === null) {
           return null;
         }
-        return PrismaAdminUserAccountRepository.refusedReactivate(stateOf(stored).status);
+        return PrismaAdminUserAccountRepository.refusedTransition(stateOf(stored));
       }
 
       await this.actions.record(tx, {

@@ -90,7 +90,7 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T7 | Payment detail: `GET /admin/payments/:paymentId` + `/admin/pagos/<id>` | S4, S6 | worker | |
 | T8 | Admin unpublish with audit, `ownerId` on the detail, support card on the invitation detail | S4, S6 | worker | |
 | T9 | Disable, reactivate, and resend the sign-in code with audit + web actions | S4, S6 | worker | see L10 |
-| T10 | Support action review follow-ups: role guard, 409 under concurrent transitions, payment retry link, regression probes | S4, S6 | worker | |
+| T10 | Support action review follow-ups: role guard, 409 under concurrent transitions, payment retry link, regression probes | S4, S6 | worker | see L11 |
 | T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | see L7 |
 
 ## Log
@@ -138,3 +138,8 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   refusal»; «returning an unexpected 500 instead of the intended 409 conflict» under concurrent opposite transitions;
   «Pressing the advertised retry button therefore navigates away from the payment detail»; the verifier's two
   regression probes (per-IP bypass, admin-route reflection).
+- L11 — T10 (worker): both guarded account updates require `role = CUSTOMER`, and a zero-count re-read answers a
+  typed 409 (admin protected, already disabled, already active) or 404, never a 500; «Volver a intentar» on
+  `/admin/pagos/<id>` reloads the same detail; two regression probes pin the per-IP bypass of the in-process resend and
+  that every `admin/` route is `@AdminOnly()`. Evidence: API 1870, web 1765, db 440, typecheck, lint, format, docs.
+  CI browser-test slowness traced to the «Install Chromium» step (402-501 s vs 39 s), not the tests.

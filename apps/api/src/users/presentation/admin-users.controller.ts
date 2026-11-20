@@ -29,10 +29,13 @@ const USER_ID = new ParseUUIDPipe();
  *
  * - `POST /admin/users/:userId/disable`: 200 `{ status: "DISABLED", revokedSessions }`, or 404 `USER_NOT_FOUND`, 409
  *   `ACCOUNT_ALREADY_DISABLED`, 409 `ADMIN_ACCOUNT_PROTECTED`. The status change, the session revocation, and the
- *   `ACCOUNT_DISABLED` audit row are one transaction, and the account's invitations stay published (L8).
+ *   `ACCOUNT_DISABLED` audit row are one transaction, and the account's invitations stay published (L8). The guard
+ *   includes the customer role, so an account promoted in between is 409 `ADMIN_ACCOUNT_PROTECTED`, and a guarded
+ *   update that matches no row is re-read into `ACCOUNT_ALREADY_DISABLED` or `ACCOUNT_ALREADY_ACTIVE` (a concurrent
+ *   opposite transition), never an unexpected 500.
  * - `POST /admin/users/:userId/reactivate`: 200 `{ status: "ACTIVE" }`, or 404 `USER_NOT_FOUND`, 409
  *   `ACCOUNT_ALREADY_ACTIVE`, 409 `ADMIN_ACCOUNT_PROTECTED`, with the `ACCOUNT_REACTIVATED` audit row in the same
- *   transaction (L9).
+ *   transaction (L9) and the same role guard and re-read as the disable.
  * - `POST /admin/users/:userId/sign-in-code`: 202 `{ outcome: "requested" }`, or 404 `USER_NOT_FOUND`, 409
  *   `USER_CANNOT_SIGN_IN_BY_CODE`. The `SIGN_IN_CODE_RESENT` audit row records the request before Better Auth's own
  *   sign-in-code endpoint is asked for a code, so the per-email quota, the hashing, the expiry, the attempt cap, and the

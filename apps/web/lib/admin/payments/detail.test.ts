@@ -8,7 +8,7 @@ import {
   paymentEventOutcomeLabel,
   paymentEventTypeLabel,
 } from "./copy.ts";
-import { paymentDetailView } from "./detail.ts";
+import { paymentDetailView, paymentDetailNoticeLinks } from "./detail.ts";
 
 // What the payment detail page renders (M9 T7; S4): the stored facts and the events the intake kept for them. Every
 // event type and outcome the API writes has a Spanish label, and a value outside that closed set still renders — with
@@ -38,6 +38,16 @@ const DETAIL: AdminPaymentDetail = {
     { type: "paid", outcome: "applied", receivedAt: AT, processedAt: AT },
   ],
 };
+
+describe("paymentDetailNoticeLinks", () => {
+  it("retries this detail and keeps the list as a separate way back (M9 T10; R3-001)", () => {
+    assert.deepEqual(paymentDetailNoticeLinks(PAYMENT_ID), {
+      // «Volver a intentar» reloads the same detail, never the list the retry used to navigate to.
+      retryHref: `/admin/pagos/${PAYMENT_ID}`,
+      listHref: "/admin/pagos",
+    });
+  });
+});
 
 describe("paymentDetailView", () => {
   it("shows the payment, its amount like the list, and the link to its invitation", () => {
