@@ -89,7 +89,8 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T6 | `AdminAction` migration + admin module (recorder, domain, append-only trigger) + db-spec | S6 | worker | |
 | T7 | Payment detail: `GET /admin/payments/:paymentId` + `/admin/pagos/<id>` | S4, S6 | worker | |
 | T8 | Admin unpublish with audit, `ownerId` on the detail, support card on the invitation detail | S4, S6 | worker | |
-| T9 | Disable, reactivate, and resend the sign-in code with audit + web actions | S4, S6 | worker | |
+| T9 | Disable, reactivate, and resend the sign-in code with audit + web actions | S4, S6 | worker | see L10 |
+| T10 | Support action review follow-ups: role guard, 409 under concurrent transitions, payment retry link, regression probes | S4, S6 | worker | |
 | T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | see L7 |
 
 ## Log
@@ -128,3 +129,12 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   go through Better Auth's emailOTP with a per-email 5/hour quota and asynchronous delivery; admin reads are read-only;
   no audit table exists. Parent decisions: the `admin` module with `AdminActionRecorder` satisfies «Misma transacción»;
   the resend audit row records the request; `ownerId` is added to the admin detail (additive).
+- L10 — T6-T9 delivered as chained PRs #96 (audit), #97 (payment detail), #98 (unpublish), #99 (account core), #100
+  (account routes), #101 (account web), CI green on each and merged; master `6b527ac`. Native reviews: #97
+  `review-8ec17fe9778e9c90` and #99 `review-e2ce9ee8cb14e003` approved; #96, #98, #100, #101 not due; #98-#100 also
+  passed an independent security verifier (escalated item 2). Better Auth's per-IP limit does not apply to the
+  in-process resend; the per-email 5/hour quota does (accepted: an admin can exhaust it, each resend is audited).
+  Advisories for T10: «Include role CUSTOMER in the guarded WHERE and treat a zero count as a protected-account
+  refusal»; «returning an unexpected 500 instead of the intended 409 conflict» under concurrent opposite transitions;
+  «Pressing the advertised retry button therefore navigates away from the payment detail»; the verifier's two
+  regression probes (per-IP bypass, admin-route reflection).
