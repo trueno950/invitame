@@ -32,6 +32,7 @@ import {
   missingFieldsMessage,
   statusLabel,
 } from "../../../../lib/customer/invitations.ts";
+import { publishHintFor } from "../../../../lib/customer/publish-copy.ts";
 import { publicInvitationPath } from "../../../../lib/public/invitation-page.ts";
 import type { OwnedInvitation, RsvpRead } from "../../../../lib/server/invitations-api.ts";
 import { isInvitationId } from "../../../../lib/server/invitations-api.ts";
@@ -264,6 +265,11 @@ export default async function InvitationDetailPage({
     (paymentPanel.kind === "pay" ||
       paymentPanel.kind === "retry" ||
       paymentPanel.kind === "amount-unavailable");
+  /**
+   * What the publish block says about the price (T3; S3): «Publicar no tiene costo.» only for a free package or a
+   * deployment in free mode, so the promise never reaches a package that costs money.
+   */
+  const publishHint = publishHintFor(payment);
   const pinned =
     templates === undefined
       ? undefined
@@ -352,6 +358,7 @@ export default async function InvitationDetailPage({
               )
             }
             paymentPending={paymentPending}
+            publishHint={publishHint}
             previewSrc={invitationPreviewPath(invitation.id)}
             publicHref={publicHref}
             rsvpView={rsvpView}
@@ -463,7 +470,7 @@ export default async function InvitationDetailPage({
                 >
                   <input name="id" type="hidden" value={invitation.id} />
                   <BlockLabel>{INVITATION_COPY.publishHeading}</BlockLabel>
-                  <p className="text-sm leading-6 text-muted">{INVITATION_COPY.publishHint}</p>
+                  <p className="text-sm leading-6 text-muted">{publishHint}</p>
                   {paymentPending ? (
                     <p className={fieldHint}>{PAYMENT_COPY.publishBlockedHint}</p>
                   ) : null}

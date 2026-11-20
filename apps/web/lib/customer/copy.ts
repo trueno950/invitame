@@ -178,6 +178,12 @@ export const INVITATION_COPY = {
   publishHeading: "Publicar",
   publishHint:
     "Cuando la invitación esté completa, publícala para compartirla con tus invitados. Publicar no tiene costo.",
+  /**
+   * The same hint for a package that costs money, or for one whose payment state could not be read (T3; S3): it says
+   * what publishing does and promises nothing about the price, because only a free package may promise that.
+   */
+  publishHintCharged:
+    "Cuando la invitación esté completa, publícala para compartirla con tus invitados.",
   publish: "Publicar",
   /** Why a refused publication is listed field by field instead of as one sentence (S7). */
   publishIssuesHeading: "Falta esto para publicar",
