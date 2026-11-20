@@ -68,6 +68,17 @@ const DETAIL = {
   payments: [PAYMENT],
 };
 
+/** The additive analytics fields of the detail (T12; S2, S7): aperturas of the last 90 days and the RSVP totals. */
+const VIEWS = { public: 12, guest: 3 };
+const RSVP_TOTALS = { attendingPeople: 48, declined: 9, responses: 21 };
+const DETAIL_WITH_ANALYTICS = { ...DETAIL, views: VIEWS, rsvpTotals: RSVP_TOTALS };
+/**
+ * The detail as the client hands it to a page: without the analytics fields, the two additive ones read as `null`, so
+ * the invitation page keeps working before the API lands.
+ */
+const PARSED_DETAIL = { ...DETAIL, views: null, rsvpTotals: null };
+const PARSED_DETAIL_WITH_ANALYTICS = { ...DETAIL, views: VIEWS, rsvpTotals: RSVP_TOTALS };
+
 interface Received {
   method: string;
   url: string;
@@ -166,7 +177,7 @@ describe("requests", () => {
   it("reads one invitation's status detail by id", async () => {
     answer(200, DETAIL);
 
-    assert.deepEqual(await client().detail(INVITATION_ID), { ok: true, value: DETAIL });
+    assert.deepEqual(await client().detail(INVITATION_ID), { ok: true, value: PARSED_DETAIL });
 
     const request = received[0];
     assert.equal(received.length, 1);
@@ -207,7 +218,7 @@ describe("requests", () => {
     });
 
     answer(200, { ...DETAIL, ...extra });
-    assert.deepEqual(await client().detail(INVITATION_ID), { ok: true, value: DETAIL });
+    assert.deepEqual(await client().detail(INVITATION_ID), { ok: true, value: PARSED_DETAIL });
   });
 
   it("keeps the owner's id out of the list, which still answers the email only (S1, L3)", async () => {
@@ -243,6 +254,65 @@ describe("requests", () => {
     const page = await client().list();
     assert.ok(page.ok);
     assert.equal("ownerStatus" in (page.value.items[0] ?? {}), false);
+  });
+
+  it("keeps the aperturas and RSVP totals of the detail, and only there (T12; S2, S7)", async () => {
+    answer(200, DETAIL_WITH_ANALYTICS);
+    const detail = await client().detail(INVITATION_ID);
+    assert.deepEqual(detail, { ok: true, value: PARSED_DETAIL_WITH_ANALYTICS });
+
+    // A list row keeps exactly the shape it had: the analytics of one invitation are not a list field.
+    answer(200, {
+      items: [{ ...INVITATION, views: VIEWS, rsvpTotals: RSVP_TOTALS }],
+      nextCursor: null,
+    });
+    const page = await client().list();
+    assert.ok(page.ok);
+    assert.equal("views" in (page.value.items[0] ?? {}), false);
+    assert.equal("rsvpTotals" in (page.value.items[0] ?? {}), false);
+  });
+
+  it("accepts a detail without the additive analytics fields, which the page then renders nothing for", async () => {
+    // The API answers neither field until its analytics slice lands: the detail is still the contract it was, and the
+    // two fields read as `null` so the invitation page renders no aperturas card instead of failing.
+    answer(200, DETAIL);
+    const detail = await client().detail(INVITATION_ID);
+    assert.ok(detail.ok);
+    assert.equal(detail.value.views, null);
+    assert.equal(detail.value.rsvpTotals, null);
+
+    // Each field is additive on its own: one answered, the other still absent.
+    answer(200, { ...DETAIL, views: VIEWS });
+    const partial = await client().detail(INVITATION_ID);
+    assert.deepEqual(partial, { ok: true, value: { ...PARSED_DETAIL, views: VIEWS } });
+
+    answer(200, { ...DETAIL, rsvpTotals: RSVP_TOTALS });
+    const other = await client().detail(INVITATION_ID);
+    assert.deepEqual(other, { ok: true, value: { ...PARSED_DETAIL, rsvpTotals: RSVP_TOTALS } });
+  });
+
+  it("fails closed on analytics fields outside their contract", async () => {
+    const bodies: unknown[] = [
+      { ...DETAIL, views: null },
+      { ...DETAIL, views: [] },
+      { ...DETAIL, views: { public: 1 } },
+      { ...DETAIL, views: { public: -1, guest: 0 } },
+      { ...DETAIL, views: { public: 1.5, guest: 0 } },
+      { ...DETAIL, views: { public: "1", guest: 0 } },
+      { ...DETAIL, rsvpTotals: null },
+      { ...DETAIL, rsvpTotals: { attendingPeople: 1, declined: 0 } },
+      { ...DETAIL, rsvpTotals: { attendingPeople: 1, declined: -1, responses: 0 } },
+      { ...DETAIL, rsvpTotals: { attendingPeople: 1, declined: 0, responses: 0.5 } },
+    ];
+
+    for (const body of bodies) {
+      answer(200, body);
+      await assert.rejects(
+        client().detail(INVITATION_ID),
+        (error: unknown) => error instanceof ApiClientError && error.kind === "invalid-response",
+        JSON.stringify(body),
+      );
+    }
   });
 
   it("answers signed out without calling the API when there is no session cookie", async () => {
@@ -436,7 +506,7 @@ describe("the admin unpublish (M9 T8; S4, S6)", () => {
         reason: "OWNER_REQUEST",
         note: "La dueña lo pidió por correo.",
       }),
-      { ok: true, value: { ...DETAIL, status: "DRAFT", publishedAt: null } },
+      { ok: true, value: { ...PARSED_DETAIL, status: "DRAFT", publishedAt: null } },
     );
 
     const request = received[0];

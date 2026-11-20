@@ -92,6 +92,25 @@ export interface AdminInvitationMedia {
   readonly galleryCount: number;
 }
 
+/**
+ * The aperturas of one invitation's links over the last 90 days (M9 T12; S2, S3, S7): the public link and the guest
+ * links, counted together and separately. It is an additive field of the detail, so `null` while the API answers none.
+ */
+export interface AdminInvitationViews {
+  readonly public: number;
+  readonly guest: number;
+}
+
+/**
+ * The RSVP totals of one invitation (M9 T12; S2): the aggregate the API computes in a bounded query, never the owner's
+ * own read, so it carries no guest, answer, or comment — only these three counts.
+ */
+export interface AdminInvitationRsvpTotals {
+  readonly attendingPeople: number;
+  readonly declined: number;
+  readonly responses: number;
+}
+
 /** One row of `GET /admin/invitations` (S1): the invitation, its owner's email, its payment, and its photos. */
 export interface AdminInvitationSummary {
   readonly invitationId: string;
@@ -137,6 +156,13 @@ export interface AdminInvitationDetail extends AdminInvitationSummary {
   readonly packageId: string;
   readonly templateVersionId: string;
   readonly payments: readonly AdminInvitationPayment[];
+  /**
+   * The aperturas of the last 90 days (T12; S2, S3, S7), or `null` while the API answers none: the field is additive, so
+   * the page renders no aperturas card before the analytics slice lands instead of failing the whole detail.
+   */
+  readonly views: AdminInvitationViews | null;
+  /** The RSVP totals (T12; S2), or `null` while the API answers none, for the same reason as `views`. */
+  readonly rsvpTotals: AdminInvitationRsvpTotals | null;
 }
 
 /** One page of the search: the rows and the cursor of the next page, or `null` on the last one. */
@@ -385,6 +411,31 @@ export function parseAdminInvitationPage(value: unknown): AdminInvitationPage | 
   return { items, nextCursor };
 }
 
+/** One invitation's aperturas of the last 90 days, refused when a count is not a non-negative integer. */
+function parseViews(value: unknown): AdminInvitationViews | undefined {
+  const views = record(value);
+
+  return views !== undefined && isCount(views.public) && isCount(views.guest)
+    ? { public: views.public, guest: views.guest }
+    : undefined;
+}
+
+/** One invitation's RSVP totals, refused when any of the three counts is outside the contract. */
+function parseRsvpTotals(value: unknown): AdminInvitationRsvpTotals | undefined {
+  const totals = record(value);
+
+  return totals !== undefined &&
+    isCount(totals.attendingPeople) &&
+    isCount(totals.declined) &&
+    isCount(totals.responses)
+    ? {
+        attendingPeople: totals.attendingPeople,
+        declined: totals.declined,
+        responses: totals.responses,
+      }
+    : undefined;
+}
+
 /** One invitation's status detail, refused whole when a field or a payment is outside the contract. */
 export function parseAdminInvitationDetail(value: unknown): AdminInvitationDetail | undefined {
   const summary = parseAdminInvitationSummary(value);
@@ -395,13 +446,21 @@ export function parseAdminInvitationDetail(value: unknown): AdminInvitationDetai
   }
 
   const payments = mapAll(detail.payments, parsePayment);
+  // The two analytics fields are additive (T12; S2, S7): an absent field is no data, not a broken body, so the page
+  // renders nothing for it. A field that is present must still be the contract's shape.
+  const views = Object.hasOwn(detail, "views") ? parseViews(detail.views) : null;
+  const rsvpTotals = Object.hasOwn(detail, "rsvpTotals")
+    ? parseRsvpTotals(detail.rsvpTotals)
+    : null;
 
   if (
     !isCatalogId(detail.ownerId) ||
     !(detail.ownerStatus === null || isAccountStatus(detail.ownerStatus)) ||
     !isCatalogId(detail.packageId) ||
     !isCatalogId(detail.templateVersionId) ||
-    payments === undefined
+    payments === undefined ||
+    views === undefined ||
+    rsvpTotals === undefined
   ) {
     return undefined;
   }
@@ -413,6 +472,8 @@ export function parseAdminInvitationDetail(value: unknown): AdminInvitationDetai
     packageId: detail.packageId,
     templateVersionId: detail.templateVersionId,
     payments,
+    views,
+    rsvpTotals,
   };
 }
 

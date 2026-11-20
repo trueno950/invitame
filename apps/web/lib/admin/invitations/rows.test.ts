@@ -43,6 +43,9 @@ const DETAIL: AdminInvitationDetail = {
   ownerStatus: "ACTIVE",
   packageId: PACKAGE_ID,
   templateVersionId: TEMPLATE_VERSION_ID,
+  // The additive analytics fields of T12 (S2, S7); absent, the page renders no aperturas card.
+  views: null,
+  rsvpTotals: null,
   payments: [
     {
       paymentId: PAYMENT_ID,
