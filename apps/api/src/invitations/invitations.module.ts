@@ -10,7 +10,28 @@ import type { RuntimeEnvironment } from "../config/environment";
 import { PrismaService } from "../database/prisma.service";
 import { MediaModule } from "../media/media.module";
 import { PaymentsModule } from "../payments/payments.module";
+import { UsersModule } from "../users/users.module";
 import { GUEST_REPOSITORY, type GuestRepository } from "./application/guest.repository";
+import {
+  ADMIN_INVITATION_REPOSITORY,
+  type AdminInvitationRepository,
+} from "./application/admin-invitation.repository";
+import {
+  GetAdminInvitationUseCase,
+  ListAdminInvitationsUseCase,
+} from "./application/admin-invitation.use-cases";
+import {
+  INVITATION_MEDIA_COUNT_READER,
+  type InvitationMediaCountReader,
+} from "./application/invitation-media-counts";
+import {
+  INVITATION_OWNER_EMAIL_READER,
+  type InvitationOwnerEmailReader,
+} from "./application/invitation-owner-email";
+import {
+  INVITATION_PAYMENT_READER,
+  type InvitationPaymentReader,
+} from "./application/invitation-payment-summary";
 import {
   INVITATION_REPOSITORY,
   type InvitationRepository,
@@ -68,12 +89,14 @@ import { RSVP_RATE_LIMITER, type RsvpRateLimiter } from "./application/rsvp-rate
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
 import { createMusicMetadataProvider } from "./infrastructure/create-music-metadata-provider";
 import { createPlaceSearch } from "./infrastructure/create-place-search";
+import { PrismaAdminInvitationRepository } from "./infrastructure/prisma-admin-invitation.repository";
 import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { PrismaPlaceSearchRateLimiter } from "./infrastructure/prisma-place-search-rate-limiter";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
 import { InvitationsController } from "./presentation/invitations.controller";
+import { AdminInvitationsController } from "./presentation/admin-invitations.controller";
 import { PublicInvitationsController } from "./presentation/public-invitations.controller";
 
 /** A use case that needs both the invitation port and the catalog contract. */
@@ -87,6 +110,44 @@ function useCase(
     inject: [INVITATION_REPOSITORY, INVITATION_CATALOG],
   };
 }
+
+/**
+ * The administrator's status view (M9 T2; S1): one global read port and its two use cases. Each use case reads its own
+ * facets through the ports the payments, media, and users modules implement, so a page asks three narrow reads and
+ * never another module's table.
+ */
+export const ADMIN_INVITATION_USE_CASES: Provider[] = [
+  {
+    provide: ListAdminInvitationsUseCase,
+    useFactory: (
+      invitations: AdminInvitationRepository,
+      payments: InvitationPaymentReader,
+      media: InvitationMediaCountReader,
+      owners: InvitationOwnerEmailReader,
+    ) => new ListAdminInvitationsUseCase(invitations, payments, media, owners),
+    inject: [
+      ADMIN_INVITATION_REPOSITORY,
+      INVITATION_PAYMENT_READER,
+      INVITATION_MEDIA_COUNT_READER,
+      INVITATION_OWNER_EMAIL_READER,
+    ],
+  },
+  {
+    provide: GetAdminInvitationUseCase,
+    useFactory: (
+      invitations: AdminInvitationRepository,
+      payments: InvitationPaymentReader,
+      media: InvitationMediaCountReader,
+      owners: InvitationOwnerEmailReader,
+    ) => new GetAdminInvitationUseCase(invitations, payments, media, owners),
+    inject: [
+      ADMIN_INVITATION_REPOSITORY,
+      INVITATION_PAYMENT_READER,
+      INVITATION_MEDIA_COUNT_READER,
+      INVITATION_OWNER_EMAIL_READER,
+    ],
+  },
+];
 
 /**
  * The invitation use cases, bound to whichever ports the module provides. The create use case draws its slug
@@ -290,12 +351,24 @@ export const INVITATION_USE_CASES: Provider[] = [
  * selects (S2), so the feature save calls one provider-neutral lookup and never names Spotify or YouTube. The place
  * search port is bound the same way through `PLACE_SEARCH_PROVIDER` (S2), and its rate limit counts on the shared
  * `RateLimit` table, so an owner cannot exhaust the free public geocoder.
+ *
+ * Milestone 9 adds the administrator's status view (T2; S1): `ADMIN_INVITATION_REPOSITORY` is the one global
+ * invitation read, bound separately from the owner-scoped `INVITATION_REPOSITORY` exactly like the payments module's
+ * refund port, so no owner use case can reach it. Its facets — the newest payment, the photo counts, and the owner's
+ * email — arrive through three narrow ports this module declares and the payments, media, and users modules
+ * implement, which is why this module imports `UsersModule` and neither queries nor joins another module's tables.
  */
 @Module({
-  imports: [CatalogModule, MediaModule, PaymentsModule],
-  controllers: [InvitationsController, PublicInvitationsController],
+  imports: [CatalogModule, MediaModule, PaymentsModule, UsersModule],
+  controllers: [InvitationsController, PublicInvitationsController, AdminInvitationsController],
   providers: [
     ...INVITATION_USE_CASES,
+    ...ADMIN_INVITATION_USE_CASES,
+    {
+      provide: ADMIN_INVITATION_REPOSITORY,
+      useFactory: (prisma: PrismaService) => new PrismaAdminInvitationRepository(prisma),
+      inject: [PrismaService],
+    },
     {
       provide: INVITATION_REPOSITORY,
       useFactory: (prisma: PrismaService) => new PrismaInvitationRepository(prisma),

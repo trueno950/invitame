@@ -1058,6 +1058,43 @@ ephemeral filesystem in production.
   S3 bucket. Serving correct media URLs there additionally needs `MEDIA_PUBLIC_BASE_URL` set to the harness's API origin
   (`API_ORIGIN`, port 3411), because the API builds absolute URLs from its own configuration.
 
+## Administrator invitation status view (current)
+
+Implemented by Milestone 9 T2 (S1, L3, L4). An administrator searches one invitation and reads its operational state —
+lifecycle dates, payment, and photo counts — with no personal data beyond the owner's email.
+
+- Module ownership: the `invitations` module owns `Invitation` and serves both routes; a separate global read port
+  (`ADMIN_INVITATION_REPOSITORY`, `PrismaAdminInvitationRepository`) answers them, bound apart from the owner-scoped
+  `INVITATION_REPOSITORY` exactly like the payments module's refund port, so no owner use case can reach the global
+  read. The payment, media, and owner facets arrive through three narrow ports the invitations module declares and
+  the payments (newest payment per invitation, batched `DISTINCT ON`), media (stored main-photo and gallery counts,
+  batched `GROUP BY`), and users (owner email) modules implement — the `INVITATION_GALLERY_READER` precedent — so
+  neither module reads another module's tables and no facet is fetched per row.
+- `GET /admin/invitations?slug=<prefix>&status=DRAFT|PUBLISHED|ARCHIVED&limit=<1..50>&cursor=<opaque>` is
+  `@AdminOnly()` (401 without a session, 403 for a customer, both before any validation) and answers 200
+  `{ items, nextCursor }`, newest first by `(createdAt, id)`. Every parameter is optional and bounded: `limit`
+  defaults to 20, `slug` is a case-insensitive prefix of at most 60 characters whose `%` and `_` are matched
+  literally (escaped, with `ESCAPE '\'`), and `status` is the closed lifecycle set. Paging is key-set, never an
+  offset, and the cursor is an opaque base64url of `(createdAt, id)`; a cursor this API did not write answers 400
+  `INVALID_CURSOR` before the database is read, and any other unknown or malformed query answers 400.
+- `GET /admin/invitations/:invitationId` answers 200 with `AdminInvitationDetail` (the same fields plus `packageId`,
+  `templateVersionId`, and the newest 20 payments) or 404 `INVITATION_NOT_FOUND`.
+- Privacy (S1, L3): a summary is `{ invitationId, slug, status, ownerEmail, createdAt, publishedAt,
+  firstPublishedAt, archivedAt, refundRequestedAt, latestPayment: { status, amountMinor, currency, paidAt } | null,
+  media: { mainPhoto, galleryCount } }`; a detail adds the pinned references and `payments: { paymentId, status,
+  amountMinor, currency, createdAt, paidAt }[]`. No invitation `content`, no owner display name or id, no guests or
+  RSVP answer, and no provider payload or payer datum is read, mapped, or logged — the adapter's `SELECT` is the
+  rule, and the mappers project only the contract's fields.
+- Migration `20261125120000_add_invitation_status_created_at_index` adds `Invitation(status, createdAt)`
+  additively (no rewrite, no default, no data change) for exactly this read; see
+  [`../database/model.md`](../database/model.md).
+- Tests: `src/invitations/application/admin-invitation.use-cases.spec.ts` (fakes: key-set paging over equal
+  `createdAt`, one batched read per facet, the cursor's contract, the payment bound, the exact field set),
+  `src/invitations/presentation/admin-invitations.controller.spec.ts` (401/403/400/404 and the response shape
+  through the shared app boundary), and `src/invitations/infrastructure/admin-invitations.prisma.db-spec.ts` (the
+  index, paging across pages with one identical `createdAt`, the slug prefix with `%` and `_`, the status filter, the
+  batched payment, media, and owner reads, and that nothing outside the contract is answered).
+
 ## Playlist metadata (current)
 
 The music feature shows the playlist's cover and title next to the button that opens it. The metadata comes from the
