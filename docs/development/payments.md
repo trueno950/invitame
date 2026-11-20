@@ -1,6 +1,7 @@
 # Checkout and payments
 
-This document describes the current, implemented payment core of the API (Milestone 7, S1, S3, S4). It is the
+This document describes the current, implemented payment core of the API (Milestone 7, S1, S3, S4) and its Mercado
+Pago adapter and refund rule (`odd/tasks/mercadopago-payments.md`). It is the
 operational companion of the code: the state machine and the entitlement rule live in
 `apps/api/src/payments/domain/`, the use cases in `apps/api/src/payments/application/`, the adapters in
 `apps/api/src/payments/infrastructure/`, and the SQL in `apps/api/src/payments/infrastructure/prisma-payment.repository.ts`.
@@ -33,7 +34,7 @@ The tables and their invariants are in [`../database/model.md`](../database/mode
 | --- | --- | --- |
 | `free` | Any environment. Default in development and test. | Today's Milestone 5 behavior: publication needs no payment, `POST /invitations/:id/checkout` answers 409 `PAYMENTS_DISABLED`, `GET /invitations/:id/payment` answers `paymentRequired: false`, and every webhook delivery is refused. No provider is bound that can charge. |
 | `simulated` | Development and test only; refused in production. | The full flow with the simulated provider: checkout, the signed webhook, the owner read, and the publication gate. |
-| a provider key | Later, once the owner chooses a provider. | The real adapter behind the same port. |
+| `mercadopago` | Any environment; the production mode that charges. | Mercado Pago Checkout Pro in MXN behind the same port (`infrastructure/mercadopago-payment-provider.ts`): the checkout, the verified notification, the owner read, the publication gate, and the administrator refund. |
 
 Production must set `PAYMENTS_MODE` explicitly: there is no default there, because the default would decide whether
 money is charged. `simulated` is refused at startup in production, because its adapter can mint a valid signature
@@ -43,9 +44,13 @@ from a configuration value, so a deployment that ran it could grant publication 
 
 | Variable | When | Rule |
 | --- | --- | --- |
-| `PAYMENTS_MODE` | Production: yes. Elsewhere: no. | `free` or `simulated`. Defaults to `free` in development and test; required in production. |
+| `PAYMENTS_MODE` | Production: yes. Elsewhere: no. | `free`, `simulated`, or `mercadopago`. Defaults to `free` in development and test; required in production. |
 | `PAYMENTS_SIMULATED_SECRET` | With `simulated` | The HMAC-SHA256 key of the simulated adapter, at least 32 characters, and different from `BETTER_AUTH_SECRET`, `AUTH_PROXY_SECRET`, and `AUTH_PROXY_SECRET_PREVIOUS`. Never logged, echoed, returned, or committed. |
-| `PAYMENTS_RETURN_BASE_URL` | With `simulated` | The web origin the simulated redirect points at, `http` or `https`, default `http://localhost:3000`. It is an origin only: no path, query, or fragment. |
+| `PAYMENTS_RETURN_BASE_URL` | With `simulated` or `mercadopago` | The web origin the simulated redirect and the Mercado Pago `back_urls` point at, `http` or `https` (`https` in production), default `http://localhost:3000`. It is an origin only: no path, query, or fragment. |
+| `PAYMENTS_WEBHOOK_BASE_URL` | With `mercadopago` | The public API origin Mercado Pago notifies; the notification URL is `<origin>/payments/webhooks/mercadopago`. An origin only, `https` in production. |
+| `MERCADOPAGO_ACCESS_TOKEN` | With `mercadopago` | The API credential, sent as a Bearer token. Different from every other secret here. Never logged, echoed, returned, or committed. |
+| `MERCADOPAGO_WEBHOOK_SECRET` | With `mercadopago` | The notification signature secret from the Mercado Pago panel. Different from the access token and from every auth secret. Never logged, echoed, returned, or committed. |
+| `MERCADOPAGO_API_BASE_URL` | No | `https://api.mercadopago.com` by default; an origin only, so a sandbox proxy is a configuration change. `https` in production. |
 
 Every message from `apps/api/src/config/environment.ts` names a variable and never echoes its value. In `free` mode
 neither the secret nor the return origin is read, so an existing deployment needs no new variable to keep working.
@@ -89,6 +94,41 @@ of the body, which is why the route reads `request.rawBody` and not the parsed J
 The rejection is a single `400 { "code": "PAYMENT_WEBHOOK_REJECTED" }`: a caller cannot tell a missing signature from
 a stale one or a forged one. Nothing is written for a refused delivery.
 
+## Mercado Pago
+
+The adapter (`infrastructure/mercadopago-payment-provider.ts`) talks to Mercado Pago over HTTPS with the access
+token, a 5 second timeout per request, and one structured `mercadopago-request-failed` log line per failure that
+names only a category (status, timeout, network, unreadable answer) — never a body, a token, or a payer datum.
+
+- **Checkout.** `createCheckout` posts a Checkout Pro preference: one item with the snapshot amount in MXN,
+  `external_reference` = our `paymentId`, `back_urls` to `<PAYMENTS_RETURN_BASE_URL>/cuenta/invitaciones/<id>/pago`,
+  `auto_return: "approved"`, `notification_url` = `<PAYMENTS_WEBHOOK_BASE_URL>/payments/webhooks/mercadopago`, and
+  `X-Idempotency-Key` = the payment's idempotency key. It answers the preference's `init_point` as `redirectUrl`, and
+  `providerReference` stays our `paymentId`, the one identifier both sides echo.
+- **Notification signature.** `POST /payments/webhooks/mercadopago` reads `x-signature` (`ts=<ts>,v1=<hex>`),
+  `x-request-id`, and the query's `data.id`, and verifies `v1` as HMAC-SHA256 with `MERCADOPAGO_WEBHOOK_SECRET` over
+  `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`, constant-time, with the timestamp within ±5 minutes. Any
+  failure is the same `400 PAYMENT_WEBHOOK_REJECTED` with no detail, and nothing is written.
+- **Re-read, never trust the payload.** A verified payment notification re-reads `GET /v1/payments/<data.id>` and
+  keeps only `external_reference`, `status`, `transaction_amount` (exact cents), `currency_id`, and the event time.
+  The event id is `mercadopago-<data.id>-<status>`, so a redelivery is a duplicate. `approved` → `paid`,
+  `rejected`/`cancelled` → `failed`, `refunded`/`charged_back` → `refunded`; `pending`, `authorized`, `in_process`,
+  and `in_mediation` are authentic but decide nothing. An authentic delivery of another topic or a status that
+  decides nothing answers `200 { outcome: "ignored" }` and writes nothing, so Mercado Pago stops retrying. The
+  existing intake still checks the snapshot amount and currency and the guarded transitions.
+- **Refund.** `refund` posts `POST /v1/payments/<id>/refunds` with no amount (a full refund) and an
+  `X-Idempotency-Key` derived from our payment, after finding the Mercado Pago payment through
+  `GET /v1/payments/search?external_reference=<paymentId>`.
+
+## Refunds: «Sin reembolso tras publicar»
+
+An administrator may ask for a full refund only while the payment is `paid` and its invitation was never published
+(`apps/api/src/payments/application/refund.use-cases.ts`). "Never published" reads `Invitation.firstPublishedAt`,
+which the first publish sets and nothing clears, because `publishedAt` is cleared on unpublish and archive. The
+admin click only asks the provider: the payment becomes `refunded` from the verified notification that follows, and a
+`refunded` payment no longer opens the publication gate. A publish that races a refund is refused by the gate once the
+refund lands; the stable refund idempotency key keeps a double click to one refund.
+
 ## Adding a real provider adapter
 
 1. Add the provider key to `PAYMENTS_MODE` in `apps/api/src/config/environment.ts`, plus the settings variant that
@@ -109,10 +149,9 @@ a stale one or a forged one. Nothing is written for a refused delivery.
 
 ## Production checklist for the owner
 
-The provider, its account, its fees, and refunds beyond recording the provider's event are the owner's decisions.
-Before production charges money:
+The provider is Mercado Pago (owner decision, `odd/tasks/owner-followups.md` L2). Before production charges money:
 
-1. Choose the provider and add its adapter (above), or keep `PAYMENTS_MODE=free` to publish without payment.
+1. Keep `PAYMENTS_MODE=free` to publish without payment, or set `PAYMENTS_MODE=mercadopago` with the variables above.
 2. Set `PAYMENTS_MODE` explicitly. It is required in production, and `simulated` is refused there.
 3. Put every provider credential in the deployment's secret storage, never in `apps/api/.env` committed to the
    repository, a log line, a response, a fixture, or a documentation example.
@@ -123,8 +162,8 @@ Before production charges money:
    the provider's own retries are enabled: a duplicate delivery is a no-op by design.
 7. Verify the provider's sandbox events end to end: forged, unsigned, stale, duplicate, out-of-order, and failed
    events, plus a price change after checkout (the payment must keep its amount).
-8. Decide how refunds are handled beyond recording the provider's `refunded` event; the API records the transition
-   and nothing else.
+8. Run one sandbox pass with test credentials: a refund of a never-published paid invitation, and the refusal of a
+   published one.
 
 ## Routes and codes
 
@@ -135,7 +174,9 @@ answers the same 404 as an unknown one.
 | --- | --- | --- |
 | `POST /invitations/:id/checkout` | `200 { paymentId, redirectUrl, amountMinor, currency }` | `409 PAYMENTS_DISABLED`, `409 PAYMENT_NOT_REQUIRED`, `409 PAYMENT_PRICE_UNAVAILABLE`, `409 PAYMENT_ALREADY_PAID`, `409 INVITATION_PACKAGE_LOCKED_BY_PAYMENT`, `409 INVITATION_NOT_EDITABLE`, `404 INVITATION_NOT_FOUND`, `503 PAYMENT_PROVIDER_UNAVAILABLE` |
 | `GET /invitations/:id/payment` | `200 { paymentRequired, status, amountMinor, currency, paidAt }` | `404 INVITATION_NOT_FOUND` |
-| `POST /payments/webhooks/:provider` (public) | `200 { outcome: "processed" }`, `200 { outcome: "duplicate" }` | `400 PAYMENT_WEBHOOK_REJECTED` (no detail), `404 PAYMENT_PROVIDER_NOT_FOUND` |
+| `POST /payments/webhooks/:provider` (public) | `200 { outcome: "processed" }`, `200 { outcome: "duplicate" }`, `200 { outcome: "ignored" }` | `400 PAYMENT_WEBHOOK_REJECTED` (no detail), `404 PAYMENT_PROVIDER_NOT_FOUND` |
+| `GET /admin/payments?status=paid&limit=<1..50>` (admin) | `200` newest paid payments with the invitation slug and `refundable` | `401`, `403`, `400` for another status or limit |
+| `POST /admin/payments/:paymentId/refund` (admin) | `200 { outcome: "requested" }`; the state changes only from the notification | `401`, `403`, `404 PAYMENT_NOT_FOUND`, `409 PAYMENT_NOT_REFUNDABLE`, `409 INVITATION_ALREADY_PUBLISHED`, `503 PAYMENT_PROVIDER_UNAVAILABLE` |
 | `POST /payments/simulated/:paymentId/emit` (owner) | `200 { outcome: "processed" }`, `200 { outcome: "duplicate" }` | `409 PAYMENT_SIMULATED_DISABLED`, `404 PAYMENT_NOT_FOUND`, `400` for an outcome other than `paid` or `failed` |
 
 `POST /invitations/:id/checkout` answers 200 and not 201: a repeated checkout resumes the same pending payment, with
@@ -173,18 +214,26 @@ client value can never make a page say "paid", and the API's publication gate st
   checkout's `redirectUrl` is followed only when it is an absolute `http`/`https` URL whose origin is exactly the web
   origin of the request that submitted the form (`requestOrigin`), whose path is exactly
   `/cuenta/invitaciones/<that invitation's UUID>/pago/simulado/<UUID>`, and which carries no credentials, query,
-  fragment, or trailing slash. Anything else — another origin, a protocol-relative URL, `javascript:` or `data:`, a
-  relative path, another invitation's id — fails closed with the page's own error notice
-  (`payment-redirect-refused`) instead of being followed, and a request whose own origin cannot be determined refuses
-  every redirect. This milestone's provider is the simulated one, so its page is the whole allow-list; a real provider
-  adapter needs its own host allow-list for its checkout domain, reviewed with that adapter (the provider is the
-  owner's decision, L1). `PAYMENTS_RETURN_BASE_URL` must therefore name the web origin the owner actually browses: a
-  different host or port than the request's own is refused, which is the fail-closed answer and not a bug.
+  fragment, or trailing slash. The one external address it follows is Mercado Pago's Checkout Pro `init_point`: an
+  `https` URL with no credentials or fragment whose host is `mercadopago` or `mercadolibre` on `.com` or `.com.mx`
+  (or a subdomain of those), the same rule the API adapter applies before answering it. Anything else — another
+  origin, `www.mercadopago.evil.com`, a protocol-relative URL, `javascript:` or `data:`, a relative path, another
+  invitation's id — fails closed with the page's own error notice (`payment-redirect-refused`) instead of being
+  followed, and a simulated redirect whose request origin cannot be determined is refused. `PAYMENTS_RETURN_BASE_URL`
+  must therefore name the web origin the owner actually browses: a different host or port than the request's own is
+  refused, which is the fail-closed answer and not a bug.
 - **Return page** (`/cuenta/invitaciones/<id>/pago`): the provider sends the browser here, and the page renders
   `GET /invitations/:id/payment` — «Estamos confirmando tu pago» with an «Actualizar» link while it is pending or
   absent, «Pago confirmado» with the amount and the date plus the way back to publish, «El pago no se completó» with a
   retry button that starts the checkout again, and a package that needs no payment goes straight back to the
-  invitation. A reload after the provider's webhook shows the new state because the read is never cached.
+  invitation, and a `refunded` payment says so with its own message. Mercado Pago's return query (`status`,
+  `collection_status`, `payment_id`, and the rest) is dropped before the page reads its own notices: it is never
+  payment state. A reload after the provider's notification shows the new state because the read is never cached.
+- **Admin refunds** (`/admin/pagos`, «Operación → Pagos»): an enrolled administrator sees the newest paid payments
+  (`GET /admin/payments?status=paid&limit=50`) with the invitation slug, and a «Reembolsar» form only on a row the
+  API marks `refundable`. The server action calls `POST /admin/payments/:paymentId/refund`, says the refund was
+  requested and that the state updates when Mercado Pago confirms it, and maps each refusal code to its own Spanish
+  sentence. The API's admin guard is what authorizes the refund; the hidden button is not.
 - **Simulated page** (`/cuenta/invitaciones/<id>/pago/simulado/<paymentId>`): the development-only page the simulated
   checkout redirects to, under `/cuenta` so the session proxy covers it. It shows «Pago de prueba», says that no real
   charge happens, and offers «Pagar» and «Simular rechazo», each one a server action that calls

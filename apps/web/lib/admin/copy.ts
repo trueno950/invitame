@@ -88,6 +88,8 @@ export const ADMIN_SHELL_COPY = {
   breadcrumbLabel: "Ruta de navegación",
   generalGroup: "General",
   catalogGroup: "Catálogo",
+  operationsGroup: "Operación",
   panel: "Panel",
   catalogOverview: "Resumen del catálogo",
+  payments: "Pagos",
 } as const;

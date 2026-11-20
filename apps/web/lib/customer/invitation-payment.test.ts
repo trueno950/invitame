@@ -18,6 +18,7 @@ import {
   paymentReturnView,
   simulatedPaymentView,
   startCheckout,
+  withoutProviderReturnParameters,
 } from "./invitation-payment.ts";
 import { INVITATION_PATHS } from "./invitations.ts";
 
@@ -37,6 +38,10 @@ const CHECKOUT: Checkout = {
   amountMinor: 150000,
   currency: "MXN",
 };
+
+/** The Checkout Pro page the API answers in `PAYMENTS_MODE=mercadopago`: the provider's own `init_point` (S1). */
+const MERCADOPAGO_CHECKOUT =
+  "https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=123456789-0b6f3e0e";
 
 /** The API's answer for a package that costs `$1,500.00` and has no payment yet (S4). */
 const UNPAID: InvitationPayment = {
@@ -176,6 +181,43 @@ describe("the checkout redirect allow-list", () => {
     assert.equal(checkoutRedirectPath(CHECKOUT.redirectUrl, ID, "localhost:3000"), undefined);
   });
 
+  it("follows the provider's own Checkout Pro page exactly as the API answered it", () => {
+    assert.equal(checkoutRedirectPath(MERCADOPAGO_CHECKOUT, ID, ORIGIN), MERCADOPAGO_CHECKOUT);
+    for (const providerUrl of [
+      "https://sandbox.mercadopago.com.mx/checkout/v1/redirect?pref_id=1",
+      "https://mercadopago.com.mx/checkout/v1/redirect?pref_id=1",
+      "https://www.mercadolibre.com.mx/checkout/v1/redirect?pref_id=1",
+    ]) {
+      assert.equal(checkoutRedirectPath(providerUrl, ID, ORIGIN), providerUrl, providerUrl);
+    }
+  });
+
+  it("follows the provider's page even when the request's own origin is unknown", () => {
+    // The provider's address is absolute and allow-listed by host, so it needs no origin of this page.
+    assert.equal(checkoutRedirectPath(MERCADOPAGO_CHECKOUT, ID, undefined), MERCADOPAGO_CHECKOUT);
+  });
+
+  it("refuses a redirect that only looks like the provider's page", () => {
+    for (const redirect of [
+      "http://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=1",
+      "https://mercadopago.com.mx.evil.example/checkout/v1/redirect?pref_id=1",
+      "https://evilmercadopago.com/checkout/v1/redirect?pref_id=1",
+      "https://www.mercadopago.evil.com/checkout/v1/redirect?pref_id=1",
+      "https://mercadolibre.attacker.co/checkout/v1/redirect?pref_id=1",
+      "https://mercadopago.com@evil.example/checkout/v1/redirect",
+      "https://evil.example/?mercadopago.com.mx",
+      "https://www.mercadopago.com.mx/checkout/v1/redirect#pagar",
+      "javascript:alert(1)",
+      "not a url",
+    ]) {
+      assert.equal(checkoutRedirectPath(redirect, ID, ORIGIN), undefined, redirect);
+    }
+  });
+
+  it("refuses any redirect for an id that is not the invitation's UUID", () => {
+    assert.equal(checkoutRedirectPath(MERCADOPAGO_CHECKOUT, "no-es-un-uuid", ORIGIN), undefined);
+  });
+
   it("refuses a query, a fragment, a trailing slash, credentials, and another invitation's page", () => {
     const path = PAYMENT_PATHS.simulatedPage(ID, PAYMENT_ID);
 
@@ -216,7 +258,7 @@ describe("the payment panel of a draft", () => {
   });
 
   it("offers a retry when the payment failed or expired", () => {
-    for (const status of ["failed", "expired", "refunded"] as const) {
+    for (const status of ["failed", "expired"] as const) {
       const view = paymentPanelView({ ...UNPAID, status });
 
       assert.equal(view.kind, "retry", status);
@@ -225,6 +267,13 @@ describe("the payment panel of a draft", () => {
       assert.equal(view.kind === "retry" && view.hint, PAYMENT_COPY.retryHint);
       assert.equal(view.kind === "retry" && view.amount, "$1,500.00 MXN");
     }
+  });
+
+  it("offers the same retry after a refund, because the package must be paid again", () => {
+    const view = paymentPanelView({ ...UNPAID, status: "refunded" });
+
+    assert.equal(view.kind, "retry");
+    assert.equal(view.kind === "retry" && view.action, PAYMENT_COPY.retry);
   });
 
   it("confirms the payment with its date once the API says paid", () => {
@@ -276,8 +325,8 @@ describe("the return page of one payment", () => {
     }
   });
 
-  it("offers a retry after a failed, expired, or refunded payment", () => {
-    for (const status of ["failed", "expired", "refunded"] as const) {
+  it("offers a retry after a failed or expired payment", () => {
+    for (const status of ["failed", "expired"] as const) {
       const view = paymentReturnView({ ...UNPAID, status });
 
       assert.equal(view.kind, "failed", status);
@@ -286,6 +335,16 @@ describe("the return page of one payment", () => {
       assert.equal(view.kind === "failed" && view.retry, PAYMENT_COPY.retry);
       assert.equal(view.kind === "failed" && view.amount, "$1,500.00 MXN");
     }
+  });
+
+  it("explains a refund instead of a charge that never happened", () => {
+    const view = paymentReturnView({ ...UNPAID, status: "refunded" });
+
+    assert.equal(view.kind, "refunded");
+    assert.equal(view.kind === "refunded" && view.heading, PAYMENT_COPY.refundedHeading);
+    assert.equal(view.kind === "refunded" && view.body, PAYMENT_COPY.refundedBody);
+    assert.equal(view.kind === "refunded" && view.amount, "$1,500.00 MXN");
+    assert.equal(view.kind === "refunded" && view.retry, PAYMENT_COPY.retry);
   });
 
   it("sends a package that needs no payment straight back to the invitation", () => {
@@ -322,6 +381,41 @@ describe("the simulated payment page", () => {
   });
 });
 
+describe("the provider's return query", () => {
+  it("drops every provider hint before the page reads its own notice codes", () => {
+    assert.deepEqual(
+      withoutProviderReturnParameters({
+        status: "approved",
+        collection_status: "approved",
+        payment_id: "123456789",
+        external_reference: ID,
+        preference_id: "123456789-abc",
+        merchant_order_id: "987654321",
+        payment_type: "credit_card",
+        site_id: "MLM",
+        processing_mode: "aggregator",
+        error: "payment-required",
+      }),
+      { error: "payment-required" },
+    );
+  });
+
+  it("drops a capitalised or forged spelling of a provider hint too", () => {
+    assert.deepEqual(withoutProviderReturnParameters({ Status: "approved", PAYMENT_ID: "1" }), {});
+  });
+
+  it("keeps the page's own parameters and never changes the input", () => {
+    const parameters = { error: "not-found", notice: "published", issues: ["uno", "dos"] };
+
+    assert.deepEqual(withoutProviderReturnParameters(parameters), parameters);
+    assert.deepEqual(parameters, {
+      error: "not-found",
+      notice: "published",
+      issues: ["uno", "dos"],
+    });
+  });
+});
+
 describe("startCheckout", () => {
   it("starts the checkout and redirects to the payment page the API answered", async () => {
     const { client, calls } = fakeClient({ checkout: { ok: true, value: CHECKOUT } });
@@ -330,6 +424,17 @@ describe("startCheckout", () => {
       await startCheckout(client, form({ id: ID }), ORIGIN),
       PAYMENT_PATHS.simulatedPage(ID, PAYMENT_ID),
     );
+    assert.deepEqual(calls, [
+      { method: "POST", path: `/invitations/${ID}/checkout`, body: undefined },
+    ]);
+  });
+
+  it("sends the browser to Mercado Pago's own Checkout Pro page when the API answers one", async () => {
+    const { client, calls } = fakeClient({
+      checkout: { ok: true, value: { ...CHECKOUT, redirectUrl: MERCADOPAGO_CHECKOUT } },
+    });
+
+    assert.equal(await startCheckout(client, form({ id: ID }), ORIGIN), MERCADOPAGO_CHECKOUT);
     assert.deepEqual(calls, [
       { method: "POST", path: `/invitations/${ID}/checkout`, body: undefined },
     ]);

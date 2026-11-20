@@ -118,7 +118,7 @@ export function PaymentReturnBody({
     );
   }
 
-  if (view.kind === "failed") {
+  if (view.kind === "failed" || view.kind === "refunded") {
     return (
       <>
         <p className={statusNote}>{view.body}</p>

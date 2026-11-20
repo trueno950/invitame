@@ -44,8 +44,8 @@ security-sensitive design before implementation; this document is that reviewed 
 | --- | --- | --- | --- | --- |
 | T1 | Env + port changes (query on webhook, refund method) + Mercado Pago adapter with fake-HTTP specs | S1, S2, S4 | worker | see L4 |
 | T2 | Refund rule: admin route, never-published check, provider refund call | S3, S4 | worker | see L5 |
-| T3 | Web: Checkout Pro redirect and return page states; admin refund button | S1, S3 | worker | |
-| T4 | Docs (README env rows, payments docs, ROADMAP M7), native review, PRs, CI, merge | S1-S4 | inline | |
+| T3 | Web: Checkout Pro redirect and return page states; admin refund button | S1, S3 | worker | see L6 |
+| T4 | Docs (README env rows, payments docs, ROADMAP M7), native review, PRs, CI, merge | S1-S4 | inline | see L6 |
 
 ## Needs the owner
 
@@ -82,3 +82,17 @@ security-sensitive design before implementation; this document is that reviewed 
   a `refundable` flag) and `POST /admin/payments/:paymentId/refund` (409 unless `paid` and never published, 503 when
   the provider refuses; `refunded` only from the verified notification). Evidence: typecheck, lint, format pass; API
   1751 unit and 401 db-specs (disposable database) pass.
+- L6 — T3 (worker): the checkout redirect allow-list follows a Mercado Pago `init_point`; the return page drops the
+  provider's return query and renders only the API's state, with its own `refunded` view; `/admin/pagos` lists paid
+  payments and requests a refund where `refundable`. The parent found the provider host pattern (web and the T1 API
+  adapter) accepted `www.mercadopago.evil.com`; both now allow only `mercadopago`/`mercadolibre` on `.com` or
+  `.com.mx` (RED observed in both specs). T4: `docs/development/payments.md` and `ROADMAP.md` M7. Evidence: API 1751
+  and web 1655 tests, typecheck, lint, format, docs:check, and diff-check pass.
+- L7 — Delivery shape: three chained PRs — `feat/mercadopago-1-adapter` (4a1636c), `feat/mercadopago-2-refund`
+  (87a6b4f, d16d776, 67840dd), `feat/mercadopago-3-web` (70a7964, 562c154). Slice 1 native review
+  `review-a3aaf74ba7e41093` approved and acknowledged; advisories kept for a follow-up: refund events carry the approval
+  time, a refund retry after the provider already refunded cannot confirm it, and a signed notification without a topic
+  is ignored instead of refused. Slice 2 review `review-242ad9e08d5e50ef` found a publish/refund race (CRITICAL);
+  67840dd claims `Invitation.refundRequestedAt` on the row before the provider call and publish requires it NULL
+  (API 1752 unit and 403 db-specs pass). Its provider route is `recover` (scope_changed), which the facade refuses in
+  this session (`input must be a string`).

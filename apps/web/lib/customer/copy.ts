@@ -500,6 +500,9 @@ export const PAYMENT_COPY = {
   failedHeading: "El pago no se completó",
   failedBody:
     "No se cobró tu paquete. Puedes intentarlo de nuevo cuando quieras; tu invitación sigue guardada como borrador.",
+  refundedHeading: "Tu pago fue reembolsado",
+  refundedBody:
+    "Te devolvimos el importe de tu paquete. Para publicar tu invitación primero hay que pagarla de nuevo.",
   notRequiredHeading: "Esta invitación no necesita pago",
   notRequiredBody: "Puedes publicarla desde su página, sin costo.",
   unavailableHeading: "No pudimos consultar el pago",

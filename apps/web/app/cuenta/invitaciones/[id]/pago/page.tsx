@@ -7,6 +7,7 @@ import { editorSectionTarget } from "../../../../../lib/customer/editor-sections
 import {
   PAYMENT_PATHS,
   paymentReturnView,
+  withoutProviderReturnParameters,
 } from "../../../../../lib/customer/invitation-payment.ts";
 import {
   INVITATION_PATHS,
@@ -28,11 +29,12 @@ export const metadata: Metadata = {
 type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
 
 /**
- * `/cuenta/invitaciones/[id]/pago` (M7 T2; S1, S4): where the provider sends the browser back after a checkout. The
- * page renders the API's own payment state — never a query parameter, a cookie, or a client value — so a webhook the
- * API received while the browser was away decides what the owner sees, and a reload after it shows the new state. A
- * package that needs no payment goes straight back to the invitation; a failed or expired payment offers the retry,
- * which starts the checkout again.
+ * `/cuenta/invitaciones/[id]/pago` (M7 T2, T3; S1, S4): where the provider sends the browser back after a checkout, with
+ * whatever query it appends (`status`, `collection_status`, `payment_id`, …). Those parameters are untrusted hints and
+ * are dropped before the page reads its own notice codes, so the page renders the API's own payment state — never a
+ * query parameter, a cookie, or a client value — and a webhook the API received while the browser was away decides what
+ * the owner sees. A package that needs no payment goes straight back to the invitation; a failed, expired, or refunded
+ * payment offers the retry, which starts the checkout again.
  */
 export default async function InvitationPaymentPage({
   params,
@@ -43,7 +45,7 @@ export default async function InvitationPaymentPage({
 }) {
   await connection();
   const [{ id }, parameters] = await Promise.all([params, searchParams]);
-  const notices = invitationPageNotices(parameters);
+  const notices = invitationPageNotices(withoutProviderReturnParameters(parameters));
   const backLink = (
     <Link className={quietButton} href={INVITATION_PATHS.list}>
       {INVITATION_COPY.backToList}
