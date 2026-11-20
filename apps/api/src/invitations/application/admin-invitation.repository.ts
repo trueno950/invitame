@@ -1,3 +1,4 @@
+import type { AdminActionReason } from "../../admin/admin-action-recorder";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { InvitationPageCursor } from "./invitation-cursor";
 
@@ -40,6 +41,17 @@ export interface AdminInvitationQuery {
 }
 
 /**
+ * Why an administrator unpublished an invitation and who did it (T8; S4, S6): the one audit row the change writes
+ * names both, and the actor is the session's own id, never a client-supplied one.
+ */
+export interface AdminInvitationUnpublishAudit {
+  adminUserId: string;
+  reason: AdminActionReason;
+  /** The administrator's optional note, as they sent it: the recorder trims it and enforces its bound. */
+  note: string | null;
+}
+
+/**
  * The administrator's invitation read (M9 T2; S1). Reads only: nothing here writes, and nothing here answers a
  * request field it was not asked for.
  */
@@ -52,6 +64,20 @@ export interface AdminInvitationRepository {
 
   /** One invitation whatever its owner and status, or null when no row has this id. */
   findForAdmin(invitationId: string): Promise<AdminInvitationRow | null>;
+
+  /**
+   * The one administrator write of this module (T8; S4, S6, L9): PUBLISHED → DRAFT for any owner, with the audit row
+   * `audit` describes written in the same transaction, so the change and its record commit together or not at all.
+   *
+   * `firstPublishedAt` is untouched: unpublishing returns the invitation to a draft and never erases the publication
+   * the refund rule reads. Null means no invitation has this id (the route's 404); an invitation that is not
+   * published refuses with the domain's own error (`InvitationNotPublishedError` for a DRAFT,
+   * `InvitationAlreadyArchivedError` for an ARCHIVED row), and nothing is written to the change or the audit.
+   */
+  unpublishForAdmin(
+    invitationId: string,
+    audit: AdminInvitationUnpublishAudit,
+  ): Promise<AdminInvitationRow | null>;
 }
 
 export const ADMIN_INVITATION_REPOSITORY = Symbol("AdminInvitationRepository");

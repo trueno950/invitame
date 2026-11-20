@@ -12,7 +12,7 @@ explicitly planned unless marked current.
 | --- | --- | --- |
 | Web | `apps/web` is a Next.js 16 App Router app with an honest pre-launch landing page at `/` (see Landing page below), a proxy for `/api/auth`, a server-side API client, and the customer pages `/ingresar` (sign-in by emailed code) and `/cuenta` (own profile and sign-out) with `/cuenta/invitaciones` (own invitation drafts: list, create from a published template and an active package, and edit them in a tabbed editor of «Contenido», «Fotos», «Funciones», «Asistencia», and «Publicar» where every field saves on its own and, from 1024 px up, the stored draft renders live beside the fields; archive) with that editor's owner-only preview `/cuenta/invitaciones/<id>/vista-previa` (the stored draft rendered by the guest registry and features block for the editor's live frame; noindex, per request, 404 for anyone else), the guest page `/i/<slug>` of a published invitation (rendered per request, with its feature block and its `/i/<slug>/calendario.ics` download), and the administrator pages `/admin/ingresar` (password and second factor), `/admin/activar` (authenticator-app enrollment), and `/admin` (a minimal panel with sign-out); the pages use the visual theme «A · Rosa y vino» ([`docs/design/theme.md`](../design/theme.md): Tailwind tokens, fonts committed in the repository and loaded with `next/font/local` so the build needs no network for them, fine-line SVG ornaments, and a contrast test). | Guests, RSVP, payment, and media. **Planned** (Milestones 6–8). |
 | API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling, administrator creation, and administrator recovery by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
-| Database | PostgreSQL and Prisma own `User` and the identity tables Better Auth reads and writes (sessions, credential accounts, verification codes, two-factor records, and rate-limit counters) plus the catalog, packages, features, templates, immutable template versions, `Invitation` drafts pinned to a version, RSVP answers, guests, media rows, and the `Payment`/`PaymentEvent` payment core; see [`model.md`](../database/model.md). | Analytics. **Planned.** |
+| Database | PostgreSQL and Prisma own `User` and the identity tables Better Auth reads and writes (sessions, credential accounts, verification codes, two-factor records, and rate-limit counters) plus the catalog, packages, features, templates, immutable template versions, `Invitation` drafts pinned to a version, RSVP answers, guests, media rows, the `Payment`/`PaymentEvent` payment core, and the append-only `AdminAction` support-action audit; see [`model.md`](../database/model.md). | Analytics. **Planned.** |
 | Catalog | The API `catalog` module (`apps/api/src/catalog`) serves administrator-only endpoints under `/admin/catalog` for categories, features, packages with their features and MXN prices, templates, and template versions (create, publish, retire); the web pages under `/admin/catalogo` call them from the server. See Catalog administration below. Signed-in creators read the published templates and active packages through `GET /catalog/templates` and `GET /catalog/packages`, served from the catalog's public application contract (`CatalogPublicReader`); the template read also answers the published version's own `configuration` snapshot, so the creator chooser can preview each template with the real renderer instead of a stored screenshot. | Anonymous catalog browsing. **Planned.** |
 | Invitations | The API `invitations` module (`apps/api/src/invitations`) lets a signed-in customer create, list, read, edit the content of, edit the feature data of, and archive their own drafts under `/invitations`, and publish (`POST /invitations/:id/publish`) or unpublish them; publication requires every required field, content that still validates, a package that still fits, and a pinned version that is still published, and it asks a payment gate whose answer depends on `PAYMENTS_MODE`: `free` keeps "no payment required", and every mode that charges requires a verified `paid` payment for the invitation's current package (see Checkout and payments below). A published invitation stays editable live. Each invitation stores an IANA `timeZone` and one optional `InvitationFeatureSettings` row keyed by the invitation, written through `PUT /invitations/:id/features` (creator-owned, validated, refused for an archived invitation like a content save); the domain gates what a guest may see as the pinned package's feature keys intersected with the implemented allow-list `COUNTDOWN`, `MAP`, `RSVP`, `WHATSAPP`, `MUSIC`, `GIFT_REGISTRY`, `GUEST_LIST`, and `QR_PASS` (the precise-locations batch adds the `InvitationPlace` table behind `PUT`/`DELETE /invitations/:id/places/:field` and an owner-only `GET /invitations/:id/places/search?q=`, and both reads carry a `places` map keyed by address field — see Precise locations below), plus the always-available calendar, with WhatsApp only while a phone is stored and music only while an allow-listed playlist link is stored. Guests read it through the public, uncacheable `GET /public/invitations/:slug`, which returns only the slug, `componentKey`, configuration, the pinned schema's content, `publishedAt`, `timeZone`, and the gated `features` (`countdown`, `map`, `calendar`, `whatsapp`, `music` as `{ url, provider, title, coverUrl }` or null, `giftRegistry`, and `rsvp` as `{ mode: "open" | "guest-list" | null, deadline, partyLimit, qrPass }`, where `qrPass` is true only while the package grants both the guest list and its access pass); nothing about the package travels. Milestone 6 G1 adds the open RSVP: a creator sets the deadline and the party limit (`PUT /invitations/:id/rsvp-settings`, refused for an archived invitation), reads the answers with their totals (`GET /invitations/:id/rsvp`), and downloads them as a spreadsheet-safe CSV attachment (`GET /invitations/:id/rsvp.csv`); a guest submits `POST /public/invitations/:slug/rsvp` without a session, which is refused unless the invitation is published, its package grants `RSVP` without `GUEST_LIST`, and the deadline has not passed, is limited to 10 submissions per hour per client address and invitation on the shared `RateLimit` store, drops a submission whose honeypot field is filled while answering the same 202, and upserts on `(invitationId, dedupeKey)` so a retry never duplicates. Milestone 6 G2 adds the guest list behind `GUEST_LIST`: the creator lists the guests with their answers, check-in state, and totals (`GET /invitations/:id/guests`), adds one (`POST /invitations/:id/guests`, which answers the plain personal token once), edits one (`PUT /invitations/:id/guests/:guestId`), removes one together with the answer it gave (`DELETE /invitations/:id/guests/:guestId`), and rotates one's link (`POST /invitations/:id/guests/:guestId/token`); the CSV export becomes the guest list, pending guests and check-in times included, while the open form keeps its own export. A personal link is `/i/<slug>/g/<token>`, read through `GET /public/invitations/:slug/guests/:token` as the same public projection plus one `guest` block, and answered through `POST /public/invitations/:slug/guests/:token/rsvp`; both answer the one public 404 for every unknown, revoked, or foreign token, the answer is validated against the guest's own seats, and a submission is limited per guest on the shared `RateLimit` store. With `QR_PASS`, the owner checks a confirmed guest in through `POST /invitations/:id/guests/check-in`, which keeps the first check-in instant, and the personal page offers the access QR only to a confirmed guest. Every guest route is refused with 409 `GUEST_LIST_NOT_AVAILABLE` (or `QR_PASS_NOT_AVAILABLE` for the check-in) unless the pinned package grants the key. The web draft page's «Funciones» tab holds that feature data (the time zone select, the WhatsApp contact and the playlist link when the pinned package includes them, the note that names the packages granting the gift registry, and the automatic features the guests will see), and each field saves on its own through the editor's autosave. A draft pins a published `TemplateVersion` and an active package that includes the renderer's required feature keys, gets a generated unique slug, and stores partial content validated against the pinned schema; the owner comes only from the session and another owner's draft answers 404. See `odd/tasks/m4-invitations.md` and `odd/tasks/invitation-features.md`. | Payment, the web guest list and QR pages (M6 G4), media, expiration rules, and slug regeneration. **Planned.** |
 | Renderer | An allow-listed renderer registry: the API validates each version's `schema` and `configuration` against the renderer contract at creation and publication, and the web maps `componentKey` to a reviewed component; a test keeps both key lists equal. The registered renderers are the three themed birthday layouts `birthday-map-01`, `birthday-poster-01`, and `birthday-story-01` with the shared eight-theme allow-list, the baby shower layout `baby-shower-classic-01` with its eight baby shower themes, the themed baptism layout `baptism-classic-01` with its six themes, the three elegant «Arco y foto» layouts `xv-arch-01`, `wedding-arch-01`, and `baptism-arch-01`, and the three elegant «Ornamental» layouts `xv-ornamental-01`, `wedding-ornamental-01`, and `baptism-ornamental-01`, all six with the shared eight elegant themes; each takes exactly `{ componentKey, theme }`. The earlier single design `birthday-adventure-01` was deleted when the themed layouts replaced it. | Further layouts and themes per occasion. **Planned.** |
@@ -41,6 +41,8 @@ The current API tree is intentionally small:
 
 ```text
 apps/api/src/
+  admin/        the append-only support-action audit: the `AdminAction` domain rules and the one public
+                `AdminActionRecorder` contract that writes a row inside the caller's transaction
   auth/         Better Auth instance factory, integration registration, access control, and sign-in code delivery
   config/       startup environment validation and the configuration module
   database/     Prisma module and service
@@ -1060,8 +1062,9 @@ ephemeral filesystem in production.
 
 ## Administrator invitation status view (current)
 
-Implemented by Milestone 9 T2 (S1, L3, L4). An administrator searches one invitation and reads its operational state —
-lifecycle dates, payment, and photo counts — with no personal data beyond the owner's email.
+Implemented by Milestone 9 T2 (S1, L3, L4), with the administrator's unpublish added by T8 (S4, S6, L9). An
+administrator searches one invitation and reads its operational state — lifecycle dates, payment, and photo counts —
+with no personal data beyond the owner's email, and may unpublish one invitation with an audited reason.
 
 - Module ownership: the `invitations` module owns `Invitation` and serves both routes; a separate global read port
   (`ADMIN_INVITATION_REPOSITORY`, `PrismaAdminInvitationRepository`) answers them, bound apart from the owner-scoped
@@ -1080,14 +1083,26 @@ lifecycle dates, payment, and photo counts — with no personal data beyond the 
   covers a canonical instant outside the years a stored `createdAt` can have (1970..9999): JavaScript `Date` reaches
   ±275760 and writes those years in an expanded six-digit form PostgreSQL cannot read as a `timestamptz` at all, so
   such a cursor is malformed here instead of a database error later.
-- `GET /admin/invitations/:invitationId` answers 200 with `AdminInvitationDetail` (the same fields plus `packageId`,
-  `templateVersionId`, and the newest 20 payments) or 404 `INVITATION_NOT_FOUND`. The payment port documents that
-  bound and the adapter clamps every request into `1..20`, so no caller widens the read; the detail read answers the
-  404 for an id that is not a UUID too, instead of a cast error.
+- `GET /admin/invitations/:invitationId` answers 200 with `AdminInvitationDetail` (the same fields plus `ownerId`,
+  `packageId`, `templateVersionId`, and the newest 20 payments) or 404 `INVITATION_NOT_FOUND`. `ownerId` is the
+  additive reference T8 adds so a support action can address the owner's account; it is an identifier, never the
+  display name the view does not answer, and the list keeps «solo el correo» (L3). The payment port documents the
+  payment bound and the adapter clamps every request into `1..20`, so no caller widens the read; the detail read
+  answers the 404 for an id that is not a UUID too, instead of a cast error.
+- `POST /admin/invitations/:invitationId/unpublish` (T8; S4, S6) is `@AdminOnly()` and takes the actor from
+  `@SessionUserId()`, never from the body. The body is `{ reason, note? }`: a reason of the audit's closed set, and a
+  note at most 500 characters that is required — non-blank — for `OTHER`, refused with 400 otherwise (the body DTO
+  states the rule and the audit domain repeats it). It answers 200 with the same `AdminInvitationDetail`, or 404
+  `INVITATION_NOT_FOUND`, 409 `INVITATION_NOT_PUBLISHED` for a draft, and 409 `INVITATION_ALREADY_ARCHIVED`. The write
+  is one Prisma interactive transaction in `PrismaAdminInvitationRepository.unpublishForAdmin`: the guarded
+  `updateMany({ where: { id, status: "PUBLISHED" }, data: { status: "DRAFT", publishedAt: null } })` — the owner
+  unpublish's transition without the owner scope — and then `AdminActionRecorder.record(tx, …)` through the same
+  client, so the change and its `AdminAction` row commit together or not at all. `firstPublishedAt` is untouched, a
+  refused unpublish writes no audit row, and no refund is created; the web page says so (S4).
 - Privacy (S1, L3): a summary is `{ invitationId, slug, status, ownerEmail, createdAt, publishedAt,
   firstPublishedAt, archivedAt, refundRequestedAt, latestPayment: { status, amountMinor, currency, paidAt } | null,
-  media: { mainPhoto, galleryCount } }`; a detail adds the pinned references and `payments: { paymentId, status,
-  amountMinor, currency, createdAt, paidAt }[]`. No invitation `content`, no owner display name or id, no guests or
+  media: { mainPhoto, galleryCount } }`; a detail adds `ownerId`, the pinned references, and `payments: { paymentId,
+  status, amountMinor, currency, createdAt, paidAt }[]`. No invitation `content`, no owner display name, no guests or
   RSVP answer, and no provider payload or payer datum is read, mapped, or logged — the adapter's `SELECT` is the
   rule, and the mappers project only the contract's fields.
 - Migration `20261125120000_add_invitation_status_created_at_index` adds `Invitation(status, createdAt)` additively
@@ -1095,15 +1110,54 @@ lifecycle dates, payment, and photo counts — with no personal data beyond the 
   `20261126120000_add_invitation_created_at_id_index` adds `Invitation(createdAt, id)` the same way for the unfiltered
   page, built concurrently so it takes no `SHARE` lock on the table; see
   [`../database/model.md`](../database/model.md).
+- Web (T3, T8): `/admin/invitaciones/<id>` shows the status and, while the invitation is published, an «Acciones de
+  soporte» card whose one form posts to `app/admin/invitaciones/actions.ts` (`unpublishInvitation` in
+  `lib/admin/invitations/commands.ts` reads it): a reason select over the closed set, a note textarea bounded at 500
+  characters, and the sentence «Despublicar no genera un reembolso.». It works without JavaScript and redirects after
+  POST with `?notice=` or `?error=` and a code from a fixed list (`lib/admin/invitations/notices.ts`); the client
+  (`lib/server/admin-invitations-client.ts`) maps a 404 to `not-found`, each 409 to `not-published` or
+  `already-archived`, 400 to `validation`, and 5xx to `unavailable`, and parses `ownerId` in the detail validator. Each
+  row of the invitation's payments list links to `/admin/pagos/<paymentId>`.
 - Tests: `src/invitations/application/admin-invitation.use-cases.spec.ts` (fakes: key-set paging over equal
   `createdAt`, one batched read per facet, the cursor's contract and its instant window, the payment bound, the exact
-  field set), `src/invitations/presentation/admin-invitations.controller.spec.ts` (401/403/400/404 and the response
-  shape through the shared app boundary, including 400 `INVALID_CURSOR` for an out-of-window instant),
-  `src/invitations/infrastructure/prisma-admin-invitation.repository.spec.ts` (a non-UUID detail id answers null
-  without a query), `src/payments/infrastructure/prisma-invitation-payment-reader.spec.ts` (the adapter clamps to
-  `1..20`), and `src/invitations/infrastructure/admin-invitations.prisma.db-spec.ts` (both indexes, the cursor
-  refusal against PostgreSQL, paging across pages with one identical `createdAt`, the slug prefix with `%` and `_`,
-  the status filter, the batched payment, media, and owner reads, and that nothing outside the contract is answered).
+  field set, and the unpublish use case's audit pass-through and refusals),
+  `src/invitations/presentation/admin-invitations.controller.spec.ts` (401/403/400/404/409 and the response shape
+  through the shared app boundary, including 400 `INVALID_CURSOR` for an out-of-window instant and the unpublish's
+  200/404/409s), `src/invitations/infrastructure/prisma-admin-invitation.repository.spec.ts` (a non-UUID detail id
+  answers null without a query; the guarded unpublish writes the audit row with the caller's transaction and a
+  refusal records nothing), `src/payments/infrastructure/prisma-invitation-payment-reader.spec.ts` (the adapter clamps
+  to `1..20`), and `src/invitations/infrastructure/admin-invitations.prisma.db-spec.ts` with
+  `admin-invitation-unpublish.prisma.db-spec.ts` (both indexes, the cursor refusal against PostgreSQL, paging across
+  pages with one identical `createdAt`, the slug prefix with `%` and `_`, the status filter, the batched payment,
+  media, and owner reads, that nothing outside the contract is answered, and the unpublish committing its audit row,
+  writing none for a refusal, and rolling back when the audit entry is refused).
+
+## Administrator audit (current)
+
+Implemented by Milestone 9 T6 (S4, S6, L8, L9): the durable record of who changed something, what they changed, and
+why. This slice is the audit foundation only; the routes that write it arrive in later tasks.
+
+- Module ownership: a new `admin` module (`apps/api/src/admin`) owns the `AdminAction` table
+  (migration `20261127120000_add_admin_actions`, additive: two enum types, the table, the checks, the indexes, the
+  references, and the trigger; see [`../database/model.md`](../database/model.md)). Its domain
+  (`domain/admin-action.ts`) holds the two closed sets — `INVITATION_UNPUBLISHED`, `ACCOUNT_DISABLED`,
+  `ACCOUNT_REACTIVATED`, `SIGN_IN_CODE_RESENT` and `ABUSE`, `OWNER_REQUEST`, `PAYMENT_ERROR`, `OTHER` — and validates
+  one entry: the note trimmed and at most 500 characters, present and non-blank for `OTHER`, and exactly the one
+  target the action names. Viewing a payment is not an action and writes no row.
+- The one public contract is `AdminActionRecorder` (`admin-action-recorder.ts`, DI token `ADMIN_ACTION_RECORDER`,
+  exported by `admin.module.ts`): `record(tx: Prisma.TransactionClient, entry)` validates the entry and inserts the
+  row through the transaction client its caller passes, never opening one of its own. The module that owns the
+  changed state therefore writes its change and the audit row in one transaction (L9 «Misma transacción»), the
+  resend action records the request before delivering the code, and `admin.module.ts` states that no other code
+  writes `AdminAction`.
+- The row is final: `AdminAction_append_only` (`BEFORE UPDATE OR DELETE`) raises on every row, so a stored audit row
+  cannot be rewritten or removed. Its three references are `ON DELETE RESTRICT`, so the actor, the target account,
+  and the invitation an audit row names cannot be deleted while it exists.
+- Tests: `src/admin/domain/admin-action.spec.ts` (the closed sets, the note rules, the target rules, and the
+  malformed-id refusals), `src/admin/admin.wiring.spec.ts` (the recorder resolves from `AppModule`), and
+  `src/admin/infrastructure/admin-action.prisma.db-spec.ts` (the migration's enums, columns, checks, indexes, and
+  references; a row written with the caller's transaction and rolled back with its change; each CHECK refusing its
+  bad case; the trigger refusing UPDATE and DELETE; and the three `RESTRICT` refusals).
 
 ## Playlist metadata (current)
 

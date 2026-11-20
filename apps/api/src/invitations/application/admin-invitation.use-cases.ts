@@ -1,3 +1,4 @@
+import type { AdminActionReason } from "../../admin/admin-action-recorder";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { AdminInvitationRepository, AdminInvitationRow } from "./admin-invitation.repository";
 import { decodeInvitationCursor, encodeInvitationCursor } from "./invitation-cursor";
@@ -62,6 +63,11 @@ export interface AdminInvitationPage {
 
 /** One invitation as the detail page reads it: the summary plus its pinned references and its newest payments. */
 export interface AdminInvitationDetail extends AdminInvitationSummary {
+  /**
+   * The owner's id, the additive reference of T8 (S4): the support card needs it to address the owner's account, and
+   * it is an identifier, never personal data like the display name the view never answers.
+   */
+  ownerId: string;
   packageId: string;
   templateVersionId: string;
   /** The newest payments, at most `ADMIN_INVITATION_DETAIL_PAYMENT_LIMIT`, newest first. */
@@ -189,9 +195,51 @@ export class GetAdminInvitationUseCase {
       ...toSummary(row, new Map(), counts, emails),
       // The newest payment of the bounded list is the same one the summary's `latestPayment` states.
       latestPayment: payments[0] ?? null,
+      ownerId: row.ownerId,
       packageId: row.packageId,
       templateVersionId: row.templateVersionId,
       payments,
     };
+  }
+}
+
+/** One administrator's unpublish request: which invitation, who asked, and why (T8; S4, S6). */
+export interface AdminUnpublishCommand {
+  invitationId: string;
+  /** The signed-in administrator's own id, never a client-supplied actor (S6). */
+  adminUserId: string;
+  reason: AdminActionReason;
+  /** The optional note, as the administrator sent it; the audit domain trims it and enforces its bound. */
+  note: string | null;
+}
+
+/**
+ * An administrator unpublishes one invitation, by abuse report or at the owner's request (T8; S4, S6, L9). The change
+ * and its audit row are one transaction in the repository, so the invitation is never a draft without a record of who
+ * made it one. The answer is the same detail the read route serves, so the page renders the new state from the API's
+ * own answer instead of guessing it.
+ *
+ * Null means no invitation has this id; the refusals of an invitation that is not published come from the port
+ * unchanged, so presentation can answer its own conflict codes.
+ */
+export class UnpublishAdminInvitationUseCase {
+  constructor(
+    private readonly invitations: AdminInvitationRepository,
+    private readonly detail: GetAdminInvitationUseCase,
+  ) {}
+
+  async execute(command: AdminUnpublishCommand): Promise<AdminInvitationDetail | null> {
+    const unpublished = await this.invitations.unpublishForAdmin(command.invitationId, {
+      adminUserId: command.adminUserId,
+      reason: command.reason,
+      note: command.note,
+    });
+
+    if (unpublished === null) {
+      return null;
+    }
+
+    // The write read the row back; the detail read then answers the facets the page shows (payments, photos, owner).
+    return this.detail.execute(unpublished.invitationId);
   }
 }

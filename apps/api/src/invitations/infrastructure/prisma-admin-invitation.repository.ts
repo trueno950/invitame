@@ -1,12 +1,17 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import type { AdminActionRecorder } from "../../admin/admin-action-recorder";
+import { ADMIN_ACTION } from "../../admin/admin-action-recorder";
 import type {
   AdminInvitationQuery,
   AdminInvitationRepository,
   AdminInvitationRow,
+  AdminInvitationUnpublishAudit,
 } from "../application/admin-invitation.repository";
 import { isInvitationId } from "../application/invitation-cursor";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
+import { unpublish } from "../domain/invitation-lifecycle";
+import { InvitationNotPublishedError } from "../domain/invitation.errors";
 
 // The administrator's invitation read on PostgreSQL (M9 T2; S1). Two rules shape this adapter:
 //
@@ -18,6 +23,11 @@ import type { InvitationStatus } from "../domain/invitation-lifecycle";
 // The slug prefix is a case-insensitive `LIKE` over the stored slug. `%` and `_` are the pattern's own wildcards, so
 // they are escaped and the statement declares the escape character: a prefix a slug cannot contain (`_`, `%`) then
 // matches only itself instead of everything.
+//
+// The one write (T8; S4, S6, L9) is the administrator's unpublish: the same guarded transition the owner's own
+// unpublish performs, without the owner scope, plus the audit row the caller's `AdminActionRecorder` writes through the
+// same transaction client. The two statements are one unit: if the audit entry is refused, the transition rolls back
+// with it, so an invitation is never a draft without a record of who made it one.
 
 /** One row as the statement returns it: the stored enum label, not a Prisma client enum name. */
 interface AdminInvitationSqlRow {
@@ -87,8 +97,21 @@ function escapeLikePattern(prefix: string): string {
   return prefix.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
+/**
+ * The refusal of a guarded update that matched nothing: the domain transition states which one it is — a DRAFT answers
+ * `InvitationNotPublishedError` and an ARCHIVED row `InvitationAlreadyArchivedError` (S7, A2) — so the route keeps its
+ * two 409 codes. A PUBLISHED row cannot reach the fallback: the guarded update matches exactly that status.
+ */
+function refusedUnpublish(status: InvitationStatus): never {
+  unpublish(status);
+  throw new InvitationNotPublishedError();
+}
+
 export class PrismaAdminInvitationRepository implements AdminInvitationRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly actions: AdminActionRecorder,
+  ) {}
 
   async listForAdmin(query: AdminInvitationQuery): Promise<AdminInvitationRow[]> {
     const conditions: Prisma.Sql[] = [];
@@ -136,5 +159,56 @@ export class PrismaAdminInvitationRepository implements AdminInvitationRepositor
     });
 
     return row === null ? null : toRow(row);
+  }
+
+  async unpublishForAdmin(
+    invitationId: string,
+    audit: AdminInvitationUnpublishAudit,
+  ): Promise<AdminInvitationRow | null> {
+    // The route already refuses a parameter that is not a UUID; this guard is for a direct caller, and it costs no
+    // transaction. "No such row" is the same null the route maps to its one 404.
+    if (!isInvitationId(invitationId)) {
+      return null;
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const changed = await tx.invitation.updateMany({
+        // The guard is the whole transition: only a PUBLISHED row changes, and the status and its marker move in the
+        // same statement, as the `Invitation_publishedAt_matches_status` check requires. `firstPublishedAt` is not
+        // part of this write, so unpublishing never erases the history the refund rule reads (S3).
+        where: { id: invitationId, status: "PUBLISHED" },
+        data: { status: "DRAFT", publishedAt: null },
+      });
+
+      if (changed.count !== 1) {
+        // Nothing changed, so nothing is audited either: re-read the row to tell a missing invitation (404) from one
+        // that exists with a status this action refuses (409).
+        const stored = await tx.invitation.findUnique({
+          where: { id: invitationId },
+          select: { status: true },
+        });
+        if (stored === null) {
+          return null;
+        }
+        return refusedUnpublish(stored.status as InvitationStatus);
+      }
+
+      // The audit row is written with this transaction, never a transaction of its own: the invitation never becomes a
+      // draft without the record of who made it one, and the recorder's refusal rolls the transition back.
+      await this.actions.record(tx, {
+        adminUserId: audit.adminUserId,
+        action: ADMIN_ACTION.INVITATION_UNPUBLISHED,
+        reason: audit.reason,
+        note: audit.note,
+        invitationId,
+      });
+
+      return toRow(
+        await tx.invitation.findUniqueOrThrow({
+          where: { id: invitationId },
+          select: FIND_COLUMNS,
+        }),
+      );
+    });
   }
 }

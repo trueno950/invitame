@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { AdminInvitationDetail } from "../../server/admin-invitations-client.ts";
-import { PAYMENTS_STATUS_LABELS } from "../payments/copy.ts";
+import { PAYMENTS_STATUS_LABELS, paymentDetailPath } from "../payments/copy.ts";
 import {
   INVITATION_DETAIL_COPY,
   INVITATIONS_COPY,
@@ -10,13 +10,13 @@ import {
   invitationDetailPath,
 } from "./copy.ts";
 import { invitationDetailView, invitationRowView } from "./rows.ts";
-
 // What one row of `/admin/invitaciones` and one invitation's status page render (M9 T3; S1): only the stored facts the
 // API answers — the owner's email, never a display name; a payment state and amount, never a provider payload; photo
 // counts, never an image — plus the public link of a published invitation and nothing of its content.
 
 const INVITATION_ID = "1b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e11";
 const PAYMENT_ID = "0b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e10";
+const OWNER_ID = "9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19";
 const PACKAGE_ID = "2b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e12";
 const TEMPLATE_VERSION_ID = "3b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e13";
 const CREATED_AT = "2026-11-10T10:00:00.000Z";
@@ -38,6 +38,7 @@ const SUMMARY = {
 
 const DETAIL: AdminInvitationDetail = {
   ...SUMMARY,
+  ownerId: OWNER_ID,
   packageId: PACKAGE_ID,
   templateVersionId: TEMPLATE_VERSION_ID,
   payments: [
@@ -172,6 +173,10 @@ describe("invitationDetailView", () => {
     assert.equal(view.payments[0]?.amount, "$1,500.00 MXN");
     assert.match(view.payments[0]?.paid ?? "", /12 nov 2026/);
     assert.equal(view.payments[1]?.paid, "");
+    // Every row links to the payment detail the S4 support read serves (M9 T7), so a support person can see the
+    // events Mercado Pago sent without leaving the invitation.
+    assert.equal(view.payments[0]?.href, paymentDetailPath(PAYMENT_ID));
+    assert.equal(view.payments[0]?.href, `/admin/pagos/${PAYMENT_ID}`);
 
     assert.equal(view.photos.main, INVITATION_DETAIL_COPY.photosYes);
     assert.equal(view.photos.gallery, INVITATIONS_COPY.galleryCount(3));
@@ -214,6 +219,7 @@ describe("invitationDetailView", () => {
     assert.deepEqual(Object.keys(view.payments[0] ?? {}).sort(), [
       "amount",
       "created",
+      "href",
       "paid",
       "paymentId",
       "statusLabel",

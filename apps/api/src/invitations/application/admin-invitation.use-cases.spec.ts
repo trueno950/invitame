@@ -2,16 +2,23 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 
+import { ADMIN_ACTION_REASON } from "../../admin/admin-action-recorder";
+import {
+  InvitationAlreadyArchivedError,
+  InvitationNotPublishedError,
+} from "../domain/invitation.errors";
 import type {
   AdminInvitationQuery,
   AdminInvitationRepository,
   AdminInvitationRow,
+  AdminInvitationUnpublishAudit,
 } from "./admin-invitation.repository";
 import {
   ADMIN_INVITATION_DETAIL_PAYMENT_LIMIT,
   GetAdminInvitationUseCase,
   InvalidInvitationCursorError,
   ListAdminInvitationsUseCase,
+  UnpublishAdminInvitationUseCase,
 } from "./admin-invitation.use-cases";
 import type { InvitationMediaCountReader, InvitationMediaCounts } from "./invitation-media-counts";
 import type { InvitationOwnerEmailReader } from "./invitation-owner-email";
@@ -26,6 +33,7 @@ import type {
 // the exact set of fields the status view answers — which is the privacy rule of S1/L3.
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
+const ADMIN_ID = "99999999-9999-4999-8999-999999999999";
 
 /** The admin read port over an in-memory table that applies the same filters and order as the Prisma adapter. */
 class FakeAdminInvitationRepository implements AdminInvitationRepository {
@@ -75,6 +83,29 @@ class FakeAdminInvitationRepository implements AdminInvitationRepository {
 
   async findForAdmin(invitationId: string): Promise<AdminInvitationRow | null> {
     return this.rows.find((row) => row.invitationId === invitationId) ?? null;
+  }
+
+  /** Every unpublish the use case asked, so a spec can assert the audit it carried and the refusals it wrote nothing for. */
+  readonly unpublishes: Array<{ invitationId: string; audit: AdminInvitationUnpublishAudit }> = [];
+  /** The refusal the port answers instead of a row, when a spec names one. */
+  refusal: Error | null = null;
+
+  async unpublishForAdmin(
+    invitationId: string,
+    audit: AdminInvitationUnpublishAudit,
+  ): Promise<AdminInvitationRow | null> {
+    this.unpublishes.push({ invitationId, audit });
+    if (this.refusal !== null) {
+      throw this.refusal;
+    }
+
+    const row = this.rows.find((stored) => stored.invitationId === invitationId);
+    if (row === undefined) {
+      return null;
+    }
+    row.status = "DRAFT";
+    row.publishedAt = null;
+    return row;
   }
 }
 
@@ -143,6 +174,7 @@ interface Harness {
   owners: FakeOwnerReader;
   list: ListAdminInvitationsUseCase;
   detail: GetAdminInvitationUseCase;
+  unpublish: UnpublishAdminInvitationUseCase;
 }
 
 function harness(): Harness {
@@ -150,6 +182,7 @@ function harness(): Harness {
   const payments = new FakePaymentReader();
   const media = new FakeMediaCountReader();
   const owners = new FakeOwnerReader();
+  const detail = new GetAdminInvitationUseCase(repository, payments, media, owners);
 
   return {
     repository,
@@ -157,7 +190,8 @@ function harness(): Harness {
     media,
     owners,
     list: new ListAdminInvitationsUseCase(repository, payments, media, owners),
-    detail: new GetAdminInvitationUseCase(repository, payments, media, owners),
+    detail,
+    unpublish: new UnpublishAdminInvitationUseCase(repository, detail),
   };
 }
 
@@ -454,6 +488,7 @@ describe("GetAdminInvitationUseCase (M9 T2; S1)", () => {
       "latestPayment",
       "media",
       "ownerEmail",
+      "ownerId",
       "packageId",
       "payments",
       "publishedAt",
@@ -494,8 +529,93 @@ describe("GetAdminInvitationUseCase (M9 T2; S1)", () => {
     assert.ok(detail);
     assert.equal("content" in detail, false);
     assert.equal("ownerDisplayName" in detail, false);
-    assert.equal("ownerId" in detail, false);
+    // The additive `ownerId` (T8; S4) is the one owner reference the page needs to address the account; the address
+    // itself is still the only owner text the view answers (L3).
+    assert.equal(detail.ownerId, row.ownerId);
+    assert.equal(detail.ownerEmail, "duena@example.test");
     assert.equal("guests" in detail, false);
     assert.equal("rsvpResponses" in detail, false);
+  });
+});
+
+describe("UnpublishAdminInvitationUseCase (M9 T8; S4, S6)", () => {
+  it("asks the port for the transition with the actor, the reason, and the note, and answers the new detail", async () => {
+    const test = harness();
+    const publishedAt = new Date("2026-11-24T10:00:00.000Z");
+    const row = test.repository.add({
+      slug: "boda-ana",
+      status: "PUBLISHED",
+      publishedAt,
+      firstPublishedAt: publishedAt,
+    });
+    test.owners.emails.set(OWNER, "duena@example.test");
+    test.payments.detail.set(row.invitationId, [payment()]);
+    test.media.counts.set(row.invitationId, { mainPhoto: true, galleryCount: 2 });
+
+    const detail = await test.unpublish.execute({
+      invitationId: row.invitationId,
+      adminUserId: ADMIN_ID,
+      reason: ADMIN_ACTION_REASON.OWNER_REQUEST,
+      note: "La dueña lo pidió por correo.",
+    });
+
+    assert.deepEqual(test.repository.unpublishes, [
+      {
+        invitationId: row.invitationId,
+        audit: {
+          adminUserId: ADMIN_ID,
+          reason: ADMIN_ACTION_REASON.OWNER_REQUEST,
+          note: "La dueña lo pidió por correo.",
+        },
+      },
+    ]);
+    assert.ok(detail);
+    assert.equal(detail.invitationId, row.invitationId);
+    assert.equal(detail.status, "DRAFT");
+    assert.equal(detail.publishedAt, null);
+    // Unpublishing returns the invitation to a draft; the first publication stays the invitation's history (S3).
+    assert.equal(detail.firstPublishedAt?.getTime(), publishedAt.getTime());
+    assert.equal(detail.ownerId, OWNER);
+    assert.equal(detail.ownerEmail, "duena@example.test");
+    assert.equal(detail.payments.length, 1);
+    assert.deepEqual(detail.media, { mainPhoto: true, galleryCount: 2 });
+  });
+
+  it("answers null, and reads no facet, for an id no invitation has", async () => {
+    const test = harness();
+
+    assert.equal(
+      await test.unpublish.execute({
+        invitationId: randomUUID(),
+        adminUserId: ADMIN_ID,
+        reason: ADMIN_ACTION_REASON.ABUSE,
+        note: null,
+      }),
+      null,
+    );
+    assert.deepEqual(test.payments.listCalls, []);
+    assert.deepEqual(test.media.calls, []);
+  });
+
+  it("lets the port's refusal through unchanged, so the route can answer its own conflict", async () => {
+    for (const refusal of [
+      new InvitationNotPublishedError(),
+      new InvitationAlreadyArchivedError(),
+    ]) {
+      const test = harness();
+      test.repository.refusal = refusal;
+
+      await assert.rejects(
+        test.unpublish.execute({
+          invitationId: randomUUID(),
+          adminUserId: ADMIN_ID,
+          reason: ADMIN_ACTION_REASON.PAYMENT_ERROR,
+          note: null,
+        }),
+        (error: unknown) => error === refusal,
+      );
+      assert.deepEqual(test.payments.listCalls, [], "a refused unpublish reads no payment");
+      assert.deepEqual(test.media.calls, [], "a refused unpublish reads no photo count");
+    }
   });
 });
