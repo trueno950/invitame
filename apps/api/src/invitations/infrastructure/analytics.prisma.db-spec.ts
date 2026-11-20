@@ -20,13 +20,25 @@ import { PrismaRsvpRepository } from "./prisma-rsvp.repository";
 // counted upsert under a retry and across the Ciudad de México midnight, the composite key and the RESTRICT reference,
 // the funnel buckets of both modules' timestamps at the same boundary, the RSVP aggregate against the owner read's own
 // totals, the top-invitations order, and the retention cutoff. Every instant is explicit, so no assertion depends on
-// the wall clock. Runs only through `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL. The database is
-// shared with parallel suites: every row here carries a key made from this run's id, cleanup removes exactly those
-// rows, and `InvitationView` rows are deleted before their invitation because the reference is ON DELETE RESTRICT.
+// the wall clock. Runs only through `pnpm --filter @invitame/api test:db` with an explicit DATABASE_URL.
+//
+// What this suite deletes: only rows whose invitation carries this run's id, and only for its own fixtures — cleanup
+// removes exactly those, `InvitationView` rows before their invitation because the reference is ON DELETE RESTRICT. The
+// database is shared with parallel suites, so the suite never deletes anything table-wide: the retention command, whose
+// real `DELETE` is by day and ignores the invitation, runs inside a transaction that is rolled back, so it removes
+// another suite's row from no committed state. Reads that aggregate across every suite (`viewsByDay`,
+// `topInvitationViews`, both funnel reads) are asserted either as this run's own contribution or on a window whose days
+// only this run writes, never as a global total of a day another fixture also uses.
 
 /** 2026-11-29 02:00 UTC is 2026-11-28 in Ciudad de México, so retention keeps days from 2026-08-30 on. */
 const NOW = new Date("2026-11-29T02:00:00.000Z");
 const RENDERER = "birthday-poster-01";
+
+/**
+ * What a case throws to roll its transaction back: the retention case runs the real, table-wide purge inside one, so the
+ * delete is observed without removing any row a sibling suite or another case of this run stores.
+ */
+class RolledBackPurge extends Error {}
 
 describe("invitation analytics on real PostgreSQL (M9 T11; S2, S3, S7)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
@@ -168,9 +180,25 @@ describe("invitation analytics on real PostgreSQL (M9 T11; S2, S3, S7)", () => {
     return created.id;
   }
 
-  /** The stored rows of one invitation, keyed by `YYYY-MM-DD` and source, with the count each one holds. */
-  async function storedViews(invitationId: string) {
-    const rows = await prisma.$queryRaw<Array<{ day: string; source: string; count: number }>>(
+  /**
+   * The slug a fixture was stored with, so a case can state the order a read answers instead of assuming the run's own
+   * suffix. The slug is the tie-break the top-invitations read orders by (S2).
+   */
+  async function slugOf(invitationId: string): Promise<string> {
+    const row = await prisma.invitation.findUniqueOrThrow({
+      where: { id: invitationId },
+      select: { slug: true },
+    });
+
+    return row.slug;
+  }
+
+  /**
+   * The stored rows of one invitation, keyed by `YYYY-MM-DD` and source, with the count each one holds. `client` is the
+   * transaction a case is observing, so a delete this case rolls back can still be read as it happens.
+   */
+  async function storedViews(invitationId: string, client: PrismaClient = prisma) {
+    const rows = await client.$queryRaw<Array<{ day: string; source: string; count: number }>>(
       Prisma.sql`
         SELECT to_char("day", 'YYYY-MM-DD') AS "day", "source"::text AS "source", "count"
         FROM "InvitationView"
@@ -301,28 +329,26 @@ describe("invitation analytics on real PostgreSQL (M9 T11; S2, S3, S7)", () => {
     });
 
     it("leaves a pending payment out of the approved count", async () => {
+      // A window far from every other fixture of this suite (which uses 2026 and 2032 days), so the map this read
+      // answers holds only this run's day: a sibling suite's checkout on another window cannot join it.
       const invitationId = await newInvitation({
         slug: "m9-analytics-pending",
-        createdAt: new Date("2026-06-01T12:00:00.000Z"),
+        createdAt: new Date("2031-03-13T13:00:00.000Z"),
       });
       await newPayment({
         invitationId,
-        createdAt: new Date("2026-06-02T12:00:00.000Z"),
+        createdAt: new Date("2031-03-14T12:00:00.000Z"), // 2031-03-14 in Ciudad de México.
         paidAt: null,
       });
 
-      // A window outside every other fixture's instants, so this assertion owns the whole map.
-      const window = resolveAnalyticsWindow({ from: "2026-06-01", to: "2026-06-03" }, NOW);
+      const window = resolveAnalyticsWindow({ from: "2031-03-13", to: "2031-03-15" }, NOW);
       const paymentSteps = await paymentFunnel.funnelByDay(window);
 
-      assert.deepEqual(paymentSteps.get("2026-06-02"), {
-        checkoutsStarted: 1,
-        paymentsApproved: 0,
-      });
-      assert.equal(
-        paymentSteps.get("2026-06-01"),
-        undefined,
-        "a day with nothing is absent, not zero",
+      // The whole window, not a share of it: the pending checkout is counted as started and never as approved, and a
+      // day with nothing is absent, not zero.
+      assert.deepEqual(
+        [...paymentSteps],
+        [["2031-03-14", { checkoutsStarted: 1, paymentsApproved: 0 }]],
       );
     });
   });
@@ -383,19 +409,22 @@ describe("invitation analytics on real PostgreSQL (M9 T11; S2, S3, S7)", () => {
   });
 
   describe("the reads", () => {
-    it("sums the two links per day and orders the top invitations by total, then slug", async () => {
-      const at = new Date("2026-07-10T12:00:00.000Z");
-      const first = await newInvitation({
-        slug: "m9-analytics-top-a",
-        createdAt: new Date("2026-07-01T12:00:00.000Z"),
-      });
+    it("sums both links per day and orders the top invitations by total, then by slug", async () => {
+      // A day no other fixture of this suite or of a sibling suite counts a view on, so both reads answer exactly this
+      // run's three invitations and the tie between the first two is decided by the slug alone.
+      const at = new Date("2032-05-20T12:00:00.000Z"); // 2032-05-20 in Ciudad de México.
+      // Created b before a, the opposite of their slug order: insertion order can never produce the order asserted below.
       const second = await newInvitation({
         slug: "m9-analytics-top-b",
-        createdAt: new Date("2026-07-01T12:00:00.000Z"),
+        createdAt: new Date("2032-05-01T12:00:00.000Z"),
+      });
+      const first = await newInvitation({
+        slug: "m9-analytics-top-a",
+        createdAt: new Date("2032-05-01T12:00:00.000Z"),
       });
       const third = await newInvitation({
         slug: "m9-analytics-top-c",
-        createdAt: new Date("2026-07-01T12:00:00.000Z"),
+        createdAt: new Date("2032-05-01T12:00:00.000Z"),
       });
       // Two invitations tie at three openings; the slug decides their order. The third has fewer.
       for (let index = 0; index < 2; index += 1) {
@@ -406,33 +435,23 @@ describe("invitation analytics on real PostgreSQL (M9 T11; S2, S3, S7)", () => {
       await views.increment(second, "GUEST", at);
       await views.increment(third, "PUBLIC", at);
 
-      const window = resolveAnalyticsWindow({ from: "2026-07-10", to: "2026-07-10" }, NOW);
+      const window = resolveAnalyticsWindow({ from: "2032-05-20", to: "2032-05-20" }, NOW);
       const byDay = await analytics.viewsByDay(window);
       const top = await analytics.topInvitationViews(window, ANALYTICS_TOP_INVITATIONS_LIMIT);
+      const firstSlug = await slugOf(first);
+      const secondSlug = await slugOf(second);
+      const thirdSlug = await slugOf(third);
 
-      const slugs = top.map((row) => row.slug);
-      const mine = slugs.filter((slug) => slug.startsWith("m9-analytics-top-"));
-      const firstRow = top.find((row) => row.invitationId === first);
-      const thirdRow = top.find((row) => row.invitationId === third);
-
-      // `viewsByDay` groups every suite's rows of the day, so the day is present with at least this suite's openings.
-      assert.ok((byDay.get("2026-07-10")?.public ?? 0) >= 5);
-      assert.ok((byDay.get("2026-07-10")?.guest ?? 0) >= 2);
-      assert.deepEqual(firstRow, {
-        invitationId: first,
-        slug: firstRow?.slug ?? "",
-        public: 2,
-        guest: 1,
-      });
-      assert.equal(thirdRow?.public, 1);
-      assert.equal(thirdRow?.guest, 0);
-      // Ordered by the total of both links descending; the tie between the first two is broken by the slug.
-      const firstIndex = slugs.indexOf(firstRow?.slug ?? "");
-      const thirdIndex = slugs.indexOf(thirdRow?.slug ?? "");
-      assert.ok(firstIndex >= 0 && thirdIndex >= 0);
-      assert.ok(firstIndex < thirdIndex, "three openings come before one");
-      assert.ok(mine.length >= 3);
-      assert.ok(top.length <= ANALYTICS_TOP_INVITATIONS_LIMIT);
+      // The whole day, not a share of it: the two links of each invitation, summed.
+      assert.deepEqual([...byDay], [["2032-05-20", { public: 5, guest: 2 }]]);
+      // Ordered by the total of both links descending, and the two three-opening rows by slug ascending (S2), which is
+      // the opposite order to their insertion.
+      assert.ok(firstSlug < secondSlug, "the tied pair's slugs say a before b");
+      assert.deepEqual(top, [
+        { invitationId: first, slug: firstSlug, public: 2, guest: 1 },
+        { invitationId: second, slug: secondSlug, public: 2, guest: 1 },
+        { invitationId: third, slug: thirdSlug, public: 1, guest: 0 },
+      ]);
     });
 
     it("applies the three funnel indexes the migration adds", async () => {
@@ -464,7 +483,7 @@ describe("invitation analytics on real PostgreSQL (M9 T11; S2, S3, S7)", () => {
   });
 
   describe("the retention command", () => {
-    it("deletes a row of ninety-one days, keeps one of exactly ninety, and a dry run deletes nothing", async () => {
+    it("deletes a row of ninety-one days, keeps one of exactly ninety, and rolls the table-wide run back", async () => {
       const invitationId = await newInvitation({
         slug: "m9-analytics-retention",
         createdAt: new Date("2026-11-20T12:00:00.000Z"),
@@ -473,51 +492,85 @@ describe("invitation analytics on real PostgreSQL (M9 T11; S2, S3, S7)", () => {
       await views.increment(invitationId, "PUBLIC", new Date("2026-08-29T12:00:00.000Z"));
       await views.increment(invitationId, "PUBLIC", new Date("2026-08-30T12:00:00.000Z"));
       await views.increment(invitationId, "PUBLIC", new Date("2026-11-28T12:00:00.000Z"));
-      const purge = new PurgeInvitationViewsUseCase(views, () => NOW);
-      // The command deletes everything older than the cutoff, whatever invitation it belongs to, so the suite reads the
-      // count of those rows instead of assuming they belong to it: other cases of this same run are still stored.
-      const olderThanCutoff = async () => {
-        const rows = await prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
-          SELECT count(*)::int AS "count" FROM "InvitationView" WHERE "day" < '2026-08-30'::date
-        `);
-
-        return rows[0]?.count ?? 0;
-      };
-      const before = await olderThanCutoff();
-      assert.ok(before >= 1, "this invitation's ninety-one-day row is older than the cutoff");
-
-      assert.deepEqual(await purge.execute({ dryRun: true }), {
-        dryRun: true,
-        deletedViews: before,
+      // A second invitation stands for a concurrently running run's row: the real command deletes by day, whatever
+      // invitation a row belongs to, so this row goes inside the transaction and has to survive its rollback.
+      const otherRun = await newInvitation({
+        slug: "m9-analytics-retention-other",
+        createdAt: new Date("2026-11-20T12:00:00.000Z"),
       });
-      assert.deepEqual(
-        await storedViews(invitationId),
-        [
-          ["2026-08-29", "PUBLIC", 1],
-          ["2026-08-30", "PUBLIC", 1],
-          ["2026-11-28", "PUBLIC", 1],
-        ],
-        "a dry run deletes nothing",
+      await views.increment(otherRun, "PUBLIC", new Date("2026-08-29T12:00:00.000Z"));
+
+      const allThree = [
+        ["2026-08-29", "PUBLIC", 1],
+        ["2026-08-30", "PUBLIC", 1],
+        ["2026-11-28", "PUBLIC", 1],
+      ];
+      const kept = [
+        ["2026-08-30", "PUBLIC", 1],
+        ["2026-11-28", "PUBLIC", 1],
+      ];
+      assert.deepEqual(await storedViews(invitationId), allThree);
+
+      // The command deletes every row older than the cutoff, so the real delete runs inside a transaction this case
+      // rolls back: no sibling suite's row and no other case's row can be removed from the shared database, and the
+      // count the command reports can still be compared exactly against the table it deleted from.
+      await assert.rejects(
+        prisma.$transaction(async (transaction) => {
+          // The adapter only issues statements, so the transaction client stands in for the pooled one.
+          const inTransaction = transaction as unknown as PrismaClient;
+          const purge = new PurgeInvitationViewsUseCase(
+            new PrismaInvitationViewRepository(inTransaction),
+            () => NOW,
+          );
+          /** Every suite's rows older than the cutoff, read in the transaction that is about to delete them. */
+          const olderThanCutoff = async () => {
+            const rows = await inTransaction.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+              SELECT count(*)::int AS "count" FROM "InvitationView" WHERE "day" < '2026-08-30'::date
+            `);
+
+            return rows[0]?.count ?? 0;
+          };
+
+          const before = await olderThanCutoff();
+          assert.ok(before >= 2, "both ninety-one-day rows are older than the cutoff");
+
+          assert.deepEqual(await purge.execute({ dryRun: true }), {
+            dryRun: true,
+            deletedViews: before,
+          });
+          assert.deepEqual(
+            await storedViews(invitationId, inTransaction),
+            allThree,
+            "a dry run deletes nothing",
+          );
+          assert.equal(await olderThanCutoff(), before);
+
+          assert.deepEqual(await purge.execute({ dryRun: false }), {
+            dryRun: false,
+            deletedViews: before,
+          });
+          // The exactly-ninety-day row and today's row stay: the delete is `day < cutoff`, so the cutoff day is kept.
+          assert.deepEqual(await storedViews(invitationId, inTransaction), kept);
+          // The delete is by day, not by invitation: the other run's row went with this run's older one.
+          assert.deepEqual(await storedViews(otherRun, inTransaction), []);
+          assert.equal(await olderThanCutoff(), 0);
+
+          // Idempotent: the same command on the same day deletes nothing the second time, not even this run's rows.
+          assert.deepEqual(await purge.execute({ dryRun: false }), {
+            dryRun: false,
+            deletedViews: 0,
+          });
+          assert.deepEqual(await storedViews(invitationId, inTransaction), kept);
+
+          throw new RolledBackPurge();
+        }),
+        RolledBackPurge,
       );
-      assert.equal(await olderThanCutoff(), before);
 
-      assert.deepEqual(await purge.execute({ dryRun: false }), {
-        dryRun: false,
-        deletedViews: before,
-      });
-      // The exactly-ninety-day row and today's row stay: the delete is `day < cutoff`, so the cutoff day is kept.
-      assert.deepEqual(await storedViews(invitationId), [
-        ["2026-08-30", "PUBLIC", 1],
-        ["2026-11-28", "PUBLIC", 1],
-      ]);
-      assert.equal(await olderThanCutoff(), 0);
-
-      // Idempotent: the same command on the same day deletes nothing the second time.
-      assert.deepEqual(await purge.execute({ dryRun: false }), { dryRun: false, deletedViews: 0 });
-      assert.deepEqual(await storedViews(invitationId), [
-        ["2026-08-30", "PUBLIC", 1],
-        ["2026-11-28", "PUBLIC", 1],
-      ]);
+      // Rolled back: the table holds exactly what this case seeded, so it proved the table-wide command without
+      // deleting a row of any other suite — nor of this run's own other cases.
+      assert.deepEqual(await storedViews(invitationId), allThree);
+      assert.deepEqual(await storedViews(otherRun), [["2026-08-29", "PUBLIC", 1]]);
     });
   });
 
