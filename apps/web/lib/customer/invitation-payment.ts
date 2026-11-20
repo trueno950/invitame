@@ -14,11 +14,12 @@ import {
 } from "./invitations.ts";
 
 /**
- * The creator's side of a payment (M7 T2; S1, S4): the «Pagar y publicar» panel of a draft, the checkout
- * redirect allow-list, the return page the provider sends the browser back to, and the development-only simulated
- * page. Every state here is the API's answer (`GET /invitations/:id/payment`); nothing reads a query parameter, a
- * cookie, or a client value to decide whether an invitation is paid, and the publish button is only a convenience —
- * the API's own payment gate remains the guard (S1).
+ * The creator's side of a payment (M7 T2, T3; S1, S4): the «Pagar y publicar» panel of a draft, the checkout redirect
+ * allow-list of both providers, the return page Mercado Pago sends the browser back to, and the development-only
+ * simulated page. Every state here is the API's answer (`GET /invitations/:id/payment`); nothing reads a query
+ * parameter, a cookie, or a client value to decide whether an invitation is paid — the provider's own `status` hint on
+ * the return URL included — and the publish button is only a convenience: the API's own payment gate remains the guard
+ * (S1).
  */
 
 /** The payment pages of one invitation, next to the draft they belong to. */
@@ -51,28 +52,56 @@ export function formatPaymentAmount(amountMinor: number, currency: string): stri
 const UUID_SOURCE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
 /**
- * The one path a checkout may send the browser to under this milestone's provider: the invitation's own simulated
- * page. A real provider will need its own host allow-list next to this one (the owner's decision, L1); until then a
- * redirect that is not exactly this path is refused, because the browser's next address is chosen by the API answer
- * and never by a value this page could be tricked into following.
+ * An absolute https URL on a Mercado Pago or Mercado Libre host is the provider's own Checkout Pro page, and the one
+ * external address this page may follow (M7 T3; S1). It mirrors the API adapter's own allow-list
+ * (`CHECKOUT_HOST_PATTERN` in `mercadopago-payment-provider.ts`) rather than inventing a second rule: the label must
+ * be exactly `mercadopago` or `mercadolibre` on `.com` or `.com.mx` (the MXN market), and the host must end there, so
+ * `mercadopago.com.mx.evil.example`, `www.mercadopago.evil.com`, and `evilmercadopago.com` are all refused.
  */
+const PROVIDER_CHECKOUT_HOST =
+  /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*(?:mercadopago|mercadolibre)\.com(?:\.mx)?$/;
+
+/** The one path a checkout may send the browser to under the simulated provider: the invitation's own page. */
 const SIMULATED_REDIRECT_PATH = new RegExp(
   `^/cuenta/invitaciones/(${UUID_SOURCE})/pago/simulado/(${UUID_SOURCE})$`,
   "i",
 );
 
 /**
- * The relative path to redirect to, or nothing when the answer is not exactly this invitation's simulated page on
- * this request's own origin (T2, S4). It fails closed: another origin, a protocol-relative or non-`http(s)` URL, a
- * URL with credentials, a query or a fragment, a trailing slash, a different path, and another invitation's id are
- * all refused. The page that could not name its own origin refuses every redirect.
+ * The provider's page, exactly as the API answered it, or nothing when the address is not one (M7 T3; S1). Only the
+ * host allow-list and the transport protect this decision: the path, the query, and the preference id are the
+ * provider's own, so they are followed as answered, while credentials and a fragment are refused.
+ */
+function providerCheckoutUrl(url: URL): string | undefined {
+  if (
+    url.protocol !== "https:" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.hash !== "" ||
+    !PROVIDER_CHECKOUT_HOST.test(url.hostname)
+  ) {
+    return undefined;
+  }
+
+  return url.href;
+}
+
+/**
+ * The address to redirect to, or nothing when the API's answer is neither the provider's own Checkout Pro page nor
+ * exactly this invitation's simulated page on this request's own origin (M7 T3; S1, S4). The browser's next address is
+ * always chosen by the API's answer, allow-listed here, and never by a value a visitor could supply:
+ *
+ * - a Mercado Pago or Mercado Libre https page is followed as answered, and needs no origin of this page;
+ * - the simulated page is followed only as this origin's relative path, so simulated mode works exactly as before;
+ * - everything else is refused: another origin, a protocol-relative or non-`http(s)` URL, credentials, a query or a
+ *   fragment on the simulated page, a trailing slash, a different path, and another invitation's id.
  */
 export function checkoutRedirectPath(
   redirectUrl: string,
   invitationId: string,
   origin: string | undefined,
 ): string | undefined {
-  if (origin === undefined || origin === "" || !isInvitationId(invitationId)) {
+  if (!isInvitationId(invitationId)) {
     return undefined;
   }
 
@@ -83,7 +112,14 @@ export function checkoutRedirectPath(
     return undefined;
   }
 
+  const providerUrl = providerCheckoutUrl(url);
+  if (providerUrl !== undefined) {
+    return providerUrl;
+  }
+
   if (
+    origin === undefined ||
+    origin === "" ||
     (url.protocol !== "http:" && url.protocol !== "https:") ||
     url.origin !== origin ||
     url.username !== "" ||
@@ -101,6 +137,46 @@ export function checkoutRedirectPath(
   }
 
   return PAYMENT_PATHS.simulatedPage(invitationId.toLowerCase(), (match[2] ?? "").toLowerCase());
+}
+
+/**
+ * The query parameters Mercado Pago appends to a `back_url`. They are untrusted hints about a payment the provider
+ * will notify separately: no page here reads them, and the return page drops them before it reads its own notice
+ * codes, so no provider value — and no forged one — can ever select a message or a payment state (M7 T3; S1).
+ */
+export const PROVIDER_RETURN_PARAMETERS: readonly string[] = [
+  "collection_status",
+  "external_reference",
+  "merchant_account_id",
+  "merchant_order_id",
+  "payment_id",
+  "payment_type",
+  "preference_id",
+  "processing_mode",
+  "site_id",
+  "status",
+];
+
+const PROVIDER_RETURN_PARAMETER_SET = new Set(PROVIDER_RETURN_PARAMETERS);
+
+type SearchParameters = Readonly<Record<string, string | string[] | undefined>>;
+
+/**
+ * The return page's query without the provider's hints (M7 T3; S1). The page then reads only its own `error`,
+ * `notice`, and `issues` codes, which it looks up in fixed tables, so an appointment with the provider's `status`
+ * cannot decide anything. The parameter names are matched case-insensitively, because a forged spelling deserves no
+ * more trust than the real one. The input is left as it was.
+ */
+export function withoutProviderReturnParameters(parameters: SearchParameters): SearchParameters {
+  const kept: Record<string, string | string[] | undefined> = {};
+
+  for (const [name, value] of Object.entries(parameters)) {
+    if (!PROVIDER_RETURN_PARAMETER_SET.has(name.toLowerCase())) {
+      kept[name] = value;
+    }
+  }
+
+  return kept;
 }
 
 /** The amount and its currency, such as `$1,500.00 MXN`, or nothing when the API's snapshot is unreadable (S4). */
@@ -194,8 +270,9 @@ export function paymentPanelView(payment: InvitationPayment): PaymentPanelView {
 }
 
 /**
- * What `GET /invitations/:id/payment` means on the return page (S4): the provider's answer is read from the API, so
- * a reload after a webhook shows the new state, and a query parameter can never make a page say "paid".
+ * What `GET /invitations/:id/payment` means on the return page (S1, S4): the state is the API's, so a reload after the
+ * provider's verified notification shows the new one, and a query parameter can never make a page say "paid". A
+ * refunded payment gets its own message, because the money was charged and returned, not never charged.
  */
 export type PaymentReturnView =
   | {
@@ -212,7 +289,7 @@ export type PaymentReturnView =
       readonly paidOn: string;
     }
   | {
-      readonly kind: "failed";
+      readonly kind: "failed" | "refunded";
       readonly heading: string;
       readonly body: string;
       readonly amount: string;
@@ -236,6 +313,16 @@ export function paymentReturnView(payment: InvitationPayment): PaymentReturnView
       kind: "not-required",
       heading: PAYMENT_COPY.notRequiredHeading,
       body: PAYMENT_COPY.notRequiredBody,
+    };
+  }
+
+  if (payment.status === "refunded") {
+    return {
+      kind: "refunded",
+      heading: PAYMENT_COPY.refundedHeading,
+      body: PAYMENT_COPY.refundedBody,
+      amount: paymentAmount(payment) ?? "",
+      retry: PAYMENT_COPY.retry,
     };
   }
 
@@ -314,9 +401,11 @@ function text(form: FormData, name: string): string | undefined {
 
 /**
  * Starts or resumes the checkout through `POST /invitations/:id/checkout` and answers the redirect the action
- * follows (S4). The API owns the amount, the snapshot, and the provider's reference; this function only follows the
- * redirect the API answered, and only when `checkoutRedirectPath` accepts it. A refused redirect is this page's own
- * error notice, because the browser was about to leave for an address the API did not prove it owns.
+ * follows (M7 T3; S1, S4). The API owns the amount, the snapshot, and the provider's reference, and its answer names the
+ * next page: in `PAYMENTS_MODE=mercadopago` that is the provider's own Checkout Pro URL, and in the simulated mode it is
+ * this invitation's simulated page. This function only follows the redirect the API answered, and only when
+ * `checkoutRedirectPath` accepts it. A refused redirect is this page's own error notice, because the browser was about
+ * to leave for an address the API did not prove it owns.
  */
 export async function startCheckout(
   api: PaymentClient,
