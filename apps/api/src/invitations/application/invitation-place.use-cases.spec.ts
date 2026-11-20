@@ -365,6 +365,41 @@ describe("place search use case (S2, S3)", () => {
       [],
     );
   });
+
+  it("does not cache a failed lookup, so the next identical query asks the geocoder again (S2, S3)", async () => {
+    const { searching, search, cache } = build();
+    search.failure = new TypeError("connect ECONNREFUSED");
+
+    assert.deepEqual(
+      await searching.execute({ ownerId: "owner-1", id: INVITATION_ID, query: "querétaro" }),
+      [],
+    );
+
+    // The provider answers again: an earlier failure is not an empty answer the cache would repeat.
+    search.failure = null;
+    assert.deepEqual(
+      await searching.execute({ ownerId: "owner-1", id: INVITATION_ID, query: "querétaro" }),
+      [SAN_JOSE],
+    );
+    assert.deepEqual(search.asked, ["querétaro", "querétaro"]);
+    assert.equal(cache.size, 1);
+  });
+
+  it("still caches an empty answer the provider really gave (S2)", async () => {
+    const { searching, search, cache } = build();
+    search.answer = [];
+
+    await searching.execute({ ownerId: "owner-1", id: INVITATION_ID, query: "querétaro" });
+    const second = await searching.execute({
+      ownerId: "owner-1",
+      id: INVITATION_ID,
+      query: "querétaro",
+    });
+
+    assert.deepEqual(second, []);
+    assert.equal(search.asked.length, 1);
+    assert.equal(cache.size, 1);
+  });
 });
 
 describe("the search cache (S2)", () => {

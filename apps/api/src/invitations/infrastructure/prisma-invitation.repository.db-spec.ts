@@ -49,6 +49,10 @@ describe("Prisma invitation repository on PostgreSQL", () => {
 
   after(async () => {
     try {
+      // A place row references its invitation with ON DELETE RESTRICT, so the stored points go first.
+      await prisma.invitationPlace.deleteMany({
+        where: { invitationId: { in: invitationIds } },
+      });
       await prisma.invitation.deleteMany({ where: { id: { in: invitationIds } } });
       await prisma.templateVersion.deleteMany({ where: { templateId: { in: templateIds } } });
       await prisma.template.deleteMany({ where: { id: { in: templateIds } } });
@@ -232,6 +236,39 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       assert.deepEqual(await repository.findOwned(ownerId, created.id), created);
       assert.equal(await repository.findOwned(await newOwner(), created.id), null);
       assert.equal(await repository.findOwned(ownerId, UNKNOWN_ID), null);
+    });
+
+    it("answers only the stored points the domain still accepts (S2, S3)", async () => {
+      const ownerId = await newOwner();
+      const created = await newDraft(ownerId, newSlug(), { address: "Calle Hidalgo 12" });
+      const label = "Calle Hidalgo 12, Querétaro";
+
+      // Two of the rows were written around the API: a field that is not an address field, and a blank label.
+      await prisma.invitationPlace.createMany({
+        data: [
+          { invitationId: created.id, field: "address", label, lat: 20.5888, lng: -100.3899 },
+          {
+            invitationId: created.id,
+            field: "notes",
+            label: "Centro",
+            lat: 20.5888,
+            lng: -100.3899,
+          },
+          {
+            invitationId: created.id,
+            field: "ceremonyAddress",
+            label: "   ",
+            lat: 20.5888,
+            lng: -100.3899,
+          },
+        ],
+      });
+
+      const found = await repository.findOwned(ownerId, created.id);
+
+      // The read degrades to the points nobody can dispute instead of answering values no rule validated.
+      assert.deepEqual(found?.places, { address: { label, lat: 20.5888, lng: -100.3899 } });
+      assert.deepEqual(found?.content, { address: "Calle Hidalgo 12" });
     });
 
     it("lists only the owner's invitations, newest first", async () => {

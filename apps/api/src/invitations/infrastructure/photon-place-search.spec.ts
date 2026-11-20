@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
+
+import { Logger } from "@nestjs/common";
 
 import {
   PHOTON_MEXICO_BIAS,
   PHOTON_RESULT_LIMIT,
   PHOTON_USER_AGENT,
   PhotonPlaceSearch,
+  type PlaceSearchFailure,
   photonPlaces,
 } from "./photon-place-search";
 
@@ -56,6 +59,8 @@ function searchWith(
   const provider = new PhotonPlaceSearch({
     baseUrl: BASE_URL,
     fetch: fake.fetch,
+    // The default reporter warns through Nest's logger; the failure-reporting suite observes that separately.
+    reportFailure: () => {},
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
   });
 
@@ -168,6 +173,7 @@ describe("Photon place search (S2)", () => {
 
     const failing = new PhotonPlaceSearch({
       baseUrl: BASE_URL,
+      reportFailure: () => {},
       fetch: (async () => {
         throw new TypeError("connect ECONNREFUSED");
       }) as unknown as typeof fetch,
@@ -188,6 +194,7 @@ describe("Photon place search (S2)", () => {
     const provider = new PhotonPlaceSearch({
       baseUrl: BASE_URL,
       timeoutMs: 5,
+      reportFailure: () => {},
       fetch: ((_input: string | URL | Request, init?: RequestInit) =>
         new Promise((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () => {
@@ -197,6 +204,117 @@ describe("Photon place search (S2)", () => {
     });
 
     assert.deepEqual(await provider.search("querétaro"), []);
+  });
+});
+
+describe("Photon failure reporting (S2, S3)", () => {
+  /** A provider whose reporter collects every fact, so a test reads exactly what operations would see. */
+  function reporting(options: { fetch: typeof fetch; timeoutMs?: number }) {
+    const failures: PlaceSearchFailure[] = [];
+    const provider = new PhotonPlaceSearch({
+      baseUrl: BASE_URL,
+      fetch: options.fetch,
+      reportFailure: (failure) => failures.push(failure),
+      ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    });
+
+    return { provider, failures };
+  }
+
+  it("reports what went wrong as a bounded category, and never the text that was typed", async () => {
+    const refused = reporting({
+      fetch: answeringFetch({ type: "FeatureCollection", features: [] }, { status: 503 }).fetch,
+    });
+    assert.deepEqual(await refused.provider.search("Parroquia de San José"), []);
+    assert.deepEqual(refused.failures, [
+      { event: "place-search-failed", category: "http-status", status: 503 },
+    ]);
+
+    const failing = reporting({
+      fetch: (async () => {
+        throw new TypeError("connect ECONNREFUSED");
+      }) as unknown as typeof fetch,
+    });
+    assert.deepEqual(await failing.provider.search("Parroquia de San José"), []);
+    assert.deepEqual(failing.failures, [{ event: "place-search-failed", category: "network" }]);
+
+    const slow = reporting({
+      timeoutMs: 5,
+      fetch: ((_input: string | URL | Request, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          });
+        })) as unknown as typeof fetch,
+    });
+    assert.deepEqual(await slow.provider.search("Parroquia de San José"), []);
+    assert.deepEqual(slow.failures, [{ event: "place-search-failed", category: "timeout" }]);
+
+    const oversized = reporting({
+      fetch: answeringFetch(
+        { type: "FeatureCollection", features: [] },
+        { headers: { "content-length": String(64 * 1024 + 1) } },
+      ).fetch,
+    });
+    assert.deepEqual(await oversized.provider.search("Parroquia de San José"), []);
+    assert.deepEqual(oversized.failures, [
+      { event: "place-search-failed", category: "body-rejected" },
+    ]);
+
+    const unreadable = reporting({ fetch: answeringFetch("not json at all").fetch });
+    assert.deepEqual(await unreadable.provider.search("Parroquia de San José"), []);
+    assert.deepEqual(unreadable.failures, [
+      { event: "place-search-failed", category: "invalid-json" },
+    ]);
+
+    // The request names the address an owner is typing, so the fact never carries it.
+    for (const failures of [
+      refused.failures,
+      failing.failures,
+      slow.failures,
+      oversized.failures,
+      unreadable.failures,
+    ]) {
+      assert.equal(JSON.stringify(failures).includes("Parroquia"), false);
+      assert.equal(JSON.stringify(failures).includes("José"), false);
+    }
+  });
+
+  it("reports nothing for a lookup that answered, even an empty answer", async () => {
+    const { provider, failures } = reporting({
+      fetch: answeringFetch({ type: "FeatureCollection", features: [] }).fetch,
+    });
+
+    assert.deepEqual(await provider.search("querétaro"), []);
+    assert.deepEqual(failures, []);
+  });
+
+  it("warns through Nest's logger by default, so a provider that stops answering is visible (S3)", async () => {
+    const recorded: unknown[][] = [];
+    const spy = mock.method(Logger.prototype, "warn", (...args: unknown[]) => {
+      recorded.push(args);
+    });
+    const provider = new PhotonPlaceSearch({
+      baseUrl: BASE_URL,
+      fetch: answeringFetch({ type: "FeatureCollection", features: [] }, { status: 429 }).fetch,
+    });
+
+    try {
+      assert.deepEqual(await provider.search("Querétaro"), []);
+    } finally {
+      spy.mock.restore();
+    }
+
+    const lines = recorded.filter(
+      ([first]) => (first as { event?: string } | undefined)?.event === "place-search-failed",
+    );
+    assert.equal(lines.length, 1, "the fault is reported once");
+    assert.deepEqual(lines[0]?.[0], {
+      event: "place-search-failed",
+      category: "http-status",
+      status: 429,
+    });
+    assert.equal(JSON.stringify(lines[0]?.[0]).includes("Querétaro"), false);
   });
 });
 

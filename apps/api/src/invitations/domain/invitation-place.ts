@@ -8,7 +8,8 @@ import type { JsonObject } from "./invitation-content";
 // - the address fields of the pinned template version: a declared property whose name ends with `Address` or is
 //   exactly `address`, derived from the schema and never from a template name;
 // - the stored point: a non-blank label of at most 300 characters, a latitude in -90..90, and a longitude in
-//   -180..180, the same bounds the column CHECK constraints state;
+//   -180..180, the same bounds the column CHECK constraints state; a stored value that fails them is no point at
+//   all, so a malformed row degrades both reads instead of throwing or showing an empty marker;
 // - the label a geocoder answered, composed from its own fields and bounded to the column's width;
 // - whether a guest still sees a stored point: only while the package grants `MAP` and the address text in the
 //   content still equals the label the point was stored with, so rewriting the address silently drops the old
@@ -215,10 +216,32 @@ export function validatePlaceWrite(input: {
 }
 
 /**
+ * Whether a stored value is still a point this API answers (S2, S3): an object whose label is exactly the text
+ * `normalizePlaceLabel` writes and whose coordinates are inside the bounds the column states. A row written around
+ * the API — a value that is not a point, a blank label, a label wider than the column, a coordinate outside the
+ * range — is therefore no point at all, so a read degrades to "no stored point" instead of throwing or answering a
+ * value no rule validated.
+ */
+export function isStoredPlacePoint(value: unknown): value is PlacePoint {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const fields = value as { label?: unknown; lat?: unknown; lng?: unknown };
+
+  return (
+    typeof fields.label === "string" &&
+    normalizePlaceLabel(fields.label) === fields.label &&
+    isLatitude(fields.lat) &&
+    isLongitude(fields.lng)
+  );
+}
+
+/**
  * The points a guest may see (S2): only while the package grants `MAP`, only for an address field, only for a
  * point the domain would still accept, and only while the stored label is exactly the text the content holds for
  * that field. Rewriting the address therefore drops the old coordinates instead of sending a guest to the place the
- * owner no longer means, and a row written around the API never reaches a guest with an unusable coordinate.
+ * owner no longer means, and a row written around the API never reaches a guest with an unusable coordinate: a
+ * malformed stored value is skipped, never a read that throws.
  */
 export function confirmedPlaces(
   places: StoredPlaces,
@@ -232,16 +255,12 @@ export function confirmedPlaces(
   const confirmed: Record<string, PlacePoint> = {};
 
   for (const [field, place] of Object.entries(places)) {
-    if (!isAddressFieldName(field)) {
+    // The values come from stored rows, so one of them may be anything at all; it is no point for a guest.
+    if (!isAddressFieldName(field) || !isStoredPlacePoint(place)) {
       continue;
     }
     const text = Object.hasOwn(content, field) ? content[field] : undefined;
-    if (
-      typeof text !== "string" ||
-      text !== place.label ||
-      !isLatitude(place.lat) ||
-      !isLongitude(place.lng)
-    ) {
+    if (typeof text !== "string" || text !== place.label) {
       continue;
     }
     Object.defineProperty(confirmed, field, {

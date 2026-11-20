@@ -648,6 +648,42 @@ describe("the playlist metadata bounds (S2)", () => {
     }
   });
 
+  it("keeps a title to one line of visible text, so provider characters never reach a card (S2)", () => {
+    // A line break, a tab, and a NUL separate words instead of breaking the guest's card.
+    assert.equal(normalizePlaylistTitle("Today’s\nTop\tHits"), "Today’s Top Hits");
+    assert.equal(normalizePlaylistTitle("La\u0000boda"), "La boda");
+    // A bidi override and a zero-width character only reorder or hide text, so they are dropped.
+    assert.equal(normalizePlaylistTitle("La\u202Eboda"), "Laboda");
+    assert.equal(normalizePlaylistTitle("La\u200Bboda"), "Laboda");
+    // A title of nothing but control characters says nothing.
+    assert.equal(normalizePlaylistTitle("\n\t\u0000"), null);
+    // A non-breaking space is a space, so a provider cannot hide the word boundary from the column.
+    assert.equal(normalizePlaylistTitle("La\u00A0boda"), "La boda");
+  });
+
+  it("cuts a title at the bound without answering half of a character (S2)", () => {
+    // U+FE0F joins the character before it: a cut between the two would render two glyphs instead of one.
+    const heart = "\u2764\uFE0F";
+    const cut = normalizePlaylistTitle(`${"a".repeat(PLAYLIST_TITLE_MAX_LENGTH - 1)}${heart}b`);
+
+    assert.equal(cut, "a".repeat(PLAYLIST_TITLE_MAX_LENGTH - 1));
+    assert.equal([...(cut ?? "")].length, PLAYLIST_TITLE_MAX_LENGTH - 1);
+  });
+
+  it("refuses a cover the column would not store as the value the provider gave (S2)", () => {
+    // The URL parser trims spaces and drops tabs and line breaks, so it accepts values the column's
+    // `starts_with(..., 'https://')` check refuses; a value with such a character is no cover at all.
+    for (const value of [
+      " https://i.scdn.co/image/abc",
+      "https://i.scdn.co/image/abc ",
+      "https://i.scdn.co/im\nage/abc",
+      "https://i.scdn.co/image/abc\t",
+      "https://i.scdn.co/image/a\u0000bc",
+    ]) {
+      assert.equal(isMusicCoverUrl(value), false, JSON.stringify(value));
+    }
+  });
+
   it("accepts a cover only over https on an allow-listed image host", () => {
     for (const host of MUSIC_COVER_HOSTS) {
       assert.equal(isMusicCoverUrl(`https://${host}/image/abc`), true, host);

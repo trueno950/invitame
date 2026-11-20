@@ -10,10 +10,12 @@ import {
   isLongitude,
   normalizePlaceQuery,
   PLACE_LABEL_ISSUE,
+  PLACE_LABEL_MAX_LENGTH,
   PLACE_LAT_ISSUE,
   PLACE_LNG_ISSUE,
   PLACE_QUERY_LENGTH_ISSUE,
   PLACE_QUERY_TYPE_ISSUE,
+  type StoredPlaces,
   validatePlaceWrite,
 } from "./invitation-place";
 
@@ -188,5 +190,37 @@ describe("public places (S2)", () => {
       { address: SAN_JOSE },
     );
     assert.deepEqual(confirmedPlaces(stored, { address: 42 }, true), {});
+  });
+
+  it("skips a malformed stored point instead of throwing or showing an empty marker (S2, S3)", () => {
+    const longLabel = "a".repeat(PLACE_LABEL_MAX_LENGTH + 1);
+    // A row written around the API: a value that is not a point at all, a blank label the content also holds,
+    // and a label wider than the column. Each one is no point for a guest, and none of them throws.
+    const malformed = {
+      address: null,
+      ceremonyAddress: { ...SAN_JOSE, label: "   " },
+      receptionAddress: { ...SAN_JOSE, label: longLabel },
+    } as unknown as StoredPlaces;
+
+    assert.deepEqual(
+      confirmedPlaces(
+        malformed,
+        { address: SAN_JOSE.label, ceremonyAddress: "   ", receptionAddress: longLabel },
+        true,
+      ),
+      {},
+    );
+
+    // A malformed row costs only its own point: a well-formed one next to it still reaches the guest.
+    assert.deepEqual(
+      confirmedPlaces(
+        { ...malformed, address: SAN_JOSE } as unknown as StoredPlaces,
+        {
+          address: SAN_JOSE.label,
+        },
+        true,
+      ),
+      { address: SAN_JOSE },
+    );
   });
 });

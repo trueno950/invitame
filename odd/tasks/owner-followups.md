@@ -28,9 +28,9 @@ feature documents; this one records the decisions and fixes the rest.
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
 | T1 | `referrerPolicy` camel-case property on the music cover; test fails on any React console error | S1 | inline | 2271770 |
-| T2 | Sticky phone save-status strip | S2 | worker (editor UI) | |
-| T3 | Publish copy only promises no cost for a free package | S3 | worker (editor UI) | |
-| T4 | API review follow-ups (#81-#83) | S4 | worker (API) | |
+| T2 | Sticky phone save-status strip | S2 | worker (editor UI) | see L6 |
+| T3 | Publish copy only promises no cost for a free package | S3 | worker (editor UI) | see L6 |
+| T4 | API review follow-ups (#81-#83) | S4 | worker (API) | see L7 |
 | T5 | Web review follow-ups (#84, #85) | S4 | worker (web places) | |
 | T6 | Delete merged temporary branches and the stash | S5 | inline | no commit (git state, L4) |
 | T7 | Record the decisions and the admin configuration panel in `ROADMAP.md` | S6 | inline | pending commit |
@@ -82,3 +82,14 @@ concrete weakness, and fixes it with a test or records why it is not a defect.
   the admin catalog (`apps/web/app/admin/catalogo/paquetes/[id]/page.tsx`), and the S3 driver already supports R2
   (`apps/api/src/media/infrastructure/s3-media-storage.ts`, `MEDIA_S3_REGION=auto`), so R2 is configuration plus a
   bucket, not code.
+- L6 — T2/T3 (worker): the phone strip was inert because the customer frame is `overflow-hidden`, a scroll container
+  that never scrolls; below `lg` the frame now uses `overflow: clip` (`paper-wash:has([data-editor-shell])`), so the
+  existing `sticky top-0` strip pins (Playwright 390 px: strip top 139 px → 0 px after scrolling; 1280 px unchanged).
+  `publishHintFor(payment)` keeps «Publicar no tiene costo.» only for free mode or a zero-price package; a paid package
+  or an unreadable payment read gets the hint without the promise. RED on the paid cases, web 1608 pass.
+- L7 — T4 (worker), each finding fixed test-first: #81 playlist titles are one bounded line of visible text cut on a
+  grapheme boundary, and a cover with whitespace or control characters is refused before the https CHECK can fail the
+  save; #82 malformed stored places are skipped by `isStoredPlacePoint`; #82 Photon failures emit one structured
+  warning (`place-search-failed`, category, status) without the query; #83 R4-002 a failed lookup is no longer cached
+  as an empty answer; #83 R4-003 the repository keeps only stored rows the domain accepts. API 1688 unit and 144
+  invitations db-specs pass.
