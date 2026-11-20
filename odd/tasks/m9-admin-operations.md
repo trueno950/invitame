@@ -50,7 +50,8 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T1 | Explore: current admin API/pages, invitation, payment, and media reads the status view can reuse | S1 | explore | see L5 |
 | T2 | API: admin invitation search and status detail (state, payment, media counts), bounded, no personal data | S1 | worker | |
 | T3 | Web: `/admin/invitaciones` search with filters and a status detail page | S1 | worker | |
-| T4 | Docs, native review, PR, CI, merge for the S1 slice | S1 | inline | |
+| T4 | Docs, native review, PR, CI, merge for the S1 slice | S1 | inline | see L6 |
+| T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | |
 
 ## Log
 
@@ -64,3 +65,11 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 - L5 — T1 (explorer): only admin routes today are `/admin/payments`; all invitation reads are owner-scoped; no title
   column (it lives in personal `content`); no pagination convention exists (cursor is new); `Invitation` has only
   `@@index([ownerId])`; media has no count port. Design above follows the gallery-reader port precedent.
+- L6 — S1 delivered as chained PRs #94 (reads, ports, index) → #93 (routes) → #91 (web client) → #92 (web pages), CI
+  green on each, merged; master `0ba297f`. Native review of slice 1 `review-7ef7a9e905741614` approved; slices 2-4 not
+  due (medium, under budget). One unidentified intermittent db-spec failure (1 of 6 local runs, under load) did not
+  reproduce. Advisories kept for T5: «The cursor decoder accepts canonical ISO instants that are outside PostgreSQL's
+  timestamptz range»; «the added (status, createdAt) index cannot satisfy that global createdAt ordering»; «The
+  payment adapter passes an arbitrary limit to Prisma even though the port says the detail list is capped at twenty»;
+  «CREATE INDEX without CONCURRENTLY takes a SHARE lock on Invitation». The parent decided T5 adds a second additive
+  index `Invitation(createdAt, id)` (same kind as the authorized one, L3) and never edits the merged migration.
