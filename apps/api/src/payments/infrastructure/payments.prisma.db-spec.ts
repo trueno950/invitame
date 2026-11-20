@@ -8,6 +8,7 @@ import { requireLocalDatabaseUrl } from "../../../test/database";
 import { PrismaCatalogPublicReader } from "../../catalog/infrastructure/prisma-catalog-public-reader";
 import { PAYMENTS_MODE } from "../../config/environment";
 import type { InvitationRecord } from "../../invitations/application/invitation.repository";
+import { InvitationPaymentRequiredError } from "../../invitations/application/invitation.application.errors";
 import { PrismaInvitationRepository } from "../../invitations/infrastructure/prisma-invitation.repository";
 import {
   InvitationPackageLockedByPaymentError,
@@ -839,6 +840,35 @@ describe("payments on real PostgreSQL (M7 S1, S4)", () => {
         },
       });
     }
+
+    it("refuses a publish that passed the gate before a refund claim landed, and stores nothing", async () => {
+      const invitation = await newInvitation();
+      const payment = await newPayment(invitation);
+      await repository.claimRefund(payment.id, FIRST_PUBLISHED_AT);
+
+      await assert.rejects(
+        invitations.publish(invitation.ownerId, invitation.id, FIRST_PUBLISHED_AT),
+        { name: InvitationPaymentRequiredError.name },
+      );
+      const row = await prisma.invitation.findUniqueOrThrow({ where: { id: invitation.id } });
+      assert.equal(row.status, "DRAFT");
+      assert.equal(row.publishedAt, null);
+      assert.equal(row.firstPublishedAt, null);
+    });
+
+    it("refuses the claim once the invitation was published, and writes nothing", async () => {
+      const invitation = await newInvitation();
+      const payment = await newPayment(invitation);
+      await invitations.publish(invitation.ownerId, invitation.id, FIRST_PUBLISHED_AT);
+
+      await assert.rejects(refund.execute({ paymentId: payment.id }), {
+        name: PaymentInvitationAlreadyPublishedError.name,
+      });
+      const row = await prisma.invitation.findUniqueOrThrow({ where: { id: invitation.id } });
+      assert.equal(row.refundRequestedAt, null);
+      const stored = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      assert.equal(stored.status, "paid");
+    });
 
     it("sets firstPublishedAt on the first publish and keeps it through unpublish and archive", async () => {
       const invitation = await newInvitation();

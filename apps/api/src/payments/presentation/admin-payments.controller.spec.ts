@@ -23,6 +23,7 @@ import type {
   RefundTarget,
 } from "../application/payment.repository";
 import { PAYMENT_REFUND_REPOSITORY } from "../application/payment.repository";
+import { PaymentInvitationAlreadyPublishedError } from "../application/payment.errors";
 import type {
   CheckoutIntent,
   CheckoutSession,
@@ -54,6 +55,7 @@ type Row = Record<string, unknown>;
 class RefundRepository extends MemoryPaymentRepository implements PaymentRefundRepository {
   private readonly firstPublishedAt = new Map<string, Date>();
   private readonly slugs = new Map<string, string>();
+  readonly requestedAt = new Map<string, Date>();
 
   setSlug(invitationId: string, slug: string): void {
     this.slugs.set(invitationId, slug);
@@ -98,6 +100,17 @@ class RefundRepository extends MemoryPaymentRepository implements PaymentRefundR
     };
   }
 
+  async claimRefund(paymentId: string, at: Date): Promise<void> {
+    const payment = this.payments.find((stored) => stored.id === paymentId);
+    if (payment === undefined) {
+      return;
+    }
+    if (this.firstPublishedAt.has(payment.invitationId)) {
+      throw new PaymentInvitationAlreadyPublishedError();
+    }
+    this.requestedAt.set(payment.invitationId, at);
+  }
+
   async listPaidForAdmin(limit: number): Promise<AdminPaymentRow[]> {
     return this.payments
       .filter((payment) => payment.status === "paid")
@@ -112,6 +125,7 @@ class RefundRepository extends MemoryPaymentRepository implements PaymentRefundR
         currency: payment.currency,
         paidAt: payment.paidAt,
         firstPublishedAt: this.firstPublishedAt.get(payment.invitationId) ?? null,
+        refundRequestedAt: this.requestedAt.get(payment.invitationId) ?? null,
       }));
   }
 }

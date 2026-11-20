@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   InvitationContentConflictError,
+  InvitationPaymentRequiredError,
   InvitationSlugTakenError,
 } from "../application/invitation.application.errors";
 import type {
@@ -373,7 +374,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
       const next = publish(current.status);
 
       const changed = await tx.invitation.updateMany({
-        where: { id, ownerId, status: "DRAFT" },
+        // A claimed refund keeps this invitation out of publishing: the database orders the two (T2, S3).
+        where: { id, ownerId, status: "DRAFT", refundRequestedAt: null },
         data: {
           status: next,
           publishedAt: at,
@@ -384,6 +386,14 @@ export class PrismaInvitationRepository implements InvitationRepository {
         },
       });
       if (changed.count !== 1) {
+        // A claimed refund is what refused this publication, so it answers the payment gate's own refusal (T2, S3).
+        const claimed = await tx.invitation.findFirst({
+          where: { id, refundRequestedAt: { not: null } },
+          select: { id: true },
+        });
+        if (claimed !== null) {
+          throw new InvitationPaymentRequiredError("PAYMENT_REQUIRED");
+        }
         // A concurrent publish or archive won; nothing was published by this request.
         throw new InvitationAlreadyPublishedError();
       }

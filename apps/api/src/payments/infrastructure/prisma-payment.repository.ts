@@ -14,6 +14,10 @@ import type {
   PaymentTarget,
   RefundTarget,
 } from "../application/payment.repository";
+import {
+  PaymentInvitationAlreadyPublishedError,
+  PaymentNotRefundableError,
+} from "../application/payment.errors";
 import type { PaymentStatus } from "../domain/payment";
 
 // The payments repository on PostgreSQL (M7 S1, S4). Two statements are the whole concurrency story of this
@@ -258,6 +262,35 @@ export class PrismaPaymentRepository implements PaymentRepository, PaymentRefund
         };
   }
 
+  async claimRefund(paymentId: string, at: Date): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.findUnique({
+        where: { id: paymentId },
+        select: { invitationId: true, status: true, providerReference: true },
+      });
+      if (payment === null || payment.status !== "paid" || payment.providerReference === null) {
+        throw new PaymentNotRefundableError();
+      }
+
+      const { count } = await tx.invitation.updateMany({
+        // `firstPublishedAt: null` is "never published" (the CHECK constraint pairs both columns), and the claim is
+        // written only when it is not stored yet, so a retry keeps the first instant.
+        where: { id: payment.invitationId, firstPublishedAt: null, refundRequestedAt: null },
+        data: { refundRequestedAt: at },
+      });
+      if (count === 0) {
+        // A stored claim stays (the retry re-sends the same refund); any other miss means it was published.
+        const invitation = await tx.invitation.findUniqueOrThrow({
+          where: { id: payment.invitationId },
+          select: { refundRequestedAt: true },
+        });
+        if (invitation.refundRequestedAt === null) {
+          throw new PaymentInvitationAlreadyPublishedError();
+        }
+      }
+    });
+  }
+
   async listPaidForAdmin(limit: number): Promise<AdminPaymentRow[]> {
     const rows = await this.prisma.payment.findMany({
       where: { status: "paid" },
@@ -268,7 +301,7 @@ export class PrismaPaymentRepository implements PaymentRepository, PaymentRefund
         currency: true,
         status: true,
         paidAt: true,
-        invitation: { select: { slug: true, firstPublishedAt: true } },
+        invitation: { select: { slug: true, firstPublishedAt: true, refundRequestedAt: true } },
       },
       orderBy: [{ paidAt: "desc" }, { id: "desc" }],
       take: limit,
@@ -283,6 +316,7 @@ export class PrismaPaymentRepository implements PaymentRepository, PaymentRefund
       currency: row.currency,
       paidAt: row.paidAt,
       firstPublishedAt: row.invitation.firstPublishedAt,
+      refundRequestedAt: row.invitation.refundRequestedAt,
     }));
   }
 

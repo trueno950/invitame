@@ -1,6 +1,5 @@
 import { PAYMENT_STATUS } from "../domain/payment";
 import {
-  PaymentInvitationAlreadyPublishedError,
   PaymentNotFoundError,
   PaymentNotRefundableError,
   PaymentProviderUnavailableError,
@@ -14,11 +13,11 @@ import type { PaymentProvider } from "./payment-provider.port";
 // first publish sets and nothing clears. The command only asks the provider: the payment becomes `refunded` from the
 // verified notification that follows, never from the administrator's click, so no request can invent a payment state.
 //
-// A publish racing a refund is left to the existing guards instead of a lock: publishing asks the payment gate, which
-// counts `refunded` as unpaid, so a publish that loses the race to a completed refund is refused by the gate. A
-// publish that wins before the refund is answered by the never-published rule the next refund reads, and the
-// provider's own idempotency key keeps the command itself single. This is a documented ordering, not a guarantee
-// that a refund and a publish cannot both start; the gate is what makes the sequence safe.
+// A publish racing a refund is settled by the database (R3-001), not by an ordering the code hopes for: a refund
+// claims `Invitation.refundRequestedAt` with a conditional single-row update, and publishing is a guarded update of
+// the same row that requires that column to stay NULL, so exactly one of the two lands. A provider failure keeps the
+// claim (fail closed): the invitation stays unpublishable and the retry re-sends the same idempotent refund, instead
+// of a published invitation whose payment was refunded.
 
 /** What an accepted refund command answers: it asked the provider and changed no payment state (S3). */
 export interface RefundRequested {
@@ -36,8 +35,8 @@ export function refundIdempotencyKey(paymentId: string): string {
 /**
  * Asks the provider for a full refund of one paid, never-published payment (T2, S3). Every refusal is typed and
  * stable: an unknown payment is `PaymentNotFoundError` (404), a payment that is not `paid` or has no provider
- * reference is `PaymentNotRefundableError` (409), and an invitation that was ever published is
- * `PaymentInvitationAlreadyPublishedError` (409). A provider that refuses or cannot be reached is
+ * reference is `PaymentNotRefundableError` (409), and a claim the database refuses because the invitation was ever
+ * published is `PaymentInvitationAlreadyPublishedError` (409). A provider that refuses or cannot be reached is
  * `PaymentProviderUnavailableError` (503), the same answer a checkout gives, and nothing is written either way.
  */
 export class RefundPaymentUseCase {
@@ -57,10 +56,8 @@ export class RefundPaymentUseCase {
       throw new PaymentNotRefundableError();
     }
 
-    // «Sin reembolso tras publicar» (S3): publishing, unpublishing, and archiving all keep this timestamp.
-    if (target.firstPublishedAt !== null) {
-      throw new PaymentInvitationAlreadyPublishedError();
-    }
+    // The claim is the decision (T2, S3): a conditional write of the invitation row that a racing publish re-checks.
+    await this.payments.claimRefund(target.paymentId, new Date());
 
     let result: Awaited<ReturnType<PaymentProvider["refund"]>>;
     try {
@@ -112,7 +109,10 @@ export class ListAdminPaymentsUseCase {
       amountMinor: row.amountMinor,
       currency: row.currency,
       paidAt: row.paidAt,
-      refundable: row.status === PAYMENT_STATUS.PAID && row.firstPublishedAt === null,
+      refundable:
+        row.status === PAYMENT_STATUS.PAID &&
+        row.firstPublishedAt === null &&
+        row.refundRequestedAt === null,
     }));
   }
 }

@@ -157,17 +157,26 @@ export interface AdminPaymentRow {
   currency: string;
   paidAt: Date | null;
   firstPublishedAt: Date | null;
+  /** The instant a refund claim asked the provider; a row that carries one offers no second click (T2, S3). */
+  refundRequestedAt: Date | null;
 }
 
 /**
  * The administrator refund port (T2, S3, S4). It is separate from `PaymentRepository` on purpose: the refund rule is
- * the only reader of `Invitation.firstPublishedAt` and the only global payment read in the product, and keeping it
+ * the only writer of `Invitation.refundRequestedAt` and the only global payment read in the product, and keeping it
  * apart means no owner-scoped use case can reach it by accident. Nothing here writes a payment: a refund is a
  * provider command, and `refunded` arrives only from the verified notification.
  */
 export interface PaymentRefundRepository {
   /** The payment and its invitation's first publication, or null when no payment has this id. */
   findRefundTarget(paymentId: string): Promise<RefundTarget | null>;
+
+  /**
+   * Claims the refund of a paid, never-published payment: a conditional `Invitation.refundRequestedAt` write, the
+   * same row publishing guards (T2, S3). A stored claim stays and a published invitation answers
+   * `PaymentInvitationAlreadyPublishedError`, so a retry re-sends the same refund.
+   */
+  claimRefund(paymentId: string, at: Date): Promise<void>;
 
   /** The newest `paid` payments, at most `limit`, newest first: the administrator's bounded read. */
   listPaidForAdmin(limit: number): Promise<AdminPaymentRow[]>;

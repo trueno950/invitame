@@ -38,6 +38,9 @@ const PAID_AT = new Date("2026-11-23T09:00:00.000Z");
 class RefundRepository extends MemoryPaymentRepository implements PaymentRefundRepository {
   private readonly firstPublishedAt = new Map<string, Date>();
   private readonly slugs = new Map<string, string>();
+  /** The instant each invitation's refund claim wrote, and the order the command's steps ran in. */
+  readonly requestedAt = new Map<string, Date>();
+  readonly steps: string[] = [];
 
   setSlug(invitationId: string, slug: string): void {
     this.slugs.set(invitationId, slug);
@@ -63,6 +66,20 @@ class RefundRepository extends MemoryPaymentRepository implements PaymentRefundR
     };
   }
 
+  async claimRefund(paymentId: string, at: Date): Promise<void> {
+    this.steps.push("claim");
+    const payment = this.payments.find((stored) => stored.id === paymentId);
+    if (payment === undefined || payment.status !== "paid" || payment.providerReference === null) {
+      throw new PaymentNotRefundableError();
+    }
+    if (this.firstPublishedAt.has(payment.invitationId)) {
+      throw new PaymentInvitationAlreadyPublishedError();
+    }
+    if (!this.requestedAt.has(payment.invitationId)) {
+      this.requestedAt.set(payment.invitationId, at);
+    }
+  }
+
   async listPaidForAdmin(limit: number): Promise<AdminPaymentRow[]> {
     return this.payments
       .filter((payment) => payment.status === "paid")
@@ -77,6 +94,7 @@ class RefundRepository extends MemoryPaymentRepository implements PaymentRefundR
         currency: payment.currency,
         paidAt: payment.paidAt,
         firstPublishedAt: this.firstPublishedAt.get(payment.invitationId) ?? null,
+        refundRequestedAt: this.requestedAt.get(payment.invitationId) ?? null,
       }));
   }
 }
@@ -85,6 +103,8 @@ class RefundRepository extends MemoryPaymentRepository implements PaymentRefundR
 class FakeRefundProvider implements PaymentProvider {
   readonly key = "mercadopago";
   readonly refunds: Array<{ providerReference: string; idempotencyKey: string }> = [];
+  /** The same list the repository writes to, so the test observes the order of the command's two steps. */
+  steps: string[] = [];
   result: RefundResult = { ok: true };
   failure: Error | null = null;
 
@@ -97,6 +117,7 @@ class FakeRefundProvider implements PaymentProvider {
   }
 
   async refund(providerReference: string, idempotencyKey: string): Promise<RefundResult> {
+    this.steps.push("refund");
     this.refunds.push({ providerReference, idempotencyKey });
     if (this.failure !== null) {
       throw this.failure;
@@ -140,12 +161,10 @@ function seed(
     provider: "mercadopago",
   });
 
-  return {
-    repository,
-    paymentId: payment.id,
-    invitationId: invitation.id,
-    provider: new FakeRefundProvider(),
-  };
+  const provider = new FakeRefundProvider();
+  provider.steps = repository.steps;
+
+  return { repository, paymentId: payment.id, invitationId: invitation.id, provider };
 }
 
 describe("refund use cases (T2, S3, S4)", () => {
@@ -181,6 +200,21 @@ describe("refund use cases (T2, S3, S4)", () => {
         name: PaymentInvitationAlreadyPublishedError.name,
       });
       assert.deepEqual(provider.refunds, []);
+      assert.deepEqual(repository.steps, ["claim"]);
+      assert.equal(repository.payments[0]?.status, "paid");
+    });
+
+    it("claims before it calls the provider and keeps a failed claim, so a retry re-sends it", async () => {
+      const { repository, paymentId, invitationId, provider } = seed();
+      provider.failure = new Error("the provider is down");
+      const useCase = new RefundPaymentUseCase(repository, provider);
+
+      await assert.rejects(useCase.execute({ paymentId }), {
+        name: PaymentProviderUnavailableError.name,
+      });
+      // Fail closed (S3): the claim stays, so the invitation stays unpublishable and the retry re-sends it.
+      assert.deepEqual(repository.steps, ["claim", "refund"]);
+      assert.ok(repository.requestedAt.get(invitationId) instanceof Date);
       assert.equal(repository.payments[0]?.status, "paid");
     });
 
@@ -298,6 +332,10 @@ describe("refund use cases (T2, S3, S4)", () => {
         refundable: false,
       });
       assert.equal(rows[1]?.refundable, true);
+
+      repository.requestedAt.set(refundable.id, FIRST_PUBLISHED);
+      const claimed = await new ListAdminPaymentsUseCase(repository).execute({ limit: 50 });
+      assert.equal(claimed[1]?.refundable, false);
     });
 
     it("answers at most the requested bound", async () => {
