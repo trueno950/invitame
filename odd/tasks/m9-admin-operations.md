@@ -19,6 +19,11 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   («Estado, eventos recibidos de Mercado Pago y su historial, sin datos de la tarjeta»), «Desactivar una cuenta»
   («Bloquear el acceso de un usuario»), and «Reenviar el enlace de acceso» («Volver a mandar el código de inicio de
   sesión a un usuario»).
+- S6 — Support action decisions (L8, L9): every state-changing support action writes one append-only `AdminAction`
+  row in the same transaction as the change («Misma transacción (recomendado)»); the reason is a closed set plus an
+  optional note of at most 500 characters, required when the reason is «Otro»; an account can be disabled and
+  reactivated («Sí, reactivar (recomendado)»); disabling keeps the owner's invitations published; resending the code
+  uses the existing limits; viewing a payment is not audited («No (recomendado)»).
 - S5 — The configuration panel (owner-followups L2) is a later slice of this milestone.
 
 ## Design (S1)
@@ -43,6 +48,36 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   lifecycle dates, payments, and media counts plus the public link when published. Server-first; the query values are
   validated before they reach the API.
 
+## Design (S4, S6 — support actions)
+
+- **`admin` module** (`apps/api/src/admin/`) owns the `AdminAction` table. It exports one public infrastructure contract,
+  `AdminActionRecorder.record(tx, entry)`, which writes the audit row with the caller's Prisma transaction client, so
+  the owning module performs its change and the audit row in one transaction. No other code writes `AdminAction`.
+- **`AdminAction`** (additive migration): `id uuid`, `adminUserId uuid NOT NULL` → `User` (RESTRICT), `action`
+  (`INVITATION_UNPUBLISHED | ACCOUNT_DISABLED | ACCOUNT_REACTIVATED | SIGN_IN_CODE_RESENT`), `reason` (`ABUSE |
+  OWNER_REQUEST | PAYMENT_ERROR | OTHER`), `note varchar(500) NULL` (CHECK: present when `reason = OTHER`),
+  `targetUserId uuid NULL`, `invitationId uuid NULL`, `createdAt timestamptz`; CHECK exactly one target; indexes
+  `(createdAt, id)`, `(targetUserId)`, `(invitationId)`; a `BEFORE UPDATE OR DELETE` trigger refuses any change
+  (the `Invitation_pinned_fields_immutable` pattern). No email, IP, or payload column.
+- **Routes** (all `@AdminOnly()`, actor from `@SessionUserId()`, body `{ reason, note? }` validated by DTO):
+  - `POST /admin/invitations/:invitationId/unpublish` → 200; 404 `INVITATION_NOT_FOUND`; 409 `INVITATION_NOT_PUBLISHED`
+    / `INVITATION_ALREADY_ARCHIVED`. Keeps `firstPublishedAt`; never creates a refund (the UI says so).
+  - `POST /admin/users/:userId/disable` and `/reactivate` → 200 `{ status, revokedSessions? }`; 404 `USER_NOT_FOUND`;
+    409 `ACCOUNT_ALREADY_DISABLED` / `ACCOUNT_ALREADY_ACTIVE`; an administrator account answers 409
+    `ADMIN_ACCOUNT_PROTECTED`. Disable revokes sessions in the same transaction.
+  - `POST /admin/users/:userId/sign-in-code` → 202 `{ outcome: "requested" }`; 404 `USER_NOT_FOUND`; 409
+    `USER_CANNOT_SIGN_IN_BY_CODE` (disabled or administrator). It goes through Better Auth's own sign-in-code endpoint
+    so the per-email quota, hashing, expiry, and attempt cap apply unchanged. The audit row records the request and is
+    written before the request (delivery is asynchronous and never reported as done).
+  - `GET /admin/payments/:paymentId` → 200 `{ paymentId, invitationId, invitationSlug, status, amountMinor, currency,
+    provider, createdAt, paidAt, events: [{ type, outcome, receivedAt, processedAt }] }` (newest 50), 404
+    `PAYMENT_NOT_FOUND`. Not audited; no payer datum, provider reference, idempotency key, or payload hash.
+- **Admin invitation detail** gains the additive `ownerId` field so the web can address the owner's account.
+- **Web**: an «Acciones de soporte» card on `/admin/invitaciones/<id>` (unpublish when published; disable or reactivate
+  and resend the code for the owner), each a server-action form with the reason select and the note, `?notice=` /
+  `?error=` redirects; `/admin/pagos/<id>` for the payment detail, linked from the payments table and the invitation
+  detail.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -51,6 +86,10 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T2 | API: admin invitation search and status detail (state, payment, media counts), bounded, no personal data | S1 | worker | |
 | T3 | Web: `/admin/invitaciones` search with filters and a status detail page | S1 | worker | |
 | T4 | Docs, native review, PR, CI, merge for the S1 slice | S1 | inline | see L6 |
+| T6 | `AdminAction` migration + admin module (recorder, domain, append-only trigger) + db-spec | S6 | worker | |
+| T7 | Payment detail: `GET /admin/payments/:paymentId` + `/admin/pagos/<id>` | S4, S6 | worker | |
+| T8 | Admin unpublish with audit, `ownerId` on the detail, support card on the invitation detail | S4, S6 | worker | |
+| T9 | Disable, reactivate, and resend the sign-in code with audit + web actions | S4, S6 | worker | |
 | T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | see L7 |
 
 ## Log
@@ -82,3 +121,10 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 - L8 — Owner chose the next slice: «Acciones de soporte (recomendado)». Answers: audit «Tabla de auditoría
   (recomendado)»; reason «Lista cerrada + nota (recomendado)»; disabling an account «Siguen publicadas (recomendado)»;
   resending the code «Mismos límites actuales (recomendado)».
+
+- L9 — Owner answers (support actions): reactivate «Sí, reactivar (recomendado)»; audit «Misma transacción
+  (recomendado)»; payment views «No (recomendado)»; note «Sí, con «Otro» (recomendado)». Explorer findings: disabling
+  exists only as a CLI (`disable-user.command.ts`, keyed by email, revokes sessions); nothing reactivates; sign-in codes
+  go through Better Auth's emailOTP with a per-email 5/hour quota and asynchronous delivery; admin reads are read-only;
+  no audit table exists. Parent decisions: the `admin` module with `AdminActionRecorder` satisfies «Misma transacción»;
+  the resend audit row records the request; `ownerId` is added to the admin detail (additive).
