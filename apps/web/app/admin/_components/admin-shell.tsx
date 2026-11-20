@@ -6,6 +6,7 @@ import {
   LibraryBig,
   LogOut,
   type LucideIcon,
+  Mail,
   Package,
   Sparkles,
   Tags,
@@ -15,6 +16,7 @@ import type { ReactNode } from "react";
 
 import { CATALOG_INDEX_COPY, CATALOG_PATHS } from "../../../lib/admin/catalog/copy.ts";
 import { ADMIN_PANEL_COPY, ADMIN_SHELL_COPY } from "../../../lib/admin/copy.ts";
+import { INVITATIONS_PATHS } from "../../../lib/admin/invitations/copy.ts";
 import { PAYMENTS_PATHS } from "../../../lib/admin/payments/copy.ts";
 import { SignOutButton } from "../../_components/sign-out-button.tsx";
 import { AdminBrandMark } from "./admin-brand-mark.tsx";
@@ -28,7 +30,8 @@ export type AdminSection =
   | "features"
   | "packages"
   | "templates"
-  | "payments";
+  | "payments"
+  | "invitations";
 
 export interface Breadcrumb {
   label: string;
@@ -180,6 +183,14 @@ export function AdminShell({
                 href={PAYMENTS_PATHS.index}
                 icon={CreditCard}
                 label={ADMIN_SHELL_COPY.payments}
+              />
+            </li>
+            <li>
+              <NavLink
+                active={current === "invitations"}
+                href={INVITATIONS_PATHS.index}
+                icon={Mail}
+                label={ADMIN_SHELL_COPY.invitations}
               />
             </li>
           </ul>
