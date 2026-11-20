@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   ChevronRight,
   CreditCard,
   LayoutDashboard,
@@ -14,6 +15,7 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { ANALYTICS_PATHS } from "../../../lib/admin/analytics/copy.ts";
 import { CATALOG_INDEX_COPY, CATALOG_PATHS } from "../../../lib/admin/catalog/copy.ts";
 import { ADMIN_PANEL_COPY, ADMIN_SHELL_COPY } from "../../../lib/admin/copy.ts";
 import { INVITATIONS_PATHS } from "../../../lib/admin/invitations/copy.ts";
@@ -31,7 +33,8 @@ export type AdminSection =
   | "packages"
   | "templates"
   | "payments"
-  | "invitations";
+  | "invitations"
+  | "analytics";
 
 export interface Breadcrumb {
   label: string;
@@ -191,6 +194,14 @@ export function AdminShell({
                 href={INVITATIONS_PATHS.index}
                 icon={Mail}
                 label={ADMIN_SHELL_COPY.invitations}
+              />
+            </li>
+            <li>
+              <NavLink
+                active={current === "analytics"}
+                href={ANALYTICS_PATHS.index}
+                icon={BarChart3}
+                label={ADMIN_SHELL_COPY.analytics}
               />
             </li>
           </ul>

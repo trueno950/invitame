@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
+import { INVITATION_ANALYTICS_COPY } from "../../../../lib/admin/analytics/copy.ts";
+import { invitationActivityView } from "../../../../lib/admin/analytics/rows.ts";
 import { SIGN_IN_PATH } from "../../../../lib/admin/catalog/commands.ts";
 import { ADMIN_SHELL_COPY } from "../../../../lib/admin/copy.ts";
 import {
@@ -114,6 +116,12 @@ export default async function AdminInvitationDetailPage({
   const detail = loaded.value;
   const view = invitationDetailView(detail);
   const support = invitationSupportView(detail);
+  // The aperturas and RSVP totals are additive (T12; S2, S7): while the API answers neither, the card is not rendered,
+  // so the page keeps working before the analytics slice lands.
+  const activity =
+    detail.views === null || detail.rsvpTotals === null
+      ? undefined
+      : invitationActivityView(detail.views, detail.rsvpTotals);
   const copy = INVITATION_DETAIL_COPY;
 
   return (
@@ -265,6 +273,43 @@ export default async function AdminInvitationDetailPage({
                 </div>
               )}
             </AdminCard>
+            {activity === undefined ? null : (
+              <AdminCard
+                description={INVITATION_ANALYTICS_COPY.intro}
+                id="invitation-analytics"
+                title={INVITATION_ANALYTICS_COPY.heading}
+              >
+                <div className={`${adminCardBody} grid gap-6 text-sm sm:grid-cols-2`}>
+                  <div>
+                    <h3 className="text-sm font-medium text-admin-ink">
+                      {INVITATION_ANALYTICS_COPY.viewsHeading}
+                    </h3>
+                    <dl className="mt-2 flex flex-col gap-2">
+                      {activity.views.map((row) => (
+                        <div className="flex items-baseline justify-between gap-3" key={row.label}>
+                          <dt className="text-admin-muted">{row.label}</dt>
+                          <dd className="font-medium tabular-nums text-admin-ink">{row.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p className={adminHint}>{INVITATION_ANALYTICS_COPY.viewsHint}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-admin-ink">
+                      {INVITATION_ANALYTICS_COPY.rsvpHeading}
+                    </h3>
+                    <dl className="mt-2 flex flex-col gap-2">
+                      {activity.rsvp.map((row) => (
+                        <div className="flex items-baseline justify-between gap-3" key={row.label}>
+                          <dt className="text-admin-muted">{row.label}</dt>
+                          <dd className="font-medium tabular-nums text-admin-ink">{row.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                </div>
+              </AdminCard>
+            )}
             <AdminCard
               description={INVITATION_SUPPORT_COPY.intro}
               id="invitation-support"

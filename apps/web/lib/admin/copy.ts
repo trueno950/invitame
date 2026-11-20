@@ -93,4 +93,5 @@ export const ADMIN_SHELL_COPY = {
   catalogOverview: "Resumen del catálogo",
   payments: "Pagos",
   invitations: "Invitaciones",
+  analytics: "Analítica",
 } as const;
