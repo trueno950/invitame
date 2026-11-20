@@ -5,7 +5,9 @@ import { formatAmount } from "../invitations/rows.ts";
 import {
   PAYMENT_DETAIL_COPY,
   PAYMENTS_COPY,
+  PAYMENTS_PATHS,
   PAYMENTS_STATUS_LABELS,
+  paymentDetailPath,
   paymentEventOutcomeLabel,
   paymentEventTypeLabel,
 } from "./copy.ts";
@@ -63,6 +65,21 @@ function eventView(event: AdminPaymentEvent, index: number): PaymentDetailEventV
         : formatInstant(event.processedAt),
     processedAt: event.processedAt ?? undefined,
   };
+}
+
+/** The two links of the detail page's notices: the retry of this detail, and the way back to the list. */
+export interface PaymentDetailNoticeLinks {
+  /** `/admin/pagos/<id>`: the same page, reloaded. */
+  readonly retryHref: string;
+  readonly listHref: string;
+}
+
+/**
+ * The links a notice of `/admin/pagos/<id>` offers (M9 T10; R3-001): «Volver a intentar» reloads the same detail,
+ * because a failed read of one payment is not a reason to leave it, and the list stays a separate way back.
+ */
+export function paymentDetailNoticeLinks(paymentId: string): PaymentDetailNoticeLinks {
+  return { retryHref: paymentDetailPath(paymentId), listHref: PAYMENTS_PATHS.index };
 }
 
 /** One payment's detail page: its summary, the link to its invitation, and its events newest first. */

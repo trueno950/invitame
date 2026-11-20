@@ -9,7 +9,10 @@ import {
   PAYMENTS_COPY,
   PAYMENTS_PATHS,
 } from "../../../../lib/admin/payments/copy.ts";
-import { paymentDetailView } from "../../../../lib/admin/payments/detail.ts";
+import {
+  paymentDetailNoticeLinks,
+  paymentDetailView,
+} from "../../../../lib/admin/payments/detail.ts";
 import { loadAdminView, routeAdminPage } from "../../../../lib/admin/session.ts";
 import { isCatalogId } from "../../../../lib/server/admin-catalog-validators.ts";
 import { adminPayments } from "../../../../lib/server/admin-payments-api.ts";
@@ -59,13 +62,13 @@ export default async function AdminPaymentDetailPage({
 
   const { id } = await params;
 
-  if (session.kind !== "administrator") {
-    return <PaymentsUnavailable />;
-  }
-
-  // An id that is not a UUID names nothing, so no request is sent for it.
+  // An id that is not a UUID names nothing, so no request is sent for it, whichever session read the page.
   if (!isCatalogId(id)) {
     return <PaymentNotFound />;
+  }
+
+  if (session.kind !== "administrator") {
+    return <PaymentsUnavailable id={id} />;
   }
 
   let loaded: PaymentsResult<AdminPaymentDetail>;
@@ -73,7 +76,7 @@ export default async function AdminPaymentDetailPage({
     loaded = await adminPayments.detail(id);
   } catch {
     // An unexpected failure is already logged by the server wrapper; the page never shows a body it could not read.
-    return <PaymentsUnavailable />;
+    return <PaymentsUnavailable id={id} />;
   }
 
   if (!loaded.ok) {
@@ -83,7 +86,7 @@ export default async function AdminPaymentDetailPage({
     if (loaded.failure === "forbidden") {
       redirect("/cuenta");
     }
-    return loaded.failure === "not-found" ? <PaymentNotFound /> : <PaymentsUnavailable />;
+    return loaded.failure === "not-found" ? <PaymentNotFound /> : <PaymentsUnavailable id={id} />;
   }
 
   const detail = loaded.value;
@@ -221,12 +224,21 @@ export default async function AdminPaymentDetailPage({
   );
 }
 
-/** The notice of a read that failed: the page never renders an empty payment as if it were the stored one. */
-function PaymentsUnavailable() {
+/**
+ * The notice of a read that failed: the page never renders an empty payment as if it were the stored one, and its
+ * «Volver a intentar» reloads this same detail (M9 T10; R3-001) — the list stays a separate link.
+ */
+function PaymentsUnavailable({ id }: { id: string }) {
+  const links = paymentDetailNoticeLinks(id);
+
   return (
     <PaymentsNotice
       body={PAYMENT_DETAIL_COPY.unavailableBody}
       heading={PAYMENT_DETAIL_COPY.unavailableHeading}
+      links={[
+        { href: links.retryHref, label: PAYMENT_DETAIL_COPY.retry },
+        { href: links.listHref, label: PAYMENT_DETAIL_COPY.backToList },
+      ]}
     />
   );
 }
@@ -237,7 +249,7 @@ function PaymentNotFound() {
     <PaymentsNotice
       body={PAYMENT_DETAIL_COPY.notFoundBody}
       heading={PAYMENT_DETAIL_COPY.notFoundHeading}
-      linkLabel={PAYMENT_DETAIL_COPY.backToList}
+      links={[{ href: PAYMENTS_PATHS.index, label: PAYMENT_DETAIL_COPY.backToList }]}
     />
   );
 }
@@ -245,17 +257,22 @@ function PaymentNotFound() {
 function PaymentsNotice({
   body,
   heading,
-  linkLabel = PAYMENT_DETAIL_COPY.retry,
+  links,
 }: {
   body: string;
   heading: string;
-  linkLabel?: string;
+  /** The retry reloads the page that failed; the other link is the way back to the list. */
+  links: ReadonlyArray<{ href: string; label: string }>;
 }) {
   return (
     <AdminCenteredShell heading={heading} intro={body}>
-      <a className={adminButtonOutline} href={PAYMENTS_PATHS.index}>
-        {linkLabel}
-      </a>
+      <div className="flex flex-wrap gap-3">
+        {links.map((link) => (
+          <a className={adminButtonOutline} href={link.href} key={link.href}>
+            {link.label}
+          </a>
+        ))}
+      </div>
     </AdminCenteredShell>
   );
 }

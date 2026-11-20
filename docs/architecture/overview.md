@@ -1124,7 +1124,9 @@ with no personal data beyond the owner's email, and may unpublish one invitation
   POST with `?notice=` or `?error=` and a code from a fixed list (`lib/admin/invitations/notices.ts`); the client
   (`lib/server/admin-invitations-client.ts`) maps a 404 to `not-found`, each 409 to `not-published` or
   `already-archived`, 400 to `validation`, and 5xx to `unavailable`, and parses `ownerId` in the detail validator. Each
-  row of the invitation's payments list links to `/admin/pagos/<paymentId>`.
+  row of the invitation's payments list links to `/admin/pagos/<paymentId>`; that detail's unavailable notice retries
+the same detail (its «Volver a intentar» reloads `/admin/pagos/<paymentId>`, never the list) and keeps «Volver a los
+pagos» as a separate link.
 - Tests: `src/invitations/application/admin-invitation.use-cases.spec.ts` (fakes: key-set paging over equal
   `createdAt`, one batched read per facet, the cursor's contract and its instant window, the payment bound, the exact
   field set, and the unpublish use case's audit pass-through and refusals),
@@ -1180,13 +1182,21 @@ sign-in code, and each state change writes one append-only `AdminAction` row in 
   before any port; the actor is `@SessionUserId()` and the body is `{ reason, note? }`, the same closed reason set and
   note rule the unpublish states, now declared once in `apps/api/src/admin/admin-action.dto.ts`):
   - `POST /admin/users/:userId/disable` → 200 `{ status: "DISABLED", revokedSessions }`, 404 `USER_NOT_FOUND`, 409
-    `ACCOUNT_ALREADY_DISABLED`, 409 `ADMIN_ACCOUNT_PROTECTED`. One Prisma interactive transaction reads the account,
-    refuses an administrator's, runs the guarded `updateMany({ where: { id, status: "ACTIVE" } })`, deletes every
-    session of the account, and records `ACCOUNT_DISABLED` through the injected recorder. The owner's invitations are
-    untouched (L8: «Siguen publicadas»).
+    `ACCOUNT_ALREADY_DISABLED`, 409 `ACCOUNT_ALREADY_ACTIVE`, 409 `ADMIN_ACCOUNT_PROTECTED`. One Prisma interactive
+    transaction reads the account, refuses an administrator's, runs the guarded
+    `updateMany({ where: { id, status: "ACTIVE", role: "CUSTOMER" } })`, deletes every session of the account, and
+    records `ACCOUNT_DISABLED` through the injected recorder. The owner's invitations are untouched (L8: «Siguen
+    publicadas»).
   - `POST /admin/users/:userId/reactivate` → 200 `{ status: "ACTIVE" }`, 404 `USER_NOT_FOUND`, 409
-    `ACCOUNT_ALREADY_ACTIVE`, 409 `ADMIN_ACCOUNT_PROTECTED`, with `ACCOUNT_REACTIVATED` in the same transaction
-    (L9). Sessions stay as they are — disabling revoked them — so the customer signs in again with a new code.
+    `ACCOUNT_ALREADY_DISABLED`, 409 `ACCOUNT_ALREADY_ACTIVE`, 409 `ADMIN_ACCOUNT_PROTECTED`, with
+    `ACCOUNT_REACTIVATED` in the same transaction (L9), guarded the same way with `status: "DISABLED"` and
+    `role: "CUSTOMER"`. Sessions stay as they are — disabling revoked them — so the customer signs in again with a new
+    code.
+  - The role is part of both guards, so a promotion committed between the read and the update can neither be disabled
+    nor reactivated: the statement matches no row instead. A zero count is then re-read, and the answer is the refusal
+    the row now names — an administrator's account is 409 `ADMIN_ACCOUNT_PROTECTED`, `DISABLED` is
+    `ACCOUNT_ALREADY_DISABLED`, `ACTIVE` is `ACCOUNT_ALREADY_ACTIVE`, and a row that is gone is 404 `USER_NOT_FOUND`.
+    No observation of that re-read reaches an unexpected 500.
   - `POST /admin/users/:userId/sign-in-code` → 202 `{ outcome: "requested" }`, 404 `USER_NOT_FOUND`, 409
     `USER_CANNOT_SIGN_IN_BY_CODE` (a `DISABLED` account or an administrator's). Its own transaction reads the account,
     refuses what may not sign in by code, and writes `SIGN_IN_CODE_RESENT`; only then does the use case ask the auth
@@ -1200,7 +1210,11 @@ sign-in code, and each state change writes one append-only `AdminAction` row in 
   the HTTP handler invokes, while `auth.api.*` enters at `toAuthEndpoints` → `dispatchAuthEndpoint`. An administrator
   is therefore not throttled per IP on this one in-process request: their `@AdminOnly()` session is the guard, and
   the per-email quota still bounds how many codes an account can receive. The db-spec pins both halves (six requests
-  are all accepted, five are delivered).
+  are all accepted, five are delivered), and `src/auth/sign-in-code/in-process-code-request.spec.ts` pins the finding
+  itself on Better Auth's in-memory adapter: with the client's per-IP bucket of the endpoint already exhausted (a
+  fourth HTTP request answers 429), three `auth.api.sendVerificationOTP` calls all resolve, all three are delivered
+  after the task queue drains, and the per-email counter advances by three — so an upgrade that starts limiting or
+  dropping the in-process request fails loudly there instead of in production.
 - Web (`/admin/invitaciones/<id>`): the «Acciones de soporte» card gains the owner's account section, built from the
   detail's `ownerStatus`: «Desactivar cuenta» while it is active, «Reactivar cuenta» while it is disabled, and
   «Reenviar código de acceso» while the owner may sign in by code. Each is a server action form
@@ -1213,9 +1227,12 @@ sign-in code, and each state change writes one append-only `AdminAction` row in 
 - Tests: `src/users/domain/account-support.spec.ts` (the transitions and the administrator's protection, from a
   table), `src/users/application/admin-user-account.use-cases.spec.ts` (the audit entry each action builds, the
   resend's record-then-request order, every refusal passed through), `src/users/infrastructure/prisma-admin-user-account.repository.spec.ts`
-  (the guarded statements, the recorder's own transaction client, no statement on a refusal or on a malformed id),
+  (the guarded statements and their customer-role condition, the zero-count re-read answering a typed 409 or a 404 and
+  never a 500, the recorder's own transaction client, no statement on a refusal or on a malformed id),
   `src/users/presentation/admin-users.controller.spec.ts` (401/403/400/404/409 and the 200/202 shapes through the
-  shared app boundary, with the session's own actor), and `src/users/infrastructure/admin-user-accounts.prisma.db-spec.ts`
+  shared app boundary, with the session's own actor), `src/admin/admin-route-authorization.spec.ts` (every route of
+  `AppModule` under `admin/` carries `@AdminOnly()` and none carries `@Public()`, derived from the module graph so a new
+  unmarked admin route fails), and `src/users/infrastructure/admin-user-accounts.prisma.db-spec.ts`
   (each change committing with its audit row, refusals writing nothing, an administrator account protected, a disable
   revoking sessions while the owner's invitations stay published, a reactivate restoring a code sign-in, the resend
   recording every request while the existing per-email quota drops the sixth, and a refused audit entry rolling the

@@ -40,6 +40,11 @@ interface Recorded {
 interface Options {
   /** The row the adapter's own select answers, or null when no user has the id. */
   readonly stored: ReturnType<typeof storedAccount> | null;
+  /**
+   * The row the re-read after a guarded update sees; `stored` unless given, and null for a row that is gone. It stands
+   * for whatever another transaction committed between this call's read and its update (M9 T10; R1-001, R4-001).
+   */
+  readonly reread?: ReturnType<typeof storedAccount> | null;
   /** How many rows the guarded update matched. */
   readonly updated?: number;
   /** How many sessions the delete matched. */
@@ -58,7 +63,10 @@ function harness(options: Options) {
     user: {
       findUnique: async (args: { where: { id: string } }) => {
         reads.push(args.where.id);
-        return options.stored;
+        if (reads.length === 1) {
+          return options.stored;
+        }
+        return options.reread === undefined ? options.stored : options.reread;
       },
       updateMany: async (args: Record<string, unknown>) => {
         updates.push(args);
@@ -113,7 +121,11 @@ describe("PrismaAdminUserAccountRepository disable (M9 T9; S4, S6, L8)", () => {
       revokedSessions: 2,
     });
     assert.deepEqual(test.updates, [
-      { where: { id: USER_ID, status: "ACTIVE" }, data: { status: "DISABLED" } },
+      {
+        // The role is part of the guard: an account promoted in between is never disabled (M9 T10; R1-001).
+        where: { id: USER_ID, status: "ACTIVE", role: "CUSTOMER" },
+        data: { status: "DISABLED" },
+      },
     ]);
     assert.deepEqual(test.deletes, [{ where: { userId: USER_ID } }]);
     assert.equal(test.recorded.length, 1);
@@ -130,6 +142,49 @@ describe("PrismaAdminUserAccountRepository disable (M9 T9; S4, S6, L8)", () => {
       note: AUDIT.note,
       targetUserId: USER_ID,
     });
+  });
+
+  it("guards the customer role, so a promotion committed in between is a 409 refusal instead of a disable", async () => {
+    const test = harness({
+      stored: storedAccount("ACTIVE"),
+      updated: 0,
+      // The promotion commits after this call's read, so its guarded update matches no row.
+      reread: storedAccount("ACTIVE", "ADMIN"),
+    });
+
+    await assert.rejects(
+      test.repository.disableForAdmin(USER_ID, AUDIT),
+      (error: unknown) => error instanceof AdminAccountProtectedError,
+    );
+    assert.deepEqual(test.updates, [
+      {
+        where: { id: USER_ID, status: "ACTIVE", role: "CUSTOMER" },
+        data: { status: "DISABLED" },
+      },
+    ]);
+    assert.deepEqual(test.deletes, [], "a protected account loses no session");
+    assert.deepEqual(test.recorded, []);
+  });
+
+  it("answers a typed conflict, never a 500, when the re-read still sees the original ACTIVE status", async () => {
+    // A concurrent disable and reactivate landed in between, so the guarded update matched nothing while the row is
+    // ACTIVE again: the answer is a conflict the route maps, not an unexpected failure (M9 T10; R4-001).
+    const test = harness({ stored: storedAccount("ACTIVE"), updated: 0 });
+
+    await assert.rejects(
+      test.repository.disableForAdmin(USER_ID, AUDIT),
+      (error: unknown) => error instanceof AccountAlreadyActiveError,
+    );
+    assert.deepEqual(test.deletes, []);
+    assert.deepEqual(test.recorded, []);
+  });
+
+  it("answers 404 when the row is gone by the time the guarded update matched nothing", async () => {
+    const test = harness({ stored: storedAccount("ACTIVE"), updated: 0, reread: null });
+
+    assert.equal(await test.repository.disableForAdmin(USER_ID, AUDIT), null);
+    assert.deepEqual(test.deletes, []);
+    assert.deepEqual(test.recorded, []);
   });
 
   it("refuses an account that is already disabled, with no session delete and no audit row", async () => {
@@ -182,7 +237,11 @@ describe("PrismaAdminUserAccountRepository reactivate (M9 T9; S4, S6, L9)", () =
       status: "ACTIVE",
     });
     assert.deepEqual(test.updates, [
-      { where: { id: USER_ID, status: "DISABLED" }, data: { status: "ACTIVE" } },
+      {
+        // The role is part of the guard here too (M9 T10; R1-001).
+        where: { id: USER_ID, status: "DISABLED", role: "CUSTOMER" },
+        data: { status: "ACTIVE" },
+      },
     ]);
     assert.deepEqual(test.deletes, [], "reactivating revokes nothing");
     assert.deepEqual(test.recorded[0]?.entry, {
@@ -192,6 +251,43 @@ describe("PrismaAdminUserAccountRepository reactivate (M9 T9; S4, S6, L9)", () =
       note: AUDIT.note,
       targetUserId: USER_ID,
     });
+  });
+
+  it("guards the customer role, so a promotion committed in between is a 409 refusal instead of a reactivate", async () => {
+    const test = harness({
+      stored: storedAccount("DISABLED"),
+      updated: 0,
+      reread: storedAccount("DISABLED", "ADMIN"),
+    });
+
+    await assert.rejects(
+      test.repository.reactivateForAdmin(USER_ID, AUDIT),
+      (error: unknown) => error instanceof AdminAccountProtectedError,
+    );
+    assert.deepEqual(test.updates, [
+      {
+        where: { id: USER_ID, status: "DISABLED", role: "CUSTOMER" },
+        data: { status: "ACTIVE" },
+      },
+    ]);
+    assert.deepEqual(test.recorded, []);
+  });
+
+  it("answers a typed conflict, never a 500, when the re-read still sees the original DISABLED status", async () => {
+    const test = harness({ stored: storedAccount("DISABLED"), updated: 0 });
+
+    await assert.rejects(
+      test.repository.reactivateForAdmin(USER_ID, AUDIT),
+      (error: unknown) => error instanceof AccountAlreadyDisabledError,
+    );
+    assert.deepEqual(test.recorded, []);
+  });
+
+  it("answers 404 when the row is gone by the time the guarded update matched nothing", async () => {
+    const test = harness({ stored: storedAccount("DISABLED"), updated: 0, reread: null });
+
+    assert.equal(await test.repository.reactivateForAdmin(USER_ID, AUDIT), null);
+    assert.deepEqual(test.recorded, []);
   });
 
   it("refuses an account that is already active, writing nothing", async () => {
