@@ -70,4 +70,10 @@ export const adminInvitations = {
   list: (...args: Parameters<AdminInvitationsClient["list"]>) => logged((api) => api.list(...args)),
   detail: (...args: Parameters<AdminInvitationsClient["detail"]>) =>
     logged((api) => api.detail(...args)),
+  /**
+   * The administrator's one audited write of this area (M9 T8; S4, S6): unpublish an invitation with the reason and
+   * note the server action read. It is logged the same way, so an unexpected failure is one line and then a rethrow.
+   */
+  unpublish: (...args: Parameters<AdminInvitationsClient["unpublish"]>) =>
+    logged((api) => api.unpublish(...args)),
 };

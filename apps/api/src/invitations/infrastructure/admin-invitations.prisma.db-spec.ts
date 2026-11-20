@@ -5,6 +5,7 @@ import { after, before, describe, it } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 
+import { PrismaAdminActionRecorder } from "../../admin/infrastructure/prisma-admin-action-recorder";
 import { requireLocalDatabaseUrl } from "../../../test/database";
 import { MEDIA_MIME, storageKeyFor } from "../../media/domain/media-asset";
 import { PrismaInvitationMediaCountReader } from "../../media/infrastructure/prisma-invitation-media-count-reader";
@@ -30,7 +31,9 @@ const RENDERER = "birthday-poster-01";
 
 describe("admin invitation status view on real PostgreSQL (M9 T2; S1)", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: requireLocalDatabaseUrl() } } });
-  const repository = new PrismaAdminInvitationRepository(prisma);
+  // The read port also carries the administrator's unpublish (T8), which writes its audit row through this recorder;
+  // this suite only reads, so the recorder is never asked.
+  const repository = new PrismaAdminInvitationRepository(prisma, new PrismaAdminActionRecorder());
   const payments = new PrismaInvitationPaymentReader(prisma);
   const media = new PrismaInvitationMediaCountReader(prisma);
   const owners = new PrismaInvitationOwnerEmailReader(prisma);
@@ -393,7 +396,18 @@ describe("admin invitation status view on real PostgreSQL (M9 T2; S1)", () => {
     assert.equal("content" in stored, false);
     assert.equal(serialized.includes("Contenido privado"), false);
     assert.equal(serialized.includes("Ana Dueña"), false);
-    assert.equal(serialized.includes(ownerId), false);
+    // The additive `ownerId` of T8 (S4) is the one owner reference the detail answers: an identifier the support card
+    // needs to address the account. The list keeps «solo el correo» (L3), so its rows still answer no owner id.
+    assert.equal(stored.ownerId, ownerId);
+    const page = await list.execute({
+      slug: `m9-fields-${runId}`,
+      status: null,
+      limit: 10,
+      cursor: null,
+    });
+    const [summary] = page.items;
+    assert.ok(summary);
+    assert.equal("ownerId" in summary, false, "the list answers the owner's email only (L3)");
     const owner = await prisma.user.findUniqueOrThrow({
       where: { id: ownerId },
       select: { email: true },

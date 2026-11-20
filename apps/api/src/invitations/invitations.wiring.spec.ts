@@ -23,6 +23,7 @@ import {
 import {
   GetAdminInvitationUseCase,
   ListAdminInvitationsUseCase,
+  UnpublishAdminInvitationUseCase,
 } from "./application/admin-invitation.use-cases";
 import {
   INVITATION_MEDIA_COUNT_READER,
@@ -200,6 +201,7 @@ describe("InvitationsModule wiring", () => {
         ClearInvitationPlaceUseCase,
         ListAdminInvitationsUseCase,
         GetAdminInvitationUseCase,
+        UnpublishAdminInvitationUseCase,
       ]) {
         assert.ok(context.get(useCase) instanceof useCase, useCase.name);
       }

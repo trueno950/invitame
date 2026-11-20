@@ -8,7 +8,7 @@ import type {
 } from "../../server/admin-invitations-client.ts";
 import { formatInstant } from "../catalog/format.ts";
 import { formatMxn } from "../catalog/price.ts";
-import { PAYMENTS_STATUS_LABELS } from "../payments/copy.ts";
+import { PAYMENTS_STATUS_LABELS, paymentDetailPath } from "../payments/copy.ts";
 import {
   INVITATION_DETAIL_COPY,
   INVITATIONS_COPY,
@@ -95,6 +95,8 @@ export interface InvitationPaymentView {
   readonly created: string;
   /** The paid instant, or "" while the payment is not paid. */
   readonly paid: string;
+  /** The payment's own detail page (M9 T7; S4), so the events Mercado Pago sent are one click away. */
+  readonly href: string;
 }
 
 export interface InvitationDetailView {
@@ -124,6 +126,7 @@ function paymentView(payment: AdminInvitationPayment): InvitationPaymentView {
     amount: formatAmount(payment.amountMinor, payment.currency),
     created: formatInstant(payment.createdAt),
     paid: payment.paidAt === null ? "" : formatInstant(payment.paidAt),
+    href: paymentDetailPath(payment.paymentId),
   };
 }
 

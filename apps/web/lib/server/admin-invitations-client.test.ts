@@ -23,6 +23,8 @@ const INVITATION_ID = "1b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e11";
 const PAYMENT_ID = "0b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e10";
 const PACKAGE_ID = "2b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e12";
 const TEMPLATE_VERSION_ID = "3b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e13";
+/** The owner's id, the additive reference of T8 the support card needs to address the account. */
+const OWNER_ID = "9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19";
 const CREATED_AT = "2026-11-10T10:00:00.000Z";
 const PUBLISHED_AT = "2026-11-12T10:00:00.000Z";
 /** The API's own key-set cursor: opaque base64url of `createdAt` and `id`. */
@@ -58,6 +60,7 @@ const PAYMENT = {
 
 const DETAIL = {
   ...INVITATION,
+  ownerId: OWNER_ID,
   packageId: PACKAGE_ID,
   templateVersionId: TEMPLATE_VERSION_ID,
   payments: [PAYMENT],
@@ -205,6 +208,17 @@ describe("requests", () => {
     assert.deepEqual(await client().detail(INVITATION_ID), { ok: true, value: DETAIL });
   });
 
+  it("keeps the owner's id out of the list, which still answers the email only (S1, L3)", async () => {
+    // The detail's additive `ownerId` (T8; S4) is not a summary field: the list the pages already render keeps exactly
+    // the shape it had, even if a future API answered the identifier there by accident.
+    answer(200, { items: [{ ...INVITATION, ownerId: OWNER_ID }], nextCursor: null });
+
+    assert.deepEqual(await client().list(), {
+      ok: true,
+      value: { items: [INVITATION], nextCursor: null },
+    });
+  });
+
   it("answers signed out without calling the API when there is no session cookie", async () => {
     for (const cookie of [null, "", "theme=dark"]) {
       const api = client(cookie);
@@ -290,6 +304,9 @@ describe("requests", () => {
     for (const body of [
       { ...DETAIL, packageId: "no-es-un-uuid" },
       { ...DETAIL, templateVersionId: undefined },
+      { ...DETAIL, ownerId: undefined },
+      { ...DETAIL, ownerId: "no-es-un-uuid" },
+      { ...DETAIL, ownerId: null },
       { ...DETAIL, payments: undefined },
       { ...DETAIL, payments: [{ ...PAYMENT, paymentId: "x" }] },
       { ...DETAIL, payments: [{ ...PAYMENT, status: "approved" }] },
@@ -379,5 +396,108 @@ describe("isInvitationCursor", () => {
     for (const value of ["", "a b", "abc+def", "abc/def=", "../x", "a".repeat(201), 42, null]) {
       assert.equal(isInvitationCursor(value), false, String(value));
     }
+  });
+});
+
+describe("the admin unpublish (M9 T8; S4, S6)", () => {
+  it("posts the administrator's reason and note, and reads the new detail", async () => {
+    answer(200, { ...DETAIL, status: "DRAFT", publishedAt: null });
+
+    assert.deepEqual(
+      await client().unpublish(INVITATION_ID, {
+        reason: "OWNER_REQUEST",
+        note: "La dueña lo pidió por correo.",
+      }),
+      { ok: true, value: { ...DETAIL, status: "DRAFT", publishedAt: null } },
+    );
+
+    const request = received[0];
+    assert.equal(received.length, 1);
+    assert.equal(request?.method, "POST");
+    assert.equal(request?.url, `/admin/invitations/${INVITATION_ID}/unpublish`);
+    assert.equal(request?.headers.cookie, SESSION_COOKIE);
+    assert.equal(request?.headers["x-invitame-proxy-secret"], PROXY_SECRET);
+    assert.match(request?.headers["content-type"] ?? "", /^application\/json/);
+    assert.deepEqual(JSON.parse(request?.body ?? ""), {
+      reason: "OWNER_REQUEST",
+      note: "La dueña lo pidió por correo.",
+    });
+  });
+
+  it("leaves the note out when the administrator wrote none", async () => {
+    answer(200, { ...DETAIL, status: "DRAFT", publishedAt: null });
+
+    await client().unpublish(INVITATION_ID, { reason: "ABUSE", note: null });
+
+    assert.deepEqual(JSON.parse(received[0]?.body ?? ""), { reason: "ABUSE" });
+  });
+
+  it("maps each refusal to its own outcome", async () => {
+    const cases: Array<[number, unknown, string]> = [
+      [404, { code: "INVITATION_NOT_FOUND" }, "not-found"],
+      [409, { code: "INVITATION_NOT_PUBLISHED" }, "not-published"],
+      [409, { code: "INVITATION_ALREADY_ARCHIVED" }, "already-archived"],
+      [400, { message: "Bad Request", statusCode: 400 }, "validation"],
+      [403, { message: "Forbidden", statusCode: 403 }, "forbidden"],
+    ];
+
+    for (const [status, body, failure] of cases) {
+      answer(status, body);
+      assert.deepEqual(
+        await client().unpublish(INVITATION_ID, { reason: "ABUSE", note: null }),
+        { ok: false, failure },
+        `${status} ${JSON.stringify(body)}`,
+      );
+    }
+  });
+
+  it("answers signed out without calling the API when there is no session cookie", async () => {
+    assert.deepEqual(await client(null).unpublish(INVITATION_ID, { reason: "ABUSE", note: null }), {
+      ok: false,
+      failure: "signed-out",
+    });
+    assert.equal(received.length, 0);
+  });
+
+  it("answers not found without calling the API when the invitation id is not a UUID", async () => {
+    for (const id of ["", "x", "../invitations", `${INVITATION_ID}/payments`]) {
+      assert.deepEqual(await client().unpublish(id, { reason: "ABUSE", note: null }), {
+        ok: false,
+        failure: "not-found",
+      });
+    }
+    assert.equal(received.length, 0);
+  });
+
+  it("answers unavailable on a 5xx and when the API cannot be reached", async () => {
+    answer(503, { code: "INTERNAL_ERROR" });
+    assert.deepEqual(await client().unpublish(INVITATION_ID, { reason: "ABUSE", note: null }), {
+      ok: false,
+      failure: "unavailable",
+    });
+
+    assert.deepEqual(
+      await client(undefined, "http://127.0.0.1:1").unpublish(INVITATION_ID, {
+        reason: "ABUSE",
+        note: null,
+      }),
+      { ok: false, failure: "unavailable" },
+    );
+  });
+
+  it("fails closed on a success whose body is not the detail contract", async () => {
+    answer(200, { ...DETAIL, ownerId: undefined });
+    await assert.rejects(
+      client().unpublish(INVITATION_ID, { reason: "ABUSE", note: null }),
+      (error: unknown) => error instanceof ApiClientError && error.kind === "invalid-response",
+    );
+  });
+
+  it("treats a 409 code it does not know as rejected", async () => {
+    answer(409, { code: "INVITATION_ALREADY_PUBLISHED" });
+    await assert.rejects(
+      client().unpublish(INVITATION_ID, { reason: "ABUSE", note: null }),
+      (error: unknown) => error instanceof ApiClientError && error.kind === "rejected",
+    );
   });
 });

@@ -1,5 +1,6 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 
+import { InvalidAdminActionError } from "../../admin/admin-action-recorder";
 import type {
   AdminInvitationDetail,
   AdminInvitationPage,
@@ -7,13 +8,18 @@ import type {
 } from "../application/admin-invitation.use-cases";
 import { InvalidInvitationCursorError } from "../application/admin-invitation.use-cases";
 import type { InvitationPaymentSummary } from "../application/invitation-payment-summary";
+import {
+  InvitationAlreadyArchivedError,
+  InvitationNotPublishedError,
+} from "../domain/invitation.errors";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PaymentStatus } from "../../payments/domain/payment";
 
 // The stable REST shapes of the administrator's invitation status view (M9 T2; S1, L3). The field set is the whole
 // privacy rule: the lifecycle dates, the newest payment's four state fields, the photo counts, and the owner's email.
-// No invitation content, no owner display name, no guests, no RSVP answer, no provider payload, and no owner id is
-// answered, so a response can never confirm what the status view was not allowed to read.
+// No invitation content, no owner display name, no guests, no RSVP answer, and no provider payload is answered, so a
+// response can never confirm what the status view was not allowed to read. The detail alone adds the owner's id (T8;
+// S4), an identifier the support card needs to address the account, and the pinned references.
 
 /** The newest payment as the list shows it: enough to state whether a payment happened, never an identifier. */
 export interface AdminInvitationLatestPaymentResponse {
@@ -56,6 +62,8 @@ export interface AdminInvitationSummaryResponse {
 
 /** One invitation's detail: the row's own fields plus the pinned references and the newest payments. */
 export interface AdminInvitationDetailResponse extends AdminInvitationSummaryResponse {
+  /** The owner's id: the additive reference T8 adds so the support card can address the owner's account (S4). */
+  ownerId: string;
   packageId: string;
   templateVersionId: string;
   /** The newest payments, at most 20, newest first. */
@@ -111,6 +119,7 @@ export function toAdminInvitationDetailResponse(
 ): AdminInvitationDetailResponse {
   return {
     ...toAdminInvitationSummaryResponse(stored),
+    ownerId: stored.ownerId,
     packageId: stored.packageId,
     templateVersionId: stored.templateVersionId,
     payments: stored.payments.map(toPayment),
@@ -148,6 +157,36 @@ export function orAdminInvitationNotFound(
 export function mapAdminInvitationError(error: unknown): never {
   if (error instanceof InvalidInvitationCursorError) {
     throw new BadRequestException({ code: "INVALID_CURSOR" });
+  }
+  throw error;
+}
+
+/**
+ * The answer of the administrator's unpublish (T8; S4, S6): the same detail the read route serves, so the page renders
+ * the new state from the API's own answer. Null is the one 404 `INVITATION_NOT_FOUND`.
+ */
+export function toAdminUnpublishedResponse(
+  stored: AdminInvitationDetail | null,
+): AdminInvitationDetailResponse {
+  return orAdminInvitationNotFound(stored);
+}
+
+/**
+ * The refusals of the administrator's unpublish (T8; S4, S6). An invitation that exists but is not published is a
+ * conflict, and each wrong status keeps its own code: a DRAFT was never published, an ARCHIVED invitation is terminal
+ * (S7, A2). A note the audit domain refuses — «Otro» without one, or one over 500 characters — is a malformed request,
+ * which the body DTO already refuses; this mapping keeps a direct caller's refusal a 400 instead of a 500. Any other
+ * error is rethrown unchanged.
+ */
+export function mapAdminUnpublishError(error: unknown): never {
+  if (error instanceof InvitationAlreadyArchivedError) {
+    throw new ConflictException({ code: "INVITATION_ALREADY_ARCHIVED" });
+  }
+  if (error instanceof InvitationNotPublishedError) {
+    throw new ConflictException({ code: "INVITATION_NOT_PUBLISHED" });
+  }
+  if (error instanceof InvalidAdminActionError) {
+    throw new BadRequestException({ code: "INVALID_ADMIN_ACTION" });
   }
   throw error;
 }

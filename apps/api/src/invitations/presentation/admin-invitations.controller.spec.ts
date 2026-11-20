@@ -20,12 +20,15 @@ import type {
   AdminInvitationQuery,
   AdminInvitationRepository,
   AdminInvitationRow,
+  AdminInvitationUnpublishAudit,
 } from "../application/admin-invitation.repository";
 import { ADMIN_INVITATION_REPOSITORY } from "../application/admin-invitation.repository";
 import {
   GetAdminInvitationUseCase,
   ListAdminInvitationsUseCase,
+  UnpublishAdminInvitationUseCase,
 } from "../application/admin-invitation.use-cases";
+import { unpublish } from "../domain/invitation-lifecycle";
 import type {
   InvitationMediaCountReader,
   InvitationMediaCounts,
@@ -46,6 +49,10 @@ import { AdminInvitationsController } from "./admin-invitations.controller";
 // unknown invitation, and the exact response shape of the list and the detail — which is what the web pages parse.
 // The ports are fakes, so no database and no network are involved; PostgreSQL behavior is proved in the `*.db-spec.ts`
 // suite.
+//
+// The support action (M9 T8; S4, S6) is proved the same way: the actor is the session's own id, the body is one closed
+// reason plus an optional note, and each refusal — validation, not found, not published, already archived — is its own
+// status and code.
 
 const TRUSTED_ORIGIN = "http://localhost:3000";
 const AUTH_BASE_URL = "http://localhost:3000";
@@ -105,6 +112,23 @@ class StubAdminInvitationRepository implements AdminInvitationRepository {
   async findForAdmin(invitationId: string) {
     return this.rows.find((row) => row.invitationId === invitationId) ?? null;
   }
+
+  /** Every unpublish the route asked for, so a refusal can be proved to have written nothing. */
+  readonly unpublishes: Array<{ invitationId: string; audit: AdminInvitationUnpublishAudit }> = [];
+
+  async unpublishForAdmin(invitationId: string, audit: AdminInvitationUnpublishAudit) {
+    this.unpublishes.push({ invitationId, audit });
+
+    const row = this.rows.find((stored) => stored.invitationId === invitationId);
+    if (row === undefined) {
+      return null;
+    }
+    // The domain transition names the refusal: a draft is INVITATION_NOT_PUBLISHED and an archived row
+    // INVITATION_ALREADY_ARCHIVED (S7, A2).
+    row.status = unpublish(row.status);
+    row.publishedAt = null;
+    return row;
+  }
 }
 
 class StubPaymentReader implements InvitationPaymentReader {
@@ -162,8 +186,11 @@ interface Harness {
   repository: StubAdminInvitationRepository;
   payments: StubPaymentReader;
   media: StubMediaCountReader;
+  /** The ids of the accounts the suite signed in, in order, so a spec can name the session's actor. */
+  signedInUserIds: string[];
   signIn(role: "CUSTOMER" | "ADMIN"): Promise<string>;
   send(path: string, options?: { cookie?: string }): Promise<Response>;
+  post(path: string, options?: { cookie?: string; body?: unknown }): Promise<Response>;
 }
 
 async function startHarness(): Promise<Harness> {
@@ -191,6 +218,7 @@ async function startHarness(): Promise<Harness> {
   });
 
   const repository = new StubAdminInvitationRepository();
+  const signedInUserIds: string[] = [];
   const payments = new StubPaymentReader();
   const media = new StubMediaCountReader();
   const owners = new StubOwnerReader();
@@ -221,6 +249,13 @@ async function startHarness(): Promise<Harness> {
         provide: GetAdminInvitationUseCase,
         useValue: new GetAdminInvitationUseCase(repository, payments, media, owners),
       },
+      {
+        provide: UnpublishAdminInvitationUseCase,
+        useValue: new UnpublishAdminInvitationUseCase(
+          repository,
+          new GetAdminInvitationUseCase(repository, payments, media, owners),
+        ),
+      },
     ],
   })
   class AdminInvitationsTestModule {}
@@ -235,6 +270,7 @@ async function startHarness(): Promise<Harness> {
     repository,
     payments,
     media,
+    signedInUserIds,
     async signIn(role): Promise<string> {
       counter += 1;
       const context = await auth.$context;
@@ -246,6 +282,7 @@ async function startHarness(): Promise<Harness> {
         },
         { method: "email-otp" },
       );
+      signedInUserIds.push(created.id);
       const session = await context.internalAdapter.createSession(created.id);
       const signature = createHmac("sha256", secret).update(session.token).digest("base64");
       const user = database.user?.find((row) => row.id === created.id);
@@ -267,6 +304,20 @@ async function startHarness(): Promise<Harness> {
       return fetch(`${baseUrl}${path}`, {
         headers: options.cookie ? { cookie: options.cookie } : {},
       });
+    },
+    post(path, options = {}) {
+      const init: RequestInit = {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(options.cookie ? { cookie: options.cookie } : {}),
+        },
+      };
+      if (options.body !== undefined) {
+        init.body = JSON.stringify(options.body);
+      }
+
+      return fetch(`${baseUrl}${path}`, init);
     },
   };
 }
@@ -480,6 +531,7 @@ describe("admin invitation status routes (M9 T2; S1)", () => {
         "latestPayment",
         "media",
         "ownerEmail",
+        "ownerId",
         "packageId",
         "payments",
         "publishedAt",
@@ -488,6 +540,7 @@ describe("admin invitation status routes (M9 T2; S1)", () => {
         "status",
         "templateVersionId",
       ]);
+      assert.equal(body.ownerId, OWNER);
       assert.equal(body.packageId, row.packageId);
       assert.equal(body.templateVersionId, row.templateVersionId);
       assert.deepEqual(body.media, { mainPhoto: false, galleryCount: 4 });
@@ -515,6 +568,189 @@ describe("admin invitation status routes (M9 T2; S1)", () => {
 
       assert.equal(response.status, 404);
       assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+    });
+  });
+});
+
+describe("admin invitation unpublish (M9 T8; S4, S6)", () => {
+  const PUBLISHED_AT = "2026-11-24T10:00:00.000Z";
+  let harness: Harness;
+  let adminCookie: string;
+  let customerCookie: string;
+  let adminUserId: string;
+
+  before(async () => {
+    harness = await startHarness();
+    adminCookie = await harness.signIn("ADMIN");
+    customerCookie = await harness.signIn("CUSTOMER");
+    adminUserId = harness.signedInUserIds[0] ?? "";
+    assert.notEqual(adminUserId, "");
+  });
+
+  after(async () => {
+    await harness?.app.close();
+  });
+
+  function unpublishPath(invitationId: string): string {
+    return `${PATH}/${invitationId}/unpublish`;
+  }
+
+  describe("authorization", () => {
+    it("answers 401 without a session and reaches no port", async () => {
+      const response = await harness.post(unpublishPath(UNKNOWN_ID), {
+        body: { reason: "ABUSE" },
+      });
+
+      assert.equal(response.status, 401);
+      assert.deepEqual(harness.repository.unpublishes, []);
+    });
+
+    it("answers 403 to a signed-in customer, before any validation", async () => {
+      const response = await harness.post(unpublishPath(UNKNOWN_ID), {
+        cookie: customerCookie,
+        body: { reason: "not-a-reason" },
+      });
+
+      assert.equal(response.status, 403);
+      assert.deepEqual(harness.repository.unpublishes, []);
+    });
+  });
+
+  describe("body", () => {
+    it("answers 400 for every body outside the contract, and writes nothing", async () => {
+      const bodies: unknown[] = [
+        {},
+        { note: "sin razón" },
+        { reason: "ABUSE", unknown: 1 },
+        { reason: "OTHER" },
+        { reason: "OTHER", note: "" },
+        { reason: "OTHER", note: "   " },
+        { reason: "OTHER", note: null },
+        { reason: "ABUSE", note: "a".repeat(501) },
+        { reason: "abuse" },
+        { reason: "PAID" },
+      ];
+
+      for (const body of bodies) {
+        const response = await harness.post(unpublishPath(UNKNOWN_ID), {
+          cookie: adminCookie,
+          body,
+        });
+
+        assert.equal(response.status, 400, JSON.stringify(body));
+      }
+      assert.deepEqual(harness.repository.unpublishes, [], "a refused body reaches no port");
+    });
+
+    it("answers 400 for an id that is not a UUID, before reaching a port", async () => {
+      const response = await harness.post(`${PATH}/not-a-uuid/unpublish`, {
+        cookie: adminCookie,
+        body: { reason: "ABUSE" },
+      });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(harness.repository.unpublishes, []);
+    });
+  });
+
+  describe("outcome", () => {
+    it("answers 200 with the admin detail of the invitation, keeping firstPublishedAt and answering ownerId", async () => {
+      const repository = harness.repository;
+      const row = repository.add({
+        slug: "despublicar-uno",
+        status: "PUBLISHED",
+        publishedAt: new Date(PUBLISHED_AT),
+        firstPublishedAt: new Date(PUBLISHED_AT),
+      });
+
+      const response = await harness.post(unpublishPath(row.invitationId), {
+        cookie: adminCookie,
+        body: { reason: "OWNER_REQUEST", note: "  La dueña lo pidió.  " },
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.equal(body.invitationId, row.invitationId);
+      assert.equal(body.status, "DRAFT");
+      assert.equal(body.publishedAt, null);
+      assert.equal(body.firstPublishedAt, PUBLISHED_AT);
+      assert.equal(body.ownerId, row.ownerId);
+      assert.equal(body.ownerEmail, OWNER_EMAIL);
+      assert.deepEqual(Object.keys(body).sort(), [
+        "archivedAt",
+        "createdAt",
+        "firstPublishedAt",
+        "invitationId",
+        "latestPayment",
+        "media",
+        "ownerEmail",
+        "ownerId",
+        "packageId",
+        "payments",
+        "publishedAt",
+        "refundRequestedAt",
+        "slug",
+        "status",
+        "templateVersionId",
+      ]);
+      assert.equal(harness.repository.unpublishes.length, 1);
+      const asked = harness.repository.unpublishes[0];
+      assert.equal(asked?.invitationId, row.invitationId);
+      assert.equal(asked?.audit.reason, "OWNER_REQUEST");
+      assert.equal(asked?.audit.note, "  La dueña lo pidió.  ");
+      // The actor is the session's own id, never a body field: the global pipe refuses a body that names one.
+      assert.equal(asked?.audit.adminUserId, adminUserId);
+    });
+
+    it("accepts a reason without a note, and one with a note it trims nothing of at this layer", async () => {
+      const row = harness.repository.add({ slug: "despublicar-dos", status: "PUBLISHED" });
+
+      const response = await harness.post(unpublishPath(row.invitationId), {
+        cookie: adminCookie,
+        body: { reason: "ABUSE" },
+      });
+
+      assert.equal(response.status, 200);
+      assert.equal(harness.repository.unpublishes.at(-1)?.audit.reason, "ABUSE");
+      assert.equal(harness.repository.unpublishes.at(-1)?.audit.note, null);
+    });
+
+    it("answers 404 INVITATION_NOT_FOUND for an unknown invitation", async () => {
+      const response = await harness.post(unpublishPath(UNKNOWN_ID), {
+        cookie: adminCookie,
+        body: { reason: "ABUSE" },
+      });
+
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+    });
+
+    it("answers 409 INVITATION_NOT_PUBLISHED for a draft", async () => {
+      const row = harness.repository.add({ slug: "despublicar-tres", status: "DRAFT" });
+      const before = harness.repository.unpublishes.length;
+
+      const response = await harness.post(unpublishPath(row.invitationId), {
+        cookie: adminCookie,
+        body: { reason: "PAYMENT_ERROR" },
+      });
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_NOT_PUBLISHED" });
+      // The refused action wrote nothing: the port was asked and answered its refusal inside the same call.
+      assert.equal(harness.repository.unpublishes.length, before + 1);
+      assert.equal(row.status, "DRAFT");
+    });
+
+    it("answers 409 INVITATION_ALREADY_ARCHIVED for an archived invitation", async () => {
+      const row = harness.repository.add({ slug: "despublicar-cuatro", status: "ARCHIVED" });
+
+      const response = await harness.post(unpublishPath(row.invitationId), {
+        cookie: adminCookie,
+        body: { reason: "ABUSE", note: "Reporte de abuso." },
+      });
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_ALREADY_ARCHIVED" });
     });
   });
 });

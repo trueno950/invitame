@@ -1,4 +1,7 @@
-import type { AdminInvitationStatus } from "../../server/admin-invitations-client.ts";
+import type {
+  AdminActionReason,
+  AdminInvitationStatus,
+} from "../../server/admin-invitations-client.ts";
 
 /**
  * Spanish product copy of the administrator invitation status pages (M9 T3; S1, L3–L5). Administrators are addressed
@@ -124,3 +127,64 @@ export const INVITATION_DETAIL_COPY = {
   notFoundBody: "Puede que el enlace esté mal escrito o que la invitación ya no exista.",
   retry: "Volver a intentar",
 } as const;
+
+/**
+ * The reason an administrator gives for a support action (M9 T8; S6, L9), each with its Spanish label. The record is
+ * complete for `AdminActionReason`: a reason added to the API would fail the typecheck here instead of rendering
+ * unlabelled.
+ */
+export const INVITATION_UNPUBLISH_REASON_LABELS = {
+  ABUSE: "Abuso",
+  OWNER_REQUEST: "Petición del dueño",
+  PAYMENT_ERROR: "Error de pago",
+  OTHER: "Otro",
+} satisfies Record<AdminActionReason, string>;
+
+/**
+ * `/admin/invitaciones/<id>`: the «Acciones de soporte» card (M9 T8; S4, S6). The form is offered only while the
+ * invitation is published, the reason is the API's closed set, and the note is as wide as the column. The card says in
+ * the page that unpublishing creates no refund, because a support person must never promise one.
+ */
+export const INVITATION_SUPPORT_COPY = {
+  heading: "Acciones de soporte",
+  intro:
+    "Cada acción queda registrada con tu cuenta y el motivo, en la misma operación que el cambio.",
+  unpublishHeading: "Despublicar la invitación",
+  unpublishHint:
+    "La invitación vuelve a borrador y su enlace público deja de mostrarse hasta que el dueño la publique de nuevo.",
+  /** Why the form is not offered: only a published invitation has anything to unpublish (S4). */
+  notPublished: "Solo se puede despublicar una invitación publicada.",
+  reasonLabel: "Motivo",
+  /** The select's empty first option: the administrator names a reason instead of accepting one by accident. */
+  reasonPlaceholder: "Elige un motivo",
+  noteLabel: "Nota",
+  noteHint: "Obligatoria cuando el motivo es «Otro». Máximo 500 caracteres.",
+  /** The one fact of the action a support person must not promise away (S4). */
+  noRefund: "Despublicar no genera un reembolso.",
+  unpublish: "Despublicar",
+  /**
+   * The outcomes of the unpublish form that are not a refusal: the API answered the new detail, so the page shows the
+   * invitation as a draft. It never says the invitation was deleted, because it was not.
+   */
+  notice: {
+    unpublished: "Despublicamos la invitación. Su enlace público ya no está disponible.",
+  },
+  /**
+   * The refusals of the unpublish form, each with its own Spanish sentence: the three codes of
+   * `apps/api/src/invitations/presentation/admin-invitation.response.ts` (`INVITATION_NOT_FOUND`,
+   * `INVITATION_NOT_PUBLISHED`, `INVITATION_ALREADY_ARCHIVED`), the client's `validation` for a 400 it cannot attribute,
+   * and the web's own two — a form it could not read (`invalid-form`) and a call that never reached the API
+   * (`unavailable`). The three API refusals exist one to one, so a new code cannot be shown as another one.
+   */
+  error: {
+    "not-found": "No encontramos esa invitación. Vuelve a la lista.",
+    "not-published": "La invitación no está publicada, así que no hay nada que despublicar.",
+    "already-archived": "La invitación está archivada, así que ya no se puede despublicar.",
+    validation: "No pudimos leer la solicitud. Revisa el motivo y la nota.",
+    "invalid-form": "No pudimos leer la solicitud. Revisa el motivo y la nota.",
+    unavailable: "No pudimos completar la solicitud. Inténtalo de nuevo en unos minutos.",
+  },
+} as const;
+
+export type InvitationsErrorCode = keyof typeof INVITATION_SUPPORT_COPY.error;
+export type InvitationsNoticeCode = keyof typeof INVITATION_SUPPORT_COPY.notice;
