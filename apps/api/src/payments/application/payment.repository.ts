@@ -185,3 +185,55 @@ export interface PaymentRefundRepository {
 export const PAYMENT_REPOSITORY = Symbol("PaymentRepository");
 
 export const PAYMENT_REFUND_REPOSITORY = Symbol("PaymentRefundRepository");
+
+/**
+ * One stored event of the administrator's payment detail (M9 T7; S4): the normalized event and nothing else. It
+ * carries no provider event id, no raw payload, and no payload digest, so the digest can never become a field of a
+ * response by accident.
+ */
+export interface AdminPaymentEventRecord {
+  type: PaymentEventType;
+  outcome: PaymentEventOutcome;
+  receivedAt: Date;
+  processedAt: Date | null;
+}
+
+/**
+ * One payment as the administrator's detail read answers it (M9 T7; S4): the payment's own snapshot, its invitation's
+ * public slug, the adapter key, and its newest events. No payer datum and no provider reference, so the page renders
+ * no card or payer data — the read never carries one.
+ */
+export interface AdminPaymentDetail {
+  paymentId: string;
+  invitationId: string;
+  invitationSlug: string;
+  status: PaymentStatus;
+  amountMinor: number;
+  currency: string;
+  provider: string;
+  createdAt: Date;
+  paidAt: Date | null;
+  /** Newest first, at most `ADMIN_PAYMENT_EVENT_LIMIT`. */
+  events: AdminPaymentEventRecord[];
+}
+
+/**
+ * The port's own bound for one detail read: the newest fifty events of the payment. The adapter applies it to every
+ * read, so no caller can widen it and none can ask for an unbounded list.
+ */
+export const ADMIN_PAYMENT_EVENT_LIMIT = 50;
+
+/**
+ * The administrator's payment detail port (M9 T7; S4). It is separate from `PaymentRepository` and from
+ * `PaymentRefundRepository` on purpose: it is a global read by payment id, so no owner-scoped use case can reach a
+ * payment it does not own through it. It writes nothing: «Ver el detalle de un pago» is read-only and not audited
+ * (S6, L9).
+ */
+export interface AdminPaymentDetailReader {
+  /**
+   * The payment and its newest `ADMIN_PAYMENT_EVENT_LIMIT` events, newest first, or null when no payment has this id.
+   */
+  findForAdmin(paymentId: string): Promise<AdminPaymentDetail | null>;
+}
+
+export const ADMIN_PAYMENT_DETAIL_READER = Symbol("AdminPaymentDetailReader");

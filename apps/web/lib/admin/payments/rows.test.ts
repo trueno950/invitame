@@ -7,6 +7,7 @@ import {
   PAYMENTS_NOTICE_COPY,
   PAYMENTS_STATUS_LABELS,
   PAYMENTS_COPY,
+  paymentDetailPath,
 } from "./copy.ts";
 import { paymentsPageNotices } from "./notices.ts";
 import { paymentRowView } from "./rows.ts";
@@ -37,6 +38,9 @@ describe("paymentRowView", () => {
     assert.equal(view.refund, PAYMENTS_COPY.refund);
     assert.equal(view.note, undefined);
     assert.equal(view.slug, "ana-y-daniel");
+    // The row links to its own detail (M9 T7; S4), and the link is the id the list already showed.
+    assert.equal(view.href, paymentDetailPath(PAYMENT_ID));
+    assert.equal(view.href, `/admin/pagos/${PAYMENT_ID}`);
     assert.equal(view.amount, "$1,500.00 MXN");
     assert.equal(view.statusLabel, PAYMENTS_STATUS_LABELS.paid);
     assert.match(view.paidOn, /12 nov 2026/);

@@ -1,4 +1,4 @@
-import { PAYMENTS_COPY } from "../../../../lib/admin/payments/copy.ts";
+import { PAYMENTS_COPY, paymentDetailPath } from "../../../../lib/admin/payments/copy.ts";
 import { paymentRowView } from "../../../../lib/admin/payments/rows.ts";
 import type { AdminPayment } from "../../../../lib/server/admin-payments-client.ts";
 import {
@@ -17,7 +17,8 @@ import {
  * refund either way, and this page is never the guard.
  *
  * Each refund is its own form posting to the server action, so it works without JavaScript like the catalog pages. The
- * page stays a server component: the only interactivity is the browser's own form submission.
+ * page stays a server component: the only interactivity is the browser's own form submission. Every row links to its
+ * own detail (M9 T7; S4), which reads the payment and the events Mercado Pago sent for it.
  */
 export function PaymentsTable({
   action,
@@ -66,7 +67,12 @@ export function PaymentsTable({
                 return (
                   <tr className={adminTableRow} key={row.paymentId}>
                     <td className={adminTableCell}>
-                      <span className="font-medium text-admin-ink">{row.slug}</span>
+                      <a
+                        className="font-medium text-admin-ink underline decoration-admin-border underline-offset-2 hover:decoration-admin-ink"
+                        href={paymentDetailPath(row.paymentId)}
+                      >
+                        {row.slug}
+                      </a>
                       <span className="mt-0.5 block text-xs text-admin-muted">
                         {row.statusLabel}
                       </span>
