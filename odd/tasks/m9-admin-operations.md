@@ -51,7 +51,7 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T2 | API: admin invitation search and status detail (state, payment, media counts), bounded, no personal data | S1 | worker | |
 | T3 | Web: `/admin/invitaciones` search with filters and a status detail page | S1 | worker | |
 | T4 | Docs, native review, PR, CI, merge for the S1 slice | S1 | inline | see L6 |
-| T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | |
+| T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | see L7 |
 
 ## Log
 
@@ -73,3 +73,12 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   payment adapter passes an arbitrary limit to Prisma even though the port says the detail list is capped at twenty»;
   «CREATE INDEX without CONCURRENTLY takes a SHARE lock on Invitation». The parent decided T5 adds a second additive
   index `Invitation(createdAt, id)` (same kind as the authorized one, L3) and never edits the merged migration.
+- L7 — T5 (worker + parent): the cursor refuses instants outside 1970..9999 (400 `INVALID_CURSOR` instead of a 500);
+  additive migration `20261126120000_add_invitation_created_at_id_index` builds `Invitation(createdAt, id)` with
+  `CREATE INDEX CONCURRENTLY` (accepted by `prisma migrate deploy`); the detail payment read is clamped to 1..20; a
+  non-UUID detail id answers null without a query. The parent rewrote the key-set predicate as the row comparison
+  `("createdAt", "id") < (…)`, an `Index Cond` (21 heap fetches) instead of a `Filter` (7 040 rows removed) on 20 000
+  rows. Evidence: API 1786 unit and 418 db-specs, typecheck, lint, format, docs:check pass.
+- L8 — Owner chose the next slice: «Acciones de soporte (recomendado)». Answers: audit «Tabla de auditoría
+  (recomendado)»; reason «Lista cerrada + nota (recomendado)»; disabling an account «Siguen publicadas (recomendado)»;
+  resending the code «Mismos límites actuales (recomendado)».
