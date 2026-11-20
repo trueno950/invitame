@@ -111,14 +111,20 @@ names only a category (status, timeout, network, unreadable answer) — never a 
   failure is the same `400 PAYMENT_WEBHOOK_REJECTED` with no detail, and nothing is written.
 - **Re-read, never trust the payload.** A verified payment notification re-reads `GET /v1/payments/<data.id>` and
   keeps only `external_reference`, `status`, `transaction_amount` (exact cents), `currency_id`, and the event time.
+  The event time is `date_approved` for an approval and the payment's `date_last_updated` (then `date_created`) for a
+  refusal, a refund, or a chargeback, so a refund event carries the refund instant and not the original charge.
   The event id is `mercadopago-<data.id>-<status>`, so a redelivery is a duplicate. `approved` → `paid`,
   `rejected`/`cancelled` → `failed`, `refunded`/`charged_back` → `refunded`; `pending`, `authorized`, `in_process`,
   and `in_mediation` are authentic but decide nothing. An authentic delivery of another topic or a status that
-  decides nothing answers `200 { outcome: "ignored" }` and writes nothing, so Mercado Pago stops retrying. The
-  existing intake still checks the snapshot amount and currency and the guarded transitions.
+  decides nothing answers `200 { outcome: "ignored" }` and writes nothing, so Mercado Pago stops retrying. A signed
+  delivery that names no topic at all is malformed rather than undecided, so it is refused with the same
+  `400 PAYMENT_WEBHOOK_REJECTED` and is retried instead of being dropped silently.
+  The existing intake still checks the snapshot amount and currency and the guarded transitions.
 - **Refund.** `refund` posts `POST /v1/payments/<id>/refunds` with no amount (a full refund) and an
   `X-Idempotency-Key` derived from our payment, after finding the Mercado Pago payment through
-  `GET /v1/payments/search?external_reference=<paymentId>`.
+  `GET /v1/payments/search?external_reference=<paymentId>`. A search that answers the payment as `refunded` or
+  `charged_back` is the same success without a second refund request, so a retried administrator action confirms the
+  refund that already landed instead of failing.
 
 ## Refunds: «Sin reembolso tras publicar»
 

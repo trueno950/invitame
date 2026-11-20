@@ -48,11 +48,12 @@ export const PAYMENTS_STATUS_LABELS: Readonly<Record<PaymentStatus, string>> = {
 };
 
 /**
- * The refusal codes of the refund page, each with its Spanish sentence. They come from
+ * The seven codes of the refund page, each with its Spanish sentence: the four refusals of
  * `apps/api/src/payments/presentation/payment.response.ts` (`PAYMENT_NOT_FOUND`, `PAYMENT_NOT_REFUNDABLE`,
- * `INVITATION_ALREADY_PUBLISHED`, `PAYMENT_PROVIDER_UNAVAILABLE`), plus the web's own two: a form it could not read,
- * and a call that never reached the API. The four API refusals exist one to one, so a new code cannot be shown
- * silently as another one.
+ * `INVITATION_ALREADY_PUBLISHED`, `PAYMENT_PROVIDER_UNAVAILABLE`), the client's `validation` for a 400 it cannot
+ * attribute to one of them, and the web's own two — a form it could not read (`invalid-form`) and a call that never
+ * reached the API (`unavailable`). The four API refusals exist one to one, so a new code cannot be shown silently as
+ * another one.
  */
 export const PAYMENTS_ERROR_COPY = {
   "not-found": "No encontramos ese pago. Vuelve a cargar la lista.",

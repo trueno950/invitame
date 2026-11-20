@@ -109,6 +109,9 @@ analytics design is documented separately in
   unable to have `publishedAt` without a `firstPublishedAt` (`publishedAt IS NULL OR firstPublishedAt IS NOT NULL`),
   and a `DRAFT` that was published before may carry one. The migration backfilled `firstPublishedAt = publishedAt`
   for the rows published at that moment, the only publication history the schema kept before this column.
+- `Invitation.refundRequestedAt` is a nullable `TIMESTAMPTZ(6)` that the refund claim writes before the provider is
+  called and nothing else writes, and publishing requires it `NULL`, so a publish that races a refund is refused
+  instead of overtaking it (T2, S3).
 - `Invitation_archivedAt_matches_status` from `20261111214752` is unchanged and still correct for three statuses:
   `("status" = 'ARCHIVED') = ("archivedAt" IS NOT NULL)` holds for a `DRAFT` (both false), a `PUBLISHED` (both
   false), and an `ARCHIVED` row (both true), so `archivedAt` still marks exactly the archived state.

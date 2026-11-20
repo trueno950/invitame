@@ -1,3 +1,4 @@
+import { isCatalogId } from "../../server/admin-catalog-validators.ts";
 import type { AdminPaymentsClient, PaymentsResult } from "../../server/admin-payments-client.ts";
 import { SIGN_IN_PATH } from "../catalog/commands.ts";
 import { PAYMENTS_PATHS } from "./copy.ts";
@@ -9,9 +10,10 @@ import { paymentsErrorTarget, paymentsNoticeTarget } from "./notices.ts";
  * (`notices.ts`). The API applies the rule and asks the provider; nothing here decides whether a payment may be
  * refunded, and nothing here changes a payment's state.
  *
- * The only checks made here are those needed to build a request at all: the id is one text value, and it is a UUID, so
- * it is safe as a path segment. A missing, repeated, or malformed value never becomes a request. An unexpected failure
- * (already logged by the server wrapper) is reported as `unavailable` instead of pretending the refund was requested.
+ * The only checks made here are those needed to build a request at all: the id is one text value, and the shared
+ * validator `isCatalogId` — the one the API client also uses — says it is a UUID, so it is safe as a path segment. A
+ * missing, repeated, or malformed value never becomes a request. An unexpected failure (already logged by the server
+ * wrapper) is reported as `unavailable` instead of pretending the refund was requested.
  */
 
 /**
@@ -25,13 +27,10 @@ function text(form: FormData, name: string): string | undefined {
   return values.length === 1 && typeof value === "string" ? value : undefined;
 }
 
-/** A canonical UUID, the only shape the API accepts as a payment id. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function refundPayment(api: AdminPaymentsClient, form: FormData): Promise<string> {
   const paymentId = text(form, "paymentId");
 
-  if (paymentId === undefined || !UUID.test(paymentId)) {
+  if (paymentId === undefined || !isCatalogId(paymentId)) {
     return paymentsErrorTarget(PAYMENTS_PATHS.index, "invalid-form");
   }
 

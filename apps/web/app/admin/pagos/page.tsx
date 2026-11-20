@@ -8,7 +8,7 @@ import { PAYMENTS_COPY, PAYMENTS_PATHS } from "../../../lib/admin/payments/copy.
 import { paymentsPageNotices } from "../../../lib/admin/payments/notices.ts";
 import { loadAdminView, routeAdminPage } from "../../../lib/admin/session.ts";
 import { adminPayments } from "../../../lib/server/admin-payments-api.ts";
-import type { AdminPayment } from "../../../lib/server/admin-payments-client.ts";
+import type { AdminPayment, PaymentsResult } from "../../../lib/server/admin-payments-client.ts";
 import { getAuthSession } from "../../../lib/server/session-api.ts";
 import { AdminCenteredShell } from "../_components/admin-centered-shell.tsx";
 import { AdminShell } from "../_components/admin-shell.tsx";
@@ -46,7 +46,7 @@ export default async function AdminPaymentsPage({
   }
 
   const notices = paymentsPageNotices(await searchParams);
-  let loaded: { ok: true; value: AdminPayment[] } | { ok: false; failure: string };
+  let loaded: PaymentsResult<AdminPayment[]>;
   try {
     loaded = await adminPayments.list();
   } catch {

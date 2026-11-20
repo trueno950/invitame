@@ -13,6 +13,16 @@ security-sensitive design before implementation; this document is that reviewed 
 - S4 — Forged, unsigned, stale, duplicate, and out-of-order notifications are handled deliberately; nothing about the
   provider payload becomes the domain model; no secret, token, or payer data is logged or stored.
 
+- S5 — Follow-up of the slice-1 review (advisories quoted from `review-a3aaf74ba7e41093`):
+  (a) R3-001 «occurredAt always prefers date_approved, so refunded and charged_back events carry the original approval
+  instant instead of the later refund/chargeback instant»; (b) R4-001 «A retried refund after the first refund
+  succeeded cannot use the idempotency key: the search only accepts an `approved` payment»; (c) R4-002 «a missing
+  topic is malformed and should be rejected so it can be retried or alerted». Plus one sentence for
+  `Invitation.refundRequestedAt` in `docs/database/model.md`.
+- S6 — Follow-up of the slice-3 review (`review-73b1758996ff357d`): R2-001 «two sources of truth for one accepted id
+  shape»; R2-002 «the comment omits a code» (`validation`); R2-003 «The page re-declares the list result with
+  `failure: string` instead of using `PaymentsResult<AdminPayment[]>`».
+
 ## Design
 
 - **Mode and configuration.** `PAYMENTS_MODE=mercadopago` (production-allowed; `simulated` stays refused there).
@@ -46,6 +56,8 @@ security-sensitive design before implementation; this document is that reviewed 
 | T2 | Refund rule: admin route, never-published check, provider refund call | S3, S4 | worker | see L5 |
 | T3 | Web: Checkout Pro redirect and return page states; admin refund button | S1, S3 | worker | see L6 |
 | T4 | Docs (README env rows, payments docs, ROADMAP M7), native review, PRs, CI, merge | S1-S4 | inline | see L6 |
+| T5 | API follow-ups: status-specific event time, refund retry after provider refund, refuse a signed notification without topic, model.md sentence | S5 | worker | see L9 |
+| T6 | Web follow-ups: one id validator, error-table comment, typed list result | S6 | worker | see L9 |
 
 ## Needs the owner
 
@@ -96,3 +108,8 @@ security-sensitive design before implementation; this document is that reviewed 
   67840dd claims `Invitation.refundRequestedAt` on the row before the provider call and publish requires it NULL
   (API 1752 unit and 403 db-specs pass). Its provider route is `recover` (scope_changed), which the facade refuses in
   this session (`input must be a string`).
+- L8 — Owner (after #87-#89 merged): "si y merge" — do the review follow-ups (T5, T6) and merge them.
+- L9 — T5 (worker): status-specific event time, an already-refunded payment confirms a retried refund without a second
+  request, a signed notification without a topic is refused (400) so Mercado Pago retries it; `refundRequestedAt` in
+  `docs/database/model.md`. T6 (worker): one id validator, the error-table comment, the typed list result; behavior
+  unchanged (differential identical). Evidence: API 1757 and web 1655 tests, typecheck, lint, format, docs:check pass.
