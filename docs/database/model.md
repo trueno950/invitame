@@ -121,6 +121,12 @@ analytics design is documented separately in
   draft row reads `NULL`.
 - The public read by slug needs no extra index: `Invitation_slug_key` is already unique, so `WHERE slug = $1` reads at
   most one row through it and the status is filtered on that row. No partial index on published rows is added.
+- `Invitation_status_createdAt_idx` on `(status, createdAt)` is the administrator's status view index (M9 T2; S1),
+  added additively by `20261125120000_add_invitation_status_created_at_index` with no rewrite, default, or data
+  change: `GET /admin/invitations` reads one page newest first, optionally filtered by one status, and its key-set
+  cursor continues on `(createdAt desc, id desc)`. The leading `status` serves the filtered page and the unfiltered
+  page reads the same index's `createdAt` order, so the read never scans the table; the descending `id` tie-break is
+  answered by the sort, so no second index is added.
 - The columns the application may update are `status`, `content`, `publishedAt`, `archivedAt`, `timeZone`,
   `rsvpDeadline`, `rsvpPartyLimit`, and `updatedAt`; publish and unpublish write `publishedAt`, only the RSVP
   settings route writes the two RSVP columns, nothing writes `expiresAt`, and the pinned fields can never change.

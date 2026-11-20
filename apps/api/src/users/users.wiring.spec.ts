@@ -8,6 +8,11 @@ import { Global, type INestApplication, Module } from "@nestjs/common";
 import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
 import { PrismaService } from "../database/prisma.service";
+import {
+  INVITATION_OWNER_EMAIL_READER,
+  type InvitationOwnerEmailReader,
+} from "../invitations/application/invitation-owner-email";
+import { PrismaInvitationOwnerEmailReader } from "./infrastructure/prisma-invitation-owner-email-reader";
 
 // UsersModule wiring in AppModule (M2 T6b; S1, S9): the own profile routes exist and sit behind the
 // global guard. A Prisma stub stands in for the database, so the suite never connects to one.
@@ -45,6 +50,16 @@ describe("AppModule own profile wiring", () => {
 
   after(async () => {
     await app?.close();
+  });
+
+  it("binds the owner-email port the administrator's invitation status view asks (M9 T2)", async () => {
+    const reader = app.get<InvitationOwnerEmailReader>(INVITATION_OWNER_EMAIL_READER, {
+      strict: false,
+    });
+
+    assert.ok(reader instanceof PrismaInvitationOwnerEmailReader);
+    // An empty page reads nothing: the port answers a batch, and the status view asks with the ids it has.
+    assert.deepEqual(await reader.emailsFor([]), new Map());
   });
 
   it("serves the own profile routes only behind the guard", async () => {

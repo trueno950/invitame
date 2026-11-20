@@ -12,6 +12,7 @@ import {
   INVITATION_GALLERY_READER,
   type InvitationGalleryReader,
 } from "../invitations/application/invitation-gallery";
+import { INVITATION_MEDIA_COUNT_READER } from "../invitations/application/invitation-media-counts";
 import { IMAGE_PROCESSOR } from "./application/image-processing";
 import { MEDIA_REPOSITORY, type MediaRepository } from "./application/media.repository";
 import {
@@ -28,6 +29,7 @@ import { MEDIA_CATALOG, type MediaCatalog } from "./application/media-catalog";
 import { MEDIA_STORAGE, type MediaStorage } from "./application/media-storage";
 import { type AssetUrl, mediaUrl } from "./application/media-url";
 import { createMediaStorage } from "./infrastructure/create-media-storage";
+import { PrismaInvitationMediaCountReader } from "./infrastructure/prisma-invitation-media-count-reader";
 import { PrismaMediaRepository } from "./infrastructure/prisma-media.repository";
 import { SharpImageProcessor } from "./infrastructure/sharp-image-processor";
 import { InvitationsMediaController } from "./presentation/invitations-media.controller";
@@ -143,12 +145,19 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
         new ReadPublicGalleryUseCase(invitations, { assetUrl: assetUrlFrom(config) }),
     },
     {
+      // The media facet of the administrator's invitation status view (M9 T2; S1): counts only, so the status view
+      // reads no storage key, URL, alt text, or binary.
+      provide: INVITATION_MEDIA_COUNT_READER,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PrismaInvitationMediaCountReader(prisma),
+    },
+    {
       provide: CleanupMediaUseCase,
       inject: [MEDIA_REPOSITORY, MEDIA_STORAGE, MEDIA_LOG],
       useFactory: (invitations: MediaRepository, storage: MediaStorage, log: MediaLog) =>
         new CleanupMediaUseCase(invitations, storage, log),
     },
   ],
-  exports: [INVITATION_GALLERY_READER],
+  exports: [INVITATION_GALLERY_READER, INVITATION_MEDIA_COUNT_READER],
 })
 export class MediaModule {}
