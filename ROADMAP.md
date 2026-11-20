@@ -238,12 +238,12 @@ No broad CRM, open guest directory, marketing automation, or guaranteed WhatsApp
 
 ## Milestone 7 — Checkout and one payment provider
 
-**Status:** Implemented without a real provider (`odd/tasks/m7-payments.md`): the provider-neutral payment core,
-price snapshots, the verified webhook intake, the publication gate, and a development-only simulated provider.
-Production runs `PAYMENTS_MODE=free` until the real adapter ships. Owner decisions (`odd/tasks/owner-followups.md`,
-L2): the provider is Mercado Pago (Checkout Pro, MXN), and refunds follow «Sin reembolso tras publicar»: a full
-refund only for an invitation that was never published. The Mercado Pago adapter and that refund rule are the next
-payments slice.
+**Status:** Implemented (`odd/tasks/m7-payments.md`, `odd/tasks/mercadopago-payments.md`): the provider-neutral
+payment core, price snapshots, the verified webhook intake, the publication gate, a development-only simulated
+provider, and the Mercado Pago Checkout Pro adapter (MXN, `PAYMENTS_MODE=mercadopago`) with signed, re-read
+notifications. Refunds follow «Sin reembolso tras publicar»: an administrator may request a full refund only for a
+paid invitation that was never published. Production keeps `PAYMENTS_MODE=free` until the owner configures Mercado
+Pago credentials and completes one sandbox pass (`docs/development/payments.md`).
 
 ### Outcome
 
