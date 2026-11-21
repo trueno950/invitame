@@ -22,6 +22,10 @@ import type { RuntimeEnvironment } from "../../config/environment";
 import { PublicInvitationNotRenderableError } from "../application/invitation.application.errors";
 import { GetPublicInvitationUseCase } from "../application/invitation.use-cases";
 import {
+  type InvitationViewSource,
+  RecordInvitationViewUseCase,
+} from "../application/invitation-views";
+import {
   GetPublicGuestUseCase,
   SubmitGuestRsvpUseCase,
 } from "../application/invitation-guest.use-cases";
@@ -75,6 +79,11 @@ class NoStoreInterceptor implements NestInterceptor {
  * logged once as a structured line without content or owner, and the guest still sees that same 404 (A3). What
  * the response carries is only the application's allow-listed projection: no owner, package, price, status, or
  * ids (A7), and never `expiresAt` (S8).
+ *
+ * Every served page counts one opening of the link it came through (M9 T11; S2, S7, L12): `PUBLIC` for this page,
+ * `GUEST` for a guest's personal link, and never a 404, an unrenderable invitation, an RSVP submission, or the owner's
+ * own preview. The count is fire-and-forget — the guest never waits for it, and a failure is one structured line
+ * instead of a different answer — so the opening counter can never take the public page down.
  */
 @Controller("public/invitations")
 @Public()
@@ -91,6 +100,8 @@ export class PublicInvitationsController {
     private readonly getPublicGuest: GetPublicGuestUseCase,
     @Inject(SubmitGuestRsvpUseCase)
     private readonly submitGuestRsvp: SubmitGuestRsvpUseCase,
+    @Inject(RecordInvitationViewUseCase)
+    private readonly recordView: RecordInvitationViewUseCase,
     @Inject(ConfigService)
     private readonly config: ConfigService<RuntimeEnvironment, true>,
   ) {}
@@ -100,8 +111,13 @@ export class PublicInvitationsController {
   async read(@Param("slug") slug: string): Promise<PublicInvitationResponse> {
     try {
       const stored = await this.getPublic.execute(slug);
+      if (stored === null) {
+        return publicInvitationNotFound();
+      }
+      // Counted only here: the invitation resolved and its renderer exists, so this answer is a served opening.
+      this.countView(stored.invitationId, "PUBLIC");
 
-      return stored === null ? publicInvitationNotFound() : toPublicInvitationResponse(stored);
+      return toPublicInvitationResponse(stored);
     } catch (error) {
       if (!(error instanceof PublicInvitationNotRenderableError)) {
         throw error;
@@ -129,8 +145,14 @@ export class PublicInvitationsController {
   ): Promise<PublicGuestInvitationResponse> {
     try {
       const stored = await this.getPublicGuest.execute(slug, token);
+      if (stored === null) {
+        return publicInvitationNotFound();
+      }
+      // A personal link is its own source (S7): the same guest may also open the plain page, and that is another
+      // opening of another link.
+      this.countView(stored.page.invitationId, "GUEST");
 
-      return stored === null ? publicInvitationNotFound() : toPublicGuestInvitationResponse(stored);
+      return toPublicGuestInvitationResponse(stored);
     } catch (error) {
       if (!(error instanceof PublicInvitationNotRenderableError)) {
         throw error;
@@ -170,6 +192,17 @@ export class PublicInvitationsController {
     } catch (error) {
       return mapGuestError(error);
     }
+  }
+
+  /**
+   * Counts one served opening without making the guest wait for it (M9 T11; S2, S7): the write is started and never
+   * awaited, and its failure is one structured line with no slug, no id, and no visitor — an operational signal, not a
+   * record of who opened the page. The answer is already built from the projection, so nothing about it can change.
+   */
+  private countView(invitationId: string, source: InvitationViewSource): void {
+    void this.recordView.execute({ invitationId, source }).catch(() => {
+      this.logger.warn({ event: "invitation_view_count_failed" });
+    });
   }
 
   /**

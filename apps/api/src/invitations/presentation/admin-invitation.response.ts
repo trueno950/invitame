@@ -7,6 +7,7 @@ import type {
   AdminInvitationSummary,
 } from "../application/admin-invitation.use-cases";
 import { InvalidInvitationCursorError } from "../application/admin-invitation.use-cases";
+import type { AdminInvitationAnalytics } from "../application/admin-analytics";
 import type { InvitationPaymentSummary } from "../application/invitation-payment-summary";
 import type { OwnerAccountStatus } from "../application/invitation-owner-status";
 import {
@@ -61,6 +62,16 @@ export interface AdminInvitationSummaryResponse {
   media: AdminInvitationMediaResponse;
 }
 
+/**
+ * The invitation's own activity in the numbers the analytics slice adds (M9 T11; S2, S7): the openings of its public
+ * and guest links in the retained window (the last ninety days) and the RSVP totals. Both are plain counts; no visitor
+ * and no guest is named.
+ */
+export interface AdminInvitationAnalyticsResponse {
+  rsvpTotals: { attendingPeople: number; declined: number; responses: number };
+  views: { public: number; guest: number };
+}
+
 /** One invitation's detail: the row's own fields plus the pinned references and the newest payments. */
 export interface AdminInvitationDetailResponse extends AdminInvitationSummaryResponse {
   /** The owner's id: the additive reference T8 adds so the support card can address the owner's account (S4). */
@@ -75,6 +86,9 @@ export interface AdminInvitationDetailResponse extends AdminInvitationSummaryRes
   templateVersionId: string;
   /** The newest payments, at most 20, newest first. */
   payments: AdminInvitationPaymentResponse[];
+  /** The views of the retained window and the RSVP totals (M9 T11; S2, S7). */
+  rsvpTotals: { attendingPeople: number; declined: number; responses: number };
+  views: { public: number; guest: number };
 }
 
 /** One page of the status view: the rows and the cursor to continue after, or null when the page is the last. */
@@ -121,9 +135,27 @@ export function toAdminInvitationSummaryResponse(
   };
 }
 
+/**
+ * The analytics facet of the detail, projected field by field: the RSVP totals use the owner read's own semantics
+ * (`attendingPeople`, `declined`, `responses`) and the views are the two links separately, so the page renders exactly
+ * the numbers the owner's own screens would explain (M9 T11; S2, S7).
+ */
+function toAnalytics(analytics: AdminInvitationAnalytics): AdminInvitationAnalyticsResponse {
+  return {
+    rsvpTotals: {
+      attendingPeople: analytics.rsvpTotals.attendingPeople,
+      declined: analytics.rsvpTotals.declined,
+      responses: analytics.rsvpTotals.responses,
+    },
+    views: { public: analytics.views.public, guest: analytics.views.guest },
+  };
+}
+
 export function toAdminInvitationDetailResponse(
   stored: AdminInvitationDetail,
 ): AdminInvitationDetailResponse {
+  const analytics = toAnalytics(stored.analytics);
+
   return {
     ...toAdminInvitationSummaryResponse(stored),
     ownerId: stored.ownerId,
@@ -131,6 +163,8 @@ export function toAdminInvitationDetailResponse(
     packageId: stored.packageId,
     templateVersionId: stored.templateVersionId,
     payments: stored.payments.map(toPayment),
+    rsvpTotals: analytics.rsvpTotals,
+    views: analytics.views,
   };
 }
 

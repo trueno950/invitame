@@ -763,6 +763,10 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "configuration",
         "content",
         "features",
+        // The stored id is the application's own field (M9 T11; S7), so the public read can count one opening; the REST
+        // mapper builds the guest's body field by field and never answers it (the presentation suite asserts the body's
+        // exact key set).
+        "invitationId",
         "places",
         "publishedAt",
         "slug",

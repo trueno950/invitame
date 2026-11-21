@@ -43,6 +43,17 @@ import {
 } from "./application/invitation-payment-summary";
 import { INVITATION_REPOSITORY, type InvitationRecord } from "./application/invitation.repository";
 import {
+  INVITATION_VIEW_REPOSITORY,
+  type InvitationViewRepository,
+} from "./application/invitation-views";
+import { INVITATION_VIEW_RETENTION_REPOSITORY } from "./application/invitation-view-retention";
+import { INVITATION_FUNNEL_PAYMENT_READER } from "./application/admin-analytics";
+import {
+  GetAdminFunnelAnalyticsUseCase,
+  GetAdminViewsAnalyticsUseCase,
+} from "./application/admin-analytics.use-cases";
+import { RecordInvitationViewUseCase } from "./application/invitation-views";
+import {
   ArchiveInvitationUseCase,
   CreateInvitationDraftUseCase,
   GetOwnInvitationUseCase,
@@ -89,13 +100,17 @@ import {
 import { RSVP_REPOSITORY } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
+import { PrismaAdminAnalyticsRepository } from "./infrastructure/prisma-admin-analytics.repository";
 import { PrismaAdminInvitationRepository } from "./infrastructure/prisma-admin-invitation.repository";
+import { PrismaInvitationViewRepository } from "./infrastructure/prisma-invitation-view.repository";
 import { PrismaGuestRepository } from "./infrastructure/prisma-guest.repository";
 import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.repository";
 import { PrismaPlaceSearchRateLimiter } from "./infrastructure/prisma-place-search-rate-limiter";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
 import { InvitationsModule } from "./invitations.module";
+import { ADMIN_ANALYTICS_REPOSITORY } from "./application/admin-analytics";
+import { AdminAnalyticsController } from "./presentation/admin-analytics.controller";
 import { AdminInvitationsController } from "./presentation/admin-invitations.controller";
 import { InvitationsController } from "./presentation/invitations.controller";
 import { PublicInvitationsController } from "./presentation/public-invitations.controller";
@@ -206,6 +221,9 @@ describe("InvitationsModule wiring", () => {
         ListAdminInvitationsUseCase,
         GetAdminInvitationUseCase,
         UnpublishAdminInvitationUseCase,
+        RecordInvitationViewUseCase,
+        GetAdminViewsAnalyticsUseCase,
+        GetAdminFunnelAnalyticsUseCase,
       ]) {
         assert.ok(context.get(useCase) instanceof useCase, useCase.name);
       }
@@ -274,6 +292,30 @@ describe("InvitationsModule wiring", () => {
       );
       assert.ok(ownerStatuses !== undefined);
       assert.deepEqual(await ownerStatuses.statusesFor([]), new Map());
+      // The analytics of this module (M9 T11; S2, S3, S7): the reads, the counted upsert, and the retention statements,
+      // all on adapters of this module's own tables; the payment funnel steps come from the payments module's port.
+      assert.ok(
+        context.get(ADMIN_ANALYTICS_REPOSITORY, { strict: false }) instanceof
+          PrismaAdminAnalyticsRepository,
+      );
+      assert.ok(
+        context.get(INVITATION_VIEW_REPOSITORY, { strict: false }) instanceof
+          PrismaInvitationViewRepository,
+      );
+      assert.equal(
+        context.get(INVITATION_VIEW_REPOSITORY, { strict: false }),
+        context.get(INVITATION_VIEW_RETENTION_REPOSITORY, { strict: false }),
+        "one adapter serves the counted upsert and the retention command",
+      );
+      const paymentFunnel = context.get<{ funnelByDay?: unknown }>(
+        INVITATION_FUNNEL_PAYMENT_READER,
+        { strict: false },
+      );
+      assert.equal(paymentFunnel.funnelByDay instanceof Function, true);
+      const views = context.get<InvitationViewRepository>(INVITATION_VIEW_REPOSITORY, {
+        strict: false,
+      });
+      assert.equal(views.increment instanceof Function, true);
       // The owner-scoped read is still its own binding: the two ports are not the same object.
       assert.ok(
         context.get<AdminInvitationRepository>(ADMIN_INVITATION_REPOSITORY, {
@@ -313,6 +355,7 @@ describe("InvitationsModule wiring", () => {
       InvitationsController,
       PublicInvitationsController,
       AdminInvitationsController,
+      AdminAnalyticsController,
     ]);
   });
 });
@@ -382,6 +425,9 @@ describe("AppModule invitation wiring", () => {
       // The administrator's status view (M9 T2; S1): behind the guard and `@AdminOnly()`.
       ["GET", "/admin/invitations?slug=boda&status=PUBLISHED&limit=10"],
       ["GET", `/admin/invitations/${id}`],
+      // The analytics of the administrator (M9 T11; S2, S7): behind the guard and `@AdminOnly()`.
+      ["GET", "/admin/analytics/views?from=2026-11-01&to=2026-11-28"],
+      ["GET", "/admin/analytics/funnel?from=2026-11-01&to=2026-11-28"],
     ];
 
     for (const [method, path, body] of routes) {

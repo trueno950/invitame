@@ -55,6 +55,10 @@ import {
   type InvitationPaymentDecision,
   type InvitationPaymentGate,
 } from "../application/invitation-payment-gate";
+import {
+  type InvitationViewRepository,
+  INVITATION_VIEW_REPOSITORY,
+} from "../application/invitation-views";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "../application/music-metadata";
 import { PLACE_SEARCH, type PlaceSearch } from "../application/place-search";
 import { InMemoryPlaceSearchCache } from "../application/place-search-cache";
@@ -611,6 +615,23 @@ class MemoryRsvpRepository implements RsvpRepository {
  * statuses, the attending answer a check-in needs, and the seats a confirmed party needs — so a route that skipped
  * one would be caught here. The plain token never enters this class: it holds the digests, as `Guest.tokenHash` does.
  */
+/**
+ * The `InvitationView` write port (M9 T11; S2, S7) over an in-memory list. It records every increment the public reads
+ * make, so the suite can prove which openings are counted and which are not, and it can fail on demand to prove the
+ * guest's answer never depends on the counter.
+ */
+class MemoryInvitationViewRepository implements InvitationViewRepository {
+  readonly increments: Array<{ invitationId: string; source: string; at: Date }> = [];
+  fail = false;
+
+  async increment(invitationId: string, source: "PUBLIC" | "GUEST", at: Date): Promise<void> {
+    if (this.fail) {
+      throw new Error("counter unavailable");
+    }
+    this.increments.push({ invitationId, source, at });
+  }
+}
+
 class MemoryGuestRepository implements GuestRepository {
   readonly guests: Array<GuestRecord & { tokenHash: string }> = [];
   readonly responses: Array<
@@ -928,6 +949,7 @@ describe("invitations routes: /invitations", () => {
   const rsvpRepository = new MemoryRsvpRepository(repository);
   const guestRepository = new MemoryGuestRepository(repository);
   const rateLimiter = new MemoryRateLimiter();
+  const viewRepository = new MemoryInvitationViewRepository();
   const placeSearch = new MemoryPlaceSearch();
   const placeSearchLimiter = new MemoryPlaceSearchLimiter();
   let app: INestApplication;
@@ -958,6 +980,8 @@ describe("invitations routes: /invitations", () => {
         { provide: RSVP_REPOSITORY, useValue: rsvpRepository },
         { provide: GUEST_REPOSITORY, useValue: guestRepository },
         { provide: RSVP_RATE_LIMITER, useValue: rateLimiter },
+        // The public reads count one opening each through this port (M9 T11; S2, S7).
+        { provide: INVITATION_VIEW_REPOSITORY, useValue: viewRepository },
         { provide: PLACE_SEARCH, useValue: placeSearch },
         { provide: PLACE_SEARCH_RATE_LIMITER, useValue: placeSearchLimiter },
         { provide: InMemoryPlaceSearchCache, useValue: new InMemoryPlaceSearchCache() },
@@ -3987,6 +4011,179 @@ describe("invitations routes: /invitations", () => {
 
       assert.equal(response.status, 202);
       assert.deepEqual(await response.json(), { status: "received" });
+    });
+  });
+
+  describe("invitation view counting (M9 T11; S2, S3, S7, L12)", () => {
+    const PUBLIC_PATH = "/public/invitations";
+
+    /** A published invitation created through the owner routes, so the public read serves it. */
+    async function published(packageId: string = RSVP_PACKAGE_ID) {
+      const { cookie } = await signedInCustomer();
+      const created = (await (
+        await send("POST", PATH, cookie, { templateVersionId: PUBLISHED_VERSION_ID, packageId })
+      ).json()) as Row & { id: string; slug: string };
+      await send("PUT", `${PATH}/${created.id}/content`, cookie, { content: { title: "Ana" } });
+      assert.equal((await send("POST", `${PATH}/${created.id}/publish`, cookie)).status, 200);
+
+      return { cookie, created };
+    }
+
+    /** A stored row inserted directly, for the states the owner routes cannot produce here. */
+    function seed(overrides: {
+      slug: string;
+      status: InvitationStatus;
+      templateVersionId?: string;
+    }): InvitationRecordWithMusic {
+      const at = new Date(Date.UTC(2026, 9, 12, 9, 0, 0));
+      const row: InvitationRecordWithMusic = {
+        id: randomUUID(),
+        ownerId: randomUUID(),
+        templateVersionId: overrides.templateVersionId ?? PUBLISHED_VERSION_ID,
+        packageId: ACTIVE_PACKAGE_ID,
+        slug: overrides.slug,
+        status: overrides.status,
+        content: { title: "Cumpleaños de Ana" },
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        rsvpDeadline: null,
+        rsvpPartyLimit: 4,
+        places: {},
+        archivedAt: overrides.status === "ARCHIVED" ? at : null,
+        publishedAt: overrides.status === "PUBLISHED" ? at : null,
+        firstPublishedAt: overrides.status === "PUBLISHED" ? at : null,
+        expiresAt: null,
+        createdAt: at,
+        updatedAt: at,
+      };
+      repository.rows.push(row);
+      return row;
+    }
+
+    it("counts exactly one PUBLIC opening of the public page, with the request's own instant", async () => {
+      const { created } = await published();
+      const before = viewRepository.increments.length;
+      const startedAt = Date.now();
+
+      const response = await send("GET", `${PUBLIC_PATH}/${created.slug}`);
+
+      assert.equal(response.status, 200);
+      const counted = viewRepository.increments.slice(before);
+      assert.equal(counted.length, 1);
+      assert.equal(counted[0]?.invitationId, created.id);
+      assert.equal(counted[0]?.source, "PUBLIC");
+      const at = counted[0]?.at.getTime() ?? 0;
+      assert.ok(at >= startedAt - 1_000 && at <= Date.now() + 1_000, "the request's own instant");
+    });
+
+    it("counts nothing for an unknown, draft, archived, or unrenderable slug (A3)", async () => {
+      const cases = [
+        "invitacion-never0",
+        seed({ slug: "invitacion-draft0", status: "DRAFT" }).slug,
+        seed({ slug: "invitacion-archiv", status: "ARCHIVED" }).slug,
+        seed({
+          slug: "invitacion-norend",
+          status: "PUBLISHED",
+          templateVersionId: UNRENDERABLE_VERSION_ID,
+        }).slug,
+        seed({ slug: "invitacion-novers", status: "PUBLISHED", templateVersionId: UNKNOWN_ID })
+          .slug,
+        "Invitacion-Mayus",
+      ];
+      const before = viewRepository.increments.length;
+
+      for (const slug of cases) {
+        const response = await send("GET", `${PUBLIC_PATH}/${slug}`);
+
+        assert.equal(response.status, 404, slug);
+      }
+      assert.equal(viewRepository.increments.length, before, "an invisible page counts nothing");
+    });
+
+    it("counts a GUEST opening of a personal link, never a PUBLIC one, and no RSVP submission", async () => {
+      const { created } = await published(QR_PASS_PACKAGE_ID);
+      const guest = guestRepository.seedGuest(created.id, {
+        token: "A".repeat(22),
+        name: "Ana",
+        seats: 3,
+      });
+      const before = viewRepository.increments.length;
+
+      const page = await send("GET", `${PUBLIC_PATH}/${created.slug}/guests/${"A".repeat(22)}`);
+      assert.equal(page.status, 200);
+      const counted = viewRepository.increments.slice(before);
+      assert.deepEqual(
+        counted.map((increment) => [increment.invitationId, increment.source]),
+        [[created.id, "GUEST"]],
+      );
+
+      const submit = await send(
+        "POST",
+        `${PUBLIC_PATH}/${created.slug}/guests/${"A".repeat(22)}/rsvp`,
+        undefined,
+        { attending: true, partySize: 1, message: null },
+      );
+      assert.equal(submit.status, 202);
+      assert.equal(viewRepository.increments.length, before + 1, "an answer is not an opening");
+      assert.equal(guest.id, guest.id);
+    });
+
+    it("does not count an open-form RSVP submission or the owner's own preview", async () => {
+      const { cookie, created } = await published();
+      const before = viewRepository.increments.length;
+
+      const submit = await send("POST", `${PUBLIC_PATH}/${created.slug}/rsvp`, undefined, {
+        name: "Ana",
+        attending: true,
+        partySize: 1,
+      });
+      assert.equal(submit.status, 202);
+
+      const preview = await send("GET", `${PATH}/${created.id}`, cookie);
+      assert.equal(preview.status, 200);
+
+      assert.equal(
+        viewRepository.increments.length,
+        before,
+        "neither an answer nor a preview is an opening",
+      );
+    });
+
+    it("answers the same page when the counter fails, and logs one line without a slug or an id", async () => {
+      const { created } = await published();
+      const healthy = await send("GET", `${PUBLIC_PATH}/${created.slug}`);
+      const expectedBody = await healthy.text();
+      const recorded: unknown[][] = [];
+      const spy = mock.method(Logger.prototype, "warn", (...args: unknown[]) => {
+        recorded.push(args);
+      });
+
+      viewRepository.fail = true;
+      let failed: Response;
+      try {
+        failed = await send("GET", `${PUBLIC_PATH}/${created.slug}`);
+      } finally {
+        viewRepository.fail = false;
+        spy.mock.restore();
+      }
+
+      assert.equal(healthy.status, 200);
+      assert.equal(failed.status, 200, "a counter fault never changes the guest's answer");
+      assert.equal(await failed.text(), expectedBody);
+      assert.equal(failed.headers.get("cache-control"), healthy.headers.get("cache-control"));
+
+      const lines = recorded.filter(
+        ([first]) =>
+          (first as { event?: string } | undefined)?.event === "invitation_view_count_failed",
+      );
+      assert.equal(lines.length, 1, "the fault is reported once");
+      assert.deepEqual(lines[0]?.[0], { event: "invitation_view_count_failed" });
+      const text = JSON.stringify(lines[0]?.[0]);
+      assert.equal(text.includes(created.id), false, "no invitation id is logged");
+      assert.equal(text.includes(created.slug), false, "no slug is logged");
     });
   });
 });

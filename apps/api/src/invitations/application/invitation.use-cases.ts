@@ -671,6 +671,8 @@ export class GetPublicInvitationUseCase {
       : [];
 
     return {
+      // The id is internal to the API: the response mapper never answers it, and the public read counts with it (S7).
+      invitationId: published.id,
       slug: published.slug,
       componentKey: render.componentKey,
       configuration: render.configuration,

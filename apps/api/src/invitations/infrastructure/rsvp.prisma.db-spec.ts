@@ -575,9 +575,12 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         // This package grants no guest list, so it offers no access pass (M6 G2).
         qrPass: false,
       });
-      // No guest answer, no owner, no id: the page a guest receives carries the settings only (S4, A7).
+      // The stored id is the application's own field (M9 T11; S7), so the public read can count one opening; the REST
+      // mapper never answers it, and the presentation suite pins the guest's exact body.
+      assert.equal(page?.invitationId, open.invitation.id);
+      // No guest answer and no owner: the projection carries the settings only (S4, A7).
       const text = JSON.stringify(page);
-      for (const secret of ["Ana", "+525512345678", "gusto", open.ownerId, open.invitation.id]) {
+      for (const secret of ["Ana", "+525512345678", "gusto", open.ownerId]) {
         assert.equal(text.includes(secret), false, secret);
       }
       assert.equal(text.includes("RSVP"), false, "the package's key list stays private");

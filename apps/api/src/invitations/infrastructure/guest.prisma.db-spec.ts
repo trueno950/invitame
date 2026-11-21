@@ -670,8 +670,11 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
         response: { attending: true, partySize: 2, message: "Vamos" },
         qrPass: true,
       });
+      // The stored id is the application's own field (M9 T11; S7), so the guest read can count one opening; the REST
+      // mapper never answers it.
+      assert.equal(page?.page.invitationId, invitation.id);
       const text = JSON.stringify(page);
-      for (const secret of ["Beto", guest.token, invitation.ownerId, invitation.id]) {
+      for (const secret of ["Beto", guest.token, invitation.ownerId]) {
         assert.equal(text.includes(secret), false, secret);
       }
       // The other guest's own link is not this guest's page.

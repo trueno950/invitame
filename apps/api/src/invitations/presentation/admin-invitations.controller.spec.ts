@@ -16,6 +16,13 @@ import { createConfigModule } from "../../config/config.module";
 import { EmailDeliveryService } from "../../email/application/email-delivery.service";
 import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../../email/infrastructure/system-email-delivery-runtime";
+import { ADMIN_ANALYTICS_REPOSITORY } from "../application/admin-analytics";
+import type {
+  AdminAnalyticsRepository,
+  AdminInvitationAnalytics,
+  InvitationFunnelDay,
+  TopInvitationView,
+} from "../application/admin-analytics";
 import type {
   AdminInvitationQuery,
   AdminInvitationRepository,
@@ -199,12 +206,44 @@ class StubOwnerStatusReader implements InvitationOwnerStatusReader {
   }
 }
 
+/**
+ * The detail's analytics facet (M9 T11; S2, S7): the retained views and the RSVP totals of one invitation. It answers
+ * zeros until a case sets them, exactly like an invitation with no activity, and it records the window it was asked
+ * for, so the suite can prove the read is the retained one.
+ */
+class StubAnalyticsRepository implements AdminAnalyticsRepository {
+  detail: AdminInvitationAnalytics = {
+    views: { public: 0, guest: 0 },
+    rsvpTotals: { attendingPeople: 0, declined: 0, responses: 0 },
+  };
+  readonly detailWindows: Array<{ invitationId: string; from: string; to: string }> = [];
+
+  async viewsByDay() {
+    return new Map<string, { public: number; guest: number }>();
+  }
+
+  async topInvitationViews(): Promise<TopInvitationView[]> {
+    return [];
+  }
+
+  async invitationFunnelByDay() {
+    return new Map<string, InvitationFunnelDay>();
+  }
+
+  async invitationAnalytics(invitationId: string, window: { from: string; to: string }) {
+    this.detailWindows.push({ invitationId, from: window.from, to: window.to });
+
+    return this.detail;
+  }
+}
+
 interface Harness {
   app: INestApplication;
   repository: StubAdminInvitationRepository;
   payments: StubPaymentReader;
   media: StubMediaCountReader;
   ownerStatuses: StubOwnerStatusReader;
+  analytics: StubAnalyticsRepository;
   /** The ids of the accounts the suite signed in, in order, so a spec can name the session's actor. */
   signedInUserIds: string[];
   signIn(role: "CUSTOMER" | "ADMIN"): Promise<string>;
@@ -242,6 +281,7 @@ async function startHarness(): Promise<Harness> {
   const media = new StubMediaCountReader();
   const owners = new StubOwnerReader();
   const ownerStatuses = new StubOwnerStatusReader();
+  const analytics = new StubAnalyticsRepository();
 
   @Module({
     imports: [
@@ -262,19 +302,34 @@ async function startHarness(): Promise<Harness> {
       { provide: INVITATION_MEDIA_COUNT_READER, useValue: media },
       { provide: INVITATION_OWNER_EMAIL_READER, useValue: owners },
       { provide: INVITATION_OWNER_STATUS_READER, useValue: ownerStatuses },
+      { provide: ADMIN_ANALYTICS_REPOSITORY, useValue: analytics },
       {
         provide: ListAdminInvitationsUseCase,
         useValue: new ListAdminInvitationsUseCase(repository, payments, media, owners),
       },
       {
         provide: GetAdminInvitationUseCase,
-        useValue: new GetAdminInvitationUseCase(repository, payments, media, owners, ownerStatuses),
+        useValue: new GetAdminInvitationUseCase(
+          repository,
+          payments,
+          media,
+          owners,
+          ownerStatuses,
+          analytics,
+        ),
       },
       {
         provide: UnpublishAdminInvitationUseCase,
         useValue: new UnpublishAdminInvitationUseCase(
           repository,
-          new GetAdminInvitationUseCase(repository, payments, media, owners, ownerStatuses),
+          new GetAdminInvitationUseCase(
+            repository,
+            payments,
+            media,
+            owners,
+            ownerStatuses,
+            analytics,
+          ),
         ),
       },
     ],
@@ -292,6 +347,7 @@ async function startHarness(): Promise<Harness> {
     payments,
     media,
     ownerStatuses,
+    analytics,
     signedInUserIds,
     async signIn(role): Promise<string> {
       counter += 1;
@@ -559,9 +615,11 @@ describe("admin invitation status routes (M9 T2; S1)", () => {
         "payments",
         "publishedAt",
         "refundRequestedAt",
+        "rsvpTotals",
         "slug",
         "status",
         "templateVersionId",
+        "views",
       ]);
       assert.equal(body.ownerId, OWNER);
       assert.equal(body.ownerStatus, "ACTIVE");
@@ -585,6 +643,60 @@ describe("admin invitation status routes (M9 T2; S1)", () => {
         currency: "MXN",
         paidAt: payment.paidAt.toISOString(),
       });
+    });
+
+    it("always answers views and rsvpTotals as objects of non-negative integers, zeros when there is no activity", async () => {
+      // The web page's validators read both fields on every detail, so they are never null, never absent, and never a
+      // string: an invitation with nothing counted answers zeros (M9 T11; S2, S7).
+      harness.analytics.detail = {
+        views: { public: 0, guest: 0 },
+        rsvpTotals: { attendingPeople: 0, declined: 0, responses: 0 },
+      };
+      const empty = harness.repository.add({ slug: "detalle-sin-actividad" });
+
+      const emptyResponse = await harness.send(`${PATH}/${empty.invitationId}`, {
+        cookie: adminCookie,
+      });
+      const emptyBody = (await emptyResponse.json()) as Row;
+
+      assert.equal(emptyResponse.status, 200);
+      assert.deepEqual(emptyBody.views, { public: 0, guest: 0 });
+      assert.deepEqual(emptyBody.rsvpTotals, { attendingPeople: 0, declined: 0, responses: 0 });
+      for (const [field, counts] of [
+        ["views", emptyBody.views],
+        ["rsvpTotals", emptyBody.rsvpTotals],
+      ] as const) {
+        for (const [key, value] of Object.entries(counts as Row)) {
+          assert.equal(typeof value, "number", `${field}.${key}`);
+          assert.equal(Number.isInteger(value), true, `${field}.${key}`);
+          assert.equal(Number(value) >= 0, true, `${field}.${key}`);
+        }
+      }
+
+      // And they carry the counted values of an invitation that has activity.
+      harness.analytics.detail = {
+        views: { public: 12, guest: 3 },
+        rsvpTotals: { attendingPeople: 7, declined: 2, responses: 4 },
+      };
+      const active = harness.repository.add({ slug: "detalle-con-actividad" });
+
+      const activeResponse = await harness.send(`${PATH}/${active.invitationId}`, {
+        cookie: adminCookie,
+      });
+      const activeBody = (await activeResponse.json()) as Row;
+
+      assert.equal(activeResponse.status, 200);
+      assert.deepEqual(activeBody.views, { public: 12, guest: 3 });
+      assert.deepEqual(activeBody.rsvpTotals, {
+        attendingPeople: 7,
+        declined: 2,
+        responses: 4,
+      });
+      // The window is the retained one: ninety days before today in Ciudad de México through today.
+      const window = harness.analytics.detailWindows.at(-1);
+      assert.equal(window?.invitationId, active.invitationId);
+      assert.match(String(window?.from), /^\d{4}-\d{2}-\d{2}$/);
+      assert.match(String(window?.to), /^\d{4}-\d{2}-\d{2}$/);
     });
 
     it("answers 404 INVITATION_NOT_FOUND for an unknown invitation", async () => {
@@ -715,9 +827,11 @@ describe("admin invitation unpublish (M9 T8; S4, S6)", () => {
         "payments",
         "publishedAt",
         "refundRequestedAt",
+        "rsvpTotals",
         "slug",
         "status",
         "templateVersionId",
+        "views",
       ]);
       assert.equal(harness.repository.unpublishes.length, 1);
       const asked = harness.repository.unpublishes[0];

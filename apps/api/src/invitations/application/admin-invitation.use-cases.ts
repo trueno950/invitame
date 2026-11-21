@@ -1,5 +1,11 @@
 import type { AdminActionReason } from "../../admin/admin-action-recorder";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
+import { retainedAnalyticsWindow } from "../domain/analytics-window";
+import type {
+  AdminAnalyticsRepository,
+  AdminInvitationAnalytics,
+  AnalyticsClock,
+} from "./admin-analytics";
 import type { AdminInvitationRepository, AdminInvitationRow } from "./admin-invitation.repository";
 import { decodeInvitationCursor, encodeInvitationCursor } from "./invitation-cursor";
 import type { InvitationMediaCounts, InvitationMediaCountReader } from "./invitation-media-counts";
@@ -79,6 +85,11 @@ export interface AdminInvitationDetail extends AdminInvitationSummary {
   templateVersionId: string;
   /** The newest payments, at most `ADMIN_INVITATION_DETAIL_PAYMENT_LIMIT`, newest first. */
   payments: InvitationPaymentSummary[];
+  /**
+   * The whole invitation's activity in the numbers the analytics slice adds (M9 T11; S2, S7): the openings of its
+   * public and guest links in the retained window (the last ninety days), and the RSVP totals the owner read shows.
+   */
+  analytics: AdminInvitationAnalytics;
 }
 
 /** What the administrator's search accepts: the filters, the bound, and the cursor as it arrived. */
@@ -185,6 +196,8 @@ export class GetAdminInvitationUseCase {
     private readonly media: InvitationMediaCountReader,
     private readonly owners: InvitationOwnerEmailReader,
     private readonly ownerStatuses: InvitationOwnerStatusReader,
+    private readonly analytics: AdminAnalyticsRepository,
+    private readonly now: AnalyticsClock = () => new Date(),
   ) {}
 
   async execute(invitationId: string): Promise<AdminInvitationDetail | null> {
@@ -193,13 +206,16 @@ export class GetAdminInvitationUseCase {
       return null;
     }
 
-    const [payments, counts, emails, statuses] = await Promise.all([
+    const [payments, counts, emails, statuses, analytics] = await Promise.all([
       this.payments.listForInvitation(invitationId, ADMIN_INVITATION_DETAIL_PAYMENT_LIMIT),
       this.media.countsFor([invitationId]),
       this.owners.emailsFor([row.ownerId]),
       // The support card addresses the owner's account (T9; S4), so the detail asks the sibling read once, for its own
       // owner, and never widens what a page of rows reads.
       this.ownerStatuses.statusesFor([row.ownerId]),
+      // The analytics of this one invitation (M9 T11; S2): the retained view totals and the RSVP aggregate, in one read
+      // of this module's own repository — never the owner read, and never a facet fetched per row.
+      this.analytics.invitationAnalytics(invitationId, retainedAnalyticsWindow(this.now())),
     ]);
 
     return {
@@ -211,6 +227,7 @@ export class GetAdminInvitationUseCase {
       packageId: row.packageId,
       templateVersionId: row.templateVersionId,
       payments,
+      analytics,
     };
   }
 }

@@ -10,6 +10,7 @@ import { requireLocalDatabaseUrl } from "../../../test/database";
 import { MEDIA_MIME, storageKeyFor } from "../../media/domain/media-asset";
 import { PrismaInvitationMediaCountReader } from "../../media/infrastructure/prisma-invitation-media-count-reader";
 import { PrismaInvitationPaymentReader } from "../../payments/infrastructure/prisma-invitation-payment-reader";
+import { PrismaAdminAnalyticsRepository } from "./prisma-admin-analytics.repository";
 import { PrismaInvitationOwnerEmailReader } from "../../users/infrastructure/prisma-invitation-owner-email-reader";
 import { PrismaInvitationOwnerStatusReader } from "../../users/infrastructure/prisma-invitation-owner-status-reader";
 import type { AdminInvitationRow } from "../application/admin-invitation.repository";
@@ -39,8 +40,18 @@ describe("admin invitation status view on real PostgreSQL (M9 T2; S1)", () => {
   const media = new PrismaInvitationMediaCountReader(prisma);
   const owners = new PrismaInvitationOwnerEmailReader(prisma);
   const ownerStatuses = new PrismaInvitationOwnerStatusReader(prisma);
+  // The detail's analytics facet (M9 T11; S2, S7) is read from this module's own tables, so the status view's suite
+  // exercises it against PostgreSQL too.
+  const analytics = new PrismaAdminAnalyticsRepository(prisma);
   const list = new ListAdminInvitationsUseCase(repository, payments, media, owners);
-  const detail = new GetAdminInvitationUseCase(repository, payments, media, owners, ownerStatuses);
+  const detail = new GetAdminInvitationUseCase(
+    repository,
+    payments,
+    media,
+    owners,
+    ownerStatuses,
+    analytics,
+  );
   const runId = randomUUID().replaceAll("-", "").slice(0, 12);
   const userIds: string[] = [];
   const categoryIds: string[] = [];
@@ -93,6 +104,8 @@ describe("admin invitation status view on real PostgreSQL (M9 T2; S1)", () => {
         where: { payment: { invitationId: { in: invitationIds } } },
       });
       await prisma.payment.deleteMany({ where: { invitationId: { in: invitationIds } } });
+      // `InvitationView` references its invitation with ON DELETE RESTRICT (M9 T11), so its rows go first.
+      await prisma.invitationView.deleteMany({ where: { invitationId: { in: invitationIds } } });
       await prisma.mediaAsset.deleteMany({ where: { invitationId: { in: invitationIds } } });
       await prisma.invitationFeatureSettings.deleteMany({
         where: { invitationId: { in: invitationIds } },
