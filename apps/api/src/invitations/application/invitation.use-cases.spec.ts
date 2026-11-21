@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 
+import { INITIAL_OPERATIONAL_SETTINGS } from "../../settings/domain/operational-settings";
 import {
   InvitationAlreadyArchivedError,
   InvitationAlreadyPublishedError,
@@ -112,14 +113,14 @@ class MemoryInvitationRepository implements InvitationRepository {
       expiresAt: null,
       createdAt: now,
       updatedAt: now,
-      // The database defaults every new row reads (S4, M6 G1).
+      // The columns a new row reads beyond the create input (S4, M6 G1); the party limit arrives in `input` because
+      // the create use case states the settings row's default (M9 T13).
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl: null,
       playlistTitle: null,
       playlistCoverUrl: null,
       rsvpDeadline: null,
-      rsvpPartyLimit: 4,
       places: {},
       ...input,
       content: { ...input.content },
@@ -463,6 +464,55 @@ async function publishedInvitation(fixture: ReturnType<typeof seeded>, nextSlug?
 }
 
 describe("CreateInvitationDraftUseCase", () => {
+  it("starts a new draft at the party limit the settings row states (M9 T13; S5, S8)", async () => {
+    const fixture = seeded();
+    const settings = {
+      current: async () => ({
+        ...INITIAL_OPERATIONAL_SETTINGS,
+        rsvpDefaultPartyLimit: 6,
+        updatedAt: new Date(0),
+      }),
+    };
+
+    await new CreateInvitationDraftUseCase(
+      fixture.repository,
+      fixture.catalog,
+      slugs("invitacion-k7m2qx"),
+      settings,
+    ).execute({
+      ownerId: fixture.ownerId,
+      templateVersionId: fixture.version.id,
+      packageId: fixture.packageId,
+    });
+
+    assert.equal(fixture.repository.rows[0]?.rsvpPartyLimit, 6);
+
+    // A later save changes what the next draft starts with, and never a stored invitation.
+    const lowered = {
+      current: async () => ({
+        ...INITIAL_OPERATIONAL_SETTINGS,
+        rsvpDefaultPartyLimit: 2,
+        updatedAt: new Date(0),
+      }),
+    };
+    await new CreateInvitationDraftUseCase(
+      fixture.repository,
+      fixture.catalog,
+      slugs("invitacion-k7m2qx2"),
+      lowered,
+    ).execute({
+      ownerId: fixture.ownerId,
+      templateVersionId: fixture.version.id,
+      packageId: fixture.packageId,
+    });
+
+    assert.deepEqual(
+      fixture.repository.rows.map((row) => row.rsvpPartyLimit),
+      [6, 2],
+      "the first draft keeps the limit it was created with",
+    );
+  });
+
   it("stores a DRAFT pinned to the owner, the version, and the package, with empty content", async () => {
     const fixture = seeded();
 

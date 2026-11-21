@@ -23,6 +23,7 @@ import {
 } from "./invitation-place.use-cases";
 import type { PlaceSearch } from "./place-search";
 import { InMemoryPlaceSearchCache, placeSearchCacheKey } from "./place-search-cache";
+import { INITIAL_OPERATIONAL_SETTINGS } from "../../settings/domain/operational-settings";
 import type { PlaceSearchRateLimiter } from "./place-search-rate-limiter";
 
 // The place use cases (S1-S3): the search answers at most five suggestions for the text the owner typed, asks the
@@ -550,5 +551,58 @@ describe("place write and clear use cases (S2, S3)", () => {
       InvalidInvitationPlaceError,
     );
     assert.deepEqual(repository.cleared, []);
+  });
+});
+
+describe("the place search result limit from the settings row (M9 T13; S5, S8)", () => {
+  /** Six valid suggestions, so a limit of three and one of six are distinguishable. */
+  function suggestions(count: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      label: `Sugerencia ${index + 1}`,
+      lat: 19.43 + index / 1000,
+      lng: -99.13 - index / 1000,
+    }));
+  }
+
+  it("answers at most the configured number of suggestions, on a fresh answer and on a cached one", async () => {
+    const repository = new MemoryInvitationRepository();
+    const search = new MemoryPlaceSearch();
+    const limiter = new MemoryPlaceSearchLimiter();
+    const cache = new InMemoryPlaceSearchCache();
+    repository.rows.push(record());
+    search.answer = suggestions(6);
+
+    let limit = 3;
+    const searching = new SearchPlacesUseCase(repository, search, limiter, cache, {
+      current: async () => ({
+        ...INITIAL_OPERATIONAL_SETTINGS,
+        placeSearchResultLimit: limit,
+        updatedAt: new Date(0),
+      }),
+    });
+
+    const narrow = await searching.execute({
+      ownerId: "owner-1",
+      id: INVITATION_ID,
+      query: "Parroquia de San José",
+    });
+    assert.deepEqual(
+      narrow?.map((place) => place.label),
+      ["Sugerencia 1", "Sugerencia 2", "Sugerencia 3"],
+      "the answer is bounded by the configured limit",
+    );
+
+    // The same query is answered from the cache after a save lowered the limit: the cached answer is sliced again.
+    limit = 1;
+    const cached = await searching.execute({
+      ownerId: "owner-1",
+      id: INVITATION_ID,
+      query: "Parroquia de San José",
+    });
+    assert.deepEqual(
+      cached?.map((place) => place.label),
+      ["Sugerencia 1"],
+    );
+    assert.equal(search.asked.length, 1, "the repeated query still costs no provider request");
   });
 });

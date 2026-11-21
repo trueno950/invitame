@@ -159,6 +159,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
       packageId: catalogState.packageId,
       slug: newSlug(),
       content: {},
+      // The settings row's default party limit, stated explicitly like the use case does (M9 T13).
+      rsvpPartyLimit: 4,
     });
     invitationIds.push(created.id);
     return { invitation: created, ownerId: owner, ...catalogState };

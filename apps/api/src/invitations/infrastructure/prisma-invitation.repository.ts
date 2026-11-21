@@ -145,6 +145,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
           packageId: input.packageId,
           slug: input.slug,
           content: input.content as Prisma.InputJsonObject,
+          // The settings row's default party limit, read when the draft was created (M9 T13; S5, S8).
+          rsvpPartyLimit: input.rsvpPartyLimit,
         },
       });
       return toRecord(created);

@@ -159,6 +159,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
       packageId: catalogState.packageId,
       slug: newSlug(),
       content: {},
+      // The settings row's default party limit, stated explicitly like the use case does (M9 T13).
+      rsvpPartyLimit: 4,
     });
     invitationIds.push(created.id);
     if (options.rsvpDeadline !== undefined || options.rsvpPartyLimit !== undefined) {

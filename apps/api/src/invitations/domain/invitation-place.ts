@@ -27,7 +27,11 @@ export const PLACE_QUERY_MIN_LENGTH = 3;
 /** The longest query the geocoder is asked about: the width of an address anyone types (S2). */
 export const PLACE_QUERY_MAX_LENGTH = 120;
 
-/** At most five suggestions reach the owner, which is what the listbox renders (S2). */
+/**
+ * At most five suggestions reach the owner while no administrator has changed the panel, which is what the listbox
+ * renders (S2). The live value is the settings row's `placeSearchResultLimit`, read through
+ * `OPERATIONAL_SETTINGS_READER` when a search runs (M9 T13; S5, S8).
+ */
 export const PLACE_RESULT_LIMIT = 5;
 
 /** The message a query that is not a text is refused with. */

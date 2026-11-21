@@ -6,7 +6,6 @@ import {
   isLongitude,
   normalizePlaceQuery,
   PLACE_FIELD_ISSUE,
-  PLACE_RESULT_LIMIT,
   type PlacePoint,
   validatePlaceWrite,
 } from "../domain/invitation-place";
@@ -19,6 +18,10 @@ import type { InvitationRepository } from "./invitation.repository";
 import { type OwnedInvitation, toOwnedInvitation } from "./invitation.use-cases";
 import type { InvitationCatalog } from "./invitation-catalog";
 import { NO_PLACE_SEARCH, type PlaceSearch } from "./place-search";
+import {
+  INITIAL_OPERATIONAL_SETTINGS_READER,
+  type OperationalSettingsReader,
+} from "../../settings/application/operational-settings";
 import { InMemoryPlaceSearchCache, placeSearchCacheKey } from "./place-search-cache";
 import type { PlaceSearchRateLimiter } from "./place-search-rate-limiter";
 
@@ -47,7 +50,7 @@ function isInvitationId(value: unknown): value is string {
 }
 
 /** What one suggestion may be: a point the domain accepts, so a drifted adapter cannot poison the cache. */
-function usableSuggestions(places: readonly PlacePoint[]): PlacePoint[] {
+function usableSuggestions(places: readonly PlacePoint[], limit: number): PlacePoint[] {
   return places
     .filter(
       (place) =>
@@ -56,7 +59,7 @@ function usableSuggestions(places: readonly PlacePoint[]): PlacePoint[] {
         isLatitude(place.lat) &&
         isLongitude(place.lng),
     )
-    .slice(0, PLACE_RESULT_LIMIT)
+    .slice(0, limit)
     .map((place) => ({ label: place.label.trim(), lat: place.lat, lng: place.lng }));
 }
 
@@ -87,6 +90,9 @@ export class SearchPlacesUseCase {
     private readonly places: PlaceSearch = NO_PLACE_SEARCH,
     private readonly rateLimiter: PlaceSearchRateLimiter = { consume: async () => true },
     private readonly cache: InMemoryPlaceSearchCache = new InMemoryPlaceSearchCache(),
+    // How many suggestions the owner sees (M9 T13; S5, S8): the settings row's `placeSearchResultLimit`, read on
+    // every search so a lowered limit applies to the next answer, including one served from the cache.
+    private readonly settings: OperationalSettingsReader = INITIAL_OPERATIONAL_SETTINGS_READER,
   ) {}
 
   async execute(input: SearchPlacesInput): Promise<readonly PlacePoint[] | null> {
@@ -103,10 +109,13 @@ export class SearchPlacesUseCase {
       throw new InvalidPlaceQueryError([validation.issue]);
     }
 
+    // The limit is read on every search, so a lowered one applies to the next answer — including a cached answer,
+    // which is sliced again instead of being served at the width it was cached with (M9 T13; S5, S8).
+    const limit = (await this.settings.current()).placeSearchResultLimit;
     const key = placeSearchCacheKey(validation.query);
     const cached = this.cache.get(key);
     if (cached !== undefined) {
-      return cached;
+      return cached.slice(0, limit);
     }
 
     // Only a request that reaches the geocoder spends the owner's limit; a cached answer costs nothing (S2).
@@ -114,7 +123,7 @@ export class SearchPlacesUseCase {
       throw new PlaceSearchRateLimitedError();
     }
 
-    const answer = await this.ask(validation.query);
+    const answer = await this.ask(validation.query, limit);
     // A provider that failed says nothing about the place, so its failure is not an empty answer: only an answer
     // the provider really gave is cached, and the next identical query asks again (S2, S3).
     if (!answer.ok) {
@@ -126,9 +135,9 @@ export class SearchPlacesUseCase {
   }
 
   /** One bounded request: the port answers nothing for a provider that is slow, down, or unusable (S2, S3). */
-  private async ask(query: string): Promise<PlaceSearchAnswer> {
+  private async ask(query: string, limit: number): Promise<PlaceSearchAnswer> {
     try {
-      return { ok: true, places: usableSuggestions(await this.places.search(query)) };
+      return { ok: true, places: usableSuggestions(await this.places.search(query), limit) };
     } catch {
       // The editor shows no suggestion rather than an error: the owner can keep typing the address by hand.
       return { ok: false };

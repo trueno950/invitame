@@ -3,7 +3,12 @@ import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { describe, it } from "node:test";
 import { InvitationNotEditableError } from "../../invitations/domain/invitation.errors";
-import { MEDIA_MIME, MEDIA_ORPHAN_GRACE_MS, storageKeyFor } from "../domain/media-asset";
+import {
+  MEDIA_MIME,
+  MEDIA_ORPHAN_GRACE_MS,
+  type MediaLimits,
+  storageKeyFor,
+} from "../domain/media-asset";
 import {
   type ImageMetadata,
   type ImageProcessor,
@@ -38,6 +43,10 @@ import {
 import type { MediaCatalog } from "./media-catalog";
 import type { MediaObject, MediaStorage, MediaStorageObject } from "./media-storage";
 import { MediaStorageError } from "./media-storage";
+import {
+  INITIAL_OPERATIONAL_SETTINGS,
+  type OperationalSettings,
+} from "../../settings/domain/operational-settings";
 
 // The media use cases (M8 S4): owner-scoped uploads, the main-photo replacement, the limits, the delete order,
 // the upload recovery order, and the serving rules. Every adapter is a fake, so the order of the side effects is
@@ -60,6 +69,8 @@ class FakeRepository implements MediaRepository {
   failInsert: Error | null = null;
   insertLimit: Error | null = null;
   serving: ServingMedia | null = null;
+  /** The limits the caller passed, as the real adapter receives them (M9 T13; S5, S8). */
+  limits: MediaLimits[] = [];
   private readonly calls: string[];
 
   constructor(calls: string[]) {
@@ -76,8 +87,17 @@ class FakeRepository implements MediaRepository {
     return this.invitation === null ? null : this.rows;
   }
 
-  async insert(_owner: string, _invitation: string, asset: NewMediaAsset): Promise<InsertedMedia> {
+  async insert(
+    _owner: string,
+    _invitation: string,
+    asset: NewMediaAsset,
+    _at?: Date,
+    limits?: MediaLimits,
+  ): Promise<InsertedMedia> {
     this.calls.push("insert");
+    if (limits) {
+      this.limits.push(limits);
+    }
     if (this.failInsert) {
       throw this.failInsert;
     }
@@ -1002,5 +1022,74 @@ describe("public gallery", () => {
         alt: "Segunda",
       },
     ]);
+  });
+});
+
+describe("the upload size and the two caps from the settings row (M9 T13; S5, S8)", () => {
+  /** The same composition, with a reader answering one saved settings row. */
+  function setupWith(overrides: Partial<OperationalSettings>) {
+    const calls: string[] = [];
+    const repository = new FakeRepository(calls);
+    const storage = new FakeStorage(calls);
+    const processor = new FakeProcessor(calls);
+    const catalog = new FakeCatalog();
+    catalog.includedFeatureKeys = ["GALLERY"];
+    const upload = new UploadMediaUseCase(repository, catalog, storage, processor, {
+      assetUrl: (assetId: string) => `https://api.example.test/media/${assetId}`,
+      now: () => new Date("2026-01-01T00:00:00.000Z"),
+      newAssetId: () => "44444444-4444-4444-8444-444444444444",
+      settings: {
+        current: async () => ({
+          ...INITIAL_OPERATIONAL_SETTINGS,
+          ...overrides,
+          updatedAt: new Date(0),
+        }),
+      },
+    });
+
+    return { upload, repository, storage };
+  }
+
+  /** A JPEG padded to exactly `megabytes`, which is what the size check reads. */
+  function jpegOf(megabytes: number): Uint8Array {
+    const bytes = new Uint8Array(megabytes * 1024 * 1024);
+    bytes.set(JPEG);
+    return bytes;
+  }
+
+  it("refuses an upload over the configured size, naming that size, and stores no object", async () => {
+    const { upload, storage } = setupWith({ maxUploadMegabytes: 10 });
+
+    await assert.rejects(
+      upload.execute({
+        ownerId: OWNER,
+        invitationId: INVITATION,
+        kind: "gallery",
+        alt: null,
+        bytes: jpegOf(11),
+      }),
+      (error: unknown) =>
+        error instanceof InvalidMediaUploadError &&
+        JSON.stringify(error.issues) === JSON.stringify(["file must be at most 10 MB"]),
+    );
+    assert.equal(storage.objects.size, 0);
+  });
+
+  it("accepts an upload at the raised size and passes the two caps the settings state to the insert", async () => {
+    const { upload, repository } = setupWith({
+      maxUploadMegabytes: 15,
+      galleryPhotoLimit: 8,
+      storedAssetLimit: 9,
+    });
+
+    await upload.execute({
+      ownerId: OWNER,
+      invitationId: INVITATION,
+      kind: "gallery",
+      alt: null,
+      bytes: jpegOf(15),
+    });
+
+    assert.deepEqual(repository.limits, [{ galleryPhotoLimit: 8, storedAssetLimit: 9 }]);
   });
 });

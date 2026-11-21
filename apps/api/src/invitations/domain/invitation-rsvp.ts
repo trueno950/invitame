@@ -31,11 +31,15 @@ export const RSVP_MESSAGE_MAX_LENGTH = 280;
 /** The widest party any invitation allows, whatever its own limit says: `RsvpResponse.partySize`. */
 export const RSVP_PARTY_SIZE_MAX = 10;
 
-/** The party limit bounds a creator may set (S4). */
+/** The party limit bounds a creator may set (S4). The maximum is the widest the column accepts, never a policy. */
 export const RSVP_PARTY_LIMIT_MIN = 1;
 export const RSVP_PARTY_LIMIT_MAX = 10;
 
-/** The party limit a new invitation reads, and the one every row that existed before M6 reads. */
+/**
+ * The party limit a new invitation reads while no administrator has changed the panel: the value the migration seeds
+ * (M9 T13; S5, S8). The live value is the settings row's `rsvpDefaultPartyLimit`, read through
+ * `OPERATIONAL_SETTINGS_READER` when a draft is created.
+ */
 export const DEFAULT_RSVP_PARTY_LIMIT = 4;
 
 /** The issue a name that is not a string is refused with. */
@@ -78,7 +82,16 @@ export const RSVP_DEADLINE_ISSUE = "deadline must be an ISO 8601 instant with an
 export const RSVP_PARTY_LIMIT_TYPE_ISSUE = "partyLimit must be an integer";
 
 /** The issue a party limit outside 1 to 10 is refused with. */
-export const RSVP_PARTY_LIMIT_RANGE_ISSUE = "partyLimit must be between 1 and 10";
+export const RSVP_PARTY_LIMIT_RANGE_ISSUE = rsvpPartyLimitRangeIssue(RSVP_PARTY_LIMIT_MAX);
+
+/**
+ * The issue a party limit above the platform's current maximum is refused with (M9 T13; S5, S8). The bounds sentence
+ * names the maximum the settings row states right now, so an owner who is told «between 1 and 6» reads the limit the
+ * API actually applies.
+ */
+export function rsvpPartyLimitRangeIssue(maxPartyLimit: number): string {
+  return `partyLimit must be between ${RSVP_PARTY_LIMIT_MIN} and ${maxPartyLimit}`;
+}
 
 /**
  * An ISO 8601 instant with an explicit offset: a date, `T`, a time, and `Z` or `±hh:mm`. A date alone or a
@@ -149,15 +162,28 @@ export type RsvpSettingsValidation =
   | { readonly ok: true; readonly value: RsvpSettings }
   | { readonly ok: false; readonly issues: string[] };
 
+/** The limits a settings save is judged against: the platform-wide maximum party size (M9 T13; S5, S8). */
+export interface RsvpSettingsLimits {
+  /** The widest party an owner may set; the settings row's `rsvpMaxPartyLimit`, never wider than the column. */
+  readonly maxPartyLimit?: number;
+}
+
 /**
  * Validates a settings request (S4): `deadline` is null or an ISO 8601 instant with an offset, and `partyLimit`
- * is an integer from 1 to 10. Every issue is reported, the deadline first, and nothing is transformed except
- * the deadline's instant. A past deadline is accepted: it simply closes RSVP, which is the owner's decision.
+ * is an integer from 1 to the platform's current maximum (the settings row's `rsvpMaxPartyLimit`, or the column's own
+ * 10 when no settings module is composed). Every issue is reported, the deadline first, and nothing is transformed
+ * except the deadline's instant. A past deadline is accepted: it simply closes RSVP, which is the owner's decision.
+ *
+ * A lowered maximum does not touch a stored limit: an invitation whose `rsvpPartyLimit` already exceeds it keeps the
+ * number it has, and only the next save above the maximum is refused (S8 «Conservan lo que tienen»).
  */
-export function validateRsvpSettings(input: {
-  readonly deadline: unknown;
-  readonly partyLimit: unknown;
-}): RsvpSettingsValidation {
+export function validateRsvpSettings(
+  input: {
+    readonly deadline: unknown;
+    readonly partyLimit: unknown;
+  },
+  limits: RsvpSettingsLimits = {},
+): RsvpSettingsValidation {
   const issues: string[] = [];
   let deadline: Date | null = null;
 
@@ -176,10 +202,16 @@ export function validateRsvpSettings(input: {
   }
 
   const partyLimit = input.partyLimit;
+  // The platform maximum is the settings row's, clamped to the column's own widest value so a corrupted setting can
+  // never admit a party size the `Invitation_rsvpPartyLimit_range` check refuses.
+  const maxPartyLimit = Math.min(
+    limits.maxPartyLimit ?? RSVP_PARTY_LIMIT_MAX,
+    RSVP_PARTY_LIMIT_MAX,
+  );
   if (typeof partyLimit !== "number" || !Number.isInteger(partyLimit)) {
     issues.push(RSVP_PARTY_LIMIT_TYPE_ISSUE);
-  } else if (partyLimit < RSVP_PARTY_LIMIT_MIN || partyLimit > RSVP_PARTY_LIMIT_MAX) {
-    issues.push(RSVP_PARTY_LIMIT_RANGE_ISSUE);
+  } else if (partyLimit < RSVP_PARTY_LIMIT_MIN || partyLimit > maxPartyLimit) {
+    issues.push(rsvpPartyLimitRangeIssue(maxPartyLimit));
   }
 
   if (issues.length > 0 || typeof partyLimit !== "number") {

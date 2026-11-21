@@ -14,6 +14,11 @@ import {
   validateImageDimensions,
   validateMediaUpload,
 } from "../domain/media-asset";
+import {
+  INITIAL_OPERATIONAL_SETTINGS_READER,
+  type OperationalSettingsReader,
+} from "../../settings/application/operational-settings";
+import { megabytesInBytes } from "../../settings/domain/operational-settings";
 import type { ImageProcessor } from "./image-processing";
 import { MediaProcessingError } from "./image-processing";
 import {
@@ -57,12 +62,17 @@ export type MediaLogEvent = { event: string } & Record<string, unknown>;
 /** The sink media events go to. The module binds it to the Nest logger; a test records the events. */
 export type MediaLog = (event: MediaLogEvent) => void;
 
-/** What the module injects: the public URL builder, the clock, the id source, and the log sink. */
+/** What the module injects: the public URL builder, the clock, the id source, the log sink, and the settings. */
 export interface MediaOptions {
   assetUrl: AssetUrl;
   now?: () => Date;
   newAssetId?: () => string;
   log?: MediaLog;
+  /**
+   * The operational settings (M9 T13; S5, S8): the upload size and the two caps, read on every upload so a save takes
+   * effect on the next one. Composed without a settings module, the reader answers the values the migration seeds.
+   */
+  settings?: OperationalSettingsReader;
 }
 
 /** One asset as the creator's editor and the gallery read see it: never its storage key or its row ids beyond it. */
@@ -109,6 +119,7 @@ export class UploadMediaUseCase {
   private readonly now: () => Date;
   private readonly newAssetId: () => string;
   private readonly log: MediaLog;
+  private readonly settings: OperationalSettingsReader;
 
   constructor(
     private readonly invitations: MediaRepository,
@@ -120,6 +131,7 @@ export class UploadMediaUseCase {
     this.now = options.now ?? (() => new Date());
     this.newAssetId = options.newAssetId ?? (() => randomUUID());
     this.log = options.log ?? (() => {});
+    this.settings = options.settings ?? INITIAL_OPERATIONAL_SETTINGS_READER;
   }
 
   async execute(input: UploadMediaInput): Promise<MediaAssetView> {
@@ -133,7 +145,15 @@ export class UploadMediaUseCase {
     // The archived refusal comes before the request values: an archived invitation accepts nothing at all (A2).
     assertEditable(invitation.status);
 
-    const upload = validateMediaUpload({ bytes: input.bytes, kind: input.kind, alt: input.alt });
+    // The settings are read at the moment the limits are checked (M9 T13; S5, S8): the upload size bounds the bytes
+    // before anything is decoded, and the same read supplies the two caps the insert enforces.
+    const settings = await this.settings.current();
+    const upload = validateMediaUpload({
+      bytes: input.bytes,
+      kind: input.kind,
+      alt: input.alt,
+      maxBytes: megabytesInBytes(settings.maxUploadMegabytes),
+    });
     if (!upload.ok) {
       throw new InvalidMediaUploadError(upload.issues);
     }
@@ -169,7 +189,10 @@ export class UploadMediaUseCase {
 
     let inserted: InsertedMedia | null;
     try {
-      inserted = await this.invitations.insert(input.ownerId, invitation.id, asset, this.now());
+      inserted = await this.invitations.insert(input.ownerId, invitation.id, asset, this.now(), {
+        galleryPhotoLimit: settings.galleryPhotoLimit,
+        storedAssetLimit: settings.storedAssetLimit,
+      });
     } catch (error) {
       // The row was not written, so the object is an orphan: delete it, best effort, and log the outcome only.
       await this.deleteObject(asset.storageKey, "media_upload_recovery");

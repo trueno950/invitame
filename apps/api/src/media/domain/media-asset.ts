@@ -1,8 +1,13 @@
-// Invitation media, domain rules (M8 S1, S4). The API accepts a photo only when its own bytes say it is a JPEG,
-// PNG, or WebP — never the filename or the client's MIME — at most 10 MB and at most 8000 px per side, and then
-// stores it re-encoded as WebP with its longest side at most 2000 px. Nothing here touches the filesystem, the
-// database, or the image library: the format, size, and dimension rules are pure, and the processing adapter that
-// reads the dimensions and writes the WebP output lives in infrastructure.
+// Invitation media, domain rules (M8 S1, S4; M9 T13). The API accepts a photo only when its own bytes say it is a JPEG,
+// PNG, or WebP — never the filename or the client's MIME — at most the configured upload size (10 MB initially) and at
+// most 8000 px per side, and then stores it re-encoded as WebP with its longest side at most 2000 px. Nothing here
+// touches the filesystem, the database, or the image library: the format, size, and dimension rules are pure, and the
+// processing adapter that reads the dimensions and writes the WebP output lives in infrastructure.
+//
+// The three numbers an administrator may change — the upload size, the gallery cap, and the stored-asset cap — are
+// passed in by the caller, which reads them from the settings row at the moment it checks them (S5, S8). The constants
+// below are the values the migration seeds, so a test or a composition without a settings module behaves exactly as the
+// product did before the panel existed.
 //
 // Binaries never reach PostgreSQL (AGENTS.md): the storage key is `invitations/<invitationId>/<assetId>.webp`,
 // built from validated ids only, so no user-supplied name can escape the prefix or name a path.
@@ -15,7 +20,10 @@ export type MediaKind = (typeof MEDIA_KINDS)[number];
 /** The one MIME the API stores and serves for every asset: the re-encoded WebP (S4). */
 export const MEDIA_MIME = "image/webp";
 
-/** The largest upload the API accepts, in bytes: 10 MB (S4). */
+/**
+ * The largest upload the API accepts while no administrator has changed the panel, in bytes: 10 MB (S4). The live
+ * value is the settings row's `maxUploadMegabytes`, read by the upload use case on every request (M9 T13; S5, S8).
+ */
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /** The largest accepted input side, in pixels (S4). Checked from metadata, before the image is decoded. */
@@ -30,20 +38,37 @@ export const MAX_INPUT_PIXELS = MAX_INPUT_DIMENSION * MAX_INPUT_DIMENSION;
 /** The longest side of a stored image, in pixels (S4). */
 export const MAX_OUTPUT_DIMENSION = 2000;
 
-/** How many gallery photos one invitation may hold (S4). */
+/** How many gallery photos one invitation may hold while the panel is unchanged (S4; M9 T13). */
 export const MAX_GALLERY_PHOTOS = 12;
 
-/** How many stored assets one invitation may hold, both kinds together (S4). */
+/** How many stored assets one invitation may hold, both kinds together, while the panel is unchanged (S4; M9 T13). */
 export const MAX_STORED_ASSETS = 40;
+
+/**
+ * The two caps an upload is checked against, read from the settings row when the row is written (M9 T13; S5, S8). A
+ * lowered cap only refuses the next addition: the photos an invitation already stores stay exactly as they are.
+ */
+export interface MediaLimits {
+  readonly galleryPhotoLimit: number;
+  readonly storedAssetLimit: number;
+}
+
+/** The limits the migration seeds, so a composition without a settings module behaves as the product did before it. */
+export const INITIAL_MEDIA_LIMITS: MediaLimits = {
+  galleryPhotoLimit: MAX_GALLERY_PHOTOS,
+  storedAssetLimit: MAX_STORED_ASSETS,
+};
 
 /** The longest alt text, in characters, matching the `MediaAsset.alt` column (S4). */
 export const MAX_ALT_LENGTH = 120;
 
 /**
- * The largest request body the multipart upload route accepts: the 10 MB file plus room for the boundary, the
- * `kind` and `alt` fields, and the part headers. Every other route keeps its own, smaller JSON limit.
+ * The largest request body the multipart upload route accepts: 16 MB, the widest configured upload (15 MB, the
+ * `maxUploadMegabytes` bound) plus room for the boundary, the `kind` and `alt` fields, and the part headers. This is the
+ * static cap of that one route — it bounds the bytes the process reads before any check runs — while the per-upload
+ * size the settings state is enforced by `validateMediaUpload`. Every other route keeps its own, smaller JSON limit.
  */
-export const MAX_UPLOAD_REQUEST_BYTES = 11 * 1024 * 1024;
+export const MAX_UPLOAD_REQUEST_BYTES = 16 * 1024 * 1024;
 
 /** The prefix every media object lives under, so a cleanup can list exactly the objects it owns. */
 export const MEDIA_STORAGE_PREFIX = "invitations/";
@@ -70,8 +95,18 @@ const STORAGE_KEY = new RegExp(
 /** The message a file that is not a JPEG, PNG, or WebP is refused with. */
 export const MEDIA_FORMAT_ISSUE = "file must be a JPEG, PNG, or WebP image";
 
-/** The message a file over 10 MB is refused with. */
-export const MEDIA_SIZE_ISSUE = "file must be at most 10 MB";
+/**
+ * The message a file over the configured upload size is refused with. It names the bound that refused it, so a
+ * creator who is told «at most 15 MB» reads the limit the API actually applies (M9 T13; S5, S8).
+ */
+export function mediaSizeIssue(maxBytes: number): string {
+  const megabytes = Math.round(maxBytes / (1024 * 1024));
+
+  return `file must be at most ${megabytes} MB`;
+}
+
+/** The message a file over the initial 10 MB is refused with, which is the panel's seeded value. */
+export const MEDIA_SIZE_ISSUE = mediaSizeIssue(MAX_UPLOAD_BYTES);
 
 /** The message an unknown kind is refused with. */
 export const MEDIA_KIND_ISSUE = "kind must be main-photo or gallery";
@@ -155,18 +190,21 @@ export type MediaUploadValidation =
   | { readonly ok: false; readonly issues: string[] };
 
 /**
- * Validates one upload (S4): the kind must be allow-listed, the alt text must be bounded and normalizes to null
- * when blank, and the bytes must be non-empty, at most 10 MB, and a JPEG, PNG, or WebP by signature. The size is
- * read before the signature, so an oversized payload is refused without reading further. A refused upload stores
- * nothing and writes no object. Dimensions are checked separately, from metadata, by
- * `validateImageDimensions`.
+ * Validates one upload (S4; M9 T13): the kind must be allow-listed, the alt text must be bounded and normalizes to null
+ * when blank, and the bytes must be non-empty, at most `maxBytes` (the settings row's upload size, or the initial
+ * 10 MB), and a JPEG, PNG, or WebP by signature. The size is read before the signature, so an oversized payload is
+ * refused without reading further. A refused upload stores nothing and writes no object. Dimensions are checked
+ * separately, from metadata, by `validateImageDimensions`.
  */
 export function validateMediaUpload(input: {
   readonly bytes: Uint8Array;
   readonly kind: unknown;
   readonly alt: unknown;
+  /** The widest upload the settings allow, in bytes; the seeded 10 MB when the caller passes nothing. */
+  readonly maxBytes?: number;
 }): MediaUploadValidation {
   const issues: string[] = [];
+  const maxBytes = input.maxBytes ?? MAX_UPLOAD_BYTES;
 
   if (!isMediaKind(input.kind)) {
     issues.push(MEDIA_KIND_ISSUE);
@@ -177,9 +215,9 @@ export function validateMediaUpload(input: {
     issues.push(alt.issue);
   }
 
-  const sizeOk = input.bytes.length > 0 && input.bytes.length <= MAX_UPLOAD_BYTES;
+  const sizeOk = input.bytes.length > 0 && input.bytes.length <= maxBytes;
   if (!sizeOk) {
-    issues.push(MEDIA_SIZE_ISSUE);
+    issues.push(mediaSizeIssue(maxBytes));
   }
 
   const format = detectImageFormat(input.bytes);

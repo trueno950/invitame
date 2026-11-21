@@ -97,6 +97,20 @@ describe("analytics calendar (M9 T11; S2, S3, S7)", () => {
       assert.equal(thirtyDaysEndingThere.days.length, ANALYTICS_DEFAULT_WINDOW_DAYS);
     });
 
+    it("uses the configured default window when the caller names neither bound (S5, S8)", () => {
+      const window = resolveAnalyticsWindow({ from: null, to: null }, now, 7);
+
+      assert.equal(window.to, "2026-11-28");
+      assert.equal(window.from, "2026-11-22");
+      assert.deepEqual(window.days.length, 7);
+
+      // The ninety-day maximum stays fixed whatever the configured default is.
+      assert.throws(
+        () => resolveAnalyticsWindow({ from: null, to: "2026-11-28" }, now, 120),
+        InvalidAnalyticsWindowError,
+      );
+    });
+
     it("accepts a single day and the widest allowed window", () => {
       const single = resolveAnalyticsWindow({ from: "2026-11-28", to: "2026-11-28" }, now);
       assert.deepEqual(single.days, ["2026-11-28"]);

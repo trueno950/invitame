@@ -148,6 +148,8 @@ describe("media assets on real PostgreSQL (M8 S4)", () => {
       packageId: createdPackage.id,
       slug: `m8media-${runId.slice(0, 8)}-${sequence}`,
       content: {},
+      // The settings row's default party limit, stated explicitly like the use case does (M9 T13).
+      rsvpPartyLimit: 4,
     });
     invitationIds.push(invitation.id);
     if (options.publish !== false) {
@@ -163,6 +165,7 @@ describe("media assets on real PostgreSQL (M8 S4)", () => {
   async function upload(
     invitation: { id: string; ownerId: string },
     kind: "main-photo" | "gallery" = "gallery",
+    limits?: { galleryPhotoLimit: number; storedAssetLimit: number },
   ) {
     const id = randomUUID();
     const created = await media.insert(
@@ -180,6 +183,7 @@ describe("media assets on real PostgreSQL (M8 S4)", () => {
         alt: null,
       },
       AT,
+      limits,
     );
     assert.ok(created !== null, "the asset is stored");
 
@@ -341,6 +345,48 @@ describe("media assets on real PostgreSQL (M8 S4)", () => {
           : [],
       );
       assert.equal(replaced.length, 2, "each replacement reports the row it replaced");
+    });
+
+    it("refuses the next addition above a lowered gallery cap and keeps every stored photo (S8)", async () => {
+      const { invitation } = await newInvitation();
+      // A full gallery under the seeded cap, then a save that lowers the cap to eight: nothing stored is removed.
+      for (let position = 0; position < MAX_GALLERY_PHOTOS; position += 1) {
+        await upload(invitation, "gallery");
+      }
+      const storedBefore = await prisma.mediaAsset.count({
+        where: { invitationId: invitation.id, kind: "GALLERY", status: "STORED" },
+      });
+      assert.equal(storedBefore, MAX_GALLERY_PHOTOS);
+
+      await assert.rejects(
+        upload(invitation, "gallery", {
+          galleryPhotoLimit: 8,
+          storedAssetLimit: MAX_STORED_ASSETS,
+        }),
+        (error: unknown) => error instanceof MediaLimitExceededError && error.limit === "gallery",
+      );
+
+      const stored = await prisma.mediaAsset.findMany({
+        where: { invitationId: invitation.id, kind: "GALLERY", status: "STORED" },
+        orderBy: { position: "asc" },
+      });
+      assert.equal(
+        stored.length,
+        MAX_GALLERY_PHOTOS,
+        "the twelve photos the invitation already had stay",
+      );
+      assert.deepEqual(
+        stored.map((row) => row.position),
+        Array.from({ length: MAX_GALLERY_PHOTOS }, (_, index) => index),
+        "and they keep their order",
+      );
+
+      // The lowered cap is not a permanent lock: the same invitation accepts a photo again once the cap is raised.
+      const added = await upload(invitation, "gallery", {
+        galleryPhotoLimit: MAX_GALLERY_PHOTOS + 1,
+        storedAssetLimit: MAX_STORED_ASSETS,
+      });
+      assert.equal(added.asset.kind, "gallery");
     });
 
     it("caps one invitation at 40 stored assets, main photo included", async () => {

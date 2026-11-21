@@ -11,6 +11,11 @@ import { CatalogModule } from "../catalog/catalog.module";
 import type { RuntimeEnvironment } from "../config/environment";
 import { PrismaService } from "../database/prisma.service";
 import { MediaModule } from "../media/media.module";
+import {
+  OPERATIONAL_SETTINGS_READER,
+  type OperationalSettingsReader,
+} from "../settings/application/operational-settings";
+import { SettingsModule } from "../settings/settings.module";
 import { PaymentsModule } from "../payments/payments.module";
 import { UsersModule } from "../users/users.module";
 import { GUEST_REPOSITORY, type GuestRepository } from "./application/guest.repository";
@@ -199,15 +204,24 @@ export const ADMIN_INVITATION_USE_CASES: Provider[] = [
 export const ADMIN_ANALYTICS_USE_CASES: Provider[] = [
   {
     provide: GetAdminViewsAnalyticsUseCase,
-    useFactory: (analytics: AdminAnalyticsRepository) =>
-      new GetAdminViewsAnalyticsUseCase(analytics),
-    inject: [ADMIN_ANALYTICS_REPOSITORY],
+    // The window a request that names neither bound reads is the settings row's default (M9 T13; S5, S8); the
+    // ninety-day maximum stays fixed in the domain.
+    useFactory: (analytics: AdminAnalyticsRepository, settings: OperationalSettingsReader) =>
+      new GetAdminViewsAnalyticsUseCase(analytics, undefined, settings),
+    inject: [ADMIN_ANALYTICS_REPOSITORY, OPERATIONAL_SETTINGS_READER],
   },
   {
     provide: GetAdminFunnelAnalyticsUseCase,
-    useFactory: (analytics: AdminAnalyticsRepository, payments: InvitationFunnelPaymentReader) =>
-      new GetAdminFunnelAnalyticsUseCase(analytics, payments),
-    inject: [ADMIN_ANALYTICS_REPOSITORY, INVITATION_FUNNEL_PAYMENT_READER],
+    useFactory: (
+      analytics: AdminAnalyticsRepository,
+      payments: InvitationFunnelPaymentReader,
+      settings: OperationalSettingsReader,
+    ) => new GetAdminFunnelAnalyticsUseCase(analytics, payments, undefined, settings),
+    inject: [
+      ADMIN_ANALYTICS_REPOSITORY,
+      INVITATION_FUNNEL_PAYMENT_READER,
+      OPERATIONAL_SETTINGS_READER,
+    ],
   },
 ];
 
@@ -233,23 +247,35 @@ export const INVITATION_USE_CASES: Provider[] = [
     useFactory: (invitations: InvitationRepository) => new UnpublishInvitationUseCase(invitations),
     inject: [INVITATION_REPOSITORY],
   },
-  useCase(CreateInvitationDraftUseCase),
+  {
+    provide: CreateInvitationDraftUseCase,
+    // The draft's default party limit is the settings row's (M9 T13; S5, S8), read when the draft is created.
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      settings: OperationalSettingsReader,
+    ) => new CreateInvitationDraftUseCase(invitations, catalog, undefined, settings),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, OPERATIONAL_SETTINGS_READER],
+  },
   useCase(GetOwnInvitationUseCase),
   // The place use cases (S1, S2): the search asks the geocoder port under the owner's own limit and cache, and both
   // writes validate the field against the pinned schema before storing the point.
   {
     provide: SearchPlacesUseCase,
+    // How many suggestions reach the owner is the settings row's (M9 T13; S5, S8), read on every search.
     useFactory: (
       invitations: InvitationRepository,
       places: PlaceSearch,
       rateLimiter: PlaceSearchRateLimiter,
       cache: InMemoryPlaceSearchCache,
-    ) => new SearchPlacesUseCase(invitations, places, rateLimiter, cache),
+      settings: OperationalSettingsReader,
+    ) => new SearchPlacesUseCase(invitations, places, rateLimiter, cache, settings),
     inject: [
       INVITATION_REPOSITORY,
       PLACE_SEARCH,
       PLACE_SEARCH_RATE_LIMITER,
       InMemoryPlaceSearchCache,
+      OPERATIONAL_SETTINGS_READER,
     ],
   },
   useCase(UpdateInvitationPlaceUseCase),
@@ -297,9 +323,14 @@ export const INVITATION_USE_CASES: Provider[] = [
   },
   {
     provide: UpdateRsvpSettingsUseCase,
-    useFactory: (invitations: InvitationRepository, rsvp: RsvpRepository) =>
-      new UpdateRsvpSettingsUseCase(invitations, rsvp),
-    inject: [INVITATION_REPOSITORY, RSVP_REPOSITORY],
+    // The platform-wide maximum party size is the settings row's (M9 T13; S5, S8): a save above it is refused, and a
+    // stored limit above a lowered maximum keeps its value.
+    useFactory: (
+      invitations: InvitationRepository,
+      rsvp: RsvpRepository,
+      settings: OperationalSettingsReader,
+    ) => new UpdateRsvpSettingsUseCase(invitations, rsvp, settings),
+    inject: [INVITATION_REPOSITORY, RSVP_REPOSITORY, OPERATIONAL_SETTINGS_READER],
   },
   {
     provide: GetRsvpResponsesUseCase,
@@ -309,13 +340,21 @@ export const INVITATION_USE_CASES: Provider[] = [
   },
   {
     provide: SubmitPublicRsvpUseCase,
+    // The widest party at submit is the invitation's own limit capped by the settings row's maximum (M9 T13; S5, S8).
     useFactory: (
       invitations: InvitationRepository,
       catalog: InvitationCatalog,
       rsvp: RsvpRepository,
       rateLimiter: RsvpRateLimiter,
-    ) => new SubmitPublicRsvpUseCase(invitations, catalog, rsvp, rateLimiter),
-    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, RSVP_REPOSITORY, RSVP_RATE_LIMITER],
+      settings: OperationalSettingsReader,
+    ) => new SubmitPublicRsvpUseCase(invitations, catalog, rsvp, rateLimiter, undefined, settings),
+    inject: [
+      INVITATION_REPOSITORY,
+      INVITATION_CATALOG,
+      RSVP_REPOSITORY,
+      RSVP_RATE_LIMITER,
+      OPERATIONAL_SETTINGS_READER,
+    ],
   },
   // The guest list (M6 G2): every use case needs the invitation port, the catalog gate, and the guest port.
   {
@@ -433,7 +472,7 @@ export const INVITATION_USE_CASES: Provider[] = [
  * card can offer the account actions without this module reading a user table.
  */
 @Module({
-  imports: [AdminModule, CatalogModule, MediaModule, PaymentsModule, UsersModule],
+  imports: [AdminModule, CatalogModule, MediaModule, PaymentsModule, SettingsModule, UsersModule],
   controllers: [
     InvitationsController,
     PublicInvitationsController,

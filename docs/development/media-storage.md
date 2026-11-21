@@ -18,7 +18,7 @@ companion of the code: the rules live in `apps/api/src/media/domain/media-asset.
   Production therefore defaults to `s3` and fails closed until a bucket is configured.
 - `sharp` re-encodes every accepted image to WebP at most 2000 px on its longest side and strips EXIF, GPS, XMP, and
   the ICC profile, so no location or camera data reaches a guest. Only JPEG, PNG, and WebP pass the magic-byte check,
-  at most 10 MB and at most 8000 px per side, read from the header before any decode.
+  at most the configured upload size and at most 8000 px per side, read from the header before any decode.
 - The header read is unbounded by pixels on purpose, and the decode is bounded (S4, A4, A2): an image whose header
   declares 9000 px a side is refused by the domain's 8000 px rule with the dimensions message instead of looking like
   a bad format, the decode path keeps `sharp`'s 8000 x 8000 pixel cap, and one API process runs one image operation
@@ -28,6 +28,22 @@ companion of the code: the rules live in `apps/api/src/media/domain/media-asset.
   [`../database/model.md`](../database/model.md).
 - Public URLs are absolute API URLs built from `MEDIA_PUBLIC_BASE_URL`: `<origin>/media/<assetId>`. Nothing in a URL,
   a header, or a response names the provider, the bucket, a signed URL, or a credential.
+
+## Limits
+
+- The upload size, the gallery cap, and the stored-asset cap are the administrator's operational settings
+  (`OperationalSettings`), read through `OPERATIONAL_SETTINGS_READER.current()` on every upload: the size before
+  anything is decoded, and the two caps inside the transaction that writes the row while the invitation row is locked.
+  The seeded values — 10 MB, 12 gallery photos, 40 stored assets — are what the code used before the panel existed, so
+  nothing changed on deploy. A lowered cap refuses the next upload and leaves every stored photo exactly where it is
+  (S8).
+- `maxUploadMegabytes` is bounded at 15, so the static request-body cap of the one multipart upload route is 16 MB
+  (`MAX_UPLOAD_REQUEST_BYTES`, passed by `apps/api/src/media/presentation/invitations-media.controller.ts`): the widest
+  configured file plus room for the boundary, the `kind` and `alt` fields, and the part headers. Every other route
+  keeps its own, smaller JSON limit. The response to an oversized body is 413 `PAYLOAD_TOO_LARGE`, and an upload
+  over the configured size is 400 `INVALID_MEDIA_UPLOAD` with `file must be at most <n> MB`.
+- The two caps and the size are per platform, not per invitation or per package: a package grants the gallery, and the
+  settings decide how large it may grow.
 
 ## Environment
 
