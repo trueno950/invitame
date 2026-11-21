@@ -41,16 +41,21 @@ export function mediaNotFound(): NotFoundException {
 }
 
 /**
- * The upload bound one owned invitation answers (M9 T13; S5, S8): the configured size in bytes, so the owner's page
- * refuses an oversized photo before reading it and states the size it actually applies. One field, and nothing about
- * the row it came from.
+ * The limits one owned invitation answers (M9 T13, T15; S5, S8): the configured upload size in bytes and the configured
+ * gallery cap, so the owner's page refuses an oversized photo before reading it, states the size and the cap it actually
+ * applies, and withholds the upload form once the stored count reaches the cap. Two numbers, and nothing about the row
+ * they came from.
  */
 export interface MediaUploadLimitsResponse {
   maxUploadBytes: number;
+  galleryPhotoLimit: number;
 }
 
 export function toMediaUploadLimitsResponse(limits: MediaUploadLimits): MediaUploadLimitsResponse {
-  return { maxUploadBytes: limits.maxUploadBytes };
+  return {
+    maxUploadBytes: limits.maxUploadBytes,
+    galleryPhotoLimit: limits.galleryPhotoLimit,
+  };
 }
 
 export function toMediaAssetResponse(view: MediaAssetView): MediaAssetResponse {

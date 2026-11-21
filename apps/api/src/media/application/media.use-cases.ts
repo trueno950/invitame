@@ -273,17 +273,19 @@ export class ListOwnMediaUseCase {
   }
 }
 
-/** The upload bound one owned invitation reads, in bytes: the only limit the owner's own page needs to know (S5). */
+/** The limits one owned invitation reads: the upload bound in bytes and the gallery cap (S5, S8). */
 export interface MediaUploadLimits {
   readonly maxUploadBytes: number;
+  readonly galleryPhotoLimit: number;
 }
 
 /**
- * The upload size one owned invitation answers (M9 T13; S5, S8 «Tamaño de foto»). The web refuses an oversized photo
- * before reading it, so it cannot hard-code a bound: it asks this read, which answers the settings row's
- * `maxUploadMegabytes` at the moment of the call, in bytes. The route is owner-scoped, so another customer's invitation
- * and an id that names nothing answer the same `MediaNotFoundError` (A4), and the read is the same one the upload
- * itself applies: the API stays the guard, and this answer only lets the page refuse politely before sending.
+ * The limits one owned invitation answers (M9 T13, T15; S5, S8 «Tamaño de foto», «Fotos por invitación»). The web refuses
+ * an oversized photo before reading it and states the gallery cap it actually applies, so it cannot hard-code either
+ * number: it asks this read, which answers the settings row's `maxUploadMegabytes` (in bytes) and `galleryPhotoLimit` at
+ * the moment of the call. The route is owner-scoped, so another customer's invitation and an id that names nothing
+ * answer the same `MediaNotFoundError` (A4), and the read is the same one the upload itself applies: the API stays the
+ * guard, and this answer only lets the page refuse politely before sending and state the configured cap (S8).
  */
 export class ReadOwnMediaLimitsUseCase {
   constructor(
@@ -302,7 +304,10 @@ export class ReadOwnMediaLimitsUseCase {
 
     const settings = await this.settings.current();
 
-    return { maxUploadBytes: megabytesInBytes(settings.maxUploadMegabytes) };
+    return {
+      maxUploadBytes: megabytesInBytes(settings.maxUploadMegabytes),
+      galleryPhotoLimit: settings.galleryPhotoLimit,
+    };
   }
 }
 

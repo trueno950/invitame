@@ -6,8 +6,9 @@ package scripts remain the source of truth for the current repository.
 
 ## Product direction
 
-**Status:** Planned direction; implemented through Milestone 5 (foundation, identity, catalog, invitation drafts,
-and publication).
+**Status:** Planned direction; implemented through Milestone 9 (foundation, identity, catalog, invitation drafts,
+publication, guests and RSVP, payments, media, and administrator operations). Milestone 10 (production readiness and
+first release) and the catalog design track are the work that remains.
 
 InvitaMe is planned as a self-service invitation service with no manual operator step between an order and its
 publication: a customer chooses a catalog design, completes the invitation, pays, and the backend publishes it after
@@ -301,7 +302,14 @@ No video pipeline, advanced image editing, shared file drive, or unbounded user 
 
 ## Milestone 9 — Admin operations and useful analytics
 
-**Status:** Planned.
+**Status:** Implemented (`odd/tasks/m9-admin-operations.md`): the administrator's operational status view (invitation
+search and a status detail without unnecessary personal data), the support actions each recorded in an append-only
+`AdminAction` row written in the same transaction as the change (unpublish, payment detail, account
+disable/reactivate, sign-in code resend), the privacy-bounded analytics (invitation opens by day, purchase funnel, and
+RSVP totals, in `America/Mexico_City`) with its 90-day retention command, and the configuration panel for the
+operational settings with its own audited save. A lowered limit removes and hides nothing: it only stops what is
+added after it (S8 «Nada se borra ni se oculta»). The approved daily Railway task for `pnpm analytics:retention` is
+created with the first production deployment (Milestone 10).
 
 ### Outcome
 

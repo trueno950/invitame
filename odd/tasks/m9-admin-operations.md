@@ -169,7 +169,7 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T12 | Web: `/admin/analitica` and the analytics on the invitation detail | S2, S7 | worker | see L13 |
 | T13 | API: `OperationalSettings` migration + settings module + audit + consumers read it + routes | S5, S8 | worker | see L16 |
 | T14 | Web: `/admin/configuracion` hub and settings form | S5, S8 | worker | see L16 |
-| T15 | Final follow-ups: web gallery cap from the API, admin-route reflection probe gaps, ROADMAP M9 status | S1, S8 | worker | |
+| T15 | Final follow-ups: web gallery cap from the API, admin-route reflection probe gaps, ROADMAP M9 status | S1, S8 | worker | see L18 |
 | T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | see L7 |
 
 ## Log
@@ -253,3 +253,7 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   `apps/web/next.config.ts`. Still open: the web hard-codes the 12-photo gallery cap.
 - L17 — Configuration panel delivered as chained PRs #109-#114, CI green, merged; master `10f7548`. Owner: «si» to the
   final follow-up PR (T15) and then Milestone 10.
+- L18 — T15 (worker): the owner media limits route also answers `galleryPhotoLimit`, and the web states and enforces
+  the configured cap (a gallery above a lowered cap keeps every photo and refuses the next); the admin-route probe
+  derives routes from the composed path (bare `admin` included) and has a real `@Public()` negative control;
+  ROADMAP M9 is Implemented. Evidence: API 1973, web 1873, typecheck, lint, format, docs:check.

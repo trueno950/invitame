@@ -177,17 +177,25 @@ describe("media response parsers", () => {
     assert.equal(parseDeletedMedia(undefined), undefined);
   });
 
-  it("reads the upload bound the API answers, and refuses any other shape", () => {
-    assert.deepEqual(parseMediaLimits({ maxUploadBytes: 15 * 1024 * 1024 }), {
+  it("reads the limits the API answers, and refuses any other shape", () => {
+    assert.deepEqual(parseMediaLimits({ maxUploadBytes: 15 * 1024 * 1024, galleryPhotoLimit: 6 }), {
       maxUploadBytes: 15 * 1024 * 1024,
+      galleryPhotoLimit: 6,
     });
     for (const broken of [
       {},
-      { maxUploadBytes: 0 },
-      { maxUploadBytes: -1 },
-      { maxUploadBytes: 1.5 },
-      { maxUploadBytes: "10" },
-      { maxUploadBytes: null },
+      { maxUploadBytes: 0, galleryPhotoLimit: 6 },
+      { maxUploadBytes: -1, galleryPhotoLimit: 6 },
+      { maxUploadBytes: 1.5, galleryPhotoLimit: 6 },
+      { maxUploadBytes: "10", galleryPhotoLimit: 6 },
+      { maxUploadBytes: null, galleryPhotoLimit: 6 },
+      // A body without the configured gallery cap is not this contract: the page then states no cap and invents none.
+      { maxUploadBytes: 15 * 1024 * 1024 },
+      { maxUploadBytes: 15 * 1024 * 1024, galleryPhotoLimit: 0 },
+      { maxUploadBytes: 15 * 1024 * 1024, galleryPhotoLimit: -1 },
+      { maxUploadBytes: 15 * 1024 * 1024, galleryPhotoLimit: 1.5 },
+      { maxUploadBytes: 15 * 1024 * 1024, galleryPhotoLimit: "12" },
+      { maxUploadBytes: 15 * 1024 * 1024, galleryPhotoLimit: null },
       { jobs: 1 },
       [],
       null,
@@ -373,12 +381,12 @@ describe("media list, update, and removal", () => {
     assert.equal(received[0]?.url, `/invitations/${ID}/media`);
   });
 
-  it("reads the upload bound of one invitation from its own route", async () => {
-    answerJson(200, { maxUploadBytes: 15 * 1024 * 1024 });
+  it("reads the limits of one invitation from its own route", async () => {
+    answerJson(200, { maxUploadBytes: 15 * 1024 * 1024, galleryPhotoLimit: 6 });
 
     assert.deepEqual(await client().limits(ID), {
       ok: true,
-      value: { maxUploadBytes: 15 * 1024 * 1024 },
+      value: { maxUploadBytes: 15 * 1024 * 1024, galleryPhotoLimit: 6 },
     });
     assert.equal(received[0]?.method, "GET");
     assert.equal(received[0]?.url, `/invitations/${ID}/media/limits`);

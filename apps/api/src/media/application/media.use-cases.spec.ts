@@ -48,6 +48,10 @@ import {
   INITIAL_OPERATIONAL_SETTINGS,
   type OperationalSettings,
 } from "../../settings/domain/operational-settings";
+import {
+  INITIAL_OPERATIONAL_SETTINGS_SNAPSHOT,
+  type OperationalSettingsSnapshot,
+} from "../../settings/application/operational-settings";
 
 // The media use cases (M8 S4): owner-scoped uploads, the main-photo replacement, the limits, the delete order,
 // the upload recovery order, and the serving rules. Every adapter is a fake, so the order of the side effects is
@@ -1112,21 +1116,37 @@ describe("the owner media limits read (M9 T13; S5, S8)", () => {
     };
   }
 
-  it("answers the configured upload size in bytes, read on every call", async () => {
-    const { limits } = limitsWith({ maxUploadMegabytes: 15 });
+  it("answers the configured upload size in bytes and the configured gallery cap", async () => {
+    const { limits } = limitsWith({ maxUploadMegabytes: 15, galleryPhotoLimit: 6 });
 
     assert.deepEqual(await limits.execute(OWNER, INVITATION), {
       maxUploadBytes: 15 * 1024 * 1024,
+      galleryPhotoLimit: 6,
     });
   });
 
-  it("answers the seeded 10 MB when no settings module is composed", async () => {
+  it("answers the seeded 10 MB and twelve-photo gallery when no settings module is composed", async () => {
     const { repository } = setup();
     const seeded = new ReadOwnMediaLimitsUseCase(repository);
 
     assert.deepEqual(await seeded.execute(OWNER, INVITATION), {
       maxUploadBytes: 10 * 1024 * 1024,
+      galleryPhotoLimit: 12,
     });
+  });
+
+  it("reads the settings row on every call, so a saved gallery cap answers the next read", async () => {
+    const { repository } = setup();
+    let stored: OperationalSettingsSnapshot = INITIAL_OPERATIONAL_SETTINGS_SNAPSHOT;
+    const limits = new ReadOwnMediaLimitsUseCase(repository, {
+      current: async () => stored,
+    });
+
+    assert.equal((await limits.execute(OWNER, INVITATION)).galleryPhotoLimit, 12);
+
+    stored = { ...stored, galleryPhotoLimit: 5, updatedAt: new Date(1) };
+
+    assert.equal((await limits.execute(OWNER, INVITATION)).galleryPhotoLimit, 5);
   });
 
   it("answers the one 404 for another owner's invitation and for an id that names nothing", async () => {

@@ -23,6 +23,11 @@ import { GuardedForm } from "./autosave/navigation-guard.tsx";
  * The photos are plain `<img>` elements, not `next/image`: they are served by the API's public origin, which is not in
  * this app's image configuration, and they already are the re-encoded WebP the API produced. The current photo and the
  * gallery thumbnails reserve the dimensions the API stored, so the section does not jump while they load.
+ *
+ * Neither number this section states is written here: the upload size and the gallery cap are the ones the API's own
+ * limits read answered (M9 T13, T15; S5, S8), so a configured 6 or 24 photos reaches the sentence, the count and the
+ * withheld upload form without a deploy. A gallery already above a lowered cap keeps every photo: the section only
+ * stops offering another one (S8).
  */
 
 const THUMBNAIL = "mt-3 h-auto w-full max-w-56 rounded-lg ring-1 ring-gold/45";
@@ -115,12 +120,12 @@ export function GallerySection({
       <h2 className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
         {MEDIA_COPY.galleryTitle}
       </h2>
-      <p className="mt-2 text-sm leading-6 text-muted">{MEDIA_COPY.galleryHint}</p>
+      <p className="mt-2 text-sm leading-6 text-muted">{MEDIA_COPY.galleryHint(view.photoLimit)}</p>
 
       <p className="mt-3 text-sm font-medium text-ink">
         {MEDIA_COPY.galleryCount(view.photos.length, view.photoLimit)}
       </p>
-      {view.limitReached ? (
+      {view.limitReached && view.photoLimit !== null ? (
         <p className="mt-1 text-sm leading-6 text-muted">
           {MEDIA_COPY.galleryLimitNote(view.photoLimit)}
         </p>

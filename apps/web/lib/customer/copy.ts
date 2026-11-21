@@ -387,7 +387,7 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "media-unsupported-type": "Ese archivo no es una foto JPEG, PNG o WebP.",
   "media-not-found": "No encontramos esa foto en tu invitación.",
   "media-limit-reached":
-    "Tu galería ya tiene 12 fotos. Quita una para subir otra: la invitación admite hasta 12.",
+    "Tu galería ya tiene todas las fotos que admite la invitación. Quita una para subir otra.",
   "media-storage-unavailable":
     "No pudimos guardar la foto. Espera un momento y vuelve a intentarlo; tu invitación no cambió.",
   "gallery-unavailable":
@@ -427,10 +427,16 @@ export const MEDIA_COPY = {
   mainPhotoFileLabel: "Archivo de la foto",
   mainPhotoAccept: "image/jpeg,image/png,image/webp",
   mainPhotoSubmit: "Subir foto",
-  /** The «Galería» section of a draft (S3, S4). */
+  /** The «Galería» section of a draft (S3, S4).
+   *
+   * The photo cap is the one the API's own limits read answered (M9 T15; S8 «Fotos por invitación»), never a number
+   * written here: the sentence names the configured limit, and a read that answered nothing names none.
+   */
   galleryTitle: "Galería",
-  galleryHint:
-    "Sube hasta 12 fotos y ordénalas como quieres que las vean tus invitados. Cada foto se abre en grande al tocarla.",
+  galleryHint: (limit: number | null) =>
+    limit === null
+      ? "Ordena tus fotos como quieres que las vean tus invitados. Cada foto se abre en grande al tocarla."
+      : `Sube hasta ${limit} fotos y ordénalas como quieres que las vean tus invitados. Cada foto se abre en grande al tocarla.`,
   galleryUploadHeading: "Agregar una foto",
   galleryUploadHint: (megabytes: number | null) =>
     megabytes === null
@@ -447,7 +453,8 @@ export const MEDIA_COPY = {
   galleryEmpty: "Tu galería todavía no tiene fotos.",
   galleryLimitNote: (limit: number) =>
     `Tu galería ya tiene ${limit} fotos, el máximo de la invitación. Quita una para subir otra.`,
-  galleryCount: (count: number, limit: number) => `${count} de ${limit} fotos.`,
+  galleryCount: (count: number, limit: number | null) =>
+    limit === null ? `${count} fotos.` : `${count} de ${limit} fotos.`,
   galleryUnavailable:
     "Esta invitación no incluye la galería de fotos. Se muestra con los paquetes Premium y Deluxe.",
   galleryUnavailableRead:

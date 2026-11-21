@@ -94,7 +94,9 @@ function view(overrides: Partial<MediaAssetView> = {}): MediaAssetView {
   };
 }
 
-function controllerWith(options: { uploadError?: Error; maxUploadBytes?: number } = {}) {
+function controllerWith(
+  options: { uploadError?: Error; maxUploadBytes?: number; galleryPhotoLimit?: number } = {},
+) {
   const captured: Array<Record<string, unknown>> = [];
   const upload = {
     execute: async (input: Record<string, unknown>) => {
@@ -110,7 +112,10 @@ function controllerWith(options: { uploadError?: Error; maxUploadBytes?: number 
   } as unknown as UploadMediaUseCase;
   const list = { execute: async () => [view()] } as never;
   const limits = {
-    execute: async () => ({ maxUploadBytes: options.maxUploadBytes ?? 10 * 1024 * 1024 }),
+    execute: async () => ({
+      maxUploadBytes: options.maxUploadBytes ?? 10 * 1024 * 1024,
+      galleryPhotoLimit: options.galleryPhotoLimit ?? 12,
+    }),
   } as unknown as ReadOwnMediaLimitsUseCase;
   const update = {
     execute: async (input: Record<string, unknown>) => view({ alt: (input.alt as string) ?? null }),
@@ -279,11 +284,15 @@ describe("owner media routes", () => {
     assert.equal((await controller.list(OWNER, INVITATION)).length, 1);
   });
 
-  it("answers the upload size the settings row states, in bytes", async () => {
-    const { controller } = controllerWith({ maxUploadBytes: 15 * 1024 * 1024 });
+  it("answers the upload size and the gallery cap the settings row states", async () => {
+    const { controller } = controllerWith({
+      maxUploadBytes: 15 * 1024 * 1024,
+      galleryPhotoLimit: 6,
+    });
 
     assert.deepEqual(await controller.limits(OWNER, INVITATION), {
       maxUploadBytes: 15 * 1024 * 1024,
+      galleryPhotoLimit: 6,
     });
   });
 

@@ -105,10 +105,11 @@ export class InvitationsMediaController {
   }
 
   /**
-   * The upload bound of one owned invitation (M9 T13; S5, S8), in bytes: the settings row's `maxUploadMegabytes` read
-   * at the moment of the call. The owner's page refuses a photo over it before reading it and states the size it
-   * actually applies; the upload itself checks the same setting again, so this answer is a courtesy, never the guard.
-   * Another customer's invitation, an unknown id, and a malformed id are the one media 404 (A4).
+   * The limits of one owned invitation (M9 T13, T15; S5, S8), as the settings row states them: `maxUploadBytes` so the
+   * owner's page refuses an oversized photo before reading it, and `galleryPhotoLimit` so the gallery section states the
+   * configured cap and withholds its upload form once the stored count reaches it. Both are read at the moment of the
+   * call; the upload and the insert check the same row again, so this answer is a courtesy, never the guard. Another
+   * customer's invitation, an unknown id, and a malformed id are the one media 404 (A4).
    */
   @Get("limits")
   async limits(
