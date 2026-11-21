@@ -7,11 +7,11 @@ import {
   isAbsoluteMediaUrl,
   isMediaId,
   isMediaUploadWithinBound,
-  MAX_GALLERY_PHOTOS,
   MEDIA_ALT_MAX_LENGTH,
   type MediaAsset,
   type MediaClient,
   type MediaFailure,
+  type MediaLimits,
 } from "../server/media-api.ts";
 import {
   CUSTOMER_SIGN_IN_PATH,
@@ -60,8 +60,11 @@ export interface MediaSectionView {
   readonly mainPhotoUrl: string | null;
   /** The gallery photos in the API's order, each with its moves. */
   readonly photos: readonly GalleryPhotoView[];
-  /** How many photos the gallery may hold, and whether this one already holds them all (S4). */
-  readonly photoLimit: number;
+  /**
+   * How many photos the gallery may hold, as the API's own limits read answered it (M9 T15; S5, S8 «Fotos por
+   * invitación»), or null when it answered nothing: no number is invented then, and the API's own refusal decides.
+   */
+  readonly photoLimit: number | null;
   readonly limitReached: boolean;
   /**
    * The largest upload the API accepts right now, in bytes, as its own read answered it, or null when the read did not
@@ -80,15 +83,18 @@ export function mainPhotoUrl(content: Record<string, unknown>): string | null {
 }
 
 /**
- * The media section of one invitation (S2, S3, S4). `assets` is the owner's media read; without it the gallery is
- * shown empty rather than guessed, and a photo the API did not answer is never invented. `maxUploadBytes` is the upload
- * bound the API's own read answered, or null when it answered nothing; the section states it instead of a constant
- * (M9 T13; S5, S8). Only the photos the read calls `gallery` render in the section, in the order the API returned them.
+ * The media section of one invitation (S2, S3, S4; M9 T15; S8). `assets` is the owner's media read; without it the
+ * gallery is shown empty rather than guessed, and a photo the API did not answer is never invented. `limits` is the
+ * owner's limits read: the upload bound and the gallery cap the API answered, or null when it answered nothing; the
+ * section states both instead of a constant (M9 T13, T15; S5, S8) and withholds its upload form only once the stored
+ * count reaches the configured cap. A gallery above a lowered cap keeps every photo and is never hidden or trimmed (S8
+ * «Nada se borra ni se oculta; el nuevo límite solo frena lo que se agregue después»). Only the photos the read calls
+ * `gallery` render in the section, in the order the API returned them.
  */
 export function mediaSectionView(
   invitation: OwnedInvitation,
   assets: readonly MediaAsset[] | undefined,
-  maxUploadBytes: number | null = null,
+  limits: MediaLimits | null = null,
 ): MediaSectionView {
   const photos = (assets ?? [])
     .filter((asset) => asset.kind === "gallery")
@@ -102,6 +108,7 @@ export function mediaSectionView(
       canMoveUp: index > 0,
       canMoveDown: index < gallery.length - 1,
     }));
+  const photoLimit = limits?.galleryPhotoLimit ?? null;
 
   return {
     id: invitation.id,
@@ -109,9 +116,9 @@ export function mediaSectionView(
     galleryAvailable: invitation.availableFeatures.includes(GALLERY_FEATURE_KEY),
     mainPhotoUrl: mainPhotoUrl(invitation.content),
     photos,
-    photoLimit: MAX_GALLERY_PHOTOS,
-    limitReached: photos.length >= MAX_GALLERY_PHOTOS,
-    maxUploadBytes,
+    photoLimit,
+    limitReached: photoLimit !== null && photos.length >= photoLimit,
+    maxUploadBytes: limits?.maxUploadBytes ?? null,
     altMaxLength: MEDIA_ALT_MAX_LENGTH,
   };
 }
@@ -224,6 +231,20 @@ export function uploadMegabytes(maxUploadBytes: number | null): number | null {
 }
 
 /**
+ * The limits the API answers for one owned invitation, or null when that read failed (M9 T13, T15; S5, S8). A failed
+ * read invents neither a size nor a cap: nothing is refused client-side, no cap is stated, and the API's own answers
+ * decide, so a limit the page could not learn never becomes a number this server made up.
+ */
+export async function mediaLimits(
+  api: Pick<MediaActionsApi, "limits">,
+  invitationId: string,
+): Promise<MediaLimits | null> {
+  const limits = await api.limits(invitationId);
+
+  return limits.ok ? limits.value : null;
+}
+
+/**
  * The upload bound the API answers for one owned invitation, in bytes, or null when that read failed (M9 T13; S5, S8).
  * A failed read refuses nothing on its own: the upload is sent and the API's own answer decides, so a limit the page
  * could not learn never becomes a number this server invented.
@@ -232,9 +253,7 @@ export async function mediaUploadBytes(
   api: Pick<MediaActionsApi, "limits">,
   invitationId: string,
 ): Promise<number | null> {
-  const limits = await api.limits(invitationId);
-
-  return limits.ok ? limits.value.maxUploadBytes : null;
+  return (await mediaLimits(api, invitationId))?.maxUploadBytes ?? null;
 }
 
 /**
@@ -286,7 +305,7 @@ export async function uploadMainPhoto(api: MediaActionsApi, form: FormData): Pro
 
 /**
  * One gallery photo (S3, S4): `POST /invitations/:id/media` with `kind: gallery` and the alt text the creator typed.
- * The API refuses the upload when the package does not grant `GALLERY` or the twelve-photo limit is reached, and the
+ * The API refuses the upload when the package does not grant `GALLERY` or the configured gallery cap is reached, and the
  * page's own sentence names each of those refusals. An alt text over the API's bound is refused here, before a byte is
  * sent, so the creator learns it from the form instead of from a refused upload.
  */

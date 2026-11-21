@@ -961,9 +961,10 @@ guest map. An invitation that never confirmed a point keeps exactly the text-sea
 
 ## Invitation media (current)
 
-Implemented by Milestone 8 (S1, S3, S4). Creators upload the invitation's main photo and, when the pinned package
-grants `GALLERY`, up to twelve gallery photos. Binaries live in object storage, never in PostgreSQL and never on an
-ephemeral filesystem in production.
+Implemented by Milestone 8 (S1, S3, S4); the caps are operational settings since Milestone 9 (S5, S8). Creators upload
+the invitation's main photo and, when the pinned package grants `GALLERY`, up to the configured gallery cap (twelve
+photos when seeded). Binaries live in object storage, never in PostgreSQL and never on an ephemeral filesystem in
+production.
 
 - Feature module `apps/api/src/media/`: `domain` owns the pure upload rules (magic-byte format detection, the
   configured upload size, 8000 px per side, the 2000 px output target, the 120-character alt text, the key format and
@@ -984,12 +985,15 @@ ephemeral filesystem in production.
   object is deleted best effort and logged by event name only. Deletion marks the row `deleted` first and deletes the
   object after it; a failed object delete leaves a row for `pnpm media:cleanup`, which also removes objects whose rows
   are missing. It is idempotent and supports `--dry-run`.
-- Limits (S4), enforced in the transaction that writes a row and serialized on the invitation: one current main
-  photo per invitation (replacing marks the previous one deleted and deletes its object), at most 12 gallery photos,
-  at most 40 stored assets. Ownership and the archived refusal are in the same statement that reads or writes the
-  row, so another customer's invitation or asset answers one 404 (A4).
+- Limits (S4; S5, S8), enforced in the transaction that writes a row and serialized on the invitation: one current main
+  photo per invitation (replacing marks the previous one deleted and deletes its object), at most the configured
+  `galleryPhotoLimit` gallery photos, at most the configured `storedAssetLimit` stored assets. Ownership and the archived
+  refusal are in the same statement that reads or writes the row, so another customer's invitation or asset answers one
+  404 (A4).
 - REST: owner routes `GET`/`POST /invitations/:id/media`, `GET /invitations/:id/media/limits`,
-  `PATCH`/`DELETE /invitations/:id/media/:assetId` behind the session guard, and the public `GET /media/:assetId`. That
+  `PATCH`/`DELETE /invitations/:id/media/:assetId` behind the session guard, and the public `GET /media/:assetId`. The
+  limits route answers `{ maxUploadBytes, galleryPhotoLimit }` for one owned invitation, both read from the settings row
+  on every call, so the web neither hard-codes a size nor a photo cap (S8 «Fotos por invitación»). That
   route is `@Public()`: a published invitation's image is
   public and cached for a year as immutable, the owner sees a draft with `private, no-store`, and every other case —
   missing, deleted, unpublished, foreign, or an object that is gone — is the same 404. It answers
@@ -1008,12 +1012,14 @@ ephemeral filesystem in production.
   credentials, positive dimensions, a bounded alt text, a non-negative position), and maps each documented refusal to a
   typed outcome that never carries a body. The upload is multipart built on the server from the bytes the browser sent:
   the part is named `photo`, declared `application/octet-stream`, and carries no browser filename, so the creator's own
-  file name and the browser's claimed MIME never leave the web. The upload size is not a constant there: `GET
-  /invitations/:id/media/limits` answers the configured `maxUploadBytes`, and the page and both upload actions use it
-  for the pre-send refusal and for the Spanish sentence that names the size, so a size above the old 10 MB constant is
-  no longer refused on the web side and an administrator's save arrives without a deploy. When that read does not
-  answer, nothing is refused client-side: the API's own 413 or 400 decides, never a number the web invented. One upload
-  gets a 60-second deadline instead of the shared 10.
+  file name and the browser's claimed MIME never leave the web. Neither limit is a constant there: `GET
+  /invitations/:id/media/limits` answers the configured `maxUploadBytes` and `galleryPhotoLimit`, and the page and both
+  upload actions use them for the pre-send refusal, the Spanish sentence that names the size, and the gallery count and
+  cap, so a size above the old 10 MB constant is no longer refused on the web side and an administrator's save arrives
+  without a deploy. The gallery section states «N de M fotos» with the configured M and withholds its upload form once
+  the stored count reaches M; a gallery already above a lowered M keeps every photo and is never hidden or trimmed (S8).
+  When that read does not answer, nothing is refused client-side and no cap is stated: the API's own 413, 400, or 409
+  decides, never a number the web invented. One upload gets a 60-second deadline instead of the shared 10.
 - Web actions (M8 S2, S3, S4): `apps/web/lib/customer/invitation-media.ts` turns one submitted form into the API call
   and the page's own redirect. A main photo is uploaded with `kind: main-photo` and then its answered URL is written
   into the template's `mainPhoto` content field through the same content save the editor uses, so every layout keeps
@@ -1025,10 +1031,11 @@ ephemeral filesystem in production.
   only after its autosave queue is empty, so an upload never discards a field typed in another tab; one unexpected
   failure is logged once as `invitation_media_call_failed` with the error class, the client's failure kind, and the
   class of its cause: never an alt text, a file name, an id, a cookie, or a response body.
-- Web UI (M8 S2, S4; T2c: S1-S4): the editor's «Fotos» tab carries «Subir foto» (always) and the «Galería» section,
-  which only a package whose owner read lists `GALLERY` in `availableFeatures` grants. The gallery shows the count of
-  twelve, one upload form, and per photo its thumbnail, its alt text, «Subir», «Bajar», and «Quitar». An archived
-  invitation shows the photos with no form; a failed media read keeps the rest of the draft editable with one note.
+- Web UI (M8 S2, S4; T2c: S1-S4; M9 T15): the editor's «Fotos» tab carries «Subir foto» (always) and the «Galería»
+  section, which only a package whose owner read lists `GALLERY` in `availableFeatures` grants. The gallery shows the
+  count against the cap the limits route answered, one upload form, and per photo its thumbnail, its alt text, «Subir»,
+  «Bajar», and «Quitar». An archived invitation shows the photos with no form; a failed media read keeps the rest of the
+  draft editable with one note.
 - Editor shell (T2c; S1-S4): `/cuenta/invitaciones/<id>` renders one client island, `EditorShell`, over the reads the
   page already made. The five tabs are real `role="tab"` tabs (a rail beside the form from 1024 px up, a wrapping row
   above it on a phone) and are client state, never a navigation: the open tab is mirrored into `?seccion=` with
@@ -1336,7 +1343,8 @@ to be constants are now one row the panel edits, and every consumer reads that r
 - A lowered limit keeps what exists (S8 «Conservan lo que tienen»). Nothing stored is deleted, hidden, or rewritten: an
   invitation whose party limit exceeds a lowered maximum keeps it while the next larger response is refused, and a
   gallery above a lowered cap keeps every photo and refuses the next one. The settings change no historical data at
-  all.
+  all. The web states the configured cap and the configured size because the owner media route `GET
+  /invitations/:id/media/limits` answers both on every call (T15), never because a number is written in the page.
 - Routes, both `@AdminOnly()` (401 without a session, 403 for a customer, before any validation):
   - `GET /admin/settings` → 200 `{ settings: { rsvpDefaultPartyLimit, rsvpMaxPartyLimit, galleryPhotoLimit,
     storedAssetLimit, maxUploadMegabytes, placeSearchResultLimit, analyticsDefaultWindowDays }, bounds: { <field>:

@@ -13,10 +13,11 @@ import {
  * The upload is multipart, built here from bytes the browser sent to this server. The part is named `photo` and
  * declared `application/octet-stream` on purpose: the API decides the format from magic bytes alone, so the web never
  * forwards the browser's claim about the type and never forwards the file's original name, which can carry personal
- * data. The size bound is not a constant here: it is the number the API's own owner-scoped limits read answers at the
- * moment the page or the action asks (M9 T13; S5, S8 «Tamaño de foto»), so a configured 10 to 15 MB is reachable from
- * the web and a later save is picked up without a deploy. The API remains the guard; this check only refuses politely
- * before a byte is read.
+ * data. The limits are not constants here: the API's own owner-scoped read answers the configured upload size and the
+ * configured gallery cap at the moment the page or the action asks (M9 T13, T15; S5, S8 «Tamaño de foto», «Fotos por
+ * invitación»), so a configured 10 to 15 MB and 1 to 24 photos are reachable from the web and a later save is picked up
+ * without a deploy. The API remains the guard; these checks only refuse politely before a byte is read and state the
+ * numbers the API already decided.
  *
  * This module deliberately has no `server-only` marker, so `node --test` can load it and prove the mapping; the
  * cookie-reading wiring that imports it lives in `app/cuenta/invitaciones/_lib/media.ts` and is `server-only`.
@@ -28,18 +29,17 @@ export const MEDIA_KINDS = ["main-photo", "gallery"] as const;
 export type MediaKind = (typeof MEDIA_KINDS)[number];
 
 /**
- * The upload bound one owned invitation answers (M9 T13; S5, S8 «Tamaño de foto»): the settings row's
- * `maxUploadMegabytes`, in bytes, as the API's own owner-scoped read answered it.
+ * The limits one owned invitation answers (M9 T13, T15; S5, S8 «Tamaño de foto», «Fotos por invitación»): the settings
+ * row's `maxUploadMegabytes`, in bytes, and its `galleryPhotoLimit`, as the API's own owner-scoped read answered them.
+ * Neither is a constant here: a save in the panel reaches the page without a deploy.
  */
 export interface MediaLimits {
   readonly maxUploadBytes: number;
+  readonly galleryPhotoLimit: number;
 }
 
 /** The longest alt text the API stores, in characters (S4). */
 export const MEDIA_ALT_MAX_LENGTH = 120;
-
-/** How many gallery photos one invitation may hold (S4). */
-export const MAX_GALLERY_PHOTOS = 12;
 
 /**
  * The deadline of one upload: the API's own request bound is much shorter, but a 15 MB body over a slow link needs
@@ -69,7 +69,7 @@ export interface MediaAsset {
  *   asset answers the same as an unknown one (A4);
  * - `not-editable`: 409 `INVITATION_NOT_EDITABLE`, the invitation is archived;
  * - `gallery-unavailable`: 409 `GALLERY_NOT_AVAILABLE`, the pinned package does not grant `GALLERY` (S3);
- * - `limit-reached`: 409 `MEDIA_LIMIT_REACHED`, the 12 gallery photos or the 40 stored assets are used up;
+ * - `limit-reached`: 409 `MEDIA_LIMIT_REACHED`, the configured gallery photos or the 40 stored assets are used up;
  * - `invalid-upload`: 400 `INVALID_MEDIA_UPLOAD`, the bytes, the kind, or the alt text were refused;
  * - `invalid-update`: 400 `INVALID_MEDIA_UPDATE`, the alt text or the position were refused;
  * - `payload-too-large`: 413 `PAYLOAD_TOO_LARGE`, the request body is over the route's bound;
@@ -122,7 +122,7 @@ export interface MediaUpdateInput {
 export interface MediaClient {
   /** `GET /invitations/:id/media`: the stored assets of one owned invitation, the main photo first (S4). */
   list(invitationId: string): Promise<MediaResult<MediaAsset[]>>;
-  /** `GET /invitations/:id/media/limits`: the configured upload size, in bytes (M9 T13; S5, S8). */
+  /** `GET /invitations/:id/media/limits`: the configured upload size and gallery cap (M9 T13, T15; S5, S8). */
   limits(invitationId: string): Promise<MediaResult<MediaLimits>>;
   /** `POST /invitations/:id/media`: one photo, as multipart (S4). */
   upload(invitationId: string, upload: MediaUploadInput): Promise<MediaResult<MediaAsset>>;
@@ -274,17 +274,22 @@ export function parseDeletedMedia(value: unknown): { readonly status: "deleted" 
 }
 
 /**
- * The upload bound of one read (M9 T13; S5, S8): a positive whole number of bytes, and nothing else. A body without it,
- * or with a value that is not a size, is not this contract, and the caller then refuses nothing client-side rather than
- * invent a bound.
+ * The limits of one read (M9 T13, T15; S5, S8): a positive whole number of bytes and a positive whole number of gallery
+ * photos, and nothing else. A body missing either field, or with a value that is not a positive whole number, is not this
+ * contract, and the caller then refuses nothing client-side and states no cap rather than invent one.
  */
 export function parseMediaLimits(value: unknown): MediaLimits | undefined {
-  const maxUploadBytes = record(value)?.maxUploadBytes;
+  const limits = record(value);
+  const maxUploadBytes = limits?.maxUploadBytes;
+  const galleryPhotoLimit = limits?.galleryPhotoLimit;
 
   return typeof maxUploadBytes === "number" &&
     Number.isSafeInteger(maxUploadBytes) &&
-    maxUploadBytes > 0
-    ? { maxUploadBytes }
+    maxUploadBytes > 0 &&
+    typeof galleryPhotoLimit === "number" &&
+    Number.isSafeInteger(galleryPhotoLimit) &&
+    galleryPhotoLimit > 0
+    ? { maxUploadBytes, galleryPhotoLimit }
     : undefined;
 }
 

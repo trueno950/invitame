@@ -5,6 +5,7 @@ import type { InvitationResult, OwnedInvitation } from "../server/invitations-ap
 import type { MediaAsset, MediaClient, MediaFailure, MediaLimits } from "../server/media-api.ts";
 import {
   type MediaActionsApi,
+  mediaLimits,
   mediaSectionView,
   moveGalleryPhoto,
   removeGalleryPhoto,
@@ -14,10 +15,10 @@ import {
   uploadMegabytes,
 } from "./invitation-media.ts";
 
-// The creator's media actions (M8 S2, S4): the main photo of the editor, the «Galería» section, and the redirect each
-// submitted form answers. The API owns the bytes, the limits, and the ownership; these functions only read the form,
-// enforce the upload bound the API's own read answered (M9 T13; S5, S8), and fold every outcome into the page's own
-// Spanish notice or error code.
+// The creator's media actions (M8 S2, S4; M9 T15): the main photo of the editor, the «Galería» section, and the
+// redirect each submitted form answers. The API owns the bytes, the limits, and the ownership; these functions only read
+// the form, enforce the upload bound the API's own read answered (M9 T13; S5, S8), state the gallery cap it answered
+// (S8), and fold every outcome into the page's own Spanish notice or error code.
 
 const ID = "0b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e10";
 const ASSET_ID = "9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19";
@@ -64,10 +65,24 @@ const MAIN = asset({
   position: null,
 });
 
+/** The limits one read answers, as the fake API's own owner route would state them (M9 T13, T15; S5, S8). */
+function limitsOf(
+  options: { maxUploadBytes?: number; galleryPhotoLimit?: number } = {},
+): MediaLimits {
+  return {
+    maxUploadBytes: options.maxUploadBytes ?? 10 * 1024 * 1024,
+    galleryPhotoLimit: options.galleryPhotoLimit ?? 12,
+  };
+}
+
 /** A fake of both clients one media action needs, recording every call it receives. */
 function fakeApi(
   overrides: Partial<MediaActionsApi> = {},
-  options: { maxUploadBytes?: number; limitsFailure?: MediaFailure } = {},
+  options: {
+    maxUploadBytes?: number;
+    galleryPhotoLimit?: number;
+    limitsFailure?: MediaFailure;
+  } = {},
 ): MediaActionsApi & {
   calls: string[];
 } {
@@ -85,7 +100,7 @@ function fakeApi(
       const failure = options.limitsFailure;
 
       return failure === undefined
-        ? { ok: true, value: { maxUploadBytes: options.maxUploadBytes ?? 10 * 1024 * 1024 } }
+        ? { ok: true, value: limitsOf(options) }
         : { ok: false, failure };
     },
     async upload(_id, upload) {
@@ -158,16 +173,36 @@ describe("the media section of a draft", () => {
 
   it("carries the upload bound the API answered, and none when it answered nothing", () => {
     assert.equal(
-      mediaSectionView(INVITATION, undefined, 15 * 1024 * 1024).maxUploadBytes,
+      mediaSectionView(INVITATION, undefined, limitsOf({ maxUploadBytes: 15 * 1024 * 1024 }))
+        .maxUploadBytes,
       15 * 1024 * 1024,
     );
     assert.equal(mediaSectionView(INVITATION, undefined).maxUploadBytes, null);
+  });
+
+  it("states the gallery cap the API answered, and none when it answered nothing", () => {
+    assert.equal(
+      mediaSectionView(INVITATION, undefined, limitsOf({ galleryPhotoLimit: 6 })).photoLimit,
+      6,
+    );
+    assert.equal(mediaSectionView(INVITATION, undefined).photoLimit, null);
   });
 
   it("states the upload bound in whole megabytes, and states none when there is none", () => {
     assert.equal(uploadMegabytes(10 * 1024 * 1024), 10);
     assert.equal(uploadMegabytes(15 * 1024 * 1024), 15);
     assert.equal(uploadMegabytes(null), null);
+  });
+
+  it("reads the limits of one invitation, and answers none when that read failed (M9 T15; S8)", async () => {
+    const api = fakeApi({}, { maxUploadBytes: 6 * 1024 * 1024, galleryPhotoLimit: 6 });
+
+    assert.deepEqual(await mediaLimits(api, ID), {
+      maxUploadBytes: 6 * 1024 * 1024,
+      galleryPhotoLimit: 6,
+    });
+
+    assert.equal(await mediaLimits(fakeApi({}, { limitsFailure: "not-found" }), ID), null);
   });
 
   it("says the gallery is unavailable when the package does not grant it", () => {
@@ -177,18 +212,58 @@ describe("the media section of a draft", () => {
     assert.deepEqual(view.photos, []);
   });
 
-  it("marks the limit of twelve photos", () => {
-    const photos = Array.from({ length: 12 }, (_unused, index) =>
+  it("withholds the upload form once the stored count reaches the configured cap (S8)", () => {
+    const countOf = (count: number) =>
+      Array.from({ length: count }, (_unused, index) =>
+        asset({
+          id: `9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e${String(index).padStart(2, "0")}`,
+          position: index,
+        }),
+      );
+
+    assert.equal(
+      mediaSectionView(INVITATION, countOf(6), limitsOf({ galleryPhotoLimit: 6 })).limitReached,
+      true,
+    );
+    assert.equal(
+      mediaSectionView(INVITATION, countOf(5), limitsOf({ galleryPhotoLimit: 6 })).limitReached,
+      false,
+    );
+    // The twelve the code used before the panel are no longer a cap of their own: a configured six is reached at six.
+    assert.equal(
+      mediaSectionView(INVITATION, countOf(6), limitsOf({ galleryPhotoLimit: 12 })).limitReached,
+      false,
+    );
+  });
+
+  it("keeps every photo of a gallery above a lowered cap, and refuses only the next one (S8)", () => {
+    const photos = Array.from({ length: 8 }, (_unused, index) =>
       asset({
         id: `9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e${String(index).padStart(2, "0")}`,
         position: index,
       }),
     );
-    const view = mediaSectionView(INVITATION, photos);
+    const view = mediaSectionView(INVITATION, photos, limitsOf({ galleryPhotoLimit: 6 }));
 
+    assert.equal(view.photos.length, 8, "nothing stored is hidden or removed");
+    assert.equal(view.photoLimit, 6);
     assert.equal(view.limitReached, true);
-    assert.equal(view.photoLimit, 12);
-    assert.equal(mediaSectionView(INVITATION, photos.slice(0, 11)).limitReached, false);
+  });
+
+  it("invites no number the API did not answer and disables nothing when the limits read failed", () => {
+    const photos = Array.from({ length: 20 }, (_unused, index) =>
+      asset({
+        id: `9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e${String(index).padStart(2, "0")}`,
+        position: index,
+      }),
+    );
+
+    for (const limits of [null, undefined]) {
+      const view = mediaSectionView(INVITATION, photos, limits);
+      assert.equal(view.photoLimit, null);
+      assert.equal(view.limitReached, false, "the API's own refusal decides");
+      assert.equal(view.photos.length, 20);
+    }
   });
 
   it("shows no thumbnail for a stored photo link that is not an absolute http(s) URL", () => {

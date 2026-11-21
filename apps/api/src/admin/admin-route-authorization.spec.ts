@@ -15,21 +15,30 @@ import { DiscoveryService, MetadataScanner } from "@nestjs/core";
 
 import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
+import { AdminOnly, Public } from "../auth/access-control/access-control";
 import { PrismaService } from "../database/prisma.service";
 
-// Every administrator route, derived from the application's real module graph (M9 T10; S4, S6). `@AdminOnly()` on the
+// Every administrator route, derived from the application's real module graph (M9 T10, T15; S4, S6). `@AdminOnly()` on the
 // controller (or on a handler) is the only thing that makes the global guard answer 403 to a signed-in customer, and a
 // handler is unguarded unless the marker is on it or its class; `@Public()` would let it through with no session at
-// all. This suite reflects over the controllers `AppModule` actually registers, takes the routes whose path starts with
-// `admin/`, and asserts that each one carries the administrator marker and none carries the public one — so a new
-// admin route added without the decorator fails here instead of shipping unprotected.
+// all. This suite reflects over every controller `AppModule` actually registers, composes each handler's full path
+// (controller prefix plus handler path, normalized), takes the routes whose composed path is the bare `admin` prefix or
+// anything under `admin/`, and asserts that each one carries the administrator marker and none carries the public one —
+// so a new admin route added without the decorator fails here instead of shipping unprotected. The checked set is read
+// from what each handler answers rather than from its controller's declared prefix, because the two can disagree: a
+// controller whose prefix is exactly `admin`, and a prefix-less controller with an `admin/…` handler path, are both
+// administrator routes. Two negative controls keep the suite honest: an undecorated probe of each shape must be
+// reported, and a probe carrying the real `@Public()` together with `@AdminOnly()` must be reported too, so the
+// public-marker lookup cannot silently go vacuous.
 //
 // The metadata keys are symbols the access-control module keeps private, so they are read by their declared
 // descriptions (`access-control.ts`: `Symbol("invitame:admin-only")`, `Symbol("invitame:public-route")`).
 
 const ADMIN_ONLY = "invitame:admin-only";
 const PUBLIC_ROUTE = "invitame:public-route";
-const ADMIN_PREFIX = "admin/";
+/** The bare administrator prefix, which is an administrator route of its own. */
+const ADMIN_ROUTE_ROOT = "/admin";
+const ADMIN_PREFIX = "/admin/";
 
 /** The value of a symbol-valued metadata key, found by the description the access-control module declares. */
 function marker(target: object, description: string): unknown {
@@ -47,6 +56,8 @@ function isMarked(target: object, description: string): boolean {
 interface RouteEntry {
   /** `Controller.handler`, for a failure message that names the source. */
   readonly name: string;
+  /** The composed full path this handler answers: its controller's prefix plus its own path, normalized. */
+  readonly path: string;
   /** `GET /admin/users/:userId/disable`-shaped, so the report reads like the API's own routes. */
   readonly route: string;
   readonly adminOnly: boolean;
@@ -100,16 +111,26 @@ function routeEntriesOf(controller: ControllerClass, scanner: MetadataScanner): 
 
     const verb = typeof method === "number" ? (RequestMethod[method] ?? "ROUTE") : String(method);
     const handlerPath = declaredPaths(handler)[0] ?? "";
+    const path = routePath(...prefixes, handlerPath);
 
     return [
       {
         name: `${controller.name}.${name}`,
-        route: `${verb} ${routePath(...prefixes, handlerPath)}`,
+        path,
+        route: `${verb} ${path}`,
         adminOnly: isMarked(handler, ADMIN_ONLY) || isMarked(controller, ADMIN_ONLY),
         publicRoute: isMarked(handler, PUBLIC_ROUTE) || isMarked(controller, PUBLIC_ROUTE),
       },
     ];
   });
+}
+
+/**
+ * Whether a composed handler path is an administrator route: the bare `admin` prefix, or anything under `admin/`. The
+ * boundary is a whole segment, so a prefix that merely starts with the letters, such as `administrator`, is not one.
+ */
+function isAdministratorPath(path: string): boolean {
+  return path === ADMIN_ROUTE_ROOT || path.startsWith(ADMIN_PREFIX);
 }
 
 /** The entries that would answer an administrator-only expectation wrongly: unmarked, or public. */
@@ -122,9 +143,69 @@ function violations(entries: readonly RouteEntry[]): string[] {
     );
 }
 
-/** An admin probe nothing decorates and an admin probe marked public: the negative controls. */
+/**
+ * Every administrator route of the given controllers.
+ *
+ * The checked set is derived from the route each handler actually answers, never from a declaration that can disagree
+ * with it: a controller whose prefix is exactly `admin` composes `/admin` and a prefix-less controller can compose an
+ * `admin/…` handler path, and both belong to the checked set like `@Controller("admin/…")` does. A prefix that merely
+ * starts with the letters, such as `administrator`, is not an administrator route.
+ */
+function administratorRoutesOf(
+  controllers: readonly ControllerClass[],
+  scanner: MetadataScanner,
+): RouteEntry[] {
+  return controllers
+    .flatMap((controller) => routeEntriesOf(controller, scanner))
+    .filter((entry) => isAdministratorPath(entry.path));
+}
+
+/** An admin probe nothing decorates, an undecorated probe of each shape, and the two marked probes: the controls. */
 @Controller("admin/undecorated-probe")
 class UndecoratedAdminProbeController {
+  @Get()
+  list(): string {
+    return "";
+  }
+}
+
+/** An undecorated probe whose controller prefix is exactly `admin`, so its route is a bare-prefixed admin route. */
+@Controller("admin")
+class BareAdminPrefixProbeController {
+  @Get("undecorated-probe")
+  list(): string {
+    return "";
+  }
+}
+
+/** An undecorated probe whose handler path alone names the `admin/` segment under a prefix-less controller. */
+@Controller()
+class RootAdminPathProbeController {
+  @Get("admin/root-probe")
+  list(): string {
+    return "";
+  }
+}
+
+/** A probe whose prefix merely looks like `admin`: it answers no administrator route. */
+@Controller("administrator")
+class LookalikePrefixProbeController {
+  @Get()
+  list(): string {
+    return "";
+  }
+}
+
+/**
+ * A probe marked both ways with the real decorators: `@AdminOnly()` and `@Public()`. The public marker wins in the guard
+ * (`getAllAndOverride`), so this route would answer with no session at all; the suite must report it as a violation.
+ * The probe is what keeps the public-marker lookup honest: if it silently went vacuous — a renamed symbol, a marker read
+ * from the handler while the decorator sits on the class — this control fails instead of letting every route pass.
+ */
+@Controller("admin/public-probe")
+@AdminOnly()
+@Public()
+class PublicAdminProbeController {
   @Get()
   list(): string {
     return "";
@@ -164,16 +245,13 @@ describe("administrator route authorization (M9 T10; S4, S6)", () => {
     discovery = app.get(DiscoveryService, { strict: false });
     scanner = app.get(MetadataScanner, { strict: false });
 
-    adminRoutes = discovery
-      .getControllers()
-      .flatMap((wrapper) => {
+    adminRoutes = administratorRoutesOf(
+      discovery.getControllers().flatMap((wrapper) => {
         const controller: unknown = wrapper.metatype;
         return typeof controller === "function" ? [controller] : [];
-      })
-      .filter((controller) =>
-        declaredPaths(controller).some((path) => routePath(path).slice(1).startsWith(ADMIN_PREFIX)),
-      )
-      .flatMap((controller) => routeEntriesOf(controller, scanner));
+      }),
+      scanner,
+    );
   });
 
   after(async () => {
@@ -211,5 +289,42 @@ describe("administrator route authorization (M9 T10; S4, S6)", () => {
       [["GET /admin/undecorated-probe", false, false]],
     );
     assert.equal(violations(probe).length, 1);
+  });
+
+  it("derives the checked set from each handler's composed path, not from its controller's declared prefix", () => {
+    const probe = administratorRoutesOf(
+      [
+        BareAdminPrefixProbeController,
+        RootAdminPathProbeController,
+        LookalikePrefixProbeController,
+      ],
+      scanner,
+    );
+
+    assert.deepEqual(
+      probe.map((entry) => [entry.route, entry.adminOnly, entry.publicRoute]),
+      [
+        ["GET /admin/undecorated-probe", false, false],
+        ["GET /admin/root-probe", false, false],
+      ],
+      "the bare `admin` prefix and the prefix-less `admin/…` handler are checked; `administrator` is not",
+    );
+    assert.equal(violations(probe).length, 2, "an undecorated route of either shape is reported");
+  });
+
+  it("does not treat a prefix that merely starts with the letters as an administrator route", () => {
+    assert.deepEqual(administratorRoutesOf([LookalikePrefixProbeController], scanner), []);
+  });
+
+  it("reports an admin route that also carries the real @Public(), so the public lookup cannot go vacuous", () => {
+    const probe = administratorRoutesOf([PublicAdminProbeController], scanner);
+
+    assert.deepEqual(
+      probe.map((entry) => [entry.route, entry.adminOnly, entry.publicRoute]),
+      [["GET /admin/public-probe", true, true]],
+    );
+    assert.deepEqual(violations(probe), [
+      "PublicAdminProbeController.list (GET /admin/public-probe) is a public route",
+    ]);
   });
 });

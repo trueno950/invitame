@@ -47,13 +47,17 @@ companion of the code: the rules live in `apps/api/src/media/domain/media-asset.
   it reached the API. `apps/web/next.config.ts` sets both to 16 MB (`WEB_REQUEST_BODY_LIMIT`, pinned by
   `apps/web/lib/server/next-config.test.ts`), the same as `MAX_UPLOAD_REQUEST_BYTES`. Next has no per-route setting,
   so the limit applies to every server action and proxied route; each still requires a session.
-- `GET /invitations/:id/media/limits` answers `{ maxUploadBytes }` for one owned invitation: the same
-  `maxUploadMegabytes`, read on every call, in bytes. It exists because the web must refuse an oversized photo before
-  it reads it, and a constant there would make any configured size above 10 MB unreachable. The route is owner-scoped
-  like the rest of the media routes (a foreign or unknown invitation is the one 404 `MEDIA_NOT_FOUND`), it answers one
-  number and nothing about the row, and it is a courtesy: the upload checks the same setting again, so the API stays the
-  guard. The web falls back to refusing nothing client-side when this read does not answer, and lets the API's own 413
-  or 400 decide.
+- `GET /invitations/:id/media/limits` answers `{ maxUploadBytes, galleryPhotoLimit }` for one owned invitation: the same
+  `maxUploadMegabytes` (in bytes) and `galleryPhotoLimit`, read on every call. It exists because the web must refuse an
+  oversized photo before it reads it and must state the photo cap it actually applies, and a constant there would make
+  any configured size above 10 MB or cap other than twelve unreachable or dishonest. The route is owner-scoped like the
+  rest of the media routes (a foreign or unknown invitation is the one 404 `MEDIA_NOT_FOUND`), it answers two numbers
+  and nothing about the row, and it is a courtesy: the upload checks the same settings again, so the API stays the
+  guard. The web falls back to refusing nothing client-side and stating no cap when this read does not answer, and lets
+  the API's own 413, 400, or 409 decide.
+- A gallery already above a lowered cap keeps every photo: the editor states the configured cap and withholds its upload
+  form once the stored count reaches it, and nothing stored is hidden, trimmed, or deleted (S8 «Nada se borra ni se
+  oculta; el nuevo límite solo frena lo que se agregue después»).
 - The two caps and the size are per platform, not per invitation or per package: a package grants the gallery, and the
   settings decide how large it may grow.
 
