@@ -193,3 +193,6 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   runs inside a rolled-back transaction, the funnel and top cases use far-away windows, the slug tie-break is asserted,
   and the detail facet is tested through the real use case. The owner disabled RDD for the clone for this delivery.
   The CI browser-install slowness stays (owner decision). The Railway schedule waits for the owner.
+- L14 — Owner answers after the analytics delivery (#103-#108): the Railway retention schedule is «si» but «aun no
+  subimos a railway», so it is approved and created with the first production deployment (Milestone 10); the secret
+  scan of the now-public history is «no»; the configuration panel (S5) is «si», next.

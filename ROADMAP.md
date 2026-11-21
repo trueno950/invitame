@@ -341,7 +341,8 @@ Make the approved MVP operable, recoverable, and releasable with explicit owners
 - Production CI/CD commands and branch protection after human approval;
 - deployment environment configuration and secret management;
 - migration/recovery and backup restoration exercises;
-- observability, alert ownership, rate limits, retention, and support runbooks;
+- observability, alert ownership, rate limits, retention, and support runbooks, including the approved daily Railway
+  task for `pnpm analytics:retention` (`docs/development/analytics-retention.md`) and the periodic `pnpm media:cleanup`;
 - performance checks for public rendering and critical API paths; and
 - release checklist, rollback plan, and post-release verification.
 
