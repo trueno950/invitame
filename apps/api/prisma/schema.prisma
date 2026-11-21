@@ -78,6 +78,7 @@ enum AdminActionType {
   ACCOUNT_DISABLED
   ACCOUNT_REACTIVATED
   SIGN_IN_CODE_RESENT
+  SETTINGS_UPDATED
 }
 
 // The closed set of reasons an administrator gives (L8, L9, S6). `OTHER` is the one value that requires the note.
@@ -608,14 +609,16 @@ model InvitationView {
 }
 
 // One append-only audit row per state-changing support action (M9 T6; S4, S6, L9): who acted, what they did, why, and
-// which one target they changed. It carries no email address, client address, or provider payload. The `admin` module
+// which target they changed. It carries no email address, client address, or provider payload. The `admin` module
 // owns this table and only `AdminActionRecorder.record(tx, entry)` writes it, through the caller's own transaction, so
 // the change and its audit row commit together (L9 «Misma transacción»); the webhook-style side effect of resending
 // a code is recorded before the request, never after it.
 // Migration 20261127120000_add_admin_actions adds what Prisma cannot express: the CHECK constraints
 // "AdminAction_note_length", "AdminAction_note_required_for_other", "AdminAction_exactly_one_target", and
 // "AdminAction_target_matches_action", plus the "AdminAction_append_only" trigger, which refuses every UPDATE and
-// DELETE so that a stored row is final.
+// DELETE so that a stored row is final. Migration 20261129120050_add_settings_admin_action_type adds the
+// SETTINGS_UPDATED label (M9 T13; S5, S8, L15), and 20261129120100_add_settings_admin_action relaxes the two target
+// checks: the one platform-wide action names no target, while every other action keeps exactly the target it names.
 model AdminAction {
   id           String            @id @default(uuid()) @db.Uuid
   // The administrator who took the action, taken from the session and never from client input. ON DELETE RESTRICT:
@@ -625,10 +628,10 @@ model AdminAction {
   reason       AdminActionReason
   // Optional and trimmed, at most 500 characters; required and non-blank while the reason is OTHER.
   note         String?           @db.VarChar(500)
-  // The account the three account actions changed; NULL for INVITATION_UNPUBLISHED. The CHECK constraints keep it
-  // XOR with `invitationId` and keep the pair matching `action`.
+  // The account the three account actions changed; NULL for INVITATION_UNPUBLISHED and SETTINGS_UPDATED. The CHECK
+  // constraints keep it XOR with `invitationId`, and keep the pair matching `action`.
   targetUserId String?           @db.Uuid
-  // The invitation INVITATION_UNPUBLISHED changed; NULL for the three account actions.
+  // The invitation INVITATION_UNPUBLISHED changed; NULL for the three account actions and for SETTINGS_UPDATED.
   invitationId String?           @db.Uuid
   createdAt    DateTime          @default(now()) @db.Timestamptz(6)
 
@@ -640,4 +643,32 @@ model AdminAction {
   @@index([createdAt, id])
   @@index([targetUserId])
   @@index([invitationId])
+}
+
+// The administrator's operational settings (M9 T13; S5, S8, L15): exactly one row, whose `id` is the literal
+// 'default', seeded by the migration with the limits the code used before this slice so nothing changes on deploy. The
+// `settings` module owns this table. Every consumer (invitations: the RSVP limits, the place search, the analytics
+// default window; media: the gallery, the stored assets, the upload size) reads it through
+// `OPERATIONAL_SETTINGS_READER.current()` at the moment it checks a limit, so a save takes effect on the next check and
+// a lowered limit only stops what is added afterwards: nothing stored is deleted, hidden, or rewritten (S8).
+// Migration 20261129120000_add_operational_settings adds what Prisma cannot express: the single-row CHECK on `id`, a
+// CHECK bound on every column, and the two cross-field checks ("rsvpDefaultPartyLimit" <= "rsvpMaxPartyLimit" and
+// "storedAssetLimit" >= "galleryPhotoLimit" + 1), plus the one seeded row.
+model OperationalSettings {
+  id String @id @db.VarChar(7)
+
+  // The party limit a new invitation starts with, and the widest party an owner may set and a guest may submit (S5).
+  rsvpDefaultPartyLimit      Int
+  rsvpMaxPartyLimit          Int
+  // How many gallery photos, and how many stored assets of both kinds together, one invitation may hold (S5).
+  galleryPhotoLimit          Int
+  storedAssetLimit           Int
+  // The largest upload the API accepts, in whole megabytes; the upload route's static body cap is 16 MB (S5).
+  maxUploadMegabytes         Int
+  // How many place suggestions the owner sees, and the analytics window a request that names no bound reads (S5).
+  placeSearchResultLimit     Int
+  analyticsDefaultWindowDays Int
+
+  // The instant of the last save; the panel answers it and nothing else reads it.
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 }
