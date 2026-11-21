@@ -90,6 +90,7 @@ export const ADMIN_SHELL_COPY = {
   catalogGroup: "Catálogo",
   operationsGroup: "Operación",
   panel: "Panel",
+  settings: "Configuración",
   catalogOverview: "Resumen del catálogo",
   payments: "Pagos",
   invitations: "Invitaciones",

@@ -9,6 +9,7 @@ import {
   type LucideIcon,
   Mail,
   Package,
+  Settings,
   Sparkles,
   Tags,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import { CATALOG_INDEX_COPY, CATALOG_PATHS } from "../../../lib/admin/catalog/co
 import { ADMIN_PANEL_COPY, ADMIN_SHELL_COPY } from "../../../lib/admin/copy.ts";
 import { INVITATIONS_PATHS } from "../../../lib/admin/invitations/copy.ts";
 import { PAYMENTS_PATHS } from "../../../lib/admin/payments/copy.ts";
+import { SETTINGS_PATHS } from "../../../lib/admin/settings/copy.ts";
 import { SignOutButton } from "../../_components/sign-out-button.tsx";
 import { AdminBrandMark } from "./admin-brand-mark.tsx";
 import { adminButtonVariant, adminFocus } from "./admin-ui.ts";
@@ -27,6 +29,7 @@ import { adminButtonVariant, adminFocus } from "./admin-ui.ts";
 /** The sidebar entry of the page, highlighted and marked as the current page. */
 export type AdminSection =
   | "panel"
+  | "settings"
   | "catalog"
   | "categories"
   | "features"
@@ -158,6 +161,14 @@ export function AdminShell({
                 href="/admin"
                 icon={LayoutDashboard}
                 label={ADMIN_SHELL_COPY.panel}
+              />
+            </li>
+            <li>
+              <NavLink
+                active={current === "settings"}
+                href={SETTINGS_PATHS.index}
+                icon={Settings}
+                label={ADMIN_SHELL_COPY.settings}
               />
             </li>
             <li className={groupLabel}>{ADMIN_SHELL_COPY.catalogGroup}</li>

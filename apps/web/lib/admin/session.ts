@@ -11,8 +11,9 @@ import type { AuthSessionUser } from "../server/auth-session.ts";
  * - customer: `/cuenta`, the customer's own page;
  * - pending administrator (role ADMIN, `twoFactorEnabled` not true): the enrollment page;
  * - administrator (enrolled): the panel, the catalog pages under `/admin/catalogo` (M3 T8a; S1), the refund
- *   list under `/admin/pagos` (M7 T3; S3), the invitation status pages under `/admin/invitaciones` (M9 T3; S1), and
- *   the analytics page under `/admin/analitica` (M9 T12; S2, S7);
+ *   list under `/admin/pagos` (M7 T3; S3), the invitation status pages under `/admin/invitaciones` (M9 T3; S1), the
+ *   analytics page under `/admin/analitica` (M9 T12; S2, S7), and the configuration page under
+ *   `/admin/configuracion` (M9 T14; S5, S8);
  * - unavailable (the read failed): the page renders a retry notice, or the sign-in form.
  */
 
@@ -34,7 +35,8 @@ export type AdminPage =
   | "catalog"
   | "payments"
   | "invitations"
-  | "analytics";
+  | "analytics"
+  | "settings";
 
 /** The page each kind of visitor belongs on. An `unavailable` read has none: every page renders. */
 const HOME: Record<Exclude<SessionKind, "unavailable">, string> = {
@@ -47,8 +49,8 @@ const HOME: Record<Exclude<SessionKind, "unavailable">, string> = {
 /**
  * The one kind of visitor each page renders for. `catalog` stands for every page under
  * `/admin/catalogo`, `payments` for every page under `/admin/pagos`, `invitations` for every page
- * under `/admin/invitaciones`, and `analytics` for `/admin/analitica`: they all require an enrolled
- * administrator, like the panel.
+ * under `/admin/invitaciones`, `analytics` for `/admin/analitica`, and `settings` for
+ * `/admin/configuracion`: they all require an enrolled administrator, like the panel.
  */
 const AUDIENCE: Record<AdminPage, Exclude<SessionKind, "unavailable">> = {
   panel: "administrator",
@@ -58,6 +60,7 @@ const AUDIENCE: Record<AdminPage, Exclude<SessionKind, "unavailable">> = {
   payments: "administrator",
   invitations: "administrator",
   analytics: "administrator",
+  settings: "administrator",
 };
 
 export async function loadAdminView(
