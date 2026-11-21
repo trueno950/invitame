@@ -14,6 +14,7 @@ import {
   ADMIN_ACTION_TARGET_TYPE_ISSUE,
   ADMIN_ACTION_TYPE_ISSUE,
   ADMIN_ACTION_NOTE_MAX_LENGTH,
+  ADMIN_ACTION_NO_TARGET_ISSUE,
   adminActionTarget,
   isAdminActionReason,
   isAdminActionType,
@@ -68,6 +69,51 @@ describe("the administrator audit entry (M9 T6; S4, S6, L9)", () => {
     assert.equal(adminActionTarget(ADMIN_ACTION.ACCOUNT_DISABLED), "user");
     assert.equal(adminActionTarget(ADMIN_ACTION.ACCOUNT_REACTIVATED), "user");
     assert.equal(adminActionTarget(ADMIN_ACTION.SIGN_IN_CODE_RESENT), "user");
+    assert.equal(
+      adminActionTarget(ADMIN_ACTION.SETTINGS_UPDATED),
+      null,
+      "the platform-wide settings change names no resource (S8, L15)",
+    );
+  });
+
+  it("accepts the settings change with no target at all, which is the one action that names nothing", () => {
+    const result = validateAdminActionEntry({
+      adminUserId: actor,
+      action: ADMIN_ACTION.SETTINGS_UPDATED,
+      reason: ADMIN_ACTION_REASON.OTHER,
+      note: "galleryPhotoLimit: 12 → 8",
+    });
+
+    assert.ok(result.ok);
+    assert.equal(result.value.action, ADMIN_ACTION.SETTINGS_UPDATED);
+    assert.equal(result.value.targetUserId, null);
+    assert.equal(result.value.invitationId, null);
+    assert.equal(isAdminActionType(ADMIN_ACTION.SETTINGS_UPDATED), true);
+  });
+
+  it("refuses a settings change that still names a target", () => {
+    for (const target of [
+      { targetUserId: targetUser },
+      { invitationId: invitation },
+      {
+        targetUserId: targetUser,
+        invitationId: invitation,
+      },
+    ]) {
+      assert.equal(
+        issuesOf(
+          validateAdminActionEntry({
+            adminUserId: actor,
+            action: ADMIN_ACTION.SETTINGS_UPDATED,
+            reason: ADMIN_ACTION_REASON.OTHER,
+            note: "nuevo límite",
+            ...target,
+          }),
+        ),
+        ADMIN_ACTION_NO_TARGET_ISSUE,
+        JSON.stringify(target),
+      );
+    }
   });
 
   it("trims the note and turns a blank one into no note at all", () => {

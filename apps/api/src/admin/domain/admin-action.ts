@@ -5,8 +5,8 @@
 // final: nothing here can change one, because nothing here ever updates one.
 
 /**
- * The four state-changing support actions that are audited (S4). Viewing a payment is deliberately absent: S6
- * decided that reading a payment is not an action and writes no row.
+ * The state-changing actions that are audited (S4, S5, S8). Viewing a payment is deliberately absent: S6 decided that
+ * reading a payment is not an action and writes no row.
  */
 export const ADMIN_ACTION = {
   /** An administrator unpublished an invitation, by abuse report or at the owner's request. */
@@ -17,6 +17,8 @@ export const ADMIN_ACTION = {
   ACCOUNT_REACTIVATED: "ACCOUNT_REACTIVATED",
   /** An administrator asked the existing sign-in-code flow to mail a new code (S4). */
   SIGN_IN_CODE_RESENT: "SIGN_IN_CODE_RESENT",
+  /** An administrator changed the operational settings (S5, S8, L15). It names no target: it changes the platform. */
+  SETTINGS_UPDATED: "SETTINGS_UPDATED",
 } as const;
 
 export type AdminActionType = (typeof ADMIN_ACTION)[keyof typeof ADMIN_ACTION];
@@ -37,15 +39,19 @@ export type AdminActionReason = (typeof ADMIN_ACTION_REASON)[keyof typeof ADMIN_
 /** The widest note S6 allows, counted in characters: the width of `AdminAction.note`. */
 export const ADMIN_ACTION_NOTE_MAX_LENGTH = 500;
 
-/** What one action names: the invitation it changed, or the account whose access it changed. */
-export type AdminActionTarget = "invitation" | "user";
+/**
+ * What one action names: the invitation it changed, the account whose access it changed, or — for the one action that
+ * changes platform-wide configuration instead of a resource — nothing at all (S8, L15).
+ */
+export type AdminActionTarget = "invitation" | "user" | null;
 
-/** Which target each action names; the migration's target check restates this table. */
+/** Which target each action names; the migration's target checks restate this table. */
 const TARGET_BY_ACTION: Readonly<Record<AdminActionType, AdminActionTarget>> = {
   [ADMIN_ACTION.INVITATION_UNPUBLISHED]: "invitation",
   [ADMIN_ACTION.ACCOUNT_DISABLED]: "user",
   [ADMIN_ACTION.ACCOUNT_REACTIVATED]: "user",
   [ADMIN_ACTION.SIGN_IN_CODE_RESENT]: "user",
+  [ADMIN_ACTION.SETTINGS_UPDATED]: null,
 };
 
 /** The issue an action outside the closed set is refused with. */
@@ -65,6 +71,9 @@ export const ADMIN_ACTION_TARGET_TYPE_ISSUE = "targetUserId and invitationId mus
 /** The issue an entry with no target or with both targets is refused with. */
 export const ADMIN_ACTION_TARGET_COUNT_ISSUE =
   "exactly one of targetUserId and invitationId is required";
+
+/** The issue a target-less action that still names a target is refused with (S8, L15). */
+export const ADMIN_ACTION_NO_TARGET_ISSUE = `${ADMIN_ACTION.SETTINGS_UPDATED} names no target: targetUserId and invitationId must both be null`;
 
 /** The issue a note that is not a string is refused with. */
 export const ADMIN_ACTION_NOTE_TYPE_ISSUE = "note must be a string or null";
@@ -95,7 +104,7 @@ export function isAdminActionReason(value: unknown): value is AdminActionReason 
   );
 }
 
-/** The target an action names: an invitation, or a user account. */
+/** The target an action names: an invitation, a user account, or none for a platform-wide change. */
 export function adminActionTarget(action: AdminActionType): AdminActionTarget {
   return TARGET_BY_ACTION[action];
 }
@@ -115,6 +124,8 @@ export interface AdminActionEntry {
   targetUserId?: string | null;
   /** The invitation the action changed; set exactly for `INVITATION_UNPUBLISHED`. */
   invitationId?: string | null;
+  // `SETTINGS_UPDATED` names neither: it is the one action that changes platform-wide configuration, so both ids
+  // must be absent and the migration's relaxed target checks state the same rule.
 }
 
 /** An entry every column accepts: the note trimmed, and exactly the target the action names. */
@@ -188,16 +199,23 @@ export function validateAdminActionEntry(input: unknown): AdminActionValidation 
   if (!isOptionalUuid(targetUserId) || !isOptionalUuid(invitationId)) {
     return { ok: false, issue: ADMIN_ACTION_TARGET_TYPE_ISSUE };
   }
-  if ((targetUserId === null) === (invitationId === null)) {
-    return { ok: false, issue: ADMIN_ACTION_TARGET_COUNT_ISSUE };
-  }
 
   const target = adminActionTarget(action);
-  if (target === "invitation" && invitationId === null) {
-    return { ok: false, issue: `${action} must target an invitation` };
-  }
-  if (target === "user" && targetUserId === null) {
-    return { ok: false, issue: `${action} must target a user` };
+  if (target === null) {
+    // The platform-wide action names nothing. A target would make the row claim a resource it never changed.
+    if (targetUserId !== null || invitationId !== null) {
+      return { ok: false, issue: ADMIN_ACTION_NO_TARGET_ISSUE };
+    }
+  } else {
+    if ((targetUserId === null) === (invitationId === null)) {
+      return { ok: false, issue: ADMIN_ACTION_TARGET_COUNT_ISSUE };
+    }
+    if (target === "invitation" && invitationId === null) {
+      return { ok: false, issue: `${action} must target an invitation` };
+    }
+    if (target === "user" && targetUserId === null) {
+      return { ok: false, issue: `${action} must target a user` };
+    }
   }
 
   return {

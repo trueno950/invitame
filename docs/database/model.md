@@ -41,8 +41,15 @@ no row is rewritten and nothing is deleted. The analytics slice adds two additiv
 opening per invitation, calendar day, and link) with its composite primary key, its day index, its `RESTRICT`
 reference, and its non-negative-count check, and `20261128130000_add_analytics_indexes` adds the three funnel indexes
 `Payment(createdAt)`, `Payment(paidAt)`, and `Invitation(firstPublishedAt)`. Every object is new, so no row is rewritten
-and nothing is deleted. Future analytics design is documented separately in [`future-model.md`](future-model.md); that
-document does not add tables.
+and nothing is deleted. The configuration-panel slice adds three additive migrations:
+`20261129120000_add_operational_settings` creates the single-row `OperationalSettings` table with its per-column bound
+checks, its two cross-field checks, and the one seeded row (the limits the code used up to that slice, so nothing
+changes on deploy); `20261129120050_add_settings_admin_action_type` appends the `SETTINGS_UPDATED` label to the
+`AdminActionType` enum (a migration of its own because PostgreSQL cannot use a new enum value in the transaction that
+adds it); and `20261129120100_add_settings_admin_action` replaces the two `AdminAction` target checks so that the one
+platform-wide action names no target while every other action keeps exactly the target it names. No existing row is
+rewritten by any of them and nothing is deleted. Future analytics design is documented separately in
+[`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
 | --- | --- |
@@ -68,7 +75,8 @@ document does not add tables.
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
 | `InvitationView` | One counted opening of one invitation's link: the invitation reference, the calendar `day` in `America/Mexico_City`, the `source` (`PUBLIC` or `GUEST`), and the `count` of openings that pair counted; the composite primary key is `(invitationId, day, source)`. No IP address, user agent, referrer, cookie, session, token, or slug |
-| `AdminAction` | One append-only audit row of one state-changing support action: the `adminUserId` who acted, the `action` (`INVITATION_UNPUBLISHED`, `ACCOUNT_DISABLED`, `ACCOUNT_REACTIVATED`, `SIGN_IN_CODE_RESENT`), the `reason` (`ABUSE`, `OWNER_REQUEST`, `PAYMENT_ERROR`, `OTHER`), the optional `note` (up to 500 characters, required for `OTHER`), and exactly one target (`targetUserId` or `invitationId`), with `createdAt`. No email address, client address, or provider payload |
+| `OperationalSettings` | The administrator's configuration panel as one row, whose `id` is the literal `default`: `rsvpDefaultPartyLimit`, `rsvpMaxPartyLimit`, `galleryPhotoLimit`, `storedAssetLimit`, `maxUploadMegabytes`, `placeSearchResultLimit`, `analyticsDefaultWindowDays`, and `updatedAt`. No email, name, secret, or other personal datum |
+| `AdminAction` | One append-only audit row of one state-changing action: the `adminUserId` who acted, the `action` (`INVITATION_UNPUBLISHED`, `ACCOUNT_DISABLED`, `ACCOUNT_REACTIVATED`, `SIGN_IN_CODE_RESENT`, `SETTINGS_UPDATED`), the `reason` (`ABUSE`, `OWNER_REQUEST`, `PAYMENT_ERROR`, `OTHER`), the optional `note` (up to 500 characters, required for `OTHER`), and the target the action names — exactly one `targetUserId` or `invitationId` for every action except `SETTINGS_UPDATED`, which names none — with `createdAt`. No email address, client address, or provider payload |
 
 ## Invariants
 
@@ -437,18 +445,21 @@ Current status: the `AdminAction` table exists and `apps/api/src/admin` owns it 
 references, and the trigger; the row is written by `AdminActionRecorder.record(tx, entry)`, nothing else writes the
 table, and the administrator routes that call it arrive in later tasks.
 
-- One row records one state-changing support action: who acted, what they did, why, and which single target they
-  changed. `adminUserId` is the signed-in administrator and never client input; `action` is the
-  `AdminActionType` enum (`INVITATION_UNPUBLISHED`, `ACCOUNT_DISABLED`, `ACCOUNT_REACTIVATED`,
-  `SIGN_IN_CODE_RESENT`) and `reason` is the `AdminActionReason` enum (`ABUSE`, `OWNER_REQUEST`,
-  `PAYMENT_ERROR`, `OTHER`), so no other value is storable. Viewing a payment is not an action and writes no row.
+- One row records one state-changing action: who acted, what they did, why, and which target they changed.
+  `adminUserId` is the signed-in administrator and never client input; `action` is the `AdminActionType` enum
+  (`INVITATION_UNPUBLISHED`, `ACCOUNT_DISABLED`, `ACCOUNT_REACTIVATED`, `SIGN_IN_CODE_RESENT`, `SETTINGS_UPDATED`)
+  and `reason` is the `AdminActionReason` enum (`ABUSE`, `OWNER_REQUEST`, `PAYMENT_ERROR`, `OTHER`), so no other value
+  is storable. Viewing a payment is not an action and writes no row.
 - `note` is `VARCHAR(500)` and nullable. `AdminAction_note_length` states the bound, and
   `AdminAction_note_required_for_other` requires a present, non-blank note while the reason is `OTHER`; every other
   reason may carry one or not. The domain trims the note before it is stored, so a note of spaces is not a note.
 - `AdminAction_exactly_one_target` (`num_nonnulls("targetUserId", "invitationId") = 1`) keeps one target per row, and
   `AdminAction_target_matches_action` keeps that target the one the action means: `INVITATION_UNPUBLISHED` names
   `invitationId`, and the three account actions name `targetUserId`. A row with no target, with two, or with the
-  other action's target is refused.
+  other action's target is refused. `20261129120100_add_settings_admin_action` relaxes both checks for exactly one
+  value: `SETTINGS_UPDATED` changes platform-wide configuration, so it names no target at all, and a
+  `SETTINGS_UPDATED` row that names one is refused. Every other action keeps the rule above, and a target-less row of
+  any other type is still refused by `AdminAction_exactly_one_target`.
 - All three references are `ON DELETE RESTRICT`. An actor's history outlives an attempt to remove the account that
   wrote it, and an audited target cannot be removed while the row that names it exists. No production path deletes a
   `User` or an `Invitation` today (disabling and archiving are their terminal writes), so the new references refuse
@@ -469,6 +480,46 @@ table, and the administrator routes that call it arrive in later tasks.
   and `DROP TYPE "AdminActionType";`, plus `DROP FUNCTION "prevent_admin_action_mutation"();` after the table. Only
   audit history is lost; accounts, invitations, payments, and media are untouched. Never edit the applied migration
   file.
+
+## Operational settings
+
+Current status: the single-row `OperationalSettings` table exists and `apps/api/src/settings` owns it (M9 T13; S5, S8,
+L15). `20261129120000_add_operational_settings` creates the table, its checks, and the one seeded row.
+
+- One row, and only one: `OperationalSettings_single_row` pins `id` to the literal `default`, so a read needs no
+  ordering or limit and a save is one `UPDATE` of one row. The row carries the administrator's configuration panel
+  as seven integers and `updatedAt`; it has no email, name, secret, or personal column, and deploy-only configuration
+  (payments, abuse limits, refunds, retention, credentials) never becomes a column here.
+- Each column states its own bound in a CHECK — `rsvpDefaultPartyLimit` 1..10, `rsvpMaxPartyLimit` 1..10,
+  `galleryPhotoLimit` 1..24, `storedAssetLimit` 1..80, `maxUploadMegabytes` 1..15, `placeSearchResultLimit` 1..10,
+  and `analyticsDefaultWindowDays` 7..90 — and two cross-field checks state what a single bound cannot:
+  `OperationalSettings_rsvp_default_within_max` keeps `rsvpDefaultPartyLimit` at or below `rsvpMaxPartyLimit`, and
+  `OperationalSettings_stored_assets_above_gallery` keeps `storedAssetLimit` at least one above `galleryPhotoLimit`,
+  so a full gallery can never leave the main photo no slot. The domain (`domain/operational-settings.ts`) states the
+  same bounds and the same two rules, so a value it accepts is a value the row can store.
+- The migration seeds the row with the limits the code used before this slice — 4, 10, 12, 40, 10, 5, 30 — so the
+  deploy changes no behavior (L15). A save that stores the values already present writes nothing, neither the row nor
+  an audit row.
+- Every consumer reads the row through `OPERATIONAL_SETTINGS_READER.current()` at the moment it checks a limit: the
+  invitations module for the RSVP default and maximum party limit, the place-search result limit, and the analytics
+  default window; the media module for the upload size, the gallery cap, and the stored-asset cap. There is no cache
+  in this slice, so a save takes effect on the next check, and a lowered limit only stops what is added afterwards:
+  nothing stored is deleted, hidden, or rewritten. A new draft starts at the seeded or saved default party limit, an
+  invitation whose stored party limit exceeds a lowered maximum keeps it while the next larger response is refused,
+  and a gallery above a lowered cap keeps its photos and refuses the next one. The fixed product bounds — the 90-day
+  analytics maximum and the 90-day retention — are not settings and stay in the domain.
+- Every save is audited. `PUT /admin/settings` writes the row and one `AdminAction` row in one transaction, through
+  the admin module's `AdminActionRecorder`: action `SETTINGS_UPDATED`, reason `OTHER`, no target, and a note of the
+  form `field: old → new; …` followed by the administrator's optional note (at most 500 characters in total, which is
+  the column's width). A save that changes nothing writes no audit row, and an audit entry the domain refuses rolls
+  the update back with it.
+- Rollback / recovery of `20261129120000_add_operational_settings`: additive, so recovery is redeploying the previous
+  migration set or `DROP TABLE "OperationalSettings";`. Only the panel's saved values are lost, and every consumer
+  falls back to the values the code had before the panel (its documented initial values). Rollback of
+  `20261129120100_add_settings_admin_action` restores the two previous target checks, so no `SETTINGS_UPDATED` row may
+  be written until the migration is applied again; `20261129120050_add_settings_admin_action_type` cannot be undone in
+  place (PostgreSQL cannot remove an enum label), so a rollback of the panel leaves the unused label stored. Never
+  edit an applied migration file.
 
 ## Identity tables
 

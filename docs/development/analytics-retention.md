@@ -65,10 +65,11 @@ before the first scheduled run and whenever the window changes.
 It needs only `DATABASE_URL` and `NODE_ENV`: no auth, web, media, or payment secret. It is the whole operation, so it is
 safe to run at any time; `InvitationView` is written only by the two public reads, which never read it back.
 
-## Railway schedule (pending owner approval)
+## Railway schedule (approved, pending the first deployment)
 
-S7 chose «Comando + tarea programada en Railway». The command exists; the production schedule is a change the owner
-approves separately. When approved, the deployment adds a scheduled task (Railway's cron service) that runs:
+S7 chose «Comando + tarea programada en Railway», and the owner approved the schedule (`odd/tasks/m9-admin-operations.md`
+L14). The product is not deployed to Railway yet, so the task is created together with the first production
+deployment (Milestone 10). That deployment adds a scheduled task (Railway's cron service) that runs:
 
 ```text
 pnpm analytics:retention

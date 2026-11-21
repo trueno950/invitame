@@ -29,6 +29,12 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   invitado (recomendado)», counted together and separately; the day is cut in «Ciudad de México (recomendado)»
   (`America/Mexico_City`); retention «Comando + tarea programada en Railway (recomendado)» — the Railway schedule is a
   production change the owner approves separately.
+- S8 — Configuration panel decisions (L15): settings «Acompañantes RSVP», «Fotos por invitación», «Tamaño de foto»,
+  «Búsqueda y analítica»; a lowered limit «Conservan lo que tienen (recomendado)» — «Nada se borra ni se oculta; el
+  nuevo límite solo frena lo que se agregue después»; audit «Nota opcional (recomendado)» — «Se registra el antes y el
+  después siempre»; values «Los actuales y límites seguros (recomendado)» — «Cada ajuste arranca con el valor que tiene
+  hoy en el código, así nada cambia al desplegar». Payments, abuse limits, refunds, retention, and secrets stay
+  deploy-only.
 - S5 — The configuration panel (owner-followups L2) is a later slice of this milestone.
 
 ## Design (S1)
@@ -112,6 +118,40 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   aperturas (público, invitados) and the funnel, the top invitations linked to their detail; the invitation detail
   shows its aperturas and RSVP totals. Tables only; no chart library.
 
+## Design (S5, S8 — configuration panel)
+
+- **Storage**: a single-row `OperationalSettings` table (additive migration; `id` CHECK = `'default'`, seeded by the
+  migration with today's code values so nothing changes on deploy), typed integer columns each with a CHECK bound:
+  | Column | Initial | Bounds |
+  | --- | --- | --- |
+  | `rsvpDefaultPartyLimit` | 4 | 1..10, ≤ `rsvpMaxPartyLimit` |
+  | `rsvpMaxPartyLimit` | 10 | 1..10 |
+  | `galleryPhotoLimit` | 12 | 1..24 |
+  | `storedAssetLimit` | 40 | 1..80, ≥ `galleryPhotoLimit` + 1 |
+  | `maxUploadMegabytes` | 10 | 1..15 |
+  | `placeSearchResultLimit` | 5 | 1..10 |
+  | `analyticsDefaultWindowDays` | 30 | 7..90 |
+  plus `updatedAt`. No email or personal column.
+- **Module**: a new `settings` module owns the table. It exports one public read contract,
+  `OPERATIONAL_SETTINGS_READER.current()`, which reads the row on every use-case call (no cache in this slice), and the
+  admin routes. Consumers (invitations: RSVP limits, place search, analytics default window; media: gallery, stored
+  assets, upload size) read it at the moment they check a limit, replacing the hard-coded constants. A lowered limit
+  only stops new additions: nothing existing is deleted, hidden, or rewritten (an invitation whose stored party limit
+  exceeds a lowered maximum keeps it; a gallery above a lowered cap keeps its photos and refuses new ones).
+- **Upload size**: `maxUploadMegabytes` up to 15 needs the static request-body cap of the media upload route raised to
+  16 MB (one route only); the per-upload check reads the setting.
+- **Routes** (`@AdminOnly()`): `GET /admin/settings` → `{ settings: { …seven fields }, bounds: { <field>: { min, max }
+  }, updatedAt }`; `PUT /admin/settings` with all seven fields plus an optional `note` (≤ 200 characters) → 200 with the
+  same shape; 400 `INVALID_SETTINGS` with `issues: [{ field, rule }]` for a value out of bounds or a cross-field rule.
+  A save that changes nothing writes nothing and answers 200.
+- **Audit**: a new `AdminActionType` value `SETTINGS_UPDATED` with no target (the `AdminAction` exactly-one-target
+  CHECK is relaxed for this type only), written in the same transaction as the update, reason `OTHER`, and a generated
+  note `field: old → new; …` followed by the optional admin note.
+- **Web**: `/admin/configuracion` («General → Configuración»): a hub card linking the four existing catalog pages
+  (categorías, funciones, paquetes con precios, plantillas) and one form with the seven settings grouped as in S8, each
+  showing its bounds, the optional note, and «Guardado» / error notices. The page says that a lower limit does not
+  remove anything that already exists.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -127,6 +167,8 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T10 | Support action review follow-ups: role guard, 409 under concurrent transitions, payment retry link, regression probes | S4, S6 | worker | see L11 |
 | T11 | API: `InvitationView` migration, view counting, admin analytics reads and routes, retention command | S2, S3, S7 | worker | see L13 |
 | T12 | Web: `/admin/analitica` and the analytics on the invitation detail | S2, S7 | worker | see L13 |
+| T13 | API: `OperationalSettings` migration + settings module + audit + consumers read it + routes | S5, S8 | worker | |
+| T14 | Web: `/admin/configuracion` hub and settings form | S5, S8 | worker | |
 | T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | see L7 |
 
 ## Log
@@ -193,3 +235,11 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   runs inside a rolled-back transaction, the funnel and top cases use far-away windows, the slug tie-break is asserted,
   and the detail facet is tested through the real use case. The owner disabled RDD for the clone for this delivery.
   The CI browser-install slowness stays (owner decision). The Railway schedule waits for the owner.
+- L14 — Owner answers after the analytics delivery (#103-#108): the Railway retention schedule is «si» but «aun no
+  subimos a railway», so it is approved and created with the first production deployment (Milestone 10); the secret
+  scan of the now-public history is «no»; the configuration panel (S5) is «si», next.
+
+- L15 — Owner answers (configuration panel): settings «Acompañantes RSVP, Fotos por invitación, Tamaño de foto,
+  Búsqueda y analítica»; lowered limits «Conservan lo que tienen (recomendado)»; audit «Nota opcional (recomendado)»;
+  values «Los actuales y límites seguros (recomendado)». Explorer: no settings table exists; limits are frozen at boot
+  or hard-coded; `AdminAction` requires exactly one target, so `SETTINGS_UPDATED` needs that CHECK relaxed.
