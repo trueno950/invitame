@@ -39,6 +39,8 @@ to be checked before prose, and it defines when a human decision is required.
 - [`architecture/overview.md`](architecture/overview.md) — current runtime map and planned module boundaries.
 - [`design/theme.md`](design/theme.md) — the current visual theme: tokens, fonts, ornaments, motion, and contrast rules.
 - [`development/quality-gates.md`](development/quality-gates.md) — current scripts and Definition of Done.
+- [`development/deployment.md`](development/deployment.md) — production configuration matrix per app, first-release values, and Railway services.
+- [`development/deployment-services.md`](development/deployment-services.md) — the two Railway service descriptors, their exact build, migration, and start commands, and the prerequisites the first deploy needs.
 - [`development/payments.md`](development/payments.md) — payment modes, environment, the simulated signature scheme, adding a real provider adapter, and the production checklist.
 - [`development/media-storage.md`](development/media-storage.md) — invitation media storage, environment, serving, and the cleanup command.
 - [`development/git-workflow.md`](development/git-workflow.md) — branch, work-unit, staged-diff, and PR procedure.

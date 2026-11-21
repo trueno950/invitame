@@ -1,0 +1,25 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "pnpm install --frozen-lockfile && pnpm --filter @invitame/api prisma:generate && pnpm build",
+    "watchPatterns": [
+      "apps/api/**",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "tsconfig.base.json",
+      "turbo.json",
+      ".nvmrc"
+    ]
+  },
+  "deploy": {
+    "preDeployCommand": ["pnpm --filter @invitame/api prisma:migrate:deploy"],
+    "startCommand": "node apps/api/dist/main.js",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "numReplicas": 1
+  }
+}
