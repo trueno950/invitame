@@ -11,6 +11,8 @@ import {
   rsvpDedupeKey,
   rsvpModeOf,
   validateRsvpResponse,
+  RSVP_PARTY_LIMIT_MAX,
+  rsvpPartyLimitRangeIssue,
   validateRsvpSettings,
 } from "./invitation-rsvp";
 
@@ -158,6 +160,25 @@ describe("RSVP settings validation (S4)", () => {
       "deadline must be an ISO 8601 instant with an offset, or null",
       "partyLimit must be between 1 and 10",
     ]);
+  });
+
+  it("refuses a party limit above the maximum the settings row states, naming that maximum (S5, S8)", () => {
+    assert.deepEqual(
+      issuesOf(validateRsvpSettings({ deadline: null, partyLimit: 7 }, { maxPartyLimit: 6 })),
+      ["partyLimit must be between 1 and 6"],
+    );
+    assert.deepEqual(
+      validateRsvpSettings({ deadline: null, partyLimit: 6 }, { maxPartyLimit: 6 }),
+      { ok: true, value: { deadline: null, partyLimit: 6 } },
+      "the lowered maximum is inclusive",
+    );
+    assert.equal(rsvpPartyLimitRangeIssue(6), "partyLimit must be between 1 and 6");
+
+    // A maximum wider than the column can hold never admits a party size the database refuses.
+    assert.deepEqual(
+      issuesOf(validateRsvpSettings({ deadline: null, partyLimit: 11 }, { maxPartyLimit: 40 })),
+      [`partyLimit must be between 1 and ${RSVP_PARTY_LIMIT_MAX}`],
+    );
   });
 });
 

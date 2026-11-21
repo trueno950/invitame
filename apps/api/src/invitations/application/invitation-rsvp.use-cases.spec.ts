@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 
+import type { OperationalSettingsReader } from "../../settings/application/operational-settings";
+import { INITIAL_OPERATIONAL_SETTINGS } from "../../settings/domain/operational-settings";
 import { InvitationNotEditableError } from "../domain/invitation.errors";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
@@ -665,5 +667,70 @@ describe("SubmitPublicRsvpUseCase (S1, S4)", () => {
 
     await assert.rejects(submit.execute(SUBMISSION), RsvpNotOpenError);
     assert.equal(rsvp.responses.length, 0);
+  });
+});
+
+describe("the platform-wide party maximum from the settings row (M9 T13; S5, S8)", () => {
+  /** A reader answering one saved maximum, as the settings module would after a panel save. */
+  function settingsWith(rsvpMaxPartyLimit: number): OperationalSettingsReader {
+    return {
+      current: async () => ({
+        ...INITIAL_OPERATIONAL_SETTINGS,
+        rsvpMaxPartyLimit,
+        updatedAt: new Date(0),
+      }),
+    };
+  }
+
+  it("refuses the owner's next save above a lowered maximum and keeps the stored limit", async () => {
+    const { invitations, rsvp } = seeded({ rsvpPartyLimit: 10 });
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
+    const useCase = new UpdateRsvpSettingsUseCase(invitations, rsvp, settingsWith(6));
+
+    await assert.rejects(
+      useCase.execute({ ownerId: OWNER, id: invitation.id, deadline: null, partyLimit: 7 }),
+      (error: unknown) =>
+        error instanceof InvalidRsvpSettingsError &&
+        JSON.stringify(error.issues) === JSON.stringify(["partyLimit must be between 1 and 6"]),
+    );
+    assert.equal(
+      invitation.rsvpPartyLimit,
+      10,
+      "the stored limit is never rewritten by a lowered maximum",
+    );
+
+    const stored = await useCase.execute({
+      ownerId: OWNER,
+      id: invitation.id,
+      deadline: null,
+      partyLimit: 6,
+    });
+    assert.equal(stored?.partyLimit, 6, "a save at the lowered maximum is accepted");
+  });
+
+  it("refuses a new response above the lowered maximum, keeping the invitation's own larger limit", async () => {
+    const { invitations, catalog, rsvp, submit } = seeded({ rsvpPartyLimit: 10 });
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
+    const capped = new SubmitPublicRsvpUseCase(
+      invitations,
+      catalog,
+      rsvp,
+      new MemoryRateLimiter(),
+      () => NOW,
+      settingsWith(6),
+    );
+
+    await assert.rejects(
+      capped.execute({ ...SUBMISSION, partySize: 7 }),
+      (error: unknown) =>
+        JSON.stringify(issuesOf(error)) ===
+        JSON.stringify(["partySize must be between 1 and 6 when attending"]),
+    );
+    assert.equal(rsvp.responses.length, 0, "nothing is stored for a refused party size");
+
+    await capped.execute({ ...SUBMISSION, partySize: 6 });
+    assert.equal(rsvp.responses.length, 1, "the lowered maximum itself is accepted");
+    assert.equal(invitation.rsvpPartyLimit, 10, "the stored limit is untouched");
+    assert.equal(submit instanceof SubmitPublicRsvpUseCase, true);
   });
 });

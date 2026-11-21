@@ -1,5 +1,5 @@
 import type { InvitationStatus } from "../../invitations/domain/invitation-lifecycle";
-import type { MediaKind } from "../domain/media-asset";
+import type { MediaKind, MediaLimits } from "../domain/media-asset";
 
 // The persistence port of invitation media (M8 S4). Ownership is never checked outside the statement that reads or
 // writes the row: an own-invitation read answers null for another customer's id exactly like an id that names
@@ -71,15 +71,19 @@ export interface MediaRepository {
 
   /**
    * Stores one asset in one transaction that repeats ownership and the editable statuses, marks a previous main
-   * photo deleted, and refuses a gallery photo over 12 or an invitation over 40 stored assets. Null when the
-   * invitation is missing or foreign, so nothing is written; throws `InvitationNotEditableError` when it is
-   * archived and `MediaLimitExceededError` when a limit is reached, and writes nothing in either case.
+   * photo deleted, and refuses a gallery photo over the gallery cap or an invitation over its stored-asset cap.
+   * `limits` is the caller's read of the settings row, taken at the moment it checks them (M9 T13; S5, S8); with no
+   * argument the caps the migration seeds apply. A lowered cap refuses the next addition and never removes a stored
+   * asset. Null when the invitation is missing or foreign, so nothing is written; throws
+   * `InvitationNotEditableError` when it is archived and `MediaLimitExceededError` when a limit is reached, and writes
+   * nothing in either case.
    */
   insert(
     ownerId: string,
     invitationId: string,
     asset: NewMediaAsset,
     at: Date,
+    limits?: MediaLimits,
   ): Promise<InsertedMedia | null>;
 
   /** Replaces one stored asset's alt text; null when it is missing, foreign, or already deleted (A4). */

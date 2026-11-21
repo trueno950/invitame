@@ -17,6 +17,10 @@ import {
 } from "./invitation-rsvp.errors";
 import type { RsvpReadModel, RsvpRepository } from "./rsvp.repository";
 import type { RsvpRateLimiter } from "./rsvp-rate-limiter";
+import {
+  INITIAL_OPERATIONAL_SETTINGS_READER,
+  type OperationalSettingsReader,
+} from "../../settings/application/operational-settings";
 
 // The RSVP use cases (M6 G1; S1, S3, S4). Two are the creator's: saving the deadline and the party limit, and
 // reading the settings with every response and the totals that page shows. One is the guest's: submitting an open
@@ -106,6 +110,9 @@ export class UpdateRsvpSettingsUseCase {
   constructor(
     private readonly invitations: InvitationRepository,
     private readonly rsvp: RsvpRepository,
+    // The platform-wide maximum party size (M9 T13; S5, S8), read at the moment the save is validated. A lowered
+    // maximum refuses the next save above it and never rewrites a limit an invitation already stores.
+    private readonly settings: OperationalSettingsReader = INITIAL_OPERATIONAL_SETTINGS_READER,
   ) {}
 
   async execute(input: UpdateRsvpSettingsInput): Promise<RsvpSettings | null> {
@@ -119,10 +126,11 @@ export class UpdateRsvpSettingsUseCase {
     // A read-only invitation is refused before its request values are even looked at (S7, A2).
     assertEditable(stored.status);
 
-    const validation = validateRsvpSettings({
-      deadline: input.deadline,
-      partyLimit: input.partyLimit,
-    });
+    const settings = await this.settings.current();
+    const validation = validateRsvpSettings(
+      { deadline: input.deadline, partyLimit: input.partyLimit },
+      { maxPartyLimit: settings.rsvpMaxPartyLimit },
+    );
     if (!validation.ok) {
       throw new InvalidRsvpSettingsError(validation.issues);
     }
@@ -182,6 +190,10 @@ export class SubmitPublicRsvpUseCase {
     private readonly rsvp: RsvpRepository,
     private readonly rateLimiter: RsvpRateLimiter,
     private readonly now: RsvpClock = () => new Date(),
+    // The platform-wide maximum party size (M9 T13; S5, S8), read at the moment the response is validated. An
+    // invitation whose stored limit the panel lowered keeps the party it allows, and the next larger response is
+    // refused.
+    private readonly settings: OperationalSettingsReader = INITIAL_OPERATIONAL_SETTINGS_READER,
   ) {}
 
   async execute(input: SubmitPublicRsvpInput): Promise<boolean> {
@@ -212,6 +224,10 @@ export class SubmitPublicRsvpUseCase {
       return true;
     }
 
+    // The widest party is the invitation's own limit capped by the platform maximum: a guest may never submit more
+    // people than the panel allows, even when the invitation stores a larger limit from before the change.
+    const settings = await this.settings.current();
+    const partyLimit = Math.min(published.rsvpPartyLimit, settings.rsvpMaxPartyLimit);
     const validation = validateRsvpResponse(
       {
         name: input.name,
@@ -220,7 +236,7 @@ export class SubmitPublicRsvpUseCase {
         phone: input.phone,
         message: input.message,
       },
-      { partyLimit: published.rsvpPartyLimit },
+      { partyLimit },
     );
     if (!validation.ok) {
       throw new InvalidRsvpResponseError(validation.issues);

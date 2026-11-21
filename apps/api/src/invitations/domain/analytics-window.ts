@@ -10,7 +10,12 @@
 /** The zone every analytics day is cut in (S7, L12: «Ciudad de México»). */
 export const ANALYTICS_TIME_ZONE = "America/Mexico_City";
 
-/** The window a request that names neither bound reads: the last thirty days ending today (S2). */
+/**
+ * The window a request that names neither bound reads while no administrator has changed the panel: the last thirty
+ * days ending today (S2). The live value is the settings row's `analyticsDefaultWindowDays`, read through
+ * `OPERATIONAL_SETTINGS_READER` when a read runs (M9 T13; S5, S8); the ninety-day maximum and the ninety-day retention
+ * stay fixed, because they are the product's bound and not a preference.
+ */
 export const ANALYTICS_DEFAULT_WINDOW_DAYS = 30;
 
 /** The widest window one request may read: ninety days (S2, S3). A wider one is a malformed request. */
@@ -138,20 +143,21 @@ export function retainedAnalyticsWindow(
 
 /**
  * The window a request reads, or `InvalidAnalyticsWindowError`. A missing `to` is today in the analytics zone and a
- * missing `from` is `ANALYTICS_DEFAULT_WINDOW_DAYS` ending at `to`, so a request that names neither reads the last
- * thirty days (S2). The bounds are inclusive, the window may not be reversed, and it may hold at most
- * `ANALYTICS_MAX_WINDOW_DAYS` days; anything else is a 400.
+ * missing `from` is `defaultWindowDays` ending at `to`, so a request that names neither reads the configured default
+ * window (S2, S5) — thirty days unless an administrator saved another one. The bounds are inclusive, the window may not
+ * be reversed, and it may hold at most `ANALYTICS_MAX_WINDOW_DAYS` days; anything else is a 400.
  */
 export function resolveAnalyticsWindow(
   query: { from: string | null; to: string | null },
   now: Date,
+  defaultWindowDays: number = ANALYTICS_DEFAULT_WINDOW_DAYS,
 ): AnalyticsWindow {
   const to = query.to ?? todayInAnalyticsZone(now);
   if (!isAnalyticsDay(to)) {
     throw new InvalidAnalyticsWindowError("day");
   }
 
-  const from = query.from ?? addAnalyticsDays(to, -(ANALYTICS_DEFAULT_WINDOW_DAYS - 1));
+  const from = query.from ?? addAnalyticsDays(to, -(defaultWindowDays - 1));
   if (!isAnalyticsDay(from)) {
     throw new InvalidAnalyticsWindowError("day");
   }

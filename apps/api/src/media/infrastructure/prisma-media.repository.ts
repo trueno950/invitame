@@ -11,12 +11,14 @@ import type {
   OwnedMediaInvitation,
   ServingMedia,
 } from "../application/media.repository";
-import { MAX_GALLERY_PHOTOS, MAX_STORED_ASSETS } from "../domain/media-asset";
+import { INITIAL_MEDIA_LIMITS, type MediaLimits } from "../domain/media-asset";
 
-// The media port on PostgreSQL (M8 S4). Owner-scoped reads and writes carry the owner in their own statement, so
+// The media port on PostgreSQL (M8 S4; M9 T13). Owner-scoped reads and writes carry the owner in their own statement, so
 // another customer's id is indistinguishable from a missing one (A4) and a concurrent archive can never slip a
-// write through (A2). The two limits of S4 are enforced inside the transaction that writes the row, serialized on
-// the invitation row (`SELECT ... FOR UPDATE`), so two simultaneous uploads cannot both take the last slot.
+// write through (A2). The two caps are enforced inside the transaction that writes the row, serialized on the
+// invitation row (`SELECT ... FOR UPDATE`), so two simultaneous uploads cannot both take the last slot; the caps
+// themselves are the caller's read of the settings row (S5, S8), so a lowered one refuses the next addition and never
+// touches an asset already stored.
 //
 // The gallery position is assigned by the adapter, never by a caller: an upload appends, and a reorder rewrites the
 // gallery's positions 0..n-1 in one transaction. Every row is read back in the same shape, so a caller never sees a
@@ -97,10 +99,11 @@ export class PrismaMediaRepository implements MediaRepository {
     invitationId: string,
     asset: NewMediaAsset,
     at: Date,
+    limits: MediaLimits = INITIAL_MEDIA_LIMITS,
   ): Promise<InsertedMedia | null> {
     return this.prisma.$transaction(async (transaction) => {
       // One row lock per invitation serializes concurrent uploads, so the counts below cannot both see the last
-      // free slot (S4: at most 12 gallery photos and 40 stored assets).
+      // free slot (S4): the caps are the settings row's gallery and stored-asset limits, read by the caller.
       const invitation = await transaction.$queryRaw<Array<{ status: InvitationStatus }>>`
         SELECT "status" FROM "Invitation"
         WHERE "id" = ${invitationId}::uuid AND "ownerId" = ${ownerId}::uuid
@@ -124,11 +127,12 @@ export class PrismaMediaRepository implements MediaRepository {
       if (counting === undefined) {
         return null;
       }
-      // The outer bound first: an invitation holds at most 40 stored assets, and a gallery at most 12 photos.
-      if (Number(counting.stored) >= MAX_STORED_ASSETS) {
+      // The outer bound first: the stored-asset cap covers both kinds, then the gallery cap covers gallery photos.
+      // Both come from the settings row, so a lowered cap refuses this upload and leaves the stored ones alone.
+      if (Number(counting.stored) >= limits.storedAssetLimit) {
         throw new MediaLimitExceededError("assets");
       }
-      if (asset.kind === "gallery" && Number(counting.gallery) >= MAX_GALLERY_PHOTOS) {
+      if (asset.kind === "gallery" && Number(counting.gallery) >= limits.galleryPhotoLimit) {
         throw new MediaLimitExceededError("gallery");
       }
 

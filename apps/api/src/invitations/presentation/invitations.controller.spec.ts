@@ -85,6 +85,10 @@ import type { PlaylistMetadata } from "../domain/invitation-features";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
+import {
+  INITIAL_OPERATIONAL_SETTINGS_READER,
+  OPERATIONAL_SETTINGS_READER,
+} from "../../settings/application/operational-settings";
 import { INVITATION_USE_CASES } from "../invitations.module";
 import { InvitationsController } from "./invitations.controller";
 import { PublicInvitationsController } from "./public-invitations.controller";
@@ -985,6 +989,9 @@ describe("invitations routes: /invitations", () => {
         { provide: PLACE_SEARCH, useValue: placeSearch },
         { provide: PLACE_SEARCH_RATE_LIMITER, useValue: placeSearchLimiter },
         { provide: InMemoryPlaceSearchCache, useValue: new InMemoryPlaceSearchCache() },
+        // The operational settings (M9 T13; S5, S8): this suite exercises other rules, so it composes the reader
+        // that answers the values the migration seeds.
+        { provide: OPERATIONAL_SETTINGS_READER, useValue: INITIAL_OPERATIONAL_SETTINGS_READER },
       ],
     })
     class InvitationsTestModule {}

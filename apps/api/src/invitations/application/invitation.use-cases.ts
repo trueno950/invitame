@@ -51,6 +51,10 @@ import type { InvitationGalleryReader } from "./invitation-gallery";
 import type { InvitationPaymentGate } from "./invitation-payment-gate";
 import { type PublicInvitation, projectPublicContent } from "./invitation-public";
 import { type MusicMetadataProvider, NO_MUSIC_METADATA } from "./music-metadata";
+import {
+  INITIAL_OPERATIONAL_SETTINGS_READER,
+  type OperationalSettingsReader,
+} from "../../settings/application/operational-settings";
 
 // The invitation use cases (M4 T3 and M5 T3; S1, S2, S3, S6, S7, S9, A1, A3, A4, A7). Creating and editing a
 // draft is free for any signed-in customer: the chosen package is only validated against the pinned version's
@@ -235,6 +239,10 @@ export class CreateInvitationDraftUseCase {
     private readonly invitations: InvitationRepository,
     private readonly catalog: InvitationCatalog,
     private readonly nextSlug: InvitationSlugSource = DEFAULT_SLUG_SOURCE,
+    // The operational settings (M9 T13; S5, S8): a new draft starts with the party limit the panel states, read at
+    // the moment the draft is created so a save takes effect on the next invitation. Composed without a settings
+    // module, the reader answers the values the migration seeds.
+    private readonly settings: OperationalSettingsReader = INITIAL_OPERATIONAL_SETTINGS_READER,
   ) {}
 
   async execute(input: CreateDraftInput): Promise<OwnedInvitation> {
@@ -267,11 +275,15 @@ export class CreateInvitationDraftUseCase {
       throw new InvitationPackageDoesNotFitError(input.packageId);
     }
 
+    const settings = await this.settings.current();
     const created = await this.createWithGeneratedSlug({
       ownerId: input.ownerId,
       templateVersionId: version.id,
       packageId: input.packageId,
       content: {},
+      // The default party limit is the settings row's, so a panel save changes what the next draft starts with
+      // without touching a single stored invitation (S8).
+      rsvpPartyLimit: settings.rsvpDefaultPartyLimit,
     });
 
     return toOwnedInvitation(created, version.schema, entitlements.includedFeatureKeys);

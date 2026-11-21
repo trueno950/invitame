@@ -139,6 +139,8 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       packageId: catalog.packageId,
       slug,
       content,
+      // The settings row's default party limit, stated explicitly like the use case does (M9 T13).
+      rsvpPartyLimit: 4,
     });
     invitationIds.push(created.id);
     return created;
@@ -190,6 +192,8 @@ describe("Prisma invitation repository on PostgreSQL", () => {
         packageId: catalog.packageId,
         slug,
         content: { celebrantName: "Ana" },
+        // The settings row's default party limit, stated explicitly like the use case does (M9 T13).
+        rsvpPartyLimit: 4,
       });
       invitationIds.push(created.id);
 
@@ -219,6 +223,8 @@ describe("Prisma invitation repository on PostgreSQL", () => {
           packageId: catalog.packageId,
           slug: first.slug,
           content: {},
+          // The settings row's default party limit, stated explicitly like the use case does (M9 T13).
+          rsvpPartyLimit: 4,
         }),
         (error: unknown) => error instanceof InvitationSlugTakenError && error.slug === first.slug,
       );
@@ -434,6 +440,8 @@ describe("Prisma invitation repository on PostgreSQL", () => {
         packageId: catalog.packageId,
         slug: newSlug(),
         content: {},
+        // The settings row's default party limit, stated explicitly like the use case does (M9 T13).
+        rsvpPartyLimit: 4,
       });
       invitationIds.push(created.id);
       const newer = await prisma.templateVersion.create({

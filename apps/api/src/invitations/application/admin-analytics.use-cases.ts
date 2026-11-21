@@ -1,5 +1,9 @@
 import { type AnalyticsWindow, resolveAnalyticsWindow } from "../domain/analytics-window";
 import {
+  INITIAL_OPERATIONAL_SETTINGS_READER,
+  type OperationalSettingsReader,
+} from "../../settings/application/operational-settings";
+import {
   type AdminAnalyticsRepository,
   type AnalyticsClock,
   ANALYTICS_TOP_INVITATIONS_LIMIT,
@@ -40,6 +44,21 @@ export interface AdminAnalyticsQuery {
 }
 
 /**
+ * The window one request reads (S2, S5, S8): the bounds it named, or the configured default ending today in Ciudad de
+ * México. The settings row is read on every request, so a saved default applies to the next page load; the ninety-day
+ * maximum and the ninety-day retention are fixed in the domain and never read from the panel.
+ */
+async function windowOfRequest(
+  query: AdminAnalyticsQuery,
+  settings: OperationalSettingsReader,
+  now: AnalyticsClock,
+): Promise<AnalyticsWindow> {
+  const { analyticsDefaultWindowDays } = await settings.current();
+
+  return resolveAnalyticsWindow(query, now(), analyticsDefaultWindowDays);
+}
+
+/**
  * `GET /admin/analytics/views`: the daily openings of the public link and of the guest links, counted separately and
  * together (S7), plus the invitations with the most openings inside the same window. A day with no opening answers a
  * zero, so the table always shows the whole window.
@@ -48,10 +67,12 @@ export class GetAdminViewsAnalyticsUseCase {
   constructor(
     private readonly analytics: AdminAnalyticsRepository,
     private readonly now: AnalyticsClock = () => new Date(),
+    // The configured default window (M9 T13; S5, S8), read on every request: the ninety-day maximum stays fixed.
+    private readonly settings: OperationalSettingsReader = INITIAL_OPERATIONAL_SETTINGS_READER,
   ) {}
 
   async execute(query: AdminAnalyticsQuery): Promise<AdminViewsAnalytics> {
-    const window = resolveAnalyticsWindow(query, this.now());
+    const window = await windowOfRequest(query, this.settings, this.now);
     const [byDay, topInvitations] = await Promise.all([
       this.analytics.viewsByDay(window),
       this.analytics.topInvitationViews(window, ANALYTICS_TOP_INVITATIONS_LIMIT),
@@ -80,10 +101,12 @@ export class GetAdminFunnelAnalyticsUseCase {
     private readonly analytics: AdminAnalyticsRepository,
     private readonly payments: InvitationFunnelPaymentReader,
     private readonly now: AnalyticsClock = () => new Date(),
+    // The configured default window (M9 T13; S5, S8), read on every request: the ninety-day maximum stays fixed.
+    private readonly settings: OperationalSettingsReader = INITIAL_OPERATIONAL_SETTINGS_READER,
   ) {}
 
   async execute(query: AdminAnalyticsQuery): Promise<AdminFunnelAnalytics> {
-    const window: AnalyticsWindow = resolveAnalyticsWindow(query, this.now());
+    const window: AnalyticsWindow = await windowOfRequest(query, this.settings, this.now);
     const [invitations, payments] = await Promise.all([
       this.analytics.invitationFunnelByDay(window),
       this.payments.funnelByDay(window),

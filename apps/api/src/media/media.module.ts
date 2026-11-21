@@ -9,6 +9,11 @@ import { CatalogModule } from "../catalog/catalog.module";
 import type { RuntimeEnvironment } from "../config/environment";
 import { PrismaService } from "../database/prisma.service";
 import {
+  OPERATIONAL_SETTINGS_READER,
+  type OperationalSettingsReader,
+} from "../settings/application/operational-settings";
+import { SettingsModule } from "../settings/settings.module";
+import {
   INVITATION_GALLERY_READER,
   type InvitationGalleryReader,
 } from "../invitations/application/invitation-gallery";
@@ -56,9 +61,14 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
  * adapter scopes every statement by the invitation's owner, which is the ownership rule the API already uses (A4).
  * The media module implements the invitations module's `InvitationGalleryReader` port, so the public projection never
  * imports a media repository.
+ *
+ * M9 T13 adds the operational settings: the module imports `SettingsModule` and injects its one public read contract,
+ * `OPERATIONAL_SETTINGS_READER`, so the upload reads the size cap and the two photo caps at the moment it checks them
+ * (S5, S8) and never queries the settings table itself. A lowered cap refuses the next upload and leaves every stored
+ * photo exactly where it is.
  */
 @Module({
-  imports: [CatalogModule],
+  imports: [CatalogModule, SettingsModule],
   controllers: [InvitationsMediaController, MediaController],
   providers: [
     {
@@ -97,6 +107,7 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
         IMAGE_PROCESSOR,
         MEDIA_LOG,
         ConfigService,
+        OPERATIONAL_SETTINGS_READER,
       ],
       useFactory: (
         invitations: MediaRepository,
@@ -105,10 +116,12 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
         processor: SharpImageProcessor,
         log: MediaLog,
         config: ConfigService<RuntimeEnvironment, true>,
+        settings: OperationalSettingsReader,
       ) =>
         new UploadMediaUseCase(invitations, catalog, storage, processor, {
           assetUrl: assetUrlFrom(config),
           log,
+          settings,
         }),
     },
     {

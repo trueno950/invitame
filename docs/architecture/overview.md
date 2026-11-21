@@ -50,6 +50,9 @@ apps/api/src/
   database/     Prisma module and service
   email/        email delivery port, retry/alert policy, and Resend, Mailpit, and in-memory adapters
   health/       database-backed health endpoint and tests
+  settings/     the administrator's operational settings: the single-row `OperationalSettings` table, the domain
+                bounds and the two cross-field rules, the one public `OPERATIONAL_SETTINGS_READER` read contract the
+                invitations and media modules consume, the audited save, and the `GET`/`PUT /admin/settings` routes
   users/        own profile (`GET /me`, `PATCH /me`), the account support routes (`POST /admin/users/:userId/…`),
                 the disable-user, create-administrator, and reset-second-factor use cases, their Prisma adapters,
                 the owner ports the administrator's invitation view asks, and the `user:disable`, `admin:create`,
@@ -1261,9 +1264,10 @@ are computed on read.
   with the day computed by PostgreSQL as `(at AT TIME ZONE 'America/Mexico_City')::date`, and it is fire-and-forget: the
   public read never awaits it, and a failure is one structured line `{ event: "invitation_view_count_failed" }` with no
   slug, no id, and nothing about the visitor, so the guest's page is identical whether the counter is healthy or not.
-- Window (S2, S3): a day is the calendar day in `America/Mexico_City`; both bounds are `YYYY-MM-DD` and optional, `to`
-  defaults to today in the zone and `from` to thirty days ending there, the window may not be reversed, and it may hold
-  at most ninety days. A day that is not a real calendar day is a validation 400 from the DTO; a reversed or over-wide
+- Window (S2, S3, S5): a day is the calendar day in `America/Mexico_City`; both bounds are `YYYY-MM-DD` and optional,
+  `to` defaults to today in the zone and `from` to the configured default window ending there (thirty days unless an
+  administrator saved another, see Operational settings below), the window may not be reversed, and it may hold at
+  most ninety days — that maximum, and the ninety-day retention, are product bounds and not settings. A day that is not a real calendar day is a validation 400 from the DTO; a reversed or over-wide
   window is 400 `INVALID_ANALYTICS_WINDOW` from the use case, before any query. Both reads answer every day of the
   window exactly once, ascending, with zeros where nothing was counted, so the page never has a gap to guess.
 - `GET /admin/analytics/views?from&to` → 200 `{ days: [{ day, public, guest }], topInvitations: [{ invitationId, slug,
@@ -1301,6 +1305,69 @@ are computed on read.
   deletes nothing). The public counting rule is pinned in `src/invitations/presentation/invitations.controller.spec.ts`
   (one `PUBLIC` opening, one `GUEST` opening, nothing for a 404 or an RSVP submission or the owner preview, and the same
   page when the counter fails).
+
+## Operational settings (current)
+
+Implemented by Milestone 9 T13 (S5, S8, L15): the administrator's configuration panel. Four groups of limits that used
+to be constants are now one row the panel edits, and every consumer reads that row at the moment it checks a limit.
+
+- Storage: the `settings` module (`apps/api/src/settings`) owns the single-row `OperationalSettings` table. Its `id` is
+  the literal `default` (a CHECK pins it), so a read is one lookup and a save is one `UPDATE`; each column states its
+  own CHECK bound and two cross-field checks state the rules a single bound cannot. See
+  [`../database/model.md`](../database/model.md) for the columns, the bounds, and the seeded values.
+- The one public contract: `OPERATIONAL_SETTINGS_READER.current()` (`application/operational-settings.ts`). Consumers
+  inject that token and read the row on every call — no cache in this slice — so a save takes effect on the next check.
+  No consumer queries the table or imports this module's infrastructure: the `invitations` module (the RSVP default
+  and maximum party limit, the place-search result limit, the analytics default window) and the `media` module (the
+  upload size, the gallery cap, the stored-asset cap) are the two consumers, and both import `SettingsModule`.
+- Read per check, never frozen at boot: a new draft stores the row's `rsvpDefaultPartyLimit` as its own
+  `rsvpPartyLimit`; a guest's submission is validated against the invitation's stored limit **capped** by the row's
+  `rsvpMaxPartyLimit`; the owner's `PUT /invitations/:id/rsvp-settings` validates against that same maximum; the place
+  search slices its answer to `placeSearchResultLimit`; both analytics reads resolve their default window from
+  `analyticsDefaultWindowDays`; and an upload checks `maxUploadMegabytes`, `galleryPhotoLimit`, and `storedAssetLimit`
+  inside the transaction that writes the row.
+- A lowered limit keeps what exists (S8 «Conservan lo que tienen»). Nothing stored is deleted, hidden, or rewritten: an
+  invitation whose party limit exceeds a lowered maximum keeps it while the next larger response is refused, and a
+  gallery above a lowered cap keeps every photo and refuses the next one. The settings change no historical data at
+  all.
+- Routes, both `@AdminOnly()` (401 without a session, 403 for a customer, before any validation):
+  - `GET /admin/settings` → 200 `{ settings: { rsvpDefaultPartyLimit, rsvpMaxPartyLimit, galleryPhotoLimit,
+    storedAssetLimit, maxUploadMegabytes, placeSearchResultLimit, analyticsDefaultWindowDays }, bounds: { <field>:
+    { min, max } }, updatedAt }`. `bounds` carries exactly the seven fields, so the form states the limits without a
+    second source, and `updatedAt` is an ISO instant.
+  - `PUT /admin/settings` with the same seven integer fields plus an optional `note` of at most 200 characters → 200
+    with the same shape. A save that changes nothing writes nothing and answers the stored row. A value outside its
+    bounds or a broken cross-field rule answers 400 `INVALID_SETTINGS` with `issues: [{ field, rule }]`, where `field`
+    is one of the seven names and `rule` is `min`, `max`, `integer`, `rsvpDefaultPartyLimitAtMostMax`, or
+    `storedAssetLimitAboveGallery` (every identifier is at most 40 characters, the bound the web client accepts); a
+    missing field, an unknown field, or a non-integer answers the global pipe's own 400.
+- Audit (S6 «Misma transacción», S8 «Nota opcional»): the row and one `AdminAction` row commit in one transaction,
+  through the admin module's `AdminActionRecorder`. The action is `SETTINGS_UPDATED`, the reason is `OTHER`, the row
+  names no target (the migration relaxed the two target checks for exactly this action), and the note is
+  `field: old → new; …` for every changed field followed by the administrator's optional note, inside the column's 500
+  characters. An audit entry the domain refuses rolls the settings back with it.
+- Deploy-only, never in this panel (S8): payment configuration and provider credentials, abuse limits and rate
+  windows, refunds, analytics retention, and every secret stay in validated environment configuration. The panel edits
+  four groups of limits — «Acompañantes RSVP», «Fotos por invitación», «Tamaño de foto», and «Búsqueda y analítica» —
+  and nothing else.
+- Upload size (S5): `maxUploadMegabytes` tops out at 15 MB, which is why the static request-body cap of the one
+  multipart upload route (`MAX_UPLOAD_REQUEST_BYTES`, `apps/api/src/media/presentation/invitations-media.controller.ts`)
+  is 16 MB; every other route keeps its own, smaller JSON limit. The per-upload check reads the setting.
+- Migrations: `20261129120000_add_operational_settings` (the table, its checks, and the seeded row),
+  `20261129120050_add_settings_admin_action_type` (the `SETTINGS_UPDATED` enum label, in a file of its own because
+  PostgreSQL cannot use a new enum value in the transaction that adds it), and
+  `20261129120100_add_settings_admin_action` (the relaxed target checks). All additive.
+- Tests: `src/settings/domain/operational-settings.spec.ts` (every bound edge, both cross-field rules, the issue
+  order, the change list, and the bounded audit note), `src/settings/application/operational-settings.use-cases.spec.ts`
+  (a no-op save writes nothing, a change writes one audit row with the generated note, the optional note is appended, a
+  refused request opens no transaction), `src/settings/presentation/admin-settings.controller.spec.ts` (401/403, the
+  exact GET and PUT shapes, and every 400), `src/settings/settings.wiring.spec.ts` (the module exports the reader, both
+  consumers import it, and `AppModule` binds it to the Prisma adapter), `src/settings/infrastructure/
+  operational-settings.prisma.db-spec.ts` (the migration's row and checks, the save committing with its audit row, a
+  refused audit entry rolling the update back, and the relaxed check still refusing a target-less action of every other
+  type), and the consumer cases in `invitation.use-cases.spec.ts`, `invitation-rsvp.use-cases.spec.ts`,
+  `invitation-place.use-cases.spec.ts`, `admin-analytics.use-cases.spec.ts`, `media.use-cases.spec.ts`, and
+  `media.prisma.db-spec.ts` (a lowered gallery cap refuses the thirteenth photo and keeps the twelve).
 
 ## Playlist metadata (current)
 

@@ -16,6 +16,7 @@ import {
   INVITATION_FUNNEL_PAYMENT_READER,
 } from "./admin-analytics";
 import type { InvitationFunnelPaymentReader } from "./admin-analytics";
+import { INITIAL_OPERATIONAL_SETTINGS } from "../../settings/domain/operational-settings";
 import {
   GetAdminFunnelAnalyticsUseCase,
   GetAdminViewsAnalyticsUseCase,
@@ -283,5 +284,38 @@ describe("administrator analytics use cases (M9 T11; S2, S3, S7)", () => {
 
   it("names the payment funnel port the invitations module declares", () => {
     assert.equal(typeof INVITATION_FUNNEL_PAYMENT_READER, "symbol");
+  });
+});
+
+describe("the analytics default window from the settings row (M9 T13; S5, S8)", () => {
+  /** A reader answering one saved default window, as the settings module would after a panel save. */
+  function settingsWith(analyticsDefaultWindowDays: number) {
+    return {
+      current: async () => ({
+        ...INITIAL_OPERATIONAL_SETTINGS,
+        analyticsDefaultWindowDays,
+        updatedAt: new Date(0),
+      }),
+    };
+  }
+
+  it("reads the configured default window when the request names neither bound, and never a wider maximum", async () => {
+    const analytics = new FakeAnalyticsRepository();
+    const payments = new FakePaymentFunnelReader();
+    const settings = settingsWith(7);
+    const views = new GetAdminViewsAnalyticsUseCase(analytics, () => NOW, settings);
+    const funnel = new GetAdminFunnelAnalyticsUseCase(analytics, payments, () => NOW, settings);
+
+    const read = await views.execute({ from: null, to: null });
+    await funnel.execute({ from: null, to: null });
+
+    assert.equal(read.days.length, 7);
+    assert.deepEqual(analytics.windows.at(-2), { from: "2026-11-22", to: "2026-11-28" });
+    assert.deepEqual(analytics.windows.at(-1), { from: "2026-11-22", to: "2026-11-28" });
+    assert.deepEqual(payments.windows.at(-1), { from: "2026-11-22", to: "2026-11-28" });
+
+    // An explicit window is the caller's, whatever the configured default is.
+    const explicit = await views.execute({ from: "2026-11-26", to: "2026-11-28" });
+    assert.equal(explicit.days.length, 3);
   });
 });

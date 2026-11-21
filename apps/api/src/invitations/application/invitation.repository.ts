@@ -81,6 +81,12 @@ export interface NewInvitation {
   packageId: string;
   slug: string;
   content: JsonObject;
+  /**
+   * The party limit the draft starts with (M9 T13; S5, S8): the settings row's `rsvpDefaultPartyLimit`, read when the
+   * draft is created. Written explicitly rather than left to the column's default, so the panel's value is the one
+   * stored instead of the value the column was created with.
+   */
+  rsvpPartyLimit: number;
 }
 
 /**
