@@ -12,6 +12,7 @@ import {
   type RuntimeEnvironment,
 } from "../config/environment";
 import { PrismaService } from "../database/prisma.service";
+import { INVITATION_FUNNEL_PAYMENT_READER } from "../invitations/application/admin-analytics";
 import { INVITATION_PAYMENT_READER } from "../invitations/application/invitation-payment-summary";
 import { INVITATION_PAYMENT_GATE } from "../invitations/application/invitation-payment-gate";
 import { GetAdminPaymentDetailUseCase } from "./application/admin-payment-detail.use-cases";
@@ -34,6 +35,7 @@ import { CatalogPaymentPrices } from "./infrastructure/catalog-payment-prices";
 import { DisabledPaymentProvider } from "./infrastructure/disabled-payment-provider";
 import { MercadoPagoPaymentProvider } from "./infrastructure/mercadopago-payment-provider";
 import { PaymentGate } from "./infrastructure/payment-gate";
+import { PrismaInvitationFunnelReader } from "./infrastructure/prisma-invitation-funnel-reader";
 import { PrismaInvitationPaymentReader } from "./infrastructure/prisma-invitation-payment-reader";
 import { PrismaPaymentRepository } from "./infrastructure/prisma-payment.repository";
 import { SimulatedPaymentProvider } from "./infrastructure/simulated-payment-provider";
@@ -123,6 +125,13 @@ function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
       useFactory: (prisma: PrismaService) => new PrismaInvitationPaymentReader(prisma),
     },
     {
+      // The payment steps of the administrator's purchase funnel (M9 T11; S2): the invitations module declares the port
+      // and this module implements it in one batched read of the window, so the funnel reads no payment table.
+      provide: INVITATION_FUNNEL_PAYMENT_READER,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PrismaInvitationFunnelReader(prisma),
+    },
+    {
       provide: PAYMENT_CATALOG,
       inject: [CATALOG_PUBLIC_READER],
       useFactory: (catalog: CatalogPublicContract) => new CatalogPaymentPrices(catalog),
@@ -193,6 +202,6 @@ function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
       ) => new PaymentGate(mode, catalog, payments),
     },
   ],
-  exports: [INVITATION_PAYMENT_GATE, INVITATION_PAYMENT_READER],
+  exports: [INVITATION_PAYMENT_GATE, INVITATION_PAYMENT_READER, INVITATION_FUNNEL_PAYMENT_READER],
 })
 export class PaymentsModule {}
