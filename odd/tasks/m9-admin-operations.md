@@ -125,8 +125,8 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T8 | Admin unpublish with audit, `ownerId` on the detail, support card on the invitation detail | S4, S6 | worker | |
 | T9 | Disable, reactivate, and resend the sign-in code with audit + web actions | S4, S6 | worker | see L10 |
 | T10 | Support action review follow-ups: role guard, 409 under concurrent transitions, payment retry link, regression probes | S4, S6 | worker | see L11 |
-| T11 | API: `InvitationView` migration, view counting, admin analytics reads and routes, retention command | S2, S3, S7 | worker | |
-| T12 | Web: `/admin/analitica` and the analytics on the invitation detail | S2, S7 | worker | |
+| T11 | API: `InvitationView` migration, view counting, admin analytics reads and routes, retention command | S2, S3, S7 | worker | see L13 |
+| T12 | Web: `/admin/analitica` and the analytics on the invitation detail | S2, S7 | worker | see L13 |
 | T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | see L7 |
 
 ## Log
@@ -186,3 +186,10 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   downloads (21.9 MB at 45 kB/s), not the browser (2 s). Explorer findings: the API public read is the only reliable
   counting point (no caching, `no-store`, the owner preview uses another read); funnel steps already persist; no
   scheduler exists in the repository.
+- L13 — T11/T12 delivered as five slices (views table + retention, reads, routes + counting, web client, web pages)
+  plus a sixth that isolates the analytics db-specs. The native review of the reads slice
+  (`review-9633dfc6a8a9c976`) became terminal (`corrupted_or_unverifiable_authority`); its one BLOCKER was the slice
+  boundary (the module wiring lands in the routes slice). Its real findings were fixed in slice 6: the retention case
+  runs inside a rolled-back transaction, the funnel and top cases use far-away windows, the slug tie-break is asserted,
+  and the detail facet is tested through the real use case. The owner disabled RDD for the clone for this delivery.
+  The CI browser-install slowness stays (owner decision). The Railway schedule waits for the owner.

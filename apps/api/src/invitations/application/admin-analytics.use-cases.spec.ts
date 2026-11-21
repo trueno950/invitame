@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { InvalidAnalyticsWindowError } from "../domain/analytics-window";
+import type { AdminInvitationRow } from "./admin-invitation.repository";
+import { GetAdminInvitationUseCase } from "./admin-invitation.use-cases";
 import type {
   AdminAnalyticsRepository,
   AdminInvitationAnalytics,
@@ -22,7 +24,9 @@ import {
 // The administrator's analytics reads (M9 T11; S2, S3, S7). The ports are in-memory fakes, so this suite owns the
 // contract: the window the request asked for (defaulted, bounded, and refused the same way everywhere), every day of
 // the window answered in ascending order with zeros where nothing happened, the top invitation list bounded to 20, and
-// the funnel merging the invitation steps with the payment steps the payments module reports through its port.
+// the funnel merging the invitation steps with the payment steps the payments module reports through its port. The
+// invitation detail's analytics facet is asserted through the real `GetAdminInvitationUseCase.execute`, so this suite
+// never calls a port its production caller does not call.
 
 /** The clock every case judges at: 2026-11-28 in Ciudad de México (06:00 UTC is that zone's midnight). */
 const NOW = new Date("2026-11-29T02:00:00.000Z");
@@ -228,25 +232,51 @@ describe("administrator analytics use cases (M9 T11; S2, S3, S7)", () => {
   });
 
   describe("the invitation detail analytics", () => {
-    it("reads the retained view window and the RSVP totals of one invitation", async () => {
+    it("carries one invitation's views and RSVP totals through the detail use case, over the retained window", async () => {
       const { analytics } = harness();
+      const invitationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+      const row: AdminInvitationRow = {
+        invitationId,
+        ownerId: "11111111-1111-4111-8111-111111111111",
+        packageId: "22222222-2222-4222-8222-222222222222",
+        templateVersionId: "33333333-3333-4333-8333-333333333333",
+        slug: "boda-ana",
+        status: "PUBLISHED",
+        createdAt: new Date("2026-11-01T12:00:00.000Z"),
+        publishedAt: new Date("2026-11-02T12:00:00.000Z"),
+        firstPublishedAt: new Date("2026-11-02T12:00:00.000Z"),
+        archivedAt: null,
+        refundRequestedAt: null,
+      };
       analytics.detail = {
         views: { public: 12, guest: 3 },
         rsvpTotals: { attendingPeople: 7, declined: 2, responses: 4 },
       };
-
-      const answer = await analytics.invitationAnalytics("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
-        from: "2026-08-30",
-        to: "2026-11-28",
-      });
-
-      assert.deepEqual(answer, analytics.detail);
-      assert.deepEqual(analytics.detailWindows, [
+      // The facet this suite owns is the analytics repository; the detail's other facets are proved in
+      // `admin-invitation.use-cases.spec.ts`, so these fakes answer the minimum that use case needs to answer.
+      const detail = new GetAdminInvitationUseCase(
         {
-          invitationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-          from: "2026-08-30",
-          to: "2026-11-28",
+          listForAdmin: async () => [],
+          findForAdmin: async (id: string) => (id === invitationId ? row : null),
+          unpublishForAdmin: async () => null,
         },
+        { latestFor: async () => new Map(), listForInvitation: async () => [] },
+        { countsFor: async () => new Map() },
+        { emailsFor: async () => new Map() },
+        { statusesFor: async () => new Map() },
+        analytics,
+        () => NOW,
+      );
+
+      const answer = await detail.execute(invitationId);
+
+      assert.deepEqual(answer?.analytics, {
+        views: { public: 12, guest: 3 },
+        rsvpTotals: { attendingPeople: 7, declined: 2, responses: 4 },
+      });
+      // The retained window (S2): ninety days ending today in Ciudad de México, read once for this invitation.
+      assert.deepEqual(analytics.detailWindows, [
+        { invitationId, from: "2026-08-30", to: "2026-11-28" },
       ]);
     });
   });
