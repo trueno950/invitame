@@ -10,6 +10,7 @@ import { EmailModule } from "./email/email.module";
 import { HealthModule } from "./health/health.module";
 import { InvitationsModule } from "./invitations/invitations.module";
 import { PaymentsModule } from "./payments/payments.module";
+import { SettingsModule } from "./settings/settings.module";
 import { UsersModule } from "./users/users.module";
 
 export interface AppModuleOptions {
@@ -41,6 +42,10 @@ export class AppModule {
         HealthModule,
         UsersModule,
         CatalogModule,
+        // The administrator's operational settings (M9 T13; S5, S8): it owns the single-row table, exports the one read
+        // contract the invitations and media modules consume, and serves `/admin/settings`. It imports the admin
+        // module for the audit recorder and nothing imports it back.
+        SettingsModule,
         InvitationsModule,
         PaymentsModule,
       ],
