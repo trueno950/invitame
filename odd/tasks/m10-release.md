@@ -24,8 +24,8 @@ media bucket, or payment credential.
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
 | T1 | Branch protection on `master` | S4 | inline | see L3 |
-| T2 | Production configuration matrix (every variable per app, secret vs config, required and refused rules) | S1, S5 | worker | |
-| T3 | Railway service descriptors (build with `prisma:generate`, predeploy `migrate deploy`, start, health check) and a web health route | S1, S5 | worker | |
+| T2 | Production configuration matrix (every variable per app, secret vs config, required and refused rules) | S1, S5 | worker | see L4 |
+| T3 | Railway service descriptors (build with `prisma:generate`, predeploy `migrate deploy`, start, health check) and a web health route | S1, S5 | worker | see L4 |
 | T4 | CI hardening for S5 (missing material gates, a guard that a removed gate fails CI) | S1, S5 | worker | |
 | T5 | Backup and restore with Railway (S3), the migration recovery and release rollback plan | S3, S5 | worker | |
 | T6 | Release checklist, post-release verification, operations runbooks, alert ownership table | S1, S5 | worker | |
@@ -40,3 +40,12 @@ media bucket, or payment credential.
 - L3 — T1 (parent): `gh api PUT repos/trueno950/invitame/branches/master/protection` — required checks «Quality gates»,
   «Database tests», «Browser tests»; `strict: false` (chained PRs merge after each retarget without a forced update);
   no required review (single owner); no force push, no deletion; `enforce_admins: false`.
+- L4 — T2 (worker): `docs/development/deployment.md`, the production configuration matrix: 35 API and 5 web variables, each
+  rule cited from the validators and each failure message observed by running them, the `PAYMENTS_MODE=free` first-release
+  subset, the ordered secret production, and the open owner decisions. T3 (worker): `railway.api.json` and
+  `railway.web.json` (one service per file; config paths `/railway.api.json` and `/railway.web.json`, empty root
+  directory), `GET /health` on the web with its test, and `docs/development/deployment-services.md`. Parent: the web test
+  script now also runs `app/**/*.test.ts`, so the health suite is in CI (1873 → 1877 tests); the two first-deploy
+  prerequisites are numbered (`RAILPACK_PRUNE_DEPS=false` on the API, `RAILPACK_NODE_VERSION=26` on both); the service
+  document is authoritative for descriptor commands and is linked from `docs/README.md`. Evidence: API 1973, web 1877,
+  typecheck, lint, format, docs:check, `pnpm build`, diff-check.

@@ -40,7 +40,8 @@ precedence over both files.
 
 Startup validation reads these names and rules from `apps/api/src/config/environment.ts` (API) and
 `apps/web/lib/server/config.ts` (web). An empty value counts as unset. Error messages name the variable, never
-a secret value.
+a secret value. The production matrix, the Railway service variables, and the ordered secret-generation list are in
+[`docs/development/deployment.md`](docs/development/deployment.md).
 
 API (`apps/api/.env`):
 
