@@ -88,6 +88,13 @@ enum AdminActionReason {
   OTHER
 }
 
+// The two links one counted opening can come through (M9 T11; S7): the plain public page (`PUBLIC`) and one guest's
+// personal link (`GUEST`). They are counted together and separately, and the stored labels are the API's own.
+enum InvitationViewSource {
+  PUBLIC
+  GUEST
+}
+
 // Better Auth `user` model. Better Auth's `name` field is mapped onto `displayName`.
 // `role` is server-side only and never accepted as client input.
 model User {
@@ -344,6 +351,7 @@ model Invitation {
   mediaAssets     MediaAsset[]
   payments        Payment[]
   adminActions    AdminAction[]
+  views           InvitationView[]
 
   @@index([ownerId])
   // The administrator's status view (M9 T2; S1) reads a page newest first, optionally filtered by one status, so
@@ -352,6 +360,9 @@ model Invitation {
   // The same view with no status filter reads the whole table newest first, and the key-set cursor continues on
   // `id`, so migration 20261126120000_add_invitation_created_at_id_index adds this second index for that page (T5).
   @@index([createdAt, id])
+  // The analytics funnel (M9 T11; S2) aggregates first publications by day over one bounded window, so migration
+  // 20261128130000_add_analytics_indexes adds this index concurrently for that range scan.
+  @@index([firstPublishedAt])
 }
 
 // Feature data of one invitation, stored apart from the template (F1; S3, S4): changing the template never
@@ -541,6 +552,10 @@ model Payment {
 
   @@unique([provider, providerReference])
   @@index([invitationId, status])
+  // The analytics funnel (M9 T11; S2) aggregates checkouts started by creation day and approved payments by `paidAt`
+  // over one bounded window, so migration 20261128130000_add_analytics_indexes adds both indexes concurrently.
+  @@index([createdAt])
+  @@index([paidAt])
 }
 
 // One received provider event (M7 S1, S4): the normalized type, the provider's own event id, when the API received
@@ -569,6 +584,27 @@ model PaymentEvent {
 
   @@unique([provider, providerEventId])
   @@index([paymentId])
+}
+
+// One counted opening of an invitation link (M9 T11; S2, S3, S7, L12): the invitation, the calendar day in
+// `America/Mexico_City`, the link it came through (`PUBLIC` or `GUEST`), and how many openings that pair counted. The
+// composite primary key is the upsert's conflict target, so an increment is one statement that never duplicates. It
+// stores nothing about the visitor — no IP address, user agent, referrer, cookie, session, token, or slug — and the
+// `invitationId` reference is ON DELETE RESTRICT like every other invitation reference. Migration
+// 20261128120000_add_invitation_views adds what Prisma cannot express: the `InvitationView_count_non_negative` check.
+// Rows older than the retention window (ninety days, S3) are deleted by `pnpm analytics:retention`.
+model InvitationView {
+  invitationId String               @db.Uuid
+  day          DateTime             @db.Date
+  source       InvitationViewSource
+  // The openings counted for this pair; the API only ever increments it.
+  count        Int                  @default(0)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+
+  @@id([invitationId, day, source])
+  // The retention delete and both window reads filter by day, which the primary key cannot serve.
+  @@index([day])
 }
 
 // One append-only audit row per state-changing support action (M9 T6; S4, S6, L9): who acted, what they did, why, and

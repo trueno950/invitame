@@ -24,6 +24,11 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   optional note of at most 500 characters, required when the reason is «Otro»; an account can be disabled and
   reactivated («Sí, reactivar (recomendado)»); disabling keeps the owner's invitations published; resending the code
   uses the existing limits; viewing a payment is not audited («No (recomendado)»).
+- S7 — Analytics decisions (L12): a view is «Cada apertura del enlace (recomendado)» — every served public
+  invitation, reloads and the owner's own visit included, shown as «aperturas», never «personas»; links «Público y de
+  invitado (recomendado)», counted together and separately; the day is cut in «Ciudad de México (recomendado)»
+  (`America/Mexico_City`); retention «Comando + tarea programada en Railway (recomendado)» — the Railway schedule is a
+  production change the owner approves separately.
 - S5 — The configuration panel (owner-followups L2) is a later slice of this milestone.
 
 ## Design (S1)
@@ -78,6 +83,35 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   `?error=` redirects; `/admin/pagos/<id>` for the payment detail, linked from the payments table and the invitation
   detail.
 
+## Design (S2, S3, S7 — analytics)
+
+- **Only views need a table.** `InvitationView { invitationId uuid → Invitation RESTRICT, day date, source
+  (PUBLIC | GUEST), count integer CHECK (count >= 0), PRIMARY KEY (invitationId, day, source) }`, additive migration.
+  No IP, user agent, referrer, cookie, session, token, or slug column. `day` is the calendar day in
+  `America/Mexico_City`.
+- **Counting** happens in the API public reads, only after the invitation resolved and is renderable: the plain public
+  read counts `PUBLIC`, the guest-link read counts `GUEST`. One upsert `INSERT … ON CONFLICT DO UPDATE SET count =
+  count + 1`, fire-and-forget: a failure is logged once as `{ event: "invitation_view_count_failed" }` (no slug, no
+  id) and never changes the guest's answer. RSVP submissions and the owner preview do not count.
+- **Funnel and RSVP totals need no table**: daily totals computed on read in `America/Mexico_City` — drafts created
+  (`Invitation.createdAt`), checkouts started (`Payment.createdAt`), payments approved (`Payment.paidAt` where
+  `status = paid`), first publications (`Invitation.firstPublishedAt`). Additive indexes `Payment(createdAt)`,
+  `Payment(paidAt)`, `Invitation(firstPublishedAt)`. RSVP totals per invitation are a bounded SQL aggregate
+  (attending people, declined, responses), not the owner read.
+- **Routes** (all `@AdminOnly()`, read-only, the window bounded: default the last 30 days, at most 90, `from`/`to`
+  as `YYYY-MM-DD` validated by DTO, 400 otherwise): `GET /admin/analytics/views?from&to` → `{ days: [{ day, public,
+  guest }], topInvitations: [{ invitationId, slug, public, guest }] (at most 20) }`; `GET
+  /admin/analytics/funnel?from&to` → `{ days: [{ day, draftsCreated, checkoutsStarted, paymentsApproved,
+  firstPublications }] }`; the admin invitation detail gains `rsvpTotals: { attendingPeople, declined, responses }` and
+  `views: { public, guest }` (last 90 days). The invitations module owns the routes; payment counts arrive through a
+  port the invitations module declares and payments implements (the `INVITATION_PAYMENT_READER` precedent).
+- **Retention**: `pnpm analytics:retention` (copying `scripts/media-cleanup.ts`: idempotent, `--dry-run`, prints counts
+  only, exit code on failure) deletes `InvitationView` rows whose day is older than 90 days. A daily Railway cron runs
+  it in production once the owner approves that change.
+- **Web**: `/admin/analitica` («Operación → Analítica»): a GET form with «Desde» and «Hasta», a daily table of
+  aperturas (público, invitados) and the funnel, the top invitations linked to their detail; the invitation detail
+  shows its aperturas and RSVP totals. Tables only; no chart library.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -91,6 +125,8 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T8 | Admin unpublish with audit, `ownerId` on the detail, support card on the invitation detail | S4, S6 | worker | |
 | T9 | Disable, reactivate, and resend the sign-in code with audit + web actions | S4, S6 | worker | see L10 |
 | T10 | Support action review follow-ups: role guard, 409 under concurrent transitions, payment retry link, regression probes | S4, S6 | worker | see L11 |
+| T11 | API: `InvitationView` migration, view counting, admin analytics reads and routes, retention command | S2, S3, S7 | worker | |
+| T12 | Web: `/admin/analitica` and the analytics on the invitation detail | S2, S7 | worker | |
 | T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | see L7 |
 
 ## Log
@@ -143,3 +179,10 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   `/admin/pagos/<id>` reloads the same detail; two regression probes pin the per-IP bypass of the in-process resend and
   that every `admin/` route is `@AdminOnly()`. Evidence: API 1870, web 1765, db 440, typecheck, lint, format, docs.
   CI browser-test slowness traced to the «Install Chromium» step (402-501 s vs 39 s), not the tests.
+
+- L12 — Owner answers (analytics): view «Cada apertura del enlace (recomendado)»; links «Público y de invitado
+  (recomendado)»; day «Ciudad de México (recomendado)»; retention «Comando + tarea programada en Railway (recomendado)».
+  Owner also chose to leave the CI browser install as is after the parent found the slow part is `--with-deps` apt
+  downloads (21.9 MB at 45 kB/s), not the browser (2 s). Explorer findings: the API public read is the only reliable
+  counting point (no caching, `no-store`, the owner preview uses another read); funnel steps already persist; no
+  scheduler exists in the repository.

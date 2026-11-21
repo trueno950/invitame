@@ -8,6 +8,7 @@
     "pnpm": ">=10.0.0"
   },
   "scripts": {
+    "analytics:retention": "pnpm --filter @invitame/api analytics:retention",
     "build": "turbo run build",
     "db:check": "pnpm --filter @invitame/api prisma:check",
     "db:down": "docker compose down",
