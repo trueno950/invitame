@@ -1,5 +1,8 @@
 import { MEDIA_COPY } from "../../../../lib/customer/copy.ts";
-import type { MediaSectionView } from "../../../../lib/customer/invitation-media.ts";
+import {
+  type MediaSectionView,
+  uploadMegabytes,
+} from "../../../../lib/customer/invitation-media.ts";
 import {
   fieldHint,
   fieldLabel,
@@ -13,8 +16,9 @@ import { GuardedForm } from "./autosave/navigation-guard.tsx";
  * The media of a draft (M8 S2, S3, S4). Two server-rendered pieces, each a plain form that posts to a server action, so
  * nothing here needs JavaScript: «Subir foto» next to the template's own photo link field, and the «Galería» section of
  * a package that grants `GALLERY`. A file never leaves the browser for the API directly: the browser posts it to this
- * web server, which enforces the API's own 10 MB bound before reading it and forwards it as multipart. The browser's
- * declared MIME type is never trusted and never forwarded; the API reads the bytes.
+ * web server, which enforces the upload bound the API's own read answered before reading it and forwards it as
+ * multipart. The browser's declared MIME type is never trusted and never forwarded; the API reads the bytes. The size
+ * each hint names is that same answer (M9 T13; S5, S8 «Tamaño de foto»), so the sentence and the refusal agree.
  *
  * The photos are plain `<img>` elements, not `next/image`: they are served by the API's public origin, which is not in
  * this app's image configuration, and they already are the re-encoded WebP the API produced. The current photo and the
@@ -32,11 +36,14 @@ const CURRENT_PHOTO = "h-auto w-full rounded-lg ring-1 ring-gold/45";
 export function MainPhotoUpload({
   invitationId,
   currentUrl,
+  maxUploadBytes,
   action,
 }: {
   invitationId: string;
   /** The stored photo as an absolute URL, or null when the draft has none to show yet. */
   currentUrl: string | null;
+  /** The upload bound the API answered, in bytes, or null when that read failed (S5, S8). */
+  maxUploadBytes: number | null;
   action: (formData: FormData) => Promise<void>;
 }) {
   return (
@@ -71,7 +78,7 @@ export function MainPhotoUpload({
           required
           type="file"
         />
-        <p className={fieldHint}>{MEDIA_COPY.mainPhotoHint}</p>
+        <p className={fieldHint}>{MEDIA_COPY.mainPhotoHint(uploadMegabytes(maxUploadBytes))}</p>
         <div className="flex justify-end">
           <button className={`${quietButton} sm:w-auto`} type="submit">
             {MEDIA_COPY.mainPhotoSubmit}
@@ -145,7 +152,9 @@ export function GallerySection({
             name="alt"
             type="text"
           />
-          <p className={fieldHint}>{MEDIA_COPY.galleryUploadHint}</p>
+          <p className={fieldHint}>
+            {MEDIA_COPY.galleryUploadHint(uploadMegabytes(view.maxUploadBytes))}
+          </p>
           <div className="flex justify-end">
             <button className={`${primaryButton} sm:w-auto sm:px-8`} type="submit">
               {MEDIA_COPY.galleryUploadSubmit}

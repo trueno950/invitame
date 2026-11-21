@@ -19,6 +19,7 @@ import {
   type MediaSectionView,
   mainPhotoUrl,
   mediaSectionView,
+  mediaUploadBytes,
 } from "../../../../lib/customer/invitation-media.ts";
 import { paymentPanelView } from "../../../../lib/customer/invitation-payment.ts";
 import { invitationPreviewPath } from "../../../../lib/customer/invitation-preview.ts";
@@ -151,17 +152,31 @@ function GallerySectionBlock({
 /**
  * The media read of one draft, as the section renders it (M8 S4). The owner's media route answers only this
  * invitation's stored photos; a refusal or an unexpected failure becomes the section's own short note, so a storage
- * outage never hides the content the creator can still edit.
+ * outage never hides the content the creator can still edit. `maxUploadBytes` is the upload bound the page read once
+ * for both forms (M9 T13; S5, S8), or null when that read failed.
  */
 async function gallerySection(
   invitation: OwnedInvitation,
+  maxUploadBytes: number | null,
 ): Promise<MediaSectionView | "unreadable"> {
   try {
     const assets = await media.list(invitation.id);
 
-    return assets.ok ? mediaSectionView(invitation, assets.value) : "unreadable";
+    return assets.ok ? mediaSectionView(invitation, assets.value, maxUploadBytes) : "unreadable";
   } catch {
     return "unreadable";
+  }
+}
+
+/**
+ * The upload bound of one draft, in bytes, or null when the API did not answer it (M9 T13; S5, S8). A failed read is
+ * not an error of the page: the upload is still offered, and the API's own size check refuses what it must.
+ */
+async function mediaUploadBound(invitationId: string): Promise<number | null> {
+  try {
+    return await mediaUploadBytes(media, invitationId);
+  } catch {
+    return null;
   }
 }
 
@@ -246,11 +261,15 @@ export default async function InvitationDetailPage({
   const rsvp = features.showRsvp
     ? resolveRead(await attempt(() => invitations.readRsvp(invitation.id)))
     : undefined;
+  // The upload bound the two media forms refuse and state (M9 T13; S5, S8): read once, from the owner's own route, so
+  // the configured size reaches the page without a deploy. An archived invitation offers no form, so it asks nothing.
+  const maxUploadBytes =
+    invitation.status === "ARCHIVED" ? null : await mediaUploadBound(invitation.id);
   // The «Galería» is offered only when the package grants `GALLERY`, and it is read after the catalog because the
   // owner read already names the gated keys (M8 S3, S4). A failed read keeps the rest of the draft editable.
   const mediaState: MediaSectionView | "unavailable" | "unreadable" =
     invitation.availableFeatures.includes("GALLERY")
-      ? await gallerySection(invitation)
+      ? await gallerySection(invitation, maxUploadBytes)
       : "unavailable";
   // The payment state the panel renders is the API's (M7 T2; S1, S4). A read that fails leaves the page as it was,
   // because the API's own payment gate is what refuses a publication that still owes money: the panel and the
@@ -346,6 +365,7 @@ export default async function InvitationDetailPage({
                 action={uploadMainPhotoAction}
                 currentUrl={mainPhotoUrl(invitation.content)}
                 invitationId={invitation.id}
+                maxUploadBytes={maxUploadBytes}
               />
             }
             payment={

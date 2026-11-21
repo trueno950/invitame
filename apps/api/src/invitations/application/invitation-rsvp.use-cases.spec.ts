@@ -708,6 +708,41 @@ describe("the platform-wide party maximum from the settings row (M9 T13; S5, S8)
     assert.equal(stored?.partyLimit, 6, "a save at the lowered maximum is accepted");
   });
 
+  it("accepts the limit the invitation already stores, so an unrelated save is not refused", async () => {
+    const { invitations, rsvp } = seeded({ rsvpPartyLimit: 10 });
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
+    const useCase = new UpdateRsvpSettingsUseCase(invitations, rsvp, settingsWith(6));
+    const deadline = "2027-01-01T06:00:00.000Z";
+
+    const saved = await useCase.execute({
+      ownerId: OWNER,
+      id: invitation.id,
+      deadline,
+      partyLimit: 10,
+    });
+    assert.equal(saved?.partyLimit, 10, "the stored limit is kept as it was");
+    assert.equal(saved?.deadline?.toISOString(), deadline, "the new deadline is stored");
+    assert.equal(invitation.rsvpPartyLimit, 10);
+
+    await assert.rejects(
+      useCase.execute({ ownerId: OWNER, id: invitation.id, deadline, partyLimit: 9 }),
+      (error: unknown) =>
+        error instanceof InvalidRsvpSettingsError &&
+        JSON.stringify(error.issues) === JSON.stringify(["partyLimit must be between 1 and 6"]),
+      "a value above the maximum that is not the stored one is still refused",
+    );
+    assert.equal(invitation.rsvpPartyLimit, 10, "a refused save changes nothing");
+
+    const lowered = await useCase.execute({
+      ownerId: OWNER,
+      id: invitation.id,
+      deadline,
+      partyLimit: 5,
+    });
+    assert.equal(lowered?.partyLimit, 5, "a limit under the new maximum is accepted");
+    assert.equal(invitation.rsvpPartyLimit, 5);
+  });
+
   it("refuses a new response above the lowered maximum, keeping the invitation's own larger limit", async () => {
     const { invitations, catalog, rsvp, submit } = seeded({ rsvpPartyLimit: 10 });
     const invitation = invitations.rows[0] as InvitationRecordWithMusic;

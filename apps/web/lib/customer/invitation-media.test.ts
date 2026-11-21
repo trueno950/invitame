@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { InvitationResult, OwnedInvitation } from "../server/invitations-api.ts";
-import type { MediaAsset, MediaClient, MediaFailure } from "../server/media-api.ts";
-import { MAX_MEDIA_UPLOAD_BYTES } from "../server/media-api.ts";
+import type { MediaAsset, MediaClient, MediaFailure, MediaLimits } from "../server/media-api.ts";
 import {
   type MediaActionsApi,
   mediaSectionView,
@@ -12,11 +11,13 @@ import {
   saveGalleryAlt,
   uploadGalleryPhoto,
   uploadMainPhoto,
+  uploadMegabytes,
 } from "./invitation-media.ts";
 
 // The creator's media actions (M8 S2, S4): the main photo of the editor, the «Galería» section, and the redirect each
 // submitted form answers. The API owns the bytes, the limits, and the ownership; these functions only read the form,
-// enforce the bound the API also enforces, and fold every outcome into the page's own Spanish notice or error code.
+// enforce the upload bound the API's own read answered (M9 T13; S5, S8), and fold every outcome into the page's own
+// Spanish notice or error code.
 
 const ID = "0b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e10";
 const ASSET_ID = "9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19";
@@ -64,7 +65,10 @@ const MAIN = asset({
 });
 
 /** A fake of both clients one media action needs, recording every call it receives. */
-function fakeApi(overrides: Partial<MediaActionsApi> = {}): MediaActionsApi & {
+function fakeApi(
+  overrides: Partial<MediaActionsApi> = {},
+  options: { maxUploadBytes?: number; limitsFailure?: MediaFailure } = {},
+): MediaActionsApi & {
   calls: string[];
 } {
   const calls: string[] = [];
@@ -75,6 +79,14 @@ function fakeApi(overrides: Partial<MediaActionsApi> = {}): MediaActionsApi & {
         ok: true,
         value: [MAIN, asset({ id: ASSET_ID, position: 0 }), asset({ id: SECOND_ID, position: 1 })],
       };
+    },
+    async limits() {
+      calls.push("limits");
+      const failure = options.limitsFailure;
+
+      return failure === undefined
+        ? { ok: true, value: { maxUploadBytes: options.maxUploadBytes ?? 10 * 1024 * 1024 } }
+        : { ok: false, failure };
     },
     async upload(_id, upload) {
       calls.push(`upload:${upload.kind}:${upload.alt ?? ""}:${upload.bytes.length}`);
@@ -144,6 +156,20 @@ describe("the media section of a draft", () => {
     assert.equal(view.limitReached, false);
   });
 
+  it("carries the upload bound the API answered, and none when it answered nothing", () => {
+    assert.equal(
+      mediaSectionView(INVITATION, undefined, 15 * 1024 * 1024).maxUploadBytes,
+      15 * 1024 * 1024,
+    );
+    assert.equal(mediaSectionView(INVITATION, undefined).maxUploadBytes, null);
+  });
+
+  it("states the upload bound in whole megabytes, and states none when there is none", () => {
+    assert.equal(uploadMegabytes(10 * 1024 * 1024), 10);
+    assert.equal(uploadMegabytes(15 * 1024 * 1024), 15);
+    assert.equal(uploadMegabytes(null), null);
+  });
+
   it("says the gallery is unavailable when the package does not grant it", () => {
     const view = mediaSectionView({ ...INVITATION, availableFeatures: ["COUNTDOWN"] }, undefined);
 
@@ -191,22 +217,48 @@ describe("the main photo upload", () => {
 
     assert.equal(target, `${DETAIL}?notice=photo-uploaded`);
     assert.deepEqual(api.calls, [
+      "limits",
       `upload:main-photo::6`,
       "get",
       `replace:${JSON.stringify({ celebrantName: "Ana", mainPhoto: asset().url })}`,
     ]);
   });
 
-  it("refuses a photo over 10 MB before reading or sending it", async () => {
-    const api = fakeApi();
-    const huge = new File([new Uint8Array(MAX_MEDIA_UPLOAD_BYTES + 1)], "grande.jpg", {
+  it("refuses a photo over the bound the API answered, before reading or sending it", async () => {
+    const maxUploadBytes = 6 * 1024 * 1024;
+    const api = fakeApi({}, { maxUploadBytes });
+    const huge = new File([new Uint8Array(maxUploadBytes + 1)], "grande.jpg", {
       type: "image/jpeg",
     });
 
     const target = await uploadMainPhoto(api, fileForm({ id: ID }, huge));
 
     assert.equal(target, `${DETAIL}?error=media-too-large`);
-    assert.deepEqual(api.calls, []);
+    assert.deepEqual(api.calls, ["limits"], "the file is never sent");
+  });
+
+  it("accepts a photo exactly at the bound the API answered", async () => {
+    const maxUploadBytes = 6 * 1024 * 1024;
+    const api = fakeApi({}, { maxUploadBytes });
+
+    const target = await uploadMainPhoto(
+      api,
+      fileForm({ id: ID }, new File([new Uint8Array(maxUploadBytes)], "justa.jpg")),
+    );
+
+    assert.equal(target, `${DETAIL}?notice=photo-uploaded`);
+    assert.equal(api.calls[0], "limits");
+  });
+
+  it("sends the photo when the bound could not be read, leaving the refusal to the API", async () => {
+    // A failed limits read never becomes an invented number: nothing is refused here, and the API's own 413 or 400 is
+    // what the creator sees (M9 T13; S5, S8).
+    const api = fakeApi({}, { limitsFailure: "storage-unavailable" });
+
+    const target = await uploadMainPhoto(api, fileForm({ id: ID }, photo()));
+
+    assert.equal(target, `${DETAIL}?notice=photo-uploaded`);
+    assert.deepEqual(api.calls.slice(0, 2), ["limits", `upload:main-photo::6`]);
   });
 
   it("refuses a submission with no file and never reaches the API", async () => {
@@ -287,7 +339,7 @@ describe("the gallery actions", () => {
     );
 
     assert.equal(target, `${DETAIL}?notice=gallery-uploaded`);
-    assert.deepEqual(api.calls, ["upload:gallery:Los novios:3"]);
+    assert.deepEqual(api.calls, ["limits", "upload:gallery:Los novios:3"]);
   });
 
   it("uploads a gallery photo with no alt text when the field is blank", async () => {
@@ -295,7 +347,20 @@ describe("the gallery actions", () => {
 
     await uploadGalleryPhoto(api, fileForm({ id: ID, alt: "   " }, photo()));
 
-    assert.deepEqual(api.calls, ["upload:gallery::6"]);
+    assert.deepEqual(api.calls, ["limits", "upload:gallery::6"]);
+  });
+
+  it("refuses a gallery photo over the bound the API answered", async () => {
+    const maxUploadBytes = 1024 * 1024;
+    const api = fakeApi({}, { maxUploadBytes });
+
+    const target = await uploadGalleryPhoto(
+      api,
+      fileForm({ id: ID }, new File([new Uint8Array(maxUploadBytes + 1)], "grande.jpg")),
+    );
+
+    assert.equal(target, `${DETAIL}?error=media-too-large`);
+    assert.deepEqual(api.calls, ["limits"]);
   });
 
   it("refuses alt text over 120 characters before sending anything", async () => {
@@ -308,7 +373,6 @@ describe("the gallery actions", () => {
     );
     assert.deepEqual(api.calls, []);
   });
-
   it("maps a refused gallery upload", async () => {
     const api = fakeApi({
       async upload() {

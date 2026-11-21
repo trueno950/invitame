@@ -42,6 +42,18 @@ companion of the code: the rules live in `apps/api/src/media/domain/media-asset.
   configured file plus room for the boundary, the `kind` and `alt` fields, and the part headers. Every other route
   keeps its own, smaller JSON limit. The response to an oversized body is 413 `PAYLOAD_TOO_LARGE`, and an upload
   over the configured size is 400 `INVALID_MEDIA_UPLOAD` with `file must be at most <n> MB`.
+- The web uploads through a server action on a `/cuenta` page, so Next's own limits answer first. Before M9 they were
+  Next's defaults (1 MB per server action, 10 MB through `proxy.ts`), which refused almost every phone photo before
+  it reached the API. `apps/web/next.config.ts` sets both to 16 MB (`WEB_REQUEST_BODY_LIMIT`, pinned by
+  `apps/web/lib/server/next-config.test.ts`), the same as `MAX_UPLOAD_REQUEST_BYTES`. Next has no per-route setting,
+  so the limit applies to every server action and proxied route; each still requires a session.
+- `GET /invitations/:id/media/limits` answers `{ maxUploadBytes }` for one owned invitation: the same
+  `maxUploadMegabytes`, read on every call, in bytes. It exists because the web must refuse an oversized photo before
+  it reads it, and a constant there would make any configured size above 10 MB unreachable. The route is owner-scoped
+  like the rest of the media routes (a foreign or unknown invitation is the one 404 `MEDIA_NOT_FOUND`), it answers one
+  number and nothing about the row, and it is a courtesy: the upload checks the same setting again, so the API stays the
+  guard. The web falls back to refusing nothing client-side when this read does not answer, and lets the API's own 413
+  or 400 decide.
 - The two caps and the size are per platform, not per invitation or per package: a package grants the gallery, and the
   settings decide how large it may grow.
 

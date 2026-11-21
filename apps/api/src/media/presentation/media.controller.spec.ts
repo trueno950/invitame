@@ -15,6 +15,7 @@ import {
 } from "../application/media.errors";
 import type {
   MediaAssetView,
+  ReadOwnMediaLimitsUseCase,
   ServedMedia,
   ServeMediaUseCase,
   UpdateMediaUseCase,
@@ -93,7 +94,7 @@ function view(overrides: Partial<MediaAssetView> = {}): MediaAssetView {
   };
 }
 
-function controllerWith(options: { uploadError?: Error } = {}) {
+function controllerWith(options: { uploadError?: Error; maxUploadBytes?: number } = {}) {
   const captured: Array<Record<string, unknown>> = [];
   const upload = {
     execute: async (input: Record<string, unknown>) => {
@@ -108,13 +109,16 @@ function controllerWith(options: { uploadError?: Error } = {}) {
     },
   } as unknown as UploadMediaUseCase;
   const list = { execute: async () => [view()] } as never;
+  const limits = {
+    execute: async () => ({ maxUploadBytes: options.maxUploadBytes ?? 10 * 1024 * 1024 }),
+  } as unknown as ReadOwnMediaLimitsUseCase;
   const update = {
     execute: async (input: Record<string, unknown>) => view({ alt: (input.alt as string) ?? null }),
   } as unknown as UpdateMediaUseCase;
   const deleteMedia = { execute: async () => undefined } as never;
 
   return {
-    controller: new InvitationsMediaController(upload, list, update, deleteMedia),
+    controller: new InvitationsMediaController(upload, list, limits, update, deleteMedia),
     captured,
   };
 }
@@ -180,7 +184,7 @@ describe("POST /invitations/:id/media", () => {
     assert.deepEqual(captured, []);
   });
 
-  it("refuses a body over the route's 11 MB limit with 413, before parsing it", async () => {
+  it("refuses a body over the route's 16 MB limit with 413, before parsing it", async () => {
     const { controller, captured } = controllerWith();
     const form = multipart([
       { name: "kind", value: "gallery" },
@@ -197,6 +201,36 @@ describe("POST /invitations/:id/media", () => {
       (error: unknown) => httpCode(error) === 413 && httpBody(error).code === "PAYLOAD_TOO_LARGE",
     );
     assert.deepEqual(captured, []);
+  });
+
+  it("accepts a 15 MB file plus its form fields under the 16 MB request bound", async () => {
+    // The panel's widest configured size is 15 MB, so the route's own bound must leave room for the file and the form
+    // fields around it: this is the request a 15 MB configuration actually sends (S5 «Tamaño de foto»).
+    const { controller, captured } = controllerWith();
+    const bytes = Buffer.alloc(15 * 1024 * 1024, 0x7f);
+    const form = multipart([
+      { name: "kind", value: "gallery" },
+      { name: "alt", value: "Salón principal" },
+      { name: "file", filename: "photo.jpg", contentType: "image/jpeg", bytes },
+    ]);
+
+    assert.ok(
+      form.body.length < MAX_UPLOAD_REQUEST_BYTES,
+      `15 MB plus its fields is ${form.body.length} bytes, under ${MAX_UPLOAD_REQUEST_BYTES}`,
+    );
+
+    const response = await controller.create(
+      OWNER,
+      INVITATION,
+      request(form.body, form.contentType),
+    );
+
+    assert.equal(response.id, ASSET);
+    const sent = captured[0];
+    assert.ok(sent);
+    assert.equal((sent.bytes as Uint8Array).length, 15 * 1024 * 1024);
+    assert.equal(sent.kind, "gallery");
+    assert.equal(sent.alt, "Salón principal");
   });
 
   it("refuses a request that is not multipart with 415", async () => {
@@ -245,6 +279,35 @@ describe("owner media routes", () => {
     assert.equal((await controller.list(OWNER, INVITATION)).length, 1);
   });
 
+  it("answers the upload size the settings row states, in bytes", async () => {
+    const { controller } = controllerWith({ maxUploadBytes: 15 * 1024 * 1024 });
+
+    assert.deepEqual(await controller.limits(OWNER, INVITATION), {
+      maxUploadBytes: 15 * 1024 * 1024,
+    });
+  });
+
+  it("answers the one media 404 for the limits of a foreign or unknown invitation", async () => {
+    const limits = {
+      execute: async () => {
+        throw new MediaNotFoundError();
+      },
+    } as unknown as ReadOwnMediaLimitsUseCase;
+    const controller = new InvitationsMediaController(
+      {} as UploadMediaUseCase,
+      {} as never,
+      limits,
+      {} as never,
+      {} as never,
+    );
+
+    await assert.rejects(controller.limits(OWNER, INVITATION), (error: unknown) => {
+      assert.equal(httpCode(error), 404);
+      assert.deepEqual(httpBody(error), { code: "MEDIA_NOT_FOUND", message: "Media not found." });
+      return true;
+    });
+  });
+
   it("answers the same 404 for a foreign, missing, or deleted asset", async () => {
     const update = {
       execute: async () => {
@@ -258,6 +321,7 @@ describe("owner media routes", () => {
     } as never;
     const controller = new InvitationsMediaController(
       {} as UploadMediaUseCase,
+      {} as never,
       {} as never,
       update,
       deleteMedia,

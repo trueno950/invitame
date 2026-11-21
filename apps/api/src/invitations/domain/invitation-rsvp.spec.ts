@@ -180,6 +180,42 @@ describe("RSVP settings validation (S4)", () => {
       [`partyLimit must be between 1 and ${RSVP_PARTY_LIMIT_MAX}`],
     );
   });
+
+  it("keeps the limit the invitation already stores above a lowered maximum (S5, S8, L15)", () => {
+    const limits = { maxPartyLimit: 6, storedPartyLimit: 10 };
+    const deadline = "2027-01-01T06:00:00.000Z";
+
+    assert.deepEqual(
+      validateRsvpSettings({ deadline, partyLimit: 10 }, limits),
+      { ok: true, value: { deadline: new Date(deadline), partyLimit: 10 } },
+      "the stored limit is accepted, so an unrelated save is not refused",
+    );
+    assert.deepEqual(
+      issuesOf(validateRsvpSettings({ deadline: null, partyLimit: 9 }, limits)),
+      ["partyLimit must be between 1 and 6"],
+      "any other value above the maximum is still refused",
+    );
+    assert.deepEqual(
+      validateRsvpSettings({ deadline: null, partyLimit: 5 }, limits),
+      { ok: true, value: { deadline: null, partyLimit: 5 } },
+      "a value under the new maximum is accepted",
+    );
+    // Nothing else moves: without a stored limit the maximum is the only rule, and a stored limit the column cannot
+    // hold still admits nothing above the maximum.
+    assert.deepEqual(
+      issuesOf(validateRsvpSettings({ deadline: null, partyLimit: 10 }, { maxPartyLimit: 6 })),
+      ["partyLimit must be between 1 and 6"],
+    );
+    assert.deepEqual(
+      issuesOf(
+        validateRsvpSettings(
+          { deadline: null, partyLimit: 11 },
+          { maxPartyLimit: 6, storedPartyLimit: 11 },
+        ),
+      ),
+      ["partyLimit must be between 1 and 6"],
+    );
+  });
 });
 
 describe("RSVP response validation (S4)", () => {

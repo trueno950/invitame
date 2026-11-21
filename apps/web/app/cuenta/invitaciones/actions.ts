@@ -57,6 +57,7 @@ function landed(formData: FormData, target: string): string {
 function mediaApi(): MediaActionsApi {
   return {
     list: (id) => media.list(id),
+    limits: (id) => media.limits(id),
     upload: (id, upload) => media.upload(id, upload),
     update: (id, assetId, patch) => media.update(id, assetId, patch),
     remove: (id, assetId) => media.remove(id, assetId),

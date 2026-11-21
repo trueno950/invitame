@@ -25,6 +25,7 @@ import {
   DeleteMediaUseCase,
   ListOwnMediaUseCase,
   type MediaLog,
+  ReadOwnMediaLimitsUseCase,
   ReadPublicGalleryUseCase,
   ServeMediaUseCase,
   UpdateMediaUseCase,
@@ -129,6 +130,14 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
       inject: [MEDIA_REPOSITORY, ConfigService],
       useFactory: (invitations: MediaRepository, config: ConfigService<RuntimeEnvironment, true>) =>
         new ListOwnMediaUseCase(invitations, { assetUrl: assetUrlFrom(config) }),
+    },
+    {
+      // The upload bound the owner's page reads before it sends a photo (S5 «Tamaño de foto»): the same settings row
+      // the upload itself checks, read on every call, so a panel save reaches the web without a redeploy.
+      provide: ReadOwnMediaLimitsUseCase,
+      inject: [MEDIA_REPOSITORY, OPERATIONAL_SETTINGS_READER],
+      useFactory: (invitations: MediaRepository, settings: OperationalSettingsReader) =>
+        new ReadOwnMediaLimitsUseCase(invitations, settings),
     },
     {
       provide: UpdateMediaUseCase,

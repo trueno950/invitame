@@ -379,10 +379,11 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
     "No pudimos abrir la página de pago porque no corresponde a esta invitación. Vuelve a intentarlo.",
   unavailable: "No pudimos completar la acción. Inténtalo de nuevo en unos minutos.",
   "media-invalid-upload":
-    "Revisa la foto: debe ser un archivo JPEG, PNG o WebP de hasta 10 MB, con 8000 píxeles por lado como máximo.",
+    "Revisa la foto: debe ser un archivo JPEG, PNG o WebP con 8000 píxeles por lado como máximo y dentro del tamaño permitido.",
   "media-invalid-alt": "Escribe un texto alternativo de hasta 120 caracteres.",
   "media-invalid-update": "Revisa el texto alternativo de la foto y vuelve a intentarlo.",
-  "media-too-large": "La foto pesa más de 10 MB. Elige una más ligera y vuelve a intentarlo.",
+  "media-too-large":
+    "La foto pesa más de lo que admite la invitación. Elige una más ligera y vuelve a intentarlo.",
   "media-unsupported-type": "Ese archivo no es una foto JPEG, PNG o WebP.",
   "media-not-found": "No encontramos esa foto en tu invitación.",
   "media-limit-reached":
@@ -410,13 +411,17 @@ export type MediaErrorCode =
 
 /**
  * The creator's media controls (M8 S2, S3, S4): the «Subir foto» next to the photo link field and the «Galería»
- * section of a draft. The customer is addressed with "tú", like the rest of the customer pages.
+ * section of a draft. The customer is addressed with "tú", like the rest of the customer pages. The size a hint names
+ * is the one the API's own read answered (M9 T13; S5, S8 «Tamaño de foto»), never a number written here: an
+ * administrator's save reaches the sentence without a deploy, and a hint that could not read the size names none.
  */
 export const MEDIA_COPY = {
   /** The main photo's upload, next to the template's own photo link field (S4). */
   mainPhotoHeading: "Subir foto",
-  mainPhotoHint:
-    "Sube una foto JPEG, PNG o WebP de hasta 10 MB. La guardamos en tu invitación y reemplaza la que tenías.",
+  mainPhotoHint: (megabytes: number | null) =>
+    megabytes === null
+      ? "Sube una foto JPEG, PNG o WebP. La guardamos en tu invitación y reemplaza la que tenías."
+      : `Sube una foto JPEG, PNG o WebP de hasta ${megabytes} MB. La guardamos en tu invitación y reemplaza la que tenías.`,
   mainPhotoCurrent: "Foto actual",
   mainPhotoNone: "Todavía no has subido una foto principal.",
   mainPhotoFileLabel: "Archivo de la foto",
@@ -427,8 +432,10 @@ export const MEDIA_COPY = {
   galleryHint:
     "Sube hasta 12 fotos y ordénalas como quieres que las vean tus invitados. Cada foto se abre en grande al tocarla.",
   galleryUploadHeading: "Agregar una foto",
-  galleryUploadHint:
-    "Sube una foto a la vez. Puedes cambiar el orden y el texto de cada una después.",
+  galleryUploadHint: (megabytes: number | null) =>
+    megabytes === null
+      ? "Sube una foto a la vez. Puedes cambiar el orden y el texto de cada una después."
+      : `Sube una foto a la vez, de hasta ${megabytes} MB. Puedes cambiar el orden y el texto de cada una después.`,
   galleryUploadSubmit: "Subir a la galería",
   galleryAltLabel: "Texto alternativo (opcional)",
   galleryAltHint:

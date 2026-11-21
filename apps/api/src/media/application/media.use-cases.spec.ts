@@ -35,6 +35,7 @@ import {
   DeleteMediaUseCase,
   ListOwnMediaUseCase,
   type MediaLog,
+  ReadOwnMediaLimitsUseCase,
   ReadPublicGalleryUseCase,
   ServeMediaUseCase,
   UpdateMediaUseCase,
@@ -1091,5 +1092,48 @@ describe("the upload size and the two caps from the settings row (M9 T13; S5, S8
     });
 
     assert.deepEqual(repository.limits, [{ galleryPhotoLimit: 8, storedAssetLimit: 9 }]);
+  });
+});
+
+describe("the owner media limits read (M9 T13; S5, S8)", () => {
+  /** The read with a reader answering one saved settings row, as the settings module would after a panel save. */
+  function limitsWith(overrides: Partial<OperationalSettings> = {}) {
+    const { repository } = setup();
+
+    return {
+      repository,
+      limits: new ReadOwnMediaLimitsUseCase(repository, {
+        current: async () => ({
+          ...INITIAL_OPERATIONAL_SETTINGS,
+          ...overrides,
+          updatedAt: new Date(0),
+        }),
+      }),
+    };
+  }
+
+  it("answers the configured upload size in bytes, read on every call", async () => {
+    const { limits } = limitsWith({ maxUploadMegabytes: 15 });
+
+    assert.deepEqual(await limits.execute(OWNER, INVITATION), {
+      maxUploadBytes: 15 * 1024 * 1024,
+    });
+  });
+
+  it("answers the seeded 10 MB when no settings module is composed", async () => {
+    const { repository } = setup();
+    const seeded = new ReadOwnMediaLimitsUseCase(repository);
+
+    assert.deepEqual(await seeded.execute(OWNER, INVITATION), {
+      maxUploadBytes: 10 * 1024 * 1024,
+    });
+  });
+
+  it("answers the one 404 for another owner's invitation and for an id that names nothing", async () => {
+    const { limits, repository } = limitsWith();
+
+    repository.invitation = null;
+    await assert.rejects(limits.execute(OWNER, INVITATION), MediaNotFoundError);
+    await assert.rejects(limits.execute(OWNER, "not-a-uuid"), MediaNotFoundError);
   });
 });
