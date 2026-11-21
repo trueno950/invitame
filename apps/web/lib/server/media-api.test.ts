@@ -7,16 +7,18 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { ApiClientError } from "./api-client.ts";
 import {
   createMediaClient,
-  MAX_MEDIA_UPLOAD_BYTES,
+  isMediaUploadWithinBound,
   type MediaAsset,
   parseDeletedMedia,
   parseMediaAsset,
   parseMediaAssets,
+  parseMediaLimits,
 } from "./media-api.ts";
 
 // The web server's client of the media API (M8 S2, S4): it forwards only Better Auth's cookies and the proxy secret,
 // sends one upload as multipart built on the server (never the client's own MIME or filename), refuses an oversized
-// file before sending anything, and maps each documented refusal to a typed outcome instead of a body.
+// file before sending anything with the bound the API's own read answered (M9 T13; S5, S8), and maps each documented
+// refusal to a typed outcome instead of a body.
 
 const PROXY_SECRET = randomBytes(32).toString("base64url");
 const SESSION_COOKIE = "better-auth.session_token=signed.value";
@@ -174,6 +176,35 @@ describe("media response parsers", () => {
     assert.equal(parseDeletedMedia({ status: "stored" }), undefined);
     assert.equal(parseDeletedMedia(undefined), undefined);
   });
+
+  it("reads the upload bound the API answers, and refuses any other shape", () => {
+    assert.deepEqual(parseMediaLimits({ maxUploadBytes: 15 * 1024 * 1024 }), {
+      maxUploadBytes: 15 * 1024 * 1024,
+    });
+    for (const broken of [
+      {},
+      { maxUploadBytes: 0 },
+      { maxUploadBytes: -1 },
+      { maxUploadBytes: 1.5 },
+      { maxUploadBytes: "10" },
+      { maxUploadBytes: null },
+      { jobs: 1 },
+      [],
+      null,
+      undefined,
+    ]) {
+      assert.equal(parseMediaLimits(broken), undefined, JSON.stringify(broken));
+    }
+  });
+
+  it("measures one file against the bound it was given, and refuses a size that is not a positive count", () => {
+    assert.equal(isMediaUploadWithinBound(1, 10), true);
+    assert.equal(isMediaUploadWithinBound(10, 10), true);
+    assert.equal(isMediaUploadWithinBound(11, 10), false);
+    for (const size of [0, -1, 1.5, Number.NaN, "10", null, undefined]) {
+      assert.equal(isMediaUploadWithinBound(size, 10), false, String(size));
+    }
+  });
 });
 
 describe("media upload", () => {
@@ -216,20 +247,43 @@ describe("media upload", () => {
     assert.doesNotMatch(received[0]?.body.toString("latin1") ?? "", /name="alt"/);
   });
 
-  it("refuses a file over 10 MB before sending anything", async () => {
-    const oversized = new Uint8Array(MAX_MEDIA_UPLOAD_BYTES + 1);
+  it("refuses a file over the bound the API answered before sending anything", async () => {
+    const maxBytes = 15 * 1024 * 1024;
+    const oversized = new Uint8Array(maxBytes + 1);
 
-    const result = await client().upload(ID, { bytes: oversized, kind: "gallery", alt: null });
+    const result = await client().upload(ID, {
+      bytes: oversized,
+      kind: "gallery",
+      alt: null,
+      maxBytes,
+    });
 
     assert.deepEqual(result, { ok: false, failure: "payload-too-large" });
     assert.equal(received.length, 0);
   });
 
-  it("accepts a file of exactly 10 MB", async () => {
+  it("accepts a file of exactly the bound, and a file of a raised bound the panel saved", async () => {
+    const maxBytes = 15 * 1024 * 1024;
     answerJson(201, ASSET);
 
     const result = await client().upload(ID, {
-      bytes: new Uint8Array(MAX_MEDIA_UPLOAD_BYTES),
+      bytes: new Uint8Array(maxBytes),
+      kind: "gallery",
+      alt: null,
+      maxBytes,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(received.length, 1);
+  });
+
+  it("sends a file of any size when no bound was answered, leaving the API to refuse it", async () => {
+    // The bound is the API's: when the limits read failed, nothing is refused here and the API's own 413 or 400 decides
+    // (M9 T13; S5, S8). Never a number this server invented.
+    answerJson(201, ASSET);
+
+    const result = await client().upload(ID, {
+      bytes: new Uint8Array(64 * 1024 * 1024),
       kind: "gallery",
       alt: null,
     });
@@ -317,6 +371,27 @@ describe("media list, update, and removal", () => {
     assert.deepEqual(await client().list(ID), { ok: true, value: [ASSET] });
     assert.equal(received[0]?.method, "GET");
     assert.equal(received[0]?.url, `/invitations/${ID}/media`);
+  });
+
+  it("reads the upload bound of one invitation from its own route", async () => {
+    answerJson(200, { maxUploadBytes: 15 * 1024 * 1024 });
+
+    assert.deepEqual(await client().limits(ID), {
+      ok: true,
+      value: { maxUploadBytes: 15 * 1024 * 1024 },
+    });
+    assert.equal(received[0]?.method, "GET");
+    assert.equal(received[0]?.url, `/invitations/${ID}/media/limits`);
+    assert.equal(received[0]?.headers.cookie, SESSION_COOKIE);
+  });
+
+  it("maps a refused limits read and sends nothing for an id that is not a UUID", async () => {
+    answerRefusal(404, "MEDIA_NOT_FOUND");
+    assert.deepEqual(await client().limits(ID), { ok: false, failure: "not-found" });
+
+    received = [];
+    assert.deepEqual(await client().limits("../secret"), { ok: false, failure: "not-found" });
+    assert.equal(received.length, 0);
   });
 
   it("sends only the fields of one edit", async () => {

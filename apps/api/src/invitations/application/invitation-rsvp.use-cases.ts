@@ -111,7 +111,8 @@ export class UpdateRsvpSettingsUseCase {
     private readonly invitations: InvitationRepository,
     private readonly rsvp: RsvpRepository,
     // The platform-wide maximum party size (M9 T13; S5, S8), read at the moment the save is validated. A lowered
-    // maximum refuses the next save above it and never rewrites a limit an invitation already stores.
+    // maximum refuses the next value above it and never rewrites a limit an invitation already stores: saving that
+    // same stored number back stays possible, so an unrelated change (a new deadline) is never blocked by the panel.
     private readonly settings: OperationalSettingsReader = INITIAL_OPERATIONAL_SETTINGS_READER,
   ) {}
 
@@ -129,7 +130,9 @@ export class UpdateRsvpSettingsUseCase {
     const settings = await this.settings.current();
     const validation = validateRsvpSettings(
       { deadline: input.deadline, partyLimit: input.partyLimit },
-      { maxPartyLimit: settings.rsvpMaxPartyLimit },
+      // The invitation's own stored limit is the one value above a lowered maximum this save may still carry, so an
+      // administrator's change never makes an unrelated save impossible (S8 «Conservan lo que tienen»).
+      { maxPartyLimit: settings.rsvpMaxPartyLimit, storedPartyLimit: stored.rsvpPartyLimit },
     );
     if (!validation.ok) {
       throw new InvalidRsvpSettingsError(validation.issues);

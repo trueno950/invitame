@@ -166,6 +166,12 @@ export type RsvpSettingsValidation =
 export interface RsvpSettingsLimits {
   /** The widest party an owner may set; the settings row's `rsvpMaxPartyLimit`, never wider than the column. */
   readonly maxPartyLimit?: number;
+  /**
+   * The party limit this invitation already stores, when the save is about an existing invitation (S5, S8). A lowered
+   * maximum only stops what is added afterwards: the owner may save the number the invitation already has, even above
+   * the new maximum, so an unrelated change (a new deadline, for one) is never refused by the panel's limit.
+   */
+  readonly storedPartyLimit?: number | null;
 }
 
 /**
@@ -175,7 +181,8 @@ export interface RsvpSettingsLimits {
  * except the deadline's instant. A past deadline is accepted: it simply closes RSVP, which is the owner's decision.
  *
  * A lowered maximum does not touch a stored limit: an invitation whose `rsvpPartyLimit` already exceeds it keeps the
- * number it has, and only the next save above the maximum is refused (S8 «Conservan lo que tienen»).
+ * number it has — including when the owner saves that same number back, so an unrelated save still works — and every
+ * other value above the maximum is refused (S8 «Conservan lo que tienen»).
  */
 export function validateRsvpSettings(
   input: {
@@ -208,9 +215,18 @@ export function validateRsvpSettings(
     limits.maxPartyLimit ?? RSVP_PARTY_LIMIT_MAX,
     RSVP_PARTY_LIMIT_MAX,
   );
+  // The one value above the maximum a save may still carry is the limit the invitation already stores, clamped the same
+  // way: the column refusal is never relaxed, only the panel's own maximum.
+  const storedPartyLimit =
+    limits.storedPartyLimit === null || limits.storedPartyLimit === undefined
+      ? null
+      : Math.min(limits.storedPartyLimit, RSVP_PARTY_LIMIT_MAX);
   if (typeof partyLimit !== "number" || !Number.isInteger(partyLimit)) {
     issues.push(RSVP_PARTY_LIMIT_TYPE_ISSUE);
-  } else if (partyLimit < RSVP_PARTY_LIMIT_MIN || partyLimit > maxPartyLimit) {
+  } else if (
+    partyLimit < RSVP_PARTY_LIMIT_MIN ||
+    (partyLimit > maxPartyLimit && partyLimit !== storedPartyLimit)
+  ) {
     issues.push(rsvpPartyLimitRangeIssue(maxPartyLimit));
   }
 

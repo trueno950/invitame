@@ -273,6 +273,39 @@ export class ListOwnMediaUseCase {
   }
 }
 
+/** The upload bound one owned invitation reads, in bytes: the only limit the owner's own page needs to know (S5). */
+export interface MediaUploadLimits {
+  readonly maxUploadBytes: number;
+}
+
+/**
+ * The upload size one owned invitation answers (M9 T13; S5, S8 «Tamaño de foto»). The web refuses an oversized photo
+ * before reading it, so it cannot hard-code a bound: it asks this read, which answers the settings row's
+ * `maxUploadMegabytes` at the moment of the call, in bytes. The route is owner-scoped, so another customer's invitation
+ * and an id that names nothing answer the same `MediaNotFoundError` (A4), and the read is the same one the upload
+ * itself applies: the API stays the guard, and this answer only lets the page refuse politely before sending.
+ */
+export class ReadOwnMediaLimitsUseCase {
+  constructor(
+    private readonly invitations: MediaRepository,
+    private readonly settings: OperationalSettingsReader = INITIAL_OPERATIONAL_SETTINGS_READER,
+  ) {}
+
+  async execute(ownerId: string, invitationId: string): Promise<MediaUploadLimits> {
+    const invitation = isId(invitationId)
+      ? await this.invitations.findOwnedInvitation(ownerId, invitationId)
+      : null;
+
+    if (invitation === null) {
+      throw new MediaNotFoundError();
+    }
+
+    const settings = await this.settings.current();
+
+    return { maxUploadBytes: megabytesInBytes(settings.maxUploadMegabytes) };
+  }
+}
+
 /** One edit of one asset: its alt text, its gallery position, or both. */
 export interface UpdateMediaInput {
   ownerId: string;

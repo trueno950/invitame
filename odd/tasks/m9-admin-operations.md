@@ -167,8 +167,8 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
 | T10 | Support action review follow-ups: role guard, 409 under concurrent transitions, payment retry link, regression probes | S4, S6 | worker | see L11 |
 | T11 | API: `InvitationView` migration, view counting, admin analytics reads and routes, retention command | S2, S3, S7 | worker | see L13 |
 | T12 | Web: `/admin/analitica` and the analytics on the invitation detail | S2, S7 | worker | see L13 |
-| T13 | API: `OperationalSettings` migration + settings module + audit + consumers read it + routes | S5, S8 | worker | |
-| T14 | Web: `/admin/configuracion` hub and settings form | S5, S8 | worker | |
+| T13 | API: `OperationalSettings` migration + settings module + audit + consumers read it + routes | S5, S8 | worker | see L16 |
+| T14 | Web: `/admin/configuracion` hub and settings form | S5, S8 | worker | see L16 |
 | T5 | S1 review follow-ups: cursor instant range, an index for the unfiltered ordering, payment cap, concurrent index build | S1 | worker | see L7 |
 
 ## Log
@@ -243,3 +243,10 @@ its own design entry in the Log. Source of scope: `ROADMAP.md` Milestone 9.
   Búsqueda y analítica»; lowered limits «Conservan lo que tienen (recomendado)»; audit «Nota opcional (recomendado)»;
   values «Los actuales y límites seguros (recomendado)». Explorer: no settings table exists; limits are frozen at boot
   or hard-coded; `AdminAction` requires exactly one target, so `SETTINGS_UPDATED` needs that CHECK relaxed.
+- L16 — T13/T14 delivered as six slices (settings store + audit, admin routes, consumers, web client, web page, and
+  follow-ups). An independent security verifier (escalated item 2) passed all seven checks with no critical finding.
+  Follow-ups: an owner may save RSVP settings keeping a stored party limit above a lowered maximum (never raise it);
+  the web reads the configured upload size from the new owner route `GET /invitations/:id/media/limits`; DTO-bounds and
+  domain/migration drift specs; stale «11 MB» text. The parent found that Next's 1 MB server-action and 10 MB proxy
+  defaults refused almost every phone photo since M8; the owner chose «Subirlo a 16 MB (recomendado)», set in
+  `apps/web/next.config.ts`. Still open: the web hard-codes the 12-photo gallery cap.

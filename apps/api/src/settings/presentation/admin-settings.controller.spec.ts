@@ -446,6 +446,10 @@ describe("the administrator configuration panel routes (M9 T13; S5, S8, L15)", (
           ],
         ],
         [
+          { maxUploadMegabytes: 99 },
+          [{ field: "maxUploadMegabytes", rule: OPERATIONAL_SETTINGS_RULE.MAX }],
+        ],
+        [
           { analyticsDefaultWindowDays: 6 },
           [{ field: "analyticsDefaultWindowDays", rule: OPERATIONAL_SETTINGS_RULE.MIN }],
         ],

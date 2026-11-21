@@ -14,7 +14,7 @@ import {
   MediaLimitExceededError,
   MediaNotFoundError,
 } from "../application/media.errors";
-import type { MediaAssetView } from "../application/media.use-cases";
+import type { MediaAssetView, MediaUploadLimits } from "../application/media.use-cases";
 import { MediaStorageError } from "../application/media-storage";
 import type { MultipartFormError } from "./multipart-form";
 
@@ -38,6 +38,19 @@ export interface MediaAssetResponse {
 /** The one media 404: missing, foreign, deleted, unpublished, and a foreign asset are indistinguishable (S4). */
 export function mediaNotFound(): NotFoundException {
   return new NotFoundException({ code: "MEDIA_NOT_FOUND", message: "Media not found." });
+}
+
+/**
+ * The upload bound one owned invitation answers (M9 T13; S5, S8): the configured size in bytes, so the owner's page
+ * refuses an oversized photo before reading it and states the size it actually applies. One field, and nothing about
+ * the row it came from.
+ */
+export interface MediaUploadLimitsResponse {
+  maxUploadBytes: number;
+}
+
+export function toMediaUploadLimitsResponse(limits: MediaUploadLimits): MediaUploadLimitsResponse {
+  return { maxUploadBytes: limits.maxUploadBytes };
 }
 
 export function toMediaAssetResponse(view: MediaAssetView): MediaAssetResponse {

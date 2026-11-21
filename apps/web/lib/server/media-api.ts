@@ -13,8 +13,10 @@ import {
  * The upload is multipart, built here from bytes the browser sent to this server. The part is named `photo` and
  * declared `application/octet-stream` on purpose: the API decides the format from magic bytes alone, so the web never
  * forwards the browser's claim about the type and never forwards the file's original name, which can carry personal
- * data. The 10 MB bound is checked here as well, before a single byte is sent, because a browser can submit a file the
- * API would refuse.
+ * data. The size bound is not a constant here: it is the number the API's own owner-scoped limits read answers at the
+ * moment the page or the action asks (M9 T13; S5, S8 «Tamaño de foto»), so a configured 10 to 15 MB is reachable from
+ * the web and a later save is picked up without a deploy. The API remains the guard; this check only refuses politely
+ * before a byte is read.
  *
  * This module deliberately has no `server-only` marker, so `node --test` can load it and prove the mapping; the
  * cookie-reading wiring that imports it lives in `app/cuenta/invitaciones/_lib/media.ts` and is `server-only`.
@@ -25,8 +27,13 @@ export const MEDIA_KINDS = ["main-photo", "gallery"] as const;
 
 export type MediaKind = (typeof MEDIA_KINDS)[number];
 
-/** The largest upload the API accepts, in bytes: 10 MB (S4). The web refuses one byte more before sending. */
-export const MAX_MEDIA_UPLOAD_BYTES = 10 * 1024 * 1024;
+/**
+ * The upload bound one owned invitation answers (M9 T13; S5, S8 «Tamaño de foto»): the settings row's
+ * `maxUploadMegabytes`, in bytes, as the API's own owner-scoped read answered it.
+ */
+export interface MediaLimits {
+  readonly maxUploadBytes: number;
+}
 
 /** The longest alt text the API stores, in characters (S4). */
 export const MEDIA_ALT_MAX_LENGTH = 120;
@@ -35,7 +42,7 @@ export const MEDIA_ALT_MAX_LENGTH = 120;
 export const MAX_GALLERY_PHOTOS = 12;
 
 /**
- * The deadline of one upload: the API's own request bound is much shorter, but a 10 MB body over a slow link needs
+ * The deadline of one upload: the API's own request bound is much shorter, but a 15 MB body over a slow link needs
  * more than the shared 10 seconds, and a guest page never waits on it.
  */
 export const MEDIA_UPLOAD_TIMEOUT_MS = 60_000;
@@ -95,6 +102,12 @@ export interface MediaUploadInput {
   readonly kind: MediaKind;
   /** The alt text the creator typed, already trimmed, or null when they typed none. */
   readonly alt: string | null;
+  /**
+   * The upload bound the API's own limits read answered, in bytes, so this client refuses an oversized file before it
+   * sends it (M9 T13; S5, S8). Omitted when that read failed: nothing is refused here then, and the API's own 413 or
+   * 400 answers the upload — never a number this server invented.
+   */
+  readonly maxBytes?: number;
 }
 
 /** One edit of one asset: its alt text, its gallery position, or one of them (S4). */
@@ -109,6 +122,8 @@ export interface MediaUpdateInput {
 export interface MediaClient {
   /** `GET /invitations/:id/media`: the stored assets of one owned invitation, the main photo first (S4). */
   list(invitationId: string): Promise<MediaResult<MediaAsset[]>>;
+  /** `GET /invitations/:id/media/limits`: the configured upload size, in bytes (M9 T13; S5, S8). */
+  limits(invitationId: string): Promise<MediaResult<MediaLimits>>;
   /** `POST /invitations/:id/media`: one photo, as multipart (S4). */
   upload(invitationId: string, upload: MediaUploadInput): Promise<MediaResult<MediaAsset>>;
   /** `PATCH /invitations/:id/media/:assetId`: the alt text and/or the gallery position (S4). */
@@ -258,13 +273,28 @@ export function parseDeletedMedia(value: unknown): { readonly status: "deleted" 
   return record(value)?.status === "deleted" ? { status: "deleted" } : undefined;
 }
 
-/** Whether a file size is inside the API's 10 MB bound, checked before the file is read or sent (S4). */
-export function isMediaUploadWithinBound(byteSize: unknown): boolean {
+/**
+ * The upload bound of one read (M9 T13; S5, S8): a positive whole number of bytes, and nothing else. A body without it,
+ * or with a value that is not a size, is not this contract, and the caller then refuses nothing client-side rather than
+ * invent a bound.
+ */
+export function parseMediaLimits(value: unknown): MediaLimits | undefined {
+  const maxUploadBytes = record(value)?.maxUploadBytes;
+
+  return typeof maxUploadBytes === "number" &&
+    Number.isSafeInteger(maxUploadBytes) &&
+    maxUploadBytes > 0
+    ? { maxUploadBytes }
+    : undefined;
+}
+
+/** Whether a file size is inside the upload bound the API answered, checked before the file is read or sent (S4). */
+export function isMediaUploadWithinBound(byteSize: unknown, maxUploadBytes: number): boolean {
   return (
     typeof byteSize === "number" &&
     Number.isInteger(byteSize) &&
     byteSize > 0 &&
-    byteSize <= MAX_MEDIA_UPLOAD_BYTES
+    byteSize <= maxUploadBytes
   );
 }
 
@@ -434,14 +464,24 @@ export function createMediaClient(
         : call("GET", path, {}, (value) => parseMediaAssets(value, options.config.apiOrigin));
     },
 
+    async limits(invitationId: string): Promise<MediaResult<MediaLimits>> {
+      const path = mediaPath(invitationId);
+
+      return path === undefined ? NOT_FOUND : call("GET", `${path}/limits`, {}, parseMediaLimits);
+    },
+
     async upload(invitationId: string, upload: MediaUploadInput): Promise<MediaResult<MediaAsset>> {
       const path = mediaPath(invitationId);
 
       if (path === undefined) {
         return NOT_FOUND;
       }
-      // The same bound the API enforces, checked before a byte leaves this server (S4).
-      if (!isMediaUploadWithinBound(upload.bytes.length)) {
+      // The bound the API's own read answered, checked before a byte leaves this server (S4); without it the API's own
+      // refusal answers the request.
+      if (
+        upload.maxBytes !== undefined &&
+        !isMediaUploadWithinBound(upload.bytes.length, upload.maxBytes)
+      ) {
         return { ok: false, failure: "payload-too-large" };
       }
 

@@ -36,6 +36,7 @@ async function logged<T>(call: (api: MediaClient) => Promise<T>): Promise<T> {
  */
 export const media = {
   list: (id: string) => logged((api) => api.list(id)),
+  limits: (id: string) => logged((api) => api.limits(id)),
   upload: (id: string, upload: Parameters<MediaClient["upload"]>[1]) =>
     logged((api) => api.upload(id, upload)),
   update: (id: string, assetId: string, patch: Parameters<MediaClient["update"]>[2]) =>

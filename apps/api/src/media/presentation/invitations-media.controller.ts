@@ -17,6 +17,8 @@ import { SessionUserId } from "../../auth/access-control/session-user-id";
 import {
   DeleteMediaUseCase,
   ListOwnMediaUseCase,
+  type MediaUploadLimits,
+  ReadOwnMediaLimitsUseCase,
   UpdateMediaUseCase,
   UploadMediaUseCase,
 } from "../application/media.use-cases";
@@ -25,9 +27,11 @@ import { MAX_UPLOAD_REQUEST_BYTES } from "../domain/media-asset";
 import { UpdateMediaDto } from "./dto/update-media.dto";
 import {
   type MediaAssetResponse,
+  type MediaUploadLimitsResponse,
   mapMediaError,
   mapMultipartError,
   toMediaAssetResponse,
+  toMediaUploadLimitsResponse,
 } from "./media.response";
 import { MultipartFormError, readMultipartUpload } from "./multipart-form";
 
@@ -41,14 +45,16 @@ const ASSET_ID = new ParseUUIDPipe();
  * same 404 as an id that names nothing (A4). Malformed ids are refused by `ParseUUIDPipe` before a port is asked.
  *
  * The upload is multipart because the web sends a file: it is read by strict `readMultipartUpload`, which bounds the
- * whole body at about 11 MB (a 413 past it) and accepts only `file`, `kind`, and `alt`. Every other route keeps its
- * existing JSON body limit; this one route alone parses form data.
+ * whole body at 16 MB (a 413 past it) and accepts only `file`, `kind`, and `alt`. Every other route keeps its
+ * existing JSON body limit; this one route alone parses form data. The 16 MB leaves room for the widest configured
+ * upload (15 MB) plus the boundary, the fields, and the part headers (S5 «Tamaño de foto»).
  */
 @Controller("invitations/:id/media")
 export class InvitationsMediaController {
   constructor(
     @Inject(UploadMediaUseCase) private readonly upload: UploadMediaUseCase,
     @Inject(ListOwnMediaUseCase) private readonly listOwn: ListOwnMediaUseCase,
+    @Inject(ReadOwnMediaLimitsUseCase) private readonly readLimits: ReadOwnMediaLimitsUseCase,
     @Inject(UpdateMediaUseCase) private readonly updateAsset: UpdateMediaUseCase,
     @Inject(DeleteMediaUseCase) private readonly deleteMedia: DeleteMediaUseCase,
   ) {}
@@ -93,6 +99,26 @@ export class InvitationsMediaController {
   ): Promise<MediaAssetResponse[]> {
     try {
       return (await this.listOwn.execute(userId, id)).map(toMediaAssetResponse);
+    } catch (error) {
+      return mapMediaError(error);
+    }
+  }
+
+  /**
+   * The upload bound of one owned invitation (M9 T13; S5, S8), in bytes: the settings row's `maxUploadMegabytes` read
+   * at the moment of the call. The owner's page refuses a photo over it before reading it and states the size it
+   * actually applies; the upload itself checks the same setting again, so this answer is a courtesy, never the guard.
+   * Another customer's invitation, an unknown id, and a malformed id are the one media 404 (A4).
+   */
+  @Get("limits")
+  async limits(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+  ): Promise<MediaUploadLimitsResponse> {
+    try {
+      const limits: MediaUploadLimits = await this.readLimits.execute(userId, id);
+
+      return toMediaUploadLimitsResponse(limits);
     } catch (error) {
       return mapMediaError(error);
     }

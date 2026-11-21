@@ -965,8 +965,9 @@ Implemented by Milestone 8 (S1, S3, S4). Creators upload the invitation's main p
 grants `GALLERY`, up to twelve gallery photos. Binaries live in object storage, never in PostgreSQL and never on an
 ephemeral filesystem in production.
 
-- Feature module `apps/api/src/media/`: `domain` owns the pure upload rules (magic-byte format detection, 10 MB,
-  8000 px per side, the 2000 px output target, the 120-character alt text, the key format and the two limits);
+- Feature module `apps/api/src/media/`: `domain` owns the pure upload rules (magic-byte format detection, the
+  configured upload size, 8000 px per side, the 2000 px output target, the 120-character alt text, the key format and
+  the two limits);
   `application` owns the `MediaStorage` and `ImageProcessor` ports, the `MediaRepository` port, and the use cases;
   `infrastructure` holds both storage adapters (`local`, `s3`), the `sharp` processor, and the Prisma repository;
   `presentation` holds the owner routes and the one public serving route.
@@ -976,8 +977,8 @@ ephemeral filesystem in production.
   closed until a bucket is set. The credential never leaves the adapter, and no provider message, endpoint, bucket,
   key, or signed URL reaches a log or a response.
 - Uploads: `POST /invitations/:id/media` is multipart and accepts only `file`, `kind` (`main-photo` or `gallery`),
-  and `alt`, with an approximately 11 MB body bound (413 past it); every other route keeps its existing JSON body
-  limit. The format is decided from magic bytes, never the filename or the client MIME. The image is re-encoded to
+  and `alt`, with a 16 MB body bound (413 past it) that leaves room for the widest configured file (15 MB); every other
+  route keeps its existing JSON body limit. The format is decided from magic bytes, never the filename or the client MIME. The image is re-encoded to
   WebP with its longest side at most 2000 px and its metadata stripped (EXIF, GPS), so no location leaks.
 - The order of side effects is the retry policy: process, put the object, insert the row; if the insert fails, the
   object is deleted best effort and logged by event name only. Deletion marks the row `deleted` first and deletes the
@@ -987,8 +988,9 @@ ephemeral filesystem in production.
   photo per invitation (replacing marks the previous one deleted and deletes its object), at most 12 gallery photos,
   at most 40 stored assets. Ownership and the archived refusal are in the same statement that reads or writes the
   row, so another customer's invitation or asset answers one 404 (A4).
-- REST: owner routes `GET`/`POST /invitations/:id/media`, `PATCH`/`DELETE /invitations/:id/media/:assetId` behind the
-  session guard, and the public `GET /media/:assetId`. That route is `@Public()`: a published invitation's image is
+- REST: owner routes `GET`/`POST /invitations/:id/media`, `GET /invitations/:id/media/limits`,
+  `PATCH`/`DELETE /invitations/:id/media/:assetId` behind the session guard, and the public `GET /media/:assetId`. That
+  route is `@Public()`: a published invitation's image is
   public and cached for a year as immutable, the owner sees a draft with `private, no-store`, and every other case —
   missing, deleted, unpublished, foreign, or an object that is gone — is the same 404. It answers
   `Content-Type: image/webp`, `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`, and
@@ -1001,19 +1003,24 @@ ephemeral filesystem in production.
   imports a media repository; the owner read exposes media only through the media routes.
 - Configuration and operations: [`../development/media-storage.md`](../development/media-storage.md) documents every
   variable, the production checklist, the serving headers, and the cleanup command.
-- Web (M8 S2, S4): `apps/web/lib/server/media-api.ts` is the web server's client of the four owner routes. It forwards
+- Web (M8 S2, S4): `apps/web/lib/server/media-api.ts` is the web server's client of the owner routes. It forwards
   only Better Auth's cookies and the proxy secret, parses every answer strictly (an absolute `http`/`https` URL without
   credentials, positive dimensions, a bounded alt text, a non-negative position), and maps each documented refusal to a
   typed outcome that never carries a body. The upload is multipart built on the server from the bytes the browser sent:
   the part is named `photo`, declared `application/octet-stream`, and carries no browser filename, so the creator's own
-  file name and the browser's claimed MIME never leave the web. The 10 MB bound is enforced there before the body is
-  read, and again before it is sent; one upload gets a 60-second deadline instead of the shared 10.
+  file name and the browser's claimed MIME never leave the web. The upload size is not a constant there: `GET
+  /invitations/:id/media/limits` answers the configured `maxUploadBytes`, and the page and both upload actions use it
+  for the pre-send refusal and for the Spanish sentence that names the size, so a size above the old 10 MB constant is
+  no longer refused on the web side and an administrator's save arrives without a deploy. When that read does not
+  answer, nothing is refused client-side: the API's own 413 or 400 decides, never a number the web invented. One upload
+  gets a 60-second deadline instead of the shared 10.
 - Web actions (M8 S2, S3, S4): `apps/web/lib/customer/invitation-media.ts` turns one submitted form into the API call
   and the page's own redirect. A main photo is uploaded with `kind: main-photo` and then its answered URL is written
   into the template's `mainPhoto` content field through the same content save the editor uses, so every layout keeps
   rendering it unchanged. The gallery actions upload one photo, replace one alt text, move one photo one place (the
   API's `position` is the index it moves to, computed from the owner's own read, never from the browser), and remove
-  one photo. Alt text over 120 characters and a file over 10 MB are refused on the web before any request. Each action
+  one photo. Alt text over 120 characters is refused on the web before any request, and so is a file over the upload
+  bound the API's own `media/limits` read answered. Each action
   is a server action (`apps/web/app/cuenta/invitaciones/actions.ts`) that answers a redirect, and the editor calls it
   only after its autosave queue is empty, so an upload never discards a field typed in another tab; one unexpected
   failure is logged once as `invitation_media_call_failed` with the error class, the client's failure kind, and the
