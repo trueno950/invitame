@@ -21,6 +21,7 @@
     "docs:check": "node scripts/check-docs.mjs",
     "lint": "turbo run lint",
     "media:cleanup": "pnpm --filter @invitame/api media:cleanup",
+    "performance:check": "node scripts/check-performance.mjs",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },
