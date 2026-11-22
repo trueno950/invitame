@@ -36,18 +36,20 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Browser end-to-end tests | `pnpm --filter @invitame/web test:e2e` | Runs `apps/web/e2e/**/*.spec.ts` with `@playwright/test` in Chromium only, against the built API (`apps/api/dist`) and the production build of the web (`next start`), which the harness starts on the dedicated ports 3410 (web) and 3411 (API), with its API gate on 3412, or `E2E_WEB_PORT`, `E2E_API_PORT`, and `E2E_GATE_PORT`. It needs `pnpm build`, Chromium from `pnpm --filter @invitame/web test:e2e:install`, and an explicit `E2E_DATABASE_URL` (migrated) and `E2E_MAILPIT_URL`; it refuses missing or non-local values and never attaches to a server that is already listening. It is not part of `pnpm test`. CI runs it in the `browser-tests` job. See [Browser end-to-end tests](#browser-end-to-end-tests). | Changes to the web pages, their forms, the web's `/api/auth` proxy, `proxy.ts`, the server-side API client, or the auth flows they drive. |
 | Build | `pnpm build` | Builds the API with `tsc` and the web app with Next.js. Outputs are ignored build artifacts. | Runtime, dependency, configuration, or build changes; recommended for broad docs/process changes. |
 | Diff hygiene | `git diff --check` | Finds whitespace errors in the working diff. | Every change before review. |
-| CI gate coverage | `node scripts/check-ci-gates.mjs` | Reads this matrix and `.github/workflows/ci.yml` and fails when a documented gate has no declared CI step in the documented job, when a declared gate is no longer documented, or when a required check's job `name:` changed; `--self-test` proves the guard fails on a fixture that misses a gate. It checks the workflow definition, not that a past run passed. | Every CI or quality-gate change. |
+| CI gate coverage | `node scripts/check-ci-gates.mjs` | Reads this matrix and `.github/workflows/ci.yml` and fails when a documented gate has no declared CI step in the documented job, when a declared gate is no longer documented, when a gate declared local only (`pnpm db:up`, `pnpm db:down`, `pnpm format`) appears in any workflow `run:` step, when a required check's job `name:` changed, or when the required-check table below is emptied or loses one of its three rows; `--self-test` proves the guard fails on a fixture for each of those, and the declaration requires both the guard and its `--self-test` step, so deleting the self-test fails CI. It checks the workflow definition, not that a past run passed. | Every CI or quality-gate change. |
 | Start local PostgreSQL | `pnpm db:up` | Starts the local Docker Compose PostgreSQL service. | Database or integration verification. |
 | Apply migrations and generate Prisma | `pnpm db:migrate` | Runs `prisma migrate deploy` and `prisma generate` for the API schema. | Schema/migration changes and database verification. |
-| Seed | `pnpm db:seed` | Runs the API Prisma seed. Run it twice when checking idempotence: the CI `database-tests` job runs it twice on the freshly migrated service database. | Seed/catalog changes and database verification. |
+| Seed | `pnpm db:seed` | Runs the API Prisma seed. Run it twice when checking idempotence: the CI `database-tests` job runs it twice on the freshly migrated service database and fails when the second run changes a row count. | Seed/catalog changes and database verification. |
+| Seed idempotence counts | `node scripts/check-seed-idempotence.mjs` | Records the row count of every table the catalog seed writes (`--record`) and fails when a second seed changed any of them (`--verify`), against the already migrated `DATABASE_URL`. It proves the second run created nothing; it does not inspect what the rows contain. CI runs both modes around the second seed in the `database-tests` job. | Seed/catalog changes, and every CI or quality-gate change. |
 | Database connection | `pnpm db:check` | Executes the API connection check and a real `SELECT 1`. CI runs it in the `database-tests` job before `test:db`. | Database changes or any claim about database connectivity. |
 | Stop local PostgreSQL | `pnpm db:down` | Stops the local Compose services. | After local database work when the environment is no longer needed. |
 
-`.github/workflows/ci.yml` runs the CI gate coverage guard, the documentation consistency,
+`.github/workflows/ci.yml` runs the CI gate coverage guard and its self-test, the documentation consistency,
 format/lint/typecheck/test/build/diff-hygiene gates on pushes to `master` and `main` and on pull requests, a
 separate `database-tests` job that applies the migrations to an empty disposable PostgreSQL 17 service, runs
-`db:check`, `test:db`, and then the seed twice to prove it stays safe to repeat, and a `browser-tests` job that
-runs the browser end-to-end suite against PostgreSQL 17 and Mailpit services. This is a limited quality workflow,
+`db:check`, `test:db`, and then the seed twice, failing when the second run changes the row count of any table the
+seed writes, and a `browser-tests` job that runs the browser end-to-end suite against PostgreSQL 17 and Mailpit
+services. This is a limited quality workflow,
 not CD or hosted deployment. The repository still has no coverage threshold, and the browser suite covers only
 the customer and administrator flows listed below. Do not report those gaps as passing. Add the capability only
 as part of an approved work unit that defines its scope and ownership.
@@ -75,7 +77,9 @@ not run.
 pnpm db:up
 pnpm db:migrate
 pnpm db:seed
+node scripts/check-seed-idempotence.mjs --record
 pnpm db:seed
+node scripts/check-seed-idempotence.mjs --verify
 pnpm db:check
 pnpm format:check
 pnpm lint
@@ -86,8 +90,10 @@ git diff --check
 pnpm db:down
 ```
 
-The duplicate seed is intentional: it checks that the seed remains safe to repeat. A destructive migration needs
-human approval, a recovery plan, and explicit verification before it is applied to any shared environment.
+The duplicate seed is intentional: it checks that the seed remains safe to repeat, and the counts recorded between
+the two runs make the second run prove it created nothing instead of only proving it exited 0. A destructive
+migration needs human approval, a recovery plan, and explicit verification before it is applied to any shared
+environment.
 
 ### Browser end-to-end tests
 
@@ -231,9 +237,15 @@ gate coverage guard and its self-test, `docs:check`, Prisma client generation, `
 `typecheck`, `test`, `build`, and `git diff --check`, in that order. The `database-tests` job (check name
 `Database tests`) starts an empty PostgreSQL 17 service with trust authentication (no password in the workflow),
 generates the Prisma client, applies every migration to that empty database, runs `pnpm db:check`
-(`prisma:check`, a real `SELECT 1`), runs `test:db`, and then runs `pnpm db:seed` twice: the second run must create
-nothing and must not fail, which is the seed-idempotence proof the local database sequence asks for. The seed runs
-after `test:db` so the seeded catalog rows cannot change what the integration suites observe. The `browser-tests`
+(`prisma:check`, a real `SELECT 1`), runs `test:db`, and then runs `pnpm db:seed` twice. Between the two runs
+`node scripts/check-seed-idempotence.mjs --record` stores the row count of each of the six tables the catalog seed
+writes (`Category`, `Feature`, `Package`, `PackageFeature`, `Template`, `TemplateVersion`; the list lives in
+`SEEDED_MODELS` in that script), and `… --verify` after the second run fails when any count changed, naming the
+table with its before and after count. The script reads the counts through the Prisma client the job already
+generated, so it needs no SQL client on the runner, and it never writes to the database. The second run must create
+nothing and must not fail, which is the seed-idempotence proof the local database sequence asks for; the counts
+make that visible in the job log instead of resting on an exit code alone. The seed runs after `test:db` so the
+seeded catalog rows cannot change what the integration suites observe. The `browser-tests`
 job (check name `Browser tests`) starts PostgreSQL 17 (trust authentication) and Mailpit
 (`axllent/mailpit:v1.33.0`) services,
 generates the Prisma client, applies the migrations, runs `pnpm build`, installs Chromium only with its system
