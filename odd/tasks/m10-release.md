@@ -26,10 +26,10 @@ media bucket, or payment credential.
 | T1 | Branch protection on `master` | S4 | inline | see L3 |
 | T2 | Production configuration matrix (every variable per app, secret vs config, required and refused rules) | S1, S5 | worker | see L4 |
 | T3 | Railway service descriptors (build with `prisma:generate`, predeploy `migrate deploy`, start, health check) and a web health route | S1, S5 | worker | see L4 |
-| T4 | CI hardening for S5 (missing material gates, a guard that a removed gate fails CI) | S1, S5 | worker | |
-| T5 | Backup and restore with Railway (S3), the migration recovery and release rollback plan | S3, S5 | worker | |
-| T6 | Release checklist, post-release verification, operations runbooks, alert ownership table | S1, S5 | worker | |
-| T7 | Performance checks for the public invitation and critical API reads | S1 | worker | |
+| T4 | CI hardening for S5 (missing material gates, a guard that a removed gate fails CI) | S1, S5 | worker | see L5 |
+| T5 | Backup and restore with Railway (S3), the migration recovery and release rollback plan | S3, S5 | worker | see L5 |
+| T6 | Release checklist, post-release verification, operations runbooks, alert ownership table | S1, S5 | worker | see L5 |
+| T7 | Performance checks for the public invitation and critical API reads | S1 | worker | see L5 |
 | T8 | External setup with the owner: Railway project, domain, secrets, Resend, R2, cron, alerts, first release | S1-S5 | owner | |
 
 ## Log
@@ -49,3 +49,13 @@ media bucket, or payment credential.
   prerequisites are numbered (`RAILPACK_PRUNE_DEPS=false` on the API, `RAILPACK_NODE_VERSION=26` on both); the service
   document is authoritative for descriptor commands and is linked from `docs/README.md`. Evidence: API 1973, web 1877,
   typecheck, lint, format, docs:check, `pnpm build`, diff-check.
+- L5 — T4 (worker): `scripts/check-ci-gates.mjs` (documented gates ↔ workflow, both directions, `--self-test` 7 cases) wired
+  into «Quality gates»; `pnpm db:check` and `pnpm db:seed` twice added to «Database tests»; required checks documented in
+  `docs/development/git-workflow.md` §8. T5 (worker): `docs/development/backup-restore.md` (Railway-only backups, the
+  restore drill, RPO/RTO, release rollback with its invariants; every Railway claim marked «confirm at project
+  creation»). T6 (worker): `docs/development/runbooks.md` (nine runbooks and a 20-row alert table whose destinations are
+  honestly undecided until T8). T7 (worker): `scripts/check-performance.mjs` (bounded latency check, budgets measured
+  locally: web p95 250 ms, API 100 ms, provisional) + `docs/development/performance.md`. Parent: `pnpm performance:check`,
+  the two index lines, the runbooks→backup-restore link.
+  Evidence: API 1973, web 1877, the CI gate guard and its self-test, the performance dry run, typecheck, lint, format,
+  docs:check, diff-check.

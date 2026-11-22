@@ -42,6 +42,8 @@ to be checked before prose, and it defines when a human decision is required.
 - [`development/deployment.md`](development/deployment.md) — production configuration matrix per app, first-release values, and Railway services.
 - [`development/deployment-services.md`](development/deployment-services.md) — the two Railway service descriptors, their exact build, migration, and start commands, and the prerequisites the first deploy needs.
 - [`development/backup-restore.md`](development/backup-restore.md) — the Railway backup, restore-drill, RPO/RTO, and release-rollback plan, with the invariants a rollback must not break.
+- [`development/runbooks.md`](development/runbooks.md) — the release checklist, the payment, email, media, retention, secret-rotation, and admin-lockout runbooks, and the alert-ownership table.
+- [`development/performance.md`](development/performance.md) — the latency check for the public invitation and its API read, with its budgets.
 - [`development/payments.md`](development/payments.md) — payment modes, environment, the simulated signature scheme, adding a real provider adapter, and the production checklist.
 - [`development/media-storage.md`](development/media-storage.md) — invitation media storage, environment, serving, and the cleanup command.
 - [`development/git-workflow.md`](development/git-workflow.md) — branch, work-unit, staged-diff, and PR procedure.
