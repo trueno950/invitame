@@ -194,8 +194,9 @@ the previous one from the API (`environment.ts:375-414`).
 The host is Railway (ADR 0004 decision 4): one project with two services, `web` (Next.js) and `api` (NestJS), plus a
 Postgres service, under one registrable domain with `app.` and `api.` subdomains
 (`docs/adr/0004-authentication-with-better-auth.md:105-110`). Backups are Railway's own (owner decision S3 in
-`odd/tasks/m10-release.md`), so the chosen plan must include them; the backup, verification, and restore procedure is
-T5 and is not repeated here.
+`odd/tasks/m10-release.md`), so the chosen plan must include them; which backups the plan gives, how to verify one with
+a restore drill, what the RPO and RTO are, and how a release is rolled back are in
+[`backup-restore.md`](backup-restore.md).
 
 ### Per-service variables
 
