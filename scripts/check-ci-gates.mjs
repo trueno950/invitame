@@ -13,6 +13,10 @@ import { fileURLToPath } from "node:url";
 //   apart in the other direction either;
 // - a declared gate is missing from the workflow file, runs fewer times than required (the seed
 //   runs twice to prove idempotence), or was moved out of the job that is documented to run it;
+// - a gate declared `local` (the developer's Docker Compose database, the format repair command)
+//   appears in any workflow `run:` step, which would run it in CI;
+// - the required-check table is emptied or loses one of the always-required checks, which would
+//   leave branch protection protecting nothing while the heading still claims otherwise;
 // - a required status check documented in the matrix document no longer matches the workflow job
 //   `name:`, which would silently detach branch protection from the job it protects.
 //
@@ -27,6 +31,13 @@ const matrixHeading = "## Current command matrix";
 const requiredChecksHeading = "### Required status checks on `master`";
 
 /**
+ * The three status checks `master` must require. The documented table still supplies each check's
+ * job id; this list makes an emptied or trimmed table fail instead of passing with nothing to
+ * verify.
+ */
+export const REQUIRED_CHECKS = ["Quality gates", "Database tests", "Browser tests"];
+
+/**
  * How every gate of the documented matrix is expected to appear in `.github/workflows/ci.yml`.
  * `runs` entries name an exact `run:` command, the job id that must contain it, and how many times
  * it must appear; `local` marks a gate CI must not run, with the reason. Keys must equal the
@@ -34,7 +45,11 @@ const requiredChecksHeading = "### Required status checks on `master`";
  */
 export const CI_COVERAGE = {
   "node scripts/check-ci-gates.mjs": {
-    runs: [{ command: "node scripts/check-ci-gates.mjs", job: "quality-gates" }],
+    // Both steps, so deleting the self-test from the workflow fails the guard it verifies.
+    runs: [
+      { command: "node scripts/check-ci-gates.mjs", job: "quality-gates" },
+      { command: "node scripts/check-ci-gates.mjs --self-test", job: "quality-gates" },
+    ],
   },
   "pnpm format:check": {
     runs: [{ command: "pnpm format:check", job: "quality-gates" }],
@@ -77,6 +92,14 @@ export const CI_COVERAGE = {
   },
   "pnpm db:seed": {
     runs: [{ command: "pnpm db:seed", job: "database-tests", count: 2 }],
+  },
+  "node scripts/check-seed-idempotence.mjs": {
+    // The second seed proves nothing on its own: the counts must be recorded before it and compared
+    // after it, so both steps are required.
+    runs: [
+      { command: "node scripts/check-seed-idempotence.mjs --record", job: "database-tests" },
+      { command: "node scripts/check-seed-idempotence.mjs --verify", job: "database-tests" },
+    ],
   },
   "pnpm db:check": {
     runs: [{ command: "pnpm db:check", job: "database-tests" }],
@@ -247,10 +270,26 @@ function parseWorkflow(text) {
 }
 
 /**
- * The failures of one workflow/docs pair: empty when every documented gate is wired as declared and
- * every required check still names a workflow job.
+ * Whether a `run:` step executes `command`, alone or as one segment of a chained shell command such
+ * as `pnpm db:up && pnpm db:migrate`. A segment that only starts with the command is not a match.
  */
-export function evaluate({ workflow, qualityGates, coverage = CI_COVERAGE }) {
+function runsStep(runCommand, command) {
+  return runCommand
+    .split(/&&|\|\||[;\n]/)
+    .map((segment) => segment.trim())
+    .includes(command);
+}
+
+/**
+ * The failures of one workflow/docs pair: empty when every documented gate is wired as declared, no
+ * local-only gate runs in CI, and every required check still names a workflow job.
+ */
+export function evaluate({
+  workflow,
+  qualityGates,
+  coverage = CI_COVERAGE,
+  requiredChecks = REQUIRED_CHECKS,
+}) {
   const failures = [];
   const jobs = parseWorkflow(workflow);
 
@@ -274,6 +313,18 @@ export function evaluate({ workflow, qualityGates, coverage = CI_COVERAGE }) {
     }
 
     if (declaration.local !== undefined) {
+      for (const job of jobs.values()) {
+        for (const entry of job.runs) {
+          if (!runsStep(entry.command, gate.command)) {
+            continue;
+          }
+
+          failures.push(
+            `Documented gate "${gate.label}" is declared local only (${declaration.local}), so \`${gate.command}\` must not run in CI, but .github/workflows/ci.yml job "${job.id}" runs it in step "${entry.step ?? "unnamed"}": remove that step, or document the gate as a CI gate and declare the job that runs it`,
+          );
+        }
+      }
+
       continue;
     }
 
@@ -304,14 +355,28 @@ export function evaluate({ workflow, qualityGates, coverage = CI_COVERAGE }) {
     }
   }
 
-  const requiredChecks = documentedRequiredChecks(qualityGates);
-  if (requiredChecks === null) {
+  const recordedChecks = documentedRequiredChecks(qualityGates);
+  if (recordedChecks === null) {
     failures.push(
       `${qualityGatesPath} must record the required status checks under "${requiredChecksHeading}", so a renamed job cannot detach branch protection silently`,
     );
+  } else {
+    if (recordedChecks.length === 0) {
+      failures.push(
+        `${qualityGatesPath} keeps the heading "${requiredChecksHeading}" but its table has no rows: list the required checks, or remove the heading together with them`,
+      );
+    }
+
+    for (const check of requiredChecks) {
+      if (!recordedChecks.some((recorded) => recorded.check === check)) {
+        failures.push(
+          `Required check "${check}" is no longer recorded under "${requiredChecksHeading}" in ${qualityGatesPath}: record it again, or change REQUIRED_CHECKS in scripts/check-ci-gates.mjs as a reviewed change to the protection itself`,
+        );
+      }
+    }
   }
 
-  for (const required of requiredChecks ?? []) {
+  for (const required of recordedChecks ?? []) {
     if (required.job === null) {
       failures.push(
         `Required check "${required.check}" must name its workflow job id in backticks`,
@@ -365,6 +430,12 @@ jobs:
     name: Quality gates
     runs-on: ubuntu-latest
     steps:
+      - name: CI gate coverage
+        run: node scripts/check-ci-gates.mjs
+
+      - name: CI gate coverage self-test
+        run: node scripts/check-ci-gates.mjs --self-test
+
       - name: Lint
         run: pnpm lint
 
@@ -378,8 +449,14 @@ jobs:
       - name: Seed the database
         run: pnpm db:seed
 
+      - name: Record seed row counts
+        run: node scripts/check-seed-idempotence.mjs --record
+
       - name: Seed the database again (idempotence)
         run: pnpm db:seed
+
+      - name: Verify the second seed created nothing
+        run: node scripts/check-seed-idempotence.mjs --verify
 `,
   qualityGates: `# Fixture
 
@@ -387,9 +464,11 @@ jobs:
 
 | Gate | Command | Current meaning | When required |
 | --- | --- | --- | --- |
+| CI gate coverage | \`node scripts/check-ci-gates.mjs\` | Fixture. | Every CI change. |
 | Lint | \`pnpm lint\` | Fixture. | Every change. |
 | Unit tests | \`pnpm test\` | Fixture. | Every change. |
 | Seed | \`pnpm db:seed\` | Fixture. | Seed changes. |
+| Seed idempotence counts | \`node scripts/check-seed-idempotence.mjs\` | Fixture. | Seed changes. |
 | Stop local PostgreSQL | \`pnpm db:down\` | Fixture. | After local work. |
 
 ## CI/CD status
@@ -401,12 +480,18 @@ jobs:
 | Quality gates | \`quality-gates\` | Static gates. |
 | Database tests | \`database-tests\` | Database gates. |
 `,
+  // The guard's own declaration is the real one, so the fixture also proves that the real
+  // CI_COVERAGE keeps requiring both the guard and its self-test step.
   coverage: {
+    "node scripts/check-ci-gates.mjs": CI_COVERAGE["node scripts/check-ci-gates.mjs"],
     "pnpm lint": { runs: [{ command: "pnpm lint", job: "quality-gates" }] },
     "pnpm test": { runs: [{ command: "pnpm test", job: "quality-gates" }] },
     "pnpm db:seed": { runs: [{ command: "pnpm db:seed", job: "database-tests", count: 2 }] },
+    "node scripts/check-seed-idempotence.mjs":
+      CI_COVERAGE["node scripts/check-seed-idempotence.mjs"],
     "pnpm db:down": { local: "fixture local-only gate" },
   },
+  requiredChecks: ["Quality gates", "Database tests"],
 };
 
 /** Runs the guard over fixtures and proves it fails on each drift it exists to catch. */
@@ -450,10 +535,19 @@ function selfTest() {
           `      - name: Seed the database
         run: pnpm db:seed
 
-      - name: Seed the database again (idempotence)
-        run: pnpm db:seed
+      - name: Record seed row counts
 `,
-          "",
+          `      - name: Record seed row counts
+`,
+        )
+        .replace(
+          `      - name: Seed the database again (idempotence)
+        run: pnpm db:seed
+
+      - name: Verify the second seed created nothing
+`,
+          `      - name: Verify the second seed created nothing
+`,
         )
         .replace(
           `      - name: Lint
@@ -471,7 +565,7 @@ function selfTest() {
         ),
       qualityGates: fixtures.qualityGates,
       coverage: fixtures.coverage,
-      expected: ['job "database-tests"', "pnpm db:seed"],
+      expected: ['job "database-tests"', "pnpm db:seed", "at least 2 run steps"],
     },
     {
       name: "a documented gate without coverage fails",
@@ -497,6 +591,70 @@ function selfTest() {
       coverage: fixtures.coverage,
       expected: ['Required check "Quality gates"', "Quality checks"],
     },
+    {
+      name: "a local-only gate added to CI fails",
+      workflow: fixtures.workflow.replace(
+        `      - name: Test
+        run: pnpm test
+`,
+        `      - name: Test
+        run: pnpm test
+
+      - name: Stop local PostgreSQL
+        run: pnpm db:down
+`,
+      ),
+      qualityGates: fixtures.qualityGates,
+      coverage: fixtures.coverage,
+      expected: ["pnpm db:down", "must not run in CI"],
+    },
+    {
+      name: "an emptied required-check table fails",
+      workflow: fixtures.workflow,
+      qualityGates: fixtures.qualityGates.replace(
+        `| Quality gates | \`quality-gates\` | Static gates. |
+| Database tests | \`database-tests\` | Database gates. |
+`,
+        "",
+      ),
+      coverage: fixtures.coverage,
+      expected: ["has no rows"],
+    },
+    {
+      name: "a dropped required check fails",
+      workflow: fixtures.workflow,
+      qualityGates: fixtures.qualityGates.replace(
+        `| Database tests | \`database-tests\` | Database gates. |
+`,
+        "",
+      ),
+      coverage: fixtures.coverage,
+      expected: ['Required check "Database tests"', "no longer recorded"],
+    },
+    {
+      name: "a removed guard self-test step fails",
+      workflow: fixtures.workflow.replace(
+        `      - name: CI gate coverage self-test
+        run: node scripts/check-ci-gates.mjs --self-test
+`,
+        "",
+      ),
+      qualityGates: fixtures.qualityGates,
+      coverage: fixtures.coverage,
+      expected: ["CI gate coverage", "node scripts/check-ci-gates.mjs --self-test"],
+    },
+    {
+      name: "a removed seed-count verification fails",
+      workflow: fixtures.workflow.replace(
+        `      - name: Verify the second seed created nothing
+        run: node scripts/check-seed-idempotence.mjs --verify
+`,
+        "",
+      ),
+      qualityGates: fixtures.qualityGates,
+      coverage: fixtures.coverage,
+      expected: ["Seed idempotence counts", "node scripts/check-seed-idempotence.mjs --verify"],
+    },
   ];
 
   const problems = [];
@@ -505,6 +663,7 @@ function selfTest() {
       workflow: testCase.workflow,
       qualityGates: testCase.qualityGates,
       coverage: testCase.coverage,
+      requiredChecks: testCase.requiredChecks ?? fixtures.requiredChecks,
     });
 
     if (testCase.expected.length === 0) {

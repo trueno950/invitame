@@ -192,17 +192,49 @@ reads on every pull request:
 | Database tests | `database-tests` | Migrations, `db:check`, `test:db`, or either seed run fails. |
 | Browser tests | `browser-tests` | The Chromium end-to-end suite fails. |
 
-The setting lives in GitHub, not in the repository, and the repository owner configured it with
-`gh api PUT repos/trueno950/invitame/branches/master/protection`: `strict: false` (a pull request need not be up to
-date with `master`, so chained pull requests merge after each retarget without a forced update), no required
-review (single owner), no force push, no deletion, and `enforce_admins: false`. Read it back before relying on it:
+The setting lives in GitHub, not in the repository. This is the record of the owner's full-protection request on the
+branch-protection endpoint
+([GitHub REST: branch protection](https://docs.github.com/en/rest/branches/branch-protection)):
+
+```bash
+gh api --method PUT repos/trueno950/invitame/branches/master/protection \
+  --input - <<'JSON'
+{
+  "required_status_checks": {
+    "strict": false,
+    "checks": [
+      {"context": "Quality gates"},
+      {"context": "Database tests"},
+      {"context": "Browser tests"}
+    ]
+  },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
+```
+
+`strict: false` (a pull request need not be up to date with `master`, so chained pull requests merge after each
+retarget without a forced update), no required review (single owner), no force push, no deletion, and
+`enforce_admins: false`. `gh api` takes the HTTP method as `--method`/`-X`: a bare `gh api PUT …` would fail
+because `PUT` is read as the endpoint path. Read the setting back before relying on it:
 
 ```bash
 gh api repos/trueno950/invitame/branches/master/protection --jq \
-  '{strict: .required_status_checks.strict, contexts: .required_status_checks.contexts,
+  '{strict: .required_status_checks.strict,
+    checks: [.required_status_checks.checks[].context],
     force_push: .allow_force_pushes.enabled, deletions: .allow_deletions.enabled,
     admins: .enforce_admins.enabled}'
 ```
+
+The response carries the required checks twice: `contexts` (a list of names) and `checks`, which pairs each name
+with the app that must report it. The three checks above come back with the GitHub Actions app id, so read `checks`
+when the answer matters and write `checks` when changing the list. Reading it back today also returns every other
+protection flag off: `required_linear_history`, `block_creations`, `required_conversation_resolution`, `lock_branch`,
+and `allow_fork_syncing` are `false` as well (`required_signatures` has its own endpoint).
 
 `enforce_admins: false` means the owner can still merge with a failing check, so the requirement is a guard rail
 for routine merges, not proof that every merge passed. Nothing in the repository can prove a past run passed; the
@@ -219,17 +251,38 @@ the pull request that renames it would never become mergeable under the old sett
 2. Run `node scripts/check-ci-gates.mjs` and `pnpm docs:check`. The guard fails while the workflow and the table
    disagree, and again if a documented gate loses its step.
 3. Ask the owner to drop the outdated requirement before that pull request merges, and to restore the full setting
-   from the merged `master` afterwards:
+   from the merged `master` afterwards. This is two `PATCH` requests on the check policy itself, because that is
+   the endpoint that takes `strict` together with the list of checks
+   ([Update status check protection](https://docs.github.com/en/rest/branches/branch-protection#update-status-check-protection)).
+   The `…/required_status_checks/contexts` sub-resource is a different operation: `PUT` there takes only a bare
+   list of context names and cannot set `strict`, and `POST`/`DELETE` there add or remove single contexts. Each
+   `PATCH` replaces the whole list, so every request repeats `strict` (GitHub requires it) and every check that
+   must stay required:
 
    ```bash
-   gh api -X PUT repos/trueno950/invitame/branches/master/protection/required_status_checks \
+   # Before the renaming pull request merges: stop requiring the outdated name.
+   gh api --method PATCH repos/trueno950/invitame/branches/master/protection/required_status_checks \
      --input - <<'JSON'
-   {"strict": false, "contexts": ["Quality gates", "Database tests", "Browser tests"]}
+   {"strict": false, "checks": [{"context": "Database tests"}, {"context": "Browser tests"}]}
+   JSON
+
+   # After it merges: require the three checks again, with the new job name.
+   gh api --method PATCH repos/trueno950/invitame/branches/master/protection/required_status_checks \
+     --input - <<'JSON'
+   {
+     "strict": false,
+     "checks": [
+       {"context": "Quality gates"},
+       {"context": "Database tests"},
+       {"context": "Browser tests"}
+     ]
+   }
    JSON
    ```
 
-   That endpoint replaces the required contexts only; force push, deletion, and admin enforcement are separate
-   settings and stay as they are.
+   Force push, deletion, and admin enforcement are separate settings and stay as they are. `--input -` reads the
+   JSON body from standard input, so no shell quoting rewrites the payload; `--method` is required, since `gh api`
+   otherwise treats a bare method word as the endpoint path.
 
 4. Re-read the protection with the command above and record the observed result with the change.
 

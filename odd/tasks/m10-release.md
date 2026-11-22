@@ -30,6 +30,7 @@ media bucket, or payment credential.
 | T5 | Backup and restore with Railway (S3), the migration recovery and release rollback plan | S3, S5 | worker | see L5 |
 | T6 | Release checklist, post-release verification, operations runbooks, alert ownership table | S1, S5 | worker | see L5 |
 | T7 | Performance checks for the public invitation and critical API reads | S1 | worker | see L5 |
+| T9 | CI review follow-ups: `PATCH` in the required-check procedure, a seed-idempotence assertion, three guard gaps | S5 | worker | see L7 |
 | T8 | External setup with the owner: Railway project, domain, secrets, Resend, R2, cron, alerts, first release | S1-S5 | owner | |
 
 ## Log
@@ -59,3 +60,16 @@ media bucket, or payment credential.
   the two index lines, the runbooks→backup-restore link.
   Evidence: API 1973, web 1877, the CI gate guard and its self-test, the performance dry run, typecheck, lint, format,
   docs:check, diff-check.
+- L6 — T4-T7 delivered as chained PRs #117 (CI), #118 (backups), #119 (performance), #120 (runbooks), CI green, merged;
+  master `862df74`. Native review of #117 `review-dd8974379479b5f7` approved (the others were passive or medium, not
+  due). Its non-blocking findings become T9: «GitHub documents that endpoint's update operation as PATCH»; «never
+  observes whether the second run created rows»; «a documented local-only gate such as `pnpm db:up` or `pnpm db:down`
+  could be added to CI and the guard would still pass»; «If the heading remains but the table rows are deleted … the
+  guard passes»; «removing the self-test step would leave the guard green». Owner: «el pr» — do T9 before T8.
+- L7 — T9 (worker): `git-workflow.md` changes a required check with `gh api --method PATCH …/required_status_checks`
+  (`strict` + `checks`, per GitHub REST «Update status check protection»), and every `gh api` call names its method;
+  «Database tests» records the six seeded tables' row counts between the two seeds and fails when the second seed
+  changes any (`scripts/check-seed-idempotence.mjs --record/--verify`); the CI guard refuses a local-only gate in CI,
+  an emptied or incomplete required-checks table, and a removed `--self-test` or seed-count step (self-test 7 → 12
+  cases, RED observed per gap). Evidence: guard, self-test, API 1973, web 1877, typecheck, lint, format, docs:check,
+  scripts lint, diff-check; the seed-count step proved on a disposable database (pass, and fail on an extra row).

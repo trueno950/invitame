@@ -122,8 +122,17 @@ jobs:
       - name: Seed the database
         run: pnpm db:seed
 
+      # A second run that inserted nothing still exits 0, so the row count of every table the catalog
+      # seed writes (apps/api/prisma/catalog-seed.ts) is recorded here and compared after the second
+      # seed: scripts/check-seed-idempotence.mjs uses the Prisma client this job already generated.
+      - name: Record seed row counts
+        run: node scripts/check-seed-idempotence.mjs --record
+
       - name: Seed the database again (idempotence)
         run: pnpm db:seed
+
+      - name: Verify the second seed created nothing
+        run: node scripts/check-seed-idempotence.mjs --verify
 
   browser-tests:
     name: Browser tests
