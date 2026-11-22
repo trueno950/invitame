@@ -1,8 +1,10 @@
 # Quality gates
 
 This document is the practical Definition of Done for the current repository. The commands below reflect the
-scripts that exist today. A narrow documentation consistency check and limited quality-gate CI workflow are
-implemented; CD, hosted deployment, and required-check governance remain planned.
+scripts that exist today. A narrow documentation consistency check and a limited quality-gate CI workflow are
+implemented, and the three required status checks are enforced on `master` (see
+[Required status checks on `master`](#required-status-checks-on-master)); CD and hosted deployment remain
+planned.
 
 ## Definition of Done
 
@@ -34,20 +36,21 @@ Those actions remain human-owned as described in `AGENTS.md` and `docs/developme
 | Browser end-to-end tests | `pnpm --filter @invitame/web test:e2e` | Runs `apps/web/e2e/**/*.spec.ts` with `@playwright/test` in Chromium only, against the built API (`apps/api/dist`) and the production build of the web (`next start`), which the harness starts on the dedicated ports 3410 (web) and 3411 (API), with its API gate on 3412, or `E2E_WEB_PORT`, `E2E_API_PORT`, and `E2E_GATE_PORT`. It needs `pnpm build`, Chromium from `pnpm --filter @invitame/web test:e2e:install`, and an explicit `E2E_DATABASE_URL` (migrated) and `E2E_MAILPIT_URL`; it refuses missing or non-local values and never attaches to a server that is already listening. It is not part of `pnpm test`. CI runs it in the `browser-tests` job. See [Browser end-to-end tests](#browser-end-to-end-tests). | Changes to the web pages, their forms, the web's `/api/auth` proxy, `proxy.ts`, the server-side API client, or the auth flows they drive. |
 | Build | `pnpm build` | Builds the API with `tsc` and the web app with Next.js. Outputs are ignored build artifacts. | Runtime, dependency, configuration, or build changes; recommended for broad docs/process changes. |
 | Diff hygiene | `git diff --check` | Finds whitespace errors in the working diff. | Every change before review. |
+| CI gate coverage | `node scripts/check-ci-gates.mjs` | Reads this matrix and `.github/workflows/ci.yml` and fails when a documented gate has no declared CI step in the documented job, when a declared gate is no longer documented, or when a required check's job `name:` changed; `--self-test` proves the guard fails on a fixture that misses a gate. It checks the workflow definition, not that a past run passed. | Every CI or quality-gate change. |
 | Start local PostgreSQL | `pnpm db:up` | Starts the local Docker Compose PostgreSQL service. | Database or integration verification. |
 | Apply migrations and generate Prisma | `pnpm db:migrate` | Runs `prisma migrate deploy` and `prisma generate` for the API schema. | Schema/migration changes and database verification. |
-| Seed | `pnpm db:seed` | Runs the API Prisma seed. Run it twice when checking idempotence. | Seed/catalog changes and database verification. |
-| Database connection | `pnpm db:check` | Executes the API connection check and a real `SELECT 1`. | Database changes or any claim about database connectivity. |
+| Seed | `pnpm db:seed` | Runs the API Prisma seed. Run it twice when checking idempotence: the CI `database-tests` job runs it twice on the freshly migrated service database. | Seed/catalog changes and database verification. |
+| Database connection | `pnpm db:check` | Executes the API connection check and a real `SELECT 1`. CI runs it in the `database-tests` job before `test:db`. | Database changes or any claim about database connectivity. |
 | Stop local PostgreSQL | `pnpm db:down` | Stops the local Compose services. | After local database work when the environment is no longer needed. |
 
-`.github/workflows/ci.yml` runs the documentation consistency, format/lint/typecheck/test/build/diff-hygiene gates
-on pushes to `master` and `main` and on pull requests, a separate `database-tests` job that applies the
-migrations to a disposable PostgreSQL 17 service and runs `test:db`, and a `browser-tests` job that runs the
-browser end-to-end suite against PostgreSQL 17 and Mailpit services. This is a limited quality workflow, not CD,
-hosted deployment, or required-check governance. The repository still has no dedicated coverage, seed or
-migration-validation automation beyond applying the migrations before `test:db` and the browser suite, and the
-browser suite covers only the customer and administrator flows listed below. Do not report those gaps as passing. Add the capability
-only as part of an approved work unit that defines its scope and ownership.
+`.github/workflows/ci.yml` runs the CI gate coverage guard, the documentation consistency,
+format/lint/typecheck/test/build/diff-hygiene gates on pushes to `master` and `main` and on pull requests, a
+separate `database-tests` job that applies the migrations to an empty disposable PostgreSQL 17 service, runs
+`db:check`, `test:db`, and then the seed twice to prove it stays safe to repeat, and a `browser-tests` job that
+runs the browser end-to-end suite against PostgreSQL 17 and Mailpit services. This is a limited quality workflow,
+not CD or hosted deployment. The repository still has no coverage threshold, and the browser suite covers only
+the customer and administrator flows listed below. Do not report those gaps as passing. Add the capability only
+as part of an approved work unit that defines its scope and ownership.
 
 ## Recommended local sequences
 
@@ -223,13 +226,37 @@ If Docker, PostgreSQL, a browser, a provider sandbox, credentials, or another re
 ## CI/CD status
 
 The repository has a limited quality-gate CI workflow. It runs on pushes to `master` and `main` and every pull
-request: `pnpm install --frozen-lockfile`, `docs:check`, Prisma client generation, `format:check`, `lint`,
-`typecheck`, `test`, `build`, and `git diff --check`, in that order. The `database-tests` job starts a PostgreSQL 17
-service with trust authentication (no password in the workflow), generates the Prisma client, runs
-`prisma:migrate:deploy`, and runs `test:db`. The `browser-tests` job starts PostgreSQL 17 (trust authentication)
-and Mailpit (`axllent/mailpit:v1.33.0`) services, generates the Prisma client, applies the migrations, runs
-`pnpm build`, installs Chromium only with its system dependencies (`test:e2e:install --with-deps`), runs
-`test:e2e` with two workers, and uploads the failed tests' screenshots and traces for one day when it fails. Seed and connection checks stay a manual local gate (see the database
-change sequence above). Required status checks, hosted
-integration databases, CD, and deployment gates remain planned; adopt each through an explicit
-process change rather than assuming the limited CI workflow already covers them.
+request. The `quality-gates` job (check name `Quality gates`) installs with `--frozen-lockfile`, then runs the CI
+gate coverage guard and its self-test, `docs:check`, Prisma client generation, `format:check`, `lint`,
+`typecheck`, `test`, `build`, and `git diff --check`, in that order. The `database-tests` job (check name
+`Database tests`) starts an empty PostgreSQL 17 service with trust authentication (no password in the workflow),
+generates the Prisma client, applies every migration to that empty database, runs `pnpm db:check`
+(`prisma:check`, a real `SELECT 1`), runs `test:db`, and then runs `pnpm db:seed` twice: the second run must create
+nothing and must not fail, which is the seed-idempotence proof the local database sequence asks for. The seed runs
+after `test:db` so the seeded catalog rows cannot change what the integration suites observe. The `browser-tests`
+job (check name `Browser tests`) starts PostgreSQL 17 (trust authentication) and Mailpit
+(`axllent/mailpit:v1.33.0`) services,
+generates the Prisma client, applies the migrations, runs `pnpm build`, installs Chromium only with its system
+dependencies (`test:e2e:install --with-deps`), runs `test:e2e` with two workers, and uploads the failed tests'
+screenshots and traces for one day when it fails.
+
+`pnpm db:up` and `pnpm db:down` stay local only: they drive the developer's Docker Compose database, while CI
+starts its own service container per job. `pnpm format` is a repair command and is never evidence.
+
+### Required status checks on `master`
+
+Branch protection on `master` requires these three status checks, and their names are the job `name:` values in
+`.github/workflows/ci.yml`, so renaming a job detaches protection from it (the CI gate coverage guard fails first):
+
+| Required check | Job | Covers |
+| --- | --- | --- |
+| Quality gates | `quality-gates` | The static gates, tests, build, diff hygiene, and the CI gate coverage guard. |
+| Database tests | `database-tests` | Migrations on an empty database, `db:check`, `test:db`, and the seed run twice. |
+| Browser tests | `browser-tests` | The Chromium end-to-end suite against PostgreSQL and Mailpit. |
+
+The protection is configured by the repository owner on `master` only: `strict: false` (a pull request need not be
+up to date with `master` before merging, so chained pull requests merge after each retarget without a forced
+update), no required review (single owner), no force push, no deletion, and `enforce_admins: false`. How to read
+it and how to change it is documented in [`git-workflow.md`](git-workflow.md#8-required-status-checks-and-branch-protection).
+Hosted integration databases, CD, and deployment gates remain planned; adopt each through an explicit process
+change rather than assuming the limited CI workflow already covers them.

@@ -31,6 +31,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Fails when a gate documented in docs/development/quality-gates.md has no step in this
+      # file, when a declared gate disappears, or when a required check's job name changes
+      # (M10 S5: CI/CD runs the documented quality gates without silently skipping material
+      # checks). The self-test proves the guard still fails on a fixture missing a gate.
+      - name: CI gate coverage
+        run: node scripts/check-ci-gates.mjs
+
+      - name: CI gate coverage self-test
+        run: node scripts/check-ci-gates.mjs --self-test
+
       - name: Documentation consistency
         run: pnpm docs:check
 
@@ -96,11 +106,24 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @invitame/api prisma:generate
 
+      # The service database starts empty, so this applies every migration to an empty database;
+      # the seed steps below then prove the catalog seed works on that fresh schema.
       - name: Apply migrations
         run: pnpm --filter @invitame/api prisma:migrate:deploy
 
+      - name: Database connection check
+        run: pnpm db:check
+
       - name: Database integration tests
         run: pnpm --filter @invitame/api test:db
+
+      # The seed must stay safe to repeat: the second run creates nothing and must not fail. It runs
+      # after test:db so the seeded catalog rows cannot change what the integration suites observe.
+      - name: Seed the database
+        run: pnpm db:seed
+
+      - name: Seed the database again (idempotence)
+        run: pnpm db:seed
 
   browser-tests:
     name: Browser tests

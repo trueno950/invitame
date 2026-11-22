@@ -2,7 +2,9 @@
 
 This is the intended workflow for reviewable InvitaMe changes. It documents procedure; it does not install hooks,
 create GitHub automation, or authorize delivery actions. The repository has a limited quality-gate CI workflow for
-pushes to `master` and `main` and pull requests, but no CD/hosted deployment automation or issue/PR enforcement.
+pushes to `master` and `main` and pull requests, the three required status checks on `master` described in
+[section 8](#8-required-status-checks-and-branch-protection), and no CD/hosted deployment automation or
+issue/PR enforcement.
 Branch names, remotes, and history are repository state: inspect them before using a command instead of copying an
 older branch assumption from this document.
 
@@ -172,6 +174,66 @@ AI may map, implement, verify, and prepare a branch or PR body. Human approval i
 opening a PR, merge, release, deploy, external-service creation, or destructive migration. Do not force-push,
 rewrite shared history, commit directly to `main`, or bypass review with `--no-verify` as a normal workflow.
 
-After review, the human merges only when the applicable quality gates pass. Release and deployment follow a
+After review, the human merges only when the applicable quality gates pass, including the required status checks in
+[section 8](#8-required-status-checks-and-branch-protection). Release and deployment follow a
 separate human-approved procedure once environments and ownership exist; this repository does not claim those
 procedures or CD/hosted deployment automation today.
+
+## 8. Required status checks and branch protection
+
+Branch protection on `master` requires exactly these three status checks. Their names are the job `name:` values in
+`.github/workflows/ci.yml`, and the same table is recorded in
+[`quality-gates.md`](quality-gates.md#required-status-checks-on-master), which `node scripts/check-ci-gates.mjs`
+reads on every pull request:
+
+| Required check | Job id | Blocks a merge when |
+| --- | --- | --- |
+| Quality gates | `quality-gates` | The CI gate coverage guard, `docs:check`, format, lint, typecheck, tests, build, or `git diff --check` fails. |
+| Database tests | `database-tests` | Migrations, `db:check`, `test:db`, or either seed run fails. |
+| Browser tests | `browser-tests` | The Chromium end-to-end suite fails. |
+
+The setting lives in GitHub, not in the repository, and the repository owner configured it with
+`gh api PUT repos/trueno950/invitame/branches/master/protection`: `strict: false` (a pull request need not be up to
+date with `master`, so chained pull requests merge after each retarget without a forced update), no required
+review (single owner), no force push, no deletion, and `enforce_admins: false`. Read it back before relying on it:
+
+```bash
+gh api repos/trueno950/invitame/branches/master/protection --jq \
+  '{strict: .required_status_checks.strict, contexts: .required_status_checks.contexts,
+    force_push: .allow_force_pushes.enabled, deletions: .allow_deletions.enabled,
+    admins: .enforce_admins.enabled}'
+```
+
+`enforce_admins: false` means the owner can still merge with a failing check, so the requirement is a guard rail
+for routine merges, not proof that every merge passed. Nothing in the repository can prove a past run passed; the
+`node scripts/check-ci-gates.mjs` guard only proves each documented gate is wired into the job it belongs to.
+
+### Changing a required check
+
+This is an owner action plus a repository change, in this order, because GitHub matches the required names against
+the check runs reported for the pull request's head commit: a renamed job cannot satisfy the old required name, so
+the pull request that renames it would never become mergeable under the old setting.
+
+1. Change the job `name:` or its steps in `.github/workflows/ci.yml` and update the required-check table in
+   [`quality-gates.md`](quality-gates.md#required-status-checks-on-master) on the same branch.
+2. Run `node scripts/check-ci-gates.mjs` and `pnpm docs:check`. The guard fails while the workflow and the table
+   disagree, and again if a documented gate loses its step.
+3. Ask the owner to drop the outdated requirement before that pull request merges, and to restore the full setting
+   from the merged `master` afterwards:
+
+   ```bash
+   gh api -X PUT repos/trueno950/invitame/branches/master/protection/required_status_checks \
+     --input - <<'JSON'
+   {"strict": false, "contexts": ["Quality gates", "Database tests", "Browser tests"]}
+   JSON
+   ```
+
+   That endpoint replaces the required contexts only; force push, deletion, and admin enforcement are separate
+   settings and stay as they are.
+
+4. Re-read the protection with the command above and record the observed result with the change.
+
+Adding a fourth required check, removing one, or changing `strict`, force push, deletion, or admin enforcement is a
+new owner decision: do not apply it from an AI-authored change, and do not describe an unapplied setting as
+enforced. Developers cannot satisfy an unreachable required check: if a job is permanently unavailable (an
+outage, a removed service), stop and surface it instead of bypassing the check.
