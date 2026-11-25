@@ -50,8 +50,9 @@ adds it); and `20261129120100_add_settings_admin_action` replaces the two `Admin
 platform-wide action names no target while every other action keeps exactly the target it names. No existing row is
 rewritten by any of them and nothing is deleted. The expiration slice adds the additive
 `20261130120000_add_package_duration_days` migration: the `Package.durationDays` column, `INTEGER NOT NULL DEFAULT 30`,
-with the `Package_durationDays_positive` check. The default backfills every existing package with the basic month, so
-no row is invalidated and nothing is deleted. Future analytics design is documented separately in
+with the `Package_durationDays_positive` check. The default keeps every existing package valid, and the migration
+backfills the three seeded catalog keys to their known lifetimes (basic 30, premium 90, deluxe 180) before an
+administrator can customize them; no row is invalidated and nothing is deleted. Future analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
