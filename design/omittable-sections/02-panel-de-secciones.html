@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel «¿Qué incluye tu invitación?»</title>
+<style>
+  :root{--bg:#fff7f5;--surface:#fff;--rose-50:#fdeef2;--rose-100:#f8d7e0;--ink:#3b1424;--muted:#6b3a4c;--primary:#8c1c3a;--field-border:#a06e7e;--gold:#c29a54;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);line-height:1.5}
+  main{max-width:760px;margin:0 auto;padding:32px 24px 64px}
+  h1{font-family:var(--font-display);font-weight:600;font-size:30px;margin:0 0 4px}
+  h2{font-family:var(--font-display);font-weight:600;font-size:22px;margin:0 0 2px}
+  .lead{color:var(--muted);margin:0 0 18px;font-size:15px}
+  .panel{background:var(--surface);border-radius:20px;box-shadow:inset 0 0 0 1.5px var(--gold);padding:18px 20px;margin-bottom:20px}
+  .panel p{margin:0 0 14px;color:var(--muted);font-size:14px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:14px;cursor:pointer;border:1.5px solid var(--primary);background:var(--rose-50);color:var(--primary);font-weight:500}
+  .chip::before{content:"✓";font-weight:700}
+  .chip.off{border-color:var(--field-border);background:var(--surface);color:var(--muted);font-weight:400;text-decoration:line-through}
+  .chip.off::before{content:"＋";text-decoration:none}
+  .chip.locked{border-style:dashed;cursor:default}
+  .card{background:var(--surface);border-radius:20px;box-shadow:inset 0 0 0 1.5px var(--rose-100);margin-bottom:12px;padding:14px 18px;display:flex;justify-content:space-between}
+  .card b{font-size:16px}.card span{font-size:13px;color:var(--muted)}
+  :focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Contenido</h1>
+  <p class="lead">Primero elige qué secciones lleva tu invitación; abajo solo aparecen las que incluiste.</p>
+
+  <section class="panel" aria-labelledby="incluye">
+    <h2 id="incluye">¿Qué incluye tu invitación?</h2>
+    <p>Toca una sección para quitarla o agregarla. Lo que ya escribiste se guarda aunque la quites.</p>
+    <div class="chips">
+      <span class="chip locked" title="Siempre se muestra">Quinceañera y fecha</span>
+      <button class="chip" type="button" aria-pressed="true">Padres</button>
+      <button class="chip off" type="button" aria-pressed="false">Padrinos de honor</button>
+      <button class="chip" type="button" aria-pressed="true">Misa</button>
+      <button class="chip" type="button" aria-pressed="true">Recepción</button>
+      <button class="chip off" type="button" aria-pressed="false">Código de vestimenta</button>
+      <button class="chip" type="button" aria-pressed="true">Mensaje</button>
+      <button class="chip" type="button" aria-pressed="true">Confirmación</button>
+    </div>
+  </section>
+
+  <div class="card"><div><b>Quinceañera y fecha</b><br><span>Valentina · 15 de agosto</span></div><span>Completo</span></div>
+  <div class="card"><div><b>Padres</b><br><span>Laura y Jorge Ramírez</span></div><span>Completo</span></div>
+  <div class="card"><div><b>Misa</b><br><span>Parroquia de San Juan</span></div><span>Falta 1</span></div>
+  <div class="card"><div><b>Recepción</b><br><span>Salón Jardín · 21:00</span></div><span>Completo</span></div>
+  <div class="card"><div><b>Mensaje</b><br><span>Aún sin datos</span></div><span>Falta 1</span></div>
+</main>
+</body>
+</html>

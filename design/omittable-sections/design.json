@@ -1,0 +1,28 @@
+{
+  "title": "Secciones que el cliente puede apagar",
+  "brief": "El cliente decide qué secciones lleva su invitación (padrinos, misa, recepción…); nombre, fecha y al menos un lugar siempre se muestran.",
+  "feature": "odd/tasks/omittable-sections.md",
+  "artboards": [
+    {
+      "file": "01-interruptor-en-tarjeta.html",
+      "title": "Interruptor en cada tarjeta",
+      "tradeoff": "Claro y local: el control vive junto a sus datos; muchas tarjetas con interruptor se ven repetitivas",
+      "width": 1000,
+      "height": 900
+    },
+    {
+      "file": "02-panel-de-secciones.html",
+      "title": "Panel «¿Qué incluye tu invitación?»",
+      "tradeoff": "Una sola decisión arriba, muy visual; separa el control de los datos y agrega un paso antes de llenar",
+      "width": 1000,
+      "height": 900
+    },
+    {
+      "file": "03-quitar-y-agregar.html",
+      "title": "Quitar y volver a agregar",
+      "tradeoff": "La lista solo muestra lo que lleva la invitación y lo quitado queda abajo con «＋»; el control es más discreto",
+      "width": 1000,
+      "height": 900
+    }
+  ]
+}

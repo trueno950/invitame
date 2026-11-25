@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "01-interruptor-en-tarjeta.html",
+  "handoffs": {
+    "01-interruptor-en-tarjeta.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-25T23:40:24.500Z",
+      "startedAt": "2026-11-25T23:40:44.678Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/omittable-sections.md",
+      "note": "Definiendo el contrato de secciones omitibles; luego API, diseños, editor y borradores por partes."
+    }
+  }
+}
