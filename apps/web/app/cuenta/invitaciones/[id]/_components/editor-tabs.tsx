@@ -21,7 +21,7 @@ import { focusRing } from "../../../../_components/ui.ts";
 /** One tab as the editor renders it: the section it opens, its label, and what it still owes. */
 export interface EditorTabView {
   readonly section: EditorSection;
-  /** The tab's accessible name, with what it is missing: «Contenido · faltan 3» (S4). */
+  /** The tab's accessible name, with its progress: «Contenido · 4 de 12» (S4; T1). */
   readonly label: string;
   /** The short count the rail shows beside the name, or "" when the tab has nothing to count. */
   readonly meta: string;

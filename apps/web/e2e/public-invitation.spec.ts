@@ -20,7 +20,8 @@ import {
  */
 
 const DRAFT_URL = /\/cuenta\/invitaciones\/[0-9a-f-]{36}/;
-const PUBLIC_URL = /^\/i\/[a-z0-9]+(-[a-z0-9]+)*$/;
+/** The public page of an invitation, shared as the absolute address the editor resolves from its own request (T1). */
+const PUBLIC_URL = /^https?:\/\/[^/]+\/i\/[a-z0-9]+(-[a-z0-9]+)*$/;
 
 test.describe("public invitation", () => {
   test("answers a friendly 404 for a slug that names no invitation (A3, S9)", async ({ page }) => {
@@ -97,9 +98,34 @@ test.describe("public invitation", () => {
     await expect(page.getByText("Publicada", { exact: true })).toBeVisible();
     await expect(page.getByText(INVITATION_COPY.publishedNote)).toBeVisible();
 
-    // The published invitation shows its public link, which is easy to copy as text.
+    // The success panel offers the three large actions of a published invitation (T1; S2.2), all of them with the
+    // absolute address the page resolved from its own request: the copy, the WhatsApp share with its message, and the
+    // invitation itself.
+    const sharePanel = page.getByRole("region", { name: INVITATION_COPY.shareHeading });
+    await expect(sharePanel).toBeVisible();
+    await expect(sharePanel.getByRole("button", { name: INVITATION_COPY.copyLink })).toBeVisible();
+
     const publicPath = await page.getByLabel(INVITATION_COPY.publicLinkLabel).inputValue();
     expect(publicPath).toMatch(PUBLIC_URL);
+
+    const whatsapp = sharePanel.getByRole("link", { name: INVITATION_COPY.shareWhatsApp });
+    const whatsappHref = (await whatsapp.getAttribute("href")) ?? "";
+    expect(whatsappHref.startsWith("https://wa.me/?text=")).toBe(true);
+    expect(decodeURIComponent(whatsappHref)).toContain(publicPath);
+
+    await expect(sharePanel.getByRole("link", { name: INVITATION_COPY.openMine })).toHaveAttribute(
+      "href",
+      publicPath,
+    );
+
+    // Copying works or, when the browser refuses the clipboard, selects the address and says so: the confirmation is
+    // never a claim of a copy that did not happen (T1; S2.2).
+    await sharePanel.getByRole("button", { name: INVITATION_COPY.copyLink }).click();
+    await expect(
+      sharePanel
+        .getByText(INVITATION_COPY.copied)
+        .or(sharePanel.getByText(INVITATION_COPY.copySelected)),
+    ).toBeVisible();
 
     // The three fields typed last are on the guest's page: the submit flushed them instead of discarding them.
     const publicPage = await page.goto(publicPath);

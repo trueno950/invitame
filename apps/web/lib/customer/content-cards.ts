@@ -18,8 +18,8 @@ import type { ContentField, ContentSection } from "./invitations.ts";
  *   name (`date`/`time`, `ceremonyPlace`/`ceremonyAddress`) and from the control the schema asks for. Every other
  *   field gets a row of its own, so the grid always falls back to something readable;
  * - a card's state is the required fields of that card, counted by `missingRequiredNames` itself, so the sum of the
- *   cards is exactly the «Contenido · faltan N» the tab label shows; a card made only of optional fields says
- *   «Opcional · k de n» and never stops a publication;
+ *   cards is exactly the «N de M listos» the tab label and the first-steps card state; a card made only of optional
+ *   fields says «Opcional · k de n» and never stops a publication;
  * - optional fields whose whole section is optional gather in one last «Extras opcionales» card, while an optional
  *   field that has a required sibling stays beside it, where the owner expects to find it.
  *
@@ -375,4 +375,15 @@ export function defaultOpenCardKey(cards: readonly ContentCard[]): string | unde
   const missing = cards.find((card) => card.state.kind === "missing");
 
   return (missing ?? cards[0])?.key;
+}
+
+/**
+ * The card that holds one field, which is the card a missing-field link opens (T1; S2.4). A field the template does not
+ * declare, or a tab with no card at all, answers nothing instead of guessing a card to open.
+ */
+export function cardHoldingField(
+  cards: readonly ContentCard[],
+  name: string,
+): ContentCard | undefined {
+  return cards.find((card) => card.fields.some((field) => field.name === name));
 }

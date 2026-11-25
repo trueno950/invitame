@@ -5,6 +5,7 @@ import type { InvitationPayment } from "../server/invitations-api.ts";
 import {
   ACCOUNT_COPY,
   INVITATION_COPY,
+  PAYMENT_COPY,
   PLACE_PICKER_COPY,
   PUBLIC_INVITATION_COPY,
   SIGN_IN_CODE_POLICY,
@@ -74,6 +75,16 @@ describe("customer copy", () => {
   it("tells a browser without JavaScript why each button stays disabled (T8e; S42)", () => {
     assert.match(SIGN_IN_COPY.noScript, /^Para pedir tu código, .*JavaScript en tu navegador\.$/);
     assert.match(ACCOUNT_COPY.noScript, /^Para cerrar sesión, .*JavaScript en tu navegador\.$/);
+  });
+});
+
+// Where the payment button actually is (T1; S2.7): the «resumen» the old hint named no longer exists in the editor, so
+// the hint points at the «Publicar» tab the button now sits in, and it still says why publishing waits.
+describe("publish blocked hint", () => {
+  it("points at the tab the payment panel is rendered in, not at a summary that is gone", () => {
+    assert.doesNotMatch(PAYMENT_COPY.publishBlockedHint, /resumen/i);
+    assert.match(PAYMENT_COPY.publishBlockedHint, /«Pagar y publicar»/);
+    assert.match(PAYMENT_COPY.publishBlockedHint, /pestaña/);
   });
 });
 

@@ -11,19 +11,28 @@ import {
   RSVP_COPY,
 } from "../../../../../lib/customer/copy.ts";
 import {
+  editorProgress,
+  type FieldFocusRequest,
+  fieldFocus,
+  missingFieldHref,
+  nextStepLabel,
+  progressMeta,
+  stepStateLabel,
+} from "../../../../../lib/customer/editor-progress.ts";
+import {
   type AttendanceTab,
   DEFAULT_EDITOR_SECTION,
   EDITOR_SECTION_PARAM,
   EDITOR_SECTIONS,
   type EditorSection,
-  missingMeta,
+  editorSectionTarget,
   missingRequiredNames,
   sectionFromSearch,
   sectionTabLabel,
 } from "../../../../../lib/customer/editor-sections.ts";
 import type { FeatureSettingsView } from "../../../../../lib/customer/invitation-features.ts";
 import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rsvp.ts";
-import type { ContentSection } from "../../../../../lib/customer/invitations.ts";
+import type { ContentField, ContentSection } from "../../../../../lib/customer/invitations.ts";
 import type {
   PlaceSearchResult,
   PlaceWriteResult,
@@ -40,7 +49,6 @@ import {
   quietButton,
   statusNote,
   textButton,
-  textField,
 } from "../../../../_components/ui.ts";
 import {
   type AutosaveBridge,
@@ -62,6 +70,7 @@ import {
 } from "./editor-fields.tsx";
 import { EditorTabList, type EditorTabView } from "./editor-tabs.tsx";
 import { PreviewDialog, PreviewFrame } from "./preview-pane.tsx";
+import { SharePanel } from "./share-panel.tsx";
 
 /**
  * The invitation editor (T2c; S1-S4), following `design/editor-redesign/03-pestanas-y-vista-previa.html`: five tabs, the
@@ -73,11 +82,15 @@ import { PreviewDialog, PreviewFrame } from "./preview-pane.tsx";
  *   read again from the URL on the first render and on a back navigation;
  * - every field saves on its own through the T2a queue, and one sticky status line says whether the work is on its
  *   way, stored, or failed and can be retried;
- * - each tab label says what it still owes («Contenido · faltan 3»), computed from the values in the browser, so the
+ * - each tab label says what it still owes («Contenido · 4 de 12»), computed from the values in the browser, so the
  *   count falls while the owner types;
+ * - a compact «Primeros pasos» card above the editor names the three steps — the data, the photos, the publication —
+ *   with the progress of the same count, and the required fields the draft still leaves empty are links that open the
+ *   card of that field and focus it (T1; S2.1, S2.4);
  * - the preview (T2b) is a phone-width frame beside the fields on a wide screen, and a full-screen dialog behind the
  *   phone's fixed «Ver vista previa»; it is reloaded only after a save the API accepted, so it never shows data the API
- *   has not stored;
+ *   has not stored; the phone's bar also offers the step that comes next, so the small screen is not only a preview
+ *   (T1; S2.5);
  * - every action that still navigates goes through `GuardedForm` or `GuardedLink`, which flush the queue first and stop
  *   the navigation when the save failed, so nothing typed is discarded (S2).
  *
@@ -91,6 +104,167 @@ const STATUS_ID = "editor-save-status";
 const miniLabel = "text-xs font-medium uppercase tracking-[0.18em] text-primary";
 
 const saveNowButton = `inline-flex min-h-9 shrink-0 items-center rounded-full px-3 text-sm font-semibold text-primary transition-colors hover:bg-rose-100 disabled:opacity-70 ${focusRing}`;
+
+/** The phone bar's next step: the same tokens as the form's main action, at half the width of a phone. */
+const phoneNext = `inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary bg-linear-to-b from-primary from-55% to-primary-deep px-3 text-sm font-medium tracking-[0.02em] text-on-primary shadow-button ring-1 ring-primary-deep transition-[background-color] duration-150 ease-out-soft hover:from-primary-deep active:scale-[0.97] ${focusRing}`;
+
+/** One required field the draft still leaves empty, as a link to its own input (T1; S2.4). */
+function MissingFieldLinks({
+  detailPath,
+  fields,
+  names,
+  onOpen,
+}: {
+  readonly detailPath: string;
+  readonly fields: readonly ContentField[];
+  readonly names: readonly string[];
+  readonly onOpen: (name: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-sm font-medium text-ink">
+        {EDITOR_COPY.missingFields.heading(names.length)}
+      </p>
+      <ul className="flex flex-wrap gap-x-3 gap-y-1.5">
+        {names.map((name) => (
+          <li key={name}>
+            {/*
+              A real link, so it also works from a copy of the address or with the script off; a plain click is handled
+              here instead, because the tab it opens is client state and nothing typed has to be sent for it.
+            */}
+            <Link
+              className={textButton}
+              href={missingFieldHref(detailPath, name)}
+              onClick={(event) => {
+                if (
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                onOpen(name);
+              }}
+            >
+              {fields.find((field) => field.name === name)?.label ?? name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs leading-5 text-muted">{EDITOR_COPY.missingFields.hint}</p>
+    </div>
+  );
+}
+
+/**
+ * The «Primeros pasos» card (T1; S2.1): the three steps of the way to a published invitation with the progress of the
+ * same count the «Contenido» tab states, plus the fields that still stop the publication, each one a link to its input.
+ * The bar carries the number in text and in width, and every step says whether it is done, current, or ahead in words.
+ */
+function FirstStepsCard({
+  detailPath,
+  fields,
+  missing,
+  onOpen,
+  onSelect,
+  progress,
+}: {
+  readonly detailPath: string;
+  readonly fields: readonly ContentField[];
+  readonly missing: readonly string[];
+  readonly onOpen: (name: string) => void;
+  readonly onSelect: (section: EditorSection) => void;
+  readonly progress: ReturnType<typeof editorProgress>;
+}) {
+  return (
+    <section
+      aria-labelledby="editor-first-steps-heading"
+      className="rounded-panel bg-surface/90 p-3.5 ring-[1.5px] ring-rose-100 sm:p-4"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className={miniLabel} id="editor-first-steps-heading">
+          {EDITOR_COPY.firstSteps.heading}
+        </h2>
+        <p className="text-xs font-semibold text-ink">{progress.label}</p>
+      </div>
+
+      <div
+        aria-valuemax={progress.total}
+        aria-valuemin={0}
+        aria-valuenow={progress.done}
+        aria-valuetext={progress.label}
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-rose-50 ring-1 ring-rose-100"
+        role="progressbar"
+      >
+        <div
+          aria-hidden="true"
+          className="h-full rounded-full bg-primary"
+          style={{ width: `${progress.percent}%` }}
+        />
+      </div>
+
+      <ol className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {progress.steps.map((step, index) => (
+          <li key={step.key}>
+            <Link
+              aria-current={step.state === "current" ? "step" : undefined}
+              className={`flex items-center gap-1.5 rounded-sm text-sm transition-colors hover:underline hover:decoration-rose hover:decoration-2 hover:underline-offset-4 ${
+                step.state === "current"
+                  ? "font-semibold text-primary"
+                  : step.state === "done"
+                    ? "text-ink"
+                    : "text-muted"
+              } ${focusRing}`}
+              href={editorSectionTarget(detailPath, step.section)}
+              onClick={(event) => {
+                if (
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                onSelect(step.section);
+              }}
+            >
+              <span
+                aria-hidden="true"
+                className={`grid size-5 shrink-0 place-items-center rounded-full text-[0.6875rem] font-semibold ${
+                  step.state === "done"
+                    ? "bg-primary text-on-primary"
+                    : step.state === "current"
+                      ? "bg-surface text-primary ring-2 ring-primary"
+                      : "bg-rose-50 text-muted ring-[1.5px] ring-field-border"
+                }`}
+              >
+                {step.state === "done" ? "✓" : index + 1}
+              </span>
+              {step.title}{" "}
+              <span className="text-xs font-normal text-muted">({stepStateLabel(step.state)})</span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+
+      {missing.length === 0 ? null : (
+        <div className="mt-3 border-t border-rose-100 pt-3">
+          <MissingFieldLinks
+            detailPath={detailPath}
+            fields={fields}
+            names={missing}
+            onOpen={onOpen}
+          />
+        </div>
+      )}
+    </section>
+  );
+}
 
 /** One tab's panel: its heading, an optional hint, and the block of fields it holds. */
 function Panel({
@@ -154,6 +328,14 @@ export interface EditorShellProps {
   readonly publishHint: string;
   /** The count of the tabs the page already knows, such as «4 de 12» or «máx. 4». */
   readonly tabMeta: Partial<Record<EditorSection, string>>;
+  /** The path of this editor, which the step links and the missing-field links are built from. */
+  readonly detailPath: string;
+  /** The field a missing-field link named in the URL, which the «Contenido» tab opens and focuses (S2.4). */
+  readonly initialField: string | undefined;
+  /** The stored photos, the main photo counted with the gallery, which the photo step reads (S2.1). */
+  readonly photoCount: number;
+  /** The absolute address of a published invitation, built from the page's own request origin (S2.2). */
+  readonly publicUrl: string;
   /** The server-rendered blocks: the photo upload, the gallery, and the payment panel. */
   readonly mainPhoto: ReactNode;
   readonly gallery: ReactNode;
@@ -186,6 +368,10 @@ export function EditorShell({
   paymentPending,
   publishHint,
   tabMeta,
+  detailPath,
+  initialField,
+  photoCount,
+  publicUrl,
   mainPhoto,
   gallery,
   payment,
@@ -206,6 +392,20 @@ export function EditorShell({
     partyLimit: rsvpView?.partyLimit ?? 1,
   }));
   const statusLine = useRef<HTMLDivElement>(null);
+  // The field a missing-field link names, with the count that makes asking for the same field twice a new request (S2.4).
+  const [focus, setFocus] = useState<FieldFocusRequest | undefined>(() =>
+    initialField === undefined ? undefined : fieldFocus(initialField),
+  );
+
+  // A navigation to `?campo=<field>` (a shared address, or a link opened in another tab) is a new request too.
+  useEffect(() => {
+    if (initialField === undefined) {
+      return;
+    }
+    setFocus((current) =>
+      current?.field === initialField ? current : fieldFocus(initialField, current),
+    );
+  }, [initialField]);
 
   const autosave = useAutosave({
     invitationId,
@@ -254,14 +454,22 @@ export function EditorShell({
 
   const fields = useMemo(() => sections.flatMap((group) => group.fields), [sections]);
   const missing = missingRequiredNames(fields, values);
-  const missingNote =
-    missing.length === 0
-      ? null
-      : INVITATION_COPY.missingLabel(
-          missing
-            .map((name) => fields.find((field) => field.name === name)?.label ?? name)
-            .join(", "),
-        );
+  // The three first steps and the progress above them, counted by `missingRequiredNames` itself, so «4 de 12» and the
+  // «Contenido» tab never disagree (T1; S2.1).
+  const progress = editorProgress({
+    required: fields.filter((field) => field.required).length,
+    missing: missing.length,
+    photoCount,
+    published: status === "PUBLISHED",
+  });
+  const next = progress.next;
+  // A missing-field link opens the «Contenido» tab with the card of that field open and the field focused (S2.4). The
+  // queue is flushed first, so the card never opens on a field whose value is still on its way.
+  const openField = (name: string) => {
+    void autosave.flush();
+    setSection("contenido");
+    setFocus((current) => fieldFocus(name, current));
+  };
   const issues = issuesOf(autosave.state);
   // The cards of «Contenido» are recomputed from the values the browser holds, so a closed card's summary and its
   // state follow every keystroke (T2).
@@ -269,7 +477,9 @@ export function EditorShell({
 
   const tabs: readonly EditorTabView[] = EDITOR_SECTIONS.map((candidate) => {
     const meta =
-      candidate === "contenido" ? missingMeta(missing.length) : (tabMeta[candidate] ?? "");
+      candidate === "contenido"
+        ? progressMeta(progress.done, progress.total)
+        : (tabMeta[candidate] ?? "");
 
     return { section: candidate, label: sectionTabLabel(candidate, meta), meta };
   });
@@ -372,33 +582,31 @@ export function EditorShell({
               <p className="mt-1.5">
                 <StatusBadge label={statusLabel} />
               </p>
-              <p className={`${miniLabel} mt-4`}>
-                {publicHref === null ? INVITATION_COPY.slugLabel : INVITATION_COPY.publicLinkLabel}
-              </p>
               {publicHref === null ? (
                 <>
+                  <p className={`${miniLabel} mt-4`}>{INVITATION_COPY.slugLabel}</p>
                   <p className="mt-1.5 font-medium break-all text-ink">{slug}</p>
                   <p className="mt-1 text-sm leading-6 text-muted">{INVITATION_COPY.slugHint}</p>
                 </>
-              ) : (
-                <div className="mt-1.5 flex flex-col gap-2">
-                  <Link className={textButton} href={publicHref} rel="noreferrer" target="_blank">
-                    {INVITATION_COPY.openPublic}
-                  </Link>
-                  <input
-                    aria-label={INVITATION_COPY.publicLinkLabel}
-                    className={textField}
-                    readOnly
-                    value={publicHref}
+              ) : null}
+              {missing.length === 0 ? null : (
+                <div className="mt-4">
+                  <MissingFieldLinks
+                    detailPath={detailPath}
+                    fields={fields}
+                    names={missing}
+                    onOpen={openField}
                   />
-                  <p className="text-sm leading-6 text-muted">{INVITATION_COPY.publicLinkHint}</p>
                 </div>
               )}
-              {missingNote === null ? null : <p className={`${statusNote} mt-4`}>{missingNote}</p>}
             </div>
 
             {status === "PUBLISHED" ? (
-              <p className={statusNote}>{INVITATION_COPY.publishedNote}</p>
+              <>
+                <p className={statusNote}>{INVITATION_COPY.publishedNote}</p>
+                {/* The success panel: the three large actions of a published invitation (T1; S2.2). */}
+                <SharePanel publicUrl={publicUrl} />
+              </>
             ) : null}
 
             {payment}
@@ -460,6 +668,7 @@ export function EditorShell({
             {readOnlyContent ?? (
               <ContentCards
                 cards={cards}
+                focus={focus}
                 idPrefix="content"
                 issues={issues}
                 onChange={changeContent}
@@ -481,9 +690,20 @@ export function EditorShell({
         instead (T2; S2).
       */}
       <div
-        className="grid gap-4 pb-28 lg:grid-cols-[9.5rem_minmax(0,1fr)_20rem] lg:items-start lg:gap-5 lg:pb-0 xl:grid-cols-[11rem_minmax(0,1fr)_24.5rem]"
+        className="grid gap-4 pb-28 lg:grid-cols-[9.5rem_minmax(0,1fr)_20rem] lg:items-start lg:gap-5 lg:pb-0 xl:grid-cols-[11rem_minmax(0,1fr)_24.5rem] xl:gap-6 2xl:grid-cols-[12rem_minmax(0,1fr)_28rem] 2xl:gap-8"
         data-editor-shell=""
       >
+        <div className="lg:col-span-3">
+          <FirstStepsCard
+            detailPath={detailPath}
+            fields={fields}
+            missing={missing}
+            onOpen={openField}
+            onSelect={setSection}
+            progress={progress}
+          />
+        </div>
+
         <div className="lg:hidden">
           <EditorTabList
             active={section}
@@ -578,9 +798,21 @@ export function EditorShell({
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-1.5 bg-surface/95 px-4 py-3 ring-1 ring-rose-100 backdrop-blur-sm lg:hidden">
-        <button className={primaryButton} onClick={() => setPreviewOpen(true)} type="button">
-          {EDITOR_COPY.previewOpen}
-        </button>
+        <div className={next === undefined ? undefined : "grid grid-cols-2 gap-2"}>
+          <button
+            className={`${quietButton} w-full`}
+            onClick={() => setPreviewOpen(true)}
+            type="button"
+          >
+            {EDITOR_COPY.previewOpen}
+          </button>
+          {/* The step that comes next, so the phone is not only a preview (T1; S2.5). */}
+          {next === undefined ? null : (
+            <button className={phoneNext} onClick={() => setSection(next.section)} type="button">
+              {nextStepLabel(next.section)}
+            </button>
+          )}
+        </div>
         <p className="text-center text-xs leading-5 text-muted">{EDITOR_COPY.previewPhoneNote}</p>
       </div>
 

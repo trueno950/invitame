@@ -9,7 +9,6 @@ import {
   EDITOR_SECTIONS,
   editorSectionTarget,
   editorSnapshotKey,
-  missingMeta,
   missingRequiredNames,
   parseEditorSection,
   sectionFromForm,
@@ -145,17 +144,11 @@ describe("missingRequiredNames", () => {
 
     assert.deepEqual(missingRequiredNames(typed, { genderReveal: false, age: "0" }), []);
   });
-
-  it("counts what is missing into the words the tab shows", () => {
-    assert.equal(missingMeta(0), "");
-    assert.equal(missingMeta(1), "falta 1");
-    assert.equal(missingMeta(3), "faltan 3");
-  });
 });
 
 describe("sectionTabLabel", () => {
-  it("shows the tab and what it still owes, and the tab alone when it owes nothing", () => {
-    assert.equal(sectionTabLabel("contenido", "faltan 3"), "Contenido · faltan 3");
+  it("shows the tab and its progress, the tab alone when it states none", () => {
+    assert.equal(sectionTabLabel("contenido", "4 de 12"), "Contenido · 4 de 12");
     assert.equal(sectionTabLabel("contenido", ""), EDITOR_COPY.tabs.contenido);
     assert.equal(sectionTabLabel("fotos", "4 de 12"), "Fotos · 4 de 12");
   });

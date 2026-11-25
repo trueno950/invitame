@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   type ContentCard,
+  cardHoldingField,
   cardStateText,
   contentCards,
   defaultOpenCardKey,
@@ -332,5 +333,18 @@ describe("contentCards", () => {
     });
     assert.equal(defaultOpenCardKey(everyRequired), "celebrant");
     assert.equal(defaultOpenCardKey([]), undefined);
+  });
+
+  // The missing-field links of the publish panel and the first-steps card (T1; S2.4): a link names one field, and the
+  // tab opens the card that holds it, so the owner lands on the input instead of on the top of the tab.
+  it("finds the card that holds one field, whatever group the schema put it in", () => {
+    const cards = cardsOf(BAPTISM);
+
+    assert.equal(cardHoldingField(cards, "celebrantName")?.key, "celebrant");
+    assert.equal(cardHoldingField(cards, "date")?.key, "when");
+    assert.equal(cardHoldingField(cards, "ceremonyAddress")?.key, "ceremony");
+    // A field no card of this template declares names no card, so a hand-edited query opens nothing.
+    assert.equal(cardHoldingField(cards, "playlistUrl"), undefined);
+    assert.equal(cardHoldingField([], "date"), undefined);
   });
 });

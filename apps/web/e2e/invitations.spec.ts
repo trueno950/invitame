@@ -23,6 +23,21 @@ import {
 
 const DRAFT_URL = /\/cuenta\/invitaciones\/[0-9a-f-]{36}/;
 
+/** The «N de M listos» the first-steps card states, as numbers (T1; S2.1). */
+async function readProgress(page: Page): Promise<{ done: number; total: number }> {
+  const text = await page
+    .getByRole("region", { name: EDITOR_COPY.firstSteps.heading })
+    .getByRole("progressbar")
+    .getAttribute("aria-valuetext");
+  const match = /(\d+) de (\d+) listos/u.exec(text ?? "");
+
+  expect(
+    match,
+    `the first-steps card states its progress, and it read «${String(text)}»`,
+  ).not.toBeNull();
+  return { done: Number(match?.[1]), total: Number(match?.[2]) };
+}
+
 /** Creates a draft from the first published design, its first theme, and its first package. */
 async function createDraft(page: Page): Promise<void> {
   await page.getByRole("link", { name: INVITATION_COPY.newLink }).click();
@@ -48,7 +63,7 @@ async function createDraft(page: Page): Promise<void> {
   await page.getByRole("button", { name: INVITATION_COPY.createSubmit }).click();
 
   await expect(page).toHaveURL(DRAFT_URL);
-  await expect(page.getByRole("status").filter({ hasText: "creamos tu borrador" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Creamos tu invitación" })).toBeVisible();
 }
 
 test.describe("customer invitation editor", () => {
@@ -77,9 +92,22 @@ test.describe("customer invitation editor", () => {
     await expect(age).toHaveAttribute("max", "120");
     expect(await age.getAttribute("required")).toBeNull();
 
+    // The tab states its progress instead of how much is missing, and the first-steps card states the same count with
+    // its three steps, so nobody reads «faltan 8» as a wall (T1; S2.1).
+    await expect(page.getByRole("tab", { name: /^Contenido/ })).toContainText(/\d+ de \d+/);
+    const initial = await readProgress(page);
+    expect(initial.total).toBeGreaterThan(initial.done);
+    const firstSteps = page.getByRole("region", { name: EDITOR_COPY.firstSteps.heading });
+    for (const title of [
+      EDITOR_COPY.firstSteps.content,
+      EDITOR_COPY.firstSteps.photos,
+      EDITOR_COPY.firstSteps.publish,
+    ]) {
+      await expect(firstSteps.getByRole("link", { name: new RegExp(`^${title}`) })).toBeVisible();
+    }
+
     // The tab is a stack of cards and opens on the first one that still owes something, so the other groups' fields are
     // not on the page until their card is opened (T2).
-    await expect(page.getByRole("tab", { name: /^Contenido/ })).toContainText("faltan 8");
     await expect(page.getByRole("button", { name: /^Festejado/ })).toHaveAttribute(
       "aria-expanded",
       "true",
@@ -102,9 +130,12 @@ test.describe("customer invitation editor", () => {
     await fillAutosaved(page, "Nombre del festejado", "Ana");
     await fillAutosaved(page, "Edad", "7");
 
-    // The tab says what the draft still owes, computed from the fields as they are typed, and the closed card says it
-    // holds everything of its own (T2).
-    await expect(page.getByRole("tab", { name: /^Contenido/ })).toContainText("faltan 6");
+    // The tab and the first-steps card count what is already filled, computed from the fields as they are typed, and
+    // the closed card says it holds everything of its own (T2; T1; S2.1).
+    await expect(page.getByRole("tab", { name: /^Contenido/ })).toContainText(/\d+ de \d+/);
+    const later = await readProgress(page);
+    expect(later.total).toBe(initial.total);
+    expect(later.done).toBeGreaterThan(initial.done);
     await expect(page.getByRole("button", { name: /^Festejado/ })).toContainText("Completo");
     await expect(page.getByRole("button", { name: /^Festejado/ })).toContainText("Ana · 7");
 
@@ -115,6 +146,15 @@ test.describe("customer invitation editor", () => {
       "aria-expanded",
       "true",
     );
+
+    // Every missing field is a link: it opens the «Contenido» tab with that field's card and puts the focus on the input,
+    // so the note is also the way to the field (T1; S2.4).
+    await page
+      .getByRole("region", { name: EDITOR_COPY.firstSteps.heading })
+      .getByRole("link", { name: "Fecha", exact: true })
+      .click();
+    await expect(page.getByLabel("Fecha")).toBeFocused();
+    await expect(page).toHaveURL(/[?&]seccion=contenido/);
 
     // A reload reads what the API stored, so the save really happened, and the tab reopens on the card that still owes
     // something instead of the one that is complete.
@@ -152,7 +192,8 @@ test.describe("customer invitation editor", () => {
     await expect(page.getByText(INVITATION_COPY.archivedNote)).toBeVisible();
     await expect(page.getByRole("tab")).toHaveCount(0);
     await expect(page.getByText("Archivada", { exact: true })).toBeVisible();
-    await expect(page.getByText("Ana", { exact: true })).toBeVisible();
+    // The heading names the customer's own invitation, and the summary still holds what was typed (S2.1).
+    await expect(page.getByRole("heading", { level: 1, name: "Ana" })).toBeVisible();
   });
 
   test("opens the preview in a dialog on a phone and gives the focus back (S3, S4)", async ({
@@ -164,8 +205,10 @@ test.describe("customer invitation editor", () => {
     await page.goto("/cuenta/invitaciones");
     await createDraft(page);
 
-    // The phone keeps the tabs on top of the form and the preview behind one fixed action.
+    // The phone keeps the tabs on top of the form, the preview behind one fixed action, and the step that comes next
+    // beside it, so the small screen is not only a preview (T1; S2.5).
     await expect(page.getByRole("tab", { name: /^Fotos/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Siguiente: Contenido" })).toBeVisible();
     const trigger = page.getByRole("button", { name: EDITOR_COPY.previewOpen });
 
     await trigger.click();

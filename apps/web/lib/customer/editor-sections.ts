@@ -120,8 +120,8 @@ function isMissing(value: unknown): boolean {
 
 /**
  * The required fields of the pinned template the draft still has empty, in the schema's own order. The count is
- * computed from the values the browser holds, so the «Contenido» tab says «faltan 3» while the owner types and
- * reaches zero without a reload. An optional field left empty is never counted.
+ * computed from the values the browser holds, so the «Contenido» tab and the first-steps card say «4 de 12» while the
+ * owner types and reach «12 de 12» without a reload. An optional field left empty is never counted.
  */
 export function missingRequiredNames(
   fields: readonly ContentField[],
@@ -132,16 +132,7 @@ export function missingRequiredNames(
     .map((field) => field.name);
 }
 
-/** «falta 1», «faltan 3», and nothing at all when the tab owes nothing. */
-export function missingMeta(count: number): string {
-  if (count <= 0) {
-    return "";
-  }
-
-  return count === 1 ? "falta 1" : `faltan ${count}`;
-}
-
-/** The tab's label with what it still owes after it: «Contenido · faltan 3», or just «Contenido». */
+/** The tab's label with what it says about itself after the name: «Contenido · 4 de 12», or the name alone. */
 export function sectionTabLabel(section: EditorSection, meta: string): string {
   const label = EDITOR_COPY.tabs[section];
 

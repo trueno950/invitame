@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { connection } from "next/server";
 
@@ -8,6 +9,11 @@ import {
   INVITATION_ERROR_COPY,
   PAYMENT_COPY,
 } from "../../../../lib/customer/copy.ts";
+import {
+  EDITOR_FIELD_PARAM,
+  invitationHeading,
+  parseEditorField,
+} from "../../../../lib/customer/editor-progress.ts";
 import {
   attendanceTab,
   EDITOR_SECTION_PARAM,
@@ -24,6 +30,7 @@ import {
 import { paymentPanelView } from "../../../../lib/customer/invitation-payment.ts";
 import { invitationPreviewPath } from "../../../../lib/customer/invitation-preview.ts";
 import { RSVP_PATHS, rsvpSettingsView } from "../../../../lib/customer/invitation-rsvp.ts";
+import { absolutePublicUrl } from "../../../../lib/customer/invitation-share.ts";
 import {
   contentSections,
   fieldLabel,
@@ -38,6 +45,7 @@ import { publicInvitationPath } from "../../../../lib/public/invitation-page.ts"
 import type { OwnedInvitation, RsvpRead } from "../../../../lib/server/invitations-api.ts";
 import { isInvitationId } from "../../../../lib/server/invitations-api.ts";
 import type { MediaLimits } from "../../../../lib/server/media-api.ts";
+import { requestOrigin } from "../../../../lib/server/request-origin.ts";
 import { CustomerWorkspaceShell } from "../../../_components/customer-workspace-shell.tsx";
 import {
   fieldHint,
@@ -215,9 +223,15 @@ export default async function InvitationDetailPage({
   searchParams: SearchParameters;
 }) {
   await connection();
-  const [{ id }, parameters] = await Promise.all([params, searchParams]);
+  const [{ id }, parameters, origin] = await Promise.all([
+    params,
+    searchParams,
+    headers().then(requestOrigin),
+  ]);
   const notices = invitationPageNotices(parameters);
   const section = parseEditorSection(parameters[EDITOR_SECTION_PARAM]);
+  /** The field a missing-field link named, which the editor opens and focuses (T1; S2.4). */
+  const focusField = parseEditorField(parameters[EDITOR_FIELD_PARAM]);
 
   if (!isInvitationId(id)) {
     return (
@@ -302,6 +316,22 @@ export default async function InvitationDetailPage({
   const archived = invitation.status === "ARCHIVED";
   const published = invitation.status === "PUBLISHED";
   const publicHref = published ? publicInvitationPath(invitation.slug) : null;
+  /**
+   * The heading names the customer's own invitation (T1; S2.1): the celebrant, the baby, the couple, or the hosts the
+   * content announces, and «Tu invitación de <ocasión>» while it names nobody. The template's name is secondary text
+   * above it, so the owner never sees only the catalog name of a template.
+   */
+  const heading = invitationHeading(
+    invitation.content,
+    pinned?.template.category.name,
+    archived ? INVITATION_COPY.archivedHeading : INVITATION_COPY.detailHeading,
+  );
+  /** The photos the draft already holds: the main photo counted together with the stored gallery (T1; S2.1). */
+  const photoCount =
+    (typeof mediaState === "object" ? mediaState.photos.length : 0) +
+    (mainPhotoUrl(invitation.content) === null ? 0 : 1);
+  /** The absolute address the share panel copies and shares, from the origin this request resolved (T1; S2.2). */
+  const publicUrl = publicHref === null ? "" : absolutePublicUrl(origin, publicHref);
   const missing = missingFieldsMessage(invitation.missingRequiredFields);
   const editable = pinned !== undefined && !archived;
   const rows =
@@ -340,11 +370,8 @@ export default async function InvitationDetailPage({
           {INVITATION_COPY.backToList}
         </Link>
       }
-      eyebrow={INVITATION_COPY.detailEyebrow}
-      heading={
-        pinned?.template.name ??
-        (archived ? INVITATION_COPY.archivedHeading : INVITATION_COPY.detailHeading)
-      }
+      eyebrow={pinned === undefined ? INVITATION_COPY.detailEyebrow : pinned.template.name}
+      heading={heading}
       intro={archived ? INVITATION_COPY.archivedNote : INVITATION_COPY.detailIntro}
     >
       <div className="flex flex-col gap-4">
@@ -363,8 +390,12 @@ export default async function InvitationDetailPage({
             gallery={<GallerySectionBlock state={mediaState} />}
             guestListHref={RSVP_PATHS.responses(invitation.id)}
             initialSection={section}
+            initialField={focusField}
             invitationId={invitation.id}
             places={invitation.places}
+            detailPath={INVITATION_PATHS.detail(invitation.id)}
+            photoCount={photoCount}
+            publicUrl={publicUrl}
             key={editorKey}
             mainPhoto={
               <MainPhotoUpload

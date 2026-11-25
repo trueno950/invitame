@@ -143,6 +143,8 @@ export const INVITATION_COPY = {
   newLink: "Nueva invitación",
   editLink: "Editar",
   chosen: "Elegido",
+  mostChosen: "El más elegido",
+  changeOccasion: "Cambiar",
   /** Marks a field the pinned schema requires, as a note instead of the HTML `required` attribute. */
   fieldRequired: "Necesario para publicar",
   urlPlaceholder: "https://…",
@@ -198,6 +200,22 @@ export const INVITATION_COPY = {
   publicLinkLabel: "Enlace de la invitación",
   publicLinkHint: "Compártelo con tus invitados. Se abre en una pestaña nueva.",
   openPublic: "Abrir la invitación publicada",
+  /**
+   * The success panel of a published invitation (T1; S2.2): its title, the three large actions that share it, and the
+   * confirmation of the copy. The message carries the absolute link the page resolved from its own request.
+   */
+  shareHeading: "Tu invitación está publicada",
+  shareHint: "Compártela con tus invitados: el enlace abre tu invitación tal como la ven ellos.",
+  copyLink: "Copiar enlace",
+  copied: "¡Copiado!",
+  /** What the copy says when the browser refused the clipboard and the link was selected instead. */
+  copySelected: "Seleccionamos el enlace: cópialo con Ctrl+C o manteniéndolo presionado.",
+  shareWhatsApp: "Compartir por WhatsApp",
+  shareWhatsAppMessage: (url: string) => `Te comparto la invitación: ${url}`,
+  /** The third action of the panel, which opens the published page in a new tab. */
+  openMine: "Ver mi invitación",
+  /** The heading of an invitation the customer has not named yet, from the occasion of its template (T1; S2.1). */
+  invitationOf: (occasion: string) => `Tu invitación de ${occasion}`,
   /** The same way to the public page, from a card of the list (S7). */
   viewPublic: "Ver invitación",
   valueEmpty: "Sin definir",
@@ -232,6 +250,7 @@ export const INVITATION_COPY = {
   designStepHint: "Toca un diseño para verlo en sus temas, con datos de ejemplo.",
   /** How many styles one design offers, so a design with one style is not a surprise. */
   styleCount: (count: number) => (count === 1 ? "1 estilo" : `${count} temas`),
+  designCount: (count: number) => (count === 1 ? "1 diseño" : `${count} diseños`),
   singleStyle: "Estilo único",
   singleStyleNote:
     "Este diseño tiene un solo estilo, así que ya está elegido. Puedes verlo en grande y continuar.",
@@ -263,7 +282,7 @@ export const INVITATION_COPY = {
   previewNotFoundBody: "Puede que ya no esté publicada. Vuelve a elegir una plantilla.",
   previewUnavailableHeading: "No pudimos cargar la vista previa",
   packageLabel: "Paquete",
-  createSubmit: "Crear borrador",
+  createSubmit: "Crear mi invitación",
   priceMissing: "sin precio",
   noTemplates: "Aún no hay plantillas publicadas. Vuelve más tarde.",
   noPackages: "Aún no hay paquetes disponibles. Vuelve más tarde.",
@@ -291,7 +310,7 @@ export type InvitationNoticeCode = (typeof INVITATION_NOTICE_CODES)[number];
 
 /** What a finished action confirms; the code travels in the page's query, the text lives here. */
 export const INVITATION_NOTICE_COPY: Record<InvitationNoticeCode, string> = {
-  created: "Listo, creamos tu borrador.",
+  created: "¡Listo! Creamos tu invitación. Ahora personalízala a tu gusto.",
   saved: "Listo, guardamos los cambios.",
   archived: "Listo, archivamos tu invitación.",
   published: "Listo, publicamos tu invitación.",
@@ -501,7 +520,7 @@ export const PAYMENT_COPY = {
     "No pudimos leer el monto de tu pago. Vuelve a cargar la página para intentarlo de nuevo.",
   /** Why the publish button of a draft is not available yet; the API's own 402 remains the guard (S1). */
   publishBlockedHint:
-    "Para publicar esta invitación primero hay que pagar el paquete. Usa «Pagar y publicar» en el resumen.",
+    "Para publicar esta invitación primero hay que pagar el paquete. Usa «Pagar y publicar» aquí arriba, en esta misma pestaña.",
   /** The return page `/cuenta/invitaciones/<id>/pago` (S4). */
   returnTitle: "Pago de tu invitación | InvitaMe",
   returnEyebrow: "Pago de tu invitación",
@@ -797,6 +816,34 @@ export const EDITOR_COPY = {
     summaryEmpty: "Aún sin datos",
     /** The footer of the open card: the group that comes next, so the reading never stops at a closed card. */
     next: (title: string) => `Siguiente: ${title}`,
+  },
+  /**
+   * The «Primeros pasos» card and the progress line above the tabs (T1; S2.1, S2.5): three steps the owner reads at a
+   * glance, each one written as done, current, or ahead so the state never depends on a color, and the count the tab
+   * label also states. `progressEmpty` is the whole sentence of a template that requires no field, because «0 de 0
+   * listos» would read like a failure.
+   */
+  firstSteps: {
+    heading: "Primeros pasos",
+    content: "Completa tus datos",
+    photos: "Agrega fotos",
+    publish: "Publica",
+    stateDone: "Listo",
+    stateCurrent: "Ahora",
+    statePending: "Después",
+    progress: (done: number, total: number) => `${done} de ${total} listos`,
+    progressEmpty: "Sin datos por completar",
+    /** The next step the phone's fixed bar offers, named by the tab it opens. */
+    next: (label: string) => `Siguiente: ${label}`,
+  },
+  /**
+   * The fields that still stop a publication, wherever the editor names them (T1; S2.4). Each one is a link that opens
+   * the «Contenido» tab with the card of that field open and the field focused, so the note is also the way there.
+   */
+  missingFields: {
+    heading: (count: number) =>
+      count === 1 ? "Falta 1 dato para publicar" : `Faltan ${count} datos para publicar`,
+    hint: "Toca uno para ir directo a ese campo.",
   },
 } as const;
 

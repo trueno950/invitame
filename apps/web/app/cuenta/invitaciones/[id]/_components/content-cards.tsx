@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type ContentCard,
   type ContentCardRow,
+  cardHoldingField,
   cardStateText,
   defaultOpenCardKey,
 } from "../../../../../lib/customer/content-cards.ts";
 import { EDITOR_COPY } from "../../../../../lib/customer/copy.ts";
+import type { FieldFocusRequest } from "../../../../../lib/customer/editor-progress.ts";
 import { isAddressFieldName } from "../../../../../lib/invitation-features/place-point.ts";
 import { focusRing, quietButton } from "../../../../_components/ui.ts";
 import {
@@ -34,6 +36,8 @@ import {
  *   their way and nothing typed is discarded;
  * - the footer of an open card names the next group («Siguiente: Ceremonia») and moves the focus to its header, so the
  *   reading continues where it was going;
+ * - a missing-field link elsewhere in the editor (`FieldFocusRequest`) opens the card that holds the field it names and
+ *   scrolls that input into view with the focus on it, so the note is also the way to the field (T1; S2.4);
  * - the state is always written out («Completo», «Falta 1», «Faltan 2», «Opcional · 1 de 2»), never only a color, and
  *   the summary and the state follow every keystroke because both are recomputed from the values in the browser.
  *
@@ -152,6 +156,7 @@ export function ContentCards({
   onChange,
   onFlush,
   place,
+  focus,
 }: {
   readonly cards: readonly ContentCard[];
   readonly values: Readonly<Record<string, unknown>>;
@@ -162,9 +167,55 @@ export function ContentCards({
   readonly onFlush: () => void;
   /** The place search every address field of this panel uses (S1, S2). */
   readonly place: PlaceFieldHandlers;
+  /** The field a missing-field link named, which this panel opens and focuses (T1; S2.4). */
+  readonly focus?: FieldFocusRequest | undefined;
 }) {
   const [openKey, setOpenKey] = useState<string | undefined>(() => defaultOpenCardKey(cards));
   const toggles = useRef(new Map<string, HTMLButtonElement>());
+  /** The request already acted on, so a keystroke that recomputes the cards never re-focuses the same field. */
+  const handled = useRef<string | undefined>(undefined);
+  /** The field the next render brings on screen, which the effect below then scrolls to and focuses. */
+  const [pendingField, setPendingField] = useState<string | undefined>(undefined);
+
+  // A missing-field link opens the card that holds it. The field itself is mounted by the render this state change
+  // causes, so the focus is moved by the effect below, once the card is open.
+  useEffect(() => {
+    if (focus === undefined) {
+      return;
+    }
+
+    const request = `${focus.nonce}:${focus.field}`;
+
+    if (handled.current === request) {
+      return;
+    }
+
+    const card = cardHoldingField(cards, focus.field);
+
+    if (card === undefined) {
+      return;
+    }
+    handled.current = request;
+    setOpenKey(card.key);
+    setPendingField(focus.field);
+  }, [focus, cards]);
+
+  // The input is on screen now (the card was already open, or the render above committed it): scroll it into view and
+  // focus it, so the owner types where the link promised.
+  useEffect(() => {
+    if (pendingField === undefined) {
+      return;
+    }
+
+    const element = document.getElementById(`${idPrefix}-${pendingField}`);
+
+    if (element === null) {
+      return;
+    }
+    setPendingField(undefined);
+    element.scrollIntoView({ block: "center" });
+    element.focus({ preventScroll: true });
+  }, [pendingField, idPrefix]);
 
   const open = useCallback(
     (card: ContentCard, moveFocus: boolean) => {
