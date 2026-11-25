@@ -28,7 +28,7 @@ Evidence: a browser walkthrough with a test customer (desktop 1440 px and phone 
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | Editor: first-steps card with progress, heading, missing fields as links, publish success share panel, phone bottom bar next step, payment copy fix | S2.1, S2.2, S2.4, S2.5 (editor), S2.7, S3 | worker A | |
+| T1 | Editor: first-steps card with progress, heading, missing fields as links, publish success share panel, phone bottom bar next step, payment copy fix | S2.1, S2.2, S2.4, S2.5 (editor), S2.7, S3 | worker A | b31b74b |
 | T2 | Navigation and list: «← Mis invitaciones» on every step (chooser, editor, payment, preview, guests), chooser «Atrás» on phone, list cards with celebrant name, date, and miniature | S2.3, S2.5 (chooser), S2.6, S3 | worker B | |
 | T3 | Browser walkthrough again at 1440 and 390 px, gates, commit, push, CI | S1-S3 | inline | |
 
@@ -40,3 +40,16 @@ Evidence: a browser walkthrough with a test customer (desktop 1440 px and phone 
   the link only as read-only text with no copy or share action; list cards are titled by slug
   (`invitacion-z1o9m3`); the chooser hides «Atrás» below `sm`.
 - L3 — Owner approved all seven proposals (S2).
+- L5 — T2 (worker B): `back-link.tsx` + the `back` prop of `CustomerWorkspaceShell` on the chooser, full sample,
+  payment, simulated payment, attendance, and check-in pages (the bottom chooser link removed); «Atrás» visible on
+  phones; list cards via `invitation-card.tsx` with name, event date, and a renderer miniature; `GET /invitations` gained
+  optional `content`, `componentKey`, `configuration`. API 579 and web 1916 tests pass. Parent (T3): the editor uses the
+  same `back` prop; fixed the heading «Tu invitación de xV años» → «XV años» (RED observed first); docs synced;
+  browser walkthrough at 1440 and 390 px: the back link renders on every owner page (44 px tall, top-left), first-steps
+  card and «0 de 13 listos» present, no page error, no horizontal overflow.
+- L4 — T1 (worker A): `editor-progress.ts` (progress, step states, next step, missing-field links, heading),
+  `invitation-share.ts` (absolute URL, WhatsApp href), `share-panel.tsx` (copy, WhatsApp, view), first-steps card and
+  phone next step in `editor-shell.tsx`, field focus in `content-cards.tsx`, payment hint fixed. Web 1910 tests, tsc,
+  biome pass; e2e specs updated but not run. Earlier selector work committed as `da38a88`, T1 as `b31b74b` on
+  `feat/creation-flow-ux`. Follow-up for T3: `docs/architecture/overview.md` (~:1060) still documents «Contenido ·
+  faltan 3» and none of the new editor parts.

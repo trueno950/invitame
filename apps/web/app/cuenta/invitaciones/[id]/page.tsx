@@ -94,13 +94,23 @@ function BlockLabel({ children }: { children: string }) {
   return <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">{children}</p>;
 }
 
-/** The workspace of a draft nothing can be shown for, with the way back to the list. */
-function PlainShell({ heading, body, path }: { heading: string; body: string; path: string }) {
+/**
+ * The workspace of a draft nothing can be shown for, with the shared way back to the list (S2.3) and, when the read
+ * only failed for now, a retry of this same page.
+ */
+function PlainShell({ heading, body, retry }: { heading: string; body: string; retry?: string }) {
   return (
-    <CustomerWorkspaceShell eyebrow={INVITATION_COPY.detailEyebrow} heading={heading} intro={body}>
-      <Link className={quietButton} href={path}>
-        {INVITATION_COPY.backToList}
-      </Link>
+    <CustomerWorkspaceShell
+      back
+      eyebrow={INVITATION_COPY.detailEyebrow}
+      heading={heading}
+      intro={body}
+    >
+      {retry === undefined ? null : (
+        <Link className={quietButton} href={retry}>
+          {INVITATION_COPY.retry}
+        </Link>
+      )}
     </CustomerWorkspaceShell>
   );
 }
@@ -235,11 +245,7 @@ export default async function InvitationDetailPage({
 
   if (!isInvitationId(id)) {
     return (
-      <PlainShell
-        body={INVITATION_COPY.notFoundBody}
-        heading={INVITATION_COPY.notFoundHeading}
-        path={INVITATION_PATHS.list}
-      />
+      <PlainShell body={INVITATION_COPY.notFoundBody} heading={INVITATION_COPY.notFoundHeading} />
     );
   }
 
@@ -252,11 +258,7 @@ export default async function InvitationDetailPage({
 
   if (loaded.status === "not-found") {
     return (
-      <PlainShell
-        body={INVITATION_COPY.notFoundBody}
-        heading={INVITATION_COPY.notFoundHeading}
-        path={INVITATION_PATHS.list}
-      />
+      <PlainShell body={INVITATION_COPY.notFoundBody} heading={INVITATION_COPY.notFoundHeading} />
     );
   }
 
@@ -265,7 +267,7 @@ export default async function InvitationDetailPage({
       <PlainShell
         body={INVITATION_COPY.unavailableBody}
         heading={INVITATION_COPY.unavailableHeading}
-        path={INVITATION_PATHS.detail(id)}
+        retry={INVITATION_PATHS.detail(id)}
       />
     );
   }
@@ -365,11 +367,7 @@ export default async function InvitationDetailPage({
 
   return (
     <CustomerWorkspaceShell
-      actions={
-        <Link className={quietButton} href={INVITATION_PATHS.list}>
-          {INVITATION_COPY.backToList}
-        </Link>
-      }
+      back
       eyebrow={pinned === undefined ? INVITATION_COPY.detailEyebrow : pinned.template.name}
       heading={heading}
       intro={archived ? INVITATION_COPY.archivedNote : INVITATION_COPY.detailIntro}

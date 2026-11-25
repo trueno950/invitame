@@ -198,6 +198,8 @@ describe("invitationHeading", () => {
     assert.equal(invitationHeading({}, "Boda"), INVITATION_COPY.invitationOf("boda"));
     assert.equal(invitationHeading({}, "Boda"), "Tu invitación de boda");
     assert.equal(invitationHeading({}, "Baby shower"), "Tu invitación de baby shower");
+    // An initialism keeps its capitals: only a capitalized ordinary word is lowered.
+    assert.equal(invitationHeading({}, "XV años"), "Tu invitación de XV años");
     assert.equal(invitationHeading({}, undefined), INVITATION_COPY.detailHeading);
     assert.equal(invitationHeading({}, ""), INVITATION_COPY.detailHeading);
   });

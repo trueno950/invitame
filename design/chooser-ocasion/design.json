@@ -2,9 +2,33 @@
   "title": "Selector de ocasión y paquete",
   "brief": "Mejorar /cuenta/invitaciones/nueva: la ocasión es hoy una fila de texto escondida, el paquete son tarjetas de solo texto, y toda la página se siente muy roja. Hacer ambas selecciones más visuales y suavizar el color.",
   "artboards": [
-    { "file": "01-tarjetas-ilustradas.html", "title": "Tarjetas ilustradas", "tradeoff": "Iconos dibujados por ocasión; más visual y ligero, menos color de relleno", "width": 1440, "height": 900 },
-    { "file": "02-miniaturas-reales.html", "title": "Miniaturas reales", "tradeoff": "Cada ocasión muestra una invitación de verdad; muy concreto, un poco más pesado", "width": 1440, "height": 900 },
-    { "file": "03-tira-a-color.html", "title": "Tira segmentada a color", "tradeoff": "Un color por ocasión para distinguirlas al instante; rompe la monotonía del vino", "width": 1440, "height": 900 },
-    { "file": "04-paquetes-con-funciones.html", "title": "Paquetes con funciones", "tradeoff": "Las tarjetas de paquete muestran qué incluyen; menos rojo, vino solo como acento", "width": 1440, "height": 900 }
+    {
+      "file": "01-tarjetas-ilustradas.html",
+      "title": "Tarjetas ilustradas",
+      "tradeoff": "Iconos dibujados por ocasión; más visual y ligero, menos color de relleno",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "02-miniaturas-reales.html",
+      "title": "Miniaturas reales",
+      "tradeoff": "Cada ocasión muestra una invitación de verdad; muy concreto, un poco más pesado",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "03-tira-a-color.html",
+      "title": "Tira segmentada a color",
+      "tradeoff": "Un color por ocasión para distinguirlas al instante; rompe la monotonía del vino",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "04-paquetes-con-funciones.html",
+      "title": "Paquetes con funciones",
+      "tradeoff": "Las tarjetas de paquete muestran qué incluyen; menos rojo, vino solo como acento",
+      "width": 1440,
+      "height": 900
+    }
   ]
 }

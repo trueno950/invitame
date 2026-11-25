@@ -1057,7 +1057,15 @@ production.
   (`useAutosave`), so there is no «Guardar cambios» form left: `onChange` queues the field and `onBlur` flushes it, and
   a refusal arrives as `state.failure.fieldIssues`, shown under that field with `aria-describedby`. One sticky
   `SaveStatus` strip at the top of the form column is the only place that says whether the work is stored, and each tab
-  label counts what it still owes («Contenido · faltan 3») from the live values. «Contenido» itself is a stack of
+  label states its progress from the live values (`apps/web/lib/customer/editor-progress.ts`). A «Primeros pasos» card
+  (odd/tasks/creation-flow-ux.md) links the three steps «Completa tus datos», «Agrega fotos», and «Publica», shows
+  «N de M listos» from the same `missingRequiredNames` rule, and lists each missing field as a link (`?campo=`) that
+  opens the card holding it and focuses the input. The heading names the customer's invitation (the celebrant, or «Tu
+  invitación de <ocasión>») with the template name as the eyebrow; every owner page of the flow shows the same
+  «← Mis invitaciones» link (`app/_components/back-link.tsx`, the `back` prop of `CustomerWorkspaceShell`). A published
+  invitation's «Publicar» panel offers «Copiar enlace», «Compartir por WhatsApp», and «Ver mi invitación» with the
+  absolute public URL (`share-panel.tsx`, `lib/customer/invitation-share.ts`), and the phone's bottom bar names the
+  next step beside «Ver vista previa». «Contenido» itself is a stack of
   cards (`apps/web/lib/customer/content-cards.ts`): the template's own sections in order, one card open at a time
   (each header is a button with `aria-expanded` and `aria-controls`, and only the open card mounts its inputs), and the
   tab opens on the first card that still owes a required field. A closed card keeps its title, one line of the values it

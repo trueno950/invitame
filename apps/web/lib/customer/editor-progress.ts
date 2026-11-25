@@ -223,7 +223,11 @@ export function invitationHeading(
   if (party === undefined) {
     return fallback;
   }
+  // Lower only a capitalized ordinary word («Boda» → «boda»); an initialism such as «XV años» keeps its capitals.
+  const firstWord = party.split(" ")[0] ?? party;
+  const initialism = firstWord.length > 1 && firstWord === firstWord.toLocaleUpperCase("es-MX");
+
   return INVITATION_COPY.invitationOf(
-    `${party.charAt(0).toLocaleLowerCase("es-MX")}${party.slice(1)}`,
+    initialism ? party : `${party.charAt(0).toLocaleLowerCase("es-MX")}${party.slice(1)}`,
   );
 }
