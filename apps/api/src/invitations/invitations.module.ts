@@ -232,11 +232,8 @@ export const ADMIN_ANALYTICS_USE_CASES: Provider[] = [
  * gate (S6).
  */
 export const INVITATION_USE_CASES: Provider[] = [
-  {
-    provide: ListOwnInvitationsUseCase,
-    useFactory: (invitations: InvitationRepository) => new ListOwnInvitationsUseCase(invitations),
-    inject: [INVITATION_REPOSITORY],
-  },
+  // The list answers each card's content and its pinned version's renderer (T2; S2.6), so it asks the catalog too.
+  useCase(ListOwnInvitationsUseCase),
   {
     provide: ArchiveInvitationUseCase,
     useFactory: (invitations: InvitationRepository) => new ArchiveInvitationUseCase(invitations),

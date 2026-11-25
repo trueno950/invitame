@@ -20,7 +20,11 @@ import {
   InvitationTemplateVersionNotPublishedError,
   PlaceSearchRateLimitedError,
 } from "../application/invitation.application.errors";
-import type { InvitationSummary, OwnedInvitation } from "../application/invitation.use-cases";
+import type {
+  InvitationListItem,
+  InvitationSummary,
+  OwnedInvitation,
+} from "../application/invitation.use-cases";
 import type { PublicInvitation } from "../application/invitation-public";
 import {
   InvitationAlreadyArchivedError,
@@ -53,6 +57,18 @@ export interface InvitationSummaryResponse {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * One row of "Mis invitaciones" as the list serves it (T2; S2.6): the summary plus the stored content and the
+ * renderer identity of the pinned version, so the card renders the celebration's name, its date, and a miniature of
+ * the real layout. The renderer and its configuration are null when the catalog answers no render data for the
+ * pinned version, and then the card falls back to the content and the slug; nothing else of the summary changes.
+ */
+export interface InvitationListItemResponse extends InvitationSummaryResponse {
+  content: JsonObject;
+  componentKey: string | null;
+  configuration: unknown;
 }
 
 /**
@@ -154,6 +170,17 @@ export function toInvitationSummaryResponse(stored: InvitationSummary): Invitati
     archivedAt: stored.archivedAt?.toISOString() ?? null,
     createdAt: stored.createdAt.toISOString(),
     updatedAt: stored.updatedAt.toISOString(),
+  };
+}
+
+export function toInvitationListItemResponse(
+  stored: InvitationListItem,
+): InvitationListItemResponse {
+  return {
+    ...toInvitationSummaryResponse(stored),
+    content: stored.content,
+    componentKey: stored.componentKey,
+    configuration: stored.configuration,
   };
 }
 

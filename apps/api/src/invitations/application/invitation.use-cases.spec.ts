@@ -267,6 +267,8 @@ class MemoryInvitationCatalog implements InvitationCatalog {
   readonly packages = new Map<string, CatalogPackageEntitlements>();
   /** The render data of every stored version, whatever its current status (S3, A1). */
   readonly renderData = new Map<string, CatalogVersionRenderData>();
+  /** Every version id a read asked the render data of, in order (S2.6, A1). */
+  readonly renderDataReads: string[] = [];
   /** The `componentKey` values the API's in-code allow-list still knows (A3). */
   readonly registeredRenderers = new Set(["birthday-poster-01"]);
 
@@ -325,6 +327,7 @@ class MemoryInvitationCatalog implements InvitationCatalog {
   }
 
   async findVersionRenderData(versionId: string): Promise<CatalogVersionRenderData | null> {
+    this.renderDataReads.push(versionId);
     return this.renderData.get(versionId) ?? null;
   }
 
@@ -700,7 +703,9 @@ describe("ListOwnInvitationsUseCase", () => {
       packageId: fixture.packageId,
     });
 
-    const listed = await new ListOwnInvitationsUseCase(fixture.repository).execute(fixture.ownerId);
+    const listed = await new ListOwnInvitationsUseCase(fixture.repository, fixture.catalog).execute(
+      fixture.ownerId,
+    );
 
     assert.deepEqual(
       listed.map((item) => item.slug),
@@ -717,7 +722,9 @@ describe("ListOwnInvitationsUseCase", () => {
     const fixture = seeded();
 
     assert.deepEqual(
-      await new ListOwnInvitationsUseCase(fixture.repository).execute(randomUUID()),
+      await new ListOwnInvitationsUseCase(fixture.repository, fixture.catalog).execute(
+        randomUUID(),
+      ),
       [],
     );
   });
@@ -727,13 +734,56 @@ describe("ListOwnInvitationsUseCase", () => {
     await createDraft(fixture, slugs("invitacion-aaaaaa"));
     await publishedInvitation(fixture, slugs("invitacion-bbbbbb"));
 
-    const listed = await new ListOwnInvitationsUseCase(fixture.repository).execute(fixture.ownerId);
+    const listed = await new ListOwnInvitationsUseCase(fixture.repository, fixture.catalog).execute(
+      fixture.ownerId,
+    );
     const [published, draftItem] = listed;
 
     assert.deepEqual(published?.publishedAt, PUBLISHED_AT);
     assert.equal(draftItem?.publishedAt, null);
     // The expiry column exists and is never written by Milestone 5, so no response pretends it exists.
     assert.equal(Object.hasOwn(published ?? {}, "expiresAt"), false);
+  });
+
+  it("answers each card's content and its pinned version's renderer (T2; S2.6)", async () => {
+    const fixture = seeded();
+    const created = await createDraft(fixture);
+    await new UpdateInvitationContentUseCase(fixture.repository, fixture.catalog).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      content: { celebrantName: "Ana", date: "2027-03-14" },
+    });
+
+    const [item] = await new ListOwnInvitationsUseCase(fixture.repository, fixture.catalog).execute(
+      fixture.ownerId,
+    );
+
+    assert.deepEqual(item?.content, { celebrantName: "Ana", date: "2027-03-14" });
+    assert.equal(item?.componentKey, "birthday-poster-01");
+    assert.deepEqual(item?.configuration, { componentKey: "birthday-poster-01" });
+  });
+
+  it("reads one pinned version once for several invitations, and answers no renderer for one the catalog dropped (T2; S2.6)", async () => {
+    const fixture = seeded();
+    await createDraft(fixture, slugs("invitacion-aaaaaa"));
+    await createDraft(fixture, slugs("invitacion-bbbbbb"));
+    // A version the catalog no longer answers render data for: the card falls back to the stored content.
+    fixture.catalog.renderData.delete(fixture.version.id);
+
+    const listed = await new ListOwnInvitationsUseCase(fixture.repository, fixture.catalog).execute(
+      fixture.ownerId,
+    );
+
+    assert.deepEqual(fixture.catalog.renderDataReads, [fixture.version.id]);
+    assert.deepEqual(
+      listed.map((item) => item.componentKey),
+      [null, null],
+    );
+    assert.deepEqual(
+      listed.map((item) => item.configuration),
+      [null, null],
+    );
+    assert.deepEqual(listed[0]?.content, {});
   });
 });
 

@@ -12,9 +12,9 @@ import {
   CustomerWorkspaceShell,
   pageActionButton,
 } from "../../_components/customer-workspace-shell.tsx";
-import { errorNote, quietButton, textButton } from "../../_components/ui.ts";
+import { errorNote, quietButton } from "../../_components/ui.ts";
+import { InvitationCard } from "./_components/invitation-card.tsx";
 import { Notices } from "./_components/notices.tsx";
-import { StatusBadge } from "./_components/status-badge.tsx";
 import { invitations } from "./_lib/api.ts";
 import { attempt, resolveRead } from "./_lib/load.ts";
 
@@ -25,12 +25,13 @@ export const metadata: Metadata = {
 type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
 
 /**
- * `/cuenta/invitaciones` (M4 T5, T8; M5 T5; S1, S7, S11): the signed-in customer's own invitations, newest
- * first, as a grid of cards in the wide workspace so a few invitations fit on one screen. Each card names
- * the status in words as well as in the badge, the public slug, when it was created, and the way to edit it;
- * a published invitation also links to its public page, which is where a guest reads it (S7). The list
- * endpoint carries no missing-field data, so "incomplete" is shown on the invitation's own page only.
- * A customer without a session is sent to `/ingresar`; a failed read shows the retry notice.
+ * `/cuenta/invitaciones` (M4 T5, T8; M5 T5; S1, S7, S11; T2: S2.6): the signed-in customer's own invitations,
+ * newest first, as a grid of cards in the wide workspace so a few invitations fit on one screen. Each card names the
+ * celebration of the invitation, states its date, and draws a miniature of its own renderer, so an owner recognizes
+ * it at a glance instead of reading a generated slug; the status in words and in the badge, when it was created, and
+ * the way to edit it stay (S7, S3). A published invitation also links to its public page, which is where a guest reads
+ * it (S7). The list endpoint carries no missing-field data, so "incomplete" is shown on the invitation's own page
+ * only. A customer without a session is sent to `/ingresar`; a failed read shows the retry notice.
  */
 export default async function InvitationsPage({
   searchParams,
@@ -71,31 +72,7 @@ export default async function InvitationsPage({
         {rows.length > 0 ? (
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {rows.map((row) => (
-              <li
-                className="flex flex-col gap-3 rounded-panel bg-surface/90 p-5 shadow-soft ring-1 ring-gold/45"
-                key={row.id}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <p className="min-w-0 font-medium break-all text-ink">{row.slug}</p>
-                  <StatusBadge label={row.statusLabel} />
-                </div>
-                <p className="text-sm text-muted">{INVITATION_COPY.createdOn(row.createdOn)}</p>
-                <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
-                  <Link className={textButton} href={row.href}>
-                    {INVITATION_COPY.editLink}
-                  </Link>
-                  {row.publicHref === null ? null : (
-                    <Link
-                      className={textButton}
-                      href={row.publicHref}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      {INVITATION_COPY.viewPublic}
-                    </Link>
-                  )}
-                </div>
-              </li>
+              <InvitationCard key={row.id} row={row} />
             ))}
           </ul>
         ) : null}

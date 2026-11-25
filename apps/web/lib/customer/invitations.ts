@@ -5,9 +5,9 @@ import type {
   CreatorPackage,
   CreatorTemplate,
   InvitationFailure,
+  InvitationListItem,
   InvitationResult,
   InvitationStatus,
-  InvitationSummary,
   InvitationsClient,
 } from "../server/invitations-api.ts";
 import { isInvitationId } from "../server/invitations-api.ts";
@@ -21,7 +21,9 @@ import {
   type InvitationNoticeCode,
   PUBLISH_ISSUE_COPY,
 } from "./copy.ts";
+import { invitationHeading } from "./editor-progress.ts";
 import { FEATURE_ERROR_CODE, featureIssueMessages } from "./feature-issues.ts";
+import { NAVIGATION_COPY } from "./navigation-copy.ts";
 import { RSVP_SETTINGS_ERROR_CODE, rsvpSettingsIssueMessages } from "./rsvp-issue.ts";
 
 /**
@@ -384,6 +386,52 @@ export function formatDate(value: string): string {
   return Number.isNaN(time) ? "" : dateFormatter.format(time);
 }
 
+/** `5 dic 2026`: the same style, read as the calendar date it is and never shifted by a zone (S2.6). */
+const eventDateFormatter = new Intl.DateTimeFormat("es-MX", {
+  dateStyle: "medium",
+  timeZone: "UTC",
+});
+
+/** The four digits, two digits, and two digits of a stored calendar date, and one that rolls over is not one. */
+const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * The stored `date` field of an invitation as `5 dic 2026`, or null when it is not a calendar date (S2.6). The value
+ * is a calendar date, not an instant: `2026-12-05` stays 5 December in every zone, and `2026-02-31`, which
+ * `Date.parse` would roll into March, is refused so a card never shows a day nobody chose.
+ */
+export function eventDateLabel(value: unknown): string | null {
+  const match = typeof value === "string" ? CALENDAR_DATE.exec(value) : null;
+
+  if (match === null) {
+    return null;
+  }
+
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const time = Date.UTC(year, month - 1, day, 12);
+  const date = new Date(time);
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return eventDateFormatter.format(time);
+}
+
+/**
+ * The renderer data of one card (S2.6): the `componentKey` of the pinned version, its stored configuration, and the
+ * content the owner has typed. It is data only — the page decides with `registry.ts` and the renderer's own contract
+ * whether it can be drawn, so a customer module never turns a key into code.
+ */
+export interface InvitationRenderer {
+  componentKey: string;
+  configuration: unknown;
+  content: Record<string, unknown>;
+}
+
 export function statusLabel(status: InvitationStatus): string {
   return INVITATION_STATUS_LABELS[status];
 }
@@ -394,24 +442,47 @@ export function missingFieldsMessage(names: readonly string[]): string | null {
 }
 
 /**
- * One row of "Mis invitaciones": what the list shows about an invitation, and where it links. A published
- * one also links to its public page, which is the only page a guest sees (S7).
+ * One row of "Mis invitaciones": what the list shows about an invitation, and where it links (T2; S2.6). The card
+ * names the celebration, states its date, and draws a miniature of its own renderer, so the owner recognizes an
+ * invitation without reading its generated slug. A published one also links to its public page, which is the only
+ * page a guest sees (S7).
  */
 export interface InvitationRow {
   id: string;
   href: string;
   slug: string;
+  /** The celebration's name, or «Tu invitación» while the content names nobody yet. */
+  title: string;
+  /** The stored event date as `5 dic 2026`, or null while the content states none. */
+  eventDate: string | null;
+  /** The renderer of the pinned version with the stored content, or null while the API answered none. */
+  renderer: InvitationRenderer | null;
   statusLabel: string;
   /** `/i/<slug>` while the invitation is published; null while it is a draft or archived. */
   publicHref: string | null;
   createdOn: string;
 }
 
-export function invitationRows(items: readonly InvitationSummary[]): InvitationRow[] {
+/**
+ * One row per invitation. The name comes from the same `invitationHeading` the editor's heading uses, so the list and
+ * the editor never disagree about what the invitation is called; the date is the `date` field every content schema
+ * declares, and a card whose data is missing still lists with its slug and no miniature (S2.6, S3).
+ */
+export function invitationRows(items: readonly InvitationListItem[]): InvitationRow[] {
   return items.map((item) => ({
     id: item.id,
     href: INVITATION_PATHS.detail(item.id),
     slug: item.slug,
+    title: invitationHeading(item.content, undefined, NAVIGATION_COPY.cardTitle),
+    eventDate: eventDateLabel(item.content.date),
+    renderer:
+      item.componentKey === null
+        ? null
+        : {
+            componentKey: item.componentKey,
+            configuration: item.configuration,
+            content: item.content,
+          },
     statusLabel: statusLabel(item.status),
     publicHref: item.status === "PUBLISHED" ? publicInvitationPath(item.slug) : null,
     createdOn: formatDate(item.createdAt),

@@ -1063,6 +1063,8 @@ describe("invitations routes: /invitations", () => {
     "templateVersionId",
     "updatedAt",
   ];
+  /** One row of `GET /invitations`: the summary plus what a card renders the invitation from (T2; S2.6). */
+  const LIST_KEYS = [...SUMMARY_KEYS, "componentKey", "configuration", "content"].sort();
   const OWNED_KEYS = [
     ...SUMMARY_KEYS,
     "content",
@@ -1310,8 +1312,12 @@ describe("invitations routes: /invitations", () => {
         [second.id, first.id],
       );
       for (const item of body) {
-        assert.deepEqual(Object.keys(item).sort(), SUMMARY_KEYS);
+        assert.deepEqual(Object.keys(item).sort(), LIST_KEYS);
         assert.equal(item.ownerId, undefined);
+        // The card's own data: the pinned version's renderer and the stored content (T2; S2.6).
+        assert.equal(item.componentKey, RENDERER);
+        assert.deepEqual(item.configuration, { componentKey: RENDERER });
+        assert.deepEqual(item.content, {});
       }
     });
 

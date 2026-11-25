@@ -122,13 +122,13 @@ export function ChooserSummaryBar({
 
   if (state.step === 3) {
     action = canCreate ? (
-      <button className={`${pageActionButton} min-h-12 px-6`} form={formId} type="submit">
+      <button className={`${pageActionButton} min-h-12 shrink-0 px-6`} form={formId} type="submit">
         {INVITATION_COPY.createSubmit}
       </button>
     ) : null;
   } else if (forward !== undefined) {
     action = (
-      <a className={`${pageActionButton} min-h-12 px-6`} href={forward}>
+      <a className={`${pageActionButton} min-h-12 shrink-0 px-6`} href={forward}>
         {INVITATION_COPY.continueStep}
       </a>
     );
@@ -146,11 +146,12 @@ export function ChooserSummaryBar({
           </span>
         </p>
         {/*
-          The narrow artboard keeps only the summary and the way forward in the bar, so the step's own
-          content carries the way back there; from `sm` up the bar offers both, as the desktop artboard does.
+          Both ways are on the bar at every width (T2; S2.5): the owner could not find the way back on a phone while
+          it lived only in the step's own content. The summary truncates first and the primary action never shrinks,
+          so «Atrás» fits beside «Continuar» or «Crear mi invitación» without crowding it.
         */}
         {back === undefined ? null : (
-          <a className={`${textButton} hidden px-1 sm:inline`} href={back}>
+          <a className={`${textButton} shrink-0 whitespace-nowrap px-1`} href={back}>
             {INVITATION_COPY.backStep}
           </a>
         )}

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { connection } from "next/server";
 import type { ReactElement } from "react";
 
@@ -68,7 +67,8 @@ function StepHeading({ id, title }: { id: string; title: string }): ReactElement
  * the real renderer; step 2 shows the chosen design in each of its themes beside the large sample of the
  * chosen one; step 3 shows the packages and the create form, which still posts the published version id.
  * «Ver completa» opens that sample at phone width. The API is the authority on whether a package fits the
- * pinned version. Creating and editing the draft is free (S6).
+ * pinned version. Creating and editing the draft is free (S6). The shared «← Mis invitaciones» pill opens the header,
+ * and the ways back and forward sit on the footer bar at every width, phones included (T2; S2.3, S2.5).
  */
 export default async function NewInvitationPage({
   searchParams,
@@ -103,6 +103,7 @@ export default async function NewInvitationPage({
 
   return (
     <CustomerWorkspaceShell
+      back
       eyebrow={INVITATION_COPY.createEyebrow}
       heading={available ? INVITATION_COPY.createHeading : INVITATION_COPY.unavailableHeading}
       intro={available ? INVITATION_COPY.createIntro : INVITATION_COPY.unavailableBody}
@@ -307,12 +308,6 @@ export default async function NewInvitationPage({
             </a>
           </div>
         )}
-
-        <div className="border-t border-gold/40 pt-4">
-          <Link className={textButton} href={INVITATION_PATHS.list}>
-            {INVITATION_COPY.backToList}
-          </Link>
-        </div>
       </div>
 
       {available && cards.length > 0 ? (

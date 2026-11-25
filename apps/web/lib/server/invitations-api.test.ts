@@ -11,6 +11,7 @@ import {
   parseCheckout,
   parseCreatorPackages,
   parseCreatorTemplates,
+  parseInvitationListItems,
   parseInvitationPayment,
   parseInvitationSummaries,
   parseOwnedInvitation,
@@ -40,6 +41,14 @@ const SUMMARY = {
   archivedAt: null,
   createdAt: AT,
   updatedAt: AT,
+};
+
+/** One row of `GET /invitations`: the summary plus what its card renders it from (T2; S2.6). */
+const LIST_ITEM = {
+  ...SUMMARY,
+  content: { celebrantName: "Ana", date: "2026-12-05" },
+  componentKey: "birthday-poster-01",
+  configuration: { componentKey: "birthday-poster-01" },
 };
 
 const OWNED = {
@@ -212,7 +221,7 @@ describe("requests", () => {
   it("sends each endpoint's method, path, and JSON body with only the session cookie and the secret", async () => {
     const api = client();
     const calls: Array<[() => Promise<unknown>, string, string, unknown, unknown]> = [
-      [() => api.list(), "GET", "/invitations", undefined, [SUMMARY]],
+      [() => api.list(), "GET", "/invitations", undefined, [LIST_ITEM]],
       [() => api.get(ID), "GET", `/invitations/${ID}`, undefined, OWNED],
       [
         () => api.create({ templateVersionId: VERSION_ID, packageId: PACKAGE_ID }),
@@ -289,8 +298,8 @@ describe("requests", () => {
 
   it("keeps the API's order of the list", async () => {
     answer(200, [
-      { ...SUMMARY, id: VERSION_ID },
-      { ...SUMMARY, id: PACKAGE_ID },
+      { ...LIST_ITEM, id: VERSION_ID },
+      { ...LIST_ITEM, id: PACKAGE_ID },
     ]);
 
     const result = await client().list();
@@ -775,6 +784,30 @@ describe("validators", () => {
     }
     assert.equal(parseInvitationSummaries("[]"), undefined);
     assert.equal(parseInvitationSummaries([SUMMARY, null]), undefined);
+  });
+
+  it("reads the content and the pinned version's renderer of a list row (T2; S2.6)", () => {
+    assert.deepEqual(parseInvitationListItems([LIST_ITEM]), [LIST_ITEM]);
+    // A field this deployment does not render is dropped instead of reaching a page.
+    assert.deepEqual(parseInvitationListItems([{ ...LIST_ITEM, ownerId: "leak" }]), [LIST_ITEM]);
+    // A row written before the fields existed still lists, and its card falls back to the summary.
+    assert.deepEqual(parseInvitationListItems([SUMMARY]), [
+      { ...SUMMARY, content: {}, componentKey: null, configuration: null },
+    ]);
+    assert.deepEqual(parseInvitationListItems([]), []);
+  });
+
+  it("refuses a list row whose content or renderer breaks the contract (T2; S2.6)", () => {
+    for (const item of [
+      { ...LIST_ITEM, content: "Ana" },
+      { ...LIST_ITEM, content: { nested: { a: 1 } } },
+      { ...LIST_ITEM, content: null },
+      { ...LIST_ITEM, componentKey: 42 },
+      { ...LIST_ITEM, componentKey: "" },
+      { ...SUMMARY, status: "EXPIRED" },
+    ]) {
+      assert.equal(parseInvitationListItems([item]), undefined, JSON.stringify(item));
+    }
   });
 
   it("refuses content that is not a JSON object of primitive values", () => {

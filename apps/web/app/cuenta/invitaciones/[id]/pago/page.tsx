@@ -29,12 +29,13 @@ export const metadata: Metadata = {
 type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
 
 /**
- * `/cuenta/invitaciones/[id]/pago` (M7 T2, T3; S1, S4): where the provider sends the browser back after a checkout, with
- * whatever query it appends (`status`, `collection_status`, `payment_id`, …). Those parameters are untrusted hints and
- * are dropped before the page reads its own notice codes, so the page renders the API's own payment state — never a
- * query parameter, a cookie, or a client value — and a webhook the API received while the browser was away decides what
- * the owner sees. A package that needs no payment goes straight back to the invitation; a failed, expired, or refunded
- * payment offers the retry, which starts the checkout again.
+ * `/cuenta/invitaciones/[id]/pago` (M7 T2, T3; S1, S4; T2: S2.3): where the provider sends the browser back after a
+ * checkout, with whatever query it appends (`status`, `collection_status`, `payment_id`, …). Those parameters are
+ * untrusted hints and are dropped before the page reads its own notice codes, so the page renders the API's own payment
+ * state — never a query parameter, a cookie, or a client value — and a webhook the API received while the browser was
+ * away decides what the owner sees. A package that needs no payment goes straight back to the invitation; a failed,
+ * expired, or refunded payment offers the retry, which starts the checkout again. The shared «← Mis invitaciones» pill
+ * opens the header in every state, the paid one included, so the way back to the list never depends on the outcome.
  */
 export default async function InvitationPaymentPage({
   params,
@@ -46,16 +47,11 @@ export default async function InvitationPaymentPage({
   await connection();
   const [{ id }, parameters] = await Promise.all([params, searchParams]);
   const notices = invitationPageNotices(withoutProviderReturnParameters(parameters));
-  const backLink = (
-    <Link className={quietButton} href={INVITATION_PATHS.list}>
-      {INVITATION_COPY.backToList}
-    </Link>
-  );
 
   if (!isInvitationId(id)) {
     return (
       <CustomerWorkspaceShell
-        actions={backLink}
+        back
         eyebrow={PAYMENT_COPY.returnEyebrow}
         heading={INVITATION_COPY.notFoundHeading}
         intro={INVITATION_COPY.notFoundBody}
@@ -70,7 +66,7 @@ export default async function InvitationPaymentPage({
   if (loaded.status === "not-found") {
     return (
       <CustomerWorkspaceShell
-        actions={backLink}
+        back
         eyebrow={PAYMENT_COPY.returnEyebrow}
         heading={INVITATION_COPY.notFoundHeading}
         intro={INVITATION_COPY.notFoundBody}
@@ -88,6 +84,7 @@ export default async function InvitationPaymentPage({
             {PAYMENT_COPY.refresh}
           </Link>
         }
+        back
         eyebrow={PAYMENT_COPY.returnEyebrow}
         heading={PAYMENT_COPY.unavailableHeading}
         intro={PAYMENT_COPY.unavailableBody}
@@ -112,6 +109,7 @@ export default async function InvitationPaymentPage({
           </Link>
         )
       }
+      back
       eyebrow={PAYMENT_COPY.returnEyebrow}
       heading={view.heading}
       intro={view.body}

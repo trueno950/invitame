@@ -5,6 +5,7 @@ import type { PlacePoint } from "../invitation-features/place-point.ts";
 import type {
   CreatorPackage,
   CreatorTemplate,
+  InvitationListItem,
   InvitationResult,
   InvitationSummary,
   InvitationsClient,
@@ -35,6 +36,7 @@ import {
   publishIssueMessages,
   unpublishInvitation,
 } from "./invitations.ts";
+import { NAVIGATION_COPY } from "./navigation-copy.ts";
 import { templateChoiceCards } from "./template-preview.ts";
 import { chooserOccasions, resolveChooserStep, stepHref } from "./template-steps.ts";
 
@@ -215,6 +217,25 @@ const SUMMARY: InvitationSummary = {
   createdAt: AT,
   updatedAt: AT,
 };
+
+/** A pinned birthday version: the `componentKey` of its renderer, that version's configuration, and its content (S2.6). */
+const RENDERER = {
+  componentKey: "birthday-poster-01",
+  configuration: { componentKey: "birthday-poster-01", theme: "ice-kingdom" },
+  content: {
+    celebrantName: "Ana",
+    age: 7,
+    date: "2026-12-05",
+    time: "16:30",
+    location: "Jardín Los Arcos",
+    address: "Av. de las Flores 214, Col. Del Valle, Ciudad de México",
+    mainPhoto: "https://invitame.mx/samples/birthday-mateo.svg",
+    message: "¡Ven a celebrar conmigo!",
+  },
+};
+
+/** One row of the list as `GET /invitations` answers it, with what its card renders (T2; S2.6). */
+const LIST_ITEM: InvitationListItem = { ...SUMMARY, ...RENDERER };
 
 const OWNED: OwnedInvitation = {
   ...SUMMARY,
@@ -591,15 +612,18 @@ describe("invitationRows", () => {
   it("maps each invitation to a row of the list with its status and creation date", () => {
     assert.deepEqual(
       invitationRows([
-        SUMMARY,
-        { ...SUMMARY, status: "PUBLISHED", publishedAt: AT },
-        { ...SUMMARY, status: "ARCHIVED", archivedAt: AT },
+        LIST_ITEM,
+        { ...LIST_ITEM, status: "PUBLISHED", publishedAt: AT },
+        { ...LIST_ITEM, status: "ARCHIVED", archivedAt: AT },
       ]),
       [
         {
           id: ID,
           href: `/cuenta/invitaciones/${ID}`,
           slug: "invitacion-k7m2qx",
+          title: "Ana",
+          eventDate: "5 dic 2026",
+          renderer: { ...RENDERER },
           statusLabel: "Borrador",
           publicHref: null,
           createdOn: "11 nov 2026",
@@ -608,6 +632,9 @@ describe("invitationRows", () => {
           id: ID,
           href: `/cuenta/invitaciones/${ID}`,
           slug: "invitacion-k7m2qx",
+          title: "Ana",
+          eventDate: "5 dic 2026",
+          renderer: { ...RENDERER },
           statusLabel: "Publicada",
           publicHref: "/i/invitacion-k7m2qx",
           createdOn: "11 nov 2026",
@@ -616,12 +643,59 @@ describe("invitationRows", () => {
           id: ID,
           href: `/cuenta/invitaciones/${ID}`,
           slug: "invitacion-k7m2qx",
+          title: "Ana",
+          eventDate: "5 dic 2026",
+          renderer: { ...RENDERER },
           statusLabel: "Archivada",
           publicHref: null,
           createdOn: "11 nov 2026",
         },
       ],
     );
+  });
+
+  it("names the couple, the baby, or the hosts of the celebration (S2.6)", () => {
+    const titles = (content: Record<string, unknown>): string =>
+      invitationRows([{ ...LIST_ITEM, content }])[0]?.title ?? "";
+
+    assert.equal(titles({ celebrantName: "Valentina Ramírez" }), "Valentina Ramírez");
+    assert.equal(titles({ babyName: "Sofía" }), "Sofía");
+    assert.equal(titles({ hosts: "Mariana y Lucía Ruiz" }), "Mariana y Lucía Ruiz");
+    assert.equal(
+      titles({ coupleNameOne: "Ana Sofía", coupleNameTwo: "Daniel" }),
+      "Ana Sofía y Daniel",
+    );
+  });
+
+  it("keeps the stored event date, and answers nothing for one that is not a calendar date", () => {
+    const date = (content: Record<string, unknown>): string | null =>
+      invitationRows([{ ...LIST_ITEM, content }])[0]?.eventDate ?? null;
+
+    assert.equal(date({ date: "2027-04-11" }), "11 abr 2027");
+    assert.equal(date({ date: "2026-02-31" }), null);
+    assert.equal(date({ date: "5 de diciembre" }), null);
+    assert.equal(date({}), null);
+  });
+
+  it("falls back to the stored content and the slug when the card has no name, no date, or no renderer (S2.6)", () => {
+    const [row] = invitationRows([
+      { ...LIST_ITEM, content: {}, componentKey: null, configuration: null },
+    ]);
+
+    assert.equal(row?.title, NAVIGATION_COPY.cardTitle);
+    assert.equal(row?.eventDate, null);
+    // No renderer data means no miniature, and never a broken one (S3).
+    assert.equal(row?.renderer, null);
+    assert.equal(row?.slug, "invitacion-k7m2qx");
+  });
+
+  it("carries the renderer data of a row that has one, whatever its content says yet (S2.6)", () => {
+    // The card decides whether the content satisfies the renderer; the row only carries what the API answered.
+    const [row] = invitationRows([{ ...LIST_ITEM, content: { celebrantName: "Ana" } }]);
+
+    assert.deepEqual(row?.renderer, { ...RENDERER, content: { celebrantName: "Ana" } });
+    assert.equal(row?.title, "Ana");
+    assert.equal(row?.eventDate, null);
   });
 });
 
@@ -786,7 +860,7 @@ interface Answers {
   searchPlaces?: () => Promise<InvitationResult<PlacePoint[]>>;
   savePlace?: () => Promise<InvitationResult<OwnedInvitation>>;
   clearPlace?: () => Promise<InvitationResult<OwnedInvitation>>;
-  list?: () => Promise<InvitationResult<InvitationSummary[]>>;
+  list?: () => Promise<InvitationResult<InvitationListItem[]>>;
   get?: () => Promise<InvitationResult<OwnedInvitation>>;
   create?: () => Promise<InvitationResult<OwnedInvitation>>;
   replaceContent?: () => Promise<InvitationResult<OwnedInvitation>>;

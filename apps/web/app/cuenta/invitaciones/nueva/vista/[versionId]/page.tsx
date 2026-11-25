@@ -9,6 +9,7 @@ import { findPreviewTarget } from "../../../../../../lib/customer/template-previ
 import { themeStepPath } from "../../../../../../lib/customer/template-steps.ts";
 import { findRenderer } from "../../../../../../lib/renderers/registry.ts";
 import { requestOrigin } from "../../../../../../lib/server/request-origin.ts";
+import { BackLink } from "../../../../../_components/back-link.tsx";
 import { CustomerWorkspaceShell } from "../../../../../_components/customer-workspace-shell.tsx";
 import { quietButton, textButton } from "../../../../../_components/ui.ts";
 import { invitations } from "../../../_lib/api.ts";
@@ -23,10 +24,15 @@ export const metadata: Metadata = {
 /** The width of the phone the sample is rendered at: the same 390 px the layouts are designed for. */
 const PHONE_WIDTH = "24.375rem";
 
-/** The notice of a page that has no sample to show, with the way back to the chooser. */
+/** The notice of a page that has no sample to show, with the shared way back to the list (T2; S2.3). */
 function PlainShell({ heading, body }: { heading: string; body: string }) {
   return (
-    <CustomerWorkspaceShell eyebrow={INVITATION_COPY.previewEyebrow} heading={heading} intro={body}>
+    <CustomerWorkspaceShell
+      back
+      eyebrow={INVITATION_COPY.previewEyebrow}
+      heading={heading}
+      intro={body}
+    >
       <Link className={quietButton} href={INVITATION_PATHS.create}>
         {INVITATION_COPY.previewBack}
       </Link>
@@ -42,7 +48,8 @@ function PlainShell({ heading, body }: { heading: string; body: string }) {
  * `/cuenta`, so it needs a session like the rest of the account: a signed-out visitor is sent to sign in by
  * the shared read step. An id the creator catalog does not publish, a template id instead of a version id,
  * and a snapshot the renderer refuses all answer the same friendly notice, and the page leads back to
- * choosing that template, which is the theme step with this theme still selected.
+ * choosing that template, which is the theme step with this theme still selected. The shared «← Mis invitaciones» pill
+ * opens the column, at the phone's own width, so the sample is never a dead end (T2; S2.3).
  */
 export default async function TemplatePreviewPage({
   params,
@@ -84,6 +91,10 @@ export default async function TemplatePreviewPage({
   return (
     <main className="paper-wash relative isolate min-h-screen px-4 py-5 text-ink sm:px-8 sm:py-8">
       <div className="mx-auto flex w-full flex-col gap-4" style={{ maxWidth: PHONE_WIDTH }}>
+        <div className="flex items-center">
+          <BackLink />
+        </div>
+
         <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-panel bg-surface/90 px-4 py-2.5 ring-1 ring-gold/45">
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">

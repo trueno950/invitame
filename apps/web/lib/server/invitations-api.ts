@@ -373,6 +373,51 @@ export function parseInvitationSummaries(value: unknown): InvitationSummary[] | 
 }
 
 /**
+ * One row of `GET /invitations` (T2; S2.6): the summary plus what the list card renders it from — the stored content,
+ * the `componentKey` of the pinned version, and that version's configuration. The card shows the celebration's name,
+ * its date, and a miniature of the real renderer, and falls back to the slug while one of them is missing.
+ */
+export interface InvitationListItem extends InvitationSummary {
+  content: Record<string, unknown>;
+  /** The renderer of the pinned version, or null when the catalog answers no render data for it. */
+  componentKey: string | null;
+  /** The version's stored configuration, kept unread: the renderer's own parser decides whether it draws. */
+  configuration: unknown;
+}
+
+/**
+ * One list row. The three fields a card needs are additive, so a row of a deployment that predates them still lists:
+ * an absent `content` is an empty content and an absent renderer is `null`, which the card renders as the slug and no
+ * miniature (S3). A field that is present but broken refuses the whole row, exactly like the summary's own fields.
+ */
+export function parseInvitationListItem(value: unknown): InvitationListItem | undefined {
+  const summary = parseInvitationSummary(value);
+  const item = record(value);
+
+  if (summary === undefined || item === undefined) {
+    return undefined;
+  }
+
+  const content = item.content === undefined ? {} : parseContent(item.content);
+  const componentKey = item.componentKey ?? null;
+
+  if (content === undefined || !(componentKey === null || isNonEmptyString(componentKey))) {
+    return undefined;
+  }
+
+  return {
+    ...summary,
+    content,
+    componentKey,
+    configuration: item.configuration ?? null,
+  };
+}
+
+export function parseInvitationListItems(value: unknown): InvitationListItem[] | undefined {
+  return mapAll(value, parseInvitationListItem);
+}
+
+/**
  * The draft content: a plain object whose values are the primitives the pinned schema validates. An own
  * `__proto__` key stays a plain property (`Object.fromEntries` never assigns a prototype), so a stored
  * key can never change the object the page reads.
@@ -1330,9 +1375,12 @@ export function createInvitationsClient(
   }
 
   return {
-    /** `GET /invitations`: the session user's drafts, newest first (S1). */
-    list: (): Promise<InvitationResult<InvitationSummary[]>> =>
-      call("GET", INVITATIONS, undefined, parseInvitationSummaries),
+    /**
+     * `GET /invitations`: the session user's invitations, newest first, each with the content and the pinned
+     * version's renderer its card draws (S1; T2, S2.6).
+     */
+    list: (): Promise<InvitationResult<InvitationListItem[]>> =>
+      call("GET", INVITATIONS, undefined, parseInvitationListItems),
     /** `GET /invitations/:id`: one own draft with its content and missing fields (S7). */
     get: (id: string): Promise<InvitationResult<OwnedInvitation>> =>
       onDraft(id, "", (path) => call("GET", path, undefined, parseOwnedInvitation)),

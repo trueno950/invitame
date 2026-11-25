@@ -56,13 +56,14 @@ import { CheckInGuestDto, CreateGuestDto, UpdateGuestDto } from "./dto/invitatio
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import { UpdateRsvpSettingsDto } from "./dto/invitation-rsvp.dtos";
 import {
+  type InvitationListItemResponse,
   type InvitationSummaryResponse,
   mapInvitationError,
   type OwnedInvitationResponse,
   orInvitationSummaryNotFound,
   orOwnedInvitationNotFound,
   orPlaceSuggestionsNotFound,
-  toInvitationSummaryResponse,
+  toInvitationListItemResponse,
   toOwnedInvitationResponse,
 } from "./invitation.response";
 import {
@@ -153,10 +154,13 @@ export class InvitationsController {
     }
   }
 
-  /** The session user's invitations, newest first; an owner without any gets an empty list (S1). */
+  /**
+   * The session user's invitations, newest first, each with what its card renders it from (T2; S2.6); an owner without
+   * any gets an empty list (S1).
+   */
   @Get()
-  async list(@SessionUserId() userId: string): Promise<InvitationSummaryResponse[]> {
-    return (await this.listOwn.execute(userId)).map(toInvitationSummaryResponse);
+  async list(@SessionUserId() userId: string): Promise<InvitationListItemResponse[]> {
+    return (await this.listOwn.execute(userId)).map(toInvitationListItemResponse);
   }
 
   /** One of the session user's invitations, with its content and the fields it still lacks (S7). */

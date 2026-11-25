@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
-import { Ornament } from "./ornament.tsx";
+import { BackLink } from "./back-link.tsx";
 import { CustomerPageFrame } from "./customer-shell.tsx";
+import { Ornament } from "./ornament.tsx";
 
 /**
  * The wine button of a page header (M4 T8; S11, S12): `primaryButton` at its own width instead of the
@@ -16,7 +17,14 @@ interface CustomerWorkspaceShellProperties {
   intro: string;
   /** The page's main action, at the right of the header. */
   actions?: ReactNode;
-  children: ReactNode;
+  /**
+   * Whether the header opens with the shared «← Mis invitaciones» pill, at the top-left and above the eyebrow (T2;
+   * S2.3). Every page of the creation flow opts in with this one prop, so the way back to the list sits in the same
+   * place and with the same words on all of them, on a phone as well.
+   */
+  back?: boolean;
+  /** The page's body; a page that only states a refusal and offers the way back needs none (T2; S2.3). */
+  children?: ReactNode;
 }
 
 /**
@@ -32,6 +40,7 @@ export function CustomerWorkspaceShell({
   heading,
   intro,
   actions,
+  back = false,
   children,
 }: CustomerWorkspaceShellProperties) {
   const widthClass = "max-w-[100rem]";
@@ -41,6 +50,7 @@ export function CustomerWorkspaceShell({
       <div className={`mx-auto w-full ${widthClass} pt-8 sm:pt-10`}>
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0 max-w-3xl">
+            {back ? <BackLink className="mb-3" /> : null}
             <p className="inline-flex items-center gap-2 rounded-full bg-surface/75 py-1 pl-2.5 pr-3.5 text-xs font-medium uppercase tracking-[0.18em] text-primary ring-1 ring-gold/55">
               <Ornament className="size-4" name="bud" />
               {eyebrow}

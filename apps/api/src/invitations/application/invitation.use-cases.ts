@@ -47,7 +47,7 @@ import type {
   InvitationRepository,
   NewInvitation,
 } from "./invitation.repository";
-import type { InvitationCatalog } from "./invitation-catalog";
+import type { CatalogVersionRenderData, InvitationCatalog } from "./invitation-catalog";
 import type { InvitationGalleryReader } from "./invitation-gallery";
 import type { InvitationPaymentGate } from "./invitation-payment-gate";
 import { type PublicInvitation, projectPublicContent } from "./invitation-public";
@@ -122,6 +122,18 @@ export interface InvitationSummary {
   publishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * One row of "Mis invitaciones" as the list renders it (T2; S2.6): the lifecycle summary plus the stored content and
+ * the renderer identity of the pinned version, so a card shows the celebration's name, its date, and a miniature of
+ * the real layout instead of only the generated slug. The renderer and its configuration are null when the catalog
+ * answers no render data for the pinned version, and then the card falls back to the content and the slug.
+ */
+export interface InvitationListItem extends InvitationSummary {
+  content: JsonObject;
+  componentKey: string | null;
+  configuration: unknown;
 }
 
 /**
@@ -325,12 +337,38 @@ export class CreateInvitationDraftUseCase {
   }
 }
 
-/** The owner's invitations, newest first (S1). An owner without invitations gets an empty list. */
+/** The owner's invitations, newest first (S1), each with what a card renders it from (T2; S2.6). */
 export class ListOwnInvitationsUseCase {
-  constructor(private readonly invitations: InvitationRepository) {}
+  constructor(
+    private readonly invitations: InvitationRepository,
+    private readonly catalog: InvitationCatalog,
+  ) {}
 
-  async execute(ownerId: string): Promise<InvitationSummary[]> {
-    return (await this.invitations.listOwned(ownerId)).map(toSummary);
+  /**
+   * Every invitation of the owner, newest first. The render data of a pinned version is read once per distinct
+   * snapshot, so a list of many drafts of one template costs one catalog read; a version the catalog does not know
+   * answers no renderer, and the card then falls back to the content it already has.
+   */
+  async execute(ownerId: string): Promise<InvitationListItem[]> {
+    const stored = await this.invitations.listOwned(ownerId);
+    const versions = new Map<string, CatalogVersionRenderData | null>();
+    const items: InvitationListItem[] = [];
+
+    for (const record of stored) {
+      let render = versions.get(record.templateVersionId);
+
+      if (render === undefined) {
+        render = await this.catalog.findVersionRenderData(record.templateVersionId);
+        versions.set(record.templateVersionId, render);
+      }
+      items.push({
+        ...toSummary(record),
+        content: record.content,
+        componentKey: render?.componentKey ?? null,
+        configuration: render?.configuration ?? null,
+      });
+    }
+    return items;
   }
 }
 

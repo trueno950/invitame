@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
-import { CHECK_IN_COPY, INVITATION_COPY } from "../../../../../lib/customer/copy.ts";
+import { CHECK_IN_COPY } from "../../../../../lib/customer/copy.ts";
 import { checkInView } from "../../../../../lib/customer/guest-checkin.ts";
 import { INVITATION_PATHS } from "../../../../../lib/customer/invitations.ts";
 import { afterSignInPath, checkInPath } from "../../../../../lib/public/guest-pass.ts";
@@ -30,24 +30,26 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/** The one way back of a refused or invalid pass. */
+/** The one way back of a refused or invalid pass: the shared pill, and the invitation itself when it is known. */
 function PlainShell({ heading, body, path }: { heading: string; body: string; path: string }) {
+  const known = path !== INVITATION_PATHS.list;
+
   return (
     <CustomerWorkspaceShell
+      back
       eyebrow={CHECK_IN_COPY.eyebrow}
       heading={heading}
       intro={CHECK_IN_COPY.intro}
     >
       <div className="flex flex-col gap-4">
         <p className={statusNote}>{body}</p>
-        <div className="flex flex-wrap gap-3">
-          <Link className={quietButton} href={path}>
-            {CHECK_IN_COPY.backToInvitation}
-          </Link>
-          <Link className={quietButton} href={INVITATION_PATHS.list}>
-            {CHECK_IN_COPY.backToList}
-          </Link>
-        </div>
+        {known ? (
+          <div className="flex flex-wrap gap-3">
+            <Link className={quietButton} href={path}>
+              {CHECK_IN_COPY.backToInvitation}
+            </Link>
+          </div>
+        ) : null}
       </div>
     </CustomerWorkspaceShell>
   );
@@ -147,6 +149,7 @@ export default async function GuestCheckInPage({
           {CHECK_IN_COPY.backToInvitation}
         </Link>
       }
+      back
       eyebrow={CHECK_IN_COPY.eyebrow}
       heading={view.heading}
       intro={CHECK_IN_COPY.intro}

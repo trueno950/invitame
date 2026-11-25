@@ -32,7 +32,8 @@ type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
  * invitation to return to; the emit route answers only the outcome. «Pagar» and «Simular rechazo» post the same server
  * action with a different outcome, and the API signs an event and sends it through the intake a real provider would
  * use. A payment that cannot be read, is already paid, or belongs to a deployment that sells nothing shows the one
- * note that this test payment is not available.
+ * note that this test payment is not available. The shared «← Mis invitaciones» pill opens the header, and the way back
+ * to the invitation stays beside it (T2; S2.3).
  */
 export default async function SimulatedPaymentPage({
   params,
@@ -63,13 +64,13 @@ export default async function SimulatedPaymentPage({
   return (
     <CustomerWorkspaceShell
       actions={
-        <Link
-          className={quietButton}
-          href={isInvitationId(id) ? INVITATION_PATHS.detail(id) : INVITATION_PATHS.list}
-        >
-          {isInvitationId(id) ? PAYMENT_COPY.backToInvitation : INVITATION_COPY.backToList}
-        </Link>
+        isInvitationId(id) ? (
+          <Link className={quietButton} href={INVITATION_PATHS.detail(id)}>
+            {PAYMENT_COPY.backToInvitation}
+          </Link>
+        ) : undefined
       }
+      back
       eyebrow={PAYMENT_COPY.simulatedEyebrow}
       heading={heading}
       intro={intro}

@@ -49,7 +49,8 @@ import {
  *
  * Owner-only in both modes: the page never checks ownership itself, it reads the RSVP and guest routes with the
  * session cookie, and the API answers 404 for an invitation this customer does not own. A guest never reaches this
- * page and never sees another guest's data.
+ * page and never sees another guest's data. The shared «← Mis invitaciones» pill opens the header of every state
+ * (T2; S2.3), so the way back to the list is in the same place as on the rest of the flow.
  */
 
 export const metadata: Metadata = {
@@ -157,6 +158,7 @@ function GuestListMode({
           {GUEST_COPY.backToInvitation}
         </Link>
       }
+      back
       eyebrow={GUEST_COPY.responsesEyebrow}
       heading={GUEST_COPY.responsesHeading}
       intro={GUEST_COPY.responsesIntro}
@@ -224,14 +226,11 @@ export default async function RsvpResponsesPage({
   if (!isInvitationId(id)) {
     return (
       <CustomerWorkspaceShell
+        back
         eyebrow={RSVP_COPY.responsesEyebrow}
         heading={RSVP_COPY.responsesHeading}
         intro={RSVP_COPY.emptyNote}
-      >
-        <Link className={quietButton} href={INVITATION_PATHS.list}>
-          {INVITATION_COPY.backToList}
-        </Link>
-      </CustomerWorkspaceShell>
+      />
     );
   }
 
@@ -245,28 +244,22 @@ export default async function RsvpResponsesPage({
   if (invitation.status === "not-found" || rsvp.status === "not-found") {
     return (
       <CustomerWorkspaceShell
+        back
         eyebrow={RSVP_COPY.responsesEyebrow}
         heading={INVITATION_COPY.notFoundHeading}
         intro={INVITATION_COPY.notFoundBody}
-      >
-        <Link className={quietButton} href={INVITATION_PATHS.list}>
-          {INVITATION_COPY.backToList}
-        </Link>
-      </CustomerWorkspaceShell>
+      />
     );
   }
 
   if (invitation.status === "unavailable" || rsvp.status === "unavailable") {
     return (
       <CustomerWorkspaceShell
+        back
         eyebrow={RSVP_COPY.responsesEyebrow}
         heading={INVITATION_COPY.unavailableHeading}
         intro={INVITATION_COPY.unavailableBody}
-      >
-        <Link className={quietButton} href={INVITATION_PATHS.list}>
-          {INVITATION_COPY.backToList}
-        </Link>
-      </CustomerWorkspaceShell>
+      />
     );
   }
 
@@ -282,27 +275,26 @@ export default async function RsvpResponsesPage({
     if (guests.status === "unavailable") {
       return (
         <CustomerWorkspaceShell
+          actions={
+            <Link className={quietButton} href={INVITATION_PATHS.detail(id)}>
+              {GUEST_COPY.backToInvitation}
+            </Link>
+          }
+          back
           eyebrow={GUEST_COPY.responsesEyebrow}
           heading={GUEST_COPY.unavailableHeading}
           intro={GUEST_COPY.unavailableBody}
-        >
-          <Link className={quietButton} href={INVITATION_PATHS.detail(id)}>
-            {GUEST_COPY.backToInvitation}
-          </Link>
-        </CustomerWorkspaceShell>
+        />
       );
     }
     if (guests.status === "not-found") {
       return (
         <CustomerWorkspaceShell
+          back
           eyebrow={GUEST_COPY.responsesEyebrow}
           heading={INVITATION_COPY.notFoundHeading}
           intro={INVITATION_COPY.notFoundBody}
-        >
-          <Link className={quietButton} href={INVITATION_PATHS.list}>
-            {INVITATION_COPY.backToList}
-          </Link>
-        </CustomerWorkspaceShell>
+        />
       );
     }
 
@@ -337,6 +329,7 @@ export default async function RsvpResponsesPage({
           {RSVP_COPY.backToInvitation}
         </Link>
       }
+      back
       eyebrow={RSVP_COPY.responsesEyebrow}
       heading={RSVP_COPY.responsesHeading}
       intro={RSVP_COPY.responsesIntro}
