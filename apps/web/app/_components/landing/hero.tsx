@@ -4,7 +4,7 @@ import { accountAction, LANDING_COPY } from "../../../lib/landing/copy.ts";
 import { Ornament } from "../ornament.tsx";
 import { focusRing } from "../ui.ts";
 import { Wordmark } from "../wordmark.tsx";
-import { AnchorLink, SignInLink } from "./actions.tsx";
+import { AnchorLink, CreateInvitationLink, SignInLink } from "./actions.tsx";
 import { Art, DrawnBouquet } from "./art.tsx";
 import styles from "./landing.module.css";
 import { HeroStationery } from "./stationery.tsx";
@@ -85,7 +85,7 @@ export function LandingHero() {
           </h1>
           <p className={styles.heroLead}>{hero.lead}</p>
           <div className={styles.heroActions}>
-            <AnchorLink anchor={hero.primary} variant="primary" />
+            <CreateInvitationLink action={hero.primary} />
             <AnchorLink anchor={hero.secondary} variant="ghost" />
           </div>
           <ul className={styles.heroNotes}>

@@ -35,3 +35,5 @@ page that leads to creating an invitation. Design first, then implement the chos
   proposed in `design/launch-landing/` (`01-editorial-romantica.html`, `02-galeria-protagonista.html`,
   `03-directa-funcional.html`); awaiting the owner's pick. Prices in the artboards are illustrative MXN
   placeholders — the real values come from the admin panel.
+- L3 — Owner picked `01-editorial-romantica.html` (Editorial romántica) as the chosen artboard; the other
+  two are alternatives.

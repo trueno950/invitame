@@ -1,8 +1,8 @@
 # Architecture overview
 
 InvitaMe is a modular monolith with two independently runnable applications. The repository currently contains
-the foundation (catalog/version data, API configuration and health, Prisma ownership, and an honest pre-launch
-landing page) and the Milestone 2 identity work: customer and administrator sign-in, sessions, access control,
+the foundation (catalog/version data, API configuration and health, Prisma ownership, and the launch landing
+page) and the Milestone 2 identity work: customer and administrator sign-in, sessions, access control,
 the own profile, and the operator commands. The module map and flows below describe the target product and are
 explicitly planned unless marked current.
 
@@ -10,7 +10,7 @@ explicitly planned unless marked current.
 
 | Area | Current foundation | Target direction |
 | --- | --- | --- |
-| Web | `apps/web` is a Next.js 16 App Router app with an honest pre-launch landing page at `/` (see Landing page below), a proxy for `/api/auth`, a server-side API client, and the customer pages `/ingresar` (sign-in by emailed code) and `/cuenta` (own profile and sign-out) with `/cuenta/invitaciones` (own invitation drafts: list, create from a published template and an active package, and edit them in a tabbed editor of «Contenido», «Fotos», «Funciones», «Asistencia», and «Publicar» where every field saves on its own and, from 1024 px up, the stored draft renders live beside the fields; archive) with that editor's owner-only preview `/cuenta/invitaciones/<id>/vista-previa` (the stored draft rendered by the guest registry and features block for the editor's live frame; noindex, per request, 404 for anyone else), the guest page `/i/<slug>` of a published invitation (rendered per request, with its feature block and its `/i/<slug>/calendario.ics` download), and the administrator pages `/admin/ingresar` (password and second factor), `/admin/activar` (authenticator-app enrollment), and `/admin` (a minimal panel with sign-out); the pages use the visual theme «A · Rosa y vino» ([`docs/design/theme.md`](../design/theme.md): Tailwind tokens, fonts committed in the repository and loaded with `next/font/local` so the build needs no network for them, fine-line SVG ornaments, and a contrast test). | Guests, RSVP, payment, and media. **Planned** (Milestones 6–8). |
+| Web | `apps/web` is a Next.js 16 App Router app with the launch landing page at `/` (see Landing page below), a proxy for `/api/auth`, a server-side API client, and the customer pages `/ingresar` (sign-in by emailed code) and `/cuenta` (own profile and sign-out) with `/cuenta/invitaciones` (own invitation drafts: list, create from a published template and an active package, and edit them in a tabbed editor of «Contenido», «Fotos», «Funciones», «Asistencia», and «Publicar» where every field saves on its own and, from 1024 px up, the stored draft renders live beside the fields; archive) with that editor's owner-only preview `/cuenta/invitaciones/<id>/vista-previa` (the stored draft rendered by the guest registry and features block for the editor's live frame; noindex, per request, 404 for anyone else), the guest page `/i/<slug>` of a published invitation (rendered per request, with its feature block and its `/i/<slug>/calendario.ics` download), and the administrator pages `/admin/ingresar` (password and second factor), `/admin/activar` (authenticator-app enrollment), and `/admin` (a minimal panel with sign-out); the pages use the visual theme «A · Rosa y vino» ([`docs/design/theme.md`](../design/theme.md): Tailwind tokens, fonts committed in the repository and loaded with `next/font/local` so the build needs no network for them, fine-line SVG ornaments, and a contrast test). | Production readiness and the first release. **Planned** (Milestone 10). |
 | API | `apps/api` has configuration, a global Prisma service, `GET /health`, and Better Auth mounted at `/api/auth` with customer sign-in by emailed code, administrator sign-in by password and a mandatory authenticator app, a deny-by-default guard with an administrator role check and enrollment gate, the signed-in user's own profile (`GET /me`, `PATCH /me`), and account disabling, administrator creation, and administrator recovery by server-side commands. | Feature modules exposing stable REST contracts. **Planned.** |
 | Database | PostgreSQL and Prisma own `User` and the identity tables Better Auth reads and writes (sessions, credential accounts, verification codes, two-factor records, and rate-limit counters) plus the catalog, packages, features, templates, immutable template versions, `Invitation` drafts pinned to a version, RSVP answers, guests, media rows, the `Payment`/`PaymentEvent` payment core, and the append-only `AdminAction` support-action audit; see [`model.md`](../database/model.md). | Analytics. **Planned.** |
 | Catalog | The API `catalog` module (`apps/api/src/catalog`) serves administrator-only endpoints under `/admin/catalog` for categories, features, packages with their features and MXN prices, templates, and template versions (create, publish, retire); the web pages under `/admin/catalogo` call them from the server. See Catalog administration below. Signed-in creators read the published templates and active packages through `GET /catalog/templates` and `GET /catalog/packages`, served from the catalog's public application contract (`CatalogPublicReader`); the template read also answers the published version's own `configuration` snapshot, so the creator chooser can preview each template with the real renderer instead of a stored screenshot. | Anonymous catalog browsing. **Planned.** |
@@ -171,25 +171,37 @@ apps/web server components and actions ──► apps/api /me
 
 ### Landing page (current)
 
-This is M2 T8l (S35, S37; L41, L45): `apps/web/app/page.tsx`, `apps/web/app/_components/landing/`, and
-`apps/web/lib/landing/copy.ts`. The page rebuilds the approved concept «A · Rosa y vino» version 3 (hero with
-invitations fanned out of an envelope, the occasions band, the sample gallery, the steps, the guest experience on a
-phone, the closing band, and the footer) as a server component with no client JavaScript. It is rendered per
-request because it reads the request's cookies: a visitor who carries a Better Auth session cookie sees «Mi
-cuenta» (to `/cuenta`) instead of «Ingresar» in the header, the closing band, and the footer. The cookie only
-chooses the link and no API call is made; `/cuenta` checks the session and sends an expired one to `/ingresar`.
+This is the launch landing (M2 T8l, then `odd/tasks/launch-landing.md`; S1-S6): `apps/web/app/page.tsx`,
+`apps/web/app/_components/landing/`, and `apps/web/lib/landing/copy.ts`. The page keeps the approved concept
+«A · Rosa y vino» version 3 in the direction «Editorial romántica» (`design/launch-landing/01-editorial-romantica.html`,
+the one the owner picked in L3 of that task): the hero with invitations fanned out of an envelope, the catalog
+gallery, the packages, the four steps, the FAQ, the closing band, and the footer. It is a server component with
+no client JavaScript, and it is rendered per request because it reads the request's cookies: a visitor who
+carries a Better Auth session cookie sees «Mi cuenta» (to `/cuenta`) instead of «Ingresar» in the header, the
+closing band, and the footer. The cookie only chooses the link and no API call is made; `/cuenta` checks the
+session and sends an expired one to `/ingresar`.
 
-- It is an honest pre-launch page (S37): the customer pages and the administrator pages are the only product
-  surfaces, so «Ingresar» (to `/ingresar`), or «Mi cuenta» with a session, is the only active product action. Every other product action is a
-  «Próximamente» label that is neither a link nor a button; in-page anchors only scroll to `#disenos` or
-  `#como-funcionara`. The gallery is «Diseños de muestra», the steps are «Así funcionará» in the future tense,
-  and the guest phone is labeled «Ejemplo de invitación». No public page links to `/admin`.
+- It sells the product that already exists (S1, S2). The main action is «Crear mi invitación», a link to
+  `/cuenta/invitaciones/nueva` in the hero and the closing band, and «Empezar», the same link, in the gallery
+  and package cards; «Ingresar», or «Mi cuenta» with a session, stays active; every other action is an in-page
+  anchor. The sections carry the ids `contenido`, `disenos`, `precios`, `como-funciona`, and `faq`, and the
+  header and the footer link to the gallery, the packages, and the FAQ.
+- The gallery names the five published occasion lines with their theme counts (XV años, boda, cumpleaños, baby
+  shower, and bautizo) and previews each one as mini stationery (S3). The packages section shows the three
+  seeded packages (`apps/api/prisma/catalog-seed.ts`), Basic, Premium, and Deluxe, with their feature sets, the
+  badge «El más elegido» on Premium, and ILLUSTRATIVE MXN prices ($199, $399, $599) taken from `landingPricing`
+  in the copy module rather than from the API: the real values come from the administrator panel, and a task that
+  reads them from the catalog replaces them (S4). The four steps are written in the present tense because
+  choosing, filling, paying, and sharing all work today (S5); the FAQ answers the duration, RSVP, payment, and
+  refund questions as four native `<details>` disclosures, the first one open (S6).
 - All landing copy, including the default page title and description in `app/layout.tsx`, lives in
   `lib/landing/copy.ts`. `lib/landing/copy.test.ts` rejects the claims the owner ruled out (handmade, brand names,
-  usage numbers, an active «Crear mi invitación» or «Ver diseño»), checks that every action is «Ingresar» to
-  `/ingresar`, a «Próximamente» label, or an anchor to a section of the page, and checks that the landing
-  components take every link target from the copy and render no button. When a feature ships, its section changes
-  in the copy after the owner reviews the claim.
+  usage numbers, «Próximamente» and every other waiting-room wording, and the verb in the simple future), checks
+  that every action is «Ingresar» to `/ingresar`, «Crear mi invitación» to `/cuenta/invitaciones/nueva`, or an
+  anchor to a rendered section, checks the gallery occasions with their theme counts, the three packages with
+  their prices, the four steps, and the four questions, and checks that the landing components take every link
+  target from the copy, render no button, and render an element for every section id. When a claim changes, it
+  changes in the copy after the owner reviews it.
 - The hero bouquet draws itself from the CSS inside `public/ornaments/bouquet-draw.svg`; with reduced motion the
   page shows the same bouquet already drawn (see [`docs/design/theme.md`](../design/theme.md)).
 

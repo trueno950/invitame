@@ -2,10 +2,10 @@
 
 Status: **current** (M2 T8t, T8l, T8f; S35, S37, S43). The owner approved version 3 of the concept «A · Rosa y vino» on
 2026-11-05 (L41 of `odd/tasks/m2-identity.md`). The tokens, fonts, ornaments, shared components, `/ingresar`,
-`/cuenta`, and the full concept landing page at `/` (T8l: every section and the draw-on bouquet, with the honest
-pre-launch copy the owner approved in L45) are implemented. The invitation pages reuse the theme in a wide
-workspace instead of the centered card (M4 T8; S11, S12), described in [Customer workspace](#customer-workspace).
-The administrator pages under `/admin` do not use this
+`/cuenta`, and the full concept landing page at `/` (T8l: every section and the draw-on bouquet, with the launch
+copy of `odd/tasks/launch-landing.md` that leads to «Crear mi invitación») are implemented. The invitation pages
+reuse the theme in a wide workspace instead of the centered card (M4 T8; S11, S12), described in
+[Customer workspace](#customer-workspace). The administrator pages under `/admin` do not use this
 theme: they have their own neutral administration theme, described in [Administration theme](#administration-theme).
 
 ## Principles
@@ -155,11 +155,11 @@ animation and draw-on hooks removed, numbers rounded):
 
 | File | Use |
 | --- | --- |
-| `corner-floral.svg` (about 38 KB, 12 KB gzipped) | A spray of roses, buds, leaves, and gold sprigs in two corners of the customer pages (one flipped); on the landing, the hero, gallery, guest-experience, and closing bouquets, and the drawn hero bouquet with reduced motion. |
+| `corner-floral.svg` (about 38 KB, 12 KB gzipped) | A spray of roses, buds, leaves, and gold sprigs in two corners of the customer pages (one flipped); on the landing, the hero, gallery, and closing bouquets, and the drawn hero bouquet with reduced motion. |
 | `bouquet-draw.svg` (about 38 KB, 12 KB gzipped) | The same bouquet with its own draw-on CSS, for the landing hero only (see Motion). |
 | `garland.svg`, `card-corner.svg`, `arch-sprig.svg`, `envelope-spray.svg`, `doily.svg`, `crest.svg`, `swash.svg`, `petal.svg` | Landing line art: the garland on the sample cards and phones, the corners of the XV card, the sprig on the hero arch, the spray on the envelope, the doilies behind the step medallions, the laurel around the closing seal, the gold underline of «enamoran», and the drifting petals. |
-| `icon-*.svg` | Landing line icons: tiara, rings, and balloons for the occasions band; cards, quill, and envelope for the steps; calendar, pin, and heart for the guest experience. |
-| `envelope.svg`, `wax-seal.svg`, `crown.svg`, `balloons.svg`, `bunting.svg`, `damask.svg`, `lace-edge.svg`, `paper-fiber.svg`, `deckle-mask.svg` | Sample stationery of the landing: the envelope, the wax seal, the XV crown, the party balloons and bunting, the wine damask band, the lace edge of the occasions band, the paper fibre on every card, and the deckled edge of the garden card. |
+| `icon-*.svg` | Landing line icons: cards, quill, calendar, and envelope for the four steps. |
+| `envelope.svg`, `wax-seal.svg`, `crown.svg`, `balloons.svg`, `bunting.svg`, `damask.svg`, `paper-fiber.svg`, `deckle-mask.svg` | Sample stationery of the landing: the envelope, the wax seal, the XV crown, the party balloons and bunting, the wine damask band, the paper fibre on every card, and the deckled edge of the garden card. |
 | `flourish-divider.svg` | The gold flourish between the eyebrow and the heading. |
 | `rose-bud.svg` | The bullet of eyebrows. |
 | `wordmark-rose.svg` | The small rose after the wordmark. |
@@ -193,10 +193,11 @@ first screen lazily. Keep each file under 40 KB.
   with its failure note; the administration sidebar passes its own `className`.
 - `app/_components/landing/`: the landing sections (`hero.tsx`, `sections.tsx`, `closing.tsx`), the sample
   stationery (`stationery.tsx`), the drawings (`art.tsx`), and the three action shapes (`actions.tsx`):
-  `SignInLink` (the wine button to `/ingresar`), `AnchorLink` (a button-shaped link that only scrolls), and
-  `ComingSoon` (a «Próximamente» label, never a link or a button). `landing.module.css` holds the concept's
-  styles on the tokens: every color is a token or a `color-mix` of tokens, and the hero illustration and sample
-  cards scale with container query units.
+  `CreateInvitationLink` (the wine button that starts a new invitation in `/cuenta/invitaciones/nueva`, the
+  landing's main action), `SignInLink` (the button to `/ingresar`, or `/cuenta` with a session), and `AnchorLink`
+  (a button-shaped link that only scrolls). `landing.module.css` holds the concept's styles on the tokens: every
+  color is a token or a `color-mix` of tokens, and the hero illustration and sample cards scale with container
+  query units.
 - The enrollment QR code (`app/admin/activar/qr-code.tsx`) is drawn in `ink` on `surface` with a 4-module quiet
   zone and a gold hairline, the highest-contrast pair, so a phone camera reads it reliably. Below it, the setup
   key for manual entry is set in monospace `ink` on a pink tint, in groups of 4 and selectable as a whole, with a
@@ -209,10 +210,9 @@ fade on hover. With `prefers-reduced-motion: reduce`, an unlayered rule in `glob
 animation at once, and smooth scrolling is enabled only without that preference. The ornament files contain no
 animation, except `bouquet-draw.svg`.
 
-The landing moves only `transform` and `opacity`: the sample cards and the hero phone float, sparkles twinkle,
-petals drift down behind the illustration, and the guest-experience chip bobs. The concept's moving gold shimmer
-is left static, so nothing repaints once the page settles. With reduced motion every animation ends at its final
-frame and the petals are hidden.
+The landing moves only `transform` and `opacity`: the sample cards and the hero phone float, sparkles twinkle, and
+petals drift down behind the illustration. The concept's moving gold shimmer is left static, so nothing repaints
+once the page settles. With reduced motion every animation ends at its final frame and the petals are hidden.
 
 The hero bouquet draws itself on load without a script: `public/ornaments/bouquet-draw.svg` carries its own CSS.
 Each group of strokes is dashed with `pathLength="1"` and its dash offset runs to zero in 1.1 s, staggered by
@@ -642,4 +642,4 @@ JavaScript.
 | Customer workspace (invitation pages) | `apps/web/app/cuenta/invitaciones/`, `apps/web/app/_components/customer-workspace-shell.tsx` |
 | Administration classes and frames | `apps/web/app/admin/_components/` |
 | Landing sections, styles, and drawings | `apps/web/app/_components/landing/` |
-| Landing copy and its honesty test (S37) | `apps/web/lib/landing/` |
+| Landing copy and its claim test | `apps/web/lib/landing/` |

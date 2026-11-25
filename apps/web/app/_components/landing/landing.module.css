@@ -42,6 +42,13 @@
   margin-inline: auto;
 }
 
+/* the gold hairline between the hero and the gallery */
+.hairline {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-gold), transparent);
+  opacity: 0.8;
+}
+
 .skip {
   position: absolute;
   left: -999px;
@@ -107,7 +114,7 @@
   }
 }
 
-/* ---------- buttons, anchors, and the coming-soon pill ---------- */
+/* ---------- buttons and anchors ---------- */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -191,30 +198,6 @@
   .btnGhost:hover {
     background: var(--color-surface);
   }
-}
-
-/* A product action that does not exist yet: a quiet label, never a link or a button (S37). */
-.soon {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2.25rem;
-  padding: 0.25rem 0.875rem 0.25rem 0.625rem;
-  border-radius: 999px;
-  background: var(--color-rose-50);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 55%, transparent);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-primary);
-  cursor: default;
-  user-select: none;
-}
-
-.soon img {
-  width: 1rem;
-  height: 1rem;
 }
 
 /* ---------- typography helpers ---------- */
@@ -326,6 +309,13 @@
 .heroTitle .accent {
   position: relative;
   display: inline-block;
+  /* the script face carries the accent word, as in the artboard */
+  font-family: var(--font-script);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 1.14em;
+  line-height: 1.02;
+  letter-spacing: 0;
 }
 
 /* the gold swash under the accent */
@@ -995,12 +985,6 @@
   }
 }
 
-@keyframes bob {
-  to {
-    transform: translateY(-10px);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .petals {
     display: none;
@@ -1014,98 +998,7 @@
   scroll-margin-top: 4rem;
 }
 
-/* ---------- occasions band: lace edges, illustrated medals, gold fleurons ---------- */
-.occasions {
-  position: relative;
-  z-index: 3;
-  padding: 2.875rem 0;
-  border-block: 1px solid color-mix(in srgb, var(--color-gold) 55%, transparent);
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--color-surface) 70%, transparent) 50%,
-      transparent 100%
-    ),
-    var(--color-rose-50);
-}
-
-.occasions::before,
-.occasions::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 22px;
-  background: url("/ornaments/lace-edge.svg") 0 0 / 40px 22px repeat-x;
-}
-
-.occasions::before {
-  top: 0;
-}
-
-.occasions::after {
-  bottom: 0;
-  transform: scaleY(-1);
-}
-
-.occasionList {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 1.125rem 2.5rem;
-  margin: 0 auto;
-  padding: 0;
-  list-style: none;
-}
-
-.occasion {
-  display: inline-flex;
-  align-items: center;
-  gap: 1rem;
-  font-family: var(--font-display);
-  font-weight: 500;
-  font-size: 1.9375rem;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.occasion + .occasion::before {
-  content: "";
-  width: 1rem;
-  height: 1rem;
-  margin-right: 1.5rem;
-  background: var(--foil);
-  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
-}
-
-.occasionLead {
-  font-family: var(--font-script);
-  font-size: 2.125rem;
-  color: var(--color-primary);
-}
-
-.medal {
-  display: grid;
-  place-items: center;
-  width: 3.875rem;
-  height: 3.875rem;
-  border-radius: 50%;
-  background: var(--color-surface);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 80%, transparent),
-    inset 0 0 0 4px var(--color-surface),
-    inset 0 0 0 5px color-mix(in srgb, var(--color-rose) 60%, transparent),
-    0 8px 18px -10px color-mix(in srgb, var(--shade) 45%, transparent);
-}
-
-.medal img {
-  width: 2.5rem;
-  height: 2.5rem;
-}
-
-/* ---------- gallery of sample designs ---------- */
+/* ---------- gallery of catalog designs ---------- */
 .gallery {
   background:
     radial-gradient(
@@ -1122,8 +1015,8 @@
 
 .designs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1.75rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1.5rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1208,9 +1101,15 @@
   line-height: 1.1;
 }
 
-.design .soon {
+.designDetail {
+  margin: 0.375rem 0 0;
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.design .btn {
   align-self: flex-start;
-  margin: 1rem 0.375rem 0;
+  margin: 1.125rem 0.375rem 0;
 }
 
 /* mini invitations inside the thumbnails */
@@ -1382,7 +1281,207 @@
   font-size: 9cqw;
 }
 
-/* ---------- how it will work ---------- */
+/* ---------- pricing ---------- */
+.plans {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 1.5rem;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  padding: 2.25rem 1.875rem 2rem;
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 30px 60px -46px color-mix(in srgb, var(--shade) 55%, transparent);
+}
+
+/* the featured plan: the ink panel of the artboard, carried by the ink and gold tokens */
+.planFeatured {
+  background:
+    radial-gradient(
+      70% 50% at 50% 0%,
+      color-mix(in srgb, var(--color-rose) 26%, transparent),
+      transparent 70%
+    ),
+    var(--color-ink);
+  color: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 70%, transparent),
+    0 40px 70px -44px color-mix(in srgb, var(--shade) 70%, transparent);
+  transform: translateY(-0.75rem);
+}
+
+.planHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.planName {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.75rem;
+  line-height: 1.1;
+}
+
+.planBadge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-gold) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 65%, transparent);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--color-surface) 82%, var(--color-rose));
+}
+
+.planPrice {
+  margin: 1rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 2.75rem;
+  line-height: 1;
+  color: var(--color-primary);
+}
+
+.planPrice small {
+  margin-left: 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+}
+
+.planFeatured .planPrice,
+.planFeatured .planPrice small {
+  color: var(--color-surface);
+}
+
+.planSummary {
+  margin: 0.875rem 0 0;
+  font-size: 0.9375rem;
+  color: var(--color-muted);
+  text-wrap: pretty;
+}
+
+.planFeatured .planSummary {
+  color: color-mix(in srgb, var(--color-surface) 84%, var(--color-rose));
+}
+
+.planFeatures {
+  flex: 1;
+  margin: 1.5rem 0 1.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.planFeatures li {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5625rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-rose-100) 80%, transparent);
+  font-size: 0.9375rem;
+}
+
+.planFeatures li:last-child {
+  border-bottom: 0;
+}
+
+.planFeatures img {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.planFeatured .planFeatures li {
+  border-bottom-color: color-mix(in srgb, var(--color-surface) 14%, transparent);
+}
+
+.plan .btn {
+  align-self: flex-start;
+}
+
+.plansNote {
+  margin: 1.75rem 0 0;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+/* ---------- frequently asked questions ---------- */
+.faq {
+  display: grid;
+  gap: 0.875rem;
+  max-width: 45rem;
+  margin: 0 auto;
+}
+
+.faqItem {
+  padding: 0 1.5rem;
+  border-radius: var(--radius-field);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 18px 34px -28px color-mix(in srgb, var(--shade) 60%, transparent);
+}
+
+.faqItem[open] {
+  background: var(--color-surface);
+}
+
+.faqQuestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1875rem 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.25rem;
+  line-height: 1.25;
+  cursor: pointer;
+  list-style: none;
+}
+
+.faqQuestion::-webkit-details-marker {
+  display: none;
+}
+
+/* the open/closed mark: two hairlines that turn into a cross when the answer opens */
+.faqQuestion::after {
+  content: "";
+  flex: none;
+  width: 0.8125rem;
+  height: 0.8125rem;
+  background:
+    linear-gradient(var(--color-primary) 0 0) center / 100% 1.5px no-repeat,
+    linear-gradient(var(--color-primary) 0 0) center / 1.5px 100% no-repeat;
+  transition: transform 200ms var(--ease-out-soft);
+}
+
+.faqItem[open] .faqQuestion::after {
+  transform: rotate(45deg);
+}
+
+.faqAnswer {
+  margin: 0;
+  padding: 0 0 1.375rem;
+  color: var(--color-muted);
+  text-wrap: pretty;
+}
+
+/* ---------- how it works ---------- */
 .steps {
   background: linear-gradient(
     180deg,
@@ -1396,8 +1495,8 @@
 .stepList {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.75rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1408,8 +1507,8 @@
   content: "";
   position: absolute;
   top: 77px;
-  left: 17%;
-  right: 17%;
+  left: 13%;
+  right: 13%;
   height: 3px;
   background:
     radial-gradient(circle, var(--color-gold) 1.2px, transparent 1.6px) 0 0 / 11px 3px repeat-x;
@@ -1487,301 +1586,6 @@
   color: var(--color-muted);
 }
 
-/* ---------- guest experience (an example) ---------- */
-.experienceGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: center;
-  gap: 3.75rem;
-}
-
-.experience .sectionHead {
-  margin: 0;
-  text-align: left;
-}
-
-.experience .sectionIntro {
-  margin-left: 0;
-}
-
-.perks {
-  display: grid;
-  gap: 1.125rem;
-  margin: 2.5rem 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.perk {
-  display: flex;
-  align-items: flex-start;
-  gap: 1.125rem;
-  padding: 1.125rem 1.375rem;
-  border-radius: 1.375rem;
-  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 30%, transparent);
-}
-
-.perkIcon {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 3.125rem;
-  height: 3.125rem;
-  border-radius: 50%;
-  background: var(--color-surface);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 70%, transparent);
-}
-
-.perkIcon img {
-  width: 2rem;
-  height: 2rem;
-}
-
-.perkTitle {
-  display: block;
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1.4375rem;
-  line-height: 1.2;
-}
-
-.perkBody {
-  margin: 0;
-  font-size: 0.9375rem;
-  color: var(--color-muted);
-}
-
-.showcase {
-  position: relative;
-  display: grid;
-  place-items: center;
-  margin: 0;
-  padding: 3.125rem 0;
-}
-
-.halo {
-  position: absolute;
-  width: 480px;
-  height: 640px;
-  border-radius: 240px 240px 28px 28px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-rose-100) 80%, var(--color-rose)),
-    var(--color-rose-50) 70%,
-    transparent
-  );
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 45%, transparent);
-}
-
-.halo::before {
-  content: "";
-  position: absolute;
-  inset: 14px;
-  border-radius: 226px 226px 18px 18px;
-  border: 1px solid color-mix(in srgb, var(--color-gold) 60%, transparent);
-}
-
-.showcaseRoses {
-  position: absolute;
-  z-index: 1;
-  width: 300px;
-  height: auto;
-}
-
-.showcaseRosesLow {
-  left: -30px;
-  bottom: 10px;
-}
-
-.showcaseRosesHigh {
-  right: -20px;
-  top: 20px;
-  transform: scale(-1, -1);
-}
-
-.phoneLarge {
-  position: relative;
-  z-index: 2;
-  width: 340px;
-  padding: 12px;
-  border-radius: 54px;
-  background: linear-gradient(
-    145deg,
-    var(--rose-gold-1) 0%,
-    var(--rose-gold-2) 45%,
-    var(--rose-gold-1) 70%,
-    var(--rose-gold-3) 100%
-  );
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-surface) 85%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--rose-gold-3) 60%, transparent),
-    0 50px 80px -30px color-mix(in srgb, var(--shade) 50%, transparent),
-    0 12px 24px color-mix(in srgb, var(--shade) 10%, transparent);
-}
-
-/* inside the large phone, sizes are fixed; `cqw` is for the hero stage only */
-.phoneLarge .screen {
-  padding-bottom: 22px;
-  border-radius: 43px;
-}
-
-.phoneLarge .island {
-  top: 12px;
-  width: 96px;
-  height: 26px;
-}
-
-.phoneLarge .cover {
-  height: 300px;
-  padding-bottom: 18px;
-  align-content: end;
-  gap: 2px;
-}
-
-.phoneLarge .cover > img {
-  top: 92px;
-  left: -35%;
-  width: 170%;
-}
-
-.phoneLarge .kicker {
-  position: relative;
-  margin: 0;
-  font-size: 12px;
-}
-
-.phoneLarge .cover .name {
-  font-size: 56px;
-}
-
-.phoneLarge .date {
-  margin-top: 6px;
-  font-size: 11px;
-}
-
-.venue {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: calc(100% - 36px);
-  margin-top: 16px;
-  padding: 12px 14px;
-  border-radius: 18px;
-  background: var(--color-surface);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 45%, transparent),
-    0 10px 20px -16px color-mix(in srgb, var(--shade) 50%, transparent);
-  text-align: left;
-}
-
-.venueIcon {
-  flex: none;
-  width: 34px;
-  height: 34px;
-}
-
-.venueName {
-  display: block;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 18px;
-  line-height: 1.15;
-}
-
-.venueNote {
-  font-size: 12px;
-  color: var(--color-muted);
-}
-
-.phoneLarge .countLabel {
-  margin-top: 18px;
-  font-size: 22px;
-}
-
-.phoneLarge .count {
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.phoneLarge .count > span {
-  width: 60px;
-  padding: 9px 0 7px;
-  border-radius: 14px;
-  font-size: 26px;
-}
-
-.phoneLarge .count small {
-  margin-top: 4px;
-  font-size: 11px;
-}
-
-.phoneLarge .reply {
-  display: grid;
-  place-items: center;
-  min-height: 50px;
-  margin: 18px 0 6px;
-  padding: 0 30px;
-  background: var(--wine-gradient);
-  font-size: 15px;
-  box-shadow: 0 14px 24px -14px color-mix(in srgb, var(--color-primary) 90%, transparent);
-}
-
-.chip {
-  position: absolute;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 18px 12px 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-gold) 50%, transparent),
-    0 22px 40px -22px color-mix(in srgb, var(--shade) 55%, transparent);
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  color: var(--color-ink);
-  animation: bob 6s cubic-bezier(0.32, 0.72, 0, 1) infinite alternate;
-}
-
-.chipValue {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--color-primary);
-}
-
-.chipExample {
-  left: 0;
-  top: 120px;
-}
-
-.chipCountdown {
-  right: 0;
-  bottom: 150px;
-  animation-delay: -3s;
-}
-
-.chipDot {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: var(--color-rose-50);
-  box-shadow: inset 0 0 0 1px var(--color-gold);
-}
-
-.chipIcon {
-  width: 22px;
-  height: 22px;
-}
-
 /* ---------- closing band ---------- */
 .closingShell {
   padding: 10px;
@@ -1845,15 +1649,6 @@
   align-items: center;
   justify-content: center;
   gap: 0.875rem 1.25rem;
-}
-
-.closingUpcoming {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
-  font-size: 0.9375rem;
-  font-weight: 500;
-  color: var(--color-muted);
 }
 
 .closingRoses {
@@ -1966,21 +1761,26 @@
     margin-inline: auto;
   }
   .designs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 2.125rem 1.5rem;
   }
   .design:nth-child(even) .shell {
     margin-top: 0;
   }
-  .experienceGrid {
+  .plans {
     grid-template-columns: 1fr;
-  }
-  .experience .sectionHead {
+    max-width: 34rem;
     margin-inline: auto;
-    text-align: center;
   }
-  .experience .sectionIntro {
-    margin-inline: auto;
+  .planFeatured {
+    transform: none;
+  }
+  .stepList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3rem 1.5rem;
+  }
+  .stepList::before {
+    display: none;
   }
 }
 
@@ -2052,34 +1852,6 @@
   .flourish {
     width: 15rem;
   }
-  .occasions {
-    padding: 2.25rem 0;
-  }
-  .occasionList {
-    flex-direction: column;
-    align-items: flex-start;
-    width: max-content;
-    margin-inline: auto;
-    gap: 0.875rem;
-  }
-  .occasion {
-    font-size: 1.75rem;
-  }
-  .occasion + .occasion::before {
-    display: none;
-  }
-  .occasionLead {
-    align-self: center;
-    font-size: 1.875rem;
-  }
-  .medal {
-    width: 3.25rem;
-    height: 3.25rem;
-  }
-  .medal img {
-    width: 2.125rem;
-    height: 2.125rem;
-  }
   .designs {
     grid-template-columns: 1fr;
     gap: 2.5rem;
@@ -2100,6 +1872,18 @@
   .stepList::before {
     display: none;
   }
+  .plans {
+    max-width: none;
+  }
+  .plan {
+    padding: 1.875rem 1.375rem 1.625rem;
+  }
+  .faqItem {
+    padding: 0 1.125rem;
+  }
+  .faqQuestion {
+    font-size: 1.125rem;
+  }
   .medallion {
     width: 132px;
     height: 132px;
@@ -2110,55 +1894,6 @@
   .medallion img {
     width: 72px;
     height: 72px;
-  }
-  .perk {
-    padding: 1rem;
-  }
-  .showcase {
-    padding: 4.5rem 0 0.625rem;
-  }
-  .halo {
-    width: 340px;
-    height: 560px;
-    border-radius: 170px 170px 24px 24px;
-  }
-  .halo::before {
-    border-radius: 156px 156px 14px 14px;
-  }
-  .showcaseRoses {
-    width: 200px;
-  }
-  .phoneLarge {
-    width: 300px;
-    border-radius: 48px;
-  }
-  .phoneLarge .screen {
-    border-radius: 38px;
-  }
-  .phoneLarge .cover {
-    height: 270px;
-  }
-  .phoneLarge .count > span {
-    width: 54px;
-  }
-  .chip {
-    padding: 9px 14px 9px 9px;
-    font-size: 13px;
-  }
-  .chipValue {
-    font-size: 19px;
-  }
-  .chipDot {
-    width: 34px;
-    height: 34px;
-  }
-  .chipExample {
-    top: 4px;
-    left: 50%;
-    translate: -50% 0;
-  }
-  .chipCountdown {
-    display: none;
   }
   .closing {
     padding: 5rem 1.375rem 5.625rem;

@@ -1,18 +1,19 @@
 /**
- * Spanish product copy of the landing page (M2 T8l; S37, L45), addressed with "tú" in neutral Mexican
- * Spanish. The landing is an honest pre-launch page: today only customer sign-in, the own account,
- * and the administrator pages exist, so
+ * Spanish product copy of the launch landing (odd/tasks/launch-landing.md; S1-S6), addressed with
+ * "tú" in neutral Mexican Spanish. The page sells the product that already exists:
  *
- * - «Ingresar» (to `/ingresar`) is the only active product action;
- * - every other product action is a `ComingSoonAction` labeled «Próximamente» that goes nowhere;
- * - in-page anchors only scroll to a section of the page;
- * - features that do not exist yet are described in the future tense or shown as examples.
+ * - the main action is «Crear mi invitación», a real link to `/cuenta/invitaciones/nueva` (S2);
+ * - the gallery names the published occasion lines and their theme counts (S3);
+ * - the pricing shows the three seeded packages and their illustrative MXN prices (S4);
+ * - the steps are written in the present tense because choosing, filling, paying, and sharing all
+ *   work today (S5);
+ * - the FAQ answers the duration, RSVP, payment, and refund questions (S6).
  *
- * Keep every landing string here; `copy.test.ts` checks the rules above. When a feature ships, its
- * section changes here, after the owner reviews the claim.
+ * Keep every landing string here; `copy.test.ts` checks the rules above. When a claim changes, it
+ * changes here first, after the owner reviews it.
  */
 
-/** The only active product action of the landing. */
+/** «Ingresar»: the way into an existing account. */
 export interface SignInAction {
   readonly kind: "sign-in";
   readonly label: "Ingresar";
@@ -26,16 +27,23 @@ export interface AccountAction {
   readonly href: "/cuenta";
 }
 
-/** A product action that does not exist yet: shown, never a link or a button. */
-export interface ComingSoonAction {
-  readonly kind: "coming-soon";
-  readonly label: "Próximamente";
+/** The primary product action of the landing: it starts a new invitation (S2). */
+export interface CreateInvitationAction {
+  readonly kind: "create-invitation";
+  readonly label: string;
+  readonly href: "/cuenta/invitaciones/nueva";
 }
 
-export type ProductAction = SignInAction | ComingSoonAction;
+export type ProductAction = SignInAction | CreateInvitationAction;
 
 /** The ids of the sections that anchors may scroll to; the page renders each one. */
-export const LANDING_SECTION_IDS = ["contenido", "disenos", "como-funcionara"] as const;
+export const LANDING_SECTION_IDS = [
+  "contenido",
+  "disenos",
+  "precios",
+  "como-funciona",
+  "faq",
+] as const;
 export type LandingSectionId = (typeof LANDING_SECTION_IDS)[number];
 
 /** A link that only scrolls to a section of the landing. */
@@ -57,8 +65,21 @@ export function headingText({ before, accent, after = "" }: Heading): string {
 }
 
 const SIGN_IN: SignInAction = { kind: "sign-in", label: "Ingresar", href: "/ingresar" };
-const COMING_SOON: ComingSoonAction = { kind: "coming-soon", label: "Próximamente" };
 const ACCOUNT: AccountAction = { kind: "account", label: "Mi cuenta", href: "/cuenta" };
+
+/** «Crear mi invitación»: the main action of the hero, the gallery, the closing band, and the packages. */
+export const CREATE_INVITATION: CreateInvitationAction = {
+  kind: "create-invitation",
+  label: "Crear mi invitación",
+  href: "/cuenta/invitaciones/nueva",
+};
+
+/** The label of a single package card, where each plan invites the same first step. */
+const START_PLAN: CreateInvitationAction = {
+  kind: "create-invitation",
+  label: "Empezar",
+  href: "/cuenta/invitaciones/nueva",
+};
 
 /**
  * The landing's account button: «Ingresar» without a session, «Mi cuenta» with one. It only picks a link;
@@ -68,8 +89,10 @@ export function accountAction(signedIn: boolean): SignInAction | AccountAction {
   return signedIn ? ACCOUNT : SIGN_IN;
 }
 
-const TO_DESIGNS: PageAnchor = { kind: "anchor", label: "Diseños de muestra", href: "#disenos" };
-const TO_STEPS: PageAnchor = { kind: "anchor", label: "Así funcionará", href: "#como-funcionara" };
+const TO_DESIGNS: PageAnchor = { kind: "anchor", label: "Diseños", href: "#disenos" };
+const TO_PRICING: PageAnchor = { kind: "anchor", label: "Precios", href: "#precios" };
+const TO_FAQ: PageAnchor = { kind: "anchor", label: "Dudas", href: "#faq" };
+const TO_GALLERY: PageAnchor = { kind: "anchor", label: "Ver diseños", href: "#disenos" };
 
 /** Text printed on the sample stationery; it describes no feature. */
 export interface SampleCard {
@@ -78,16 +101,142 @@ export interface SampleCard {
   readonly date: string;
 }
 
+/** The four mini stationery layouts of `stationery.tsx`, one per kind of celebration. */
+export type GalleryThumbnail = "garden" | "xv" | "wine" | "party";
+
+/** One occasion card of the gallery: the published line and how many themes it holds (S3). */
+export interface GalleryDesign {
+  readonly occasion: string;
+  readonly name: string;
+  readonly detail: string;
+  readonly themeCount: number;
+  readonly thumbnail: GalleryThumbnail;
+  readonly sample: SampleCard;
+  readonly action: CreateInvitationAction;
+  readonly monogram?: string;
+  readonly turns?: string;
+  readonly age?: string;
+}
+
+/** The key of a seeded package; `landingPricing` mirrors the three rows of `catalog-seed.ts`. */
+export type PackageKey = "basic" | "premium" | "deluxe";
+
+export interface PackagePrice {
+  readonly price: string;
+  readonly currency: "MXN";
+}
+
+/**
+ * ILLUSTRATIVE MXN prices for the landing's package cards. They are placeholders copied from the
+ * launch artboard; the real values come from the public catalog and are read live in a follow-up
+ * task, so a price change here is not a price change of the product.
+ */
+export const landingPricing = {
+  basic: { price: "$199", currency: "MXN" },
+  premium: { price: "$399", currency: "MXN" },
+  deluxe: { price: "$599", currency: "MXN" },
+} as const satisfies Record<PackageKey, PackagePrice>;
+
+/** One package card: the seeded feature set and the action that starts an invitation (S4). */
+export interface PricingPackage {
+  readonly key: PackageKey;
+  readonly name: string;
+  readonly summary: string;
+  readonly features: readonly string[];
+  readonly action: CreateInvitationAction;
+  readonly featured: boolean;
+  readonly badge?: string;
+}
+
+const GALLERY_DESIGNS: readonly GalleryDesign[] = [
+  {
+    occasion: "XV años",
+    name: "Línea elegante",
+    detail: "8 temas",
+    themeCount: 8,
+    thumbnail: "xv",
+    sample: { kicker: "Mis XV años", name: "Valeria", date: "Sábado 14 de marzo · 19:00 h" },
+    action: START_PLAN,
+  },
+  {
+    occasion: "Boda",
+    name: "Línea elegante",
+    detail: "8 temas",
+    themeCount: 8,
+    thumbnail: "garden",
+    sample: { kicker: "Nuestra boda", name: "Ana & Luis", date: "21 de noviembre" },
+    action: START_PLAN,
+  },
+  {
+    occasion: "Cumpleaños",
+    name: "Temas infantiles",
+    detail: "8 temas",
+    themeCount: 8,
+    thumbnail: "party",
+    sample: { name: "Mateo", date: "¡Ven a celebrar!" },
+    turns: "cumple",
+    age: "5",
+    action: START_PLAN,
+  },
+  {
+    occasion: "Baby shower",
+    name: "Línea clásica",
+    detail: "8 temas",
+    themeCount: 8,
+    thumbnail: "garden",
+    sample: { kicker: "Baby shower", name: "Sofía", date: "Domingo 12 de abril · 12:00 h" },
+    action: START_PLAN,
+  },
+  {
+    occasion: "Bautizo",
+    name: "Línea clásica",
+    detail: "6 temas",
+    themeCount: 6,
+    thumbnail: "wine",
+    sample: { kicker: "Bautizo", name: "Mateo", date: "Sábado 6 de junio · 13:00 h" },
+    monogram: "MB",
+    action: START_PLAN,
+  },
+];
+
+const PRICING_PACKAGES: readonly PricingPackage[] = [
+  {
+    key: "basic",
+    name: "Basic",
+    summary: "La invitación esencial: fecha, ubicación y un enlace para compartir.",
+    features: ["Cuenta regresiva", "Mapa", "Enlace de WhatsApp"],
+    action: START_PLAN,
+    featured: false,
+  },
+  {
+    key: "premium",
+    name: "Premium",
+    summary: "Suma música, fotos y confirmación de asistencia para celebrar sin preguntas.",
+    features: ["Todo lo de Basic", "Música", "Galería de fotos", "Confirmar asistencia (RSVP)"],
+    action: START_PLAN,
+    featured: true,
+    badge: "El más elegido",
+  },
+  {
+    key: "deluxe",
+    name: "Deluxe",
+    summary: "Todo el catálogo, con mesa de regalos, lista de invitados y pase con código QR.",
+    features: ["Todo lo de Premium", "Mesa de regalos", "Lista de invitados", "Pase con código QR"],
+    action: START_PLAN,
+    featured: false,
+  },
+];
+
 export const LANDING_COPY = {
   metadata: {
-    title: "InvitaMe | Invitaciones digitales, próximamente",
+    title: "InvitaMe | Invitaciones digitales para tu celebración",
     description:
-      "Estamos preparando InvitaMe, invitaciones digitales para XV años, bodas y cumpleaños. Mira los diseños de muestra y conoce cómo funcionará.",
+      "Elige un diseño para XV años, boda, cumpleaños, baby shower o bautizo, personalízalo con tus datos y comparte tu invitación en minutos.",
   },
   skipLink: { kind: "anchor", label: "Saltar al contenido", href: "#contenido" } as PageAnchor,
   nav: {
     label: "Principal",
-    links: [TO_DESIGNS, TO_STEPS],
+    links: [TO_DESIGNS, TO_PRICING, TO_FAQ],
     signIn: SIGN_IN,
   },
   hero: {
@@ -97,14 +246,10 @@ export const LANDING_COPY = {
       accent: "enamoran",
       after: " desde el primer vistazo",
     } as Heading,
-    lead: "Muy pronto podrás elegir un diseño para XV años, bodas o cumpleaños, personalizarlo y compartirlo con tus invitados.",
-    primary: { kind: "anchor", label: "Ver diseños de muestra", href: "#disenos" } as PageAnchor,
-    secondary: TO_STEPS,
-    notes: [
-      "Lanzamiento próximamente",
-      "Ya puedes ingresar con tu correo",
-      "Sin contraseñas: te enviamos un código",
-    ],
+    lead: "Elige un diseño para XV años, boda, cumpleaños, baby shower o bautizo, personalízalo con tus datos y compártelo en minutos.",
+    primary: CREATE_INVITATION,
+    secondary: TO_GALLERY,
+    notes: ["Sin contraseñas", "Pagas en pesos (MXN)", "Lista hoy mismo"],
     illustrationLabel:
       "Ilustración de muestra: invitaciones de XV años, boda y cumpleaños que salen de un sobre con sello de cera, junto a un celular con una invitación abierta.",
     monogram: "IM",
@@ -128,117 +273,80 @@ export const LANDING_COPY = {
       reply: "Confirmar asistencia",
     },
   },
-  occasions: {
-    label: "Ocasiones",
-    lead: "Para cada celebración",
-    items: ["XV años", "Bodas", "Cumpleaños infantiles"],
-  },
   gallery: {
-    badge: "Próximamente",
-    heading: { before: "Diseños de ", accent: "muestra" } as Heading,
+    eyebrow: "Galería",
+    heading: { before: "Diseños para cada ", accent: "celebración" } as Heading,
     intro:
-      "Así se verán algunas de las invitaciones que estamos preparando. Podrás elegirlas y personalizarlas cuando abramos.",
-    designs: [
-      {
-        tag: "Boda",
-        name: "Jardín de rosas",
-        sample: {
-          kicker: "Nuestra boda",
-          name: "Sofía & Diego",
-          date: "12 de junio",
-        } as SampleCard,
-        action: COMING_SOON,
-      },
-      {
-        tag: "XV años",
-        name: "Vals en rosa",
-        sample: {
-          kicker: "Mis XV años",
-          name: "Camila",
-          date: "Sábado 9 de mayo · 20:00 h",
-        } as SampleCard,
-        action: COMING_SOON,
-      },
-      {
-        tag: "Boda",
-        name: "Sello de vino",
-        sample: {
-          kicker: "Nuestra boda",
-          name: "Regina & Pablo",
-          date: "3 de octubre",
-        } as SampleCard,
-        monogram: "RP",
-        action: COMING_SOON,
-      },
-      {
-        tag: "Cumpleaños",
-        name: "Fiesta de globos",
-        sample: { name: "Emilia", date: "¡Ven a celebrar!" } as SampleCard,
-        turns: "cumple",
-        age: "3",
-        action: COMING_SOON,
-      },
-    ],
+      "Cada ocasión tiene su propia línea de temas, elegidos uno a uno. Empieza por la que vas a celebrar.",
+    designs: GALLERY_DESIGNS,
+  },
+  pricing: {
+    eyebrow: "Paquetes",
+    heading: { before: "Elige tu ", accent: "paquete" } as Heading,
+    intro:
+      "Un solo pago por invitación. Cada paquete incluye cuenta regresiva, mapa y enlace de WhatsApp; los demás suman funciones.",
+    note: "Precios en pesos mexicanos (MXN), por invitación.",
+    packages: PRICING_PACKAGES,
   },
   steps: {
-    eyebrow: "Tres pasos",
-    heading: { before: "Así ", accent: "funcionará" } as Heading,
-    intro:
-      "Cuando abramos, pasarás de la idea al enlace en una tarde tranquila, sin diseñadores ni imprentas.",
+    eyebrow: "Cuatro pasos",
+    heading: { before: "Cómo ", accent: "funciona" } as Heading,
+    intro: "De cero a compartida en cuatro pasos.",
     items: [
       {
-        title: "Elegirás tu diseño",
-        body: "Explorarás diseños de XV años, bodas y cumpleaños y te quedarás con el que te enamore.",
+        title: "Elige un diseño",
+        body: "Filtra por ocasión y quédate con el tema que más te guste.",
       },
       {
-        title: "Personalizarás cada detalle",
-        body: "Escribirás los nombres, la fecha, el salón y tu mensaje, y verás el resultado al instante.",
+        title: "Llena tus datos",
+        body: "Escribe nombres, fecha, lugar y los detalles que quieras compartir.",
       },
       {
-        title: "La compartirás con un enlace",
-        body: "Tus invitados la abrirán en su celular y podrán confirmar su asistencia.",
+        title: "Paga y publica",
+        body: "Paga con tarjeta en pesos mexicanos y publica tu invitación al instante.",
+      },
+      {
+        title: "Comparte el enlace",
+        body: "Manda el enlace por WhatsApp o por donde prefieras; tus invitados la abren sin instalar nada.",
       },
     ],
   },
-  experience: {
-    eyebrow: "La experiencia",
-    heading: { before: "Tus invitados ", accent: "lo vivirán así" } as Heading,
-    intro:
-      "Al abrir el enlace, la invitación se desplegará como papel fino: portada, cuenta regresiva, ubicación y confirmación de asistencia.",
-    perks: [
-      { title: "Cuenta regresiva", body: "Cada visita les recordará cuántos días faltan." },
-      { title: "Cómo llegar", body: "El salón y la ubicación estarán siempre a la mano." },
-      { title: "Confirmación en un toque", body: "Verás quién confirma su asistencia." },
+  faq: {
+    eyebrow: "Dudas",
+    heading: { before: "Preguntas ", accent: "frecuentes" } as Heading,
+    intro: "Lo que más nos preguntan antes de empezar.",
+    items: [
+      {
+        question: "¿Cuánto tiempo dura mi invitación?",
+        answer:
+          "Según tu paquete: Basic 30 días, Premium 90 días y Deluxe 180 días desde que la publicas. Después sigue visible, pero se cierra la confirmación de asistencia.",
+      },
+      {
+        question: "¿Cómo confirman mis invitados?",
+        answer:
+          "Con el RSVP, incluido en Premium y Deluxe. Reciben tu enlace y confirman sin crear cuenta.",
+      },
+      {
+        question: "¿Cómo pago?",
+        answer:
+          "Con tarjeta a través de Mercado Pago, en pesos mexicanos. No guardamos los datos de tu tarjeta.",
+      },
+      {
+        question: "¿Puedo pedir un reembolso?",
+        answer:
+          "Una vez publicada, la invitación no es reembolsable. Antes de publicar puedes editarla o archivarla sin costo.",
+      },
     ],
-    phoneBadge: "Ejemplo de invitación",
-    phoneLabel:
-      "Ejemplo de invitación en un celular: portada de la boda de Ana y Luis, fecha, salón, cuenta regresiva y un botón para confirmar asistencia.",
-    countdownChip: { value: "23 días", label: "para el gran día" },
-    phone: {
-      kicker: "Nuestra boda",
-      name: "Ana & Luis",
-      date: "Sábado 21 de noviembre · 18:00 h",
-      venue: "Salón Jardín Las Rosas",
-      venueNote: "Recepción desde las 20:00 h",
-      countdownLabel: "Faltan 23 días",
-      countdown: [
-        { value: "23", unit: "días" },
-        { value: "06", unit: "horas" },
-        { value: "41", unit: "min" },
-        { value: "12", unit: "seg" },
-      ],
-      reply: "Confirmar asistencia",
-    },
   },
   closing: {
     heading: "Tu celebración merece una invitación inolvidable",
-    body: "Estamos preparando InvitaMe para tu próxima celebración. Mientras tanto, ya puedes ingresar con tu correo.",
-    signIn: SIGN_IN,
-    upcoming: { feature: "Crear tu invitación", action: COMING_SOON },
+    body: "Elige el diseño, llena tus datos y comparte el enlace. En minutos tienes tu invitación lista para enviar.",
+    create: CREATE_INVITATION,
+    account: SIGN_IN,
   },
   footer: {
     label: "Pie de página",
-    links: [TO_DESIGNS, TO_STEPS],
+    links: [TO_DESIGNS, TO_PRICING, TO_FAQ],
     signIn: SIGN_IN,
     copyright: (year: number) => `© ${year} InvitaMe · Hecho con cariño`,
   },

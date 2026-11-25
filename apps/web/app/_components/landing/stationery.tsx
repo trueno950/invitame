@@ -1,10 +1,18 @@
-import { LANDING_COPY, type SampleCard } from "../../../lib/landing/copy.ts";
-import { Art, pick } from "./art.tsx";
+import type { ComponentType } from "react";
+
+import {
+  type GalleryDesign,
+  type GalleryThumbnail,
+  LANDING_COPY,
+  type SampleCard,
+} from "../../../lib/landing/copy.ts";
+import { Art } from "./art.tsx";
 import styles from "./landing.module.css";
 
 /*
- * Sample stationery of the landing (M2 T8l; S35, S37): illustrations of invitations that do not exist
- * yet. Each one sits inside an element that is labeled as a sample or hidden from assistive
+ * Sample stationery of the landing (M2 T8l; S35, S37): the hero shows an illustration of what an
+ * invitation looks like, and each gallery card shows the mini stationery of its occasion line (S3).
+ * Every drawing sits inside an element that is labeled as a sample or hidden from assistive
  * technology, so its printed names and dates are never read as real content.
  */
 
@@ -98,26 +106,28 @@ export function HeroStationery() {
   );
 }
 
-type Design = (typeof LANDING_COPY.gallery.designs)[number];
+type Design = GalleryDesign;
 
-/** The four sample designs of the gallery, in the order of `LANDING_COPY.gallery.designs`. */
-const MINIS: readonly [typeof GardenMini, ...(typeof GardenMini)[]] = [
-  GardenMini,
-  XvMini,
-  WineMini,
-  PartyMini,
-];
-const TINTS: readonly [string | undefined, ...(string | undefined)[]] = [
-  styles.tintGarden,
-  styles.tintXv,
-  styles.tintWine,
-  styles.tintParty,
-];
+/** The mini stationery layout of each kind of celebration; `GalleryThumbnail` picks one. */
+const MINIS: Record<GalleryThumbnail, ComponentType<{ design: Design }>> = {
+  garden: GardenMini,
+  xv: XvMini,
+  wine: WineMini,
+  party: PartyMini,
+};
 
-export function DesignThumbnail({ design, index }: { design: Design; index: number }) {
-  const Mini = pick(MINIS, index);
+const TINTS: Record<GalleryThumbnail, string | undefined> = {
+  garden: styles.tintGarden,
+  xv: styles.tintXv,
+  wine: styles.tintWine,
+  party: styles.tintParty,
+};
+
+/** The sample invitation of one gallery card, in the paper tint of its line. */
+export function DesignThumbnail({ design }: { design: Design }) {
+  const Mini = MINIS[design.thumbnail];
   return (
-    <span aria-hidden="true" className={`${styles.thumb} ${pick(TINTS, index)}`}>
+    <span aria-hidden="true" className={`${styles.thumb} ${TINTS[design.thumbnail]}`}>
       <Mini design={design} />
     </span>
   );
@@ -163,7 +173,7 @@ function WineMini({ design }: { design: Design }) {
     <span className={`${styles.mini} ${styles.miniWine}`}>
       <span className={styles.cardBody}>
         <span className={styles.damask} />
-        <Seal monogram={"monogram" in design ? design.monogram : ""} />
+        <Seal monogram={design.monogram ?? ""} />
         <Kicker card={sample} />
         <span className={styles.name}>{sample.name}</span>
         <span className={styles.rule} />
@@ -182,7 +192,7 @@ function PartyMini({ design }: { design: Design }) {
         <Art className={styles.bunting} name="bunting" />
         <Art className={styles.balloons} name="balloons" />
         <span className={styles.name}>{sample.name}</span>
-        {"age" in design ? (
+        {design.age ? (
           <span className={styles.age}>
             {design.turns} <b>{design.age}</b>
           </span>

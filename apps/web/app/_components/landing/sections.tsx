@@ -1,13 +1,20 @@
 import type { ReactNode } from "react";
 
-import { type Heading, LANDING_COPY } from "../../../lib/landing/copy.ts";
+import {
+  type GalleryDesign,
+  type Heading,
+  LANDING_COPY,
+  landingPricing,
+  type PricingPackage,
+} from "../../../lib/landing/copy.ts";
 import { Ornament } from "../ornament.tsx";
-import { ComingSoon } from "./actions.tsx";
+import { focusRing } from "../ui.ts";
+import { CreateInvitationLink } from "./actions.tsx";
 import { Art, type ArtName, pick } from "./art.tsx";
 import styles from "./landing.module.css";
 import { DesignThumbnail } from "./stationery.tsx";
 
-const { occasions, gallery, steps } = LANDING_COPY;
+const { gallery, pricing, steps, faq } = LANDING_COPY;
 
 interface SectionHeadProperties {
   id: string;
@@ -53,30 +60,8 @@ export function AccentHeading({ heading }: { heading: Heading }): ReactNode {
   );
 }
 
-const OCCASION_ICONS: readonly [ArtName, ...ArtName[]] = ["iconTiara", "iconRings", "iconBalloons"];
-
-export function OccasionsBand() {
-  return (
-    <section aria-label={occasions.label} className={styles.occasions}>
-      <ul className={`${styles.wrap} ${styles.occasionList}`}>
-        <li aria-hidden="true" className={styles.occasionLead}>
-          {occasions.lead}
-        </li>
-        {occasions.items.map((item, index) => (
-          <li className={styles.occasion} key={item}>
-            <span className={styles.medal}>
-              <Art name={pick(OCCASION_ICONS, index)} />
-            </span>
-            {item}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/** «Diseños de muestra»: sample designs that cannot be chosen yet (S37). */
-export function SampleGallery() {
+/** «Diseños para cada celebración»: the published occasion lines, each one a way to start (S3). */
+export function DesignGallery() {
   return (
     <section
       aria-labelledby="disenos-title"
@@ -85,22 +70,23 @@ export function SampleGallery() {
     >
       <div className={styles.wrap}>
         <SectionHead
-          eyebrow={gallery.badge}
+          eyebrow={gallery.eyebrow}
           heading={gallery.heading}
           id="disenos-title"
           intro={gallery.intro}
         />
         <ul className={styles.designs}>
-          {gallery.designs.map((design, index) => (
-            <li className={styles.design} key={design.name}>
+          {gallery.designs.map((design: GalleryDesign) => (
+            <li className={styles.design} key={design.occasion}>
               <span className={styles.shell}>
-                <DesignThumbnail design={design} index={index} />
+                <DesignThumbnail design={design} />
               </span>
               <div className={styles.designMeta}>
-                <span className={styles.tag}>{design.tag}</span>
+                <span className={styles.tag}>{design.occasion}</span>
                 <h3 className={styles.designName}>{design.name}</h3>
+                <p className={styles.designDetail}>{design.detail}</p>
               </div>
-              <ComingSoon action={design.action} />
+              <CreateInvitationLink action={design.action} small variant="ghost" />
             </li>
           ))}
         </ul>
@@ -109,21 +95,79 @@ export function SampleGallery() {
   );
 }
 
-const STEP_ICONS: readonly [ArtName, ...ArtName[]] = ["iconCards", "iconQuill", "iconEnvelope"];
+/** One package card: name, illustrative MXN price, its seeded feature set, and the start action (S4). */
+function PlanCard({ item }: { item: PricingPackage }) {
+  const { price, currency } = landingPricing[item.key];
+  return (
+    <article className={`${styles.plan} ${item.featured ? styles.planFeatured : ""}`}>
+      <header className={styles.planHead}>
+        <h3 className={styles.planName}>{item.name}</h3>
+        {item.badge ? <span className={styles.planBadge}>{item.badge}</span> : null}
+      </header>
+      <p className={styles.planPrice}>
+        {price}
+        <small>{currency}</small>
+      </p>
+      <p className={styles.planSummary}>{item.summary}</p>
+      <ul className={styles.planFeatures}>
+        {item.features.map((feature) => (
+          <li key={feature}>
+            <Ornament name="bud" />
+            {feature}
+          </li>
+        ))}
+      </ul>
+      <CreateInvitationLink
+        action={item.action}
+        small
+        variant={item.featured ? "primary" : "ghost"}
+      />
+    </article>
+  );
+}
 
-/** «Así funcionará»: the three planned steps, in the future tense (S37). */
-export function PlannedSteps() {
+/** «Elige tu paquete»: the three seeded packages and their MXN prices (S4). */
+export function Pricing() {
+  return (
+    <section aria-labelledby="precios-title" className={styles.section} id="precios">
+      <div className={styles.wrap}>
+        <SectionHead
+          eyebrow={pricing.eyebrow}
+          heading={pricing.heading}
+          id="precios-title"
+          intro={pricing.intro}
+        />
+        <div className={styles.plans}>
+          {pricing.packages.map((item) => (
+            <PlanCard item={item} key={item.key} />
+          ))}
+        </div>
+        <p className={styles.plansNote}>{pricing.note}</p>
+      </div>
+    </section>
+  );
+}
+
+const STEP_ICONS: readonly [ArtName, ...ArtName[]] = [
+  "iconCards",
+  "iconQuill",
+  "iconCalendar",
+  "iconEnvelope",
+];
+
+/** «Cómo funciona»: the four steps that work today, in the present tense (S5). */
+export function HowItWorks() {
   return (
     <section
-      aria-labelledby="como-funcionara-title"
+      aria-labelledby="como-funciona-title"
       className={`${styles.section} ${styles.steps}`}
-      id="como-funcionara"
+      id="como-funciona"
     >
       <div className={styles.wrap}>
         <SectionHead
           eyebrow={steps.eyebrow}
           heading={steps.heading}
-          id="como-funcionara-title"
+          id="como-funciona-title"
           intro={steps.intro}
         />
         <ol className={styles.stepList}>
@@ -140,6 +184,25 @@ export function PlannedSteps() {
             </li>
           ))}
         </ol>
+      </div>
+    </section>
+  );
+}
+
+/** «Preguntas frecuentes»: duration, RSVP, payment, and refunds, as native disclosures (S6). */
+export function Faq() {
+  return (
+    <section aria-labelledby="faq-title" className={styles.section} id="faq">
+      <div className={styles.wrap}>
+        <SectionHead eyebrow={faq.eyebrow} heading={faq.heading} id="faq-title" intro={faq.intro} />
+        <div className={styles.faq}>
+          {faq.items.map((item, index) => (
+            <details className={styles.faqItem} key={item.question} open={index === 0}>
+              <summary className={`${styles.faqQuestion} ${focusRing}`}>{item.question}</summary>
+              <p className={styles.faqAnswer}>{item.answer}</p>
+            </details>
+          ))}
+        </div>
       </div>
     </section>
   );

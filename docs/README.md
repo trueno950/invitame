@@ -58,8 +58,10 @@ to be checked before prose, and it defines when a human decision is required.
 
 ### Implemented foundation
 
-- `apps/web` contains the Next.js 16 pre-launch landing page, the customer pages, the administrator pages, and the
-  `/api/auth` proxy, styled with the visual theme in [`design/theme.md`](design/theme.md).
+- `apps/web` contains the Next.js 16 launch landing page at `/` (hero, catalog gallery by occasion, the three
+  seeded packages, the four steps, and the FAQ, with «Crear mi invitación» leading to
+  `/cuenta/invitaciones/nueva`), the customer pages, the administrator pages, and the `/api/auth` proxy, styled
+  with the visual theme in [`design/theme.md`](design/theme.md).
 - `apps/api` contains configuration, Prisma ownership, the health module, Better Auth sign-in and sessions
   ([ADR 0004](adr/0004-authentication-with-better-auth.md)), access control, the own profile, and the operator
   commands; see [`architecture/overview.md`](architecture/overview.md).
