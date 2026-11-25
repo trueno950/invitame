@@ -32,11 +32,16 @@ export interface CatalogVersionRenderData {
   schema: unknown;
 }
 
-/** The status and included feature keys of one package, as the package-fit rule reads them (S6, A1). */
+/** The status, included feature keys, and duration of one package, as the publication rules read them (S1, S6, A1). */
 export interface CatalogPackageEntitlements {
   /** The stored package status; the domain accepts only `ACTIVE` and fails closed on anything else. */
   status: string;
   includedFeatureKeys: readonly string[];
+  /**
+   * How many days a published invitation of this package stays live, counted from its publication instant (S1). The
+   * publication writes `expiresAt` from it; the value is a positive whole number of days, guaranteed by the column.
+   */
+  durationDays: number;
 }
 
 /**
@@ -57,7 +62,7 @@ export interface InvitationCatalog {
    */
   findVersionSchema(versionId: string): Promise<CatalogVersionSchema | null>;
 
-  /** The status and included feature keys of a package; null when no package has this id. */
+  /** The status, included feature keys, and duration of a package; null when no package has this id. */
   findPackageEntitlements(packageId: string): Promise<CatalogPackageEntitlements | null>;
 
   /**

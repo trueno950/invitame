@@ -9,6 +9,7 @@ import type {
   PublicRsvpSubmitResult,
 } from "../server/public-invitations-api.ts";
 import {
+  isRsvpClosed,
   parseRsvpForm,
   publicRsvpBlock,
   RSVP_NOTICE_PARAM,
@@ -109,6 +110,21 @@ describe("publicRsvpBlock", () => {
 
   it("keeps the action it was given, so the form posts to the server action", () => {
     assert.equal(publicRsvpBlock(OPEN, SLUG, ACTION)?.action, ACTION);
+  });
+
+  it("closes the block on an expired invitation, without naming a deadline that may still be ahead (S2, T5)", () => {
+    const beforeBoth = new Date("2026-11-30T12:00:00.000Z");
+
+    // The deadline alone keeps the answer open; the expiry is what closes it (S2).
+    assert.equal(isRsvpClosed(null, beforeBoth), false);
+    assert.equal(isRsvpClosed(null, beforeBoth, true), true);
+
+    const block = publicRsvpBlock(OPEN, SLUG, ACTION, beforeBoth, true);
+
+    assert.equal(block?.closed, true);
+    // The creator's deadline is still ahead, so the closed card states no date: it closed by expiry (S2).
+    assert.equal(block?.deadline, null);
+    assert.equal(publicRsvpBlock(OPEN, SLUG, ACTION, beforeBoth)?.deadline, OPEN.deadline);
   });
 });
 

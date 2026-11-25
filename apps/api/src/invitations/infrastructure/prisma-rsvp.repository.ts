@@ -29,9 +29,9 @@ const RESPONSE_SELECT = {
  * re-states the editable status inside the write, so a concurrent archive cannot slip a change through (A2, S7).
  * The public submission is one statement: it inserts the response, or updates the response of the same
  * `(invitationId, dedupeKey)` when it already exists, and the `SELECT` that feeds it checks in the same statement
- * that the invitation is still PUBLISHED and its deadline has not passed at the submission instant. That makes a
- * retry idempotent, a concurrent duplicate impossible, and a response that races an unpublish or an elapsed
- * deadline refused by the database rather than by an earlier read.
+ * that the invitation is still PUBLISHED, has not expired, and its deadline has not passed at the submission instant.
+ * That makes a retry idempotent, a concurrent duplicate impossible, and a response that races an unpublish, an expiry,
+ * or an elapsed deadline refused by the database rather than by an earlier read (S2, T4).
  */
 export class PrismaRsvpRepository implements RsvpRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -109,6 +109,9 @@ export class PrismaRsvpRepository implements RsvpRepository {
       FROM "Invitation" AS invitation
       WHERE invitation."id" = ${invitationId}::uuid
         AND invitation."status" = 'PUBLISHED'
+        -- The expiry is re-stated here with the deadline, so an invitation that expired between the read and the write
+        -- refuses the response in the database too (S2, T4).
+        AND (invitation."expiresAt" IS NULL OR invitation."expiresAt" >= ${at})
         AND (invitation."rsvpDeadline" IS NULL OR invitation."rsvpDeadline" >= ${at})
       ON CONFLICT ("invitationId", "dedupeKey") DO UPDATE
       SET "name" = EXCLUDED."name",

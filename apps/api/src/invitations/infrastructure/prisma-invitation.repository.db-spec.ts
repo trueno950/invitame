@@ -169,13 +169,16 @@ describe("Prisma invitation repository on PostgreSQL", () => {
   /** The instant every publication fixture writes, so `publishedAt` is compared exactly (S7). */
   const PUBLISHED_AT = new Date("2026-11-12T09:30:00.000Z");
 
+  /** The expiry a publication states: the publication plus the duration the application computed (S1, T2). */
+  const EXPIRES_AT = new Date("2026-12-12T09:30:00.000Z");
+
   async function newPublishedDraft(
     ownerId: string,
     slug = newSlug(),
     content: Record<string, unknown> = {},
   ) {
     const created = await newDraft(ownerId, slug, content);
-    const published = await repository.publish(ownerId, created.id, PUBLISHED_AT);
+    const published = await repository.publish(ownerId, created.id, PUBLISHED_AT, EXPIRES_AT);
     assert.ok(published, "the fixture draft must publish");
     return published;
   }
@@ -397,20 +400,24 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       assert.deepEqual(await stored(created.id), before);
     });
 
-    it("archives a PUBLISHED invitation and clears publishedAt (A2)", async () => {
+    it("archives a PUBLISHED invitation and clears publishedAt and expiresAt (S1, A2)", async () => {
       const ownerId = await newOwner();
       const published = await newPublishedDraft(ownerId, newSlug(), { celebrantName: "Ana" });
+      assert.deepEqual(published.expiresAt, EXPIRES_AT);
 
       const archived = await repository.archive(ownerId, published.id);
 
       assert.equal(archived?.status, "ARCHIVED");
       assert.ok(archived?.archivedAt instanceof Date);
       assert.equal(archived?.publishedAt, null);
+      assert.equal(archived?.expiresAt, null);
       const row = await stored(published.id);
       assert.equal(row.status, "ARCHIVED");
       assert.ok(row.archivedAt instanceof Date);
       // The CHECK constraint requires the marker to be cleared with the status (S7, A2).
       assert.equal(row.publishedAt, null);
+      // An archived invitation is not public, so it no longer expires either (S1).
+      assert.equal(row.expiresAt, null);
       assert.deepEqual(row.content, { celebrantName: "Ana" });
     });
 
@@ -479,24 +486,39 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       const ownerId = await newOwner();
       const created = await newDraft(ownerId, newSlug(), { celebrantName: "Ana" });
 
-      const published = await repository.publish(ownerId, created.id, PUBLISHED_AT);
+      const published = await repository.publish(ownerId, created.id, PUBLISHED_AT, EXPIRES_AT);
 
       assert.equal(published?.status, "PUBLISHED");
       assert.deepEqual(published?.publishedAt, PUBLISHED_AT);
+      assert.deepEqual(published?.expiresAt, EXPIRES_AT);
       assert.equal(published?.archivedAt, null);
       assert.deepEqual(published?.content, { celebrantName: "Ana" });
-      // The record and the stored row agree, including both publication columns.
+      // The record and the stored row agree, including the publication and expiry columns.
       assert.deepEqual(await storedRecord(created.id), { ...published });
+      assert.deepEqual((await stored(created.id)).expiresAt, EXPIRES_AT);
     });
 
-    it("returns a PUBLISHED invitation to DRAFT and clears publishedAt (S7)", async () => {
+    it("writes no expiry for a publication that states none, which reads as never expiring (S1)", async () => {
+      const ownerId = await newOwner();
+      const created = await newDraft(ownerId);
+
+      const published = await repository.publish(ownerId, created.id, PUBLISHED_AT);
+
+      assert.deepEqual(published?.publishedAt, PUBLISHED_AT);
+      assert.equal(published?.expiresAt, null);
+      assert.equal((await stored(created.id)).expiresAt, null);
+    });
+
+    it("returns a PUBLISHED invitation to DRAFT and clears publishedAt and expiresAt (S1, S7)", async () => {
       const ownerId = await newOwner();
       const published = await newPublishedDraft(ownerId);
+      assert.deepEqual(published.expiresAt, EXPIRES_AT);
 
       const draft = await repository.unpublish(ownerId, published.id);
 
       assert.equal(draft?.status, "DRAFT");
       assert.equal(draft?.publishedAt, null);
+      assert.equal(draft?.expiresAt, null);
       assert.deepEqual(await storedRecord(published.id), { ...draft });
     });
 
@@ -591,7 +613,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       assert.equal(await repository.findPublishedBySlug(newSlug()), null);
     });
 
-    it("answers null for an expired row and still answers one that expires later (S8)", async () => {
+    it("answers a row whose expiry passed, because it stays visible read-only (S2, T3)", async () => {
       const ownerId = await newOwner();
       const expired = await newPublishedDraft(ownerId, newSlug());
       const future = await newPublishedDraft(ownerId, newSlug());
@@ -605,9 +627,11 @@ describe("Prisma invitation repository on PostgreSQL", () => {
         where: { id: future.id },
         data: { expiresAt: later },
       });
+      const expiredBefore = await storedRecord(expired.id);
       const futureBefore = await storedRecord(future.id);
 
-      assert.equal(await repository.findPublishedBySlug(expired.slug), null);
+      // The row is still answered with its elapsed expiry: the projection is what flags it read-only (S2).
+      assert.deepEqual(await repository.findPublishedBySlug(expired.slug), expiredBefore);
       assert.deepEqual(await repository.findPublishedBySlug(future.slug), futureBefore);
     });
   });
@@ -746,7 +770,12 @@ describe("Prisma invitation repository on PostgreSQL", () => {
 
       const entitlements = await catalogReader.findPackageEntitlements(catalog.packageId);
 
-      assert.deepEqual(entitlements, { status: "ACTIVE", includedFeatureKeys: [included.key] });
+      // The duration travels with the entitlements, because the publication writes the expiry from it (S1, T2).
+      assert.deepEqual(entitlements, {
+        status: "ACTIVE",
+        includedFeatureKeys: [included.key],
+        durationDays: 30,
+      });
       assert.equal(await catalogReader.findPackageEntitlements(UNKNOWN_ID), null);
     });
 
@@ -760,6 +789,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       assert.deepEqual(await catalogReader.findPackageEntitlements(catalog.packageId), {
         status: "ARCHIVED",
         includedFeatureKeys: [],
+        durationDays: 30,
       });
     });
   });

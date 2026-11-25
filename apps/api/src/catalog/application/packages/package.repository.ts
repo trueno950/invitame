@@ -6,6 +6,8 @@ export interface NewPackage {
   key: string;
   name: string;
   description: string | null;
+  /** How many days a published invitation of this package stays live (S1, T1); always validated before the write. */
+  durationDays: number;
 }
 
 /** Validated changes; an absent field is left as stored. `key` is immutable and not part of it. */
@@ -13,6 +15,8 @@ export interface PackageChanges {
   name?: string;
   description?: string | null;
   status?: PackageStatus;
+  /** The new duration in days, already validated against the domain bounds (S1, T1). */
+  durationDays?: number;
 }
 
 /**

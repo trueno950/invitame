@@ -80,7 +80,7 @@ interface FieldProperties {
   /** The id of that error message: the page's `Notices` unless the form has its own. */
   errorId?: string | undefined;
   placeholder?: string | undefined;
-  inputMode?: "decimal" | "text" | undefined;
+  inputMode?: "decimal" | "numeric" | "text" | undefined;
 }
 
 function describedBy(

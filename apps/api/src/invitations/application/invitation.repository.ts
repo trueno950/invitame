@@ -50,8 +50,10 @@ export interface InvitationRecord {
    */
   firstPublishedAt: Date | null;
   /**
-   * The expiry the database carries and Milestone 5 never sets (S8). It is part of the record because the
-   * column exists and the public read must already refuse an elapsed one; no write in this milestone sets it.
+   * When this invitation stops accepting answers (S1, S2): its publication instant plus its pinned package's duration.
+   * It is null exactly while the invitation is not published, because unpublishing and archiving clear it, and a row
+   * stored before the rule existed reads null and never expires. The public read still answers the row after it passed,
+   * flagged read-only (S2); nothing extends it (S3).
    */
   expiresAt: Date | null;
   createdAt: Date;
@@ -208,27 +210,35 @@ export interface InvitationRepository {
 
   /**
    * Publishes a DRAFT in one statement whose `WHERE` names the owner and the DRAFT status, marking
-   * `publishedAt` with the given instant and, only for the first publication, `firstPublishedAt` with the same
-   * instant (S7, T2). Throws `InvitationAlreadyPublishedError` when the row is owned
-   * and already published and `InvitationAlreadyArchivedError` when it is archived, so each wrong status has
-   * its own signal and a repeated publish never looks like a change; null, changing nothing, for an id that is
-   * missing or belongs to another owner (A4).
+   * `publishedAt` with the given instant, `expiresAt` with the given expiry, and, only for the first publication,
+   * `firstPublishedAt` with the publication instant (S1, S7, T2). The expiry is the publication plus the pinned
+   * package's duration; the caller states it because the duration belongs to the catalog, and a caller that predates
+   * the rule states none, leaving the invitation without an expiry instead of inventing one. Throws
+   * `InvitationAlreadyPublishedError` when the row is owned and already published and
+   * `InvitationAlreadyArchivedError` when it is archived, so each wrong status has its own signal and a repeated
+   * publish never looks like a change; null, changing nothing, for an id that is missing or belongs to another owner
+   * (A4).
    */
-  publish(ownerId: string, id: string, at: Date): Promise<InvitationRecordWithMusic | null>;
+  publish(
+    ownerId: string,
+    id: string,
+    at: Date,
+    expiresAt?: Date | null,
+  ): Promise<InvitationRecordWithMusic | null>;
 
   /**
    * Returns a PUBLISHED invitation to DRAFT in one statement whose `WHERE` names the owner and the PUBLISHED
-   * status, clearing `publishedAt` (S7, A2). Throws `InvitationNotPublishedError` when the row is owned and not
-   * published and `InvitationAlreadyArchivedError` when it is archived; null, changing nothing, for an id that
-   * is missing or belongs to another owner (A4).
+   * status, clearing `publishedAt` and `expiresAt` because the invitation no longer lives publicly (S1, S7, A2).
+   * Throws `InvitationNotPublishedError` when the row is owned and not published and `InvitationAlreadyArchivedError`
+   * when it is archived; null, changing nothing, for an id that is missing or belongs to another owner (A4).
    */
   unpublish(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null>;
 
   /**
-   * The public read (S2, A3): the one row with this slug, in one query, that is PUBLISHED and either has no
-   * expiry or expires in the future. A draft, an archived, an expired, and an unknown slug all answer null, so
-   * the guest sees one 404 for every case that must not render. Like every public read it carries no owner:
-   * the slug is the only input, and it is the repository that decides what a guest may reach.
+   * The public read (S2, A3): the one row with this slug, in one query, while it is PUBLISHED. An expired invitation
+   * is answered too, because it stays visible read-only and the projection flags it; a draft, an archived, and an
+   * unknown slug answer null, so the guest sees one 404 for every case that must not render. Like every public read it
+   * carries no owner: the slug is the only input, and it is the repository that decides what a guest may reach.
    */
   findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null>;
 }

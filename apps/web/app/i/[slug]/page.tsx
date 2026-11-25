@@ -99,8 +99,15 @@ export default async function PublicInvitationPage({
 
   // What the API gated, mapped to the block's props (F3; S4). With nothing to show the layouts render
   // exactly the markup they rendered before the block existed. An invitation that accepts open answers adds
-  // the «Confirma tu asistencia» card to that same block, so every layout shows it in the same place (G3; S4).
-  const rsvp = publicRsvpBlock(invitation.features.rsvp, invitation.slug, submitRsvpAction);
+  // the «Confirma tu asistencia» card to that same block, so every layout shows it in the same place (G3; S4). An
+  // expired invitation keeps its card and closes it, because the page stays visible read-only (S2, T5).
+  const rsvp = publicRsvpBlock(
+    invitation.features.rsvp,
+    invitation.slug,
+    submitRsvpAction,
+    new Date(),
+    invitation.expired,
+  );
   const block = publicFeatureBlock(invitation, rsvp);
   // The answer's notice, read from this page's own query and rendered on the server (G3; S4).
   const notice = rsvpNotice(parameters);

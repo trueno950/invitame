@@ -125,6 +125,7 @@ class MemoryCatalogPublicReader implements CatalogPublicReader {
         .filter((feature) => feature.included)
         .map((feature) => feature.key)
         .sort(),
+      durationDays: 30,
     };
   }
 

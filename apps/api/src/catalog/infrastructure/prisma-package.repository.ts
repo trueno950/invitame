@@ -19,6 +19,8 @@ const PACKAGE_SELECT = {
   name: true,
   description: true,
   status: true,
+  // How long a published invitation of this package stays live (S1, T1); the column is NOT NULL with a default.
+  durationDays: true,
   createdAt: true,
   updatedAt: true,
   packageFeatures: {

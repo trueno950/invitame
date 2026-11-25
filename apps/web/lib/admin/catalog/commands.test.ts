@@ -222,16 +222,29 @@ describe("createPackage and updatePackage", () => {
     const { api, calls } = stub();
     const target = await createPackage(
       api,
-      form({ key: "basico", name: "Básico", description: "" }),
+      form({ key: "basico", name: "Básico", description: "", durationDays: "30" }),
     );
 
     assert.equal(target, "/admin/catalogo/paquetes?notice=created");
     assert.deepEqual(calls, [
       {
         method: "packages.create",
-        args: [{ key: "basico", name: "Básico", description: null }],
+        args: [{ key: "basico", name: "Básico", description: null, durationDays: 30 }],
       },
     ]);
+  });
+
+  it("refuses a duration the API would refuse, before calling it (S1, T1)", async () => {
+    for (const durationDays of ["0", "-30", "1.5", "3651", "treinta", "3 0"]) {
+      const { api, calls } = stub();
+
+      assert.equal(
+        await createPackage(api, form({ key: "basico", name: "Básico", durationDays })),
+        "/admin/catalogo/paquetes/nuevo?error=invalid-form",
+        durationDays,
+      );
+      assert.deepEqual(calls, [], durationDays);
+    }
   });
 
   it("returns to the new-package form when the key is taken", async () => {
@@ -242,18 +255,27 @@ describe("createPackage and updatePackage", () => {
     );
   });
 
-  it("updates name, description, and status", async () => {
+  it("updates name, description, status, and duration", async () => {
     const { api, calls } = stub();
     const target = await updatePackage(
       api,
-      form({ id: ID, name: "Básico", description: "Lo esencial", status: "ACTIVE" }),
+      form({
+        id: ID,
+        name: "Básico",
+        description: "Lo esencial",
+        status: "ACTIVE",
+        durationDays: "180",
+      }),
     );
 
     assert.equal(target, `/admin/catalogo/paquetes/${ID}?notice=saved`);
     assert.deepEqual(calls, [
       {
         method: "packages.update",
-        args: [ID, { name: "Básico", description: "Lo esencial", status: "ACTIVE" }],
+        args: [
+          ID,
+          { name: "Básico", description: "Lo esencial", status: "ACTIVE", durationDays: 180 },
+        ],
       },
     ]);
   });

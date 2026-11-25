@@ -48,7 +48,10 @@ changes on deploy); `20261129120050_add_settings_admin_action_type` appends the 
 `AdminActionType` enum (a migration of its own because PostgreSQL cannot use a new enum value in the transaction that
 adds it); and `20261129120100_add_settings_admin_action` replaces the two `AdminAction` target checks so that the one
 platform-wide action names no target while every other action keeps exactly the target it names. No existing row is
-rewritten by any of them and nothing is deleted. Future analytics design is documented separately in
+rewritten by any of them and nothing is deleted. The expiration slice adds the additive
+`20261130120000_add_package_duration_days` migration: the `Package.durationDays` column, `INTEGER NOT NULL DEFAULT 30`,
+with the `Package_durationDays_positive` check. The default backfills every existing package with the basic month, so
+no row is invalidated and nothing is deleted. Future analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -61,12 +64,12 @@ rewritten by any of them and nothing is deleted. Future analytics design is docu
 | `RateLimit` | Better Auth persistent rate-limit counter, unique by `key` |
 | `Category` | Event catalog grouping |
 | `Feature` | Extensible catalog capability with a database-enforced unique string `key` |
-| `Package` | Sellable catalog metadata, independent of behavior branches |
+| `Package` | Sellable catalog metadata, independent of behavior branches: the unique `key`, the display metadata, the `status`, and `durationDays`, the whole days a published invitation of the package stays live |
 | `PackageFeature` | Normalized package-to-feature relation |
 | `PackagePrice` | Append-only price history of a package: integer `amountMinor` in the smallest currency unit plus an ISO `currency`; the row with no `retiredAt` is the current price |
 | `Template` | Mutable template master metadata and category relation |
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
-| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the never-cleared first publication `firstPublishedAt`, the unused-nullable expiry `expiresAt`, JSONB `content`, the archive marker, the IANA `timeZone`, and the RSVP settings `rsvpDeadline` and `rsvpPartyLimit` |
+| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the publication-derived expiry `expiresAt`, the never-cleared first publication `firstPublishedAt`, JSONB `content`, the archive marker, the IANA `timeZone`, and the RSVP settings `rsvpDeadline` and `rsvpPartyLimit` |
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
@@ -93,6 +96,13 @@ rewritten by any of them and nothing is deleted. Future analytics design is docu
   readable, so an existing invitation keeps its pinned version.
 - The API lets a `Template` be `PUBLISHED` only while it has a `PUBLISHED` version; this rule lives in the API, not
   in a database constraint.
+- `Package.durationDays` is `INTEGER NOT NULL DEFAULT 30`, checked `> 0` by `Package_durationDays_positive`
+  (migration `20261130120000_add_package_duration_days`). It is how many days a published invitation of that package
+  stays live, counted from the publication instant (S1). The default is the basic month and is what every package
+  stored before the column existed reads, so the migration needs no backfill and rewrites nothing; the seed gives each
+  catalog package its own value (`basic` 30, `premium` 90, `deluxe` 180). The API validates every write against the
+  domain bounds, 1 to 3650 days, and states the lower one again in the check because a duration of zero would publish
+  an invitation that is already expired.
 - `PackagePrice`: `amountMinor` is an `INT` checked `>= 0`, `currency` is `CHAR(3)` checked against `^[A-Z]{3}$`, and
   the partial unique index on `(packageId, currency) WHERE retiredAt IS NULL` keeps one current price per currency.
   A trigger refuses updates to `packageId`, `currency`, `amountMinor`, and `createdAt`, and refuses clearing
@@ -132,10 +142,14 @@ rewritten by any of them and nothing is deleted. Future analytics design is docu
 - `Invitation_archivedAt_matches_status` from `20261111214752` is unchanged and still correct for three statuses:
   `("status" = 'ARCHIVED') = ("archivedAt" IS NOT NULL)` holds for a `DRAFT` (both false), a `PUBLISHED` (both
   false), and an `ARCHIVED` row (both true), so `archivedAt` still marks exactly the archived state.
-- `Invitation.expiresAt` is a nullable `TIMESTAMPTZ(6)` with no default and no constraint. The column exists and no
-  code sets it in Milestone 5 (S8); the expiry rule is decided in a later milestone. Both new columns are nullable,
-  so every row that existed before the migration stayed valid, and `publishedAt` has no default so an archived or
-  draft row reads `NULL`.
+- `Invitation.expiresAt` is a nullable `TIMESTAMPTZ(6)` with no default and no constraint of its own. The publication
+  writes it as the publication instant plus the pinned package's `durationDays` (S1), and unpublishing and archiving
+  clear it in the same statement that clears `publishedAt`, so it is set exactly while the invitation is published.
+  A row stored before the rule existed reads `NULL` and never expires. Both columns are nullable, so every row that
+  existed before the migration stayed valid, and `publishedAt` has no default so an archived or draft row reads
+  `NULL`. An elapsed `expiresAt` is not a deletion and not a 404: the public read still answers the invitation, and
+  what closes is its RSVP (S2). Nothing extends an expiry (S3); a publication after an unpublish counts its lifetime
+  from the new publication instant.
 - The public read by slug needs no extra index: `Invitation_slug_key` is already unique, so `WHERE slug = $1` reads at
   most one row through it and the status is filtered on that row. No partial index on published rows is added.
 - `Invitation_status_createdAt_idx` on `(status, createdAt)` is the administrator's status view index for its
@@ -155,9 +169,10 @@ rewritten by any of them and nothing is deleted. Future analytics design is docu
   answers as an `Index Cond` on that backward scan (21 heap fetches, 0 rows filtered in the sample). The earlier `OR`
   form of the same predicate was a `Filter` that walked every row before the cursor (7 040 rows removed for a
   7 040-row offset).
-- The columns the application may update are `status`, `content`, `publishedAt`, `archivedAt`, `timeZone`,
-  `rsvpDeadline`, `rsvpPartyLimit`, and `updatedAt`; publish and unpublish write `publishedAt`, only the RSVP
-  settings route writes the two RSVP columns, nothing writes `expiresAt`, and the pinned fields can never change.
+- The columns the application may update are `status`, `content`, `publishedAt`, `expiresAt`, `archivedAt`,
+  `timeZone`, `rsvpDeadline`, `rsvpPartyLimit`, and `updatedAt`; publish writes `publishedAt` and `expiresAt` together,
+  unpublish and archive clear both, only the RSVP settings route writes the two RSVP columns, and the pinned fields can
+  never change.
 
 ## Invitation feature data
 

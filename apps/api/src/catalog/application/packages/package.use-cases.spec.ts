@@ -82,6 +82,43 @@ describe("CreatePackageUseCase", () => {
     assert.equal(repository.packages.length, 0);
   });
 
+  it("stores the basic month when the request names no duration (S1, T1)", async () => {
+    const repository = new MemoryCatalogPackageRepository();
+
+    const created = await new CreatePackageUseCase(repository).execute({
+      key: "basic",
+      name: "Básico",
+    });
+
+    assert.equal(created.durationDays, 30);
+    assert.equal(repository.packages[0]?.durationDays, 30);
+  });
+
+  it("stores the duration the request names, one per package (S1, T1)", async () => {
+    const repository = new MemoryCatalogPackageRepository();
+    const useCase = new CreatePackageUseCase(repository);
+
+    const premium = await useCase.execute({ key: "premium", name: "Premium", durationDays: 90 });
+    const deluxe = await useCase.execute({ key: "deluxe", name: "Deluxe", durationDays: 180 });
+
+    assert.equal(premium.durationDays, 90);
+    assert.equal(deluxe.durationDays, 180);
+  });
+
+  it("refuses a duration outside the bounds and stores nothing (S1, T1)", async () => {
+    const repository = new MemoryCatalogPackageRepository();
+    const useCase = new CreatePackageUseCase(repository);
+
+    for (const durationDays of [0, -30, 1.5, 3651, "90", null]) {
+      await assert.rejects(
+        useCase.execute({ key: "a", name: "A", durationDays: durationDays as number }),
+        InvalidCatalogEntryError,
+        String(durationDays),
+      );
+    }
+    assert.equal(repository.packages.length, 0);
+  });
+
   it("refuses a duplicate key and keeps the stored package", async () => {
     const { repository } = await seeded();
 
@@ -149,10 +186,28 @@ describe("UpdatePackageUseCase", () => {
       { description: "a".repeat(1001) },
       { status: "PUBLISHED" as unknown as "ACTIVE" },
       { status: null as unknown as "ACTIVE" },
+      { durationDays: 0 },
+      { durationDays: 3651 },
+      { durationDays: "90" as unknown as number },
     ]) {
       await assert.rejects(useCase.execute(created.id, input), InvalidCatalogEntryError);
     }
     assert.deepEqual(repository.packages, before);
+  });
+
+  it("changes only the duration when the change names it (S1, T1)", async () => {
+    const { repository, created } = await seeded();
+    assert.equal(created.durationDays, 30);
+
+    const changed = await new UpdatePackageUseCase(repository).execute(created.id, {
+      durationDays: 180,
+    });
+
+    assert.equal(changed?.durationDays, 180);
+    assert.equal(changed?.name, "Básico");
+    assert.equal(changed?.description, "Para empezar");
+    assert.equal(changed?.status, "DRAFT");
+    assert.equal(repository.packages[0]?.durationDays, 180);
   });
 });
 

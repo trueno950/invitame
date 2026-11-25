@@ -113,18 +113,24 @@ const PACKAGE_SEEDS = [
     key: "basic",
     name: "Basic",
     description: "Una selección inicial para empezar a planificar.",
+    // S1: «Básico 30 días». Each package states its own lifetime, counted from the publication instant.
+    durationDays: 30,
     featureKeys: ["COUNTDOWN", "MAP", "WHATSAPP"],
   },
   {
     key: "premium",
     name: "Premium",
     description: "Más recursos para una experiencia visual completa.",
+    // S1: «Premium 90 días».
+    durationDays: 90,
     featureKeys: ["COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
   },
   {
     key: "deluxe",
     name: "Deluxe",
     description: "El catálogo más amplio para celebraciones con más necesidades.",
+    // S1: «Deluxe 180 días».
+    durationDays: 180,
     featureKeys: [
       "COUNTDOWN",
       "MUSIC",
@@ -1028,6 +1034,9 @@ async function seedPackages(
           name: packageSeed.name,
           description: packageSeed.description,
           status: PackageStatus.ACTIVE,
+          // The package's own lifetime in days (S1, T1): 30, 90, or 180, written explicitly so the seed states the
+          // value rather than inheriting whatever the column was created with.
+          durationDays: packageSeed.durationDays,
         },
       ],
       skipDuplicates: true,

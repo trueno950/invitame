@@ -8,8 +8,8 @@ import { requireLocalDatabaseUrl } from "../../../test/database";
 // The publication persistence foundation (M5 T1; S2, S7, S8, A2) on real PostgreSQL: `PUBLISHED` joins the
 // invitation lifecycle, `publishedAt` is set exactly while the status is `PUBLISHED` (unpublishing and
 // archiving clear it), the archive marker still matches the status for all three statuses, `expiresAt` is a
-// nullable column that M5 never sets, and the pinned fields of a published invitation stay immutable while
-// its content remains editable. Runs only through `pnpm --filter @invitame/api test:db` with an explicit
+// nullable column the publication writes and unpublishing and archiving clear (S1), and the pinned fields of a
+// published invitation stay immutable while its content remains editable. Runs only through `pnpm --filter @invitame/api test:db` with an explicit
 // DATABASE_URL that points at a disposable, already migrated local database; not part of `pnpm test`. The
 // database is shared with parallel suites: every row here carries a key made from this run's id, and only
 // those rows are removed.

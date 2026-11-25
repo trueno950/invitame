@@ -48,12 +48,17 @@ export interface CatalogCurrentPrice {
   currency: string;
 }
 
-/** What a package grants right now: its status and the feature keys it includes (S6, A1). */
+/** What a package grants right now: its status, the feature keys it includes, and its duration (S6, A1). */
 export interface CatalogPackageEntitlements {
   packageId: string;
   status: PackageStatus;
   /** Keys of the package's features whose link has `included = true`; excluded features are not keys here. */
   includedFeatureKeys: readonly string[];
+  /**
+   * How many days a published invitation of this package stays live, counted from its publication instant (S1). The
+   * publication rule needs it, so it travels with the entitlements instead of costing a second read.
+   */
+  durationDays: number;
 }
 
 /**
@@ -113,7 +118,9 @@ export interface CatalogPublicReader {
    */
   findVersionSchema(versionId: string): Promise<StoredVersionSchema | null>;
 
-  /** The status and included feature keys of a package; null when no package has this id. */
+  /**
+   * The status, included feature keys, and duration of a package; null when no package has this id.
+   */
   findPackageEntitlements(packageId: string): Promise<CatalogPackageEntitlements | null>;
 
   /**

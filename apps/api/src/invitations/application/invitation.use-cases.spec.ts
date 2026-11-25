@@ -202,11 +202,18 @@ class MemoryInvitationRepository implements InvitationRepository {
     stored.status = "ARCHIVED";
     stored.archivedAt = new Date(stored.updatedAt.getTime() + 1000);
     stored.publishedAt = null;
+    // The status is no longer PUBLISHED, so the publication markers are cleared in the same write (S1, A2).
+    stored.expiresAt = null;
     stored.updatedAt = stored.archivedAt;
     return { ...stored, content: { ...stored.content } };
   }
 
-  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecordWithMusic | null> {
+  async publish(
+    ownerId: string,
+    id: string,
+    at: Date,
+    expiresAt: Date | null = null,
+  ): Promise<InvitationRecordWithMusic | null> {
     const stored = this.rows.find((row) => row.id === id && row.ownerId === ownerId);
     if (!stored) {
       return null;
@@ -220,6 +227,8 @@ class MemoryInvitationRepository implements InvitationRepository {
     stored.status = "PUBLISHED";
     stored.publishedAt = at;
     stored.firstPublishedAt ??= at;
+    // The expiry the publication states, exactly as the PostgreSQL adapter writes it (S1, T2).
+    stored.expiresAt = expiresAt;
     stored.updatedAt = at;
     return { ...stored, content: { ...stored.content } };
   }
@@ -237,19 +246,16 @@ class MemoryInvitationRepository implements InvitationRepository {
     }
     stored.status = "DRAFT";
     stored.publishedAt = null;
+    // The invitation is no longer published, so it no longer expires either (S1, S7).
+    stored.expiresAt = null;
     stored.updatedAt = new Date(stored.updatedAt.getTime() + 1000);
     return { ...stored, content: { ...stored.content } };
   }
 
   async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
     this.findPublishedBySlugCalls += 1;
-    const now = Date.now();
-    const stored = this.rows.find(
-      (row) =>
-        row.slug === slug &&
-        row.status === "PUBLISHED" &&
-        (row.expiresAt === null || row.expiresAt.getTime() > now),
-    );
+    // An expired invitation is still answered: it stays visible read-only, and the read flags it (S2, T3).
+    const stored = this.rows.find((row) => row.slug === slug && row.status === "PUBLISHED");
     return stored ? { ...stored, content: { ...stored.content } } : null;
   }
 }
@@ -296,7 +302,13 @@ class MemoryInvitationCatalog implements InvitationCatalog {
 
   addPackage(input: Partial<CatalogPackageEntitlements> = {}): string {
     const id = randomUUID();
-    this.packages.set(id, { status: "ACTIVE", includedFeatureKeys: [], ...input });
+    // The basic month unless a test states the package's own duration (S1).
+    this.packages.set(id, {
+      status: "ACTIVE",
+      includedFeatureKeys: [],
+      durationDays: 30,
+      ...input,
+    });
     return id;
   }
 
@@ -358,6 +370,8 @@ function seeded(
     requireFeatureKeys?: readonly string[];
     /** The feature keys the package includes, when a test needs them to differ from what a renderer requires. */
     includedFeatureKeys?: readonly string[];
+    /** The package's duration in days (S1), so a test can prove the publication reads it. */
+    durationDays?: number;
   } = {},
 ) {
   // The M5 fixtures reuse the M4 seeds: one PUBLISHED version of a PUBLISHED template and an ACTIVE package.
@@ -370,6 +384,7 @@ function seeded(
   });
   const packageId = catalog.addPackage({
     includedFeatureKeys: options.includedFeatureKeys ?? options.requireFeatureKeys ?? [],
+    ...(options.durationDays === undefined ? {} : { durationDays: options.durationDays }),
   });
   return { repository, catalog, ownerId, version, packageId };
 }
@@ -421,9 +436,12 @@ function publisher(
   };
 }
 
-/** The public reader wired to the same in-memory ports (no owner: the guest read, S2, A7). */
-function publicReader(fixture: ReturnType<typeof seeded>) {
-  return new GetPublicInvitationUseCase(fixture.repository, fixture.catalog);
+/**
+ * The public reader wired to the same in-memory ports (no owner: the guest read, S2, A7), with a fixed clock so a test
+ * observes the expiration boundary exactly (S2).
+ */
+function publicReader(fixture: ReturnType<typeof seeded>, now = () => PUBLISHED_AT) {
+  return new GetPublicInvitationUseCase(fixture.repository, fixture.catalog, undefined, now);
 }
 
 /** The feature update wired to the same in-memory ports (F1; S4, S2). */
@@ -1407,6 +1425,92 @@ describe("PublishInvitationUseCase", () => {
     assert.equal(payments.asked[0]?.id, created.id);
   });
 
+  it("writes the expiry the pinned package's duration states, from the publication instant (S1, T2)", async () => {
+    const fixture = seeded();
+    const created = await publishableDraft(fixture);
+    const { useCase } = publisher(fixture);
+
+    const published = await useCase.execute(fixture.ownerId, created.id);
+
+    const expiresAt = new Date("2026-12-12T09:30:00.000Z");
+    assert.deepEqual(published?.publishedAt, PUBLISHED_AT);
+    assert.deepEqual(fixture.repository.rows[0]?.expiresAt, expiresAt);
+    // The expiry is written, never answered: no owner response carries the instant (S1, S7).
+    assert.equal(Object.hasOwn(published ?? {}, "expiresAt"), false);
+  });
+
+  it("counts each package's own duration: 30, 90, and 180 days from the publication (S1)", async () => {
+    const expected: ReadonlyArray<readonly [number, string]> = [
+      [30, "2026-12-12T09:30:00.000Z"],
+      [90, "2027-02-10T09:30:00.000Z"],
+      [180, "2027-05-11T09:30:00.000Z"],
+    ];
+
+    for (const [durationDays, expiresAt] of expected) {
+      const fixture = seeded({ durationDays });
+      const created = await publishableDraft(fixture);
+
+      const published = await publisher(fixture).useCase.execute(fixture.ownerId, created.id);
+
+      assert.deepEqual(published?.publishedAt, PUBLISHED_AT, String(durationDays));
+      assert.deepEqual(
+        fixture.repository.rows[0]?.expiresAt,
+        new Date(expiresAt),
+        String(durationDays),
+      );
+    }
+  });
+
+  it("counts every day of a 90-day package across a month of 31 and a February (S1)", async () => {
+    // Published on 31 January, a 30-day package expires on 2 March, not on 28 or 29 February.
+    const fixture = seeded({ durationDays: 30 });
+    const created = await publishableDraft(fixture);
+    const from = new Date("2028-01-31T00:00:00.000Z");
+
+    const published = await publisher(fixture, undefined, () => from).useCase.execute(
+      fixture.ownerId,
+      created.id,
+    );
+
+    assert.deepEqual(published?.publishedAt, from);
+    assert.deepEqual(fixture.repository.rows[0]?.expiresAt, new Date("2028-03-01T00:00:00.000Z"));
+  });
+
+  it("clears the expiry on unpublish and on archive, so a draft never carries one (S1, T2)", async () => {
+    const fixture = seeded();
+    const created = await publishedInvitation(fixture);
+    assert.ok(fixture.repository.rows[0]?.expiresAt);
+
+    await new UnpublishInvitationUseCase(fixture.repository).execute(fixture.ownerId, created.id);
+    assert.equal(fixture.repository.rows[0]?.expiresAt, null);
+
+    const republished = await publisher(fixture).useCase.execute(fixture.ownerId, created.id);
+    assert.deepEqual(republished?.publishedAt, PUBLISHED_AT);
+    assert.deepEqual(fixture.repository.rows[0]?.expiresAt, new Date("2026-12-12T09:30:00.000Z"));
+
+    await new ArchiveInvitationUseCase(fixture.repository).execute(fixture.ownerId, created.id);
+    assert.equal(fixture.repository.rows[0]?.expiresAt, null);
+  });
+
+  it("gives every publication its own lifetime instead of extending the first one (S3)", async () => {
+    const fixture = seeded({ durationDays: 90 });
+    const created = await publishableDraft(fixture);
+    await publisher(fixture).useCase.execute(fixture.ownerId, created.id);
+    await new UnpublishInvitationUseCase(fixture.repository).execute(fixture.ownerId, created.id);
+
+    const later = new Date("2027-01-01T00:00:00.000Z");
+    const republished = await publisher(fixture, undefined, () => later).useCase.execute(
+      fixture.ownerId,
+      created.id,
+    );
+
+    assert.deepEqual(republished?.publishedAt, later);
+    assert.deepEqual(fixture.repository.rows[0]?.expiresAt, new Date("2027-04-01T00:00:00.000Z"));
+    // The first publication instant stays as history; only the expiry follows the new one.
+    const row = fixture.repository.rows.find((item) => item.id === created.id);
+    assert.deepEqual(row?.firstPublishedAt, PUBLISHED_AT);
+  });
+
   it("refuses an incomplete draft with every issue and stores nothing (A1)", async () => {
     const fixture = seeded();
     const created = await createDraft(fixture);
@@ -1438,6 +1542,7 @@ describe("PublishInvitationUseCase", () => {
     fixture.catalog.packages.set(fixture.packageId, {
       status: "ACTIVE",
       includedFeatureKeys: [],
+      durationDays: 30,
     });
     const { useCase, payments } = publisher(fixture);
 
@@ -1627,6 +1732,8 @@ describe("GetPublicInvitationUseCase", () => {
       },
       // The fixture stored no point, and its package grants no MAP (S2).
       places: {},
+      // The invitation is a few days old and lives 30, so it is still open for answers (S2, T2).
+      expired: false,
     });
     // Nothing outside the allow-list leaks: no owner, package, price, status, or any id but the internal one the public
     // read needs to count the opening (A7; M9 T11).
@@ -1634,6 +1741,7 @@ describe("GetPublicInvitationUseCase", () => {
       "componentKey",
       "configuration",
       "content",
+      "expired",
       "features",
       "invitationId",
       "places",
@@ -1673,22 +1781,49 @@ describe("GetPublicInvitationUseCase", () => {
     assert.deepEqual(page?.content, { celebrantName: "Ana", date: "2027-03-14" });
   });
 
-  it("answers null for a draft, an archived, an expired, and an unknown slug (A3)", async () => {
+  it("answers null for a draft, an archived, and an unknown slug (A3)", async () => {
     const fixture = seeded();
     const draftItem = await createDraft(fixture, slugs("invitacion-draft01"));
     const archived = await publishedInvitation(fixture, slugs("invitacion-archiv"));
-    const expired = await publishedInvitation(fixture, slugs("invitacion-expird"));
     await new ArchiveInvitationUseCase(fixture.repository).execute(fixture.ownerId, archived.id);
-    const expiredRow = fixture.repository.rows.find((row) => row.id === expired.id);
-    assert.ok(expiredRow);
-    // The expiry rule arrives in a later milestone; the read must already refuse an elapsed one (S8).
-    expiredRow.expiresAt = new Date(Date.now() - 1000);
     const useCase = publicReader(fixture);
 
     assert.equal(await useCase.execute(draftItem.slug), null);
     assert.equal(await useCase.execute(archived.slug), null);
-    assert.equal(await useCase.execute(expired.slug), null);
     assert.equal(await useCase.execute("invitacion-unknown"), null);
+  });
+
+  it("keeps an expired invitation visible and flags it read-only (S2, T3)", async () => {
+    const fixture = seeded();
+    const created = await publishedInvitation(fixture);
+    // Twelve days after a publication that lives 30: still open; one day past it: read-only.
+    const live = await publicReader(fixture, () => new Date("2026-12-12T09:30:00.000Z")).execute(
+      created.slug,
+    );
+    const expired = await publicReader(fixture, () => new Date("2026-12-12T09:30:00.001Z")).execute(
+      created.slug,
+    );
+
+    assert.equal(live?.expired, false);
+    // The guest still reads the invitation: the same allow-listed content, never a 404 (S2).
+    assert.equal(expired?.expired, true);
+    assert.equal(expired?.slug, created.slug);
+    assert.deepEqual(expired?.content, { celebrantName: "Ana", date: "2027-03-14" });
+    assert.equal(expired?.componentKey, "birthday-poster-01");
+  });
+
+  it("never flags an invitation the database stores without an expiry (S2)", async () => {
+    const fixture = seeded();
+    const created = await publishedInvitation(fixture);
+    const row = fixture.repository.rows.find((item) => item.id === created.id);
+    assert.ok(row);
+    row.expiresAt = null;
+
+    const page = await publicReader(fixture, () => new Date("2099-01-01T00:00:00.000Z")).execute(
+      created.slug,
+    );
+
+    assert.equal(page?.expired, false);
   });
 
   it("validates the slug format before reading anything (S2)", async () => {

@@ -219,6 +219,7 @@ describe("admin catalog packages", () => {
         "createdAt",
         "currentPrices",
         "description",
+        "durationDays",
         "features",
         "id",
         "key",
@@ -228,6 +229,11 @@ describe("admin catalog packages", () => {
       ]);
       assert.equal(listedFirst?.id, first.id);
       assert.equal(listedFirst?.status, "DRAFT");
+      assert.equal(
+        listedFirst?.durationDays,
+        30,
+        "the basic month when the request names none (S1)",
+      );
       assert.deepEqual(listedFirst?.features, [
         { id: alpha.id, key: "LIST_ALPHA", name: alpha.name, included: true },
         { id: beta.id, key: "LIST_BETA", name: beta.name, included: true },
@@ -279,6 +285,27 @@ describe("admin catalog packages", () => {
       assert.equal((await created(cookie)).description, null);
     });
 
+    it("answers 201 with the basic month when the request names no duration (S1, T1)", async () => {
+      const cookie = await signedIn("ADMIN");
+
+      const body = await created(cookie, "no-duration");
+
+      assert.equal(body.durationDays, 30);
+    });
+
+    it("stores the duration a request names, one per package (S1, T1)", async () => {
+      const cookie = await signedIn("ADMIN");
+
+      for (const durationDays of [30, 90, 180]) {
+        const body = await created(cookie, `days-${durationDays}`, { durationDays });
+        assert.equal(body.durationDays, durationDays);
+        assert.equal(
+          repository.packages.find((stored) => stored.id === body.id)?.durationDays,
+          durationDays,
+        );
+      }
+    });
+
     it("answers 409 CATALOG_KEY_TAKEN for a duplicate key and keeps the stored package", async () => {
       const cookie = await signedIn("ADMIN");
       const first = await created(cookie, "dup-key", { name: "Primero" });
@@ -309,6 +336,12 @@ describe("admin catalog packages", () => {
         { key: "bad-input", name: "N", description: "a".repeat(1001) },
       ],
       ["a numeric description", { key: "bad-input", name: "N", description: 5 }],
+      ["a duration of zero", { key: "bad-input", name: "N", durationDays: 0 }],
+      ["a negative duration", { key: "bad-input", name: "N", durationDays: -30 }],
+      ["a fractional duration", { key: "bad-input", name: "N", durationDays: 1.5 }],
+      ["a duration past the bound", { key: "bad-input", name: "N", durationDays: 3651 }],
+      ["a duration as text", { key: "bad-input", name: "N", durationDays: "90" }],
+      ["a null duration", { key: "bad-input", name: "N", durationDays: null }],
       ["an unknown field", { key: "bad-input", name: "N", sort: 1 }],
       ["a client-supplied id", { key: "bad-input", name: "N", id: UNKNOWN_ID }],
       ["a client-supplied status", { key: "bad-input", name: "N", status: "ACTIVE" }],
@@ -369,6 +402,22 @@ describe("admin catalog packages", () => {
       assert.equal((body.currentPrices as unknown[]).length, 1);
     });
 
+    it("changes only the duration when the change names it (S1, T1)", async () => {
+      const cookie = await signedIn("ADMIN");
+      const item = await created(cookie, "duration-edit");
+      assert.equal(item.durationDays, 30);
+
+      const response = await send("PATCH", `${PATH}/${item.id}`, cookie, { durationDays: 180 });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.equal(body.durationDays, 180);
+      assert.equal(body.name, "Paquete");
+      assert.equal(body.key, "duration-edit");
+      assert.equal(body.status, "DRAFT");
+      assert.equal(repository.packages.find((stored) => stored.id === item.id)?.durationDays, 180);
+    });
+
     it("answers 404 for an unknown id and for an id that is not a UUID", async () => {
       const cookie = await signedIn("ADMIN");
       const before = structuredClone(repository.packages);
@@ -392,6 +441,10 @@ describe("admin catalog packages", () => {
       ["a name over 120 characters", { name: "a".repeat(121) }],
       ["a description over 1000 characters", { description: "a".repeat(1001) }],
       ["a numeric description", { description: 5 }],
+      ["a duration of zero", { durationDays: 0 }],
+      ["a duration past the bound", { durationDays: 3651 }],
+      ["a fractional duration", { durationDays: 7.5 }],
+      ["a duration as text", { durationDays: "90" }],
       ["an unknown field", { name: "Nuevo", sort: 1 }],
       ["a client-supplied id", { name: "Nuevo", id: UNKNOWN_ID }],
       ["a client-supplied price", { name: "Nuevo", amountMinor: 1 }],

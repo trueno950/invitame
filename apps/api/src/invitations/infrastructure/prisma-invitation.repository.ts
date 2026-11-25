@@ -341,14 +341,15 @@ export class PrismaInvitationRepository implements InvitationRepository {
         return null;
       }
       const current = toRecord(stored);
-      // The domain states the transition (DRAFT or PUBLISHED -> ARCHIVED, A2); ARCHIVED and its marker are
-      // written together below. The status is no longer PUBLISHED, so the marker is cleared in the same write,
-      // as the `Invitation_publishedAt_matches_status` check requires.
+      // The domain states the transition (DRAFT or PUBLISHED -> ARCHIVED, A2); ARCHIVED and its markers are
+      // written together below. The status is no longer PUBLISHED, so `publishedAt` and `expiresAt` are cleared in the
+      // same write, as the `Invitation_publishedAt_matches_status` check requires and the expiry rule states (S1).
       const next = archive(current.status);
 
       const changed = await tx.invitation.updateMany({
         where: { id, ownerId, status: current.status },
-        data: { status: next, archivedAt: new Date(), publishedAt: null },
+        // The status is no longer PUBLISHED, so the publication markers are cleared in the same write (S1, A2).
+        data: { status: next, archivedAt: new Date(), publishedAt: null, expiresAt: null },
       });
       if (changed.count !== 1) {
         // A concurrent archive won; this request archived nothing, so it is not a successful change.
@@ -361,7 +362,12 @@ export class PrismaInvitationRepository implements InvitationRepository {
     });
   }
 
-  async publish(ownerId: string, id: string, at: Date): Promise<InvitationRecordWithMusic | null> {
+  async publish(
+    ownerId: string,
+    id: string,
+    at: Date,
+    expiresAt: Date | null = null,
+  ): Promise<InvitationRecordWithMusic | null> {
     return this.prisma.$transaction(async (tx) => {
       const stored = await tx.invitation.findFirst({
         where: { id, ownerId },
@@ -381,6 +387,10 @@ export class PrismaInvitationRepository implements InvitationRepository {
         data: {
           status: next,
           publishedAt: at,
+          // How long this invitation lives is the pinned package's decision, so the caller states the instant it
+          // computed from the publication and the duration (S1, T2). A caller that states none leaves the row without an
+          // expiry, which reads as "never expires" rather than as an invented lifetime.
+          expiresAt,
           // Only the first publication writes the history the refund rule reads; a publish after an unpublish keeps
           // the original instant (T2, S3). The transition is guarded by DRAFT, so this read cannot have gone stale:
           // nothing else writes this row while it is a draft.
@@ -419,8 +429,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
 
       const changed = await tx.invitation.updateMany({
         where: { id, ownerId, status: "PUBLISHED" },
-        // The status is no longer PUBLISHED, so `publishedAt` is cleared in the same write (S7, A2).
-        data: { status: next, publishedAt: null },
+        // The status is no longer PUBLISHED, so `publishedAt` and `expiresAt` are cleared in the same write (S1, S7, A2).
+        data: { status: next, publishedAt: null, expiresAt: null },
       });
       if (changed.count !== 1) {
         // A concurrent unpublish or archive won; nothing returned to DRAFT by this request.
@@ -434,15 +444,10 @@ export class PrismaInvitationRepository implements InvitationRepository {
   }
 
   async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
-    const now = new Date();
-    // One query on the unique slug index: the status and the expiry are filtered there too, so a draft, an
-    // archived, an expired, and an unknown slug are all a single miss (S2, A3, S8).
+    // One query on the unique slug index: a draft, an archived, and an unknown slug are a single miss (S2, A3). An
+    // expired row is answered like a live one, because it stays visible read-only and the projection flags it (S2, T3).
     const stored = await this.prisma.invitation.findFirst({
-      where: {
-        slug,
-        status: "PUBLISHED",
-        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-      },
+      where: { slug, status: "PUBLISHED" },
       select: INVITATION_SELECT,
     });
 

@@ -53,6 +53,11 @@ export interface GuestRsvpViewInput {
   readonly rsvp: PublicRsvpFeature;
   readonly action?: RsvpFormAction;
   readonly now?: Date;
+  /**
+   * Whether the API flagged the invitation read-only (S2, T5). It closes the card exactly like a passed deadline, and
+   * the card then states no deadline: the answers closed because the invitation expired, which the API decided.
+   */
+  readonly expired?: boolean;
 }
 
 /**
@@ -60,7 +65,7 @@ export interface GuestRsvpViewInput {
  * a package with no RSVP have no personal card, and the page shows nothing to answer with.
  */
 export function guestRsvpView(input: GuestRsvpViewInput): GuestRsvpBlockView | undefined {
-  const { slug, token, guest, rsvp, action } = input;
+  const { slug, token, guest, rsvp, action, expired = false } = input;
 
   if (rsvp.mode !== "guest-list" || !isInvitationSlug(slug) || !isGuestToken(token)) {
     return undefined;
@@ -81,8 +86,8 @@ export function guestRsvpView(input: GuestRsvpViewInput): GuestRsvpBlockView | u
         ? null
         : { attending: guest.response.attending, partySize: guest.response.partySize },
     message: guest.response?.message ?? "",
-    deadline: rsvp.deadline,
-    closed: isRsvpClosed(rsvp.deadline, input.now ?? new Date()),
+    deadline: expired ? null : rsvp.deadline,
+    closed: isRsvpClosed(rsvp.deadline, input.now ?? new Date(), expired),
     ...(action === undefined ? {} : { action }),
   };
 }

@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  DEFAULT_PACKAGE_DURATION_DAYS,
+  MAX_PACKAGE_DURATION_DAYS,
   MAX_PACKAGE_FEATURES,
+  MIN_PACKAGE_DURATION_DAYS,
   PACKAGE_STATUSES,
+  parsePackageDurationDays,
   parsePackageFeatureIds,
   parsePackageStatus,
 } from "./package";
 
-// Package rules at their source (M3 T6b; S1, S9): the status allow-list and the bounded, unique list of
-// feature ids that replaces a package's links.
+// Package rules at their source (M3 T6b; S1, S9): the status allow-list, the bounded, unique list of
+// feature ids that replaces a package's links, and the duration a published invitation of the package lives.
 
 const ID_A = "11111111-1111-4111-8111-111111111111";
 const ID_B = "22222222-2222-4222-8222-222222222222";
@@ -60,5 +64,33 @@ describe("parsePackageFeatureIds", () => {
     assert.equal(MAX_PACKAGE_FEATURES, 100);
     assert.equal(parsePackageFeatureIds(ids(100))?.length, 100);
     assert.equal(parsePackageFeatureIds(ids(101)), null);
+  });
+});
+
+describe("package duration (S1, S4)", () => {
+  it("bounds the duration between one day and ten years, and defaults to the basic month", () => {
+    assert.equal(MIN_PACKAGE_DURATION_DAYS, 1);
+    assert.equal(MAX_PACKAGE_DURATION_DAYS, 3650);
+    assert.equal(DEFAULT_PACKAGE_DURATION_DAYS, 30);
+  });
+
+  it("accepts a whole number of days inside the bounds, its boundaries included", () => {
+    assert.equal(parsePackageDurationDays(30), 30);
+    assert.equal(parsePackageDurationDays(90), 90);
+    assert.equal(parsePackageDurationDays(180), 180);
+    assert.equal(parsePackageDurationDays(MIN_PACKAGE_DURATION_DAYS), 1);
+    assert.equal(parsePackageDurationDays(MAX_PACKAGE_DURATION_DAYS), 3650);
+  });
+
+  it("refuses zero, a negative duration, a fraction, and a value past the bound", () => {
+    for (const value of [0, -1, -30, 1.5, 30.000_001, MAX_PACKAGE_DURATION_DAYS + 1, 1e9]) {
+      assert.equal(parsePackageDurationDays(value), null, String(value));
+    }
+  });
+
+  it("refuses a value that is not a number, and a numeric string a form may send", () => {
+    for (const value of ["30", " 30", "30 ", "", null, undefined, {}, [], true, Number.NaN]) {
+      assert.equal(parsePackageDurationDays(value), null, JSON.stringify(value));
+    }
   });
 });

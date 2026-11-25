@@ -46,6 +46,8 @@ describe("Prisma package repository on PostgreSQL", () => {
       key: `t6b-${runId}-${sequence}`,
       name,
       description: null,
+      // Every package states its lifetime; the basic month is what a request that names none gets (S1, T1).
+      durationDays: 30,
     });
     packageIds.push(created.id);
     return created;
@@ -71,6 +73,8 @@ describe("Prisma package repository on PostgreSQL", () => {
       assert.match(created.id, /^[0-9a-f-]{36}$/);
       assert.equal(created.status, "DRAFT");
       assert.equal(created.description, null);
+      // The lifetime the caller stated, read back from the row (S1, T1).
+      assert.equal(created.durationDays, 30);
       assert.deepEqual(created.features, []);
       assert.deepEqual(created.currentPrices, []);
       assert.ok(created.createdAt instanceof Date);
@@ -81,7 +85,12 @@ describe("Prisma package repository on PostgreSQL", () => {
       const before = await prisma.package.findUniqueOrThrow({ where: { id: first.id } });
 
       await assert.rejects(
-        repository.create({ key: first.key, name: "Segundo", description: "Otro" }),
+        repository.create({
+          key: first.key,
+          name: "Segundo",
+          description: "Otro",
+          durationDays: 30,
+        }),
         (error: unknown) => error instanceof CatalogKeyTakenError && error.key === first.key,
       );
 
@@ -115,6 +124,27 @@ describe("Prisma package repository on PostgreSQL", () => {
       assert.deepEqual(
         withData?.currentPrices.map((price) => [price.currency, price.amountMinor]),
         [["MXN", 200]],
+      );
+    });
+
+    it("changes only the duration when the change names it (S1, T1)", async () => {
+      const created = await newPackage("Duraciones");
+      assert.equal(created.durationDays, 30);
+
+      const changed = await repository.update(created.id, { durationDays: 180 });
+
+      assert.equal(changed?.durationDays, 180);
+      assert.equal(changed?.name, "Duraciones");
+      const row = await prisma.package.findUniqueOrThrow({ where: { id: created.id } });
+      assert.equal(row.durationDays, 180);
+      // The column's CHECK refuses a lifetime of zero or less, so no write can publish an already expired package.
+      await assert.rejects(
+        prisma.package.update({ where: { id: created.id }, data: { durationDays: 0 } }),
+        /Package_durationDays_positive/,
+      );
+      assert.equal(
+        (await prisma.package.findUniqueOrThrow({ where: { id: created.id } })).durationDays,
+        180,
       );
     });
 

@@ -96,13 +96,16 @@ const TEXT_AREA = `${FIELD} min-h-24 resize-y`;
 const HONEYPOT = "absolute -left-[9999px] h-px w-px overflow-hidden";
 const SUBMIT = `${ACTION} self-start border-0`;
 
-/** The one sentence about the deadline: when answers close, or that they already closed (S4). */
+/**
+ * The one sentence about the deadline: when answers close, or that they already closed (S4). A card closed without a
+ * deadline — an expired invitation, whose own deadline may still be ahead — still says the answers closed (S2, T5).
+ */
 function deadlineSentence(
   rsvp: { readonly deadline: string | null; readonly closed: boolean },
   timeZone: string,
 ): string | undefined {
   if (rsvp.deadline === null) {
-    return undefined;
+    return rsvp.closed ? RSVP_FORM_COPY.closedGeneric : undefined;
   }
   const text = formatRsvpDeadline(rsvp.deadline, timeZone);
 

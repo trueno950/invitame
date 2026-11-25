@@ -54,6 +54,7 @@ export class CatalogInvitationReader implements InvitationCatalog {
     return {
       status: entitlements.status,
       includedFeatureKeys: [...entitlements.includedFeatureKeys],
+      durationDays: entitlements.durationDays,
     };
   }
 

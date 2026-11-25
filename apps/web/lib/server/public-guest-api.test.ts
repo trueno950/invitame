@@ -36,6 +36,8 @@ const GUEST_PAGE: PublicGuestInvitation = {
   places: {},
   publishedAt: AT,
   timeZone: "America/Mexico_City",
+  // The read-only flag the API decided (S2, T3): this personal page still renders and only its answer closes.
+  expired: false,
   features: {
     countdown: true,
     map: true,

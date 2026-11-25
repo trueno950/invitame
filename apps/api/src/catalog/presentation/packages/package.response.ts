@@ -18,6 +18,11 @@ export interface PackageResponse {
   name: string;
   description: string | null;
   status: string;
+  /**
+   * How many days a published invitation of this package stays live, counted from its publication instant (S1, T1).
+   * The administration form edits it; a guest page never receives it.
+   */
+  durationDays: number;
   createdAt: string;
   updatedAt: string;
   features: Array<{ id: string; key: string; name: string; included: boolean }>;
@@ -39,6 +44,7 @@ export function toPackageResponse(stored: CatalogPackage): PackageResponse {
     name: stored.name,
     description: stored.description,
     status: stored.status,
+    durationDays: stored.durationDays,
     createdAt: stored.createdAt.toISOString(),
     updatedAt: stored.updatedAt.toISOString(),
     features: stored.features.map(({ id, key, name, included }) => ({ id, key, name, included })),

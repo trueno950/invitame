@@ -7,6 +7,20 @@ export type PackageStatus = (typeof PACKAGE_STATUSES)[number];
 /** The most features one package can list; the list replaces the stored links in one transaction. */
 export const MAX_PACKAGE_FEATURES = 100;
 
+/**
+ * How long a published invitation of a package stays live, in whole days (S1, S4): one day at the shortest, ten years
+ * at the longest. The `Package.durationDays` column is a NOT NULL INTEGER whose CHECK constraint repeats the lower
+ * bound, and the seed gives each catalog package its own duration.
+ */
+export const MIN_PACKAGE_DURATION_DAYS = 1;
+export const MAX_PACKAGE_DURATION_DAYS = 3650;
+
+/**
+ * The duration a package carries when nothing else is set: the basic month (S1). It is the column's default, so every
+ * package stored before the column existed keeps a valid, documented lifetime instead of none.
+ */
+export const DEFAULT_PACKAGE_DURATION_DAYS = 30;
+
 /** A feature linked to a package. `included` is false when the package shows the feature as excluded. */
 export interface PackageFeatureEntry {
   id: string;
@@ -37,6 +51,11 @@ export interface CatalogPackage {
   name: string;
   description: string | null;
   status: PackageStatus;
+  /**
+   * How many days a published invitation of this package stays live, counted from its publication instant (S1). Always
+   * a whole number inside the bounds above: the column is NOT NULL and checked, and the use cases validate every write.
+   */
+  durationDays: number;
   createdAt: Date;
   updatedAt: Date;
   features: PackageFeatureEntry[];
@@ -46,6 +65,19 @@ export interface CatalogPackage {
 /** The status when it is one of the allowed values, otherwise null. */
 export function parsePackageStatus(value: unknown): PackageStatus | null {
   return PACKAGE_STATUSES.find((status) => status === value) ?? null;
+}
+
+/**
+ * The duration when it is a whole number of days inside the bounds, otherwise null. A numeric string is refused on
+ * purpose: the transport coerces a form field to a number before this rule sees it, so a string here means the value
+ * did not come through the API boundary.
+ */
+export function parsePackageDurationDays(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    return null;
+  }
+
+  return value >= MIN_PACKAGE_DURATION_DAYS && value <= MAX_PACKAGE_DURATION_DAYS ? value : null;
 }
 
 /**

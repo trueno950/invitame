@@ -1,8 +1,20 @@
-import { ArrayMaxSize, ArrayUnique, IsArray, IsDefined, IsIn, IsUUID } from "class-validator";
+import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
+  IsDefined,
+  IsIn,
+  IsInt,
+  IsUUID,
+  Max,
+  Min,
+} from "class-validator";
 
 import { parseCategoryKey } from "../../../domain/catalog-entry";
 import {
+  MAX_PACKAGE_DURATION_DAYS,
   MAX_PACKAGE_FEATURES,
+  MIN_PACKAGE_DURATION_DAYS,
   PACKAGE_STATUSES,
   type PackageStatus,
 } from "../../../domain/package";
@@ -24,6 +36,17 @@ export class CreatePackageDto {
   @WhenPresent()
   @IsCatalogEntryDescription()
   description?: string | null;
+
+  /**
+   * The package's duration in days (S1, T1). Optional: a request that names none gets the basic month, the same value
+   * the column defaults to. The bounds are stated here so a malformed value is a `400` the transport names, and
+   * again in the domain, so no other caller can store one.
+   */
+  @WhenPresent()
+  @IsInt()
+  @Min(MIN_PACKAGE_DURATION_DAYS)
+  @Max(MAX_PACKAGE_DURATION_DAYS)
+  durationDays?: number;
 }
 
 /**
@@ -42,6 +65,12 @@ export class UpdatePackageDto {
   @WhenPresent()
   @IsIn(PACKAGE_STATUSES)
   status?: PackageStatus;
+
+  @WhenPresent()
+  @IsInt()
+  @Min(MIN_PACKAGE_DURATION_DAYS)
+  @Max(MAX_PACKAGE_DURATION_DAYS)
+  durationDays?: number;
 }
 
 /** `PUT /admin/catalog/packages/:id/features` body: the complete list of linked feature ids. */

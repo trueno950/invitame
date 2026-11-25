@@ -146,7 +146,16 @@ No public publication, payment confirmation, guest management, media uploads, or
 **Status:** Implemented (`odd/tasks/m5-publication.md`): publish and unpublish with ownership, completeness,
 package-fit, and pinned-version checks behind a payment gate that requires no payment until Milestone 7; the public,
 uncacheable read by slug; and the `/i/<slug>` guest page rendered through the renderer registry, noindex, with a
-friendly 404. Expiration is carried in the database but has no rule yet.
+friendly 404.
+
+**Expiration (implemented, `odd/tasks/invitation-expiration.md`; owner decision 2026-11-30):** each package states how
+long a published invitation stays live, in days from the publication instant — basic 30, premium 90, deluxe 180
+(S1). Publishing writes `Invitation.expiresAt` from it, and unpublishing or archiving clears it. Once it passes, the
+invitation stays **visible read-only**: the public and personal pages still render it, the API answers an `expired`
+flag instead of a 404, and the RSVP closes for both the open form and a guest's personal link (S2). Nothing extends an
+expiry, so a re-publication counts its lifetime from the new publication instant; this is definitive for the MVP (S3).
+The admin catalog edits each package's duration, and the browser journey for an expired invitation is still to be
+written.
 
 ### Outcome
 

@@ -157,6 +157,30 @@ describe("the answer card", () => {
     );
   });
 
+  it("closes the personal card when the invitation expired (S2, T5)", () => {
+    const view = guestRsvpView({
+      slug: SLUG,
+      token: TOKEN,
+      guest: {
+        name: "Ana",
+        seats: 2,
+        response: { attending: true, partySize: 2, message: "Allí estaré" },
+        qrPass: true,
+      },
+      rsvp: GUEST_LIST,
+      action: ACTION,
+      // Still before the creator's deadline: the expiry is what closed the answers (S2).
+      now: new Date("2026-11-30T12:00:00.000Z"),
+      expired: true,
+    });
+
+    assert.equal(view?.closed, true);
+    // The card states no deadline, and the answer the guest already gave stays readable.
+    assert.equal(view?.deadline, null);
+    assert.deepEqual(view?.answer, { attending: true, partySize: 2 });
+    assert.equal(view?.message, "Allí estaré");
+  });
+
   it("leaves the open form of the public page exactly as it was", () => {
     // The guest list replaces the open form; it never adds a second one (G3 preserved).
     assert.equal(publicRsvpBlock(GUEST_LIST, SLUG, ACTION), undefined);

@@ -276,6 +276,9 @@ export class PrismaGuestRepository implements GuestRepository {
       WHERE guest."id" = ${guestId}::uuid
         AND guest."invitationId" = ${invitationId}::uuid
         AND invitation."status" = 'PUBLISHED'
+        -- The expiry is re-stated here with the deadline, so an invitation that expired between the read and the write
+        -- refuses the answer in the database too (S2, T4).
+        AND (invitation."expiresAt" IS NULL OR invitation."expiresAt" >= ${at})
         AND (invitation."rsvpDeadline" IS NULL OR invitation."rsvpDeadline" >= ${at})
       ON CONFLICT ("guestId") DO UPDATE
       SET "name" = EXCLUDED."name",

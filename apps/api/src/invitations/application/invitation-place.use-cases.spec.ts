@@ -15,7 +15,7 @@ import type {
   InvitationRepository,
   NewInvitation,
 } from "./invitation.repository";
-import type { InvitationCatalog } from "./invitation-catalog";
+import type { CatalogPackageEntitlements, InvitationCatalog } from "./invitation-catalog";
 import {
   ClearInvitationPlaceUseCase,
   SearchPlacesUseCase,
@@ -189,8 +189,8 @@ class MemoryCatalog implements InvitationCatalog {
     return { id: VERSION_ID, schema: this.schema };
   }
 
-  async findPackageEntitlements(): Promise<{ status: string; includedFeatureKeys: string[] }> {
-    return { status: "ACTIVE", includedFeatureKeys: ["MAP"] };
+  async findPackageEntitlements(): Promise<CatalogPackageEntitlements> {
+    return { status: "ACTIVE", includedFeatureKeys: ["MAP"], durationDays: 30 };
   }
 
   async findVersionRenderData(): Promise<null> {

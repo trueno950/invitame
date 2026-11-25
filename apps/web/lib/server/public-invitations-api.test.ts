@@ -54,6 +54,8 @@ const PUBLIC: PublicInvitation = {
   // The precise-locations slice (S2): the points the API already filtered — MAP granted, and the label still equal to
   // the address the content holds. A package without MAP answers an empty map.
   places: {},
+  // The read-only state the API decided (S2, T3): the page still renders and its RSVP is closed.
+  expired: false,
 };
 
 /** One guest's open RSVP answer, as the guest page posts it (M6 G3; S4). */
@@ -213,6 +215,22 @@ describe("parsePublicInvitation", () => {
       ...PUBLIC,
       publishedAt: null,
     });
+  });
+
+  it("reads the read-only flag the API decided, and refuses a body that does not state it (S2, T3)", () => {
+    assert.equal(parsePublicInvitation(PUBLIC)?.expired, false);
+    assert.deepEqual(parsePublicInvitation({ ...PUBLIC, expired: true }), {
+      ...PUBLIC,
+      expired: true,
+    });
+
+    for (const expired of [undefined, null, "true", 1, {}, []]) {
+      assert.equal(
+        parsePublicInvitation({ ...PUBLIC, expired }),
+        undefined,
+        JSON.stringify(expired),
+      );
+    }
   });
 
   it("refuses a slug, componentKey, configuration, content, or publishedAt that breaks the contract", () => {

@@ -387,7 +387,7 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
       assert.equal(await prisma.rsvpResponse.count({ where: { invitationId: invitation.id } }), 2);
     });
 
-    it("refuses the write when the invitation is unpublished, archived, or past its deadline", async () => {
+    it("refuses the write when the invitation is unpublished, archived, expired, or past its deadline", async () => {
       const draft = await newPublished(["RSVP"], { publish: false });
       const write = {
         name: "Ana",
@@ -409,9 +409,22 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         rsvpDeadline: new Date("2026-11-19T00:00:00.000Z"),
       });
       assert.equal(await rsvp.upsertResponse(closed.invitation.id, write, at), false);
-      // The same row accepts a response before the deadline it carries.
+
+      // An invitation whose expiry passed is visible read-only, so the write refuses it too (S2, T4).
+      const expired = await newPublished(["RSVP"]);
+      await prisma.invitation.update({
+        where: { id: expired.invitation.id },
+        data: { expiresAt: new Date("2026-11-19T00:00:00.000Z") },
+      });
+      assert.equal(await rsvp.upsertResponse(expired.invitation.id, write, at), false);
+
+      // The same row accepts a response before the deadline and the expiry it carries.
       const open = await newPublished(["RSVP"], {
         rsvpDeadline: new Date("2026-11-21T00:00:00.000Z"),
+      });
+      await prisma.invitation.update({
+        where: { id: open.invitation.id },
+        data: { expiresAt: new Date("2026-11-21T00:00:00.000Z") },
       });
       assert.equal(await rsvp.upsertResponse(open.invitation.id, write, at), true);
 
@@ -419,7 +432,12 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         await prisma.rsvpResponse.count({
           where: {
             invitationId: {
-              in: [draft.invitation.id, archived.invitation.id, closed.invitation.id],
+              in: [
+                draft.invitation.id,
+                archived.invitation.id,
+                closed.invitation.id,
+                expired.invitation.id,
+              ],
             },
           },
         }),

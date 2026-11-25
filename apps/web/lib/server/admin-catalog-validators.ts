@@ -49,11 +49,22 @@ export interface CatalogPackage {
   name: string;
   description: string | null;
   status: PackageStatus;
+  /**
+   * How many days a published invitation of this package stays live, counted from its publication instant (S1, T1).
+   * The API states the bounds; this client only refuses a value that is not a whole number inside them.
+   */
+  durationDays: number;
   createdAt: string;
   updatedAt: string;
   features: CatalogPackageFeature[];
   currentPrices: CatalogPackagePrice[];
 }
+
+/** The shortest and longest duration the API accepts for a package, mirrored from its own domain rule (S1, T1). */
+export const MIN_PACKAGE_DURATION_DAYS = 1;
+export const MAX_PACKAGE_DURATION_DAYS = 3650;
+/** The lifetime a package gets when its form names none: the basic month, the same value the column defaults to. */
+export const DEFAULT_PACKAGE_DURATION_DAYS = 30;
 
 /** One row of `GET /admin/catalog/packages/:id/prices`; `retiredAt` is null for the current price. */
 export interface CatalogPriceHistoryEntry {
@@ -220,6 +231,16 @@ function parseCurrentPrice(value: unknown): CatalogPackagePrice | undefined {
   return { currency: price.currency, amountMinor: price.amountMinor, createdAt: price.createdAt };
 }
 
+/** Whether a value is a whole number of days inside the bounds the API states (S1, T1). */
+function isPackageDurationDays(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= MIN_PACKAGE_DURATION_DAYS &&
+    value <= MAX_PACKAGE_DURATION_DAYS
+  );
+}
+
 export function parseCatalogPackage(value: unknown): CatalogPackage | undefined {
   const stored = record(value);
 
@@ -230,6 +251,7 @@ export function parseCatalogPackage(value: unknown): CatalogPackage | undefined 
     !isNonEmptyString(stored.name) ||
     !(typeof stored.description === "string" || stored.description === null) ||
     !isPackageStatus(stored.status) ||
+    !isPackageDurationDays(stored.durationDays) ||
     !isTimestamp(stored.createdAt) ||
     !isTimestamp(stored.updatedAt)
   ) {
@@ -249,6 +271,7 @@ export function parseCatalogPackage(value: unknown): CatalogPackage | undefined 
     name: stored.name,
     description: stored.description,
     status: stored.status,
+    durationDays: stored.durationDays,
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,
     features,

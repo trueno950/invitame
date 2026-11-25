@@ -1,3 +1,4 @@
+import { isInvitationExpired } from "../domain/invitation-expiration";
 import { assertEditable } from "../domain/invitation-lifecycle";
 import {
   isRsvpOpenOn,
@@ -29,16 +30,17 @@ import {
 //
 // The order of the guest's use case is deliberate:
 // 1. the slug format, so a malformed value never reaches a query;
-// 2. `findPublishedBySlug`, which answers only a live PUBLISHED row, so a draft, an archived, an expired, and an
-//    unknown slug are one invisible case (the same 404 the public page answers);
-// 3. the package gate and the deadline, so an invitation that does not accept answers is refused before any count
-//    or write;
+// 2. `findPublishedBySlug`, which answers only a PUBLISHED row, so a draft, an archived, and an unknown slug are one
+//    invisible case (the same 404 the public page answers); an expired row is answered, because it stays visible
+//    read-only (S2);
+// 3. the package gate, the expiry, and the deadline, so an invitation that does not accept answers is refused before
+//    any count or write — this is the 409 `RSVP_NOT_OPEN` of a visible invitation whose RSVP closed (S2, S4);
 // 4. the rate limit, which bounds every remaining step;
 // 5. the honeypot, before any validation: a filled field answers exactly like a stored response, so a bot learns
 //    nothing from a 400 it would otherwise provoke;
 // 6. the domain validation against the invitation's party limit;
-// 7. the dedupe upsert, whose statement repeats the publication and deadline rules so a concurrent unpublish or an
-//    elapsed deadline is refused by the database too.
+// 7. the dedupe upsert, whose statement repeats the publication, expiry, and deadline rules so a concurrent unpublish,
+//    an elapsed deadline, or an expiry that just passed is refused by the database too.
 
 /** The totals of one invitation's answers (S1, S4): confirmed people, declines, and rows. */
 export interface RsvpTotals {
@@ -214,7 +216,9 @@ export class SubmitPublicRsvpUseCase {
     }
 
     const at = this.now();
-    if (!isRsvpOpenOn(published.rsvpDeadline, at)) {
+    // An expired invitation stays visible but read-only, so the RSVP is closed and not invisible (S2, T4). The check
+    // comes before the rate limit, so a refused submission never spends the guest's budget.
+    if (isInvitationExpired(published.expiresAt, at) || !isRsvpOpenOn(published.rsvpDeadline, at)) {
       throw new RsvpNotOpenError();
     }
 

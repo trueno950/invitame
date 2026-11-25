@@ -42,6 +42,8 @@ const PACKAGE = {
   name: "Básico",
   description: "Lo esencial",
   status: "ACTIVE",
+  // How long a published invitation of the package lives, in days (S1, T1).
+  durationDays: 30,
   createdAt: AT,
   updatedAt: AT,
   features: [{ id: ID, key: "RSVP", name: "Confirmar asistencia", included: true }],

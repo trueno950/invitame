@@ -1,6 +1,9 @@
 import type { AdminCatalogClient, CatalogResult } from "../../server/admin-catalog-client.ts";
 import {
+  DEFAULT_PACKAGE_DURATION_DAYS,
   isCatalogId,
+  MAX_PACKAGE_DURATION_DAYS,
+  MIN_PACKAGE_DURATION_DAYS,
   PACKAGE_STATUSES,
   type PackageStatus,
   TEMPLATE_STATUSES,
@@ -50,6 +53,32 @@ const editPath = (section: Section, id: string): string => `${CATALOG_PATHS[sect
 function text(form: FormData, name: string): string | undefined {
   const value = form.get(name);
   return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * The duration field of a package form (S1, T1): a whole number of days from 1 to 3650, the bounds the API states.
+ * A form that does not carry the field at all keeps the behavior it had before the field existed — the basic month on
+ * creation, no change on a save — while a value that is present and malformed is refused before any request.
+ */
+type DurationField =
+  | { readonly kind: "absent" }
+  | { readonly kind: "days"; readonly value: number }
+  | { readonly kind: "invalid" };
+
+function durationDays(form: FormData): DurationField {
+  const value = text(form, "durationDays")?.trim();
+
+  if (value === undefined || value === "") {
+    return { kind: "absent" };
+  }
+  if (!/^\d{1,4}$/.test(value)) {
+    return { kind: "invalid" };
+  }
+  const days = Number(value);
+
+  return days >= MIN_PACKAGE_DURATION_DAYS && days <= MAX_PACKAGE_DURATION_DAYS
+    ? { kind: "days", value: days }
+    : { kind: "invalid" };
 }
 
 /** The description field: blank is no description (`null`), and a non-text value is `undefined`. */
@@ -163,13 +192,26 @@ export async function createPackage(api: AdminCatalogClient, form: FormData): Pr
   const key = text(form, "key")?.trim();
   const name = text(form, "name")?.trim();
   const note = description(form);
+  const duration = durationDays(form);
 
-  if (key === undefined || name === undefined || note === undefined) {
+  if (
+    key === undefined ||
+    name === undefined ||
+    note === undefined ||
+    duration.kind === "invalid"
+  ) {
     return invalid(newPath("packages"));
   }
 
   return finish(
-    () => api.packages.create({ key, name, description: note }),
+    () =>
+      api.packages.create({
+        key,
+        name,
+        description: note,
+        // A form that names no duration keeps the basic month the API defaults to (S1, T1).
+        durationDays: duration.kind === "days" ? duration.value : DEFAULT_PACKAGE_DURATION_DAYS,
+      }),
     created("packages"),
     "packages",
     newPath("packages"),
@@ -180,24 +222,37 @@ function packageStatus(value: string | undefined): PackageStatus | undefined {
   return PACKAGE_STATUSES.find((status) => status === value);
 }
 
-/** Saves a package's `name`, `description`, and `status`. */
+/** Saves a package's `name`, `description`, `status`, and `durationDays`. */
 export async function updatePackage(api: AdminCatalogClient, form: FormData): Promise<string> {
   const id = text(form, "id");
   const name = text(form, "name")?.trim();
   const note = description(form);
   const status = packageStatus(text(form, "status"));
+  const duration = durationDays(form);
 
   if (id === undefined || !isCatalogId(id)) {
     return invalid(listPath("packages"), "not-found");
   }
 
   const path = editPath("packages", id);
-  if (name === undefined || note === undefined || status === undefined) {
+  if (
+    name === undefined ||
+    note === undefined ||
+    status === undefined ||
+    duration.kind === "invalid"
+  ) {
     return invalid(path);
   }
 
   return finish(
-    () => api.packages.update(id, { name, description: note, status }),
+    () =>
+      api.packages.update(id, {
+        name,
+        description: note,
+        status,
+        // A form that names no duration changes nothing; the stored one stays as it is (S1, T1).
+        ...(duration.kind === "days" ? { durationDays: duration.value } : {}),
+      }),
     saved(path),
     "packages",
     path,

@@ -36,6 +36,8 @@ const VERSION_RENDER_SELECT = {
 const PACKAGE_ENTITLEMENTS_SELECT = {
   id: true,
   status: true,
+  // How long a published invitation of this package stays live (S1); the publication rule reads it here.
+  durationDays: true,
   // Only the links the package actually grants; an excluded feature is not an entitlement (S6, A1).
   packageFeatures: {
     where: { included: true },
@@ -106,6 +108,7 @@ function toEntitlements(row: PackageEntitlementsRow): CatalogPackageEntitlements
     packageId: row.id,
     status: row.status,
     includedFeatureKeys: row.packageFeatures.map((link) => link.feature.key),
+    durationDays: row.durationDays,
   };
 }
 

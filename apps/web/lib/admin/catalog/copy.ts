@@ -163,6 +163,9 @@ export const PACKAGE_COPY = {
   detailsHeading: "Datos del paquete",
   statusLabel: "Estado",
   statusHint: "Solo un paquete activo se ofrece a la venta.",
+  durationLabel: "Duración en días",
+  durationHint:
+    "Cuántos días sigue visible la invitación publicada antes de quedar en solo lectura. Del 1 al 3650.",
   featuresHeading: "Funciones incluidas",
   featuresHint: "Marca las funciones que incluye este paquete.",
   featuresEmpty: "Todavía no hay funciones. Créalas primero en Funciones.",

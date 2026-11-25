@@ -221,6 +221,12 @@ model Package {
   name            String           @db.VarChar(120)
   description     String?          @db.Text
   status          PackageStatus    @default(DRAFT)
+  // How long a published invitation of this package stays live, counted from its publication instant, in whole days
+  // (S1, S4). The seed gives each catalog package its own duration (30, 90, 180). The default is the basic month, so
+  // every package stored before this column existed keeps a valid, documented lifetime instead of none. Migration
+  // 20261130120000_add_package_duration_days adds the column with the same default and the CHECK constraint Prisma
+  // cannot express, "Package_durationDays_positive" (durationDays > 0).
+  durationDays    Int              @default(30)
   createdAt       DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime         @updatedAt @db.Timestamptz(6)
   packageFeatures PackageFeature[]
@@ -337,7 +343,9 @@ model Invitation {
   // The instant a refund claim asked the provider, or NULL while none did (T2, S3). Nothing clears it, so a retry
   // re-sends the same idempotent refund; publishing refuses this row while it carries one (migration 20261124130000).
   refundRequestedAt DateTime?        @db.Timestamptz(6)
-  // Expiry the database carries but Milestone 5 never sets; the rule arrives in a later milestone (S8).
+  // The instant this published invitation expires: its publication plus its pinned package's duration (S1, S2). Set
+  // by the publication write and cleared by unpublish and archive, so it is NULL exactly while the invitation is not
+  // published. After it passes the invitation stays visible read-only and its RSVP closes; nothing extends it (S3).
   expiresAt         DateTime?        @db.Timestamptz(6)
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @db.Timestamptz(6)

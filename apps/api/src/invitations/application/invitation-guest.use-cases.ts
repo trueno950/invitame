@@ -10,6 +10,7 @@ import {
   validateGuestInput,
 } from "../domain/invitation-guest";
 import { assertEditable } from "../domain/invitation-lifecycle";
+import { isInvitationExpired } from "../domain/invitation-expiration";
 import { isRsvpOpenOn, validateRsvpResponse } from "../domain/invitation-rsvp";
 import { isValidInvitationSlug } from "../domain/invitation-slug";
 import type {
@@ -53,8 +54,9 @@ import type { RsvpRateLimiter } from "./rsvp-rate-limiter";
 //    `WHERE`. Nothing here logs, and no creator response carries another owner's data.
 //
 // The guest's two use cases deliberately share the invitation read with the open RSVP form: `findPublishedBySlug`
-// answers only a live PUBLISHED row, so a draft, an archived, an expired, and an unknown slug are one invisible
-// case. A malformed or unknown personal token answers the same invisible case too, and a token of another
+// answers only a PUBLISHED row, so a draft, an archived, and an unknown slug are one invisible case, while an expired
+// invitation is answered read-only and only its answers close (S2). A malformed or unknown personal token answers the
+// same invisible case too, and a token of another
 // invitation is not found because the lookup is scoped by the invitation id. The token itself is never stored: the
 // application hashes it and every lookup is one probe of the unique hash index, so no secret is compared in code.
 
@@ -372,9 +374,10 @@ export class RotateGuestTokenUseCase {
 /**
  * One guest's personal page (S4): the published invitation's public read plus that guest's own name, seats, last
  * answer, and whether the access QR is offered. Every invisible case answers null, which the route maps to the same
- * 404 the public page answers: a malformed slug, a draft, an archived, an expired, or an unknown slug, a malformed
- * token, an unknown or revoked token, and a token of another invitation. Nothing about another guest is read, and
- * the page is the same allow-listed projection a guest without a link receives.
+ * 404 the public page answers: a malformed slug, a draft, an archived, or an unknown slug, a malformed token, an
+ * unknown or revoked token, and a token of another invitation. An expired invitation is not invisible: the page is
+ * answered with `expired` set, so the guest still reads the invitation and sees its RSVP closed (S2). Nothing about
+ * another guest is read, and the page is the same allow-listed projection a guest without a link receives.
  */
 export class GetPublicGuestUseCase {
   constructor(
@@ -421,8 +424,9 @@ export class GetPublicGuestUseCase {
 
 /**
  * One guest's answer through their personal link (S4). The slug and the token are the only inputs that name the
- * invitation and the guest, so the route needs no session. The invitation must be published and inside its
- * deadline (409 `RSVP_NOT_OPEN` otherwise), its package must grant the guest list, and the token must name a guest of
+ * invitation and the guest, so the route needs no session. The invitation must be published, unexpired, and inside its
+ * deadline (409 `RSVP_NOT_OPEN` otherwise, which is also the answer for an expired invitation that is still visible
+ * read-only, S2), its package must grant the guest list, and the token must name a guest of
  * that invitation (the same invisible 404 as an unknown slug otherwise). The answer is validated against the
  * guest's own seats — never the invitation's party limit — and every submission is counted per guest on the shared
  * rate-limit store, so one guest cannot fill the list and one address cannot spend another guest's budget. The write
@@ -455,7 +459,9 @@ export class SubmitGuestRsvpUseCase {
     }
 
     const at = this.now();
-    if (!isRsvpOpenOn(published.rsvpDeadline, at)) {
+    // An expired invitation stays visible read-only, so a personal link still resolves and only its answer closes
+    // (S2, T4). The check comes before the rate limit, so a refused answer never spends the guest's budget.
+    if (isInvitationExpired(published.expiresAt, at) || !isRsvpOpenOn(published.rsvpDeadline, at)) {
       throw new RsvpNotOpenError();
     }
 

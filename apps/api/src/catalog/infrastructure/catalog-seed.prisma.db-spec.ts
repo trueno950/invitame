@@ -354,6 +354,21 @@ describe("catalog seed (real PostgreSQL)", () => {
     assert.ok(deluxe.packageFeatures.every((link) => link.included));
   });
 
+  it("gives each seeded package its own lifetime in days (S1, S4)", async () => {
+    await seedCatalog(prisma);
+
+    const seeded = await prisma.package.findMany({
+      where: { key: { in: SEEDED_PACKAGE_KEYS } },
+      select: { key: true, durationDays: true },
+    });
+
+    assert.deepEqual(Object.fromEntries(seeded.map((row) => [row.key, row.durationDays])), {
+      basic: 30,
+      premium: 90,
+      deluxe: 180,
+    });
+  });
+
   it("leaves every administrator edit untouched on a later run", async () => {
     await seedCatalog(prisma);
     const premium = await prisma.package.findUniqueOrThrow({

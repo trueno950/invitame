@@ -105,6 +105,8 @@ export default async function GuestInvitationPage({
     guest: invitation.guest,
     rsvp: invitation.features.rsvp,
     action: submitGuestRsvpAction,
+    // An expired invitation is still rendered here, and its personal card closes instead of asking (S2, T5).
+    expired: invitation.expired,
   });
   const guest: GuestPageBlockView = {
     greeting: guestGreeting(invitation.guest.name),

@@ -43,6 +43,8 @@ const PUBLIC: PublicInvitation = {
     rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
   },
   places: {},
+  // The read-only flag the API decided (S2, T3); this projection only renders what it is given.
+  expired: false,
 };
 
 const NOW = new Date("2026-11-13T10:00:00.000Z");

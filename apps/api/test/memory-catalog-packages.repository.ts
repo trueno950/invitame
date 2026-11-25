@@ -18,6 +18,7 @@ interface StoredPackage {
   name: string;
   description: string | null;
   status: CatalogPackage["status"];
+  durationDays: number;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -332,13 +332,8 @@ class MemoryInvitationRepository implements InvitationRepository {
   }
 
   async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
-    const now = Date.now();
-    const row = this.rows.find(
-      (stored) =>
-        stored.slug === slug &&
-        stored.status === "PUBLISHED" &&
-        (stored.expiresAt === null || stored.expiresAt.getTime() > now),
-    );
+    // An expired row is answered like a live one: it stays visible read-only and the projection flags it (S2, T3).
+    const row = this.rows.find((stored) => stored.slug === slug && stored.status === "PUBLISHED");
     return row ? structuredClone(row) : null;
   }
 }
@@ -363,12 +358,12 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     ],
   ]);
   readonly packages = new Map<string, CatalogPackageEntitlements>([
-    [ACTIVE_PACKAGE_ID, { status: "ACTIVE", includedFeatureKeys: [] }],
-    [DRAFT_PACKAGE_ID, { status: "DRAFT", includedFeatureKeys: [] }],
+    [ACTIVE_PACKAGE_ID, { status: "ACTIVE", includedFeatureKeys: [], durationDays: 30 }],
+    [DRAFT_PACKAGE_ID, { status: "DRAFT", includedFeatureKeys: [], durationDays: 30 }],
     // The seeded Basic package's keys (prisma/catalog-seed.ts), for the gated feature read (S4).
     [
       FEATURE_PACKAGE_ID,
-      { status: "ACTIVE", includedFeatureKeys: ["COUNTDOWN", "MAP", "WHATSAPP"] },
+      { status: "ACTIVE", includedFeatureKeys: ["COUNTDOWN", "MAP", "WHATSAPP"], durationDays: 30 },
     ],
     // The seeded Deluxe package's batch-2 keys (S7): music and the gift registry.
     [
@@ -376,14 +371,22 @@ class MemoryInvitationCatalog implements InvitationCatalog {
       {
         status: "ACTIVE",
         includedFeatureKeys: ["COUNTDOWN", "MUSIC", "MAP", "WHATSAPP", "GIFT_REGISTRY"],
+        durationDays: 180,
       },
     ],
     // The seeded Premium keys (M6 S3): RSVP without a guest list.
-    [RSVP_PACKAGE_ID, { status: "ACTIVE", includedFeatureKeys: ["COUNTDOWN", "RSVP"] }],
+    [
+      RSVP_PACKAGE_ID,
+      { status: "ACTIVE", includedFeatureKeys: ["COUNTDOWN", "RSVP"], durationDays: 90 },
+    ],
     // The seeded Deluxe keys (M6 S3): the guest list replaces the open form.
     [
       GUEST_LIST_PACKAGE_ID,
-      { status: "ACTIVE", includedFeatureKeys: ["COUNTDOWN", "RSVP", "GUEST_LIST"] },
+      {
+        status: "ACTIVE",
+        includedFeatureKeys: ["COUNTDOWN", "RSVP", "GUEST_LIST"],
+        durationDays: 180,
+      },
     ],
     // The same keys plus the access pass (M6 G2; S3, S4).
     [
@@ -391,6 +394,7 @@ class MemoryInvitationCatalog implements InvitationCatalog {
       {
         status: "ACTIVE",
         includedFeatureKeys: ["COUNTDOWN", "RSVP", "GUEST_LIST", "QR_PASS"],
+        durationDays: 180,
       },
     ],
   ]);
@@ -2269,6 +2273,7 @@ describe("invitations routes: /invitations", () => {
       "componentKey",
       "configuration",
       "content",
+      "expired",
       "features",
       "places",
       "publishedAt",
@@ -2395,20 +2400,12 @@ describe("invitations routes: /invitations", () => {
       }
     });
 
-    it("answers one identical uncacheable 404 for a malformed, unknown, draft, archived, expired, or unrenderable slug (A3)", async () => {
+    it("answers one identical uncacheable 404 for a malformed, unknown, draft, archived, or unrenderable slug (A3)", async () => {
       const cases: Array<[string, string]> = [
         ["malformed", "Invitacion-K7M2QX"],
         ["unknown", "invitacion-never0"],
         ["draft", seed({ slug: "invitacion-draft0", status: "DRAFT" }).slug],
         ["archived", seed({ slug: "invitacion-archiv", status: "ARCHIVED" }).slug],
-        [
-          "expired",
-          seed({
-            slug: "invitacion-expird",
-            status: "PUBLISHED",
-            expiresAt: new Date(Date.now() - 1_000),
-          }).slug,
-        ],
         [
           "unregistered renderer",
           seed({
@@ -2477,6 +2474,43 @@ describe("invitations routes: /invitations", () => {
       const text = JSON.stringify(event);
       assert.equal(text.includes(row.ownerId), false, "the owner is never logged");
       assert.equal(text.includes("Cumpleaños"), false, "the content is never logged");
+    });
+
+    it("keeps an expired invitation visible read-only and flags it, instead of answering 404 (S2, T3)", async () => {
+      const expired = seed({
+        slug: "invitacion-expird1",
+        status: "PUBLISHED",
+        expiresAt: new Date(Date.now() - 1_000),
+      });
+      const live = seed({ slug: "invitacion-live001", status: "PUBLISHED" });
+
+      const expiredResponse = await send("GET", `${PUBLIC_PATH}/${expired.slug}`);
+      const liveResponse = await send("GET", `${PUBLIC_PATH}/${live.slug}`);
+
+      assert.equal(expiredResponse.status, 200);
+      const expiredBody = (await expiredResponse.json()) as Row;
+      assert.deepEqual(Object.keys(expiredBody).sort(), PUBLIC_KEYS);
+      assert.equal(expiredBody.expired, true);
+      // The guest still reads the whole invitation: only the RSVP closed (S2).
+      assert.equal(expiredBody.slug, expired.slug);
+      assert.deepEqual(expiredBody.content, { title: "Cumpleaños de Ana" });
+      assert.equal(expiredResponse.headers.get("cache-control"), "no-store");
+
+      assert.equal(liveResponse.status, 200);
+      assert.equal(((await liveResponse.json()) as Row).expired, false);
+    });
+
+    it("never answers the expiry instant itself, only the flag it decided (S1, S2)", async () => {
+      const row = seed({
+        slug: "invitacion-expird2",
+        status: "PUBLISHED",
+        expiresAt: new Date(Date.now() - 1_000),
+      });
+
+      const body = (await (await send("GET", `${PUBLIC_PATH}/${row.slug}`)).json()) as Row;
+
+      assert.equal(body.expiresAt, undefined);
+      assert.equal(body.expired, true);
     });
 
     it("answers the time zone and the gated features, and nothing about the package (F1; S4)", async () => {
@@ -3250,6 +3284,27 @@ describe("invitations routes: /invitations", () => {
       }
     });
 
+    it("answers 409 RSVP_NOT_OPEN for an expired invitation that still renders (S2, T4)", async () => {
+      const { created } = await published();
+      const stored = repository.rows.find((row) => row.id === created.id);
+      assert.ok(stored);
+      stored.expiresAt = new Date(Date.now() - 1_000);
+      const counted = rateLimiter.consumed.length;
+
+      // The page still renders, so the submission is refused as closed rather than as missing.
+      assert.equal((await send("GET", `/public/invitations/${created.slug}`)).status, 200);
+      const response = await submit(created.slug, ATTEMPT);
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "RSVP_NOT_OPEN" });
+      assert.equal(
+        rsvpRepository.responses.some((item) => item.invitationId === created.id),
+        false,
+      );
+      // A refused submission never spends the rate limit (S4).
+      assert.equal(rateLimiter.consumed.length, counted);
+    });
+
     it("answers 429 RSVP_RATE_LIMITED when the address is over the cap, and stores nothing", async () => {
       const { created } = await published();
       rateLimiter.allow = false;
@@ -3807,6 +3862,7 @@ describe("invitations routes: /invitations", () => {
         "componentKey",
         "configuration",
         "content",
+        "expired",
         "features",
         "guest",
         "places",
@@ -3814,6 +3870,7 @@ describe("invitations routes: /invitations", () => {
         "slug",
         "timeZone",
       ]);
+      assert.equal(body.expired, false);
       assert.deepEqual(body.guest, {
         name: "Ana",
         seats: 3,

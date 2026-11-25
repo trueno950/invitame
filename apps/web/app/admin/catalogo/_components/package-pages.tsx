@@ -12,6 +12,7 @@ import { formatMxn, formatPesosField } from "../../../../lib/admin/catalog/price
 import { adminCatalog } from "../../../../lib/server/admin-catalog-api.ts";
 import {
   type CatalogPackage,
+  DEFAULT_PACKAGE_DURATION_DAYS,
   isCatalogId,
   PACKAGE_STATUSES,
 } from "../../../../lib/server/admin-catalog-validators.ts";
@@ -151,6 +152,15 @@ export async function PackageCreatePage({ searchParams }: { searchParams: Search
             invalidText={invalidText}
             keyHint={PACKAGE_COPY.keyHint}
             keyPlaceholder={PACKAGE_COPY.keyPlaceholder}
+          />
+          <TextField
+            defaultValue={String(DEFAULT_PACKAGE_DURATION_DAYS)}
+            hint={PACKAGE_COPY.durationHint}
+            id="catalog-duration"
+            inputMode="numeric"
+            label={PACKAGE_COPY.durationLabel}
+            name="durationDays"
+            required
           />
         </FormBody>
         <SubmitFooter cancelHref={CATALOG_PATHS.packages} label={PACKAGE_COPY.createSubmit} />
@@ -319,6 +329,15 @@ export async function PackageEditPage({
                     label={PACKAGE_COPY.statusLabel}
                     name="status"
                     options={STATUS_OPTIONS}
+                  />
+                  <TextField
+                    defaultValue={String(stored.durationDays)}
+                    hint={PACKAGE_COPY.durationHint}
+                    id="catalog-duration"
+                    inputMode="numeric"
+                    label={PACKAGE_COPY.durationLabel}
+                    name="durationDays"
+                    required
                   />
                 </FormBody>
                 <SubmitFooter label={CATALOG_FIELD_COPY.save} />

@@ -121,15 +121,9 @@ class MemoryInvitationRepository implements InvitationRepository {
   }
 
   async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
-    const now = Date.now();
-    return (
-      this.rows.find(
-        (row) =>
-          row.slug === slug &&
-          row.status === "PUBLISHED" &&
-          (row.expiresAt === null || row.expiresAt.getTime() > now),
-      ) ?? null
-    );
+    // An expired invitation keeps resolving: the personal page still renders read-only and only its answers close
+    // (S2, T4). The submission rule, not the read, is what refuses it.
+    return this.rows.find((row) => row.slug === slug && row.status === "PUBLISHED") ?? null;
   }
 
   seed(overrides: SeedOptions = {}): InvitationRecordWithMusic {
@@ -155,7 +149,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       archivedAt: overrides.status === "ARCHIVED" ? at : null,
       publishedAt: overrides.status === "PUBLISHED" ? at : null,
       firstPublishedAt: overrides.status === "PUBLISHED" ? at : null,
-      expiresAt: null,
+      expiresAt: overrides.expiresAt ?? null,
       createdAt: at,
       updatedAt: at,
     };
@@ -171,6 +165,8 @@ interface SeedOptions {
   status?: InvitationStatus;
   rsvpDeadline?: Date | null;
   rsvpPartyLimit?: number;
+  /** The expiry the publication wrote (S1, S2); null for a row that never expires. */
+  expiresAt?: Date | null;
 }
 
 /**
@@ -378,7 +374,9 @@ class MemoryGuestRepository implements GuestRepository {
     if (
       invitation?.status !== "PUBLISHED" ||
       guest === undefined ||
-      (invitation.rsvpDeadline !== null && at.getTime() > invitation.rsvpDeadline.getTime())
+      (invitation.rsvpDeadline !== null && at.getTime() > invitation.rsvpDeadline.getTime()) ||
+      // The expiry is re-stated in the write, like the adapter's own statement (S2, T4).
+      (invitation.expiresAt !== null && at.getTime() > invitation.expiresAt.getTime())
     ) {
       return false;
     }
@@ -438,7 +436,9 @@ class MemoryCatalog implements InvitationCatalog {
 
   async findPackageEntitlements(packageId: string): Promise<CatalogPackageEntitlements | null> {
     const includedFeatureKeys = PACKAGE_KEYS[packageId];
-    return includedFeatureKeys === undefined ? null : { status: "ACTIVE", includedFeatureKeys };
+    return includedFeatureKeys === undefined
+      ? null
+      : { status: "ACTIVE", includedFeatureKeys, durationDays: 30 };
   }
 
   findVersionRenderData(): Promise<CatalogVersionRenderData | null> {
@@ -1020,6 +1020,67 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
         RsvpNotOpenError,
       );
       assert.equal(guests.responses.filter((row) => row.guestId === closed.guest.id).length, 0);
+    });
+
+    it("closes a personal link's RSVP when the invitation expired, and still renders its page (S2, T4)", async () => {
+      const { guest, invitation, token } = await seedGuest({
+        slug: "invitacion-expird1",
+        expiresAt: new Date("2026-11-20T00:00:00.000Z"),
+      });
+      rateLimiter.consumed.length = 0;
+
+      await assert.rejects(
+        submit.execute({
+          slug: invitation.slug,
+          token,
+          attending: true,
+          partySize: 1,
+          message: null,
+        }),
+        RsvpNotOpenError,
+      );
+      assert.equal(guests.responses.filter((row) => row.guestId === guest.id).length, 0);
+      // A refused answer never spends the guest's budget.
+      assert.deepEqual(rateLimiter.consumed, []);
+
+      // The personal page is still answered: the invitation stays visible read-only (S2).
+      const page = await readGuest.execute(invitation.slug, token);
+      assert.equal(page?.page.expired, true);
+      assert.equal(page?.guest.name, "Ana Pérez");
+    });
+
+    it("accepts an answer at the expiry instant and refuses it one millisecond later (S2, T4)", async () => {
+      const open = await seedGuest({
+        slug: "invitacion-open0001",
+        expiresAt: new Date("2026-11-20T12:00:00.000Z"),
+      });
+      assert.equal(
+        await submit.execute({
+          slug: open.invitation.slug,
+          token: open.token,
+          attending: true,
+          partySize: 1,
+          message: null,
+        }),
+        true,
+      );
+
+      const expired = await seedGuest({
+        slug: "invitacion-gone0001",
+        expiresAt: new Date("2026-11-20T12:00:00.000Z"),
+      });
+      expired.invitation.expiresAt = new Date("2026-11-20T11:59:59.999Z");
+      await assert.rejects(
+        submit.execute({
+          slug: expired.invitation.slug,
+          token: expired.token,
+          attending: true,
+          partySize: 1,
+          message: null,
+        }),
+        RsvpNotOpenError,
+      );
+      assert.equal(guests.responses.filter((row) => row.guestId === expired.guest.id).length, 0);
     });
 
     it("counts every submission against the guest, never against another guest's budget", async () => {

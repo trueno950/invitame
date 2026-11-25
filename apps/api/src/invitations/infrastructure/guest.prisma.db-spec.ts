@@ -567,7 +567,7 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
       assert.equal(await prisma.rsvpResponse.count({ where: { guestId: guest.guest.id } }), 1);
     });
 
-    it("refuses the write when the invitation is not published or its deadline passed", async () => {
+    it("refuses the write when the invitation is not published, expired, or past its deadline", async () => {
       const draft = await newInvitation(["RSVP", "GUEST_LIST"], { publish: false });
       const draftGuest = await newGuest(draft.invitation);
 
@@ -606,9 +606,40 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
         ),
         false,
       );
+      // An invitation whose expiry passed is visible read-only, so its personal answers close too (S2, T4).
+      const expired = await newInvitation(["RSVP", "GUEST_LIST"]);
+      await prisma.invitation.update({
+        where: { id: expired.invitation.id },
+        data: { expiresAt: new Date("2026-11-19T00:00:00.000Z") },
+      });
+      const expiredGuest = await newGuest(expired.invitation);
+      await assert.rejects(
+        submit.execute({
+          slug: expired.invitation.slug,
+          token: expiredGuest.token,
+          attending: true,
+          partySize: 1,
+          message: null,
+        }),
+        RsvpNotOpenError,
+      );
+      assert.equal(
+        await guests.upsertResponse(
+          expired.invitation.id,
+          expiredGuest.guest.id,
+          { attending: true, partySize: 1, message: null },
+          AT,
+        ),
+        false,
+      );
+
       assert.equal(
         await prisma.rsvpResponse.count({
-          where: { guestId: { in: [draftGuest.guest.id, closedGuest.guest.id] } },
+          where: {
+            guestId: {
+              in: [draftGuest.guest.id, closedGuest.guest.id, expiredGuest.guest.id],
+            },
+          },
         }),
         0,
       );

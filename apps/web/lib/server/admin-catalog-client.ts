@@ -77,6 +77,11 @@ export interface CatalogEntryCreate {
   description: string | null;
 }
 
+/** The body of `POST /admin/catalog/packages`: the entry fields plus the package's own duration (S1, T1). */
+export interface CatalogPackageCreate extends CatalogEntryCreate {
+  durationDays: number;
+}
+
 export interface CatalogEntryUpdate {
   name?: string;
   description?: string | null;
@@ -87,6 +92,8 @@ export interface CatalogPackageUpdate {
   name?: string;
   description?: string | null;
   status?: PackageStatus;
+  /** The package's lifetime in days (S1, T1), already validated against the boundaries the API states. */
+  durationDays?: number;
 }
 
 export interface CatalogTemplateCreate {
@@ -258,7 +265,7 @@ export function createAdminCatalogClient(
     packages: {
       list: (): Promise<CatalogResult<CatalogPackage[]>> =>
         call("GET", packages, undefined, parseCatalogPackages),
-      create: (input: CatalogEntryCreate): Promise<CatalogResult<CatalogPackage>> =>
+      create: (input: CatalogPackageCreate): Promise<CatalogResult<CatalogPackage>> =>
         call(
           "POST",
           packages,

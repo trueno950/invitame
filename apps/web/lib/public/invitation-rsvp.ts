@@ -36,10 +36,15 @@ export const RSVP_NOTICE_CODES = [
 ] as const;
 export type RsvpNoticeCode = (typeof RSVP_NOTICE_CODES)[number];
 
-/** Where the page shows a closed RSVP: the block's note instead of its form (S4). */
-export function isRsvpClosed(deadline: string | null, now: Date): boolean {
-  if (deadline === null) {
-    return false;
+/**
+ * Where the page shows a closed RSVP: the block's note instead of its form (S4). Two things close it — the API's own
+ * read-only flag, which is what an expired invitation answers (S2), and the creator's deadline once it passed. A
+ * deadline this runtime cannot parse never closes the block by itself, because the API still refuses every late
+ * submission; the flag is the answer the API decided, so it is taken as given.
+ */
+export function isRsvpClosed(deadline: string | null, now: Date, expired = false): boolean {
+  if (expired || deadline === null) {
+    return expired;
   }
   const at = Date.parse(deadline);
 
@@ -49,12 +54,16 @@ export function isRsvpClosed(deadline: string | null, now: Date): boolean {
 /**
  * The RSVP block of one guest page, or undefined when this invitation does not accept open answers. A `guest-list`
  * package replaces the open form with personal links (G4; S4), and a package with neither shows nothing here.
+ *
+ * An expired invitation keeps its card and closes it (S2): the card states no deadline, because the creator's date may
+ * still be ahead and the reason the answers closed is the expiry, which the API already decided.
  */
 export function publicRsvpBlock(
   rsvp: PublicRsvpFeature,
   slug: string,
   action: RsvpFormAction | undefined,
   now: Date = new Date(),
+  expired = false,
 ): RsvpBlockView | undefined {
   if (rsvp.mode !== "open" || !isInvitationSlug(slug)) {
     return undefined;
@@ -63,8 +72,8 @@ export function publicRsvpBlock(
   return {
     slug,
     partyLimit: rsvp.partyLimit,
-    deadline: rsvp.deadline,
-    closed: isRsvpClosed(rsvp.deadline, now),
+    deadline: expired ? null : rsvp.deadline,
+    closed: isRsvpClosed(rsvp.deadline, now, expired),
     ...(action === undefined ? {} : { action }),
   };
 }

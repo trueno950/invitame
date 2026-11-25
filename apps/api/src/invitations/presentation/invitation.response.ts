@@ -36,11 +36,12 @@ import type { PlacePoint } from "../domain/invitation-place";
 // The stable REST shapes of an invitation (M4 T4 and M5 T4; S1, S3, S7, S9, A3, A4, A7). `ownerId` is
 // deliberately absent: it comes from the session and never belongs in a response (S9). An id that names nothing,
 // or names another customer's invitation, answers the same 404 (A4), so a response never confirms that a foreign
-// row exists. `expiresAt` is absent too: Milestone 5 never writes an expiry and no client may rely on one (S8).
+// row exists. `expiresAt` is absent too: the guest page reads the boolean the API decided (`expired`), never the
+// instant, so no client can compute a different answer from the one the API stated (S1, S2).
 
 /**
  * The stable REST shape of one row of "Mis invitaciones". `publishedAt` is the publication instant, null while
- * the invitation is a draft; it is what the owner sees instead of the database's unused `expiresAt` (S7, S8).
+ * the invitation is a draft; it is what the owner sees, never the expiry the API decided from the package (S7).
  */
 export interface InvitationSummaryResponse {
   id: string;
@@ -135,6 +136,11 @@ export interface PublicInvitationResponse {
    * grants MAP and only while the address text still equals the label the point was stored with. Empty otherwise.
    */
   places: Record<string, PlacePoint>;
+  /**
+   * Whether the invitation passed its expiry and is read-only (S2, T3). The page still renders the invitation; this is
+   * what closes its RSVP. It is a boolean, never the instant, so the API keeps deciding when the expiration happened.
+   */
+  expired: boolean;
 }
 
 export function toInvitationSummaryResponse(stored: InvitationSummary): InvitationSummaryResponse {
@@ -207,6 +213,8 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
       },
     },
     places: { ...stored.places },
+    // A boolean, never the instant: the guest page reads this to close the RSVP (S2, T3).
+    expired: stored.expired,
   };
 }
 

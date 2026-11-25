@@ -9,7 +9,7 @@ import { missingRequiredFields, validateDraftContent } from "./invitation-conten
 import { type PackageEntitlements, packageFitsTemplateVersion } from "./package-fit";
 
 /** The package no longer fits the pinned version: not ACTIVE, or missing a required feature key. */
-const PACKAGE_ISSUE = "package does not include the template's required features";
+export const PACKAGE_FIT_ISSUE = "package does not include the template's required features";
 
 /** The pinned version is no longer PUBLISHED, so it must not accept a new publication. */
 const VERSION_ISSUE = "template version is no longer published";
@@ -42,7 +42,7 @@ export function publicationIssues(readiness: PublicationReadiness): string[] {
     issues.push(...validation.issues);
   }
   if (!packageFitsTemplateVersion(readiness.packageEntitlements, readiness.requiredFeatureKeys)) {
-    issues.push(PACKAGE_ISSUE);
+    issues.push(PACKAGE_FIT_ISSUE);
   }
   if (!readiness.versionPublished) {
     issues.push(VERSION_ISSUE);

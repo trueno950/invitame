@@ -38,6 +38,8 @@ const PACKAGE = {
   name: "Básico",
   description: null,
   status: "DRAFT",
+  // The package's lifetime in days (S1, T1).
+  durationDays: 30,
   createdAt: AT,
   updatedAt: AT,
   features: [],
@@ -281,7 +283,12 @@ describe("requests", () => {
   it("creates a package with a 201", async () => {
     answer(201, PACKAGE);
     assert.deepEqual(
-      await client().packages.create({ key: "basic", name: "Básico", description: null }),
+      await client().packages.create({
+        key: "basic",
+        name: "Básico",
+        description: null,
+        durationDays: 30,
+      }),
       { ok: true, value: PACKAGE },
     );
   });

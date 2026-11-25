@@ -40,6 +40,12 @@ export interface PublicInvitation {
    * an empty object is what every other case answers, so a layout always reads the same shape.
    */
   places: Record<string, PlacePoint>;
+  /**
+   * Whether the invitation passed its expiry and is now read-only (S2, T3). The page still renders everything above;
+   * this flag is what closes the RSVP and tells the guest why. It is a boolean and never the instant itself, so no
+   * client can compute a different answer from the one the API decided.
+   */
+  expired: boolean;
 }
 
 /** A JSON object read from a `Json` column; arrays, null, and primitives are not objects. */

@@ -89,6 +89,12 @@ export interface PublicInvitation {
    * client never decides a point's visibility; it only refuses a shape no write could have stored.
    */
   places: StoredPlaces;
+  /**
+   * Whether the invitation passed its expiry and is read-only (S2, T3). The page still renders every other field; this
+   * is what closes the RSVP. The API decides it and answers a boolean, never the instant, so this client never computes
+   * an expiration of its own.
+   */
+  expired: boolean;
 }
 
 export type PublicInvitationResult =
@@ -279,8 +285,11 @@ export function parsePublicInvitation(
   const componentKey = invitation.componentKey;
   const features = parsePublicFeatures(invitation.features, apiOrigin);
   const places = parseStoredPlaces(invitation.places);
+  // The read-only flag is part of the contract, so a body without it is not this API's answer (S2, T3).
+  const expired = invitation.expired;
 
   if (
+    typeof expired !== "boolean" ||
     !isInvitationSlug(invitation.slug) ||
     typeof componentKey !== "string" ||
     componentKey.length === 0 ||
@@ -304,6 +313,7 @@ export function parsePublicInvitation(
     timeZone: invitation.timeZone,
     features,
     places,
+    expired,
   };
 }
 

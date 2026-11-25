@@ -21,6 +21,7 @@ import {
   publish,
   unpublish,
 } from "../domain/invitation-lifecycle";
+import { invitationExpiresAt, isInvitationExpired } from "../domain/invitation-expiration";
 import { confirmedPlaces, type PlacePoint } from "../domain/invitation-place";
 import {
   generateInvitationSlug,
@@ -28,7 +29,7 @@ import {
   isValidInvitationSlug,
 } from "../domain/invitation-slug";
 import { packageFitsTemplateVersion } from "../domain/package-fit";
-import { publicationIssues } from "../domain/publication-readiness";
+import { PACKAGE_FIT_ISSUE, publicationIssues } from "../domain/publication-readiness";
 import {
   InvalidInvitationContentError,
   InvalidInvitationFeaturesError,
@@ -542,9 +543,11 @@ export type PublicationClock = () => Date;
  * first — the pinned schema's required fields and validation, whether the package still fits what the pinned
  * version's renderer requires, and whether that version is still PUBLISHED — and every reason is reported in
  * `InvitationNotPublishableError` without storing anything. Then the payment gate is asked once (S6), and only
- * then does the write happen with `publishedAt` set to the current instant. An id that names nothing or belongs
- * to another owner answers null before the catalog or the gate is consulted (A4); publishing an already
- * published or an archived invitation is refused by the domain with its own error (S7, A2).
+ * then does the write happen with `publishedAt` set to the current instant and `expiresAt` to that instant plus the
+ * pinned package's duration in days (S1, T2). Nothing extends an expiry (S3): a publication after an unpublish counts
+ * its lifetime from the new instant. An id that names nothing or belongs to another owner answers null before the
+ * catalog or the gate is consulted (A4); publishing an already published or an archived invitation is refused by the
+ * domain with its own error (S7, A2).
  */
 export class PublishInvitationUseCase {
   constructor(
@@ -592,7 +595,20 @@ export class PublishInvitationUseCase {
       throw new InvitationPaymentRequiredError(payment.reason);
     }
 
-    const published = await this.invitations.publish(ownerId, id, this.now());
+    // The fit rule refused a package the catalog could not answer for (A1), so a publishable draft always has one; the
+    // guard keeps the type honest instead of inventing a lifetime nobody chose.
+    if (entitlements === null) {
+      throw new InvitationNotPublishableError([PACKAGE_FIT_ISSUE]);
+    }
+
+    // One instant for both marks: the invitation expires exactly `durationDays` days after it was published (S1, T2).
+    const at = this.now();
+    const published = await this.invitations.publish(
+      ownerId,
+      id,
+      at,
+      invitationExpiresAt(at, entitlements.durationDays),
+    );
     if (published === null) {
       return null;
     }
@@ -650,6 +666,8 @@ export class GetPublicInvitationUseCase {
      * composes this read without media still projects a published invitation.
      */
     private readonly gallery: InvitationGalleryReader = { readGallery: async () => [] },
+    /** The instant the expiry is judged at (S2); injectable so a test observes the boundary exactly. */
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   async execute(slug: string): Promise<PublicInvitation | null> {
@@ -710,6 +728,8 @@ export class GetPublicInvitationUseCase {
         published.content,
         includedFeatureKeys.includes(MAP_FEATURE_KEY),
       ),
+      // An elapsed expiry is not a 404: the page still renders and the RSVP closes (S2, T3).
+      expired: isInvitationExpired(published.expiresAt, this.now()),
     };
   }
 }

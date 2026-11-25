@@ -92,15 +92,9 @@ class MemoryInvitationRepository implements InvitationRepository {
   }
 
   async findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null> {
-    const now = Date.now();
-    return (
-      this.rows.find(
-        (row) =>
-          row.slug === slug &&
-          row.status === "PUBLISHED" &&
-          (row.expiresAt === null || row.expiresAt.getTime() > now),
-      ) ?? null
-    );
+    // An expired invitation is answered like a live one: it stays visible read-only and the submission is refused by
+    // the RSVP rule, never hidden behind a 404 (S2, T4).
+    return this.rows.find((row) => row.slug === slug && row.status === "PUBLISHED") ?? null;
   }
 
   seed(overrides: SeedOptions = {}): InvitationRecordWithMusic {
@@ -152,6 +146,10 @@ class MemoryRsvpRepository implements RsvpRepository {
   readonly settings = new Map<string, RsvpSettings>();
   /** When set, the next write answers exactly this, so a concurrent change can be observed. */
   refuseWrites = false;
+  /** When set, the invitation expires just before the next response write lands, as a race does (S2, T4). */
+  expireBeforeWrite = false;
+  /** Whether any response write was attempted, so a test can tell a refused write from a skipped one. */
+  upserted = false;
   private sequence = 0;
 
   constructor(private readonly invitations: MemoryInvitationRepository) {}
@@ -204,10 +202,18 @@ class MemoryRsvpRepository implements RsvpRepository {
     response: RsvpResponseWrite,
     at: Date,
   ): Promise<boolean> {
+    this.upserted = true;
     const invitation = this.invitations.rows.find((row) => row.id === invitationId);
+    if (this.expireBeforeWrite && invitation) {
+      invitation.expiresAt = new Date(at.getTime() - 1);
+      this.expireBeforeWrite = false;
+    }
     if (
       invitation?.status !== "PUBLISHED" ||
-      (invitation.rsvpDeadline !== null && at.getTime() > invitation.rsvpDeadline.getTime())
+      (invitation.rsvpDeadline !== null && at.getTime() > invitation.rsvpDeadline.getTime()) ||
+      // The expiry is re-stated in the write, so an invitation that expired between the read and the write is refused
+      // there too (S2, T4).
+      (invitation.expiresAt !== null && at.getTime() > invitation.expiresAt.getTime())
     ) {
       return false;
     }
@@ -277,7 +283,7 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     const includedFeatureKeys = this.packages.get(packageId);
     return includedFeatureKeys === undefined
       ? null
-      : { status: "ACTIVE", includedFeatureKeys: [...includedFeatureKeys] };
+      : { status: "ACTIVE", includedFeatureKeys: [...includedFeatureKeys], durationDays: 30 };
   }
 }
 
@@ -540,18 +546,13 @@ describe("SubmitPublicRsvpUseCase (S1, S4)", () => {
     assert.equal(rsvp.responses[0]?.updatedAt.getTime(), NOW.getTime());
   });
 
-  it("answers the same 404 for a malformed, unknown, draft, archived, or expired slug, and stores nothing", async () => {
+  it("answers the same 404 for a malformed, unknown, draft, or archived slug, and stores nothing", async () => {
     const cases: Array<{ label: string; slug: string; stored: SeedOptions }> = [
       // The format is refused before any query, so the stored slug is irrelevant to this case.
       { label: "malformed", slug: "Invitacion-Malformed", stored: {} },
       { label: "unknown", slug: "invitacion-never0", stored: { slug: SLUG } },
       { label: "draft", slug: SLUG, stored: { status: "DRAFT" } },
       { label: "archived", slug: SLUG, stored: { status: "ARCHIVED" } },
-      {
-        label: "expired",
-        slug: SLUG,
-        stored: { expiresAt: new Date("2020-01-01T00:00:00.000Z") },
-      },
     ];
 
     for (const { label, slug, stored } of cases) {
@@ -560,6 +561,42 @@ describe("SubmitPublicRsvpUseCase (S1, S4)", () => {
       assert.equal(await submit.execute({ ...SUBMISSION, slug }), false, label);
       assert.equal(rsvp.responses.length, 0, label);
     }
+  });
+
+  it("closes the RSVP of an expired invitation instead of hiding it (S2, T4)", async () => {
+    const { invitation, rateLimiter, rsvp, submit } = seeded({
+      expiresAt: new Date(NOW.getTime() - 1),
+    });
+
+    await assert.rejects(submit.execute(SUBMISSION), RsvpNotOpenError);
+    assert.equal(rsvp.responses.length, 0);
+    // The invitation is visible, so this is the closed answer and never the 404 of an invisible slug.
+    assert.equal(invitation.status, "PUBLISHED");
+    // A refused submission is not counted against the guest's budget.
+    assert.deepEqual(rateLimiter.consumed, []);
+  });
+
+  it("accepts an answer at the expiry instant and refuses it one millisecond later (S2, T4)", async () => {
+    const open = seeded({ expiresAt: NOW });
+    await open.submit.execute(SUBMISSION);
+    assert.equal(open.rsvp.responses.length, 1);
+
+    const expired = seeded({ expiresAt: new Date(NOW.getTime() - 1) });
+    await assert.rejects(expired.submit.execute(SUBMISSION), RsvpNotOpenError);
+    assert.equal(expired.rsvp.responses.length, 0);
+  });
+
+  it("refuses the write when the invitation expires between the read and the store (S2, T4)", async () => {
+    const { invitations, rsvp, submit } = seeded();
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
+    // The row the read answered is still live; the stored row expires before the write lands.
+    invitation.expiresAt = NOW;
+    rsvp.expireBeforeWrite = true;
+
+    await assert.rejects(submit.execute(SUBMISSION), RsvpNotOpenError);
+    assert.equal(rsvp.responses.length, 0);
+    // The write was attempted and the store refused it, so nothing was recorded by a racing submission (S2, T4).
+    assert.equal(rsvp.upserted, true);
   });
 
   it("refuses a published invitation whose package grants no open RSVP", async () => {
