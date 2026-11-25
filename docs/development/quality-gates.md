@@ -189,8 +189,8 @@ it:
    maps to a named assertion in [ADR 0004 test traceability](adr-0004-test-traceability.md).
 4. **End-to-end tests** — browser/API journeys across real trust boundaries. The `apps/web/e2e` suite covers the
    customer and administrator sign-in, account, enrollment, and sign-out journeys (see
-   [Browser end-to-end tests](#browser-end-to-end-tests)); the authoring, publication, payment, and RSVP
-   workflows are planned.
+   [Browser end-to-end tests](#browser-end-to-end-tests)), the invitation editor, and the publication journey
+   (publish, guest view, unpublish, unknown slug); browser journeys for payment and RSVP are not written yet.
 
 There is no 100% coverage goal. Coverage is a diagnostic and, once a future suite exists, a guard against obvious
 gaps; it is not a substitute for meaningful behavior tests. A test that always passes, asserts implementation
@@ -200,10 +200,10 @@ details, or cannot fail when the behavior breaks is not evidence.
 
 | Behavior | Current status | Evidence required when implemented |
 | --- | --- | --- |
-| Payments | Planned; no provider or payment model exists. | Unit tests for state transitions, integration tests for persistence/idempotency, and provider webhook tests with signature failure and replay cases. |
-| Publication | Planned; no invitation runtime exists. | Application authorization tests, integration tests for state and `TemplateVersion`, and public-route E2E coverage for unpublished and published states. |
+| Payments | Implemented (Milestone 7): provider-neutral payments with a Mercado Pago adapter, signed webhooks, and the refund rule; unit, application, controller, and adapter specs under `apps/api/src/payments`. No browser journey yet; the sandbox pass waits on owner credentials. | Unit tests for state transitions, integration tests for persistence/idempotency, and provider webhook tests with signature failure and replay cases. |
+| Publication | Implemented (Milestone 5): publish and unpublish with readiness checks and the public `/i/<slug>` runtime; domain specs and the `apps/web/e2e/public-invitation.spec.ts` journey. | Application authorization tests, integration tests for state and `TemplateVersion`, and public-route E2E coverage for unpublished and published states. |
 | Permissions | Identity and own-profile authorization implemented (Milestone 2); see [ADR 0004 test traceability](adr-0004-test-traceability.md). Browser E2E covers the customer session and the administrator enrollment, sign-in, panel, and sign-out. | Deny-by-default unit/application cases, API integration tests for ownership/roles, and E2E coverage for direct unauthorized requests. |
-| RSVP | Planned; no guest or RSVP model exists. | Domain/application behavior tests, database uniqueness/transaction tests, and public journey tests for valid, duplicate, and expired responses. |
+| RSVP | Implemented (Milestone 6): open RSVP for packages with `RSVP`, the guest list, and CSV export; domain and application specs under `apps/api/src/invitations`. No browser journey yet, and expired responses wait on the expiration rule. | Domain/application behavior tests, database uniqueness/transaction tests, and public journey tests for valid, duplicate, and expired responses. |
 | Template snapshots | Foundation implemented. | Existing migration/seed evidence plus tests that future code references the immutable version rather than mutable template metadata. |
 
 ## Extra checks by change type

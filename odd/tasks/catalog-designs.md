@@ -148,7 +148,7 @@ owner before code. Renderer map: explore task `mwdzwovk-1-5423` (2026-11-12).
 | T7a | API: optional schema fields, baby shower and baptism contracts, themes, category, seed | S13 | worker | `7f38b01` |
 | T7b | Web: nine display fonts | S13 | worker | `4250615` |
 | T7c | Web: two layouts, 14 themes, samples, creator form labels and field kinds | S13 | worker | `abc2494`, `87d7e9b` |
-| T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | pending | |
+| T8 | Elegant layouts and themes for XV años, weddings, and formal baptisms: directions, choice, implementation | S2-S5 | superseded | delivered by `odd/tasks/elegant-line.md` |
 
 ## Log
 
