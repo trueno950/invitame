@@ -147,12 +147,10 @@ test.describe("customer invitation editor", () => {
       "true",
     );
 
-    // Every missing field is a link: it opens the «Contenido» tab with that field's card and puts the focus on the input,
-    // so the note is also the way to the field (T1; S2.4).
-    await page
-      .getByRole("region", { name: EDITOR_COPY.firstSteps.heading })
-      .getByRole("link", { name: "Fecha", exact: true })
-      .click();
+    // What is missing stays light: one action goes to the next empty required field, and the full list is folded under
+    // «Ver cuáles», where every name is a link that opens its card and puts the focus on the input (T1; S2.4).
+    await firstSteps.getByText(EDITOR_COPY.missingFields.showAll).click();
+    await firstSteps.getByRole("link", { name: "Fecha", exact: true }).click();
     await expect(page.getByLabel("Fecha")).toBeFocused();
     await expect(page).toHaveURL(/[?&]seccion=contenido/);
 

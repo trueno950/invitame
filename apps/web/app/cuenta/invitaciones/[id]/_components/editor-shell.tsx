@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { contentCards } from "../../../../../lib/customer/content-cards.ts";
 import {
   EDITOR_COPY,
@@ -108,7 +116,12 @@ const saveNowButton = `inline-flex min-h-9 shrink-0 items-center rounded-full px
 /** The phone bar's next step: the same tokens as the form's main action, at half the width of a phone. */
 const phoneNext = `inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary bg-linear-to-b from-primary from-55% to-primary-deep px-3 text-sm font-medium tracking-[0.02em] text-on-primary shadow-button ring-1 ring-primary-deep transition-[background-color] duration-150 ease-out-soft hover:from-primary-deep active:scale-[0.97] ${focusRing}`;
 
-/** One required field the draft still leaves empty, as a link to its own input (T1; S2.4). */
+/**
+ * What the draft still owes before it can be published (T1; S2.4), kept light: one count, one action that goes to the
+ * next empty required field, and the full list folded away under «Ver cuáles» for whoever wants it. Every name is a real
+ * link, so it also works from a copied address or with the script off; a plain click opens the field in place, because
+ * the tab it opens is client state and nothing typed has to be sent for it.
+ */
 function MissingFieldLinks({
   detailPath,
   fields,
@@ -120,41 +133,52 @@ function MissingFieldLinks({
   readonly names: readonly string[];
   readonly onOpen: (name: string) => void;
 }) {
+  const [first] = names;
+
+  if (first === undefined) {
+    return null;
+  }
+
+  const openInPlace = (name: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    onOpen(name);
+  };
+
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-sm font-medium text-ink">
-        {EDITOR_COPY.missingFields.heading(names.length)}
-      </p>
-      <ul className="flex flex-wrap gap-x-3 gap-y-1.5">
-        {names.map((name) => (
-          <li key={name}>
-            {/*
-              A real link, so it also works from a copy of the address or with the script off; a plain click is handled
-              here instead, because the tab it opens is client state and nothing typed has to be sent for it.
-            */}
-            <Link
-              className={textButton}
-              href={missingFieldHref(detailPath, name)}
-              onClick={(event) => {
-                if (
-                  event.button !== 0 ||
-                  event.metaKey ||
-                  event.ctrlKey ||
-                  event.shiftKey ||
-                  event.altKey
-                ) {
-                  return;
-                }
-                event.preventDefault();
-                onOpen(name);
-              }}
-            >
-              {fields.find((field) => field.name === name)?.label ?? name}
-            </Link>
-          </li>
-        ))}
-      </ul>
-      <p className="text-xs leading-5 text-muted">{EDITOR_COPY.missingFields.hint}</p>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <p className="text-sm font-medium text-ink">
+          {EDITOR_COPY.missingFields.heading(names.length)}
+        </p>
+        <Link
+          className={quietButton}
+          href={missingFieldHref(detailPath, first)}
+          onClick={openInPlace(first)}
+        >
+          {EDITOR_COPY.missingFields.next}
+        </Link>
+      </div>
+      <details className="group text-sm">
+        <summary className={`w-fit cursor-pointer text-muted ${focusRing}`}>
+          {EDITOR_COPY.missingFields.showAll}
+        </summary>
+        <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1.5">
+          {names.map((name) => (
+            <li key={name}>
+              <Link
+                className={textButton}
+                href={missingFieldHref(detailPath, name)}
+                onClick={openInPlace(name)}
+              >
+                {fields.find((field) => field.name === name)?.label ?? name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }

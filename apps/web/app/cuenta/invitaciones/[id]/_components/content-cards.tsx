@@ -148,6 +148,31 @@ function CardRow({
   );
 }
 
+/**
+ * Brings a field into view inside its own scroll area. From `lg` up the form column scrolls on its own, so scrolling the
+ * whole page would push the header and the tabs out of view; only that column moves then. On a phone the page itself
+ * scrolls, and the field lands in the middle of the screen.
+ */
+function revealInScrollArea(element: HTMLElement): void {
+  let area = element.parentElement;
+
+  while (area !== null) {
+    const overflow = getComputedStyle(area).overflowY;
+
+    if ((overflow === "auto" || overflow === "scroll") && area.scrollHeight > area.clientHeight) {
+      const offset =
+        element.getBoundingClientRect().top -
+        area.getBoundingClientRect().top -
+        area.clientHeight / 3;
+
+      area.scrollBy({ top: offset, behavior: "smooth" });
+      return;
+    }
+    area = area.parentElement;
+  }
+  element.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
 export function ContentCards({
   cards,
   values,
@@ -213,7 +238,7 @@ export function ContentCards({
       return;
     }
     setPendingField(undefined);
-    element.scrollIntoView({ block: "center" });
+    revealInScrollArea(element);
     element.focus({ preventScroll: true });
   }, [pendingField, idPrefix]);
 

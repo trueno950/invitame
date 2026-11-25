@@ -843,7 +843,8 @@ export const EDITOR_COPY = {
   missingFields: {
     heading: (count: number) =>
       count === 1 ? "Falta 1 dato para publicar" : `Faltan ${count} datos para publicar`,
-    hint: "Toca uno para ir directo a ese campo.",
+    next: "Completar lo que falta",
+    showAll: "Ver cuáles",
   },
 } as const;
 
