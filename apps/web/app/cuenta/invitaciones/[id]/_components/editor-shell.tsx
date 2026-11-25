@@ -206,7 +206,7 @@ function FirstStepsCard({
   return (
     <section
       aria-labelledby="editor-first-steps-heading"
-      className="rounded-panel bg-surface/90 p-3.5 ring-[1.5px] ring-rose-100 sm:p-4"
+      className="rounded-panel bg-surface/90 p-4 ring-[1.5px] ring-rose-100 sm:p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h2 className={miniLabel} id="editor-first-steps-heading">
@@ -220,7 +220,7 @@ function FirstStepsCard({
         aria-valuemin={0}
         aria-valuenow={progress.done}
         aria-valuetext={progress.label}
-        className="mt-2 h-1.5 overflow-hidden rounded-full bg-rose-50 ring-1 ring-rose-100"
+        className="mt-3 h-2 overflow-hidden rounded-full bg-rose-50 ring-1 ring-rose-100"
         role="progressbar"
       >
         <div
@@ -230,17 +230,17 @@ function FirstStepsCard({
         />
       </div>
 
-      <ol className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+      <ol className="mt-4 grid gap-2 sm:grid-cols-3 sm:gap-3">
         {progress.steps.map((step, index) => (
           <li key={step.key}>
             <Link
               aria-current={step.state === "current" ? "step" : undefined}
-              className={`flex items-center gap-1.5 rounded-sm text-sm transition-colors hover:underline hover:decoration-rose hover:decoration-2 hover:underline-offset-4 ${
+              className={`flex min-h-12 items-center gap-2.5 rounded-xl px-3 py-2 text-sm ring-1 transition-colors ${
                 step.state === "current"
-                  ? "font-semibold text-primary"
+                  ? "bg-rose-50 font-semibold text-primary ring-primary/40"
                   : step.state === "done"
-                    ? "text-ink"
-                    : "text-muted"
+                    ? "bg-surface text-ink ring-rose-100 hover:bg-rose-50"
+                    : "bg-surface text-muted ring-rose-100 hover:bg-rose-50"
               } ${focusRing}`}
               href={editorSectionTarget(detailPath, step.section)}
               onClick={(event) => {
@@ -259,7 +259,7 @@ function FirstStepsCard({
             >
               <span
                 aria-hidden="true"
-                className={`grid size-5 shrink-0 place-items-center rounded-full text-[0.6875rem] font-semibold ${
+                className={`grid size-6 shrink-0 place-items-center rounded-full text-xs font-semibold ${
                   step.state === "done"
                     ? "bg-primary text-on-primary"
                     : step.state === "current"
@@ -269,15 +269,17 @@ function FirstStepsCard({
               >
                 {step.state === "done" ? "✓" : index + 1}
               </span>
-              {step.title}{" "}
-              <span className="text-xs font-normal text-muted">({stepStateLabel(step.state)})</span>
+              <span className="flex flex-col leading-tight">
+                {step.title}
+                <span className="text-xs font-normal text-muted">{stepStateLabel(step.state)}</span>
+              </span>
             </Link>
           </li>
         ))}
       </ol>
 
       {missing.length === 0 ? null : (
-        <div className="mt-3 border-t border-rose-100 pt-3">
+        <div className="mt-4 border-t border-rose-100 pt-4">
           <MissingFieldLinks
             detailPath={detailPath}
             fields={fields}
