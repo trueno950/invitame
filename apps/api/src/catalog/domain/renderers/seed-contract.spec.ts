@@ -14,6 +14,13 @@ import {
   XV_ARCH_TEMPLATE_SEEDS,
   XV_ORNAMENTAL_TEMPLATE_SEEDS,
 } from "../../../../prisma/catalog-seed";
+import {
+  contentSectionFamilyOf,
+  extendSchemaWithOmittableSections,
+  OMITTABLE_SECTIONS_BY_FAMILY,
+  omittedSectionsProperty,
+} from "../omittable-section-groups";
+import { OMITTED_SECTIONS_PROPERTY, parseOmittableSections } from "../omittable-sections";
 import { BABY_SHOWER_THEMES } from "./baby-shower-themes";
 import { BAPTISM_THEMES } from "./baptism-themes";
 import { BIRTHDAY_THEMES } from "./birthday-themes";
@@ -226,6 +233,70 @@ it("validates every seeded template configuration against its renderer", () => {
         configuration: seed.configuration,
       }),
       { ok: true },
+      seed.key,
+    );
+  }
+});
+
+it("seeds every version with the omittable sections of its own line (S8.1, S8.4)", () => {
+  for (const seed of SEEDED_TEMPLATE_SEEDS) {
+    const family = contentSectionFamilyOf(seed.componentKey);
+
+    assert.notEqual(family, null, seed.key);
+    if (family === null) {
+      continue;
+    }
+    assert.deepEqual(
+      parseOmittableSections(seed.schema),
+      { ok: true, value: OMITTABLE_SECTIONS_BY_FAMILY[family] },
+      seed.key,
+    );
+  }
+});
+
+it("declares the omittedSections content property as an optional unique list of the group keys (S8.2)", () => {
+  for (const seed of SEEDED_TEMPLATE_SEEDS) {
+    const family = contentSectionFamilyOf(seed.componentKey);
+    assert.notEqual(family, null, seed.key);
+    if (family === null) {
+      continue;
+    }
+    const schema = seed.schema as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+
+    assert.deepEqual(
+      schema.properties[OMITTED_SECTIONS_PROPERTY],
+      omittedSectionsProperty(family),
+      seed.key,
+    );
+    assert.equal(
+      schema.required.includes(OMITTED_SECTIONS_PROPERTY),
+      false,
+      `${seed.key} keeps omittedSections optional`,
+    );
+  }
+});
+
+it("seeds version 1 with exactly the schema the upgrade script derives (S8.4, S8.5)", () => {
+  for (const seed of SEEDED_TEMPLATE_SEEDS) {
+    const family = contentSectionFamilyOf(seed.componentKey);
+    assert.notEqual(family, null, seed.key);
+    if (family === null) {
+      continue;
+    }
+    const seeded = seed.schema as {
+      properties: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+    const { "x-omittable": _groups, "x-require-one": _sets, ...withoutExtension } = seeded;
+    const properties = { ...seeded.properties };
+    delete properties[OMITTED_SECTIONS_PROPERTY];
+
+    assert.deepEqual(
+      extendSchemaWithOmittableSections({ ...withoutExtension, properties }, family),
+      { ok: true, value: seeded },
       seed.key,
     );
   }

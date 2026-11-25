@@ -1,6 +1,10 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { PackageStatus, TemplateStatus, TemplateVersionStatus } from "@prisma/client";
 import {
+  omittableSectionsExtension,
+  omittedSectionsProperty,
+} from "../src/catalog/domain/omittable-section-groups";
+import {
   BABY_SHOWER_THEMES,
   type BabyShowerTheme,
 } from "../src/catalog/domain/renderers/baby-shower-themes";
@@ -149,7 +153,7 @@ const PACKAGE_SEEDS = [
  * The content schema every birthday layout shares: the eight invitation fields with the same types, limits,
  * and required list, so the creator form is the same for all of them (S8).
  */
-export const BIRTHDAY_CONTENT_SCHEMA = {
+const BIRTHDAY_BASE_CONTENT_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
@@ -204,6 +208,21 @@ export const BIRTHDAY_CONTENT_SCHEMA = {
 } satisfies Prisma.InputJsonObject;
 
 /**
+ * The version schema the seed publishes for every birthday template: the base schema above
+ * plus the birthday omittable sections, the sets that keep one group shown, and the
+ * `omittedSections` property that stores the omitted keys (S8.1-S8.4). The seed writes it as
+ * version 1 of a template it creates.
+ */
+export const BIRTHDAY_CONTENT_SCHEMA = {
+  ...BIRTHDAY_BASE_CONTENT_SCHEMA,
+  ...omittableSectionsExtension("birthday"),
+  properties: {
+    ...BIRTHDAY_BASE_CONTENT_SCHEMA.properties,
+    omittedSections: omittedSectionsProperty("birthday"),
+  },
+} satisfies Prisma.InputJsonObject;
+
+/**
  * The content schema of the `baby-shower-classic-01` layout (S13): a baby shower announces no age, so the
  * hosts, the date and time, the place, the message, and who confirms attendance are required, while the
  * baby's name, the gender reveal, the gift registry, and the main photo are optional. Every required string
@@ -211,7 +230,7 @@ export const BIRTHDAY_CONTENT_SCHEMA = {
  * and renders nothing, except `mainPhoto`, which declares `format: "uri"` and must be omitted instead of
  * sent empty.
  */
-export const BABY_SHOWER_CONTENT_SCHEMA = {
+const BABY_SHOWER_BASE_CONTENT_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
@@ -282,12 +301,27 @@ export const BABY_SHOWER_CONTENT_SCHEMA = {
 } satisfies Prisma.InputJsonObject;
 
 /**
+ * The version schema the seed publishes for every baby shower template: the base schema above
+ * plus the baby shower omittable sections, the sets that keep one group shown, and the
+ * `omittedSections` property that stores the omitted keys (S8.1-S8.4). The seed writes it as
+ * version 1 of a template it creates.
+ */
+export const BABY_SHOWER_CONTENT_SCHEMA = {
+  ...BABY_SHOWER_BASE_CONTENT_SCHEMA,
+  ...omittableSectionsExtension("babyShower"),
+  properties: {
+    ...BABY_SHOWER_BASE_CONTENT_SCHEMA.properties,
+    omittedSections: omittedSectionsProperty("babyShower"),
+  },
+} satisfies Prisma.InputJsonObject;
+
+/**
  * The content schema of the `baptism-classic-01` layout (S13): a baptism announces a person instead of an
  * age and usually happens in two places, so the ceremony and the reception are separate required blocks of
  * place, address, and time, together with the parents, the godparents, the message, and who confirms
  * attendance. The main photo and the gift registry are optional, bounded the same way as the baby shower ones.
  */
-export const BAPTISM_CONTENT_SCHEMA = {
+const BAPTISM_BASE_CONTENT_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
@@ -389,6 +423,21 @@ export const BAPTISM_CONTENT_SCHEMA = {
 } satisfies Prisma.InputJsonObject;
 
 /**
+ * The version schema the seed publishes for every baptism template: the base schema above
+ * plus the baptism omittable sections, the sets that keep one group shown, and the
+ * `omittedSections` property that stores the omitted keys (S8.1-S8.4). The seed writes it as
+ * version 1 of a template it creates.
+ */
+export const BAPTISM_CONTENT_SCHEMA = {
+  ...BAPTISM_BASE_CONTENT_SCHEMA,
+  ...omittableSectionsExtension("baptism"),
+  properties: {
+    ...BAPTISM_BASE_CONTENT_SCHEMA.properties,
+    omittedSections: omittedSectionsProperty("baptism"),
+  },
+} satisfies Prisma.InputJsonObject;
+
+/**
  * The content schema of the `xv-arch-01` layout (S4), the elegant «Arco y foto» form for XV años, from
  * `design/elegant-line/05-datos-por-ocasion.html`. A fifteenth birthday announces the celebrant and never an
  * age, because the age is always fifteen, and it has the same two-place shape as the themed baptism: the
@@ -399,7 +448,7 @@ export const BAPTISM_CONTENT_SCHEMA = {
  * value is valid and renders nothing, except `mainPhoto`, which declares `format: "uri"` and must be omitted
  * instead of sent empty.
  */
-export const XV_ARCH_CONTENT_SCHEMA = {
+const XV_ARCH_BASE_CONTENT_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
@@ -516,6 +565,21 @@ export const XV_ARCH_CONTENT_SCHEMA = {
 } satisfies Prisma.InputJsonObject;
 
 /**
+ * The version schema the seed publishes for every XV años template: the base schema above
+ * plus the XV años omittable sections, the sets that keep one group shown, and the
+ * `omittedSections` property that stores the omitted keys (S8.1-S8.4). The seed writes it as
+ * version 1 of a template it creates.
+ */
+export const XV_ARCH_CONTENT_SCHEMA = {
+  ...XV_ARCH_BASE_CONTENT_SCHEMA,
+  ...omittableSectionsExtension("xv"),
+  properties: {
+    ...XV_ARCH_BASE_CONTENT_SCHEMA.properties,
+    omittedSections: omittedSectionsProperty("xv"),
+  },
+} satisfies Prisma.InputJsonObject;
+
+/**
  * The content schema of the `wedding-arch-01` layout (S4), the elegant «Arco y foto» form for weddings, from
  * `design/elegant-line/05-datos-por-ocasion.html`. A wedding announces the couple in two names and has the
  * same two-place shape as XV años: the ceremony and the reception are separate required blocks of place,
@@ -523,7 +587,7 @@ export const XV_ARCH_CONTENT_SCHEMA = {
  * the wedding sponsors, the gift registry, the main photo, and the hashtag are optional, with the same bounds
  * and the same one-name-per-line rule for the lists as the XV años schema.
  */
-export const WEDDING_ARCH_CONTENT_SCHEMA = {
+const WEDDING_ARCH_BASE_CONTENT_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
@@ -644,6 +708,21 @@ export const WEDDING_ARCH_CONTENT_SCHEMA = {
       title: "Hashtag",
       maxLength: 60,
     },
+  },
+} satisfies Prisma.InputJsonObject;
+
+/**
+ * The version schema the seed publishes for every wedding template: the base schema above
+ * plus the wedding omittable sections, the sets that keep one group shown, and the
+ * `omittedSections` property that stores the omitted keys (S8.1-S8.4). The seed writes it as
+ * version 1 of a template it creates.
+ */
+export const WEDDING_ARCH_CONTENT_SCHEMA = {
+  ...WEDDING_ARCH_BASE_CONTENT_SCHEMA,
+  ...omittableSectionsExtension("wedding"),
+  properties: {
+    ...WEDDING_ARCH_BASE_CONTENT_SCHEMA.properties,
+    omittedSections: omittedSectionsProperty("wedding"),
   },
 } satisfies Prisma.InputJsonObject;
 

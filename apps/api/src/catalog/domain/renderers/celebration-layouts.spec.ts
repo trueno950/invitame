@@ -230,9 +230,16 @@ for (const family of [BABY_SHOWER, BAPTISM]) {
       const schema = editable(family.schema);
       delete schema.properties[family.requiredField];
 
+      // The themed baptism declares its `ceremony` section over `ceremonyPlace`, so a snapshot that drops the
+      // property also names a group field it no longer declares (S8.1).
       assert.deepEqual(issuesOf(validate(family, { schema })), [
         `schema.properties.${family.requiredField} is required by the renderer and is missing`,
         `schema.required lists ${JSON.stringify(family.requiredField)}, which is not declared in schema.properties`,
+        ...(family.requiredField === "ceremonyPlace"
+          ? [
+              'schema["x-omittable"] group "ceremony" names "ceremonyPlace", which the schema does not declare in properties',
+            ]
+          : []),
       ]);
     });
 

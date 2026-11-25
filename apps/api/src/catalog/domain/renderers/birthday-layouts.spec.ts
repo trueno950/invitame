@@ -139,9 +139,12 @@ for (const componentKey of LAYOUT_KEYS) {
     });
 
     it("refuses a schema that is missing or mistypes one of the shared fields", () => {
+      // The seeded schema declares `message` as an omittable section, so a snapshot that drops the property
+      // also names a group field it no longer declares (S8.1).
       assert.deepEqual(issuesOf(validate({ componentKey, schema: schemaMissing("message") })), [
         "schema.properties.message is required by the renderer and is missing",
         'schema.required lists "message", which is not declared in schema.properties',
+        'schema["x-omittable"] group "message" names "message", which the schema does not declare in properties',
       ]);
 
       const mistyped = structuredClone(BIRTHDAY_CONTENT_SCHEMA) as SchemaFixture;

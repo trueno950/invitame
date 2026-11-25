@@ -661,3 +661,113 @@ describe("baby shower and baptism content with optional fields (S13)", () => {
     ]);
   });
 });
+
+describe("omitted sections in the content (S8.1, S8.2)", () => {
+  /** A baptism draft with the fields of the shown sections only. */
+  const BAPTISM_WITH_OMITTED = {
+    celebrantName: "Mateo",
+    date: "2027-05-08",
+    parents: "Ana y Luis",
+    ceremonyPlace: "Parroquia San José",
+    ceremonyAddress: "Calle 1",
+    ceremonyTime: "11:00",
+    message: "Te esperamos",
+    rsvpContact: "Ana",
+  };
+
+  it("accepts a draft that omits a declared group, with the group fields still stored", () => {
+    const content = { ...BAPTISM_WITH_OMITTED, omittedSections: ["reception"] };
+
+    assert.deepEqual(validateDraftContent(BAPTISM_CONTENT_SCHEMA, content), {
+      ok: true,
+      value: content,
+    });
+  });
+
+  it("accepts an empty list and a list with every declared key", () => {
+    for (const omitted of [[], ["parents", "godparents", "ceremony", "reception"]]) {
+      const content = { ...BAPTISM_WITH_OMITTED, omittedSections: omitted };
+
+      assert.deepEqual(
+        validateDraftContent(BAPTISM_CONTENT_SCHEMA, content),
+        { ok: true, value: content },
+        JSON.stringify(omitted),
+      );
+    }
+  });
+
+  it("refuses a key the pinned schema does not declare as omittable", () => {
+    assert.deepEqual(
+      issuesOf(BAPTISM_CONTENT_SCHEMA, {
+        ...BAPTISM_WITH_OMITTED,
+        omittedSections: ["reception", "celebrantName"],
+      }),
+      [
+        "content.omittedSections[1] must be one of: parents, godparents, ceremony, reception, message, rsvpContact",
+      ],
+    );
+  });
+
+  it("refuses a repeated key", () => {
+    assert.deepEqual(
+      issuesOf(BAPTISM_CONTENT_SCHEMA, {
+        ...BAPTISM_WITH_OMITTED,
+        omittedSections: ["reception", "reception"],
+      }),
+      ["content.omittedSections[1] must not repeat an earlier value"],
+    );
+  });
+
+  it("refuses a value that is not a list of keys", () => {
+    for (const omitted of ["reception", 1, true, { reception: true }, [1], [null]]) {
+      const result = validateDraftContent(BAPTISM_CONTENT_SCHEMA, {
+        ...BAPTISM_WITH_OMITTED,
+        omittedSections: omitted,
+      });
+
+      assert.equal(result.ok, false, JSON.stringify(omitted));
+      assert.deepEqual(result.ok ? [] : result.issues, [
+        Array.isArray(omitted)
+          ? "content.omittedSections[0] must be one of: parents, godparents, ceremony, reception, message, rsvpContact"
+          : "content.omittedSections must be a list of: parents, godparents, ceremony, reception, message, rsvpContact",
+      ]);
+    }
+  });
+
+  it("stops counting the required fields of an omitted group as missing", () => {
+    const content = {
+      celebrantName: "Mateo",
+      date: "2027-05-08",
+      ceremonyPlace: "Parroquia San José",
+      ceremonyAddress: "Calle 1",
+      ceremonyTime: "11:00",
+      omittedSections: ["reception", "parents", "godparents", "message", "rsvpContact"],
+    };
+
+    assert.deepEqual(missingRequiredFields(BAPTISM_CONTENT_SCHEMA, content), []);
+  });
+
+  it("still reports the required fields of a group that stays shown", () => {
+    const content = {
+      celebrantName: "Mateo",
+      date: "2027-05-08",
+      omittedSections: ["reception"],
+    };
+
+    assert.deepEqual(missingRequiredFields(BAPTISM_CONTENT_SCHEMA, content), [
+      "parents",
+      "godparents",
+      "ceremonyPlace",
+      "ceremonyAddress",
+      "ceremonyTime",
+      "message",
+      "rsvpContact",
+    ]);
+  });
+
+  it("ignores a list on a version that declares no omittable section", () => {
+    const content = { title: "Cumple", omittedSections: ["title"] };
+
+    assert.deepEqual(missingRequiredFields(draftSchema(), content), ["age"]);
+  });
+});

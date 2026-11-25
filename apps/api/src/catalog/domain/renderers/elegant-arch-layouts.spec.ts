@@ -152,6 +152,12 @@ const BAPTISM_ARCH: Family = {
 
 const FAMILIES = [XV_ARCH, WEDDING_ARCH, BAPTISM_ARCH] as const;
 
+/** The omittable section each fixture field belongs to, for the snapshot that drops its property (S8.4). */
+const GROUP_OF_FIELD: Readonly<Record<string, string | undefined>> = {
+  honorSponsors: "honorSponsors",
+  ceremonyPlace: "ceremony",
+};
+
 /** The mutable `properties` and `required` of a fixture, for tests that edit them. */
 type MutableSchema = {
   properties: Record<string, unknown>;
@@ -322,10 +328,11 @@ for (const family of FAMILIES) {
 
       assert.deepEqual(schema.required, [...family.required]);
 
+      // The born-extended schema of every occasion also declares the `omittedSections` content property (S8.2).
       const expectedProperties =
         family.componentKey === BAPTISM_ARCH.componentKey
           ? Object.keys(BAPTISM_CONTENT_SCHEMA.properties)
-          : Object.keys(family.limits);
+          : [...Object.keys(family.limits), "omittedSections"];
 
       assert.deepEqual(
         Object.keys(schema.properties).sort(),
@@ -369,6 +376,12 @@ for (const family of FAMILIES) {
       assert.deepEqual(issuesOf(validate(family, { schema: requiredMissing })), [
         `schema.properties.${family.requiredField} is required by the renderer and is missing`,
         `schema.required lists ${JSON.stringify(family.requiredField)}, which is not declared in schema.properties`,
+        // A field an omittable section covers is also named by that section (S8.1, S8.4).
+        ...(GROUP_OF_FIELD[family.requiredField] !== undefined
+          ? [
+              `schema["x-omittable"] group ${JSON.stringify(GROUP_OF_FIELD[family.requiredField])} names ${JSON.stringify(family.requiredField)}, which the schema does not declare in properties`,
+            ]
+          : []),
       ]);
 
       const optionalMissing = editable(family.schema);

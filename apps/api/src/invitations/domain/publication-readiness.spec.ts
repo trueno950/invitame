@@ -188,3 +188,145 @@ describe("publicationIssues ordering", () => {
     assert.deepEqual(publicationIssues(input), publicationIssues(input));
   });
 });
+
+describe("publicationIssues omittable sections (S8.1, S8.3)", () => {
+  /** A two-place schema with two omittable sections and one require-one set. */
+  const SECTION_SCHEMA = {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    additionalProperties: false,
+    required: ["celebrantName", "date", "ceremonyPlace", "receptionPlace", "message"],
+    properties: {
+      celebrantName: { type: "string", maxLength: 80 },
+      date: { type: "string", format: "date" },
+      ceremonyPlace: { type: "string", maxLength: 120 },
+      receptionPlace: { type: "string", maxLength: 120 },
+      message: { type: "string", maxLength: 500 },
+      omittedSections: {
+        type: "array",
+        items: { type: "string", enum: ["ceremony", "reception", "message"] },
+        uniqueItems: true,
+      },
+    },
+    "x-omittable": [
+      { key: "ceremony", fields: ["ceremonyPlace"] },
+      { key: "reception", fields: ["receptionPlace"] },
+      { key: "message", fields: ["message"] },
+    ],
+    "x-require-one": [["ceremony", "reception"]],
+  };
+
+  /** The content of an invitation that shows the ceremony and hides the reception and the message. */
+  const OMITTING_CONTENT = {
+    celebrantName: "Mateo",
+    date: "2027-05-08",
+    ceremonyPlace: "Parroquia San José",
+    omittedSections: ["reception", "message"],
+  };
+
+  it("does not report the required fields of an omitted group", () => {
+    assert.deepEqual(
+      publicationIssues(readiness({ schema: SECTION_SCHEMA, content: OMITTING_CONTENT })),
+      [],
+    );
+  });
+
+  it("still reports the required fields of a group that stays shown", () => {
+    assert.deepEqual(
+      publicationIssues(
+        readiness({
+          schema: SECTION_SCHEMA,
+          content: {
+            celebrantName: "Mateo",
+            date: "2027-05-08",
+            omittedSections: ["reception", "message"],
+          },
+        }),
+      ),
+      ["content.ceremonyPlace is required to publish"],
+    );
+  });
+
+  it("refuses a publication that hides every group of one require-one set", () => {
+    assert.deepEqual(
+      publicationIssues(
+        readiness({
+          schema: SECTION_SCHEMA,
+          content: {
+            celebrantName: "Mateo",
+            date: "2027-05-08",
+            omittedSections: ["ceremony", "reception", "message"],
+          },
+        }),
+      ),
+      ["content.ceremony,reception needs one shown"],
+    );
+  });
+
+  it("names the require-one issue after the missing fields, in a fixed order", () => {
+    assert.deepEqual(
+      publicationIssues(
+        readiness({
+          schema: SECTION_SCHEMA,
+          content: { omittedSections: ["ceremony", "reception"] },
+        }),
+      ),
+      [
+        "content.celebrantName is required to publish",
+        "content.date is required to publish",
+        "content.message is required to publish",
+        "content.ceremony,reception needs one shown",
+      ],
+    );
+  });
+
+  it("does not refuse a list that keeps one group of every require-one set", () => {
+    for (const omittedSections of [[], ["ceremony"], ["reception"], ["message"]]) {
+      assert.deepEqual(
+        publicationIssues(
+          readiness({
+            schema: SECTION_SCHEMA,
+            content: {
+              celebrantName: "Mateo",
+              date: "2027-05-08",
+              ceremonyPlace: "Parroquia San José",
+              receptionPlace: "Salón Aurora",
+              message: "Te esperamos",
+              omittedSections,
+            },
+          }),
+        ),
+        [],
+        JSON.stringify(omittedSections),
+      );
+    }
+  });
+
+  it("keeps every issue of a version that declares no omittable section", () => {
+    assert.deepEqual(publicationIssues(readiness({ content: {} })), [
+      "content.celebrantName is required to publish",
+      "content.date is required to publish",
+      "content.address is required to publish",
+    ]);
+  });
+
+  it("never echoes an omitted key in the require-one issue", () => {
+    const issues = publicationIssues(
+      readiness({
+        schema: SECTION_SCHEMA,
+        content: {
+          celebrantName: "Mateo",
+          date: "2027-05-08",
+          omittedSections: ["ceremony", "reception", "message"],
+        },
+      }),
+    );
+
+    assert.deepEqual(issues, ["content.ceremony,reception needs one shown"]);
+    assert.equal(
+      issues.some((issue) => issue.includes("Mateo") || issue.includes("SECRET")),
+      false,
+      "no issue echoes a stored value",
+    );
+  });
+});

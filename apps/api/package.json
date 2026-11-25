@@ -7,6 +7,7 @@
     "analytics:retention": "node -r @swc-node/register scripts/analytics-retention.ts",
     "admin:reset-second-factor": "node -r @swc-node/register src/users/reset-second-factor.command.ts",
     "build": "tsc -p tsconfig.build.json",
+    "catalog:omittable-sections": "node -r @swc-node/register scripts/omittable-sections.ts",
     "dev": "NODE_ENV=development node --watch -r @swc-node/register src/main.ts",
     "lint": "biome lint .",
     "media:cleanup": "node -r @swc-node/register scripts/media-cleanup.ts",

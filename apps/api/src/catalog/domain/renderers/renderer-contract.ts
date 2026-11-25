@@ -1,3 +1,5 @@
+import { OMITTED_SECTIONS_PROPERTY, parseOmittableSections } from "../omittable-sections";
+
 /** A renderer's rules for one `TemplateVersion`: each method returns issue messages, empty when valid. */
 export interface RendererContract {
   readonly componentKey: string;
@@ -42,6 +44,11 @@ export interface RendererField {
  * undeclared data and declares every renderer field in `properties` with its type, listed in `required`
  * unless the field declares `presence: "optional"`, in which case it must stay out of `required`.
  * Extra properties are allowed only when declared with a primitive type.
+ *
+ * A version that declares omittable sections (S8.1, S8.2) is validated too: the extension is read by
+ * `parseOmittableSections`, every group field must be a field this renderer reads, and the `omittedSections`
+ * content property — a list, not a primitive — is accepted only because that extension declares it. A version
+ * without the extension keeps exactly the contract above, so an array property is still refused there.
  */
 export function validateRendererSchema(
   schema: unknown,
@@ -52,6 +59,10 @@ export function validateRendererSchema(
   }
 
   const issues: string[] = [];
+  // The extension is read before the property loop only to know whether `omittedSections` is legitimately a
+  // list; its own issues are reported last, once the shape of the snapshot is already stated.
+  const declaresOmittableSections = Object.hasOwn(schema, "x-omittable");
+  const sections = parseOmittableSections(schema);
 
   if (readOwn(schema, "$schema") !== JSON_SCHEMA_DRAFT) {
     issues.push(`schema.$schema must be ${JSON.stringify(JSON_SCHEMA_DRAFT)}`);
@@ -102,6 +113,10 @@ export function validateRendererSchema(
       if (rendererFieldNames.has(name)) {
         continue;
       }
+      // The omitted keys are a bounded list the extension itself declares (S8.2), validated below.
+      if (declaresOmittableSections && name === OMITTED_SECTIONS_PROPERTY) {
+        continue;
+      }
       const definition = properties[name];
       const type = isJsonObject(definition) ? readOwn(definition, "type") : undefined;
 
@@ -130,6 +145,40 @@ export function validateRendererSchema(
             `schema.required lists ${JSON.stringify(name)}, which is not declared in schema.properties`,
           );
         }
+      }
+    }
+  }
+
+  issues.push(...omittableSectionsIssues(sections, fields));
+
+  return issues;
+}
+
+/**
+ * The issues of a version's omittable-section extension: what the contract of `./omittable-sections` refuses,
+ * plus the one rule only a renderer can state — a section covers fields this renderer reads, so a group never
+ * promises an editor a section the guest page could not draw.
+ */
+function omittableSectionsIssues(
+  sections: ReturnType<typeof parseOmittableSections>,
+  fields: readonly RendererField[],
+): string[] {
+  if (!sections.ok) {
+    return [...sections.issues];
+  }
+  if (sections.value === null) {
+    return [];
+  }
+
+  const rendererFieldNames = new Set(fields.map((field) => field.name));
+  const issues: string[] = [];
+
+  for (const group of sections.value.groups) {
+    for (const name of group.fields) {
+      if (!rendererFieldNames.has(name)) {
+        issues.push(
+          `schema["x-omittable"] group ${JSON.stringify(group.key)} names ${JSON.stringify(name)}, which the renderer does not read`,
+        );
       }
     }
   }
