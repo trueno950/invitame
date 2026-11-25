@@ -1,0 +1,10 @@
+{
+  "title": "Landing de lanzamiento",
+  "brief": "Convertir la landing «próximamente» en una landing real que lleve a crear una invitación, con galería de diseños, paquetes y precios, cómo funciona y preguntas frecuentes.",
+  "feature": "odd/tasks/launch-landing.md",
+  "artboards": [
+    { "file": "01-editorial-romantica.html", "title": "Editorial romántica", "tradeoff": "Rica en emoción y ornamento; página más larga y menos escaneable", "width": 1440, "height": 900 },
+    { "file": "02-galeria-protagonista.html", "title": "Galería protagonista", "tradeoff": "El catálogo manda desde el primer vistazo; menos storytelling", "width": 1440, "height": 900 },
+    { "file": "03-directa-funcional.html", "title": "Directa y funcional", "tradeoff": "Máxima claridad y conversión; el jalón emocional más débil", "width": 1440, "height": 900 }
+  ]
+}

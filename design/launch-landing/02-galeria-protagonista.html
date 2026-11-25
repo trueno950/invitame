@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing — Galería protagonista</title>
+<style>
+  :root {
+    --background:#fff7f5; --surface:#ffffff; --rose-50:#fdeef2; --rose-100:#f8d7e0;
+    --ink:#3b1424; --muted:#6b3a4c; --placeholder:#8a6070;
+    --primary:#8c1c3a; --primary-deep:#6e1530; --on-primary:#ffffff;
+    --field-border:#a06e7e; --rose:#e9a3b5; --gold:#c29a54; --leaf:#8faf8c;
+    --radius-field:1rem; --radius-panel:1.6rem; --radius-card:2rem;
+    --shadow-paper:0 1px 1px rgb(110 21 48/6%),0 10px 24px -8px rgb(110 21 48/18%),0 34px 60px -24px rgb(110 21 48/28%);
+    --shadow-button:inset 0 1px 0 rgb(255 255 255/22%),0 14px 30px -12px rgb(140 28 58/65%);
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;
+    --font-script:"Great Vibes","Snell Roundhand","Apple Chancery",cursive;
+    --font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--background);color:var(--ink);font-family:var(--font-sans);line-height:1.5}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 36px}
+  header.nav{display:flex;align-items:center;justify-content:space-between;padding:20px 0}
+  .logo{font-family:var(--font-display);font-size:25px;font-weight:600}
+  .logo span{color:var(--primary)}
+  nav a{color:var(--muted);text-decoration:none;margin-left:22px;font-size:15px}
+  .btn{display:inline-flex;align-items:center;gap:8px;font:500 16px var(--font-sans);border:0;cursor:pointer;padding:13px 26px;border-radius:999px;background:var(--primary);color:var(--on-primary);box-shadow:var(--shadow-button);text-decoration:none}
+  .btn:hover{background:var(--primary-deep)}
+  .btn.ghost{background:var(--surface);color:var(--primary);box-shadow:inset 0 0 0 1.5px var(--primary)}
+  /* hero = gallery */
+  .hero{padding:40px 0 8px}
+  .hero h1{font-family:var(--font-display);font-weight:600;font-size:52px;line-height:1.05;margin:0 0 6px}
+  .hero .lead{color:var(--muted);font-size:18px;max-width:60ch;margin:0 0 24px}
+  .filters{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+  .filter{font:500 14px var(--font-sans);padding:8px 18px;border-radius:999px;border:1.5px solid var(--field-border);background:var(--surface);color:var(--muted);cursor:pointer}
+  .filter.on{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .card{background:var(--surface);border-radius:var(--radius-card);box-shadow:var(--shadow-paper);overflow:hidden;position:relative}
+  .thumb{height:190px;display:grid;place-items:center}
+  .card .meta{padding:12px 16px}
+  .card .occ{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--primary)}
+  .card b{font-family:var(--font-display);font-size:20px;display:block}
+  .card span{color:var(--muted);font-size:13px}
+  .cta-strip{display:flex;justify-content:center;margin:30px 0 0}
+  /* pricing strip */
+  section{padding:52px 0}
+  h2{font-family:var(--font-display);font-weight:600;font-size:36px;margin:0 0 20px}
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .plan{background:var(--surface);border-radius:var(--radius-panel);box-shadow:var(--shadow-paper);padding:26px;display:flex;flex-direction:column}
+  .plan .price{font-family:var(--font-display);font-size:38px;font-weight:600}
+  .plan .price small{font-size:15px;color:var(--muted)}
+  .plan h3{font-family:var(--font-display);font-size:24px;margin:0}
+  .plan p{color:var(--muted);font-size:14px;margin:10px 0}
+  .plan .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto}
+  .tag{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--rose-50);color:var(--primary)}
+  /* how */
+  .how{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .how .s{background:var(--surface);border-radius:var(--radius-field);box-shadow:var(--shadow-paper);padding:20px}
+  .how b{font-family:var(--font-display);font-size:19px}
+  .how p{color:var(--muted);font-size:14px;margin:6px 0 0}
+  /* faq */
+  .faq{max-width:760px}
+  details{background:var(--surface);border-radius:var(--radius-field);box-shadow:var(--shadow-paper);margin-bottom:10px;padding:0 20px}
+  summary{cursor:pointer;padding:16px 0;font-weight:500;list-style:none}
+  summary::after{content:"＋";float:right;color:var(--primary)}
+  details[open] summary::after{content:"－"}
+  details p{color:var(--muted);margin:0 0 16px}
+  footer{text-align:center;padding:56px 0 40px;color:var(--muted);font-size:14px}
+  :focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+  @media (max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.plans,.how{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="nav wrap">
+  <div class="logo">Invit<span>a</span>Me</div>
+  <nav><a href="#precios">Precios</a><a href="#como">Cómo funciona</a><a href="#faq">Dudas</a><a href="/ingresar">Ingresar</a></nav>
+</header>
+
+<section class="hero wrap">
+  <h1>Elige tu diseño y publica hoy</h1>
+  <p class="lead">Mira el catálogo real, por ocasión y tema. El diseño que ves es el que comparten tus invitados.</p>
+  <div class="filters" aria-label="Filtrar por ocasión">
+    <button class="filter on" type="button">Todos</button>
+    <button class="filter" type="button">XV años</button>
+    <button class="filter" type="button">Bodas</button>
+    <button class="filter" type="button">Cumpleaños</button>
+    <button class="filter" type="button">Baby shower</button>
+    <button class="filter" type="button">Bautizo</button>
+  </div>
+  <div class="grid">
+    <div class="card"><div class="thumb" style="background:linear-gradient(150deg,#eef5fc,#cfe6f7)"><span style="font-family:var(--font-display);font-size:26px;color:#162544">Reino de hielo</span></div><div class="meta"><span class="occ">Cumpleaños</span><b>Mateo</b><span>8 temas</span></div></div>
+    <div class="card"><div class="thumb" style="background:linear-gradient(150deg,#fdf0e8,#f6d7c4)"><span style="font-family:var(--font-display);font-size:26px;color:#7a4020">Dinosaurios</span></div><div class="meta"><span class="occ">Cumpleaños</span><b>Cartel de fiesta</b><span>8 temas</span></div></div>
+    <div class="card"><div class="thumb" style="background:linear-gradient(150deg,#f7ede4,#e9d5c3)"><span style="font-family:var(--font-script);font-size:34px;color:#8c1c3a">Valeria</span></div><div class="meta"><span class="occ">XV años</span><b>Arco y foto</b><span>8 temas</span></div></div>
+    <div class="card"><div class="thumb" style="background:linear-gradient(150deg,#eef6e9,#d3e9c8)"><span style="font-family:var(--font-display);font-size:26px;color:#17301a">Ana & Luis</span></div><div class="meta"><span class="occ">Boda</span><b>Ornamental</b><span>8 temas</span></div></div>
+    <div class="card"><div class="thumb" style="background:linear-gradient(150deg,#fdeef2,#f8d7e0)"><span style="font-family:var(--font-display);font-size:26px;color:#6e1530">Bautizo</span></div><div class="meta"><span class="occ">Bautizo</span><b>Clásico</b><span>6 temas</span></div></div>
+    <div class="card"><div class="thumb" style="background:linear-gradient(150deg,#eaf6f4,#cdebe6)"><span style="font-family:var(--font-display);font-size:26px;color:#17514a">Baby shower</span></div><div class="meta"><span class="occ">Baby shower</span><b>Clásico</b><span>8 temas</span></div></div>
+    <div class="card"><div class="thumb" style="background:linear-gradient(150deg,#f3effb,#ded2f2)"><span style="font-family:var(--font-display);font-size:26px;color:#4b2f7a">Boda formal</span></div><div class="meta"><span class="occ">Boda</span><b>Arco</b><span>8 temas</span></div></div>
+    <div class="card"><div class="thumb" style="background:linear-gradient(150deg,#fbf3e6,#f3dfc0)"><span style="font-family:var(--font-display);font-size:26px;color:#6e4a1a">XV formal</span></div><div class="meta"><span class="occ">XV años</span><b>Ornamental</b><span>8 temas</span></div></div>
+  </div>
+  <div class="cta-strip"><a class="btn" href="/cuenta/invitaciones/nueva">Crear mi invitación →</a></div>
+</section>
+
+<section class="wrap" id="precios">
+  <h2>Paquetes</h2>
+  <div class="plans">
+    <div class="plan"><h3>Basic</h3><div class="price">$199 <small>MXN</small></div><p>Para empezar a planificar.</p><div class="tags"><span class="tag">Cuenta regresiva</span><span class="tag">Mapa</span><span class="tag">WhatsApp</span></div></div>
+    <div class="plan"><h3>Premium</h3><div class="price">$399 <small>MXN</small></div><p>La experiencia visual completa.</p><div class="tags"><span class="tag">Música</span><span class="tag">Galería</span><span class="tag">RSVP</span><span class="tag">Mapa</span></div></div>
+    <div class="plan"><h3>Deluxe</h3><div class="price">$599 <small>MXN</small></div><p>El catálogo más amplio.</p><div class="tags"><span class="tag">Mesa de regalos</span><span class="tag">Lista</span><span class="tag">Pase QR</span></div></div>
+  </div>
+</section>
+
+<section class="wrap" id="como">
+  <h2>Cómo funciona</h2>
+  <div class="how">
+    <div class="s"><b>1 · Elige</b><p>Un diseño por ocasión y tema.</p></div>
+    <div class="s"><b>2 · Llena</b><p>Los datos de tu evento.</p></div>
+    <div class="s"><b>3 · Paga</b><p>Con Mercado Pago, en MXN.</p></div>
+    <div class="s"><b>4 · Comparte</b><p>El enlace con tus invitados.</p></div>
+  </div>
+</section>
+
+<section class="wrap" id="faq">
+  <h2>Preguntas frecuentes</h2>
+  <div class="faq">
+    <details open><summary>¿Cuánto tiempo dura mi invitación?</summary><p>Según el paquete: Basic 30 días, Premium 90 y Deluxe 180 desde la publicación. Después sigue visible, con el RSVP cerrado.</p></details>
+    <details><summary>¿Cómo pago?</summary><p>Con tarjeta a través de Mercado Pago, en pesos mexicanos. No guardamos tu tarjeta.</p></details>
+    <details><summary>¿Puedo pedir reembolso?</summary><p>Una vez publicada no es reembolsable. Antes de publicar puedes editar o archivar sin costo.</p></details>
+  </div>
+</section>
+
+<footer>Hecha con InvitaMe · XV años, bodas, cumpleaños y más.</footer>
+</body>
+</html>

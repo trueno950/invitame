@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chosen": "01-editorial-romantica.html",
+  "handoffs": {
+    "01-editorial-romantica.html": {
+      "status": "sent",
+      "queued": true,
+      "sentAt": "2026-11-25T05:49:31.767Z",
+      "startedAt": null,
+      "implementedAt": null,
+      "feature": "odd/tasks/launch-landing.md"
+    }
+  }
+}
