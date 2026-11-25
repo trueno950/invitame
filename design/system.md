@@ -1,6 +1,6 @@
 # InvitaMe design system
 
-Synced on 2026-11-12 from the project sources below. Values are copied from those files; nothing here is invented.
+Synced on 2026-11-30 from the project sources below. Values are copied from those files; nothing here is invented.
 Artboards use only self-contained HTML, so the project fonts are named first and followed by system fallbacks.
 
 ## Scope
@@ -9,11 +9,12 @@ There are two separate visual layers:
 
 - **App theme** — landing, `/ingresar`, `/cuenta`, and the customer invitation workspace. Source:
   `apps/web/app/globals.css`, `docs/design/theme.md`. The administration pages use a separate zinc palette.
-- **Guest invitation designs** — each catalog renderer owns its palette, passed as five CSS variables
-  (`--inv-background`, `--inv-surface`, `--inv-soft`, `--inv-ink`, `--inv-accent`). Source:
-  `apps/web/lib/renderers/birthday-adventure-01.ts` (`PALETTE_COLORS`),
-  `apps/web/app/_components/renderers/birthday-adventure-01/birthday-adventure-renderer.ts`.
-  `docs/design/theme.md` does not cover guest invitation designs.
+- **Guest invitation designs** — every themed layout takes its look from one `InvitationTheme`: seven colors, one
+  licensed display font, and one original motif, reached as CSS variables. Source:
+  `apps/web/lib/renderers/theme-tokens.ts` (the `InvitationTheme` shape and `THEME_COLOR_ROLES`),
+  `apps/web/app/_components/renderers/themed/theme.ts` (`THEME_VARIABLES`, `ON_ACCENT`, `themeStyle`), and the
+  per-occasion theme sets: `apps/web/lib/renderers/birthday-themes.ts` (8), `baby-shower-themes.ts` (8),
+  `baptism-themes.ts` (6), `elegant-themes.ts` (8). `docs/design/theme.md` does not cover guest invitation designs.
 
 The guest page `/i/<slug>` wraps the renderer in the app's `paper-wash` and a «Hecha con InvitaMe» footer link
 (`apps/web/app/i/[slug]/page.tsx`).
@@ -41,15 +42,29 @@ Administration palette (`/admin` only): background `#fafafa`, surface `#ffffff`,
 input `#8a8a93`, ink `#18181b`, muted `#52525b`, placeholder `#6b6b73`, primary `#18181b`, primary-deep `#3f3f46`,
 on-primary `#fafafa`, danger `#b91c1c`/`#fef2f2`, success `#166534`/`#f0fdf4`, warning `#92400e`/`#fffbeb`.
 
-## Colors — `birthday-adventure-01` palettes (`apps/web/lib/renderers/birthday-adventure-01.ts`)
+## Colors — guest invitation themes (`theme-tokens.ts`, `themed/theme.ts`)
 
-| Palette | background | surface | soft | ink | accent |
-| --- | --- | --- | --- | --- | --- |
-| `sunset` | `#fff4e5` | `#ffffff` | `#ffe0bd` | `#3d1f0f` | `#a8380c` |
-| `ocean` | `#e8f6fa` | `#ffffff` | `#c4e8f1` | `#0b2f3d` | `#075c75` |
-| `forest` | `#eef6e9` | `#ffffff` | `#d3e9c8` | `#17301a` | `#2a622a` |
+Every themed layout reads seven colors plus one contrast partner from its theme, as CSS variables. The
+`THEME_COLOR_ROLES` order is: `background`, `surface`, `soft`, `ink`, `accent`, `decorationOne`, `decorationTwo`.
 
-Tests require `ink` and `accent` to reach 4.5:1 on `background`, `surface`, and `soft`.
+| CSS variable | Role | Usage |
+| --- | --- | --- |
+| `--inv-background` | `background` | Invitation background layer |
+| `--inv-surface` | `surface` | Cards and panels on the invitation |
+| `--inv-soft` | `soft` | Soft wash / secondary surface |
+| `--inv-ink` | `ink` | Body text |
+| `--inv-accent` | `accent` | The single accent color |
+| `--inv-decoration-one` | `decorationOne` | First decoration color |
+| `--inv-decoration-two` | `decorationTwo` | Second decoration color |
+| `--inv-on-accent` | *(constant)* | `#ffffff` — text on `accent`, checked at 4.5:1 |
+| `--inv-display` | *(font)* | The theme's licensed display font + fallback stack |
+
+Tests require `ink` and `accent` to reach 4.5:1 on `background`, `surface`, and `soft`; `on-accent` white keeps
+4.5:1 on `accent`. Decoration never carries text.
+
+Thirty themes exist across four sets: birthday 8, baby shower 8, baptism 6, elegant 8. Each theme carries a
+`displayName` (neutral Spanish), seven `colors`, a `fontVariable`/`fontFallback`, an original `motif`, a fluid
+`titleSize`, and optionally a `titleWeight` (a face loaded at one weight is never synthetically emboldened).
 
 ## Typography (`apps/web/app/globals.css`, `apps/web/app/layout.tsx`, `docs/design/theme.md`)
 
@@ -59,8 +74,7 @@ Tests require `ink` and `accent` to reach 4.5:1 on `background`, `surface`, and 
 | `font-script` | Great Vibes | 400 | Names and accents only, never body text |
 | `font-sans` | Jost | 400, 500 | Interface and body text |
 
-`birthday-adventure-01` uses only `font-sans` and asks for 600/700, which are not loaded. Its configuration carries
-`typography: "rounded"`, which the renderer validates but does not use.
+Guest invitation themes load their own licensed display font per theme and use the `font-sans` stack for body text.
 
 ## Radius and shadows (`apps/web/app/globals.css`)
 
@@ -74,4 +88,5 @@ Tests require `ink` and `accent` to reach 4.5:1 on `background`, `surface`, and 
 - Ornaments: fine-line wine/gold engravings in `apps/web/public/ornaments/`, decorative only (`alt=""`,
   `aria-hidden`), never under text (`docs/design/theme.md`).
 - Motion is decoration and ends at once with `prefers-reduced-motion: reduce`.
-- Guest renderers: server-rendered, no client script or inline handlers (renderer tests).
+- Guest renderers: server-rendered, no client script or inline handlers (renderer tests); mobile-first and never
+  wider than 30rem (`INVITATION_ROOT`).

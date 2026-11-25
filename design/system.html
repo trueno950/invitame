@@ -48,6 +48,8 @@
   .hairline { height: 1px; background: var(--gold); margin: 16px 0; }
   .admin { background: #fafafa; color: #18181b; font-family: system-ui, sans-serif; border-radius: 0.75rem; padding: 24px; border: 1px solid #e4e4e7; }
   .admin .btn { background: #18181b; color: #fafafa; box-shadow: none; border-radius: 0.5rem; }
+  .invchip { height: 64px; border-bottom: 1px solid rgb(0 0 0 / 8%); }
+  .invgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -90,6 +92,21 @@
       <div class="box" style="border-radius:var(--radius-field);box-shadow:var(--shadow-soft)">field · 1rem · soft</div>
       <div class="box" style="border-radius:var(--radius-panel);box-shadow:var(--shadow-soft)">panel · 1.6rem</div>
       <div class="box" style="border-radius:var(--radius-card);box-shadow:var(--shadow-paper)">card · 2rem · paper</div>
+    </div>
+  </section>
+
+  <section aria-labelledby="g">
+    <h2 id="g">Tema de invitación (invitados)</h2>
+    <p class="lead" style="margin-bottom:20px">Siete roles de color más <code>--inv-on-accent</code> (blanco) desde <code>theme-tokens.ts</code> y <code>themed/theme.ts</code>. Ejemplo: el tema <b>Reino de hielo</b> de <code>birthday-themes.ts</code>.</p>
+    <div class="invgrid">
+      <div class="swatch"><div class="invchip" style="background:#eef5fc"></div><div class="meta"><b>background</b><span>#eef5fc</span></div></div>
+      <div class="swatch"><div class="invchip" style="background:#ffffff"></div><div class="meta"><b>surface</b><span>#ffffff</span></div></div>
+      <div class="swatch"><div class="invchip" style="background:#d9e8f7"></div><div class="meta"><b>soft</b><span>#d9e8f7</span></div></div>
+      <div class="swatch"><div class="invchip" style="background:#162544"></div><div class="meta"><b>ink</b><span>#162544</span></div></div>
+      <div class="swatch"><div class="invchip" style="background:#2c5aa0"></div><div class="meta"><b>accent</b><span>#2c5aa0</span></div></div>
+      <div class="swatch"><div class="invchip" style="background:#b9a8e3"></div><div class="meta"><b>decorationOne</b><span>#b9a8e3</span></div></div>
+      <div class="swatch"><div class="invchip" style="background:#8fd0f2"></div><div class="meta"><b>decorationTwo</b><span>#8fd0f2</span></div></div>
+      <div class="swatch"><div class="invchip" style="background:#ffffff;border-bottom:1px solid var(--rose-100)"></div><div class="meta"><b>on-accent</b><span>#ffffff · texto sobre accent</span></div></div>
     </div>
   </section>
 
