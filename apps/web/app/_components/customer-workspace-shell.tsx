@@ -50,7 +50,11 @@ export function CustomerWorkspaceShell({
       <div className={`mx-auto w-full ${widthClass} pt-8 sm:pt-10`}>
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0 max-w-3xl">
-            {back ? <BackLink className="mb-3" /> : null}
+            {back ? (
+              <div className="mb-5">
+                <BackLink />
+              </div>
+            ) : null}
             <p className="inline-flex items-center gap-2 rounded-full bg-surface/75 py-1 pl-2.5 pr-3.5 text-xs font-medium uppercase tracking-[0.18em] text-primary ring-1 ring-gold/55">
               <Ornament className="size-4" name="bud" />
               {eyebrow}
