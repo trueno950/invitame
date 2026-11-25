@@ -1362,9 +1362,23 @@
   color: var(--color-muted);
 }
 
+/* A card whose package the administration has not priced yet, or whose read failed: the line states that instead
+   of an amount (S4), so it is set like the card's own small print rather than like a price. */
+.planPriceUnknown {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+}
+
 .planFeatured .planPrice,
 .planFeatured .planPrice small {
   color: var(--color-surface);
+}
+
+.planFeatured .planPriceUnknown {
+  color: color-mix(in srgb, var(--color-surface) 84%, var(--color-rose));
 }
 
 .planSummary {

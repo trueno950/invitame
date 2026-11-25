@@ -49,6 +49,7 @@ import {
 import { PrismaTemplateRepository } from "./infrastructure/prisma-template.repository";
 import { CreatorCatalogController } from "./presentation/creator/creator-catalog.controller";
 import { PackagesController } from "./presentation/packages/packages.controller";
+import { PublicCatalogController } from "./presentation/public/public-catalog.controller";
 import { CategoriesController } from "./presentation/taxonomy/categories.controller";
 import { FeaturesController } from "./presentation/taxonomy/features.controller";
 import { RenderersController } from "./presentation/templates/renderers.controller";
@@ -111,7 +112,8 @@ export const CATALOG_TEMPLATE_USE_CASES: Provider[] = [
 /**
  * Catalog administration: categories, features, packages, templates with their versions, and the renderer
  * list at `/admin/catalog/*`, all `@AdminOnly()`, plus the creator catalog at `/catalog/templates` and
- * `/catalog/packages`, readable by any signed-in customer (M4 T4; S8, A5). It also exports
+ * `/catalog/packages`, readable by any signed-in customer (M4 T4; S8, A5), and the landing's price list at
+ * `/public/catalog/packages`, readable by an anonymous visitor (T4; S4). It also exports
  * `CATALOG_PUBLIC_READER`, the read-only contract other modules consume (M4 T3): the catalog keeps every query,
  * and a consuming module never imports a catalog repository or queries a catalog table.
  */
@@ -123,6 +125,7 @@ export const CATALOG_TEMPLATE_USE_CASES: Provider[] = [
     TemplatesController,
     RenderersController,
     CreatorCatalogController,
+    PublicCatalogController,
   ],
   exports: [CATALOG_PUBLIC_READER],
   providers: [

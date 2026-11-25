@@ -9,15 +9,23 @@ import { AppModule } from "../app.module";
 import { createApp } from "../app.setup";
 import { PrismaService } from "../database/prisma.service";
 
-// CatalogModule wiring in AppModule (M3 T6a to T6c and M4 T4; S1, S8, S9, A5): the admin category, feature,
-// package, template, version, and renderer routes, and the creator catalog reads, all exist and sit behind the
-// global guard. A Prisma stub stands in for the database, so the suite never connects to one. The authorized
-// behavior is proved in `taxonomy.controllers.spec.ts` and `creator/creator-catalog.controller.spec.ts`.
+// CatalogModule wiring in AppModule (M3 T6a to T6c, M4 T4, and T4; S1, S4, S8, S9, A5): the admin category,
+// feature, package, template, version, and renderer routes, the creator catalog reads, and the landing's public
+// price list, all exist; the administrator and creator routes sit behind the global guard, and the public one does
+// not. A Prisma stub stands in for the database, so the suite never connects to one. The authorized behavior is
+// proved in `taxonomy.controllers.spec.ts`, `creator/creator-catalog.controller.spec.ts`, and
+// `public/public-catalog.controller.spec.ts`.
 
 @Global()
 @Module({
-  // An anonymous request never reaches the database: the guard finds no session cookie.
-  providers: [{ provide: PrismaService, useValue: {} }],
+  // An anonymous request never reaches the database: the guard finds no session cookie. The landing's price list
+  // is public and does reach it, so the stub answers the one query that read makes.
+  providers: [
+    {
+      provide: PrismaService,
+      useValue: { package: { findMany: async (): Promise<unknown[]> => [] } },
+    },
+  ],
   exports: [PrismaService],
 })
 class StubDatabaseModule {}
@@ -91,5 +99,13 @@ describe("AppModule catalog wiring", () => {
       // 401, not 404: the route is registered and the guard refuses it.
       assert.equal(response.status, 401, `${method} ${path}`);
     }
+  });
+
+  it("serves the landing's public price list to an anonymous visitor (T4; S4)", async () => {
+    const response = await fetch(`${baseUrl}/public/catalog/packages`);
+
+    // 200, not 401 or 404: the route is registered and reads no session.
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), []);
   });
 });

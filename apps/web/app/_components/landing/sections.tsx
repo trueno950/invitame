@@ -4,9 +4,9 @@ import {
   type GalleryDesign,
   type Heading,
   LANDING_COPY,
-  landingPricing,
   type PricingPackage,
 } from "../../../lib/landing/copy.ts";
+import { planFeatures, planPrice, type LandingCatalog } from "../../../lib/landing/pricing.ts";
 import { Ornament } from "../ornament.tsx";
 import { focusRing } from "../ui.ts";
 import { CreateInvitationLink } from "./actions.tsx";
@@ -95,9 +95,14 @@ export function DesignGallery() {
   );
 }
 
-/** One package card: name, illustrative MXN price, its seeded feature set, and the start action (S4). */
-function PlanCard({ item }: { item: PricingPackage }) {
-  const { price, currency } = landingPricing[item.key];
+/**
+ * One package card: name, the MXN price the catalog answers, its feature set, and the start action (S4). The price
+ * and the features come from the read the page made, so a card never states an amount the administration has not
+ * set: without a price it says «Precio por definir», and without a catalog it keeps the seeded feature list.
+ */
+function PlanCard({ item, catalog }: { item: PricingPackage; catalog: LandingCatalog }) {
+  const price = planPrice(catalog, item);
+
   return (
     <article className={`${styles.plan} ${item.featured ? styles.planFeatured : ""}`}>
       <header className={styles.planHead}>
@@ -105,12 +110,18 @@ function PlanCard({ item }: { item: PricingPackage }) {
         {item.badge ? <span className={styles.planBadge}>{item.badge}</span> : null}
       </header>
       <p className={styles.planPrice}>
-        {price}
-        <small>{currency}</small>
+        {price === null ? (
+          <span className={styles.planPriceUnknown}>{pricing.unknownPrice}</span>
+        ) : (
+          <>
+            {price.amount}
+            <small>{price.currency}</small>
+          </>
+        )}
       </p>
       <p className={styles.planSummary}>{item.summary}</p>
       <ul className={styles.planFeatures}>
-        {item.features.map((feature) => (
+        {planFeatures(catalog, item).map((feature) => (
           <li key={feature}>
             <Ornament name="bud" />
             {feature}
@@ -126,8 +137,8 @@ function PlanCard({ item }: { item: PricingPackage }) {
   );
 }
 
-/** «Elige tu paquete»: the three seeded packages and their MXN prices (S4). */
-export function Pricing() {
+/** «Elige tu paquete»: the three seeded packages and the MXN prices the catalog answers (S4). */
+export function Pricing({ catalog }: { catalog: LandingCatalog }) {
   return (
     <section aria-labelledby="precios-title" className={styles.section} id="precios">
       <div className={styles.wrap}>
@@ -139,7 +150,7 @@ export function Pricing() {
         />
         <div className={styles.plans}>
           {pricing.packages.map((item) => (
-            <PlanCard item={item} key={item.key} />
+            <PlanCard catalog={catalog} item={item} key={item.key} />
           ))}
         </div>
         <p className={styles.plansNote}>{pricing.note}</p>

@@ -4,7 +4,8 @@
  *
  * - the main action is «Crear mi invitación», a real link to `/cuenta/invitaciones/nueva` (S2);
  * - the gallery names the published occasion lines and their theme counts (S3);
- * - the pricing shows the three seeded packages and their illustrative MXN prices (S4);
+ * - the pricing shows the three seeded packages and the MXN prices the catalog answers live, reading no
+ *   amount from this file (S4);
  * - the steps are written in the present tense because choosing, filling, paying, and sharing all
  *   work today (S5);
  * - the FAQ answers the duration, RSVP, payment, and refund questions (S6).
@@ -118,24 +119,8 @@ export interface GalleryDesign {
   readonly age?: string;
 }
 
-/** The key of a seeded package; `landingPricing` mirrors the three rows of `catalog-seed.ts`. */
+/** The key of a seeded package; the ids of the three price cards, matched against the catalog by key (S4). */
 export type PackageKey = "basic" | "premium" | "deluxe";
-
-export interface PackagePrice {
-  readonly price: string;
-  readonly currency: "MXN";
-}
-
-/**
- * ILLUSTRATIVE MXN prices for the landing's package cards. They are placeholders copied from the
- * launch artboard; the real values come from the public catalog and are read live in a follow-up
- * task, so a price change here is not a price change of the product.
- */
-export const landingPricing = {
-  basic: { price: "$199", currency: "MXN" },
-  premium: { price: "$399", currency: "MXN" },
-  deluxe: { price: "$599", currency: "MXN" },
-} as const satisfies Record<PackageKey, PackagePrice>;
 
 /** One package card: the seeded feature set and the action that starts an invitation (S4). */
 export interface PricingPackage {
@@ -286,6 +271,8 @@ export const LANDING_COPY = {
     intro:
       "Un solo pago por invitación. Cada paquete incluye cuenta regresiva, mapa y enlace de WhatsApp; los demás suman funciones.",
     note: "Precios en pesos mexicanos (MXN), por invitación.",
+    /** The line of a card whose package the administration has not priced yet, or whose read failed (S4). */
+    unknownPrice: "Precio por definir",
     packages: PRICING_PACKAGES,
   },
   steps: {

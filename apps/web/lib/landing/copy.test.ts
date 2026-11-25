@@ -2,19 +2,14 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import {
-  accountAction,
-  headingText,
-  LANDING_COPY,
-  LANDING_SECTION_IDS,
-  landingPricing,
-} from "./copy.ts";
+import { accountAction, headingText, LANDING_COPY, LANDING_SECTION_IDS } from "./copy.ts";
 
 /*
  * The launch landing (odd/tasks/launch-landing.md; S1-S6). The page sells the product that already
  * exists: the main action starts a new invitation, the gallery names the published occasion lines,
- * the pricing mirrors the seeded packages, the steps are written in the present tense, and the FAQ
- * answers the four owner questions. No copy may still present the product as coming soon.
+ * the pricing names the seeded packages and reads their MXN prices from the catalog, the steps are
+ * written in the present tense, and the FAQ answers the four owner questions. No copy may still
+ * present the product as coming soon, and no copy may state a price: the amount comes from the read.
  */
 
 /** Every string of the landing copy, including the output of its few functions. */
@@ -186,7 +181,7 @@ describe("landing copy", () => {
     }
   });
 
-  it("shows exactly the three seeded packages with their features and MXN prices", () => {
+  it("shows exactly the three seeded packages with their feature lists, and no price of its own", () => {
     const { pricing } = LANDING_COPY;
     assert.equal(headingText(pricing.heading), "Elige tu paquete");
     assert.deepEqual(
@@ -212,16 +207,12 @@ describe("landing copy", () => {
         href: CREATE_HREF,
       });
     }
-    assert.deepEqual(landingPricing, {
-      basic: { price: "$199", currency: "MXN" },
-      premium: { price: "$399", currency: "MXN" },
-      deluxe: { price: "$599", currency: "MXN" },
-    });
-    assert.deepEqual(
-      Object.keys(landingPricing).sort(),
-      pricing.packages.map((item) => item.key).sort(),
-      "every package needs a price",
-    );
+    // The MXN prices are the catalog's (S4): the copy holds the line of a package without one, and no amount.
+    assert.equal(pricing.unknownPrice, "Precio por definir");
+    assert.equal(pricing.note, "Precios en pesos mexicanos (MXN), por invitación.");
+    for (const value of strings(pricing)) {
+      assert.doesNotMatch(value, /\$\s?\d/, `a price in the copy: "${value}"`);
+    }
   });
 
   it("describes how it works in four present-tense steps", () => {
