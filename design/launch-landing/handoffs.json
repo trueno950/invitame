@@ -3,12 +3,13 @@
   "chosen": "01-editorial-romantica.html",
   "handoffs": {
     "01-editorial-romantica.html": {
-      "status": "sent",
-      "queued": true,
-      "sentAt": "2026-11-25T05:49:31.767Z",
-      "startedAt": null,
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-25T05:53:22.103Z",
+      "startedAt": "2026-11-25T06:05:30.960Z",
       "implementedAt": null,
-      "feature": "odd/tasks/launch-landing.md"
+      "feature": "odd/tasks/launch-landing.md",
+      "note": "Implementación delegada a gentle-ai-worker (task mwvpyj43-6-2um4), en curso sobre apps/web."
     }
   }
 }

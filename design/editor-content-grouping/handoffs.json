@@ -3,14 +3,12 @@
   "chosen": "01-tarjetas-resumen.html",
   "handoffs": {
     "01-tarjetas-resumen.html": {
-      "status": "implemented",
-      "queued": false,
-      "sentAt": "2026-11-19T03:08:44.013Z",
-      "startedAt": "2026-11-19T03:09:33.823Z",
-      "implementedAt": "2026-11-19T04:08:16.039Z",
-      "feature": "odd/tasks/editor-content-grouping.md",
-      "note": "Merged in #79 and #80: summary cards, one open at a time, paired rows, states shared with the tab count.",
-      "previewUrl": "http://localhost:3000/cuenta/invitaciones/b1491b14-0438-4d9a-9686-72cb352dc10e?seccion=contenido"
+      "status": "sent",
+      "queued": true,
+      "sentAt": "2026-11-25T05:48:38.589Z",
+      "startedAt": null,
+      "implementedAt": null,
+      "feature": "odd/tasks/editor-content-grouping.md"
     }
   }
 }

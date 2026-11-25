@@ -1,0 +1,21 @@
+{
+  "arrangement": "free",
+  "positions": {
+    "system": {
+      "x": 0,
+      "y": 2365
+    },
+    "01-tarjetas-resumen.html": {
+      "x": 1465,
+      "y": 0
+    },
+    "02-un-grupo-por-pantalla.html": {
+      "x": 3013,
+      "y": 2382
+    },
+    "03-resumen-editable.html": {
+      "x": 4560,
+      "y": 2365
+    }
+  }
+}
