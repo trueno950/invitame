@@ -1,5 +1,6 @@
 import { INVITATION_COPY } from "../../../../lib/customer/copy.ts";
-import { errorNote, statusNote } from "../../../_components/ui.ts";
+import { errorNote } from "../../../_components/ui.ts";
+import { TransientNotice } from "./transient-notice.tsx";
 
 interface NoticesProperties {
   notice: string | undefined;
@@ -10,7 +11,8 @@ interface NoticesProperties {
 
 /**
  * The outcome of the last action, from the page's query (`lib/customer/invitations.ts`). It renders on
- * the server, so it shows without JavaScript; the error is an alert and the confirmation a status. A
+ * the server, so it shows without JavaScript; the error is an alert and the confirmation a status. The
+ * confirmation leaves on its own (`TransientNotice`), while an error stays until the customer acts. A
  * refused publication lists each issue under its error, so the customer sees what still has to be done.
  */
 export function Notices({ notice, error, issues }: NoticesProperties) {
@@ -18,11 +20,7 @@ export function Notices({ notice, error, issues }: NoticesProperties) {
 
   return (
     <>
-      {notice === undefined ? null : (
-        <p className={statusNote} role="status">
-          {notice}
-        </p>
-      )}
+      {notice === undefined ? null : <TransientNotice message={notice} />}
       {error === undefined ? null : (
         <div className={errorNote} role="alert">
           <p>{error}</p>

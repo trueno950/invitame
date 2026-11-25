@@ -69,7 +69,7 @@ export default async function InvitationsPage({
         ) : null}
 
         {rows.length > 0 ? (
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {rows.map((row) => (
               <li
                 className="flex flex-col gap-3 rounded-panel bg-surface/90 p-5 shadow-soft ring-1 ring-gold/45"

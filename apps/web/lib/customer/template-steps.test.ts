@@ -421,12 +421,12 @@ describe("stepHref", () => {
 
     assert.equal(
       stepHref(state, 3),
-      `/cuenta/invitaciones/nueva?paso=3&ocasion=birthday&diseno=birthday-map-01&tema=${themeVersion("birthday-map-01", "blocks-and-pixels")}&paquete=${PACKAGES[1]?.value ?? ""}`,
+      `/cuenta/invitaciones/nueva?paso=3&ocasion=birthday&diseno=birthday-map-01&tema=${themeVersion("birthday-map-01", "blocks-and-pixels")}&paquete=${PACKAGES[1]?.value ?? ""}#paso-paquete`,
     );
     // A hand-made selection with no occasion still answers a usable URL.
     assert.equal(
       stepHref({ design: state.design }, 2),
-      `/cuenta/invitaciones/nueva?paso=2&diseno=birthday-map-01`,
+      `/cuenta/invitaciones/nueva?paso=2&diseno=birthday-map-01#paso-tema`,
     );
   });
 
@@ -451,7 +451,7 @@ describe("stepHref", () => {
 
     assert.equal(
       continueToTheme,
-      `/cuenta/invitaciones/nueva?paso=2&ocasion=birthday&diseno=birthday-map-01&tema=${themeVersion("birthday-map-01", BIRTHDAY_THEMES[0])}&paquete=${PACKAGES[0]?.value ?? ""}`,
+      `/cuenta/invitaciones/nueva?paso=2&ocasion=birthday&diseno=birthday-map-01&tema=${themeVersion("birthday-map-01", BIRTHDAY_THEMES[0])}&paquete=${PACKAGES[0]?.value ?? ""}#paso-tema`,
     );
     assert.equal(resolve({}).style, undefined);
 
@@ -470,7 +470,10 @@ describe("stepHref", () => {
     const state = resolve({ [THEME_PARAM]: version });
 
     assert.equal(themeStepPath(version), stepHref({ style: state.style }, 2));
-    assert.equal(themeStepPath(version), `/cuenta/invitaciones/nueva?paso=2&tema=${version}`);
+    assert.equal(
+      themeStepPath(version),
+      `/cuenta/invitaciones/nueva?paso=2&tema=${version}#paso-tema`,
+    );
   });
 });
 
@@ -651,7 +654,7 @@ describe("single-layout occasion with themes", () => {
     });
     assert.equal(
       stepHref(packageStep, 2),
-      `/cuenta/invitaciones/nueva?paso=2&ocasion=baby-shower&diseno=baby-shower-classic-01&tema=${version}&paquete=${PACKAGES[0]?.value}`,
+      `/cuenta/invitaciones/nueva?paso=2&ocasion=baby-shower&diseno=baby-shower-classic-01&tema=${version}&paquete=${PACKAGES[0]?.value}#paso-tema`,
     );
   });
 });

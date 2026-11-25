@@ -641,13 +641,56 @@ describe("creation choices", () => {
   it("offers each package as a card with its price", () => {
     // The templates are the chooser's preview cards (`template-preview.ts`); the packages keep this card.
     assert.deepEqual(packageChoices([PACKAGE]), [
-      { value: PACKAGE_ID, name: "Basic", meta: "$1,500.00 MXN", description: null },
+      {
+        value: PACKAGE_ID,
+        name: "Basic",
+        meta: "$1,500.00 MXN",
+        description: null,
+        features: ["Cuenta regresiva"],
+        featured: false,
+      },
     ]);
+  });
+
+  it("orders the cards by price, cheapest first, so the table reads as a ladder", () => {
+    // The API answers packages ordered by key (basic, deluxe, premium); the row is the price ladder instead, so
+    // the recommended middle plan is not pushed to one end and a package with no price goes last.
+    const basic = {
+      ...PACKAGE,
+      key: "basic",
+      name: "Basic",
+      currentPrice: { amountMinor: 19900, currency: "MXN" },
+    };
+    const deluxe = {
+      ...PACKAGE,
+      key: "deluxe",
+      name: "Deluxe",
+      currentPrice: { amountMinor: 59900, currency: "MXN" },
+    };
+    const premium = {
+      ...PACKAGE,
+      key: "premium",
+      name: "Premium",
+      currentPrice: { amountMinor: 39900, currency: "MXN" },
+    };
+    const free = { ...PACKAGE, key: "free", name: "Free", currentPrice: null };
+
+    assert.deepEqual(
+      packageChoices([basic, deluxe, premium, free]).map(({ name }) => name),
+      ["Basic", "Premium", "Deluxe", "Free"],
+    );
   });
 
   it("says a package has no price instead of showing zero", () => {
     assert.deepEqual(packageChoices([{ ...PACKAGE, currentPrice: null }]), [
-      { value: PACKAGE_ID, name: "Basic", meta: INVITATION_COPY.priceMissing, description: null },
+      {
+        value: PACKAGE_ID,
+        name: "Basic",
+        meta: INVITATION_COPY.priceMissing,
+        description: null,
+        features: ["Cuenta regresiva"],
+        featured: false,
+      },
     ]);
   });
 });
@@ -905,7 +948,7 @@ describe("createInvitation", () => {
           diseno: "birthday-poster-01",
         }),
       ),
-      `/cuenta/invitaciones/nueva?paso=3&ocasion=birthday&diseno=birthday-poster-01&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=package-does-not-fit`,
+      `/cuenta/invitaciones/nueva?paso=3&ocasion=birthday&diseno=birthday-poster-01&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=package-does-not-fit#paso-paquete`,
     );
   });
 
@@ -918,7 +961,7 @@ describe("createInvitation", () => {
 
     assert.equal(
       target,
-      `/cuenta/invitaciones/nueva?paso=3&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=validation`,
+      `/cuenta/invitaciones/nueva?paso=3&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=validation#paso-paquete`,
     );
   });
 
@@ -928,7 +971,7 @@ describe("createInvitation", () => {
     // The URL the step still answers: the code, the theme, and the package, plus each carried value only when
     // it is shaped like a catalog key. A slash, a space, a colon, or 65 characters is not one.
     const kept = (ocasion?: string, diseno?: string) =>
-      `/cuenta/invitaciones/nueva?paso=3${ocasion === undefined ? "" : `&ocasion=${ocasion}`}${diseno === undefined ? "" : `&diseno=${diseno}`}&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=package-not-found`;
+      `/cuenta/invitaciones/nueva?paso=3${ocasion === undefined ? "" : `&ocasion=${ocasion}`}${diseno === undefined ? "" : `&diseno=${diseno}`}&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=package-not-found#paso-paquete`;
 
     for (const [ocasion, diseno, keptOcasion, keptDiseno] of [
       ["../../etc/passwd", "birthday-poster-01&error=not-found", undefined, undefined],
@@ -964,7 +1007,7 @@ describe("createInvitation", () => {
 
     assert.equal(
       target,
-      `/cuenta/invitaciones/nueva?paso=3&ocasion=no-such-occasion&diseno=birthday-nope-01&tema=${stale}&paquete=${PACKAGE_ID}&error=version-not-published`,
+      `/cuenta/invitaciones/nueva?paso=3&ocasion=no-such-occasion&diseno=birthday-nope-01&tema=${stale}&paquete=${PACKAGE_ID}&error=version-not-published#paso-paquete`,
     );
 
     // The page re-reads every parameter against the creator catalog, so a stale or tampered one only loses
@@ -995,7 +1038,7 @@ describe("createInvitation", () => {
     const incomplete = stub();
     assert.equal(
       await createInvitation(incomplete.api, formData({ templateVersionId: VERSION_ID })),
-      `/cuenta/invitaciones/nueva?paso=3&tema=${VERSION_ID}&error=invalid-form`,
+      `/cuenta/invitaciones/nueva?paso=3&tema=${VERSION_ID}&error=invalid-form#paso-paquete`,
     );
     assert.deepEqual(incomplete.calls, []);
 
@@ -1009,7 +1052,7 @@ describe("createInvitation", () => {
         failing.api,
         formData({ templateVersionId: VERSION_ID, packageId: PACKAGE_ID }),
       ),
-      `/cuenta/invitaciones/nueva?paso=3&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=unavailable`,
+      `/cuenta/invitaciones/nueva?paso=3&tema=${VERSION_ID}&paquete=${PACKAGE_ID}&error=unavailable#paso-paquete`,
     );
   });
 });
@@ -1392,6 +1435,9 @@ describe("refused create keeps the selection", () => {
     assert.equal(state.design?.componentKey, TEMPLATE.publishedVersion.componentKey);
     assert.equal(state.style?.versionId, VERSION_ID);
     assert.equal(state.package?.value, PACKAGE_ID);
-    assert.equal(target, `${stepHref(state, 3)}&error=package-does-not-fit`);
+    assert.equal(
+      target,
+      stepHref(state, 3).replace("#paso-paquete", "&error=package-does-not-fit#paso-paquete"),
+    );
   });
 });

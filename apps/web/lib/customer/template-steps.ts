@@ -223,10 +223,18 @@ export function resolveChooserStep(
   };
 }
 
+/** The page section id each step's heading carries; the step URL's hash lands the browser there. */
+const STEP_SECTIONS: Readonly<Record<ChooserStep, string>> = {
+  1: "paso-diseno",
+  2: "paso-tema",
+  3: "paso-paquete",
+};
+
 /**
  * One step's URL with the whole selection kept, so going back never loses what was already chosen. The
  * parameters are written in a fixed order and the values are the ones the catalog published: a
- * `componentKey`, a version id, a category key, and a package id.
+ * `componentKey`, a version id, a category key, and a package id. The fragment scrolls to the target step's
+ * heading, so a server navigation never lands back at the top of the page.
  */
 export function stepHref(selection: ChooserSelection, step: ChooserStep): string {
   const parameters = new URLSearchParams();
@@ -244,7 +252,7 @@ export function stepHref(selection: ChooserSelection, step: ChooserStep): string
   if (selection.package !== undefined) {
     parameters.set(PACKAGE_PARAM, selection.package.value);
   }
-  return `${INVITATION_PATHS.create}?${parameters.toString()}`;
+  return `${INVITATION_PATHS.create}?${parameters.toString()}#${STEP_SECTIONS[step]}`;
 }
 
 /** The theme step of one published version, which is the way back from the full sample preview (S9). */
@@ -254,7 +262,7 @@ export function themeStepPath(versionId: string): string {
     [THEME_PARAM, versionId],
   ]);
 
-  return `${INVITATION_PATHS.create}?${parameters.toString()}`;
+  return `${INVITATION_PATHS.create}?${parameters.toString()}#${STEP_SECTIONS[2]}`;
 }
 
 /**

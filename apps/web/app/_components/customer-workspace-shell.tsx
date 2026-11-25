@@ -23,8 +23,9 @@ interface CustomerWorkspaceShellProperties {
  * The wide frame of the invitation pages (M4 T8; S11, S12). The owner tried the centered card of
  * `CustomerShell` and found the pages scrolled too much, as with the administration pages, so this keeps
  * the customer theme (`paper-wash`, the corner flowers, the header with the wordmark, the eyebrow with
- * its bud, the display serif) and replaces the card with a compact page header and up to `max-w-6xl` of
- * content. `/cuenta` and the sign-in pages keep the centered card.
+ * its bud, the display serif) and replaces the card with a compact page header and up to `max-w-[100rem]`
+ * of content, so the working pages use a wide screen; the header widens with it, so the menu stays aligned
+ * with the page. `/cuenta` and the sign-in pages keep the centered card.
  */
 export function CustomerWorkspaceShell({
   eyebrow,
@@ -33,9 +34,11 @@ export function CustomerWorkspaceShell({
   actions,
   children,
 }: CustomerWorkspaceShellProperties) {
+  const widthClass = "max-w-[100rem]";
+
   return (
-    <CustomerPageFrame className="pb-16 sm:pb-20">
-      <div className="mx-auto w-full max-w-6xl pt-8 sm:pt-10">
+    <CustomerPageFrame className="pb-16 sm:pb-20" widthClass={widthClass}>
+      <div className={`mx-auto w-full ${widthClass} pt-8 sm:pt-10`}>
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0 max-w-3xl">
             <p className="inline-flex items-center gap-2 rounded-full bg-surface/75 py-1 pl-2.5 pr-3.5 text-xs font-medium uppercase tracking-[0.18em] text-primary ring-1 ring-gold/55">

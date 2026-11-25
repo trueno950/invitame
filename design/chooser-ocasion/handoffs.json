@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "chosen": "02-miniaturas-reales.html",
+  "handoffs": {
+    "04-paquetes-con-funciones.html": {
+      "status": "implemented",
+      "queued": false,
+      "sentAt": "2026-11-25T14:54:40.017Z",
+      "startedAt": "2026-11-25T14:55:01.001Z",
+      "implementedAt": "2026-11-25T15:01:02.259Z",
+      "note": "Tarjetas de paquete con funciones y badge «El más elegido»; quité el relleno rosa.",
+      "previewUrl": "http://localhost:3000/cuenta/invitaciones/nueva"
+    },
+    "02-miniaturas-reales.html": {
+      "status": "implemented",
+      "queued": true,
+      "sentAt": "2026-11-25T15:01:00.026Z",
+      "startedAt": null,
+      "implementedAt": "2026-11-25T15:08:17.340Z",
+      "note": "Ocasión como tarjetas con miniatura real + nombre + número de diseños; menos rojo.",
+      "previewUrl": "http://localhost:3000/cuenta/invitaciones/nueva"
+    }
+  }
+}

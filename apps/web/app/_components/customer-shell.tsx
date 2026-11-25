@@ -14,10 +14,13 @@ import { Wordmark } from "./wordmark.tsx";
  */
 export function CustomerPageFrame({
   className,
+  widthClass = "max-w-6xl",
   children,
 }: {
   /** Extra classes of the page, such as the bottom padding a card or a workspace needs. */
   className?: string;
+  /** The maximum width of the header, so it lines up with a workspace that opts into a wider frame. */
+  widthClass?: string;
   children: ReactNode;
 }) {
   return (
@@ -33,7 +36,7 @@ export function CustomerPageFrame({
         name="corner"
       />
 
-      <header className="mx-auto max-w-6xl">
+      <header className={`mx-auto ${widthClass}`}>
         <nav
           aria-label="Principal"
           className="flex items-center gap-4 rounded-full bg-surface/80 px-6 py-2.5 shadow-soft ring-1 ring-gold/35 backdrop-blur-md sm:px-7"

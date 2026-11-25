@@ -1,4 +1,5 @@
 import { formatMxn } from "../admin/catalog/price.ts";
+import { FEATURE_LABELS } from "../landing/pricing.ts";
 import { publicInvitationPath } from "../public/invitation-page.ts";
 import type {
   CreatorPackage,
@@ -424,19 +425,40 @@ export interface ChoiceCard {
   /** The price in force of a package, always shown with the name. */
   meta: string;
   description: string | null;
+  /** The included features as Spanish labels, in the catalog's order. */
+  features: string[];
+  /** Whether this is the recommended package (premium), shown with a badge. */
+  featured: boolean;
 }
 
-/** Each package to choose, with its price in force in its own currency (S6); a free one says so. */
+/**
+ * Each package to choose, with its price in force in its own currency (S6); a free one says so. The cards are
+ * ordered by price, cheapest first, so the pricing table reads as a ladder and the recommended middle plan sits
+ * in the middle of the row; a package with no price in force goes last. The order comes from the price, never
+ * from a key or a name.
+ */
 export function packageChoices(packages: readonly CreatorPackage[]): ChoiceCard[] {
-  return packages.map((stored) => ({
-    value: stored.id,
-    name: stored.name,
-    meta:
-      stored.currentPrice === null
-        ? INVITATION_COPY.priceMissing
-        : `${formatMxn(stored.currentPrice.amountMinor, stored.currentPrice.currency)} ${stored.currentPrice.currency}`,
-    description: stored.description,
-  }));
+  return [...packages]
+    .sort((left, right) => {
+      const a = left.currentPrice?.amountMinor;
+      const b = right.currentPrice?.amountMinor;
+
+      if (a === undefined) {
+        return b === undefined ? 0 : 1;
+      }
+      return b === undefined ? -1 : a - b;
+    })
+    .map((stored) => ({
+      value: stored.id,
+      name: stored.name,
+      meta:
+        stored.currentPrice === null
+          ? INVITATION_COPY.priceMissing
+          : `${formatMxn(stored.currentPrice.amountMinor, stored.currentPrice.currency)} ${stored.currentPrice.currency}`,
+      description: stored.description,
+      features: stored.includedFeatureKeys.map((key) => FEATURE_LABELS[key] ?? key),
+      featured: stored.key === "premium",
+    }));
 }
 
 type SearchParameters = Readonly<Record<string, string | string[] | undefined>>;
@@ -556,7 +578,7 @@ function failedCreateTarget(
   put(PACKAGE_PARAM, choice.packageId);
   parameters.set(ERROR_PARAM, code);
 
-  return `${INVITATION_PATHS.create}?${parameters.toString()}`;
+  return `${INVITATION_PATHS.create}?${parameters.toString()}#paso-paquete`;
 }
 
 /** Creates a free draft and goes to it (S1, S6); a refusal returns to step 3 with the selection kept (S12). */

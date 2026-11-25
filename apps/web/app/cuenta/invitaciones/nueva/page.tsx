@@ -16,13 +16,10 @@ import {
   templateChoiceCards,
 } from "../../../../lib/customer/template-preview.ts";
 import {
-  type ChooserState,
-  type ChooserStep,
   chooserOccasions,
   DESIGN_PARAM,
   draftChoice,
   OCCASION_PARAM,
-  type OccasionChoice,
   resolveChooserStep,
   stepHref,
 } from "../../../../lib/customer/template-steps.ts";
@@ -32,7 +29,12 @@ import { errorNote, quietButton, textButton } from "../../../_components/ui.ts";
 import { ChooserStepper, ChooserSummaryBar } from "../_components/chooser-stepper.tsx";
 import { Notices } from "../_components/notices.tsx";
 import { OptionCard } from "../_components/option-card.tsx";
-import { DesignCard, SampleStage, ThemeTile } from "../_components/template-choice-card.tsx";
+import {
+  DesignCard,
+  OccasionCard,
+  SampleStage,
+  ThemeTile,
+} from "../_components/template-choice-card.tsx";
 import { invitations } from "../_lib/api.ts";
 import { attempt, resolveRead } from "../_lib/load.ts";
 import { createInvitationAction } from "../actions.ts";
@@ -43,70 +45,18 @@ export const metadata: Metadata = {
 
 type SearchParameters = Promise<Record<string, string | string[] | undefined>>;
 
-/** The id the footer bar's «Crear borrador» button submits, so the create form stays one field set. */
+/** The id the footer bar's «Crear mi invitación» button submits, so the create form stays one field set. */
 const CREATE_FORM_ID = "chooser-create";
 
-/** The numbered heading of one step. */
-function StepHeading({
-  id,
-  number,
-  title,
-}: {
-  id: string;
-  number: ChooserStep;
-  title: string;
-}): ReactElement {
+/** The query flag that reopens the occasion picker after an occasion is already chosen. */
+const PICK_OCCASION_PARAM = "ocasiones";
+
+/** The heading of one step: the title only, because the stepper already carries the step number. */
+function StepHeading({ id, title }: { id: string; title: string }): ReactElement {
   return (
-    <h2
-      className="flex items-center gap-2 font-display text-[1.375rem] font-semibold text-ink"
-      id={id}
-    >
-      <span
-        aria-hidden="true"
-        className="grid size-6 shrink-0 place-items-center rounded-full bg-primary font-sans text-xs font-semibold text-on-primary"
-      >
-        {number}
-      </span>
+    <h2 className="font-display text-[1.375rem] font-semibold text-ink" id={id}>
       {title}
     </h2>
-  );
-}
-
-/**
- * The occasion of the whole flow, from the catalog: one entry per category that publishes templates, and the
- * current one marked. Changing it is a link to step 1 of that occasion, so the flow never needs a script and
- * never offers an occasion the catalog cannot fill.
- */
-function OccasionRow({
-  occasions,
-  state,
-}: {
-  occasions: readonly OccasionChoice[];
-  state: ChooserState;
-}): ReactElement {
-  const current = state.occasion;
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
-      <span>{INVITATION_COPY.occasionLabel}</span>
-      {occasions.length > 1 ? (
-        <ul className="flex flex-wrap items-center gap-2">
-          {occasions.map((occasion) => (
-            <li key={occasion.key}>
-              {occasion.key === current?.key ? (
-                <span className="font-semibold text-ink">{occasion.name}</span>
-              ) : (
-                <a className={textButton} href={stepHref({ occasion }, 1)}>
-                  {occasion.name}
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <span className="font-semibold text-ink">{current?.name ?? ""}</span>
-      )}
-    </div>
   );
 }
 
@@ -143,6 +93,9 @@ export default async function NewInvitationPage({
   const packageCards = loadedPackages.status === "ok" ? packageChoices(loadedPackages.value) : [];
   const occasions = chooserOccasions(cards);
   const state = resolveChooserStep(occasions, packageCards, parameters);
+  const pickingOccasion =
+    parameters[PICK_OCCASION_PARAM] === "1" || parameters[OCCASION_PARAM] === undefined;
+  const hasChosenOccasion = parameters[OCCASION_PARAM] !== undefined;
   const draft = draftChoice(state);
   const designs = state.occasion?.designs ?? [];
   const design = state.design;
@@ -159,18 +112,45 @@ export default async function NewInvitationPage({
 
         {available ? (
           <>
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-              <OccasionRow occasions={occasions} state={state} />
+            <div className="flex flex-col gap-4">
               <ChooserStepper state={state} />
+              {pickingOccasion ? (
+                <section aria-labelledby="ocasion" className="flex flex-col gap-3">
+                  <h2 className="font-display text-[1.375rem] font-semibold text-ink" id="ocasion">
+                    {INVITATION_COPY.occasionLabel}
+                  </h2>
+                  <ul
+                    aria-label={INVITATION_COPY.occasionLabel}
+                    className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+                  >
+                    {occasions.map((occasion) => (
+                      <li key={occasion.key}>
+                        <OccasionCard
+                          href={stepHref({ occasion }, 1)}
+                          occasion={occasion}
+                          selected={hasChosenOccasion && occasion.key === state.occasion?.key}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : (
+                <p className="flex flex-wrap items-center gap-2 text-sm text-muted">
+                  <span>{INVITATION_COPY.occasionLabel}:</span>
+                  <span className="font-semibold text-ink">{state.occasion?.name ?? ""}</span>
+                  <a
+                    className={textButton}
+                    href={`${stepHref({ occasion: state.occasion }, 1)}&${PICK_OCCASION_PARAM}=1`}
+                  >
+                    {INVITATION_COPY.changeOccasion}
+                  </a>
+                </p>
+              )}
             </div>
 
-            {state.step === 1 ? (
+            {!pickingOccasion && state.step === 1 ? (
               <section aria-labelledby="paso-diseno" className="flex flex-col gap-3">
-                <StepHeading
-                  id="paso-diseno"
-                  number={1}
-                  title={INVITATION_COPY.stepDesignHeading}
-                />
+                <StepHeading id="paso-diseno" title={INVITATION_COPY.stepDesignHeading} />
                 <p className="text-sm leading-6 text-pretty text-muted">
                   {state.design === undefined
                     ? INVITATION_COPY.designStepHint
@@ -199,10 +179,10 @@ export default async function NewInvitationPage({
               </section>
             ) : null}
 
-            {state.step === 2 && design !== undefined && style !== undefined ? (
+            {!pickingOccasion && state.step === 2 && design !== undefined && style !== undefined ? (
               <section aria-labelledby="paso-tema" className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <StepHeading id="paso-tema" number={2} title={INVITATION_COPY.stepThemeHeading} />
+                  <StepHeading id="paso-tema" title={INVITATION_COPY.stepThemeHeading} />
                   <a className={textButton} href={previewPath(style.versionId)}>
                     {INVITATION_COPY.viewFull}
                   </a>
@@ -249,21 +229,22 @@ export default async function NewInvitationPage({
               </section>
             ) : null}
 
-            {state.step === 3 && design !== undefined && style !== undefined ? (
+            {!pickingOccasion && state.step === 3 && design !== undefined && style !== undefined ? (
               <section aria-labelledby="paso-paquete" className="flex flex-col gap-3">
-                <StepHeading
-                  id="paso-paquete"
-                  number={3}
-                  title={INVITATION_COPY.stepPackageHeading}
-                />
+                <StepHeading id="paso-paquete" title={INVITATION_COPY.stepPackageHeading} />
                 <p className="text-sm leading-6 text-pretty text-muted">
                   {INVITATION_COPY.packageNote}
                 </p>
-                <ul aria-label={INVITATION_COPY.packageLabel} className="grid gap-3 sm:grid-cols-3">
+                <ul
+                  aria-label={INVITATION_COPY.packageLabel}
+                  className="grid items-stretch gap-3 pt-3 sm:grid-cols-3"
+                >
                   {packageCards.map((card) => (
-                    <li key={card.value}>
+                    <li className={card.featured ? "lg:-mt-2" : ""} key={card.value}>
                       <OptionCard
                         description={card.description}
+                        features={card.features}
+                        featured={card.featured}
                         href={stepHref(
                           {
                             occasion: state.occasion,

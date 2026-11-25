@@ -1,7 +1,11 @@
 import type { ReactElement } from "react";
 
 import { INVITATION_COPY } from "../../../../lib/customer/copy.ts";
-import type { DesignChoice, StyleChoice } from "../../../../lib/customer/template-steps.ts";
+import type {
+  DesignChoice,
+  OccasionChoice,
+  StyleChoice,
+} from "../../../../lib/customer/template-steps.ts";
 import { findRenderer } from "../../../../lib/renderers/registry.ts";
 import type { SampleInvitation } from "../../../../lib/renderers/samples.ts";
 
@@ -119,6 +123,48 @@ export function DesignCard({
       </span>
       {style?.sample === undefined ? null : (
         <DesignMiniature componentKey={design.componentKey} sample={style.sample} />
+      )}
+    </a>
+  );
+}
+
+/** One occasion of the chooser: a miniature of its first design, its name, and its design count. */
+export function OccasionCard({
+  occasion,
+  href,
+  selected,
+}: {
+  occasion: OccasionChoice;
+  href: string;
+  selected: boolean;
+}): ReactElement {
+  const first = occasion.designs[0];
+  const sample = first?.styles[0]?.sample;
+
+  return (
+    <a
+      aria-current={selected ? "true" : undefined}
+      className={`group relative flex h-full flex-col gap-2 rounded-panel p-3 text-center ring-[1.5px] ${CARD} focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-primary ${
+        selected ? "ring-2 ring-primary" : "bg-surface ring-field-border hover:ring-primary/50"
+      }`}
+      href={href}
+    >
+      <span className="text-base font-semibold text-ink">{occasion.name}</span>
+      <span className="text-xs font-medium text-primary">
+        {INVITATION_COPY.designCount(occasion.designs.length)}
+      </span>
+      {first === undefined || sample === undefined ? (
+        <span className="flex h-[160px] items-center justify-center rounded-lg bg-rose-50 px-3 text-center text-xs leading-5 text-muted">
+          {INVITATION_COPY.sampleMissing}
+        </span>
+      ) : (
+        <ScaledInvitation
+          componentKey={first.componentKey}
+          frameClass="mx-auto h-[160px] w-[120px] rounded-lg ring-1 ring-gold/45"
+          sample={sample}
+          scaleClass=""
+          scaleStyle={{ transform: "scale(0.3077)" }}
+        />
       )}
     </a>
   );
