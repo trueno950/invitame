@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "01-campo-libre.html",
+  "handoffs": {
+    "01-campo-libre.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T17:40:07.007Z",
+      "startedAt": "2026-11-26T17:40:43.738Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después de la animación; alto riesgo (cambia la dirección guardada y se redirigen las anteriores)."
+    }
+  }
+}

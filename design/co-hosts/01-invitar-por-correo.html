@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coanfitriones — invitar por correo</title>
+<style>
+  :root{--bg:#fff7f5;--surface:#fff;--rose-50:#fdeef2;--rose-100:#f8d7e0;--ink:#3b1424;--muted:#6b3a4c;--primary:#8c1c3a;--field-border:#a06e7e;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);padding:32px}
+  main{max-width:680px;margin:0 auto}
+  h1{font-family:var(--font-display);font-weight:600;font-size:28px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 16px}
+  .card{background:var(--surface);border-radius:20px;padding:20px;box-shadow:inset 0 0 0 1.5px var(--rose-100)}
+  .add{display:flex;gap:8px;margin-bottom:16px}
+  .add input{flex:1;font:15px var(--font-sans);padding:11px 14px;border-radius:14px;border:1.5px solid var(--field-border)}
+  .add button{font:600 14px var(--font-sans);padding:11px 18px;border-radius:999px;border:0;background:var(--primary);color:#fff}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--rose-100)}
+  .row b{font-size:15px}.row span{font-size:13px;color:var(--muted);display:block}
+  .tag{font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--field-border)}
+  .row a{font-size:13px;color:var(--primary);font-weight:600}
+</style>
+</head>
+<body>
+<main>
+  <h1>Coanfitriones</h1>
+  <p class="lead">Invita a otra persona a editar esta invitación contigo. Recibirá un correo para entrar.</p>
+  <section class="card">
+    <div class="add"><input placeholder="correo@ejemplo.com" aria-label="Correo del coanfitrión"><button type="button">Invitar</button></div>
+    <div class="row"><div><b>Tú</b><span>laura@correo.com</span></div><span class="tag">Dueña</span></div>
+    <div class="row"><div><b>Jorge Ramírez</b><span>jorge@correo.com · puede editar</span></div><a href="#">Quitar</a></div>
+    <div class="row"><div><b>adriana@correo.com</b><span>Invitación enviada · pendiente</span></div><a href="#">Cancelar</a></div>
+  </section>
+</main>
+</body>
+</html>

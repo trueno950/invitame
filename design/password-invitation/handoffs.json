@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "01-pantalla-con-candado.html",
+  "handoffs": {
+    "01-pantalla-con-candado.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T17:46:14.106Z",
+      "startedAt": "2026-11-26T17:46:37.968Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después de coanfitriones; requiere aprobar el diseño de seguridad."
+    }
+  }
+}

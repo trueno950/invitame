@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coanfitriones — con permisos</title>
+<style>
+  :root{--bg:#fff7f5;--surface:#fff;--rose-50:#fdeef2;--rose-100:#f8d7e0;--ink:#3b1424;--muted:#6b3a4c;--primary:#8c1c3a;--field-border:#a06e7e;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);padding:32px}
+  main{max-width:720px;margin:0 auto}
+  h1{font-family:var(--font-display);font-weight:600;font-size:28px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 16px}
+  .p{background:var(--surface);border-radius:18px;padding:16px 18px;margin-bottom:10px;box-shadow:inset 0 0 0 1.5px var(--rose-100)}
+  .top{display:flex;justify-content:space-between;align-items:center}
+  .top b{font-size:15px}.top span{font-size:13px;color:var(--muted)}
+  .perms{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .perms span{font-size:13px;padding:6px 12px;border-radius:999px;box-shadow:inset 0 0 0 1.5px var(--field-border)}
+  .perms .on{background:var(--primary);color:#fff;box-shadow:none}
+  .note{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Coanfitriones</h1>
+  <p class="lead">Decide qué puede hacer cada persona.</p>
+  <div class="p"><div class="top"><div><b>Jorge Ramírez</b><br><span>jorge@correo.com</span></div><a href="#" style="color:#8c1c3a;font-weight:600;font-size:13px">Quitar</a></div>
+    <div class="perms"><span class="on">Editar contenido</span><span class="on">Ver asistencia</span><span>Publicar</span><span>Pagar</span></div></div>
+  <div class="p"><div class="top"><div><b>Wedding planner · Paola</b><br><span>paola@eventos.mx</span></div><a href="#" style="color:#8c1c3a;font-weight:600;font-size:13px">Quitar</a></div>
+    <div class="perms"><span class="on">Editar contenido</span><span class="on">Ver asistencia</span><span class="on">Publicar</span><span>Pagar</span></div></div>
+  <p class="note">Solo tú puedes pagar, archivar o quitar coanfitriones.</p>
+</main>
+</body>
+</html>

@@ -196,6 +196,105 @@ verification, CI, and its own merge to `master` before the next starts.
      needs, carries a title, and the page's Content Security Policy (if any) allows only that embed origin.
   5. Placement: the shared features block («Míralo en vivo»), with the fallback link «Si no carga, ábrela aquí».
      Queued after F8.
+- L14 — F10: owner picked `design/opening-animation/01-sobre-con-sello.html` («Sobre con sello»); the other two
+  are alternatives. Parent decisions for F10 (binding):
+  1. Scope: the public invitation `/i/<slug>` and the guest's personal page; never the owner preview or the editor.
+  2. Behavior: a client-only overlay over the already server-rendered invitation (without script the guest sees the
+     invitation directly): the seal fades, the flap opens, the card rises with the occasion and the celebrant's name
+     (or initials) in the theme's own tokens and script face, the envelope drops away; about 3 s in total; one tap,
+     click, Enter, Escape, or Space skips it at once; it plays once per browser session per invitation
+     (`sessionStorage`), so a reload does not replay it; `prefers-reduced-motion: reduce` skips it entirely; the
+     overlay is `aria-hidden`, never traps focus, and the page content stays in the accessibility tree.
+  3. Owner control: a switch «Animación de apertura» in «Funciones», on by default, stored as a boolean on
+     `InvitationFeatureSettings` (`openingAnimation`, additive column with default true) and accepted as OPTIONAL
+     by the features PUT (omitted keeps the stored value), passed through by the autosave like the itinerary.
+  4. Gating: a new feature key `OPENING_ANIMATION` granted to every package (migration by key, seed), so the
+     catalog can withdraw it later without code.
+  5. Weight: CSS animations only (transform and opacity), no new dependency, no image download beyond the theme's
+     own fonts. Queued after F9.
+- L15 — F11: owner picked `design/custom-address/01-campo-libre.html` («Campo libre con verificación»), placed in the
+  editor's «Publicar» tab; the other two are alternatives. Parent decisions for F11 (binding; high risk — a stored
+  identifier changes and a database guard is widened: own commits, independent verification, native review):
+  1. Rule: a slug is 3-40 characters of lowercase letters, digits, and inner hyphens (`^[a-z0-9][a-z0-9-]{1,38}
+     [a-z0-9]$`, no double hyphen), not a reserved word (route and product names such as `admin`, `api`, `cuenta`,
+     `ingresar`, `i`, `health`, `invitame`), unique across current slugs and every previous slug.
+  2. Database: a new migration lets `Invitation.slug` change only through the API's rename (the pinned-field trigger
+     keeps refusing owner, package, and any other change exactly as today) and adds an `InvitationSlugAlias` table
+     (`slug` unique, `invitationId`, `createdAt`) recording every previous slug; at most 5 renames per invitation.
+  3. API: owner-only `GET /invitations/:id/slug-availability?slug=` (rate-limited on the shared `RateLimit` store,
+     answers available / taken / invalid / reserved without naming another owner) and `PUT /invitations/:id/slug`
+     (validates, checks uniqueness in one transaction, stores the old slug as an alias, refused for an archived
+     invitation). The public read by an alias answers a redirect target, and `/i/<alias>` (and its personal and
+     calendar routes) redirect permanently to the current slug.
+  4. Web: the artboard's block in «Publicar» — prefix `invitame.mx/i/` (the real origin), the field, a live
+     «✓ Disponible» / «Ya está en uso» / «No es válida» state (debounced, server-checked), the rule hint, «Guardar
+     dirección», and the note that the previous link keeps working; the share panel and the list show the new
+     address. Queued after F10.
+- L17 — F12: owner picked `design/co-hosts/02-con-permisos.html` («Con permisos»); the other two are alternatives.
+  Security-sensitive (authorization): per `AGENTS.md` the owner must approve this security design before
+  implementation. Proposed design (binding once approved):
+  1. Data: an `InvitationCollaborator` table (`invitationId`, invited `email`, `userId` set on acceptance, a set of
+     permissions, `invitedAt`, `acceptedAt`, a hashed single-use acceptance token with a 7-day expiry); at most 5 per
+     invitation; additive migration.
+  2. Permissions: `EDIT_CONTENT` (content, photos, features), `VIEW_ATTENDANCE` (answers, guest list, CSV),
+     `PUBLISH` (publish and unpublish). Owner-only, never grantable: paying, refunds, archiving, the address rename,
+     and managing collaborators; the «Pagar» chip is shown locked with «Solo el dueño».
+  3. Invitation: the owner enters an email; the API emails a link (existing email provider); the recipient signs in
+     with the existing email code and must hold that exact email to accept; a wrong account, an expired or reused
+     token answers the same refusal. The owner can revoke a pending or accepted collaborator at any time; revoking
+     ends access on the next request.
+  4. Authorization: every invitation route resolves the caller as owner or as an accepted collaborator and checks the
+     route's permission on the backend (deny by default; another user's invitation still answers 404); the web hides
+     what a collaborator cannot do but never relies on that.
+  5. Web: the artboard's screen per invitation (owner only); «Mis invitaciones» also lists invitations shared with the
+     user, marked «Compartida contigo», with only the allowed tabs. Gating: a new feature key `CO_HOSTS` granted to
+     premium and deluxe.
+  6. Evidence: independent verification with an authorization matrix (owner, each permission, revoked, stranger)
+     and native review are required. Queued after F11.
+  Owner approval, verbatim choice: «Sí, apruebo» (the four-point security summary: email-bound single-use 7-day
+  acceptance; edit content, view attendance, publish; never pay, refund, archive, rename the address, or manage
+  collaborators; at most 5, revocable with immediate effect; backend checks every permission).
+- L18 — F13: owner picked `design/password-invitation/01-pantalla-con-candado.html` («Pantalla con candado»); the
+  owner setting follows `03-ajuste-anfitrion.html` (parent decision: proposed as its complement); `02` is the
+  alternative. Security-sensitive: the owner approves the security design below before implementation.
+  1. The password is a shared access code (4-40 characters), never a user credential; the API stores only its hash
+     with Node's built-in `crypto.scrypt` and a random salt (no invented cryptography, no new dependency); the owner
+     sees it once while setting it (with the ready-to-share message) and can replace or remove it, never read it back.
+  2. The API owns the gate: while a password is set, the public read, the RSVP and guestbook writes, the photo
+     upload, and the calendar file answer a locked state with no invitation data (only the display name for the
+     lock screen); a correct password returns an access token (HMAC over the invitation id and the password version
+     with a new server secret `INVITATION_ACCESS_SECRET`, 30 days), stored by the web in an `HttpOnly`, `Secure`,
+     `SameSite=Lax` cookie scoped to that invitation; changing or removing the password invalidates old tokens.
+  3. Attempts are limited per client address and invitation on the shared `RateLimit` store; a wrong password and a
+     locked-out attempt answer the same neutral message.
+  4. A guest's personal link `/i/<slug>/g/<token>` already carries a secret and skips the password.
+  5. Gating: a new feature key `PASSWORD_PROTECTION` granted to deluxe. Independent verification (lock matrix) and
+     native review are required. Queued after F12.
+  Owner approval, verbatim choice: «Sí, apruebo» (the five-point summary: hashed shared code shown once; server
+  locks the read, RSVP, guestbook, photos, and calendar; 30-day device memory invalidated by a change; limited
+  attempts; personal guest links skip it).
+- L19 — F14: owner picked `design/english-invitation/02-idioma-anfitrion.html` («Idioma elegido por el anfitrión»);
+  when the owner chooses both languages, guests get the ES / EN switch of `01-selector-de-idioma.html` (parent
+  decision: proposed as its complement); `03` is the alternative. Parent decisions for F14 (binding):
+  1. Setting: `language` on `InvitationFeatureSettings` — `es` (default), `es-en`, or `en` — additive column with a
+     check constraint; the features PUT accepts it as OPTIONAL (omitted keeps the stored value), passed through by
+     the autosave; the editor's «Funciones» tab shows the artboard's three options.
+  2. What is translated: every fixed guest-facing text — renderer kickers and headings, the features block
+     (countdown, map, calendar, WhatsApp, playlist, itinerary, gift registry, lodging, livestream, guestbook, album),
+     the RSVP and guestbook forms with their errors and notices, the access pass, the lock screen, the opening
+     animation, the expired note, the calendar file — from one typed dictionary per locale (`es`, `en`), never
+     machine translation; dates and times formatted with `Intl` for the locale. What the owner wrote stays as
+     written.
+  3. Guest choice: with `es-en`, a server-rendered ES / EN switch (a link carrying `?idioma=en`, remembered in a
+     cookie), so it works without client script; `en` renders English only; the document `lang` attribute follows
+     the rendered locale.
+  4. Gating: a new feature key `ENGLISH_INVITATION` granted to every package (migration by key, seed). Queued after
+     F13 (it must cover the texts every earlier feature adds).
+- L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
+  premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
+  it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
+  a disposable fresh DB `invitame_ci_check`). Rule for every feature that adds a catalog key (F4, F6, F7, F8, F9, F10):
+  update that spec's key lists and run all db-specs on a fresh, seeded, disposable database before merging.
 - L13 — F1 closed: browser walkthrough found that adding a moment saved an empty one (fixed: only complete moments are
   sent; a stored moment being retyped keeps its last complete version). Native review `review-ad6cbbf18331c6a9` on the
   API commit required one correction (the features PUT made `itinerary` required, breaking an older client during a

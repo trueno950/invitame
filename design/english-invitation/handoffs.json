@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "02-idioma-anfitrion.html",
+  "handoffs": {
+    "02-idioma-anfitrion.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T17:48:14.789Z",
+      "startedAt": "2026-11-26T17:50:10.169Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: la última; con «Español e inglés» los invitados ven el botón ES / EN (propuesta 01)."
+    }
+  }
+}

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inglés — selector de idioma para el invitado</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-script:"Great Vibes","Snell Roundhand",cursive;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px;position:relative}
+  .lang{position:absolute;top:18px;right:18px;display:flex;background:var(--surface);border-radius:999px;padding:3px;box-shadow:inset 0 0 0 1px var(--soft)}
+  .lang span{font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;color:#6d5752}
+  .lang .on{background:var(--accent);color:#fff}
+  .cover{text-align:center;padding:50px 10px 20px}
+  .cover small{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent)}
+  .cover b{display:block;font-family:var(--font-script);font-size:48px;color:var(--accent);font-weight:400}
+  .cover span{font-family:var(--font-display);font-size:18px}
+  .card{background:var(--surface);border-radius:18px;padding:16px;margin-top:10px;box-shadow:inset 0 0 0 1px var(--soft)}
+  .card h3{font-family:var(--font-display);font-size:20px;margin:0 0 6px}.card p{margin:0;font-size:14px;color:#6d5752}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="lang" role="group" aria-label="Idioma"><span>ES</span><span class="on">EN</span></div>
+  <div class="cover"><small>Our wedding</small><b>Ana &amp; Luis</b><span>November 21</span></div>
+  <div class="card"><h3>Ceremony</h3><p>Parroquia de San Juan · 5:00 p.m.</p></div>
+  <div class="card"><h3>RSVP</h3><p>Please confirm before August 1.</p></div>
+</div>
+</body>
+</html>

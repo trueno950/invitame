@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contraseña — portada visible, detalles protegidos</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;--line:#c9a99c;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-script:"Great Vibes","Snell Roundhand",cursive;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  .cover{background:var(--surface);border-radius:20px;padding:30px 20px;text-align:center;margin-bottom:12px;box-shadow:inset 0 0 0 1px var(--soft)}
+  .cover small{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent)}
+  .cover b{display:block;font-family:var(--font-script);font-size:46px;color:var(--accent);font-weight:400}
+  .cover span{font-family:var(--font-display);font-size:18px}
+  .locked{background:var(--surface);border-radius:20px;padding:20px;box-shadow:inset 0 0 0 1px var(--soft);text-align:center}
+  .locked p{font-size:14px;color:#6d5752;margin:0 0 12px}
+  .row{display:flex;gap:8px}.row input{flex:1;font:15px var(--font-sans);padding:11px 12px;border-radius:12px;border:1.5px solid var(--line)}
+  .row button{padding:11px 16px;border:0;border-radius:999px;background:var(--accent);color:#fff;font:600 14px var(--font-sans)}
+  .blur{margin-top:14px;filter:blur(4px);font-size:13px;color:#6d5752;line-height:1.8;user-select:none}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="cover"><small>Nuestra boda</small><b>Ana &amp; Luis</b><span>21 de noviembre</span></div>
+  <div class="locked">
+    <p>🔒 Lugar, horario y confirmación están protegidos.</p>
+    <div class="row"><input type="password" placeholder="Contraseña" aria-label="Contraseña"><button type="button">Abrir</button></div>
+    <div class="blur" aria-hidden="true">Ceremonia · Parroquia · 17:00 h<br>Recepción · Jardín · 19:30 h<br>Confirma tu asistencia</div>
+  </div>
+</div>
+</body>
+</html>

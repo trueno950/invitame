@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inglés — idioma de la invitación (anfitrión)</title>
+<style>
+  :root{--bg:#fff7f5;--surface:#fff;--rose-50:#fdeef2;--rose-100:#f8d7e0;--ink:#3b1424;--muted:#6b3a4c;--primary:#8c1c3a;--field-border:#a06e7e;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);padding:32px}
+  main{max-width:640px;margin:0 auto}
+  h1{font-family:var(--font-display);font-weight:600;font-size:28px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 16px}
+  .opt{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border-radius:16px;padding:14px 16px;margin-bottom:10px;box-shadow:inset 0 0 0 1.5px var(--rose-100)}
+  .opt.on{box-shadow:inset 0 0 0 2px var(--primary);background:var(--rose-50)}
+  .dot{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--field-border);flex:none;margin-top:2px}
+  .on .dot{box-shadow:inset 0 0 0 5px var(--primary)}
+  .opt b{font-size:15px}.opt span{font-size:13px;color:var(--muted);display:block}
+  .note{font-size:13px;color:var(--muted);margin-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Idioma de tu invitación</h1>
+  <p class="lead">Los textos fijos (botones, títulos, cuenta regresiva) se traducen solos; lo que tú escribes se queda como lo escribiste.</p>
+  <div class="opt"><span class="dot"></span><div><b>Solo español</b><span>Como hoy.</span></div></div>
+  <div class="opt on"><span class="dot"></span><div><b>Español e inglés</b><span>Tus invitados eligen el idioma con un botón ES / EN.</span></div></div>
+  <div class="opt"><span class="dot"></span><div><b>Solo inglés</b><span>Para invitados del extranjero.</span></div></div>
+  <p class="note">Si quieres, puedes escribir tu mensaje en ambos idiomas en el campo «Mensaje».</p>
+</main>
+</body>
+</html>

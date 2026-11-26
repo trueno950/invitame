@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dirección — campo libre con verificación</title>
+<style>
+  :root{--bg:#fff7f5;--surface:#fff;--rose-50:#fdeef2;--rose-100:#f8d7e0;--ink:#3b1424;--muted:#6b3a4c;--primary:#8c1c3a;--field-border:#a06e7e;--ok:#166534;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);padding:32px}
+  main{max-width:640px;margin:0 auto}
+  h1{font-family:var(--font-display);font-weight:600;font-size:28px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 18px}
+  .card{background:var(--surface);border-radius:20px;padding:20px;box-shadow:inset 0 0 0 1.5px var(--rose-100)}
+  label{font-size:14px;font-weight:500;display:block;margin-bottom:6px}
+  .url{display:flex;align-items:center;border:1.5px solid var(--field-border);border-radius:14px;overflow:hidden}
+  .url span{padding:12px 4px 12px 14px;color:var(--muted);font-size:15px;white-space:nowrap}
+  .url input{flex:1;border:0;font:15px var(--font-sans);padding:12px 14px 12px 0;outline:none}
+  .ok{margin:8px 0 0;font-size:13px;color:var(--ok);font-weight:600}
+  .hint{margin:6px 0 16px;font-size:13px;color:var(--muted)}
+  button{font:600 14px var(--font-sans);padding:11px 20px;border-radius:999px;border:0;background:var(--primary);color:#fff}
+  .warn{margin-top:14px;font-size:13px;color:var(--muted);background:var(--rose-50);border-radius:12px;padding:10px 12px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Dirección de tu invitación</h1>
+  <p class="lead">Elige una dirección fácil de recordar y de compartir.</p>
+  <section class="card">
+    <label for="slug">Tu dirección</label>
+    <div class="url"><span>invitame.mx/i/</span><input id="slug" value="valentina-xv"></div>
+    <p class="ok">✓ Disponible</p>
+    <p class="hint">Solo letras minúsculas, números y guiones; de 3 a 40 caracteres.</p>
+    <button type="button">Guardar dirección</button>
+    <p class="warn">Si ya compartiste el enlace anterior, seguirá funcionando y llevará a la nueva dirección.</p>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "title": "Coanfitriones",
+  "brief": "El dueño de la invitación invita a otra persona (pareja, mamá, wedding planner) a editarla con él; Premium y Deluxe.",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-invitar-por-correo.html",
+      "title": "Invitar por correo",
+      "tradeoff": "Se escribe el correo y llega una invitación; claro y seguro, todos los coanfitriones pueden editar igual",
+      "width": 780,
+      "height": 520
+    },
+    {
+      "file": "02-con-permisos.html",
+      "title": "Con permisos",
+      "tradeoff": "Cada coanfitrión con permisos (editar, ver asistencia, publicar, pagar); el más flexible, más complejo de entender",
+      "width": 820,
+      "height": 560
+    },
+    {
+      "file": "03-enlace-para-compartir.html",
+      "title": "Enlace para compartir",
+      "tradeoff": "Un enlace de un solo uso que caduca en 7 días, para mandarlo por WhatsApp; el más rápido, si se reenvía otro podría usarlo",
+      "width": 740,
+      "height": 440
+    }
+  ]
+}

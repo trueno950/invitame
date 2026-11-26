@@ -1,0 +1,28 @@
+{
+  "title": "Dirección personalizada",
+  "brief": "El anfitrión cambia la dirección aleatoria (/i/invitacion-z1o9m3) por una fácil de recordar (/i/valentina-xv); los enlaces anteriores siguen funcionando.",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-campo-libre.html",
+      "title": "Campo libre con verificación",
+      "tradeoff": "El anfitrión escribe la dirección y ve si está disponible al momento; flexible, puede tardar en dar con una libre",
+      "width": 760,
+      "height": 520
+    },
+    {
+      "file": "02-sugerencias.html",
+      "title": "Sugerencias",
+      "tradeoff": "Tres direcciones sugeridas a partir del nombre y la ocasión, con «Escribir otra»; lo más rápido, menos personal",
+      "width": 760,
+      "height": 520
+    },
+    {
+      "file": "03-en-publicar.html",
+      "title": "En el panel Publicar",
+      "tradeoff": "La dirección aparece donde se publica, con «Cambiar»; en el momento justo, se combina con 01 o 02",
+      "width": 760,
+      "height": 420
+    }
+  ]
+}

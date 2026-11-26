@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contraseña — ajuste del anfitrión</title>
+<style>
+  :root{--bg:#fff7f5;--surface:#fff;--rose-50:#fdeef2;--rose-100:#f8d7e0;--ink:#3b1424;--muted:#6b3a4c;--primary:#8c1c3a;--field-border:#a06e7e;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);padding:32px}
+  main{max-width:640px;margin:0 auto}
+  h1{font-family:var(--font-display);font-weight:600;font-size:28px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 16px}
+  .card{background:var(--surface);border-radius:20px;padding:20px;box-shadow:inset 0 0 0 1.5px var(--rose-100)}
+  .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .sw{width:42px;height:24px;border-radius:999px;background:var(--primary);position:relative}.sw::after{content:"";position:absolute;top:3px;left:21px;width:18px;height:18px;border-radius:50%;background:#fff}
+  label{display:block;font-size:14px;font-weight:500;margin-bottom:6px}
+  input{width:100%;font:15px var(--font-sans);padding:11px 14px;border-radius:14px;border:1.5px solid var(--field-border)}
+  .hint{font-size:13px;color:var(--muted);margin:8px 0 0}
+  .share{margin-top:14px;background:var(--rose-50);border-radius:12px;padding:10px 12px;font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Invitación privada</h1>
+  <p class="lead">Pide una contraseña para ver tu invitación. Compártela junto con el enlace.</p>
+  <section class="card">
+    <div class="row"><b>Pedir contraseña</b><div class="sw" role="switch" aria-checked="true" aria-label="Pedir contraseña"></div></div>
+    <label for="pw">Contraseña</label>
+    <input id="pw" value="rosas2026">
+    <p class="hint">De 4 a 40 caracteres. Tus invitados la escriben una vez por dispositivo.</p>
+    <div class="share">Mensaje para compartir: «Te invitamos a nuestra boda 💍 invitame.mx/i/ana-y-luis · contraseña: rosas2026»</div>
+  </section>
+</main>
+</body>
+</html>

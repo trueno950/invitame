@@ -1,0 +1,28 @@
+{
+  "title": "Invitación en inglés",
+  "brief": "Los textos fijos de la invitación (títulos, botones, cuenta regresiva, confirmación) en inglés para invitados del extranjero; lo que escribe el anfitrión se queda como lo escribió.",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-selector-de-idioma.html",
+      "title": "Selector de idioma",
+      "tradeoff": "Un botón ES / EN en la invitación y cada invitado elige; flexible, un control más en pantalla",
+      "width": 470,
+      "height": 620
+    },
+    {
+      "file": "02-idioma-anfitrion.html",
+      "title": "Idioma elegido por el anfitrión",
+      "tradeoff": "El anfitrión elige solo español, ambos o solo inglés; claro para él, se combina con 01 cuando elige ambos",
+      "width": 760,
+      "height": 520
+    },
+    {
+      "file": "03-bilingue-lado-a-lado.html",
+      "title": "Bilingüe lado a lado",
+      "tradeoff": "Ambos idiomas a la vez en cada título; sin botones, pero la invitación se ve más cargada",
+      "width": 470,
+      "height": 560
+    }
+  ]
+}

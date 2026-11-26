@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "02-con-permisos.html",
+  "handoffs": {
+    "02-con-permisos.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T17:43:36.118Z",
+      "startedAt": "2026-11-26T17:44:04.552Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después de la dirección personalizada; requiere aprobar el diseño de seguridad."
+    }
+  }
+}

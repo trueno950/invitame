@@ -1,0 +1,28 @@
+{
+  "title": "Invitación con contraseña",
+  "brief": "El anfitrión protege su invitación con una contraseña que comparte junto con el enlace (Deluxe).",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-pantalla-con-candado.html",
+      "title": "Pantalla con candado",
+      "tradeoff": "Todo queda oculto hasta escribir la contraseña; lo más privado, el invitado no ve nada antes",
+      "width": 470,
+      "height": 840
+    },
+    {
+      "file": "02-portada-visible.html",
+      "title": "Portada visible, detalles protegidos",
+      "tradeoff": "Se ven el nombre y la fecha, y lugar, horario y confirmación piden contraseña; más amable, deja ver lo básico",
+      "width": 470,
+      "height": 640
+    },
+    {
+      "file": "03-ajuste-anfitrion.html",
+      "title": "Ajuste del anfitrión",
+      "tradeoff": "Interruptor y contraseña en el editor, con el mensaje listo para compartir; se combina con 01 o 02",
+      "width": 760,
+      "height": 520
+    }
+  ]
+}
