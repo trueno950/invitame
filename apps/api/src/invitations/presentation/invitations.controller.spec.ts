@@ -4704,6 +4704,19 @@ describe("invitations routes: /invitations", () => {
 
     const guestPath = (slug: string, token: string) => `${PUBLIC_PATH}/${slug}/guests/${token}`;
 
+    it("never carries the table on the open public read, only in the guest block (F5; L8.4)", async () => {
+      const { created } = await published();
+
+      const open = await send("GET", `${PUBLIC_PATH}/${created.slug}`);
+      assert.equal(open.status, 200);
+      assert.equal(JSON.stringify(await open.json()).includes("tableLabel"), false);
+
+      const personal = (await (
+        await send("GET", guestPath(created.slug, "A".repeat(22)))
+      ).json()) as Row;
+      assert.equal((personal.guest as Row).tableLabel, "7");
+    });
+
     it("answers the published page plus this guest, and nothing about another guest", async () => {
       const { created, guest } = await published();
       guestRepository.seedGuest(created.id, { token: "B".repeat(22), name: "Beto" });

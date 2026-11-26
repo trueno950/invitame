@@ -216,6 +216,23 @@ describe("the guest list view", () => {
     assert.equal(JSON.stringify(view).includes(TOKEN), false);
   });
 
+  it("orders numeric tables by value, never as text (F5; L8.3)", () => {
+    const view = guestListView(INVITATION, {
+      guests: [
+        guest({ name: "A", tableLabel: "10", response: null }),
+        guest({ name: "B", tableLabel: "9", response: null }),
+        guest({ name: "C", tableLabel: "2", response: null }),
+      ],
+      totals: LIST.totals,
+    });
+
+    // A text sort would put «10» before «9»; the owner reads the tables in the order they are numbered.
+    assert.deepEqual(
+      view.tableSummaries.map((line) => line.split(" · ")[0]),
+      ["Mesa 2", "Mesa 9", "Mesa 10"],
+    );
+  });
+
   it("says «1 persona» and «1 invitado» when the count is one (F5; L8.3)", () => {
     const view = guestListView(INVITATION, {
       guests: [guest({ seats: 2, tableLabel: "Principal" })],

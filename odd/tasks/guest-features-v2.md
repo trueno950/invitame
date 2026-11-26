@@ -313,6 +313,13 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   L7 item met, 58 probes with no failure, migration idempotent, baseline differential differs only by the added
   `features.lodging`; db-specs 486/486 on a fresh seeded database; browser check of the hotel and transport cards.
   Deployment note (as L21): the API deploys before the web.
+- L23 — F5 evidence: commits `ade5fde` (API, migration `20261206120000_add_guest_table_label`) and `0f73ca1` (web).
+  Native review `review-d2f52c80101728ba` approved with no finding. Independent verification: every L8 item met, 36
+  probes with no failure; the open public read and the open-form CSV are byte-identical to the base, and the personal
+  read differs only by the added `guest.tableLabel`; db-specs 488/488 on a fresh seeded database; browser check of the
+  owner's «Mesa» column and summary and of a confirmed guest's pass («Mesa 7», «Personas 1», venue hint). The evidence
+  commit adds the verifier's two regression tests (numeric table order; the open read never carries the table) and
+  drops the unused `passTitle` copy. Deployment note (as L21): the API deploys before the web.
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on

@@ -1018,7 +1018,6 @@ export const GUEST_PAGE_COPY = {
   /** The prefilled WhatsApp message of a personal link the creator shares (G4). */
   shareMessage: (firstName: string, url: string) =>
     `Hola ${firstName}, aquí está tu invitación personal: ${url}`,
-  passTitle: "Tu pase de acceso",
   /** The ticket of F5: the kicker above the guest's name, its two labelled facts, and the venue hint (L8.4). */
   passKicker: "Pase de acceso",
   passTableLabel: "Mesa",
