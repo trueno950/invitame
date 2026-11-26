@@ -4,7 +4,7 @@ Operational runbooks for the first release and the alert-ownership table (Milest
 document an operator opens while something is happening: each runbook quotes the exact command, the exact SQL, or
 the exact structured event that exists in the code today, with a `path:line` citation. Exit criteria S5 require
 «critical workflows have human-approved operational owners and tested recovery paths»; the table in
-[§9](#9-alert-ownership-table) is where those owners and destinations are recorded, and every cell that is still
+[§10](#10-alert-ownership-table) is where those owners and destinations are recorded, and every cell that is still
 undecided says so instead of guessing.
 
 **Nothing is deployed today.** There is no Railway project, domain, production email, media bucket, or payment
@@ -25,7 +25,7 @@ per-service commands, and the variable matrices live in
   one while diagnosing.
 - Timestamps in these runbooks are UTC unless a step names `America/Mexico_City`, which is the product's own day
   boundary for analytics.
-- Structured log events are `JSON` lines with an `event` key. §9 lists the ones that are alert-worthy; §8 lists the
+- Structured log events are `JSON` lines with an `event` key. §10 lists the ones that are alert-worthy; §9 lists the
   rest and says what a log is and is not.
 
 ## 1. Release checklist
@@ -149,10 +149,10 @@ Six actions, in order, on the deployed system. Every one of them is a real user 
    increments it again — an opening is each opening of the link, reloads and the owner's own visit included
    (`docs/development/analytics-retention.md`). The write happens after the answer is sent and is never awaited, so
    a read taken in the same second as the page load may still be one behind; reload the admin page before deciding
-   it failed, and only then check `invitation_view_count_failed` (§8).
+   it failed, and only then check `invitation_view_count_failed` (§9).
 5. **Sign in as an administrator.** `https://app.<domain>/admin/ingresar` with the password and the authenticator
    code. An administrator who has not enrolled an authenticator app cannot take an administrative action, and its
-   password only works inside its 24-hour window (ADR 0004 decision 3, [§7](#7-administrator-lockout)).
+   password only works inside its 24-hour window (ADR 0004 decision 3, [§8](#8-administrator-lockout)).
 6. **Load `/admin/analitica`.** The window's daily openings and the purchase funnel render. A load failure shows
    the page's own retry notice instead of an empty table (`apps/web/app/admin/analitica/page.tsx:95-102`,
    `apps/web/lib/admin/analytics/copy.ts:59`).
@@ -423,7 +423,66 @@ period, and then the rows whose object is gone. Idempotent for the same reason: 
 first did not already remove, and a failed object keeps its row for the next run. It needs `NODE_ENV`, the
 database URL, and the media variables, but no auth, web, or payment secret.
 
-## 6. Secret rotation
+## 6. WhatsApp reminders (built, switched off)
+
+The reminder feature exists end to end and sends nothing yet: there is no WhatsApp Business subscription, so the only
+sender adapter is the one that reports `not_configured`. Nothing below is scheduled, and no owner can turn a reminder on
+today — the switches are stored, and the editor shows «Aún no está activo» while the API reports that capability.
+
+### The command
+
+```bash
+pnpm --filter @invitame/api reminders:send -- --dry-run   # plans the run and reports it, touching nothing
+pnpm --filter @invitame/api reminders:send                # claims, sends, and records the attempts
+```
+
+- Prints `{"event":"reminders_send","configured":false,"mode":"dry-run"|"send","invitations":N,"due":N,"sent":N,
+  "skipped":N,"failed":N,"alreadyRecorded":N,"unreachable":N,"notGranted":N,"unusable":N}`
+  (`apps/api/scripts/reminders-send.ts`). Counts only: never a phone number, a guest's name, a message body, an
+  invitation id, or an owner.
+- What it plans: for every published, unexpired invitation whose pinned package grants `WHATSAPP_REMINDERS` and whose
+  owner switched a reminder on, the reminders due **today in the invitation's own IANA zone** — seven and two days
+  before the RSVP deadline for the guests who have not answered yet, and one day before the celebration for the guests
+  who did not decline. A guest without a stored phone is counted as `unreachable` and is not reminded; the owner sees
+  which guests have a phone in the guest list.
+- Idempotent by record: every attempt is stored in `ReminderDelivery`, unique on invitation, guest, kind, and due date,
+  so a second run of the same day records nothing new (`alreadyRecorded`) and sends nothing twice. `--dry-run` claims,
+  sends, and records nothing; it only reports what the run would do, including what an earlier run already recorded.
+- With the default adapter every attempt is recorded as `skipped` with the reason `not_configured`. A provider refusal
+  is recorded as `failed` with a stable reason, and the run then exits 1; a guest's attempt is never retried the same
+  day, which is the price of never sending the same reminder twice.
+- Needs only `DATABASE_URL`; there is no required reminder configuration, because a missing provider *is* the
+  `not_configured` state and never a startup failure.
+- Exit 0 means the run finished with no failed attempt; 1 means at least one attempt failed, an unknown argument was
+  passed, the configured origin is not a bare `http(s)` origin
+  (`{"event":"reminders_send_refused","reason":"invalid_origin"}`), or the run itself threw
+  (`{"event":"reminders_send_failed","error":"…"}`), which is never reported as done.
+
+### Configuration keys, all unset today
+
+A future WhatsApp Business adapter would read these; none of them is required by this release, and none is validated at
+startup:
+
+| Key | What it would be | State |
+| --- | --- | --- |
+| `WHATSAPP_BUSINESS_PHONE_NUMBER_ID` | The Business sender's phone number id | Unset |
+| `WHATSAPP_BUSINESS_ACCESS_TOKEN` | The server-only API token; never logged, echoed, or returned | Unset |
+| `WHATSAPP_GRAPH_API_BASE_URL` | The Graph API origin the adapter posts to | Unset |
+| `WHATSAPP_REMINDERS_PUBLIC_BASE_URL` | The public web origin the message's link names; defaults to `https://invitame.mx` | Unset (default in use) |
+
+`DATABASE_URL` is the only setting the command needs. The capability the API answers is `false` exactly while no
+adapter is configured, and it is a flag, never a secret: the web never sees a key, a token, or a phone id.
+
+### Turning it on later
+
+1. Set the four keys above in the API environment.
+2. Add the WhatsApp Business adapter that implements `ReminderSender` in
+   `apps/api/src/reminders/infrastructure/` and provide it for `REMINDER_SENDER` in `RemindersModule` — the command,
+   the schedule, the message, the record, and the owner's screen do not change (`S6`).
+3. Run the command with `--dry-run` for one day, compare the planned counts with the guest list, and only then schedule
+   it daily with `pnpm --filter @invitame/api reminders:send`.
+
+## 7. Secret rotation
 
 ### `AUTH_PROXY_SECRET` — rotatable without a cut
 
@@ -448,7 +507,7 @@ value.
 Diagnose the window from the logs: `{"event":"auth_proxy_rejected","path":"/api/auth/…"}` means a request arrived
 without a secret the API accepts — during a rotation that is step 2 missing or a web deployment still on the old
 value *after* step 3 (`apps/api/src/auth/auth-request-guard.ts:13`, `:234-236`). Nobody can sign in while it
-persists, so treat it as P1 in §9.
+persists, so treat it as P1 in §10.
 
 The same shape applies to the other rotating credentials: `PAYMENTS_SIMULATED_SECRET`, `MERCADOPAGO_ACCESS_TOKEN`,
 `MERCADOPAGO_WEBHOOK_SECRET`, and the media credentials are re-issued on the provider's side and updated on the
@@ -469,13 +528,13 @@ What that means operationally, because it decides whether you may rotate at all:
   to produce a valid second factor.
 - Each enrolled administrator therefore needs
   `pnpm --filter @invitame/api admin:reset-second-factor -- <email>` and then a fresh enrollment
-  ([§7](#7-administrator-lockout)), and every customer signs in again.
+  ([§8](#8-administrator-lockout)), and every customer signs in again.
 - So the honest rule today: **rotate only on a real suspicion of compromise, with the owner's approval, a planned
   window, and a list of every enrolled administrator in hand.** Not as routine hygiene. A planned rotation is a
   deployment-milestone task that does not exist yet; if one is needed, it is an owner decision, not an operator
   improvisation.
 
-## 7. Administrator lockout
+## 8. Administrator lockout
 
 There is no administrator sign-up, no password change through the API, and no interface that unlocks an account.
 Two server-side commands are the whole recovery surface, both interactive-terminal only, both printing their
@@ -526,7 +585,7 @@ affected it is that account's own state.
 
 1. **Is it everybody or one account?** If customers cannot sign in either, it is not a lockout. Go to
    [§3](#3-email-delivery-degraded) (codes) or check `auth_proxy_rejected` / `auth_request_unavailable` /
-   `web_config_invalid` in §8 and `/health` on both services.
+   `web_config_invalid` in §9 and `/health` on both services.
 2. **Do administrators fail with a password error or with a second-factor error?** A password error inside the
    24-hour window is a wrong password; after the window it is an expired one — `admin:create` again. A
    second-factor error is a lost device or a lost backup code set — `admin:reset-second-factor`.
@@ -537,10 +596,10 @@ affected it is that account's own state.
 4. **Is there no administrator at all?** `admin:create` is the answer, and its 24-hour enrollment window starts the
    clock — run it when the person who will enroll is ready, not days earlier.
 
-## 8. Incident log sources
+## 9. Incident log sources
 
 Every operational signal in the product is one JSON log line with an `event` key. These are the ones that exist
-today, with where they are emitted. Use them together with §9: the event tells you what broke, the runbook tells
+today, with where they are emitted. Use them together with §10: the event tells you what broke, the runbook tells
 you what to do.
 
 | Event | Emitted at | Meaning |
@@ -589,7 +648,7 @@ Three rules apply to all of them, and they are not stylistic:
 3. **Absence of an event is not evidence of health.** Almost every structural failure here is fail-closed and
    silent by design (a refused publication, a dropped webhook). Read the event *and* the state.
 
-## 9. Alert ownership table
+## 10. Alert ownership table
 
 One row per alert-worthy event above. The ADR requires the `email_delivery_degraded` row to exist and to be owned
 **by the first production release**; the rest are the same standard applied to the other user-facing paths.
@@ -634,14 +693,14 @@ threshold. A row that names no person is not an owner, and S5's exit criterion i
 
 ## Open items this document does not decide
 
-- **Alert destinations and named owners** — every row in §9. T8, with the owner.
+- **Alert destinations and named owners** — every row in §10. T8, with the owner.
 - **The email alert's channel specifically** — required by ADR 0004 decision 8 before the first production release.
 - **The scheduled retention and cleanup tasks** — the retention task's schedule is approved and created with the
   first deployment (S7, [`analytics-retention.md`](analytics-retention.md)); a scheduled media cleanup is not yet
   agreed.
 - **Log retention** — how long the platform keeps the structured lines. That is the host's setting and an owner
   decision; until it is recorded, treat a log query as a short-window tool and `AdminAction` as the record.
-- **`BETTER_AUTH_SECRET` rotation** — no path exists ([§6](#6-secret-rotation)); a planned rotation is an owner
+- **`BETTER_AUTH_SECRET` rotation** — no path exists ([§7](#7-secret-rotation)); a planned rotation is an owner
   decision and a deployment-milestone task.
 - **Re-enabling a `DISABLED` account** — no command exists; recovering a disabled administrator is out of scope, so
-  disabling one is irreversible today ([§7](#7-administrator-lockout)).
+  disabling one is irreversible today ([§8](#8-administrator-lockout)).
