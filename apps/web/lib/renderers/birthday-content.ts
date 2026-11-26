@@ -1,4 +1,5 @@
 import {
+  hiddenFieldSet,
   isCalendarDate,
   isClockTime,
   isHttpUrl,
@@ -20,27 +21,43 @@ export { formatLongDate } from "./invitation-fields.ts";
  */
 export interface BirthdayContent {
   readonly celebrantName: string;
-  readonly age: number;
+  /** The age; absent only when the invitation omits its `age` section (S8.3). */
+  readonly age?: number;
   /** A calendar date as `YYYY-MM-DD`. */
   readonly date: string;
   /** A time as `HH:MM`. */
   readonly time: string;
   readonly location: string;
   readonly address: string;
-  /** An http or https URL. */
-  readonly mainPhoto: string;
+  /**
+   * An http or https URL; absent only when the invitation omits its `mainPhoto` section (S8.3), because a
+   * birthday may be announced without a picture.
+   */
+  readonly mainPhoto?: string;
   readonly message: string;
 }
 
-/** The typed content of a themed birthday invitation, or a `RendererPropsError` naming every defect. */
-export function parseBirthdayContent(componentKey: string, value: unknown): BirthdayContent {
+/**
+ * The typed content of a themed birthday invitation, or a `RendererPropsError` naming every defect. A field of
+ * an omitted section (`hiddenFields`, S8.3) reads as absent — no age, no photo, empty text — and is never an
+ * issue; a section that stays shown keeps today's rule, so a blank required value still refuses the snapshot.
+ */
+export function parseBirthdayContent(
+  componentKey: string,
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): BirthdayContent {
   if (!isPlainObject(value)) {
     throw new RendererPropsError(componentKey, "content", ["content must be a JSON object"]);
   }
 
   const issues: string[] = [];
+  const hidden = hiddenFieldSet(hiddenFields);
 
   const text = (name: string): string => {
+    if (hidden.has(name)) {
+      return "";
+    }
     const field = readOwn(value, name);
 
     if (typeof field !== "string" || field.trim() === "") {
@@ -50,6 +67,9 @@ export function parseBirthdayContent(componentKey: string, value: unknown): Birt
     return field;
   };
   const formatted = (name: string, valid: (field: string) => boolean, rule: string): string => {
+    if (hidden.has(name)) {
+      return "";
+    }
     const field = readOwn(value, name);
 
     if (typeof field !== "string" || !valid(field)) {
@@ -60,9 +80,13 @@ export function parseBirthdayContent(componentKey: string, value: unknown): Birt
   };
 
   const celebrantName = text("celebrantName");
-  const age = readOwn(value, "age");
+  const declaredAge = readOwn(value, "age");
+  const age = hidden.has("age") ? undefined : declaredAge;
 
-  if (typeof age !== "number" || !Number.isInteger(age) || age < 1 || age > 120) {
+  if (
+    !hidden.has("age") &&
+    (typeof age !== "number" || !Number.isInteger(age) || age < 1 || age > 120)
+  ) {
     issues.push("content.age must be an integer from 1 to 120");
   }
 
@@ -70,13 +94,24 @@ export function parseBirthdayContent(componentKey: string, value: unknown): Birt
   const time = formatted("time", isClockTime, "a time as HH:MM");
   const location = text("location");
   const address = text("address");
-  const mainPhoto = formatted("mainPhoto", isHttpUrl, "an http or https URL");
+  const mainPhoto = hidden.has("mainPhoto")
+    ? undefined
+    : formatted("mainPhoto", isHttpUrl, "an http or https URL");
   const message = text("message");
 
-  if (issues.length > 0 || typeof age !== "number") {
+  if (issues.length > 0) {
     throw new RendererPropsError(componentKey, "content", issues);
   }
-  return { celebrantName, age, date, time, location, address, mainPhoto, message };
+  return {
+    celebrantName,
+    ...(typeof age === "number" ? { age } : {}),
+    date,
+    time,
+    location,
+    address,
+    ...(mainPhoto === undefined ? {} : { mainPhoto }),
+    message,
+  };
 }
 
 /** The age line the layouts show, in neutral professional Spanish: «Cumple 7 años». */

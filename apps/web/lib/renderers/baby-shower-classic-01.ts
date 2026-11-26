@@ -53,8 +53,11 @@ export interface BabyShowerContent {
 }
 
 /** The typed content of a stored version, or a `RendererPropsError` naming every defect. */
-export function parseBabyShowerClassicContent(value: unknown): BabyShowerContent {
-  const reader = contentReader(BABY_SHOWER_CLASSIC_COMPONENT_KEY, value);
+export function parseBabyShowerClassicContent(
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): BabyShowerContent {
+  const reader = contentReader(BABY_SHOWER_CLASSIC_COMPONENT_KEY, value, hiddenFields);
 
   const hosts = reader.text("hosts");
   const date = reader.formatted("date", isCalendarDate, "a calendar date as YYYY-MM-DD");

@@ -23,6 +23,9 @@ export function parseBirthdayPosterConfiguration(value: unknown): BirthdayPoster
 }
 
 /** The shared eight content fields of a stored `birthday-poster-01` version. */
-export function parseBirthdayPosterContent(value: unknown): BirthdayContent {
-  return parseBirthdayContent(BIRTHDAY_POSTER_COMPONENT_KEY, value);
+export function parseBirthdayPosterContent(
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): BirthdayContent {
+  return parseBirthdayContent(BIRTHDAY_POSTER_COMPONENT_KEY, value, hiddenFields);
 }

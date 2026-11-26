@@ -53,6 +53,11 @@ export function isHttpUrl(value: string): boolean {
   }
 }
 
+/** The set of content fields a version hides, or one that hides nothing when the list is absent (S8.3). */
+export function hiddenFieldSet(hiddenFields: readonly string[] = []): ReadonlySet<string> {
+  return new Set(hiddenFields);
+}
+
 /** A content object and the defects found in it, in the order the parser reads its fields. */
 export interface ContentReader {
   readonly issues: string[];
@@ -74,19 +79,32 @@ export interface ContentReader {
   content<T>(build: () => T): T;
 }
 
-/** A reader over one stored content snapshot; a non-object is refused before any field is read. */
-export function contentReader(componentKey: string, value: unknown): ContentReader {
+/**
+ * A reader over one stored content snapshot; a non-object is refused before any field is read. The
+ * `hiddenFields` of an invitation (S8.3) read as absent — empty text, no optional value, no issue — because
+ * the customer switched that section off and the layout will not draw it; a field the list does not cover
+ * keeps today's rule, so a shown required value that is blank still refuses the snapshot.
+ */
+export function contentReader(
+  componentKey: string,
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): ContentReader {
   if (!isPlainObject(value)) {
     throw new RendererPropsError(componentKey, "content", ["content must be a JSON object"]);
   }
 
   const issues: string[] = [];
+  const hidden = hiddenFieldSet(hiddenFields);
   const blank = (field: unknown): boolean =>
     field === undefined || field === null || (typeof field === "string" && field.trim() === "");
 
   return {
     issues,
     text(name) {
+      if (hidden.has(name)) {
+        return "";
+      }
       const field = readOwn(value, name);
 
       if (typeof field !== "string" || field.trim() === "") {
@@ -96,6 +114,9 @@ export function contentReader(componentKey: string, value: unknown): ContentRead
       return field;
     },
     formatted(name, valid, rule) {
+      if (hidden.has(name)) {
+        return "";
+      }
       const field = readOwn(value, name);
 
       if (typeof field !== "string" || !valid(field)) {
@@ -105,6 +126,9 @@ export function contentReader(componentKey: string, value: unknown): ContentRead
       return field;
     },
     optionalText(name) {
+      if (hidden.has(name)) {
+        return undefined;
+      }
       const field = readOwn(value, name);
 
       if (blank(field)) {
@@ -117,6 +141,9 @@ export function contentReader(componentKey: string, value: unknown): ContentRead
       return field;
     },
     optionalFormatted(name, valid, rule) {
+      if (hidden.has(name)) {
+        return undefined;
+      }
       const field = readOwn(value, name);
 
       if (blank(field)) {
@@ -129,6 +156,9 @@ export function contentReader(componentKey: string, value: unknown): ContentRead
       return field;
     },
     optionalBoolean(name) {
+      if (hidden.has(name)) {
+        return undefined;
+      }
       const field = readOwn(value, name);
 
       if (field === undefined || field === null) {

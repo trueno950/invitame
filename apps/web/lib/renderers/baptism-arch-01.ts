@@ -24,6 +24,9 @@ export function parseBaptismArchConfiguration(value: unknown): BaptismArchConfig
 }
 
 /** The typed content of a stored version, read by the one baptism parser both layouts share. */
-export function parseBaptismArchContent(value: unknown): BaptismContent {
-  return parseBaptismContent(BAPTISM_ARCH_COMPONENT_KEY, value);
+export function parseBaptismArchContent(
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): BaptismContent {
+  return parseBaptismContent(BAPTISM_ARCH_COMPONENT_KEY, value, hiddenFields);
 }

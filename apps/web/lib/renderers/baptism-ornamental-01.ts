@@ -30,6 +30,9 @@ export function parseBaptismOrnamentalConfiguration(
 }
 
 /** The typed content of a stored version, read by the one baptism parser every baptism layout shares. */
-export function parseBaptismOrnamentalContent(value: unknown): BaptismContent {
-  return parseBaptismContent(BAPTISM_ORNAMENTAL_COMPONENT_KEY, value);
+export function parseBaptismOrnamentalContent(
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): BaptismContent {
+  return parseBaptismContent(BAPTISM_ORNAMENTAL_COMPONENT_KEY, value, hiddenFields);
 }

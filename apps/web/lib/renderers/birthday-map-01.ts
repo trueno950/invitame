@@ -23,6 +23,9 @@ export function parseBirthdayMapConfiguration(value: unknown): BirthdayMapConfig
 }
 
 /** The shared eight content fields of a stored `birthday-map-01` version. */
-export function parseBirthdayMapContent(value: unknown): BirthdayContent {
-  return parseBirthdayContent(BIRTHDAY_MAP_COMPONENT_KEY, value);
+export function parseBirthdayMapContent(
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): BirthdayContent {
+  return parseBirthdayContent(BIRTHDAY_MAP_COMPONENT_KEY, value, hiddenFields);
 }

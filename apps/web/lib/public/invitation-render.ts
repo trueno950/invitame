@@ -77,77 +77,77 @@ const PROPS_CHECKS: ReadonlyMap<string, PropsCheck> = new Map<string, PropsCheck
     BIRTHDAY_MAP_COMPONENT_KEY,
     (props) => {
       parseBirthdayMapConfiguration(props.configuration);
-      parseBirthdayMapContent(props.content);
+      parseBirthdayMapContent(props.content, props.hiddenFields);
     },
   ],
   [
     BIRTHDAY_POSTER_COMPONENT_KEY,
     (props) => {
       parseBirthdayPosterConfiguration(props.configuration);
-      parseBirthdayPosterContent(props.content);
+      parseBirthdayPosterContent(props.content, props.hiddenFields);
     },
   ],
   [
     BIRTHDAY_STORY_COMPONENT_KEY,
     (props) => {
       parseBirthdayStoryConfiguration(props.configuration);
-      parseBirthdayStoryContent(props.content);
+      parseBirthdayStoryContent(props.content, props.hiddenFields);
     },
   ],
   [
     BABY_SHOWER_CLASSIC_COMPONENT_KEY,
     (props) => {
       parseBabyShowerClassicConfiguration(props.configuration);
-      parseBabyShowerClassicContent(props.content);
+      parseBabyShowerClassicContent(props.content, props.hiddenFields);
     },
   ],
   [
     BAPTISM_CLASSIC_COMPONENT_KEY,
     (props) => {
       parseBaptismClassicConfiguration(props.configuration);
-      parseBaptismClassicContent(props.content);
+      parseBaptismClassicContent(props.content, props.hiddenFields);
     },
   ],
   [
     XV_ARCH_COMPONENT_KEY,
     (props) => {
       parseXVArchConfiguration(props.configuration);
-      parseXVArchContent(props.content);
+      parseXVArchContent(props.content, XV_ARCH_COMPONENT_KEY, props.hiddenFields);
     },
   ],
   [
     WEDDING_ARCH_COMPONENT_KEY,
     (props) => {
       parseWeddingArchConfiguration(props.configuration);
-      parseWeddingArchContent(props.content);
+      parseWeddingArchContent(props.content, WEDDING_ARCH_COMPONENT_KEY, props.hiddenFields);
     },
   ],
   [
     BAPTISM_ARCH_COMPONENT_KEY,
     (props) => {
       parseBaptismArchConfiguration(props.configuration);
-      parseBaptismArchContent(props.content);
+      parseBaptismArchContent(props.content, props.hiddenFields);
     },
   ],
   [
     XV_ORNAMENTAL_COMPONENT_KEY,
     (props) => {
       parseXVOrnamentalConfiguration(props.configuration);
-      parseXVOrnamentalContent(props.content);
+      parseXVOrnamentalContent(props.content, props.hiddenFields);
     },
   ],
   [
     WEDDING_ORNAMENTAL_COMPONENT_KEY,
     (props) => {
       parseWeddingOrnamentalConfiguration(props.configuration);
-      parseWeddingOrnamentalContent(props.content);
+      parseWeddingOrnamentalContent(props.content, props.hiddenFields);
     },
   ],
   [
     BAPTISM_ORNAMENTAL_COMPONENT_KEY,
     (props) => {
       parseBaptismOrnamentalConfiguration(props.configuration);
-      parseBaptismOrnamentalContent(props.content);
+      parseBaptismOrnamentalContent(props.content, props.hiddenFields);
     },
   ],
 ]);

@@ -28,6 +28,9 @@ export function parseXVOrnamentalConfiguration(value: unknown): XVOrnamentalConf
 }
 
 /** The typed content of a stored version, read by the one XV parser both elegant layouts share. */
-export function parseXVOrnamentalContent(value: unknown): XVArchContent {
-  return parseXVArchContent(value, XV_ORNAMENTAL_COMPONENT_KEY);
+export function parseXVOrnamentalContent(
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): XVArchContent {
+  return parseXVArchContent(value, XV_ORNAMENTAL_COMPONENT_KEY, hiddenFields);
 }

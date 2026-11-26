@@ -62,8 +62,9 @@ export interface WeddingArchContent {
 export function parseWeddingArchContent(
   value: unknown,
   componentKey: string = WEDDING_ARCH_COMPONENT_KEY,
+  hiddenFields: readonly string[] = [],
 ): WeddingArchContent {
-  const reader = contentReader(componentKey, value);
+  const reader = contentReader(componentKey, value, hiddenFields);
 
   const coupleNameOne = reader.text("coupleNameOne");
   const coupleNameTwo = reader.text("coupleNameTwo");

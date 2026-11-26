@@ -60,8 +60,9 @@ export interface XVArchContent {
 export function parseXVArchContent(
   value: unknown,
   componentKey: string = XV_ARCH_COMPONENT_KEY,
+  hiddenFields: readonly string[] = [],
 ): XVArchContent {
-  const reader = contentReader(componentKey, value);
+  const reader = contentReader(componentKey, value, hiddenFields);
 
   const celebrantName = reader.text("celebrantName");
   const date = reader.formatted("date", isCalendarDate, "a calendar date as YYYY-MM-DD");

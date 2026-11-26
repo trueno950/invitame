@@ -39,6 +39,12 @@ export interface RendererProps {
   readonly configuration: unknown;
   readonly content: unknown;
   /**
+   * The content fields the invitation's omitted sections cover (S3, S8.3). A hidden field reads as absent, so
+   * a required value the customer switched off never refuses the snapshot, and the layout draws no block for
+   * it. Absent means the version omits nothing, which is every version published before the extension.
+   */
+  readonly hiddenFields?: readonly string[];
+  /**
    * The features the API gated for this invitation (S3, S4): countdown, map, calendar, and WhatsApp. Absent
    * when the invitation has none, and then the renderer places no features block and its markup is exactly
    * the markup it produced before the block existed. The public page passes them (F3); a package or a

@@ -23,6 +23,9 @@ export function parseBirthdayStoryConfiguration(value: unknown): BirthdayStoryCo
 }
 
 /** The shared eight content fields of a stored `birthday-story-01` version. */
-export function parseBirthdayStoryContent(value: unknown): BirthdayContent {
-  return parseBirthdayContent(BIRTHDAY_STORY_COMPONENT_KEY, value);
+export function parseBirthdayStoryContent(
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): BirthdayContent {
+  return parseBirthdayContent(BIRTHDAY_STORY_COMPONENT_KEY, value, hiddenFields);
 }

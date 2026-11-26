@@ -31,6 +31,9 @@ export function parseWeddingOrnamentalConfiguration(
 }
 
 /** The typed content of a stored version, read by the one wedding parser both elegant layouts share. */
-export function parseWeddingOrnamentalContent(value: unknown): WeddingArchContent {
-  return parseWeddingArchContent(value, WEDDING_ORNAMENTAL_COMPONENT_KEY);
+export function parseWeddingOrnamentalContent(
+  value: unknown,
+  hiddenFields: readonly string[] = [],
+): WeddingArchContent {
+  return parseWeddingArchContent(value, WEDDING_ORNAMENTAL_COMPONENT_KEY, hiddenFields);
 }
