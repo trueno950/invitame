@@ -1,0 +1,28 @@
+{
+  "title": "Confirmación con acompañantes",
+  "brief": "El formulario de confirmación del invitado pide los nombres de sus acompañantes, si son niños y sus restricciones alimentarias, sin pasar del límite de lugares.",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-un-solo-formulario.html",
+      "title": "Un solo formulario",
+      "tradeoff": "Todo en una pantalla, familiar y rápido; se alarga con muchos acompañantes",
+      "width": 470,
+      "height": 900
+    },
+    {
+      "file": "02-tarjeta-por-persona.html",
+      "title": "Tarjeta por persona",
+      "tradeoff": "Cada persona con sus datos y restricción propia, muy ordenado; más toques para agregar gente",
+      "width": 470,
+      "height": 760
+    },
+    {
+      "file": "03-en-dos-pasos.html",
+      "title": "En dos pasos",
+      "tradeoff": "Primero sí o no y cuántos, luego quiénes y restricciones con chips; un paso extra pero menos abrumador",
+      "width": 800,
+      "height": 720
+    }
+  ]
+}

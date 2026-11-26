@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "01-botones-de-tienda.html",
+  "handoffs": {
+    "01-botones-de-tienda.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T15:57:34.200Z",
+      "startedAt": "2026-11-26T15:58:46.868Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: se implementa en cuanto termine el itinerario (comparten archivos)."
+    }
+  }
+}

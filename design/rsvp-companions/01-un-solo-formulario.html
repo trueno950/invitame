@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confirmación — un solo formulario</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;--line:#c9a99c;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  .card{background:var(--surface);border-radius:20px;padding:24px 20px;box-shadow:inset 0 0 0 1px var(--soft)}
+  h2{font-family:var(--font-display);font-weight:600;font-size:28px;text-align:center;margin:0 0 4px}
+  .sub{text-align:center;font-size:13px;color:#6d5752;margin:0 0 16px}
+  label{display:grid;gap:4px;font-size:13px;font-weight:500;margin-bottom:12px}
+  input,select,textarea{font:15px var(--font-sans);padding:10px 12px;border-radius:12px;border:1.5px solid var(--line);background:#fff;color:var(--ink)}
+  .seg{display:flex;gap:8px;margin-bottom:12px}.seg span{flex:1;text-align:center;padding:10px;border-radius:12px;border:1.5px solid var(--line);font-size:14px}
+  .seg .on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  fieldset{border:0;border-top:1px dashed var(--deco);padding:12px 0 0;margin:4px 0 12px}
+  legend{font-size:13px;font-weight:600;color:var(--accent);padding-right:6px}
+  .person{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+  .kid{display:flex;gap:6px;align-items:center;font-size:13px;white-space:nowrap}
+  button.send{width:100%;padding:12px;border:0;border-radius:999px;background:var(--accent);color:#fff;font:600 15px var(--font-sans)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <form class="card">
+    <h2>Confirma tu asistencia</h2>
+    <p class="sub">Antes del 1 de agosto · lugares para 4 personas</p>
+    <label>Tu nombre<input value="Laura Gómez"></label>
+    <div class="seg"><span class="on">Sí asistiré</span><span>No podré ir</span></div>
+    <label>¿Cuántos van contigo?<select><option>3 acompañantes</option></select></label>
+    <fieldset>
+      <legend>Nombres de tus acompañantes</legend>
+      <div class="person"><input value="Jorge Gómez"><label class="kid"><input type="checkbox"> Niño</label></div>
+      <div class="person"><input value="Sofía Gómez"><label class="kid"><input type="checkbox" checked> Niño</label></div>
+      <div class="person"><input placeholder="Nombre"><label class="kid"><input type="checkbox"> Niño</label></div>
+    </fieldset>
+    <label>Restricciones alimentarias<textarea rows="2" placeholder="Vegetariano, alergia a nueces…">Sofía es alérgica a la nuez</textarea></label>
+    <label>Mensaje (opcional)<textarea rows="2"></textarea></label>
+    <button class="send" type="button">Enviar confirmación</button>
+  </form>
+</div>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesa de regalos — pestañas</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  .card{background:var(--surface);border-radius:20px;padding:24px 20px;box-shadow:inset 0 0 0 1px var(--soft)}
+  h2{font-family:var(--font-display);font-weight:600;font-size:30px;text-align:center;margin:0 0 14px}
+  .tabs{display:flex;background:var(--bg);border-radius:999px;padding:4px;margin-bottom:16px}
+  .tabs button{flex:1;border:0;background:transparent;padding:9px;border-radius:999px;font:500 14px var(--font-sans);color:#6d5752}
+  .tabs button[aria-selected=true]{background:var(--accent);color:#fff}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .chip{padding:10px 16px;border-radius:999px;box-shadow:inset 0 0 0 1.5px var(--accent);color:var(--accent);font-weight:600;font-size:14px;text-decoration:none}
+  .hint{text-align:center;font-size:13px;color:#6d5752;margin:14px 0 0}
+</style>
+</head>
+<body>
+<div class="phone">
+  <section class="card">
+    <h2>Mesa de regalos</h2>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" type="button">Tiendas</button>
+      <button role="tab" aria-selected="false" type="button">Transferencia</button>
+      <button role="tab" aria-selected="false" type="button">Sobre</button>
+    </div>
+    <div class="chips">
+      <a class="chip" href="#">Liverpool ↗</a>
+      <a class="chip" href="#">Amazon ↗</a>
+      <a class="chip" href="#">Palacio de Hierro ↗</a>
+    </div>
+    <p class="hint">Toca una tienda para ver nuestra mesa.</p>
+  </section>
+</div>
+</body>
+</html>

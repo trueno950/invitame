@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hospedaje — guía del viajero</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  .card{background:var(--surface);border-radius:20px;padding:22px 20px;box-shadow:inset 0 0 0 1px var(--soft)}
+  h2{font-family:var(--font-display);font-weight:600;font-size:30px;text-align:center;margin:0 0 14px}
+  details{border-top:1px solid var(--soft);padding:4px 0}
+  details:last-of-type{border-bottom:1px solid var(--soft)}
+  summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:12px 0;font-weight:600;font-size:15px}
+  summary::after{content:"＋";margin-left:auto;color:var(--accent)}details[open] summary::after{content:"－"}
+  .ic{width:34px;height:34px;border-radius:50%;background:var(--soft);display:grid;place-items:center;font-size:16px}
+  details p,details li{font-size:13px;color:#6d5752;margin:4px 0 4px 44px}
+  details a{color:var(--accent);font-weight:600;font-size:13px;margin-left:44px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <section class="card">
+    <h2>Si vienes de fuera</h2>
+    <details open><summary><span class="ic" aria-hidden="true">🏨</span>Dónde hospedarte</summary>
+      <p><b>Hotel Misión</b> · a 5 min · código BODA-AYL</p><a href="#">Reservar ↗</a>
+      <p><b>City Express</b> · a 12 min</p><a href="#">Reservar ↗</a></details>
+    <details><summary><span class="ic" aria-hidden="true">✈️</span>Cómo llegar a la ciudad</summary>
+      <p>Aeropuerto Intercontinental de Querétaro, a 30 min del centro.</p></details>
+    <details><summary><span class="ic" aria-hidden="true">🚌</span>Transporte el día del evento</summary>
+      <p>Camión del hotel Misión al salón a las 19:00; regreso a la 1:00.</p></details>
+    <details><summary><span class="ic" aria-hidden="true">🍽️</span>Recomendaciones</summary>
+      <p>Restaurante La Nueva Fuente · Centro histórico</p></details>
+  </section>
+</div>
+</body>
+</html>

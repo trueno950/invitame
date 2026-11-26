@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confirmación — en dos pasos</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;--line:#c9a99c;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:flex;gap:24px;justify-content:center;align-items:center;min-height:100vh;padding:24px}
+  .phone{width:340px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  .card{background:var(--surface);border-radius:20px;padding:22px 18px;box-shadow:inset 0 0 0 1px var(--soft)}
+  .step{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);text-align:center}
+  h2{font-family:var(--font-display);font-weight:600;font-size:26px;text-align:center;margin:4px 0 14px}
+  .big{display:grid;gap:10px}
+  .big span{padding:14px;border-radius:14px;border:1.5px solid var(--line);text-align:center;font-size:15px}
+  .big .on{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
+  .stepper{display:flex;align-items:center;justify-content:center;gap:18px;margin:12px 0}
+  .stepper b{font-size:28px;font-family:var(--font-display)}.stepper span{width:38px;height:38px;border-radius:50%;border:1.5px solid var(--accent);display:grid;place-items:center;color:var(--accent);font-size:20px}
+  input,textarea{width:100%;font:14px var(--font-sans);padding:9px 12px;border-radius:12px;border:1.5px solid var(--line);background:#fff;margin-bottom:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}.chips span{font-size:12px;padding:6px 10px;border-radius:999px;border:1.5px solid var(--line)}.chips .on{border-color:var(--accent);color:var(--accent);font-weight:600}
+  .next{width:100%;padding:12px;border:0;border-radius:999px;background:var(--accent);color:#fff;font:600 15px var(--font-sans);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="phone"><div class="card">
+  <div class="step">Paso 1 de 2</div><h2>¿Nos acompañas?</h2>
+  <input value="Laura Gómez">
+  <div class="big"><span class="on">¡Sí, ahí estaré!</span><span>No podré asistir</span></div>
+  <div class="stepper"><span>−</span><b>3</b><span>＋</span></div>
+  <p style="text-align:center;font-size:13px;color:#6d5752;margin:0">personas en total (máximo 4)</p>
+  <button class="next" type="button">Continuar</button>
+</div></div>
+<div class="phone"><div class="card">
+  <div class="step">Paso 2 de 2</div><h2>¿Quiénes vienen?</h2>
+  <input value="Jorge Gómez"><input value="Sofía Gómez · niña">
+  <p style="font-size:13px;font-weight:600;margin:6px 0">¿Alguna restricción alimentaria?</p>
+  <div class="chips"><span>Vegetariano</span><span>Vegano</span><span class="on">Alergias</span><span>Sin gluten</span></div>
+  <textarea rows="2">Sofía: alergia a la nuez</textarea>
+  <button class="next" type="button">Enviar confirmación</button>
+</div></div>
+</body>
+</html>

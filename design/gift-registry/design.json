@@ -1,0 +1,28 @@
+{
+  "title": "Mesa de regalos con varios enlaces",
+  "brief": "Cómo ve el invitado las mesas de regalos (Liverpool, Amazon, Palacio de Hierro…), los datos de transferencia y la lluvia de sobres; colores del tema elegido.",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-botones-de-tienda.html",
+      "title": "Botones de tienda",
+      "tradeoff": "Todo visible de un vistazo, con «Copiar CLABE»; la más larga si hay muchas tiendas",
+      "width": 470,
+      "height": 860
+    },
+    {
+      "file": "02-pestanas.html",
+      "title": "Pestañas",
+      "tradeoff": "Compacta: tiendas, transferencia y sobre en pestañas; esconde opciones detrás de un toque",
+      "width": 470,
+      "height": 600
+    },
+    {
+      "file": "03-sobre-y-lista.html",
+      "title": "Sobre y lista",
+      "tradeoff": "Pone primero la lluvia de sobres (muy usual en México) y pliega la transferencia por discreción",
+      "width": 470,
+      "height": 760
+    }
+  ]
+}

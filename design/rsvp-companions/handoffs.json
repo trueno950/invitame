@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "01-un-solo-formulario.html",
+  "handoffs": {
+    "01-un-solo-formulario.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T16:01:31.149Z",
+      "startedAt": "2026-11-26T16:01:52.352Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después de la mesa de regalos (comparten el bloque de funciones del invitado)."
+    }
+  }
+}

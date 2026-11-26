@@ -1,0 +1,28 @@
+{
+  "title": "Hospedaje y transporte",
+  "brief": "Información para invitados que vienen de otra ciudad: hoteles con tarifa o código de grupo, cómo llegar, transporte el día del evento y recomendaciones.",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-tarjetas-de-hotel.html",
+      "title": "Tarjetas de hotel",
+      "tradeoff": "Cada hotel con distancia, precio, código de grupo y botones «Reservar» y «Cómo llegar»; la más completa y la más larga",
+      "width": 470,
+      "height": 860
+    },
+    {
+      "file": "02-guia-del-viajero.html",
+      "title": "Guía del viajero",
+      "tradeoff": "Secciones plegables (hospedaje, llegada, transporte, recomendaciones); cabe mucha información sin alargar",
+      "width": 470,
+      "height": 720
+    },
+    {
+      "file": "03-lista-compacta.html",
+      "title": "Lista compacta",
+      "tradeoff": "Una línea por hotel y una nota de transporte; la más corta, con menos detalle",
+      "width": 470,
+      "height": 560
+    }
+  ]
+}

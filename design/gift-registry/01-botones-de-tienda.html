@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesa de regalos — botones de tienda</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  .card{background:var(--surface);border-radius:20px;padding:24px 20px;box-shadow:inset 0 0 0 1px var(--soft)}
+  .kicker{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent);text-align:center}
+  h2{font-family:var(--font-display);font-weight:600;font-size:30px;text-align:center;margin:4px 0 6px}
+  p.note{text-align:center;font-size:14px;color:#6d5752;margin:0 0 18px}
+  .store{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:14px;background:var(--bg);margin-bottom:10px;text-decoration:none;color:var(--ink);box-shadow:inset 0 0 0 1px var(--soft)}
+  .store b{font-size:15px}.store span{font-size:12px;color:#6d5752;display:block}
+  .store .go{color:var(--accent);font-weight:600;font-size:13px}
+  .bank{margin-top:16px;border-top:1px dashed var(--deco);padding-top:16px}
+  .bank h3{font-family:var(--font-display);font-size:21px;margin:0 0 8px;text-align:center}
+  .row{display:flex;justify-content:space-between;font-size:14px;padding:6px 0}
+  .row span{color:#6d5752}
+  .copy{display:block;width:100%;margin-top:10px;padding:11px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font:600 14px var(--font-sans)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <section class="card">
+    <div class="kicker">Con cariño</div>
+    <h2>Mesa de regalos</h2>
+    <p class="note">Tu presencia es nuestro mejor regalo; si quieres consentirnos, aquí te dejamos opciones.</p>
+    <a class="store" href="#"><div><b>Liverpool</b><span>Evento 51234567</span></div><span class="go">Ver mesa →</span></a>
+    <a class="store" href="#"><div><b>Amazon</b><span>Lista de Ana y Luis</span></div><span class="go">Ver lista →</span></a>
+    <a class="store" href="#"><div><b>Palacio de Hierro</b><span>Evento 998877</span></div><span class="go">Ver mesa →</span></a>
+    <div class="bank">
+      <h3>Transferencia</h3>
+      <div class="row"><span>Banco</span><b>BBVA</b></div>
+      <div class="row"><span>Titular</span><b>Ana Martínez</b></div>
+      <div class="row"><span>CLABE</span><b>0121 8000 1234 5678 90</b></div>
+      <button class="copy" type="button">Copiar CLABE</button>
+    </div>
+  </section>
+</div>
+</body>
+</html>
