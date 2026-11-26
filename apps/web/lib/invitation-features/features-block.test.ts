@@ -536,6 +536,110 @@ describe("«Itinerario» in the features block (F1; L3.5)", () => {
   });
 });
 
+describe("«Hospedaje y transporte» in the features block (F4; L7.5)", () => {
+  const HOTELS = [
+    {
+      name: "Hotel Misión",
+      distance: "A 5 min",
+      price: "Desde $1,450 por noche",
+      groupCode: "BODA-AYL",
+      bookingUrl: "https://hotelmision.example.com/reserva",
+      address: "Av. Juárez 120, Centro",
+    },
+  ] as const;
+
+  const lodgingOnly = (overrides: Partial<InvitationFeatures> = {}) =>
+    render(
+      featuresOf({
+        lodging: {
+          hotels: HOTELS,
+          transport: "Habrá camión del hotel Misión al salón a las 19:00.",
+        },
+        ...overrides,
+      }),
+    );
+
+  it("draws one card per hotel with its name, distance badge, address, and price", () => {
+    const html = lodgingOnly();
+
+    assert.match(html, /data-feature="lodging"/);
+    assert.match(html, /Hotel Misión/);
+    assert.match(html, /A 5 min/);
+    assert.match(html, /Av\. Juárez 120, Centro/);
+    assert.match(html, /Desde \$1,450 por noche/);
+    assert.match(html, /Hospedaje/);
+  });
+
+  it("shows the group code as its own row, in the owner's words", () => {
+    const html = lodgingOnly();
+
+    assert.match(html, /data-hotel-group-code="BODA-AYL"/);
+    assert.match(html, /Código de grupo/);
+  });
+
+  it("offers «Reservar» and «Cómo llegar» as new tabs that never leak the opener", () => {
+    const links = linksOf(lodgingOnly());
+    const booking = links.find((link) => link.includes("Reservar"));
+    const directions = links.find((link) => link.includes("Cómo llegar"));
+
+    assert.ok(booking, "a booking link");
+    assert.equal(attributeOf(booking, "href"), "https://hotelmision.example.com/reserva");
+    assert.ok(directions, "a directions link");
+    assert.equal(
+      attributeOf(directions, "href"),
+      `https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent("Av. Juárez 120, Centro")}`,
+    );
+    for (const link of links) {
+      assert.equal(attributeOf(link, "target"), "_blank");
+      assert.equal(attributeOf(link, "rel"), "noopener noreferrer");
+    }
+  });
+
+  it("offers no action for a hotel that carries neither link", () => {
+    const html = render(
+      featuresOf({ lodging: { hotels: [{ name: "City Express" }], transport: null } }),
+    );
+
+    assert.match(html, /City Express/);
+    assert.equal(linksOf(html).length, 0);
+  });
+
+  it("draws the transport card after the hotels, and no card without it", () => {
+    const html = lodgingOnly();
+
+    assert.match(html, /data-feature="lodging-transport"/);
+    assert.match(html, /Transporte/);
+    assert.match(html, /Habrá camión del hotel Misión al salón a las 19:00\./);
+    // A transport line alone still renders the section, with no hotel card (F4; L7.1).
+    const transportOnly = render(
+      featuresOf({ lodging: { hotels: [], transport: "Camión a las 19:00." } }),
+    );
+
+    assert.match(transportOnly, /data-feature="lodging"/);
+    assert.equal(/data-hotel=/.test(transportOnly), false);
+    assert.doesNotMatch(
+      render(featuresOf({ lodging: { hotels: [], transport: null } })),
+      /data-feature="lodging"/,
+    );
+  });
+
+  it("escapes every owner text so it cannot add markup", () => {
+    const html = render(
+      featuresOf({
+        lodging: {
+          hotels: [{ name: "<img src=x onerror=alert(1)>", price: "<script>alert(2)</script>" }],
+          transport: "<b>llevamos camión</b>",
+        },
+      }),
+    );
+
+    assert.doesNotMatch(html, /<img src=x/);
+    assert.doesNotMatch(html, /<script/);
+    assert.doesNotMatch(html, /<b>llevamos/);
+    assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  });
+});
+
 describe("features block rendering rules", () => {
   const ALL_ON = featuresOf({
     countdown: true,

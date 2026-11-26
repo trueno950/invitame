@@ -6,7 +6,7 @@ import { INVITATION_FEATURE_KEYS, isInvitationFeatureKey } from "./invitation-fe
 // The web mirrors the API's gated keys (invitation-features S7, m6 S4) so an owned invitation's
 // `availableFeatures` reads strictly; a key the API gates but the mirror lacks would refuse the whole body.
 describe("implemented feature keys", () => {
-  it("mirrors every key the API gates, including the itinerary, the guest list, its QR pass, and the gallery", () => {
+  it("mirrors every key the API gates, including the itinerary, the guest list, its QR pass, the gallery, and the lodging", () => {
     assert.deepEqual(
       [...INVITATION_FEATURE_KEYS],
       [
@@ -16,6 +16,7 @@ describe("implemented feature keys", () => {
         "WHATSAPP",
         "MUSIC",
         "GIFT_REGISTRY",
+        "LODGING",
         "RSVP",
         "GUEST_LIST",
         "QR_PASS",
@@ -23,7 +24,7 @@ describe("implemented feature keys", () => {
         "CALENDAR",
       ],
     );
-    for (const key of ["ITINERARY", "RSVP", "GUEST_LIST", "QR_PASS", "GALLERY"]) {
+    for (const key of ["ITINERARY", "LODGING", "RSVP", "GUEST_LIST", "QR_PASS", "GALLERY"]) {
       assert.equal(isInvitationFeatureKey(key), true, key);
     }
   });

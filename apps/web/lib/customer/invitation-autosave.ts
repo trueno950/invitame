@@ -18,12 +18,19 @@ import {
 import { featureIssueCodes } from "./feature-issues.ts";
 import { type ContentField, fieldLabel } from "./invitations.ts";
 import { GIFT_REGISTRY_MAX_STORES } from "../invitation-features/gift-registry.ts";
+import { LODGING_MAX_HOTELS } from "../invitation-features/lodging.ts";
 import {
   type GiftRegistryDraft,
   giftRegistryDraftOf,
   giftRegistryPayloadOf,
 } from "./gift-registry.ts";
 import { type ItineraryDraftMoment, itineraryPayloadOf } from "./itinerary.ts";
+import {
+  type LodgingDraft,
+  type LodgingDraftHotel,
+  lodgingDraftOf,
+  lodgingPayloadOf,
+} from "./lodging.ts";
 import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "./omittable-sections.ts";
 import { rsvpSettingsIssueCodes } from "./rsvp-issue.ts";
 
@@ -268,6 +275,7 @@ export const FEATURE_CHANGE_FIELDS = [
   "playlistUrl",
   "itinerary",
   "giftRegistry",
+  "lodging",
 ] as const;
 
 /** The feature data one autosave asks to change; a key left out is a field the creator did not touch. */
@@ -279,6 +287,8 @@ export interface FeatureChanges {
   readonly itinerary?: readonly ItineraryDraftMoment[] | null;
   /** The gift registry as the editor holds it, or null when the owner cleared it (F2; L4.4). */
   readonly giftRegistry?: GiftRegistryDraft | null;
+  /** The lodging as the editor holds it, or null when the owner cleared it (F4; L7.4). */
+  readonly lodging?: LodgingDraft | null;
 }
 
 export type FeatureChangesParse =
@@ -393,6 +403,65 @@ function readGiftRegistryDraft(value: unknown): GiftRegistryDraft | null | undef
   return giftRegistryPayloadOf(draft) === undefined ? undefined : draft;
 }
 
+/**
+ * The lodging the editor sent, read from an untrusted payload (F4; L7.4): the six texts of every hotel and the
+ * transport note; `null` for a lodging the owner cleared, or `undefined` when the body is not this shape or a complete
+ * value is outside its bounds. A hotel still being written is accepted — it stays in the browser and the save carries
+ * the complete hotels (see `lodgingPayloadOf`).
+ */
+function readLodgingDraft(value: unknown): LodgingDraft | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  if (Object.keys(value).some((key) => !["hotels", "transport"].includes(key))) {
+    return undefined;
+  }
+  if (typeof value.transport !== "string") {
+    return undefined;
+  }
+
+  const hotels = value.hotels;
+
+  if (!Array.isArray(hotels) || hotels.length > LODGING_MAX_HOTELS) {
+    return undefined;
+  }
+
+  const drafts: LodgingDraftHotel[] = [];
+  for (const item of hotels) {
+    if (!isPlainObject(item)) {
+      return undefined;
+    }
+
+    const name = item.name;
+    const distance = item.distance;
+    const price = item.price;
+    const groupCode = item.groupCode;
+    const bookingUrl = item.bookingUrl;
+    const address = item.address;
+
+    if (
+      typeof name !== "string" ||
+      typeof distance !== "string" ||
+      typeof price !== "string" ||
+      typeof groupCode !== "string" ||
+      typeof bookingUrl !== "string" ||
+      typeof address !== "string"
+    ) {
+      return undefined;
+    }
+    drafts.push({ name, distance, price, groupCode, bookingUrl, address });
+  }
+
+  const draft: LodgingDraft = { hotels: drafts, transport: value.transport };
+
+  // Only a complete hotel or transport note outside its bounds is refused here; the one the owner is still writing is
+  // not an error, so adding an empty row never refuses a save (F4; L7.4).
+  return lodgingPayloadOf(draft) === undefined ? undefined : draft;
+}
+
 /** The most characters a submitted phone may carry, as the feature form already bounds it (S4). */
 const MAX_PHONE_TEXT_LENGTH = 32;
 
@@ -435,6 +504,7 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
     playlistUrl?: string | null;
     itinerary?: readonly ItineraryDraftMoment[] | null;
     giftRegistry?: GiftRegistryDraft | null;
+    lodging?: LodgingDraft | null;
   } = {};
 
   for (const [name, value] of Object.entries(payload)) {
@@ -482,6 +552,15 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
       changes.giftRegistry = giftRegistry;
       continue;
     }
+    if (name === "lodging") {
+      const lodging = readLodgingDraft(value);
+      if (lodging === undefined) {
+        issues.push({ field: name, message: FEATURE_ISSUE_COPY.lodging });
+        continue;
+      }
+      changes.lodging = lodging;
+      continue;
+    }
     issues.push({ field: name, message: AUTOSAVE_COPY.unknownField });
   }
 
@@ -501,6 +580,17 @@ export function mergeFeatureChanges(
 ): InvitationFeatureInput {
   let itinerary = stored.itinerary;
   let giftRegistry = stored.giftRegistry;
+  let lodging = stored.lodging;
+
+  if (Object.hasOwn(changes, "lodging")) {
+    // A lodging the contract refuses is left out of the change instead of clearing what is stored, and a hotel the
+    // owner is retyping keeps the version this invitation already stored (F4; L7.4).
+    const payload = lodgingPayloadOf(changes.lodging ?? lodgingDraftOf(null), stored.lodging);
+
+    if (payload !== undefined) {
+      lodging = payload;
+    }
+  }
 
   if (Object.hasOwn(changes, "giftRegistry")) {
     // A registry the contract refuses is left out of the change instead of clearing what is stored, and a store the
@@ -534,6 +624,7 @@ export function mergeFeatureChanges(
       : stored.playlistUrl,
     itinerary,
     giftRegistry,
+    ...(lodging === undefined ? {} : { lodging }),
   };
 }
 
@@ -664,6 +755,7 @@ function fieldIssuesOf(channel: AutosaveChannel, issues: readonly string[]): Aut
       playlist: "playlistUrl",
       itinerary: "itinerary",
       "gift-registry": "giftRegistry",
+      lodging: "lodging",
     };
     for (const code of featureIssueCodes(issues)) {
       const field = Object.hasOwn(fieldOf, code) ? fieldOf[code] : undefined;

@@ -67,6 +67,7 @@ const STORED_FEATURES: InvitationFeatureInput = {
     items: [{ time: "17:00", title: "Misa", address: "Av. Juárez 45" }],
   },
   giftRegistry: null,
+  lodging: null,
 };
 
 const STORED_RSVP: RsvpSettings = { deadline: "2026-12-01T23:30:00.000Z", partyLimit: 4 };
@@ -211,6 +212,7 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       playlistUrl: STORED_FEATURES.playlistUrl,
       itinerary: STORED_FEATURES.itinerary,
       giftRegistry: null,
+      lodging: null,
     });
   });
 
@@ -224,6 +226,7 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       playlistUrl: STORED_FEATURES.playlistUrl,
       itinerary: STORED_FEATURES.itinerary,
       giftRegistry: null,
+      lodging: null,
     });
   });
 
@@ -515,6 +518,106 @@ describe("a gift registry autosave (F2; L4.4)", () => {
           ).giftRegistry
         : undefined,
       STORED_REGISTRY,
+    );
+  });
+});
+
+describe("a lodging autosave (F4; L7.4)", () => {
+  const HOTEL = {
+    name: "Hotel Misión",
+    distance: "A 5 min",
+    price: "Desde $1,450 por noche",
+    groupCode: "BODA-AYL",
+    bookingUrl: "https://hotelmision.example.com/reserva",
+    address: "Av. Juárez 120, Centro",
+  };
+  const STORED_LODGING = {
+    version: 1 as const,
+    hotels: [HOTEL],
+    transport: "Camión a las 19:00.",
+  };
+  const EMPTY = { hotels: [], transport: "" };
+  const draftOf = (overrides: Record<string, unknown> = {}) => ({ ...EMPTY, ...overrides });
+
+  it("reads the drafts the editor sent, an incomplete hotel included, and null to clear it", () => {
+    const parsed = parseFeatureChanges({
+      lodging: draftOf({ hotels: [{ ...HOTEL, price: "" }], transport: " Camión " }),
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(
+      parsed.ok ? parsed.changes.lodging : undefined,
+      draftOf({ hotels: [{ ...HOTEL, price: "" }], transport: " Camión " }),
+    );
+    assert.equal(parseFeatureChanges({ lodging: null }).ok, true);
+  });
+
+  it("refuses a body that is not this shape, and names the field in Spanish", () => {
+    for (const broken of [
+      "hoteles",
+      { hotels: "Hotel Misión" },
+      { hotels: [{ name: "Hotel Misión" }] },
+      { hotels: [], transport: 7 },
+      { hotels: [], transport: "", extra: true },
+      { hotels: Array.from({ length: 7 }, () => ({ ...HOTEL })), transport: "" },
+    ]) {
+      const parsed = parseFeatureChanges({ lodging: broken });
+
+      assert.equal(parsed.ok, false, JSON.stringify(broken));
+      assert.deepEqual(parsed.ok ? undefined : parsed.fieldIssues, [
+        { field: "lodging", message: FEATURE_ISSUE_COPY.lodging },
+      ]);
+    }
+  });
+
+  it("sends only the hotels that are complete, and keeps a stored hotel while it is retyped", () => {
+    // A row without a name is what «Agregar hotel» starts; the save never waits for it.
+    const added = parseFeatureChanges({
+      lodging: draftOf({ hotels: [{ ...HOTEL }, { ...HOTEL, name: "" }] }),
+    });
+    // A stored hotel whose name was cleared while editing keeps its last complete version.
+    const retyped = parseFeatureChanges({
+      lodging: draftOf({ hotels: [{ ...HOTEL, name: "" }] }),
+    });
+
+    assert.equal(added.ok, true);
+    assert.equal(retyped.ok, true);
+    assert.deepEqual(
+      added.ok
+        ? mergeFeatureChanges({ ...STORED_FEATURES, lodging: STORED_LODGING }, added.changes)
+            .lodging
+        : undefined,
+      // The editor's empty transport is the owner's own value, so the save carries the cards without it.
+      { version: 1, hotels: [HOTEL] },
+    );
+    assert.deepEqual(
+      retyped.ok
+        ? mergeFeatureChanges({ ...STORED_FEATURES, lodging: STORED_LODGING }, retyped.changes)
+            .lodging
+        : undefined,
+      { version: 1, hotels: [HOTEL] },
+    );
+  });
+
+  it("clears the stored lodging when the owner emptied it, and keeps it on every other save", () => {
+    const cleared = parseFeatureChanges({ lodging: draftOf() });
+    const untouched = parseFeatureChanges({ timeZone: "America/Tijuana" });
+
+    assert.equal(cleared.ok, true);
+    assert.equal(untouched.ok, true);
+    assert.equal(
+      cleared.ok
+        ? mergeFeatureChanges({ ...STORED_FEATURES, lodging: STORED_LODGING }, cleared.changes)
+            .lodging
+        : undefined,
+      null,
+    );
+    assert.deepEqual(
+      untouched.ok
+        ? mergeFeatureChanges({ ...STORED_FEATURES, lodging: STORED_LODGING }, untouched.changes)
+            .lodging
+        : undefined,
+      STORED_LODGING,
     );
   });
 });

@@ -1,5 +1,6 @@
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import { giftRegistryOf, hideLegacyGiftRegistry } from "../invitation-features/gift-registry.ts";
+import { lodgingOf } from "../invitation-features/lodging.ts";
 import {
   type InvitationFeatures,
   isE164Phone,
@@ -222,6 +223,11 @@ function gatedFeatures(
     // The owner read answers the stored plan of the day, and the preview shows it only while the package grants the
     // key, exactly as a guest page does (F1; L3.3).
     itinerary: gated.has("ITINERARY") ? (invitation.featureSettings.itinerary?.items ?? []) : [],
+    // The preview shows only a lodging the package grants, exactly as a guest page does (F4; L7.3).
+    lodging:
+      gated.has("LODGING") && invitation.featureSettings.lodging != null
+        ? lodgingOf(invitation.featureSettings.lodging)
+        : null,
   };
 }
 

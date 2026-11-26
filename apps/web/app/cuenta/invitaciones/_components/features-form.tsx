@@ -119,6 +119,48 @@ function AutomaticFeatures({ view }: { view: FeatureSettingsView }) {
   );
 }
 
+/** The stored lodging as a plain list, which is what a read-only page can show (F4; L7.4). */
+function LodgingSummary({ view }: { view: FeatureSettingsView }) {
+  if (!view.showLodging) {
+    return null;
+  }
+
+  const { hotels, transport } = view.lodging;
+
+  return (
+    <div>
+      <p className={fieldLabel}>{FEATURE_COPY.lodgingTitle}</p>
+      {hotels.length === 0 ? (
+        <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.lodgingEmpty}</p>
+      ) : (
+        <ul className="mt-2 list-disc pl-5 text-sm leading-6 text-ink">
+          {hotels.map((hotel) => (
+            <li key={`${hotel.name}-${hotel.address}`}>
+              {hotel.name}
+              {hotel.distance === "" ? null : (
+                <span className="text-muted"> · {hotel.distance}</span>
+              )}
+              {hotel.price === "" ? null : <span className="text-muted"> · {hotel.price}</span>}
+              {hotel.groupCode === "" ? null : (
+                <span className="text-muted"> · {hotel.groupCode}</span>
+              )}
+              {hotel.bookingUrl === "" ? null : (
+                <span className="text-muted"> · {hotel.bookingUrl}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {transport === "" ? null : (
+        <p className="mt-2 text-sm leading-6 text-ink">
+          {FEATURE_COPY.lodgingTransportLabel}: {transport}
+        </p>
+      )}
+      <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.lodgingArchivedNote}</p>
+    </div>
+  );
+}
+
 /** The archived invitation's feature data: readable, with no form and no way to save. */
 export function FeaturesSummary({ view }: { view: FeatureSettingsView }) {
   const zone =
@@ -138,6 +180,7 @@ export function FeaturesSummary({ view }: { view: FeatureSettingsView }) {
         )}
         <ItinerarySummary view={view} />
         <GiftRegistrySummary view={view} />
+        <LodgingSummary view={view} />
         <p className="text-sm leading-6 text-muted">{FEATURE_COPY.archivedNote}</p>
         <AutomaticFeatures view={view} />
       </div>

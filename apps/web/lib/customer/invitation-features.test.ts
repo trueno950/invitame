@@ -64,6 +64,7 @@ const ITINERARY_PACKAGE = creatorPackage(
   "Premium",
 );
 const MAP_ONLY = creatorPackage(PACKAGE_ID, ["MAP"], "esencial");
+const LODGING_PACKAGE = creatorPackage(PACKAGE_ID, ["LODGING", "COUNTDOWN"], "premium", "Premium");
 
 describe("the feature section's Spanish copy (S7)", () => {
   it("names the two batch-2 fields in Spanish", () => {
@@ -202,6 +203,59 @@ describe("featureSettingsView", () => {
     assert.equal(featureSettingsView(stored, undefined).showItinerary, false);
     // An invitation without a plan opens an empty list, which is what the editor adds the first moment to.
     assert.deepEqual(featureSettingsView(OWNED, [ITINERARY_PACKAGE]).itinerary, []);
+  });
+
+  it("offers the lodging block only while the package grants LODGING, and opens it from the stored cards (F4; L7.4)", () => {
+    const stored = {
+      ...OWNED,
+      featureSettings: {
+        ...OWNED.featureSettings,
+        lodging: {
+          version: 1 as const,
+          hotels: [
+            {
+              name: "Hotel Misión",
+              distance: "A 5 min",
+              bookingUrl: "https://hotelmision.example.com/reserva",
+            },
+          ],
+          transport: "Camión a las 19:00.",
+        },
+      },
+    };
+
+    const granted = featureSettingsView(stored, [LODGING_PACKAGE]);
+
+    assert.equal(granted.showLodging, true);
+    assert.deepEqual(granted.lodging.hotels, [
+      {
+        name: "Hotel Misión",
+        distance: "A 5 min",
+        price: "",
+        groupCode: "",
+        bookingUrl: "https://hotelmision.example.com/reserva",
+        address: "",
+      },
+    ]);
+    assert.equal(granted.lodging.transport, "Camión a las 19:00.");
+
+    // A package without the key, and a catalog that could not be read, offer no editor for the cards.
+    assert.equal(featureSettingsView(stored, [BASIC]).showLodging, false);
+    assert.equal(featureSettingsView(stored, undefined).showLodging, false);
+    // An invitation without a lodging opens an empty list, which is what the editor adds the first hotel to.
+    assert.deepEqual(featureSettingsView(OWNED, [LODGING_PACKAGE]).lodging.hotels, []);
+  });
+
+  it("names the lodging sentence of a refusal (F4; L7.4)", () => {
+    assert.deepEqual(
+      featureIssueCodes([
+        "lodging.version must be 1",
+        "lodging.hotels[1].bookingUrl must be an https link of at most 500 characters",
+        "lodging.transport must be a string of at most 400 characters",
+      ]),
+      ["lodging"],
+    );
+    assert.equal(FEATURE_ISSUE_COPY.lodging.length > 0, true);
   });
 
   it("names the itinerary sentence of a refusal (F1; L3.4)", () => {

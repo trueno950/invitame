@@ -2,6 +2,7 @@ import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import { type GiftRegistry, parseGiftRegistry } from "../invitation-features/gift-registry.ts";
 import { isE164Phone } from "../invitation-features/invitation-features.ts";
 import { type Itinerary, parseItinerary } from "../invitation-features/itinerary.ts";
+import { type Lodging, parseLodging } from "../invitation-features/lodging.ts";
 import { type MusicLink, musicServiceOf } from "../invitation-features/music.ts";
 import { parseStoredPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
@@ -83,6 +84,12 @@ export interface PublicInvitationFeatures {
    * there is none.
    */
   readonly giftRegistryDetails: GiftRegistry | null;
+  /**
+   * The hotel cards and the transport line a guest's block draws, or null when the package does not grant `LODGING` or
+   * the invitation stores nothing there (F4; L7.3). An API body written before F4 answers nothing here and reads as
+   * null, so a page deployed earlier keeps rendering (L20).
+   */
+  readonly lodging: Lodging | null;
   /**
    * The gallery photos in the creator's order (M8 S3, S4), an empty array when the package does not grant `GALLERY`
    * and always a list, so a layout can read it without a guard.
@@ -307,6 +314,9 @@ function parsePublicFeatures(
     features.giftRegistryDetails === undefined
       ? null
       : parseGiftRegistry(features.giftRegistryDetails);
+  // The same rule for the lodging (F4; L7.3): an absent field (a body written before F4) reads as none, and another
+  // shape refuses the body instead of reaching a guest.
+  const lodging = features.lodging === undefined ? null : parseLodging(features.lodging);
 
   if (
     music === undefined ||
@@ -314,7 +324,8 @@ function parsePublicFeatures(
     gallery === undefined ||
     itinerary === undefined ||
     giftRegistry === undefined ||
-    giftRegistryGranted === undefined
+    giftRegistryGranted === undefined ||
+    lodging === undefined
   ) {
     return undefined;
   }
@@ -326,6 +337,7 @@ function parsePublicFeatures(
     calendar: true,
     giftRegistry: giftRegistryGranted,
     giftRegistryDetails: giftRegistry,
+    lodging,
     music,
     itinerary,
     gallery,

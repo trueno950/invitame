@@ -14,6 +14,7 @@ import {
   type WhatsAppContact,
 } from "../invitation-features/invitation-features.ts";
 import type { ItineraryMoment } from "../invitation-features/itinerary.ts";
+import type { Lodging } from "../invitation-features/lodging.ts";
 import type { MusicLink } from "../invitation-features/music.ts";
 import { confirmedPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isSupportedTimeZone, startInstant } from "../invitation-features/start-instant.ts";
@@ -115,6 +116,12 @@ export interface GatedFeatures {
    * them only while the package grants `ITINERARY`, and the preview applies the same rule from the owner's read.
    */
   readonly itinerary: readonly ItineraryMoment[];
+  /**
+   * The hotel cards and the transport line (F4; L7.5), already gated by the page that built this source: the public
+   * read answers them only while the package grants `LODGING`, and the preview applies the same rule from the owner's
+   * read. Null when the invitation stores nothing to draw.
+   */
+  readonly lodging: Lodging | null;
 }
 
 /** Everything one page renders the shared features block from. */
@@ -176,6 +183,7 @@ export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts
     // The API gates the gallery and answers it in the creator's order; the block renders it as it comes (M8 S4).
     gallery: source.gated.gallery,
     ...(source.gated.itinerary.length === 0 ? {} : { itinerary: source.gated.itinerary }),
+    ...(source.gated.lodging === null ? {} : { lodging: source.gated.lodging }),
     ...(Object.keys(places).length === 0 ? {} : { places }),
     ...(source.rsvp === undefined ? {} : { rsvp: source.rsvp }),
     ...(source.guest === undefined ? {} : { guest: source.guest }),
@@ -210,6 +218,7 @@ export function publicFeatureBlock(
       giftRegistryDetails: invitation.features.giftRegistryDetails,
       gallery: invitation.features.gallery,
       itinerary: invitation.features.itinerary?.items ?? [],
+      lodging: invitation.features.lodging,
     },
     places: invitation.places,
     ...(rsvp === undefined ? {} : { rsvp }),

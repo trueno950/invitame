@@ -64,6 +64,7 @@ const OWNED = {
     // The plan of the day the owner read carries (F1; L3.1); null while the invitation has none.
     itinerary: null,
     giftRegistry: null,
+    lodging: null,
   },
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
   // The precise-locations slice (S2): every stored point, keyed by the address field it belongs to.
@@ -81,6 +82,7 @@ const FEATURED = {
     playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
     itinerary: null,
     giftRegistry: null,
+    lodging: null,
   },
   availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "MUSIC", "GIFT_REGISTRY", "CALENDAR"],
 };
@@ -267,6 +269,7 @@ describe("the feature write of the editor (F2; L4.3)", () => {
       playlistUrl: null,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
 
     assert.equal(written.ok, true);
@@ -309,6 +312,7 @@ describe("requests", () => {
             playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
             itinerary: null,
             giftRegistry: null,
+            lodging: null,
           }),
         "PUT",
         `/invitations/${ID}/features`,
@@ -318,6 +322,7 @@ describe("requests", () => {
           playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
           itinerary: null,
           giftRegistry: null,
+          lodging: null,
         },
         FEATURED,
       ],
@@ -383,6 +388,7 @@ describe("requests", () => {
           playlistUrl: null,
           itinerary: null,
           giftRegistry: null,
+          lodging: null,
         }),
         { ok: false, failure: "not-found" },
         id,
@@ -770,6 +776,7 @@ describe("errors", () => {
         playlistUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       }),
       { ok: false, failure: "features-invalid", issues },
     );
@@ -782,6 +789,7 @@ describe("errors", () => {
         playlistUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       }),
       { ok: false, failure: "features-invalid" },
     );
@@ -1085,6 +1093,7 @@ describe("validators", () => {
       playlistUrl: "https://open.spotify.com/playlist/abc",
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     };
     const parse = (featureSettings: unknown) =>
       parseOwnedInvitation({ ...OWNED, featureSettings })?.featureSettings;

@@ -48,6 +48,7 @@ const GUEST_PAGE: PublicGuestInvitation = {
     music: null,
     giftRegistry: false,
     giftRegistryDetails: null,
+    lodging: null,
     itinerary: null,
     gallery: [],
     rsvp: { mode: "guest-list", deadline: "2026-12-01T18:00:00.000Z", partyLimit: 4, qrPass: true },

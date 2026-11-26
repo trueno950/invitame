@@ -658,6 +658,34 @@ export const FEATURE_COPY = {
   giftRegistryNoteMany: (packageNames: string) =>
     `La mesa de regalos se muestra con los paquetes ${packageNames}.`,
   giftRegistryNoteAny: "La mesa de regalos se muestra con un paquete que la incluya.",
+  /** The lodging block of «Funciones» (F4; L7.4). */
+  lodgingTitle: "Hospedaje y transporte",
+  lodgingHint:
+    "Agrega los hoteles con tarifa para tus invitados, en el orden en que quieres que los vean, y una nota de transporte para el día del evento.",
+  lodgingAdd: "Agregar hotel",
+  lodgingRemove: "Quitar",
+  lodgingMoveUp: "Subir",
+  lodgingMoveDown: "Bajar",
+  lodgingHotelLabel: (position: number) => `Hotel ${position}`,
+  lodgingHotelNameLabel: "Hotel",
+  lodgingHotelDistanceLabel: "Distancia (opcional)",
+  lodgingHotelDistancePlaceholder: "A 5 min",
+  lodgingHotelPriceLabel: "Precio (opcional)",
+  lodgingHotelPricePlaceholder: "Desde $1,450 por noche",
+  lodgingHotelGroupCodeLabel: "Código de grupo (opcional)",
+  lodgingHotelGroupCodePlaceholder: "BODA-AYL",
+  lodgingHotelBookingUrlLabel: "Enlace de reserva (opcional)",
+  lodgingHotelBookingUrlPlaceholder: "https://…",
+  lodgingHotelAddressLabel: "Dirección (opcional)",
+  lodgingLimitNote: "Puedes agregar hasta 6 hoteles.",
+  lodgingIncomplete: "Completa el nombre para guardar este hotel.",
+  lodgingEmpty:
+    "Todavía no hay hoteles. Agrega el primero para que tus invitados sepan dónde hospedarse.",
+  lodgingTransportLabel: "Transporte (opcional)",
+  lodgingTransportHint:
+    "Una o dos líneas sobre el camión, el estacionamiento o cómo moverse el día del evento.",
+  lodgingArchivedNote:
+    "El hospedaje se guarda con la invitación, así que puedes consultarlo aquí aunque ya no se pueda editar.",
   archivedNote:
     "Esta invitación está archivada: puedes consultar sus funcionalidades, pero ya no editarlas.",
 } as const;
@@ -747,6 +775,8 @@ export const FEATURE_ISSUE_COPY = {
     "Revisa el itinerario: cada momento necesita una hora válida y un título de 1 a 60 caracteres; el lugar y la dirección admiten hasta 160.",
   "gift-registry":
     "Revisa la mesa de regalos: cada tienda necesita un nombre de 1 a 40 caracteres y un enlace https de hasta 500; la CLABE debe tener 18 dígitos con un dígito verificador válido.",
+  lodging:
+    "Revisa el hospedaje: cada hotel necesita un nombre de 1 a 60 caracteres y un enlace de reserva https de hasta 500; la distancia, el precio y el código de grupo admiten hasta 40, 60 y 40, y el transporte hasta 400.",
   other:
     "Hay un dato de las funcionalidades que no pudimos guardar. Revísalo y vuelve a intentarlo.",
 } as const;

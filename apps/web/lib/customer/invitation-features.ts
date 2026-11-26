@@ -3,6 +3,7 @@ import type { CreatorPackage, OwnedInvitation } from "../server/invitations-api.
 import { FEATURE_COPY, INVITATION_TIME_ZONE_LABELS } from "./copy.ts";
 import { type GiftRegistryDraft, giftRegistryDraftOf } from "./gift-registry.ts";
 import { type ItineraryDraftMoment, itineraryDraftsOf } from "./itinerary.ts";
+import { type LodgingDraft, lodgingDraftOf } from "./lodging.ts";
 
 /**
  * The creator's «Funcionalidades» section (F3, F6, F7; S3, S4, S7). The feature data belongs to the invitation,
@@ -44,6 +45,7 @@ const MUSIC_FEATURE_KEY = "MUSIC";
 const RSVP_FEATURE_KEY = "RSVP";
 const GIFT_REGISTRY_FEATURE_KEY = "GIFT_REGISTRY";
 const ITINERARY_FEATURE_KEY = "ITINERARY";
+const LODGING_FEATURE_KEY = "LODGING";
 
 /** Everything the section renders for one draft. */
 export interface FeatureSettingsView {
@@ -77,6 +79,14 @@ export interface FeatureSettingsView {
   readonly showGiftRegistry: boolean;
   /** The stored registry as the editor holds it: three texts per store, the transfer, the switch, and the note (F2). */
   readonly giftRegistry: GiftRegistryDraft;
+  /**
+   * Whether the package includes LODGING, which is the only reason the «Hospedaje y transporte» block is shown (F4;
+   * L7.2, L7.4). A package without the key keeps stored cards private instead of offering an editor nobody can
+   * publish.
+   */
+  readonly showLodging: boolean;
+  /** The stored lodging as the editor holds it: six texts per hotel, and the transport note (F4). */
+  readonly lodging: LodgingDraft;
   /**
    * Whether the package includes RSVP, which is the only reason the draft offers its «Asistencia» section
    * (M6 G3; S4). A package with the guest list instead keeps that section for the guest-list tools (G4).
@@ -164,6 +174,8 @@ export function featureSettingsView(
     itinerary: itineraryDraftsOf(invitation.featureSettings.itinerary),
     showGiftRegistry: included.has(GIFT_REGISTRY_FEATURE_KEY),
     giftRegistry: giftRegistryDraftOf(invitation.featureSettings.giftRegistry),
+    showLodging: included.has(LODGING_FEATURE_KEY),
+    lodging: lodgingDraftOf(invitation.featureSettings.lodging),
     showRsvp: included.has(RSVP_FEATURE_KEY),
     giftRegistryNote: giftRegistryNote(packages, included),
     automaticFeatures: AUTOMATIC_FEATURES.filter(

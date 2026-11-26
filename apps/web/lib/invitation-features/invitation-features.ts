@@ -15,6 +15,7 @@ import type { RsvpCompanionValue } from "../public/rsvp-companions.ts";
 import type { GalleryPhoto } from "./gallery.ts";
 import type { GiftRegistry } from "./gift-registry.ts";
 import type { ItineraryMoment } from "./itinerary.ts";
+import { type Lodging, lodgingHasContent } from "./lodging.ts";
 import type { MusicLink } from "./music.ts";
 import type { StoredPlaces } from "./place-point.ts";
 
@@ -136,6 +137,11 @@ export interface InvitationFeatures {
    */
   readonly itinerary?: readonly ItineraryMoment[];
   /**
+   * The hotel cards and the transport line the shared block draws (F4; L7.5). Absent or empty renders no lodging, which
+   * is what a package without `LODGING`, or an invitation that stored nothing, answers.
+   */
+  readonly lodging?: Lodging;
+  /**
    * The confirmed points of this invitation, keyed by the address field each one belongs to (S1, S2). Only a point
    * whose stored label still equals the text the field holds is here, so the block attaches a coordinate to exactly
    * the places a guest may be sent to. Absent or empty renders the map links of every layout unchanged.
@@ -168,6 +174,7 @@ export const INVITATION_FEATURE_KEYS = [
   "WHATSAPP",
   "MUSIC",
   "GIFT_REGISTRY",
+  "LODGING",
   "RSVP",
   "GUEST_LIST",
   "QR_PASS",
@@ -199,6 +206,7 @@ export function hasAnyFeature(features: InvitationFeatures): boolean {
     features.music !== null ||
     (features.gallery !== undefined && features.gallery.length > 0) ||
     (features.itinerary !== undefined && features.itinerary.length > 0) ||
+    (features.lodging !== undefined && lodgingHasContent(features.lodging)) ||
     features.giftRegistryDetails !== undefined ||
     features.rsvp !== undefined ||
     features.guest !== undefined

@@ -122,6 +122,9 @@ export async function autosaveFeaturesAction(
           // another field carries them through instead of clearing them (F1; L3.1, L3.4; F2; L4.3, L4.4).
           itinerary: read.value.featureSettings.itinerary ?? null,
           giftRegistry: read.value.featureSettings.giftRegistry ?? null,
+          // The lodging is part of the same whole, so a save of another field carries the stored cards through (F4;
+          // L7.3, L7.4).
+          lodging: read.value.featureSettings.lodging ?? null,
         },
         parsed.changes,
       ),

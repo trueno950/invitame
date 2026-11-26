@@ -49,6 +49,17 @@ const PUBLIC: PublicInvitation = {
     music: { url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", provider: "spotify" },
     giftRegistry: true,
     giftRegistryDetails: null,
+    lodging: {
+      hotels: [
+        {
+          name: "Hotel Misión",
+          distance: "A 5 min",
+          bookingUrl: "https://hotelmision.example.com/reserva",
+          address: "Av. Juárez 120, Centro",
+        },
+      ],
+      transport: "Habrá camión del hotel al salón a las 19:00.",
+    },
     itinerary: {
       items: [
         { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
@@ -435,6 +446,7 @@ describe("parsePublicInvitation", () => {
           music: null,
           giftRegistry: false,
           giftRegistryDetails: null,
+          lodging: null,
           // The itinerary is null while the package grants no `ITINERARY` or the invitation stores none (F1; L3.3).
           itinerary: null,
           // The gallery is always a list, empty when the package grants no `GALLERY` (M8 S4).
@@ -452,6 +464,7 @@ describe("parsePublicInvitation", () => {
           music: null,
           giftRegistry: false,
           giftRegistryDetails: null,
+          lodging: null,
           itinerary: null,
           gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -482,6 +495,50 @@ describe("the itinerary of the public read (F1; L3.3)", () => {
     });
 
     assert.equal(parsed?.features.itinerary, null);
+  });
+});
+
+describe("the lodging of the public read (F4; L7.3, L7.5)", () => {
+  it("reads the hotels and the transport the API answers, in its order", () => {
+    const parsed = parsePublicInvitation(PUBLIC);
+
+    assert.deepEqual(parsed?.features.lodging, PUBLIC.features.lodging);
+  });
+
+  it("reads an absent lodging as none, so an older API body still renders the page (L20)", () => {
+    const { lodging: _omitted, ...features } = PUBLIC.features;
+    const parsed = parsePublicInvitation({ ...PUBLIC, features });
+
+    assert.equal(parsed?.features.lodging, null);
+  });
+
+  it("reads the API's null as none", () => {
+    const parsed = parsePublicInvitation({
+      ...PUBLIC,
+      features: { ...PUBLIC.features, lodging: null },
+    });
+
+    assert.equal(parsed?.features.lodging, null);
+  });
+
+  it("refuses a lodging that is not this contract, so no value written around the API reaches a guest", () => {
+    for (const broken of [
+      "Hotel Misión",
+      { hotels: "Hotel Misión", transport: null },
+      { hotels: [{ name: "Hotel Misión" }] },
+      { hotels: [{ name: "Hotel Misión", bookingUrl: "http://hotel.test" }], transport: null },
+      { hotels: Array.from({ length: 7 }, () => ({ name: "Hotel" })), transport: null },
+      { hotels: [], transport: 7 },
+    ]) {
+      assert.equal(
+        parsePublicInvitation({
+          ...PUBLIC,
+          features: { ...PUBLIC.features, lodging: broken },
+        }),
+        undefined,
+        JSON.stringify(broken),
+      );
+    }
   });
 });
 

@@ -34,6 +34,17 @@ import {
   updateItineraryMoment,
 } from "../../../../../lib/customer/itinerary.ts";
 import {
+  addLodgingHotel,
+  canAddLodgingHotel,
+  type LodgingDraft,
+  type LodgingDraftHotel,
+  isLodgingHotelIncomplete,
+  moveLodgingHotel,
+  removeLodgingHotel,
+  setLodgingTransport,
+  updateLodgingHotel,
+} from "../../../../../lib/customer/lodging.ts";
+import {
   activeOptionId,
   blurredPicker,
   dismissedSuggestions,
@@ -533,6 +544,8 @@ export interface FeatureValues {
   readonly itinerary: readonly ItineraryDraftMoment[];
   /** The gift registry as the browser holds it: stores, transfer, envelopes switch, and note (F2; L4.4). */
   readonly giftRegistry: GiftRegistryDraft;
+  /** The lodging as the browser holds it: the hotels in the owner's order and the transport note (F4; L7.4). */
+  readonly lodging: LodgingDraft;
 }
 
 /** The small controls of one itinerary moment: no form, no navigation, so each press is a save of its own (L3.4). */
@@ -956,6 +969,209 @@ function GiftRegistryFields({
   );
 }
 
+/**
+ * The «Hospedaje y transporte» block of «Funciones» (F4; L7.4): one row per hotel with its name, distance, price, group
+ * code, booking link, and address, plus the controls that add, remove, and reorder them; then the transport note. Every
+ * control is a real button with its own accessible name — «Subir Hotel Misión», «Quitar Hotel 2» — so the order is
+ * never changed by color, drag, or an icon alone. A hotel that is still being written is never sent: it stays in the
+ * browser with a hint of its own, and the stored one keeps its last complete version while the owner retypes it.
+ */
+function LodgingFields({
+  values,
+  issue,
+  onChange,
+  onFlush,
+}: {
+  values: FeatureValues;
+  issue: string | undefined;
+  onChange: (next: Partial<FeatureValues>) => void;
+  onFlush: () => void;
+}) {
+  const drafts = values.lodging;
+  const nameOf = (index: number): string => {
+    const name = drafts.hotels[index]?.name.trim() ?? "";
+
+    return name === "" ? FEATURE_COPY.lodgingHotelLabel(index + 1) : name;
+  };
+  const change = (next: LodgingDraft) => {
+    onChange({ lodging: next });
+    // A press is one deliberate action, not a keystroke: it is sent at once instead of waiting for the debounce.
+    onFlush();
+  };
+  const patch = (index: number, hotel: Partial<LodgingDraftHotel>) =>
+    onChange({ lodging: updateLodgingHotel(drafts, index, hotel) });
+
+  const incompleteHintId = (index: number): string | undefined => {
+    const hotel = drafts.hotels[index];
+
+    return hotel !== undefined && isLodgingHotelIncomplete(hotel)
+      ? `lodging-${index}-incomplete`
+      : undefined;
+  };
+
+  const field = (
+    index: number,
+    key: keyof LodgingDraftHotel,
+    label: string,
+    options: { maxLength: number; placeholder?: string; type?: "text" | "url" },
+  ) => {
+    const id = `lodging-${index}-${key}`;
+
+    return (
+      <div>
+        <label className={fieldLabel} htmlFor={id}>
+          {label}
+        </label>
+        <input
+          aria-describedby={key === "name" ? incompleteHintId(index) : undefined}
+          autoComplete={options.type === "url" ? "url" : "off"}
+          className={textField}
+          id={id}
+          inputMode={options.type === "url" ? "url" : undefined}
+          maxLength={options.maxLength}
+          name={id}
+          onBlur={onFlush}
+          onChange={(event) => patch(index, { [key]: event.target.value })}
+          placeholder={options.placeholder}
+          type={options.type ?? "text"}
+          value={drafts.hotels[index]?.[key] ?? ""}
+        />
+      </div>
+    );
+  };
+
+  // One row per hotel, numbered by its place in the list: a hotel has no id of its own, and the position is both the
+  // order the owner sees and the order the cards are stored in, so it is also the identity each row keeps while editing.
+  let position = 0;
+  const rows = drafts.hotels.map((_hotel) => {
+    const index = position;
+    position += 1;
+
+    return (
+      <li
+        className="flex flex-col gap-3 rounded-field bg-surface p-3 ring-1 ring-field-border"
+        key={index}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className={fieldLabel}>
+            {nameOf(index)}
+            <span className="ml-2 text-xs font-normal text-muted">
+              {FEATURE_COPY.lodgingHotelLabel(index + 1)}
+            </span>
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              aria-label={`${FEATURE_COPY.lodgingMoveUp} ${nameOf(index)}`}
+              className={itineraryControl}
+              disabled={index === 0}
+              onClick={() => change(moveLodgingHotel(drafts, index, "up"))}
+              type="button"
+            >
+              {FEATURE_COPY.lodgingMoveUp}
+            </button>
+            <button
+              aria-label={`${FEATURE_COPY.lodgingMoveDown} ${nameOf(index)}`}
+              className={itineraryControl}
+              disabled={index === drafts.hotels.length - 1}
+              onClick={() => change(moveLodgingHotel(drafts, index, "down"))}
+              type="button"
+            >
+              {FEATURE_COPY.lodgingMoveDown}
+            </button>
+            <button
+              aria-label={`${FEATURE_COPY.lodgingRemove} ${nameOf(index)}`}
+              className={itineraryControl}
+              onClick={() => change(removeLodgingHotel(drafts, index))}
+              type="button"
+            >
+              {FEATURE_COPY.lodgingRemove}
+            </button>
+          </div>
+        </div>
+        {incompleteHintId(index) === undefined ? null : (
+          <p className="text-sm leading-6 text-muted" id={incompleteHintId(index)}>
+            {FEATURE_COPY.lodgingIncomplete}
+          </p>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {field(index, "name", FEATURE_COPY.lodgingHotelNameLabel, { maxLength: 60 })}
+          {field(index, "distance", FEATURE_COPY.lodgingHotelDistanceLabel, {
+            maxLength: 40,
+            placeholder: FEATURE_COPY.lodgingHotelDistancePlaceholder,
+          })}
+          {field(index, "price", FEATURE_COPY.lodgingHotelPriceLabel, {
+            maxLength: 60,
+            placeholder: FEATURE_COPY.lodgingHotelPricePlaceholder,
+          })}
+          {field(index, "groupCode", FEATURE_COPY.lodgingHotelGroupCodeLabel, {
+            maxLength: 40,
+            placeholder: FEATURE_COPY.lodgingHotelGroupCodePlaceholder,
+          })}
+          <div className="sm:col-span-2">
+            {field(index, "bookingUrl", FEATURE_COPY.lodgingHotelBookingUrlLabel, {
+              maxLength: 500,
+              placeholder: FEATURE_COPY.lodgingHotelBookingUrlPlaceholder,
+              type: "url",
+            })}
+          </div>
+          <div className="sm:col-span-2">
+            {field(index, "address", FEATURE_COPY.lodgingHotelAddressLabel, { maxLength: 160 })}
+          </div>
+        </div>
+      </li>
+    );
+  });
+
+  const transportId = "lodging-transport";
+
+  return (
+    <div className="border-t border-rose-100 pt-6">
+      <p className={fieldLabel}>{FEATURE_COPY.lodgingTitle}</p>
+      <p className={fieldHint}>{FEATURE_COPY.lodgingHint}</p>
+
+      {drafts.hotels.length === 0 ? (
+        <p className="mt-3 text-sm leading-6 text-muted">{FEATURE_COPY.lodgingEmpty}</p>
+      ) : (
+        <ol className="mt-4 flex flex-col gap-4">{rows}</ol>
+      )}
+
+      <div className="mt-4 flex flex-col gap-2">
+        <button
+          className={`${quietButton} self-start`}
+          disabled={!canAddLodgingHotel(drafts)}
+          onClick={() => change(addLodgingHotel(drafts))}
+          type="button"
+        >
+          {FEATURE_COPY.lodgingAdd}
+        </button>
+        {canAddLodgingHotel(drafts) ? null : (
+          <p className="text-sm leading-6 text-muted">{FEATURE_COPY.lodgingLimitNote}</p>
+        )}
+      </div>
+
+      <div className="mt-6">
+        <label className={fieldLabel} htmlFor={transportId}>
+          {FEATURE_COPY.lodgingTransportLabel}
+        </label>
+        <textarea
+          className={multilineField}
+          id={transportId}
+          maxLength={400}
+          name={transportId}
+          onBlur={onFlush}
+          onChange={(event) =>
+            onChange({ lodging: setLodgingTransport(drafts, event.target.value) })
+          }
+          rows={3}
+          value={drafts.transport}
+        />
+        <p className={fieldHint}>{FEATURE_COPY.lodgingTransportHint}</p>
+        <FieldRefusal id="lodging-error" message={issue} />
+      </div>
+    </div>
+  );
+}
+
 /** The automatic features a guest sees, as a plain list of what the package turns on (S4). */
 function AutomaticFeatures({ view }: { view: FeatureSettingsView }) {
   return (
@@ -1078,6 +1294,15 @@ export function FeatureFields({
       {view.showGiftRegistry ? (
         <GiftRegistryFields
           issue={issues?.giftRegistry}
+          onChange={onChange}
+          onFlush={onFlush}
+          values={values}
+        />
+      ) : null}
+
+      {view.showLodging ? (
+        <LodgingFields
+          issue={issues?.lodging}
           onChange={onChange}
           onFlush={onFlush}
           values={values}

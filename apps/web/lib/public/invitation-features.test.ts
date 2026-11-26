@@ -40,6 +40,7 @@ const PUBLIC: PublicInvitation = {
     music: { url: PLAYLIST, provider: "spotify" },
     giftRegistry: true,
     giftRegistryDetails: null,
+    lodging: null,
     itinerary: null,
     gallery: [],
     rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
@@ -141,6 +142,7 @@ describe("publicFeatureBlock", () => {
         music: null,
         giftRegistry: false,
         giftRegistryDetails: null,
+        lodging: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -176,6 +178,7 @@ describe("publicFeatureBlock", () => {
         music: null,
         giftRegistry: true,
         giftRegistryDetails: null,
+        lodging: null,
         itinerary: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -224,6 +227,32 @@ describe("publicFeatureBlock", () => {
     assert.equal(block?.features.itinerary, undefined);
   });
 
+  it("carries the gated lodging into the block, with its hotels and transport (F4; L7.3, L7.5)", () => {
+    const lodging = {
+      hotels: [
+        {
+          name: "Hotel Misión",
+          distance: "A 5 min",
+          bookingUrl: "https://hotelmision.example.com/reserva",
+          address: "Av. Juárez 120, Centro",
+        },
+      ],
+      transport: "Camión a las 19:00.",
+    };
+    const block = publicFeatureBlock({
+      ...PUBLIC,
+      features: { ...PUBLIC.features, lodging },
+    });
+
+    assert.deepEqual(block?.features.lodging, lodging);
+  });
+
+  it("carries no lodging while the API answers none", () => {
+    const block = publicFeatureBlock(PUBLIC);
+
+    assert.equal(block?.features.lodging, undefined);
+  });
+
   it("keeps the map alone when the zone is unknown and nothing else is gated", () => {
     const block = publicFeatureBlock({
       ...PUBLIC,
@@ -236,6 +265,7 @@ describe("publicFeatureBlock", () => {
         music: null,
         giftRegistry: false,
         giftRegistryDetails: null,
+        lodging: null,
         itinerary: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },

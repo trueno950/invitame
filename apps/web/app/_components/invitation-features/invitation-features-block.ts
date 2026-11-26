@@ -35,6 +35,19 @@ import {
   itineraryDirectionsUrl,
 } from "../../../lib/invitation-features/itinerary.ts";
 import {
+  LODGING_BOOK_LABEL,
+  LODGING_DIRECTIONS_LABEL,
+  LODGING_GROUP_CODE_LABEL,
+  LODGING_SECTION_HINT,
+  LODGING_SECTION_KICKER,
+  LODGING_SECTION_TITLE,
+  LODGING_TRANSPORT_TITLE,
+  type Lodging,
+  type LodgingHotel,
+  lodgingDirectionsUrl,
+  lodgingHasContent,
+} from "../../../lib/invitation-features/lodging.ts";
+import {
   googleMapsUrl,
   type MapPlace,
   wazeUrl,
@@ -127,6 +140,23 @@ const TRANSFER_VALUE = "text-right font-medium break-words text-(color:--inv-ink
 /** The CLABE reads in groups of four; the number is the value the copy button hands over. */
 const TRANSFER_CLABE = "text-right font-medium break-all text-(color:--inv-ink) tabular-nums";
 const NOTE = "mt-4 text-sm leading-6 break-words text-(color:--inv-ink)";
+
+// The lodging cards (F4; L7.5): the name and its distance badge on one line, the address and price under it, the group
+// code on the theme's soft surface, and the two actions as pills — the accent one for the booking link and the outlined
+// one for the maps search, exactly the artboard's pair.
+const HOTEL_NAME = "text-base leading-tight font-medium break-words text-(color:--inv-ink)";
+/** The distance badge: the accent on the soft surface, never the only cue for anything (L7.5). */
+const HOTEL_BADGE =
+  "shrink-0 rounded-full bg-(--inv-soft) px-2.5 py-0.5 text-[0.7rem] font-medium text-(color:--inv-accent)";
+const HOTEL_LINE = "mt-1.5 text-sm leading-6 break-words text-(color:--inv-ink)";
+const HOTEL_GROUP_CODE =
+  "mt-2.5 flex items-baseline justify-between gap-3 rounded-xl bg-(--inv-background) px-3 py-2 text-sm text-(color:--inv-ink)";
+const HOTEL_GROUP_CODE_VALUE = "font-medium tracking-[0.06em] break-all text-(color:--inv-ink)";
+const HOTEL_ACTIONS = "mt-3 flex flex-wrap gap-2";
+const HOTEL_BOOK_ACTION =
+  "inline-flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full bg-(--inv-accent) px-5 text-sm font-medium text-(color:--inv-on-accent)";
+const HOTEL_DIRECTIONS_ACTION =
+  "inline-flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full px-5 text-sm font-medium text-(color:--inv-accent) ring-2 ring-inset ring-(--inv-accent)";
 
 // The timeline of the day (F1; L3.5): the time in the display face, the dot on the theme's accent, and the connector
 // in the theme's decoration color. The grid keeps the three columns aligned on every row, so a long title wraps
@@ -638,6 +668,116 @@ function guestPassSection(pass: GuestPassBlockView): ReactElement | null {
 }
 
 /**
+ * The lodging and transport (F4; L7.5): one card per hotel, in the order the owner stored, with the distance as a badge,
+ * the address and the price line, the group code on its own row, and the two actions — «Reservar» opens the booking link
+ * in a new tab without handing the opener over, and «Cómo llegar» searches the address in Google Maps. Then the
+ * transport card, which a transport line alone still shows. Every text is React's own text node, so the owner's words
+ * are escaped and nothing they typed can become markup.
+ */
+function lodgingSection(lodging: Lodging): ReactElement {
+  const hotelCards = lodging.hotels.map((hotel, index) => lodgingHotelCard(hotel, index));
+
+  return h(
+    "div",
+    { key: "lodging", "data-feature": "lodging", className: SURFACE_CARD },
+    h("p", { className: FEATURE_TITLE }, LODGING_SECTION_KICKER),
+    h(
+      "h3",
+      { className: "mt-1 text-center text-2xl font-medium text-(color:--inv-ink)" },
+      LODGING_SECTION_TITLE,
+    ),
+    h("p", { className: HINT }, LODGING_SECTION_HINT),
+    hotelCards.length === 0
+      ? null
+      : h("div", { className: "mt-3 flex flex-col gap-2.5" }, hotelCards),
+    lodging.transport === null
+      ? null
+      : h(
+          "div",
+          {
+            key: "lodging-transport",
+            "data-feature": "lodging-transport",
+            className: "mt-2.5 rounded-2xl bg-(--inv-surface) p-4",
+          },
+          h(
+            "h4",
+            { className: "text-xl font-medium text-(color:--inv-ink)" },
+            LODGING_TRANSPORT_TITLE,
+          ),
+          h("p", { className: HINT }, lodging.transport),
+        ),
+  );
+}
+
+/** One hotel card of the lodging section: the badge, the address and price line, the code, and the two actions. */
+function lodgingHotelCard(hotel: LodgingHotel, index: number): ReactElement {
+  const addressAndPrice = [hotel.address, hotel.price].filter(
+    (text): text is string => text !== undefined,
+  );
+  const actions: ReactElement[] = [];
+
+  if (hotel.bookingUrl !== undefined) {
+    actions.push(
+      h(
+        "a",
+        {
+          key: "book",
+          href: hotel.bookingUrl,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          "aria-label": `${LODGING_BOOK_LABEL} en ${hotel.name} en una pestaña nueva`,
+          className: HOTEL_BOOK_ACTION,
+        },
+        LODGING_BOOK_LABEL,
+      ),
+    );
+  }
+  if (hotel.address !== undefined) {
+    actions.push(
+      h(
+        "a",
+        {
+          key: "directions",
+          href: lodgingDirectionsUrl(hotel.address),
+          target: "_blank",
+          rel: "noopener noreferrer",
+          "aria-label": `${LODGING_DIRECTIONS_LABEL} a ${hotel.name} en Google Maps`,
+          className: HOTEL_DIRECTIONS_ACTION,
+        },
+        LODGING_DIRECTIONS_LABEL,
+      ),
+    );
+  }
+
+  return h(
+    "div",
+    {
+      key: `${index}-${hotel.name}`,
+      "data-hotel": hotel.name,
+      className: "rounded-2xl bg-(--inv-soft) p-4",
+    },
+    h(
+      "div",
+      { className: "flex items-baseline justify-between gap-3" },
+      h("p", { className: HOTEL_NAME }, hotel.name),
+      hotel.distance === undefined ? null : h("span", { className: HOTEL_BADGE }, hotel.distance),
+    ),
+    addressAndPrice.length === 0
+      ? null
+      : h("p", { className: HOTEL_LINE }, addressAndPrice.join(" · ")),
+    hotel.groupCode === undefined
+      ? null
+      : h(
+          "div",
+          { className: HOTEL_GROUP_CODE, "data-hotel-group-code": hotel.groupCode },
+          h("span", null, LODGING_GROUP_CODE_LABEL),
+          h("span", { className: HOTEL_GROUP_CODE_VALUE }, hotel.groupCode),
+        ),
+    actions.length === 0 ? null : h("div", { className: HOTEL_ACTIONS }, actions),
+  );
+}
+
+/**
  * The plan of the day (F1; L3.5): one row per moment, in the order the owner stored, with the first moment's dot filled
  * so the timeline has a start. A moment with an address offers «Cómo llegar» as a Google Maps search of that address;
  * a moment without one offers no link, because a title is not a destination anyone can navigate to.
@@ -877,6 +1017,11 @@ export function InvitationFeaturesBlock({
   // The gift registry follows the plan: where to look once a guest knows when the celebration starts (F2; L4.5).
   if (features.giftRegistryDetails !== undefined) {
     sections.push(giftRegistrySection(features.giftRegistryDetails, idPrefix));
+  }
+
+  // The lodging follows the gifts: where to sleep and how to move, once a guest knows the day and the presents (F4).
+  if (features.lodging !== undefined && lodgingHasContent(features.lodging)) {
+    sections.push(lodgingSection(features.lodging));
   }
 
   if (features.map) {

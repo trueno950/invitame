@@ -54,6 +54,12 @@ import {
   giftRegistryPayloadOf,
 } from "../../../../../lib/customer/gift-registry.ts";
 import {
+  type LodgingDraft,
+  type LodgingPayload,
+  lodgingNeedsSave,
+  lodgingPayloadOf,
+} from "../../../../../lib/customer/lodging.ts";
+import {
   OMITTED_SECTIONS_PROPERTY,
   type OmittableSections,
   omittedSectionKeys,
@@ -360,6 +366,17 @@ function storedRegistryOf(drafts: GiftRegistryDraft): GiftRegistryPayload | null
   return registry === undefined ? null : registry;
 }
 
+/**
+ * The lodging the page was rendered with, as the payload the API holds (F4; L7.4). The view answers the drafts of the
+ * stored lodging, so this is their payload again; a value the contract would refuse cannot come from the API and reads
+ * as no lodging.
+ */
+function storedLodgingOf(drafts: LodgingDraft): LodgingPayload | null {
+  const lodging = lodgingPayloadOf(drafts);
+
+  return lodging === undefined ? null : lodging;
+}
+
 function issuesOf(state: ReturnType<typeof useAutosave>["state"]): FieldIssues | undefined {
   if (state.kind !== "error") {
     return undefined;
@@ -467,6 +484,7 @@ export function EditorShell({
     playlistUrl: featureView.playlistUrl,
     itinerary: featureView.itinerary,
     giftRegistry: featureView.giftRegistry,
+    lodging: featureView.lodging,
   }));
   const [rsvp, setRsvp] = useState<RsvpValues>(() => ({
     deadline: rsvpView?.deadlineValue ?? "",
@@ -485,6 +503,12 @@ export function EditorShell({
   const storedGiftRegistry = useRef<GiftRegistryPayload | null>(
     storedRegistryOf(featureView.giftRegistry),
   );
+  /**
+   * The lodging the API holds right now (F4; L7.4), with the same role the stored plan and registry have: it tells a
+   * hotel the owner is retyping from one that was never complete, so retyping a stored hotel saves nothing and «Quitar»
+   * removes it.
+   */
+  const storedLodging = useRef<LodgingPayload | null>(storedLodgingOf(featureView.lodging));
   const featuresRef = useRef(features);
   featuresRef.current = features;
   const statusLine = useRef<HTMLDivElement>(null);
@@ -522,6 +546,12 @@ export function EditorShell({
 
         if (registry !== undefined) {
           storedGiftRegistry.current = registry;
+        }
+
+        const lodging = lodgingPayloadOf(featuresRef.current.lodging, storedLodging.current);
+
+        if (lodging !== undefined) {
+          storedLodging.current = lodging;
         }
       }
       setPreviewKey((key) => key + 1);
@@ -646,6 +676,14 @@ export function EditorShell({
     if (
       next.giftRegistry !== undefined &&
       !giftRegistryNeedsSave(features.giftRegistry, next.giftRegistry, storedGiftRegistry.current)
+    ) {
+      return;
+    }
+    // The lodging follows the same rule (F4; L7.4): a hotel being added or written, and the removal of one that was
+    // never complete, stay in the browser without a request.
+    if (
+      next.lodging !== undefined &&
+      !lodgingNeedsSave(features.lodging, next.lodging, storedLodging.current)
     ) {
       return;
     }
