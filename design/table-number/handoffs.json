@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "02-junto-al-qr.html",
+  "handoffs": {
+    "02-junto-al-qr.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T17:16:37.760Z",
+      "startedAt": "2026-11-26T17:17:01.723Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después de hospedaje y transporte; la asignación del anfitrión sigue la propuesta 03."
+    }
+  }
+}

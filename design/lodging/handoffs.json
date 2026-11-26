@@ -3,12 +3,13 @@
   "chosen": "01-tarjetas-de-hotel.html",
   "handoffs": {
     "01-tarjetas-de-hotel.html": {
-      "status": "sent",
+      "status": "in_progress",
       "queued": true,
       "sentAt": "2026-11-26T16:48:41.792Z",
-      "startedAt": null,
+      "startedAt": "2026-11-26T17:15:24.398Z",
       "implementedAt": null,
-      "feature": "odd/tasks/guest-features-v2.md"
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después de la mesa de regalos y la confirmación con acompañantes."
     }
   }
 }

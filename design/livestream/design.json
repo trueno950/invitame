@@ -1,0 +1,28 @@
+{
+  "title": "Transmisión en vivo",
+  "brief": "Enlace a la transmisión (YouTube, Zoom, Facebook…) para quien no pueda asistir; sin costo, solo se pega el enlace (Premium y Deluxe).",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-tarjeta-con-boton.html",
+      "title": "Tarjeta con botón",
+      "tradeoff": "Una tarjeta con la hora de inicio y «Ver en vivo» que abre la plataforma; simple y funciona con cualquier servicio",
+      "width": 470,
+      "height": 600
+    },
+    {
+      "file": "02-reproductor-incrustado.html",
+      "title": "Reproductor dentro de la invitación",
+      "tradeoff": "El video se ve sin salir de la invitación; solo funciona bien con YouTube y carga contenido externo en la página",
+      "width": 470,
+      "height": 560
+    },
+    {
+      "file": "03-dentro-del-itinerario.html",
+      "title": "Dentro del itinerario",
+      "tradeoff": "«Ver en vivo» junto al momento que se transmite; se integra con el itinerario, se ve solo si el anfitrión lo usa",
+      "width": 470,
+      "height": 560
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesa — junto al QR</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  .pass{background:var(--surface);border-radius:22px;padding:22px;box-shadow:inset 0 0 0 1px var(--soft)}
+  .kicker{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent);text-align:center}
+  h2{font-family:var(--font-display);font-weight:600;font-size:26px;margin:4px 0 14px;text-align:center}
+  .row{display:grid;grid-template-columns:120px 1fr;gap:16px;align-items:center}
+  .qr{width:120px;height:120px;background:repeating-conic-gradient(var(--ink) 0 25%,#fff 0 50%) 0 0/16px 16px;border:8px solid #fff;outline:1px solid var(--soft)}
+  dl{margin:0;display:grid;gap:10px}
+  dt{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#6d5752}
+  dd{margin:0;font-family:var(--font-display);font-size:24px;font-weight:600}
+  dd.big{font-size:38px;color:var(--accent)}
+  .tear{border-top:1.5px dashed var(--deco);margin:18px -22px 12px}
+  .hint{font-size:12px;color:#6d5752;text-align:center;margin:0}
+</style>
+</head>
+<body>
+<div class="phone">
+  <section class="pass">
+    <div class="kicker">Pase de acceso</div>
+    <h2>Familia Gómez</h2>
+    <div class="row">
+      <div class="qr" aria-label="Código QR de acceso" role="img"></div>
+      <dl><div><dt>Mesa</dt><dd class="big">7</dd></div><div><dt>Personas</dt><dd>3</dd></div></dl>
+    </div>
+    <div class="tear"></div>
+    <p class="hint">Muestra este código en la entrada · Salón Jardín Las Rosas</p>
+  </section>
+</div>
+</body>
+</html>

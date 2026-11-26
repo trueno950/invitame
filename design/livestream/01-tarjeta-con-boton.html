@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>En vivo — tarjeta con botón</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  .card{background:var(--surface);border-radius:20px;padding:24px 20px;text-align:center;box-shadow:inset 0 0 0 1px var(--soft)}
+  .live{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  h2{font-family:var(--font-display);font-weight:600;font-size:28px;margin:6px 0 4px}
+  p{font-size:14px;color:#6d5752;margin:0 0 16px}
+  .when{background:var(--bg);border-radius:12px;padding:10px;font-size:14px;margin-bottom:14px}
+  .when b{display:block;font-family:var(--font-display);font-size:20px}
+  a{display:block;padding:12px;border-radius:999px;background:var(--accent);color:#fff;font-weight:600;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="phone">
+  <section class="card">
+    <span class="live">Transmisión en vivo</span>
+    <h2>¿No puedes acompañarnos?</h2>
+    <p>Sigue la ceremonia en vivo desde donde estés.</p>
+    <div class="when">Comienza el sábado 15 de agosto<b>17:00 h</b></div>
+    <a href="#">Ver en vivo en YouTube ↗</a>
+  </section>
+</div>
+</body>
+</html>

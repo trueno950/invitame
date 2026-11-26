@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "03-aprobacion-anfitrion.html",
+  "handoffs": {
+    "03-aprobacion-anfitrion.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T17:23:02.880Z",
+      "startedAt": "2026-11-26T17:23:27.491Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después del libro de firmas; la subida del invitado sigue la propuesta 01."
+    }
+  }
+}

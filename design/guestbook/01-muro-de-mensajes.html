@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Libro de firmas — muro de mensajes</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;--line:#c9a99c;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-script:"Great Vibes","Snell Roundhand",cursive;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  h2{font-family:var(--font-display);font-weight:600;font-size:30px;text-align:center;margin:0 0 4px}
+  .sub{text-align:center;font-size:13px;color:#6d5752;margin:0 0 14px}
+  .note{background:var(--surface);border-radius:16px;padding:14px 16px;margin-bottom:10px;box-shadow:inset 0 0 0 1px var(--soft)}
+  .note p{margin:0 0 6px;font-size:14px;line-height:1.5}
+  .note b{font-family:var(--font-script);font-size:22px;color:var(--accent);font-weight:400}
+  form{background:var(--surface);border-radius:16px;padding:14px;box-shadow:inset 0 0 0 1.5px var(--accent)}
+  input,textarea{width:100%;font:14px var(--font-sans);padding:9px 12px;border-radius:12px;border:1.5px solid var(--line);margin-bottom:8px;background:#fff}
+  button{width:100%;padding:11px;border:0;border-radius:999px;background:var(--accent);color:#fff;font:600 14px var(--font-sans)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <h2>Libro de firmas</h2>
+  <p class="sub">Déjale un mensaje a Valentina</p>
+  <div class="note"><p>¡Que este día sea tan hermoso como tú! Te queremos mucho.</p><b>Tía Rosa</b></div>
+  <div class="note"><p>Felicidades por tus XV, nos vemos en la pista 💃</p><b>Sofía y Jorge</b></div>
+  <form><input placeholder="Tu nombre"><textarea rows="3" placeholder="Escribe tu mensaje"></textarea><button type="button">Firmar el libro</button></form>
+</div>
+</body>
+</html>

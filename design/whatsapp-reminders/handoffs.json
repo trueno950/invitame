@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "01-automaticos.html",
+  "handoffs": {
+    "01-automaticos.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T17:19:19.940Z",
+      "startedAt": "2026-11-26T17:19:42.986Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después del número de mesa; se construye completo pero apagado hasta conectar el proveedor."
+    }
+  }
+}

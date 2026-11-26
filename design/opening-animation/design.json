@@ -1,0 +1,28 @@
+{
+  "title": "Animación de apertura",
+  "brief": "Lo primero que ve el invitado al abrir el enlace: una animación corta antes de la invitación, con los colores del tema; respeta «reducir movimiento» y se puede saltar.",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-sobre-con-sello.html",
+      "title": "Sobre con sello",
+      "tradeoff": "El sello desaparece, el sobre se abre y sale la tarjeta; el efecto más emotivo y reconocible, el más largo (unos 3 s)",
+      "width": 470,
+      "height": 840
+    },
+    {
+      "file": "02-telon.html",
+      "title": "Telón",
+      "tradeoff": "Un telón se abre a los lados con el monograma al centro; teatral, ideal para fiestas, menos delicado para bodas",
+      "width": 470,
+      "height": 840
+    },
+    {
+      "file": "03-monograma.html",
+      "title": "Monograma que se desvanece",
+      "tradeoff": "La inicial en un círculo que se desvanece hacia la invitación; sobrio y rápido, el menos llamativo",
+      "width": 470,
+      "height": 840
+    }
+  ]
+}

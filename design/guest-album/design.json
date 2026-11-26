@@ -1,0 +1,28 @@
+{
+  "title": "Álbum de fotos de los invitados",
+  "brief": "Los invitados suben las fotos que toman durante el evento (desde la invitación o escaneando un QR en el salón) y el anfitrión decide cuáles se publican (Deluxe).",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-cuadricula-con-subir.html",
+      "title": "Cuadrícula con «Subir mis fotos»",
+      "tradeoff": "El álbum dentro de la invitación con un botón grande para subir; directo, depende de que el invitado abra la invitación",
+      "width": 470,
+      "height": 720
+    },
+    {
+      "file": "02-cartel-con-qr.html",
+      "title": "Cartel con QR para el salón",
+      "tradeoff": "Un cartel imprimible con QR que lleva a subir fotos; el que más fotos consigue el día del evento, requiere imprimirlo",
+      "width": 520,
+      "height": 820
+    },
+    {
+      "file": "03-aprobacion-anfitrion.html",
+      "title": "Aprobación del anfitrión",
+      "tradeoff": "Las fotos esperan revisión antes de publicarse (por revisar, publicadas, ocultas); seguro, pero el anfitrión debe revisarlas",
+      "width": 980,
+      "height": 560
+    }
+  ]
+}

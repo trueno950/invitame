@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Álbum — cartel con QR para el salón</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-script:"Great Vibes","Snell Roundhand",cursive;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .poster{width:420px;background:var(--surface);padding:40px 34px;text-align:center;box-shadow:0 0 0 1px var(--deco),0 0 0 8px var(--surface),0 0 0 9px var(--deco),0 30px 60px -30px rgb(0 0 0/40%)}
+  .script{font-family:var(--font-script);font-size:44px;color:var(--accent);margin:0}
+  h2{font-family:var(--font-display);font-weight:600;font-size:30px;margin:0 0 6px}
+  p{font-size:15px;color:#6d5752;margin:0 0 20px}
+  .qr{width:190px;height:190px;margin:0 auto 16px;background:repeating-conic-gradient(var(--ink) 0 25%,#fff 0 50%) 0 0/18px 18px;border:10px solid #fff;outline:1px solid var(--soft)}
+  .url{font-size:13px;letter-spacing:.06em;color:var(--accent);font-weight:600}
+  .print{margin-top:18px;font-size:12px;color:#6d5752}
+</style>
+</head>
+<body>
+<div class="poster">
+  <p class="script">Valentina</p>
+  <h2>¡Comparte tus fotos!</h2>
+  <p>Escanea el código y sube las fotos que tomes hoy. Las veremos todas en nuestro álbum.</p>
+  <div class="qr" role="img" aria-label="Código QR para subir fotos"></div>
+  <div class="url">invitame.mx/i/valentina-xv/fotos</div>
+  <div class="print">Cartel listo para imprimir y poner en las mesas</div>
+</div>
+</body>
+</html>

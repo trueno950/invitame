@@ -29,7 +29,7 @@ verification, CI, and its own merge to `master` before the next starts.
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| F1 | Itinerary | S2.1, S3-S5 | design → worker | |
+| F1 | Itinerary | S2.1, S3-S5 | design → worker | 4889297, e3e7357, d30c9c6, fix below |
 | F2 | Gift registry with several links and transfer details | S2.2, S3-S5 | design → worker | |
 | F3 | RSVP with companions, children, dietary restrictions | S2.3, S3-S5 | design → worker | |
 | F4 | Lodging and transport | S2.4, S3-S5 | design → worker | |
@@ -95,6 +95,115 @@ verification, CI, and its own merge to `master` before the next starts.
      progressively enhanced), keeps the honeypot and rate limits, and never exceeds the party limit.
   4. Owner: the responses page and both CSV exports add the companion names, the number of children, and the dietary
      notes; totals show adults and children. Existing answers without the new data keep rendering (empty).
+- L7 — F4: owner picked `design/lodging/01-tarjetas-de-hotel.html` («Tarjetas de hotel»); the other two are
+  alternatives. Parent decisions for F4 (binding):
+  1. Data: a new nullable `lodging` JSONB column on `InvitationFeatureSettings`, versioned and validated:
+     `{ version: 1, hotels: [{ name, distance?, price?, groupCode?, bookingUrl?, address? }] (0-6; name 1-60,
+     distance up to 40, price up to 60, groupCode up to 40, bookingUrl https only up to 500, address up to 160),
+     transport?: string (up to 400) }`. Empty (no hotel and no transport) means no lodging section. Additive
+     migration; documented.
+  2. Gating: a new catalog feature key `LODGING` granted to premium and deluxe, inserted by the same migration by
+     key (idempotent) and declared in the seed.
+  3. API: the features PUT accepts it as OPTIONAL, like the itinerary after review R3-001: an omitted `lodging` keeps
+     the stored one, `null` or an empty value clears it; the public read answers `features.lodging` only when the
+     package grants `LODGING` and it is not empty.
+  4. Web: the feature autosave passes the stored lodging through (as with the itinerary); the «Funciones» tab gets
+     a «Hospedaje y transporte» block (hotels with add, remove, reorder; transport text), never sending an
+     incomplete hotel (a hotel needs its name) and keeping a stored hotel's last complete version while retyped.
+  5. Guest page: the shared features block draws the artboard's cards with the theme tokens: name with the distance
+     as a badge, address and price line, group code row, «Reservar» (booking URL, new tab,
+     `rel="noopener noreferrer"`) and «Cómo llegar» (Google Maps search of the address) when present, then a
+     transport card. Queued after F2 and F3.
+- L8 — F5: owner picked `design/table-number/02-junto-al-qr.html` («Junto al QR») for the guest pass; the owner's
+  assignment follows `03-asignacion-en-lista.html` (parent decision: the pass needs a place to set the table, and 03
+  was proposed as its complement); `01` is the alternative. Parent decisions for F5 (binding):
+  1. Data: additive migration adding a nullable `tableLabel` (text, 1-12 characters trimmed, e.g. «7» or
+     «Principal») to the guest-list `Guest` row; blank clears it.
+  2. Gating: the existing `GUEST_LIST` / `QR_PASS` keys (Deluxe); no new key.
+  3. Owner: the guest create/edit route accepts `tableLabel` as optional (omitted keeps the stored one); the guest
+     list page gets an editable «Mesa» column and a per-table summary («Mesa 7 · 3 personas», «Sin mesa · N»);
+     the guest-list CSV adds the table.
+  4. Guest: the personal page's access pass draws the artboard's ticket — QR on one side, «Mesa» (large, accent)
+     and «Personas» on the other, a dashed tear line and the venue hint; without a table it shows only the people
+     count. The guest personal read adds the table to the guest block only. Queued after F4.
+- L9 — F6: owner picked `design/whatsapp-reminders/01-automaticos.html` («Automáticos»); the other two are
+  alternatives. Parent decisions for F6 (binding):
+  1. Settings: two owner switches per invitation — «Recordar a quien no ha confirmado» (7 and 2 days before the RSVP
+     deadline) and «Recordatorio del evento» (one day before the event) — stored as a small validated JSONB
+     `reminders` on `InvitationFeatureSettings` (`{ version: 1, pendingRsvp: boolean, eventEve: boolean }`); the
+     features PUT accepts it as OPTIONAL (omitted keeps the stored value), like the itinerary.
+  2. Gating: a new feature key `WHATSAPP_REMINDERS` granted to deluxe (migration by key, seed).
+  3. Recipients: guest-list guests with a stored phone only; pending means no answer yet. A guest without a phone is
+     listed as not reachable.
+  4. Delivery (S6): an application port `ReminderSender` with a default adapter that sends nothing and reports
+     `not_configured`; a WhatsApp Business adapter is NOT implemented now (no paid provider), only the port, its
+     contract test, and the configuration keys it would read documented as unset. A command
+     `pnpm --filter @invitame/api reminders:send` (`--dry-run`) finds the reminders due today, records each attempt in
+     a new `ReminderDelivery` table (unique per invitation, guest, kind, and due date, so a second run sends nothing
+     twice), and with the default adapter records them as skipped `not_configured`. It is documented in the runbook
+     but not scheduled.
+  5. Owner UI: the artboard's screen in the editor (Deluxe): the «Aún no está activo» status while the sender is not
+     configured (the API exposes the capability, never a secret), the two switches (saved, so they work as soon as it
+     is activated), and the message preview built from the invitation's own data.
+  6. Message: neutral Spanish template naming the guest, the occasion, the deadline or the event time, and the public
+     link; no personal data beyond what the guest already sees. Queued after F5.
+- L10 — F7: owner picked `design/guestbook/01-muro-de-mensajes.html` («Muro de mensajes») for guests; moderation
+  follows `03-moderacion-anfitrion.html` (parent decision: proposed as its complement); `02` is the alternative.
+  Parent decisions for F7 (binding):
+  1. Data: a new `GuestbookEntry` table (`invitationId`, `authorName` 1-60 trimmed, `message` 1-500 trimmed,
+     `hidden` boolean default false, `createdAt`); additive migration; documented.
+  2. Gating: a new feature key `GUESTBOOK` granted to premium and deluxe (migration by key, seed).
+  3. Public write: `POST /public/invitations/:slug/guestbook` without a session, refused unless the invitation is
+     published, not expired, and its package grants `GUESTBOOK`; honeypot field answered like a success; limited per
+     client address and invitation on the shared `RateLimit` store (like the open RSVP); plain text only (escaped on
+     render, no links turned clickable).
+  4. Public read: `features.guestbook` with the visible entries, newest first, at most 50, only when granted.
+  5. Guest page: the artboard's wall in the shared features block (notes with the signature in the script face from
+     the theme, the form below with «Firmar el libro»), works without client script (server action + redirect
+     notice), closed with a note when the invitation expired.
+  6. Owner: a «Libro de firmas» screen per invitation with «Visibles» and «Ocultos», hide and show again (owner-only,
+     404 for anyone else); entries are published immediately and never deleted by the guest. Queued after F6.
+- L11 — F8: owner picked `design/guest-album/03-aprobacion-anfitrion.html` («Aprobación del anfitrión»); the guest
+  upload view follows `01-cuadricula-con-subir.html` (parent decision: approval needs a way to upload); the poster
+  `02` is deferred as an alternative. Parent decisions for F8 (binding):
+  1. Data: a new `GuestPhoto` table (`invitationId`, storage key, `status` PENDING | PUBLISHED | HIDDEN,
+     `uploaderName` optional up to 60, `createdAt`, `reviewedAt`); binaries go through the existing media storage
+     port (local in development, the S3-compatible bucket in production), never into PostgreSQL; additive migration.
+  2. Gating: a new feature key `GUEST_ALBUM` granted to deluxe (migration by key, seed).
+  3. Public upload: without a session, refused unless the invitation is published, not expired, and granted; reuses
+     the existing upload validation (type allow-list, the configured size limit, dimension bounds, re-encoding);
+     bounded per invitation (at most 300 photos stored, pending included) and per client address on the shared
+     `RateLimit` store; every new photo is PENDING and invisible to guests until the owner publishes it. Security-
+     sensitive (anonymous upload): independent verification and native review are required.
+  4. Public read: `features.guestAlbum` with the PUBLISHED photos only (newest first, at most 60) and the count.
+  5. Guest page: the shared features block draws `01` — «Subir mis fotos», the grid, and the count — with the
+     theme tokens; after an upload the guest sees «Gracias, tu foto aparecerá cuando la aprueben».
+  6. Owner: the `03` screen per invitation with «Por revisar», «Publicadas», «Ocultas», publish/hide/show-again;
+     owner-only (404 for anyone else); hidden and never-published photos fall under the existing media retention
+     cleanup. Queued after F7.
+- L12 — F9: owner picked `design/livestream/02-reproductor-incrustado.html` («Reproductor dentro de la
+  invitación»); the other two are alternatives. Parent decisions for F9 (binding):
+  1. Data: a new nullable `livestream` JSONB on `InvitationFeatureSettings` (`{ version: 1, url, note? }`: `url`
+     https only up to 500, `note` up to 120, e.g. «Inicia a las 17:00 h»); the features PUT accepts it as OPTIONAL
+     (omitted keeps the stored value), and the autosave passes the stored value through, like the itinerary.
+  2. Gating: a new feature key `LIVESTREAM` granted to premium and deluxe (migration by key, seed).
+  3. Provider allow-list: only a YouTube link (`youtube.com/watch?v=`, `youtube.com/live/`, `youtu.be/`) is embedded,
+     resolved by the API to its video id and rendered from `https://www.youtube-nocookie.com/embed/<id>`; any other
+     https link (Zoom, Facebook, Vimeo…) shows only an «Abrir la transmisión» link (new tab,
+     `rel="noopener noreferrer"`).
+  4. Click to load: the guest page draws a facade (16:9 card with «▶» and the note) and inserts the iframe only
+     after the guest taps it; before that no request reaches the provider. The iframe is sandboxed to what playback
+     needs, carries a title, and the page's Content Security Policy (if any) allows only that embed origin.
+  5. Placement: the shared features block («Míralo en vivo»), with the fallback link «Si no carga, ábrela aquí».
+     Queued after F8.
+- L13 — F1 closed: browser walkthrough found that adding a moment saved an empty one (fixed: only complete moments are
+  sent; a stored moment being retyped keeps its last complete version). Native review `review-ad6cbbf18331c6a9` on the
+  API commit required one correction (the features PUT made `itinerary` required, breaking an older client during a
+  deploy); fixed in `e3e7357` (omitted keeps the stored one, RED observed) and approved; the web commit was medium,
+  not due. Independent verification: L3.1-L3.5 met, no-itinerary output byte-identical to the base; one blocking
+  finding — the autosave status line showed the field sentence for every channel, an unrequested change — narrowed to
+  the itinerary only, and the verifier's probes were added as regression tests. Guest timeline checked in a browser on
+  `invitacion-p6wrfv` (dev data).
 - L5 — F1 worker stopped before writing: the feature autosave rebuilds the PUT body by hand in
   `app/cuenta/invitaciones/autosave-actions.ts`, outside its surfaces, so an itinerary would be cleared by the next
   time-zone/phone/playlist save. Parent approved option B: that file (pass the stored itinerary through) plus

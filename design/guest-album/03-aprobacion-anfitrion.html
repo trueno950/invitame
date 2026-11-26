@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Álbum — aprobación del anfitrión</title>
+<style>
+  :root{--bg:#fff7f5;--surface:#fff;--rose-50:#fdeef2;--rose-100:#f8d7e0;--ink:#3b1424;--muted:#6b3a4c;--primary:#8c1c3a;--field-border:#a06e7e;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);padding:32px}
+  main{max-width:900px;margin:0 auto}
+  h1{font-family:var(--font-display);font-weight:600;font-size:30px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 14px}
+  .tabs{display:flex;gap:8px;margin-bottom:14px}.tabs span{padding:7px 14px;border-radius:999px;font-size:14px;box-shadow:inset 0 0 0 1px var(--field-border)}.tabs .on{background:var(--primary);color:#fff;box-shadow:none}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .ph{background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:inset 0 0 0 1.5px var(--rose-100)}
+  .img{aspect-ratio:1;background:linear-gradient(135deg,#f1dfd6,#d8b59a)}
+  .meta{padding:8px 10px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+  .meta button{font:600 12px var(--font-sans);padding:5px 10px;border-radius:999px;border:0;background:transparent;color:var(--primary);box-shadow:inset 0 0 0 1.5px var(--primary)}
+  .meta button.ok{background:var(--primary);color:#fff;box-shadow:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>Fotos de tus invitados</h1>
+  <p class="lead">Revisa las fotos antes de que aparezcan en tu invitación.</p>
+  <div class="tabs"><span class="on">Por revisar · 6</span><span>Publicadas · 42</span><span>Ocultas · 2</span></div>
+  <div class="grid">
+    <div class="ph"><div class="img"></div><div class="meta">Tía Rosa<button class="ok" type="button">Publicar</button></div></div>
+    <div class="ph"><div class="img"></div><div class="meta">Jorge<button class="ok" type="button">Publicar</button></div></div>
+    <div class="ph"><div class="img"></div><div class="meta">Sofía<button type="button">Ocultar</button></div></div>
+    <div class="ph"><div class="img"></div><div class="meta">Anónimo<button class="ok" type="button">Publicar</button></div></div>
+  </div>
+</main>
+</body>
+</html>

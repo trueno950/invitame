@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "01-muro-de-mensajes.html",
+  "handoffs": {
+    "01-muro-de-mensajes.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T17:21:33.984Z",
+      "startedAt": "2026-11-26T17:21:55.200Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después de los recordatorios; la moderación del anfitrión sigue la propuesta 03."
+    }
+  }
+}

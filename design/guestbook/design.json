@@ -1,0 +1,28 @@
+{
+  "title": "Libro de firmas",
+  "brief": "Los invitados dejan un mensaje para el festejado en la invitación, y el anfitrión puede ocultar los que no quiera mostrar (Premium y Deluxe).",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-muro-de-mensajes.html",
+      "title": "Muro de mensajes",
+      "tradeoff": "Mensajes como notas con firma en letra script y el formulario abajo; cálido y directo, se alarga con muchos mensajes",
+      "width": 470,
+      "height": 760
+    },
+    {
+      "file": "02-libro-abierto.html",
+      "title": "Libro abierto",
+      "tradeoff": "Papelería clásica con los últimos mensajes y «Ver los 14»; elegante y corto, firmar abre un paso aparte",
+      "width": 470,
+      "height": 620
+    },
+    {
+      "file": "03-moderacion-anfitrion.html",
+      "title": "Moderación (anfitrión)",
+      "tradeoff": "Pantalla del anfitrión con mensajes visibles y ocultos; publica al momento y se oculta después; se combina con 01 o 02",
+      "width": 840,
+      "height": 520
+    }
+  ]
+}

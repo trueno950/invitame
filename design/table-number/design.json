@@ -1,0 +1,28 @@
+{
+  "title": "Número de mesa en el pase",
+  "brief": "El anfitrión asigna una mesa a cada invitado de su lista y el invitado la ve en su pase de acceso con QR (paquete Deluxe).",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-mesa-protagonista.html",
+      "title": "Mesa protagonista",
+      "tradeoff": "El número de mesa grande en un círculo sobre el QR; imposible de perder, ocupa más alto",
+      "width": 470,
+      "height": 720
+    },
+    {
+      "file": "02-junto-al-qr.html",
+      "title": "Junto al QR",
+      "tradeoff": "Mesa y personas a un lado del QR, como boleto; compacto y elegante, la mesa menos dominante",
+      "width": 470,
+      "height": 520
+    },
+    {
+      "file": "03-asignacion-en-lista.html",
+      "title": "Asignación en la lista (anfitrión)",
+      "tradeoff": "Columna «Mesa» editable en la lista de invitados con resumen por mesa; se combina con 01 o 02",
+      "width": 1100,
+      "height": 520
+    }
+  ]
+}

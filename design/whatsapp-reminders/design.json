@@ -1,0 +1,28 @@
+{
+  "title": "Recordatorios por WhatsApp (apagados)",
+  "brief": "Pantalla del anfitrión para recordar a los invitados que confirmen; construida completa pero apagada hasta contratar el proveedor de WhatsApp (Deluxe).",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-automaticos.html",
+      "title": "Automáticos",
+      "tradeoff": "Se configuran una vez (7 y 2 días antes, y un día antes del evento) con vista previa del mensaje; cero trabajo para el anfitrión, menos control",
+      "width": 800,
+      "height": 640
+    },
+    {
+      "file": "02-manual-a-pendientes.html",
+      "title": "Envío manual a pendientes",
+      "tradeoff": "Un botón «Enviar a los pendientes» cuando el anfitrión decide; control total y menos mensajes (más barato), requiere acordarse",
+      "width": 840,
+      "height": 520
+    },
+    {
+      "file": "03-dentro-de-asistencia.html",
+      "title": "Dentro de Asistencia",
+      "tradeoff": "Un aviso discreto junto a los totales de asistencia; mínimo y sin pantalla nueva, la función queda menos visible",
+      "width": 940,
+      "height": 420
+    }
+  ]
+}

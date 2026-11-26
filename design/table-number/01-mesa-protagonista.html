@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesa — protagonista en el pase</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:20px}
+  .pass{background:var(--surface);border-radius:22px;padding:24px 22px;text-align:center;box-shadow:inset 0 0 0 1px var(--soft)}
+  .kicker{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent)}
+  h2{font-family:var(--font-display);font-weight:600;font-size:26px;margin:4px 0 2px}
+  .who{font-size:14px;color:#6d5752;margin:0 0 16px}
+  .table{margin:0 auto 16px;width:150px;height:150px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;align-content:center}
+  .table small{font-size:12px;letter-spacing:.2em;text-transform:uppercase;opacity:.85}
+  .table b{font-family:var(--font-display);font-size:64px;line-height:1}
+  .qr{width:120px;height:120px;margin:0 auto 8px;background:repeating-conic-gradient(var(--ink) 0 25%,#fff 0 50%) 0 0/16px 16px;border:8px solid #fff;outline:1px solid var(--soft)}
+  .hint{font-size:12px;color:#6d5752;margin:0}
+</style>
+</head>
+<body>
+<div class="phone">
+  <section class="pass">
+    <div class="kicker">Tu pase de acceso</div>
+    <h2>Familia Gómez</h2>
+    <p class="who">3 personas confirmadas</p>
+    <div class="table"><small>Mesa</small><b>7</b></div>
+    <div class="qr" aria-label="Código QR de acceso" role="img"></div>
+    <p class="hint">Muestra este código en la entrada.</p>
+  </section>
+</div>
+</body>
+</html>

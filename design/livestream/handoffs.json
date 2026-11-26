@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "02-reproductor-incrustado.html",
+  "handoffs": {
+    "02-reproductor-incrustado.html": {
+      "status": "in_progress",
+      "queued": false,
+      "sentAt": "2026-11-26T17:24:27.925Z",
+      "startedAt": "2026-11-26T17:24:50.451Z",
+      "implementedAt": null,
+      "feature": "odd/tasks/guest-features-v2.md",
+      "note": "En cola: después del álbum; solo YouTube se incrusta y el video carga al tocar."
+    }
+  }
+}
