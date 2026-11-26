@@ -9,7 +9,7 @@ import {
   parseBaptismClassicContent,
 } from "../../../../lib/renderers/baptism-classic-01.ts";
 import { BAPTISM_THEME } from "../../../../lib/renderers/baptism-themes.ts";
-import { formatLongDate } from "../../../../lib/renderers/invitation-fields.ts";
+import { formatLongDate, hiddenFieldSet } from "../../../../lib/renderers/invitation-fields.ts";
 import type { InvitationTheme } from "../../../../lib/renderers/theme-tokens.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { DecorationZone } from "../illustrations/decoration.ts";
@@ -45,6 +45,8 @@ export interface BaptismClassicRendererProps {
   readonly features?: InvitationFeatures;
   /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
   readonly calendarHref?: string;
+  /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
+  readonly hiddenFields?: readonly string[];
 }
 
 const h = createElement;
@@ -98,9 +100,11 @@ export function BaptismClassicRenderer({
   content,
   features,
   calendarHref,
+  hiddenFields,
 }: BaptismClassicRendererProps): ReactElement {
   const { theme: themeKey } = parseBaptismClassicConfiguration(configuration);
-  const data = parseBaptismClassicContent(content);
+  const data = parseBaptismClassicContent(content, hiddenFields);
+  const hidden = hiddenFieldSet(hiddenFields);
   const theme = BAPTISM_THEME[themeKey];
   // The gift registry is rendered only when the API gated it on and the content carries a value (F7; S7);
   // with no features at all this is a preview, and the content alone decides, as it did before this batch.
@@ -115,9 +119,42 @@ export function BaptismClassicRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: baptismEventFacts(data),
+          facts: baptismEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
         });
+  // The family card is one row per section, and it disappears when every row it holds is switched off (S8.3).
+  const familyRows = [
+    ...(hidden.has("parents")
+      ? []
+      : [
+          h(
+            "div",
+            { key: "parents", className: ROW_SOFT },
+            h("span", { className: ROW_LABEL }, "Padres"),
+            h("span", { className: ROW_VALUE }, data.parents),
+          ),
+        ]),
+    ...(hidden.has("godparents")
+      ? []
+      : [
+          h(
+            "div",
+            { key: "godparents", className: ROW_SOFT },
+            h("span", { className: ROW_LABEL }, "Padrinos"),
+            h("span", { className: ROW_VALUE }, data.godparents),
+          ),
+        ]),
+    ...(giftRegistry === undefined
+      ? []
+      : [
+          h(
+            "div",
+            { key: "gift-registry", className: ROW_SOFT },
+            h("span", { className: ROW_LABEL }, "Mesa de regalos"),
+            h("span", { className: `${ROW_VALUE} text-(color:--inv-accent)` }, giftRegistry),
+          ),
+        ]),
+  ];
 
   return h(
     "article",
@@ -173,53 +210,36 @@ export function BaptismClassicRenderer({
         ),
       ),
     ),
-    h(
-      "section",
-      { "data-section": "details", "aria-labelledby": `${idPrefix}-details` },
-      h("h2", { id: `${idPrefix}-details`, className: SECTION_TITLE }, "La familia"),
-      h(
-        "div",
-        { className: "mt-3 flex flex-col gap-2" },
-        h(
-          "div",
-          { className: ROW_SOFT },
-          h("span", { className: ROW_LABEL }, "Padres"),
-          h("span", { className: ROW_VALUE }, data.parents),
+    familyRows.length === 0
+      ? null
+      : h(
+          "section",
+          { "data-section": "details", "aria-labelledby": `${idPrefix}-details` },
+          h("h2", { id: `${idPrefix}-details`, className: SECTION_TITLE }, "La familia"),
+          h("div", { className: "mt-3 flex flex-col gap-2" }, familyRows),
         ),
-        h(
-          "div",
-          { className: ROW_SOFT },
-          h("span", { className: ROW_LABEL }, "Padrinos"),
-          h("span", { className: ROW_VALUE }, data.godparents),
+    hidden.has("ceremonyPlace")
+      ? null
+      : placeCard(
+          theme,
+          "ceremony",
+          idPrefix,
+          "Ceremonia",
+          data.ceremonyPlace,
+          data.ceremonyAddress,
+          data.ceremonyTime,
         ),
-        giftRegistry === undefined
-          ? null
-          : h(
-              "div",
-              { className: ROW_SOFT },
-              h("span", { className: ROW_LABEL }, "Mesa de regalos"),
-              h("span", { className: `${ROW_VALUE} text-(color:--inv-accent)` }, giftRegistry),
-            ),
-      ),
-    ),
-    placeCard(
-      theme,
-      "ceremony",
-      idPrefix,
-      "Ceremonia",
-      data.ceremonyPlace,
-      data.ceremonyAddress,
-      data.ceremonyTime,
-    ),
-    placeCard(
-      theme,
-      "reception",
-      idPrefix,
-      "Recepción",
-      data.receptionPlace,
-      data.receptionAddress,
-      data.receptionTime,
-    ),
+    hidden.has("receptionPlace")
+      ? null
+      : placeCard(
+          theme,
+          "reception",
+          idPrefix,
+          "Recepción",
+          data.receptionPlace,
+          data.receptionAddress,
+          data.receptionTime,
+        ),
     // The torn strip separates the two place cards from what follows, as in the other themed layouts.
     h(DecorationZone, {
       theme: themeKey,
@@ -251,29 +271,33 @@ export function BaptismClassicRenderer({
             ),
           ),
         ),
-    h(
-      "section",
-      { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
-      h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
-      h(
-        "p",
-        {
-          className:
-            "mt-3 rounded-3xl bg-(--inv-soft) px-5 py-4 text-center text-lg leading-relaxed text-(color:--inv-ink)",
-        },
-        data.message,
-      ),
-    ),
-    h(
-      "section",
-      { "data-section": "rsvp", "aria-labelledby": `${idPrefix}-rsvp` },
-      h("h2", { id: `${idPrefix}-rsvp`, className: SECTION_TITLE }, "Confirma tu asistencia"),
-      h(
-        "p",
-        { className: `mt-3 ${CARD} text-center text-lg font-medium text-(color:--inv-ink)` },
-        data.rsvpContact,
-      ),
-    ),
+    hidden.has("message")
+      ? null
+      : h(
+          "section",
+          { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
+          h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+          h(
+            "p",
+            {
+              className:
+                "mt-3 rounded-3xl bg-(--inv-soft) px-5 py-4 text-center text-lg leading-relaxed text-(color:--inv-ink)",
+            },
+            data.message,
+          ),
+        ),
+    hidden.has("rsvpContact")
+      ? null
+      : h(
+          "section",
+          { "data-section": "rsvp", "aria-labelledby": `${idPrefix}-rsvp` },
+          h("h2", { id: `${idPrefix}-rsvp`, className: SECTION_TITLE }, "Confirma tu asistencia"),
+          h(
+            "p",
+            { className: `mt-3 ${CARD} text-center text-lg font-medium text-(color:--inv-ink)` },
+            data.rsvpContact,
+          ),
+        ),
     h(DecorationZone, {
       theme: themeKey,
       part: "footer",

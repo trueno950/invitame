@@ -9,7 +9,7 @@ import {
   parseBabyShowerClassicContent,
 } from "../../../../lib/renderers/baby-shower-classic-01.ts";
 import { BABY_SHOWER_THEME } from "../../../../lib/renderers/baby-shower-themes.ts";
-import { formatLongDate } from "../../../../lib/renderers/invitation-fields.ts";
+import { formatLongDate, hiddenFieldSet } from "../../../../lib/renderers/invitation-fields.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { DecorationZone } from "../illustrations/decoration.ts";
 import { CelebrationMotif } from "../themed/celebration-motif.ts";
@@ -38,6 +38,8 @@ export interface BabyShowerClassicRendererProps {
   readonly features?: InvitationFeatures;
   /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
   readonly calendarHref?: string;
+  /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
+  readonly hiddenFields?: readonly string[];
 }
 
 const h = createElement;
@@ -73,9 +75,11 @@ export function BabyShowerClassicRenderer({
   content,
   features,
   calendarHref,
+  hiddenFields,
 }: BabyShowerClassicRendererProps): ReactElement {
   const { theme: themeKey } = parseBabyShowerClassicConfiguration(configuration);
-  const data = parseBabyShowerClassicContent(content);
+  const data = parseBabyShowerClassicContent(content, hiddenFields);
+  const hidden = hiddenFieldSet(hiddenFields);
   const theme = BABY_SHOWER_THEME[themeKey];
   // The gift registry is rendered only when the API gated it on and the content carries a value (F7; S7);
   // with no features at all this is a preview, and the content alone decides, as it did before this batch.
@@ -92,7 +96,7 @@ export function BabyShowerClassicRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: babyShowerEventFacts(data),
+          facts: babyShowerEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
         });
 
@@ -219,31 +223,35 @@ export function BabyShowerClassicRenderer({
       part: "divider",
       illustrationClassName: "pointer-events-none -mx-5 block",
     }),
-    h(
-      "section",
-      { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
-      h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
-      h(
-        "p",
-        {
-          className:
-            "mt-3 rounded-3xl bg-(--inv-soft) px-5 py-4 text-center text-lg leading-relaxed text-(color:--inv-ink)",
-        },
-        data.message,
-      ),
-    ),
-    h(
-      "section",
-      { "data-section": "rsvp", "aria-labelledby": `${idPrefix}-rsvp` },
-      h("h2", { id: `${idPrefix}-rsvp`, className: SECTION_TITLE }, "Confirma tu asistencia"),
-      h(
-        "p",
-        {
-          className: `mt-3 ${CARD} text-center text-lg font-medium text-(color:--inv-ink)`,
-        },
-        data.rsvpContact,
-      ),
-    ),
+    hidden.has("message")
+      ? null
+      : h(
+          "section",
+          { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
+          h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+          h(
+            "p",
+            {
+              className:
+                "mt-3 rounded-3xl bg-(--inv-soft) px-5 py-4 text-center text-lg leading-relaxed text-(color:--inv-ink)",
+            },
+            data.message,
+          ),
+        ),
+    hidden.has("rsvpContact")
+      ? null
+      : h(
+          "section",
+          { "data-section": "rsvp", "aria-labelledby": `${idPrefix}-rsvp` },
+          h("h2", { id: `${idPrefix}-rsvp`, className: SECTION_TITLE }, "Confirma tu asistencia"),
+          h(
+            "p",
+            {
+              className: `mt-3 ${CARD} text-center text-lg font-medium text-(color:--inv-ink)`,
+            },
+            data.rsvpContact,
+          ),
+        ),
     h(DecorationZone, {
       theme: themeKey,
       part: "footer",

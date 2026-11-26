@@ -106,12 +106,16 @@ export interface ArchLayoutProperties {
   readonly names: readonly string[];
   readonly date: string;
   readonly photoAlt: string;
-  readonly ceremony: ArchPlace;
-  readonly reception: ArchPlace;
+  /** The ceremony, or absent when the customer switched that section off (S8.3). */
+  readonly ceremony?: ArchPlace;
+  /** The reception, or absent when the customer switched that section off (S8.3). */
+  readonly reception?: ArchPlace;
   readonly family: readonly ArchNameRow[];
   readonly details: readonly ArchDetail[];
-  readonly message: ArchMessage;
-  readonly rsvpContact: string;
+  /** The message, or absent when the customer switched that section off (S8.3). */
+  readonly message?: ArchMessage;
+  /** Who confirms attendance, or absent when the customer switched that section off (S8.3). */
+  readonly rsvpContact?: string;
   readonly mainPhoto?: string;
   readonly features?: InvitationFeatures;
   readonly facts: EventFacts;
@@ -254,6 +258,8 @@ export function ArchLayout({
 }: ArchLayoutProperties): ReactElement {
   const idPrefix = useId();
   const monogram = monogramOf(names);
+  // A row of names the customer switched off arrives empty, and an empty row draws nothing (S8.3).
+  const shownFamily = family.filter((row) => row.values.length > 0);
 
   // After the two place cards and the details and before the message: the ceremony, the reception, and how
   // to reach them, then what a guest can act on (S4).
@@ -374,7 +380,7 @@ export function ArchLayout({
           }),
           h("span", { key: "monogram", className: "pb-1" }, monogram),
         ),
-    family.length === 0
+    shownFamily.length === 0
       ? null
       : h(
           "section",
@@ -389,7 +395,7 @@ export function ArchLayout({
             h(
               "dl",
               { className: "flex flex-col" },
-              family.flatMap((row, index) => [
+              shownFamily.flatMap((row, index) => [
                 h(
                   "div",
                   {
@@ -417,8 +423,8 @@ export function ArchLayout({
             ),
           ),
         ),
-    placeCard(theme, idPrefix, ceremony, false),
-    placeCard(theme, idPrefix, reception, true),
+    ceremony === undefined ? null : placeCard(theme, idPrefix, ceremony, false),
+    reception === undefined ? null : placeCard(theme, idPrefix, reception, true),
     details.length === 0
       ? null
       : h(
@@ -445,52 +451,56 @@ export function ArchLayout({
           ),
         ),
     featuresBlock,
-    h(
-      "section",
-      { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
-      h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
-      h(
-        "div",
-        { className: "mt-3 rounded-[1.5rem] bg-(--inv-soft) px-5 py-6 text-center" },
-        h(
-          "p",
-          {
-            className: "text-lg leading-relaxed text-(color:--inv-ink)",
-            style: displayFontStyle(theme),
-          },
-          message.text,
-        ),
-        message.hashtag === undefined
-          ? null
-          : h(
+    message === undefined
+      ? null
+      : h(
+          "section",
+          { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
+          h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+          h(
+            "div",
+            { className: "mt-3 rounded-[1.5rem] bg-(--inv-soft) px-5 py-6 text-center" },
+            h(
               "p",
-              { className: "mt-3 text-sm font-medium text-(color:--inv-accent)" },
-              message.hashtag,
+              {
+                className: "text-lg leading-relaxed text-(color:--inv-ink)",
+                style: displayFontStyle(theme),
+              },
+              message.text,
             ),
-        h(
-          "p",
-          {
-            className: "mt-4 text-2xl text-(color:--inv-accent)",
-            style: displayFontStyle(theme),
-          },
-          message.signature,
+            message.hashtag === undefined
+              ? null
+              : h(
+                  "p",
+                  { className: "mt-3 text-sm font-medium text-(color:--inv-accent)" },
+                  message.hashtag,
+                ),
+            h(
+              "p",
+              {
+                className: "mt-4 text-2xl text-(color:--inv-accent)",
+                style: displayFontStyle(theme),
+              },
+              message.signature,
+            ),
+          ),
         ),
-      ),
-    ),
-    h(
-      "section",
-      { "data-section": "rsvp", "aria-labelledby": `${idPrefix}-rsvp` },
-      h(
-        "div",
-        { className: `${CARD} text-center` },
-        h("h2", { id: `${idPrefix}-rsvp`, className: ROW_LABEL }, "Confirma tu asistencia"),
-        h(
-          "p",
-          { className: "mt-2 text-lg font-medium break-words text-(color:--inv-ink)" },
-          rsvpContact,
+    rsvpContact === undefined
+      ? null
+      : h(
+          "section",
+          { "data-section": "rsvp", "aria-labelledby": `${idPrefix}-rsvp` },
+          h(
+            "div",
+            { className: `${CARD} text-center` },
+            h("h2", { id: `${idPrefix}-rsvp`, className: ROW_LABEL }, "Confirma tu asistencia"),
+            h(
+              "p",
+              { className: "mt-2 text-lg font-medium break-words text-(color:--inv-ink)" },
+              rsvpContact,
+            ),
+          ),
         ),
-      ),
-    ),
     // The closing rule of the theme: its own ornament in a strip below the last card, where no text sits.
     h(DecorationZone, {
       theme: themeKey,

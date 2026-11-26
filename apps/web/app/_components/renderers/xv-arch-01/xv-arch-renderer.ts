@@ -6,10 +6,11 @@ import {
   showsGiftRegistry,
 } from "../../../../lib/invitation-features/invitation-features.ts";
 import { ELEGANT_THEME } from "../../../../lib/renderers/elegant-themes.ts";
-import { nameLines } from "../../../../lib/renderers/invitation-fields.ts";
+import { hiddenFieldSet, nameLines } from "../../../../lib/renderers/invitation-fields.ts";
 import {
   parseXVArchConfiguration,
   parseXVArchContent,
+  XV_ARCH_COMPONENT_KEY,
 } from "../../../../lib/renderers/xv-arch-01.ts";
 import { type ArchDetail, ArchLayout, type ArchNameRow } from "../elegant-arch/arch-layout.ts";
 
@@ -33,6 +34,8 @@ export interface XVArchRendererProperties {
   readonly features?: InvitationFeatures;
   /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
   readonly calendarHref?: string;
+  /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
+  readonly hiddenFields?: readonly string[];
 }
 
 const h = createElement;
@@ -42,18 +45,27 @@ export function XVArchRenderer({
   content,
   features,
   calendarHref,
+  hiddenFields,
 }: XVArchRendererProperties): ReactElement {
   const { theme: themeKey } = parseXVArchConfiguration(configuration);
-  const data = parseXVArchContent(content);
+  const data = parseXVArchContent(content, XV_ARCH_COMPONENT_KEY, hiddenFields);
+  const hidden = hiddenFieldSet(hiddenFields);
   const theme = ELEGANT_THEME[themeKey];
 
+  // A section the customer switched off draws nothing, and a row it covered arrives empty (S8.3).
   const family: ArchNameRow[] = [
-    { key: "parents", label: "Padres", values: nameLines(data.parents) },
-    {
-      key: "honor-sponsors",
-      label: "Padrinos de honor",
-      values: nameLines(data.honorSponsors),
-    },
+    ...(hidden.has("parents")
+      ? []
+      : [{ key: "parents", label: "Padres", values: nameLines(data.parents) }]),
+    ...(hidden.has("honorSponsors")
+      ? []
+      : [
+          {
+            key: "honor-sponsors",
+            label: "Padrinos de honor",
+            values: nameLines(data.honorSponsors),
+          },
+        ]),
     ...(data.chambelanes === undefined
       ? []
       : [{ key: "chambelanes", label: "Chambelanes", values: nameLines(data.chambelanes) }]),
@@ -66,7 +78,9 @@ export function XVArchRenderer({
     : undefined;
 
   const details: ArchDetail[] = [
-    { key: "dress-code", label: "Vestimenta", value: data.dressCode },
+    ...(hidden.has("dressCode")
+      ? []
+      : [{ key: "dress-code", label: "Vestimenta", value: data.dressCode }]),
     ...(giftRegistry === undefined
       ? []
       : [{ key: "gift-registry", label: "Mesa de regalos", value: giftRegistry }]),
@@ -81,26 +95,36 @@ export function XVArchRenderer({
     names: [data.celebrantName],
     date: data.date,
     photoAlt: `Foto de ${data.celebrantName}`,
-    ceremony: {
-      key: "ceremony",
-      label: "Misa",
-      place: data.ceremonyPlace,
-      address: data.ceremonyAddress,
-      time: data.ceremonyTime,
-    },
-    reception: {
-      key: "reception",
-      label: "Recepción",
-      place: data.receptionPlace,
-      address: data.receptionAddress,
-      time: data.receptionTime,
-    },
+    ...(hidden.has("ceremonyPlace")
+      ? {}
+      : {
+          ceremony: {
+            key: "ceremony",
+            label: "Misa",
+            place: data.ceremonyPlace,
+            address: data.ceremonyAddress,
+            time: data.ceremonyTime,
+          },
+        }),
+    ...(hidden.has("receptionPlace")
+      ? {}
+      : {
+          reception: {
+            key: "reception",
+            label: "Recepción",
+            place: data.receptionPlace,
+            address: data.receptionAddress,
+            time: data.receptionTime,
+          },
+        }),
     family,
     details,
-    message: { text: data.message, signature: data.celebrantName },
-    rsvpContact: data.rsvpContact,
+    ...(hidden.has("message")
+      ? {}
+      : { message: { text: data.message, signature: data.celebrantName } }),
+    ...(hidden.has("rsvpContact") ? {} : { rsvpContact: data.rsvpContact }),
     ...(data.mainPhoto === undefined ? {} : { mainPhoto: data.mainPhoto }),
-    facts: xvArchEventFacts(data),
+    facts: xvArchEventFacts(data, hiddenFields),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
   });

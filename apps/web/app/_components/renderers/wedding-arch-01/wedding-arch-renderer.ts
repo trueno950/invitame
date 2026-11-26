@@ -6,10 +6,11 @@ import {
   showsGiftRegistry,
 } from "../../../../lib/invitation-features/invitation-features.ts";
 import { ELEGANT_THEME } from "../../../../lib/renderers/elegant-themes.ts";
-import { nameLines } from "../../../../lib/renderers/invitation-fields.ts";
+import { hiddenFieldSet, nameLines } from "../../../../lib/renderers/invitation-fields.ts";
 import {
   parseWeddingArchConfiguration,
   parseWeddingArchContent,
+  WEDDING_ARCH_COMPONENT_KEY,
 } from "../../../../lib/renderers/wedding-arch-01.ts";
 import { type ArchDetail, ArchLayout, type ArchNameRow } from "../elegant-arch/arch-layout.ts";
 
@@ -32,6 +33,8 @@ export interface WeddingArchRendererProperties {
   readonly features?: InvitationFeatures;
   /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
   readonly calendarHref?: string;
+  /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
+  readonly hiddenFields?: readonly string[];
 }
 
 const h = createElement;
@@ -41,9 +44,11 @@ export function WeddingArchRenderer({
   content,
   features,
   calendarHref,
+  hiddenFields,
 }: WeddingArchRendererProperties): ReactElement {
   const { theme: themeKey } = parseWeddingArchConfiguration(configuration);
-  const data = parseWeddingArchContent(content);
+  const data = parseWeddingArchContent(content, WEDDING_ARCH_COMPONENT_KEY, hiddenFields);
+  const hidden = hiddenFieldSet(hiddenFields);
   const theme = ELEGANT_THEME[themeKey];
   const couple = `${data.coupleNameOne} y ${data.coupleNameTwo}`;
 
@@ -85,7 +90,9 @@ export function WeddingArchRenderer({
     : undefined;
 
   const details: ArchDetail[] = [
-    { key: "dress-code", label: "Vestimenta", value: data.dressCode },
+    ...(hidden.has("dressCode")
+      ? []
+      : [{ key: "dress-code", label: "Vestimenta", value: data.dressCode }]),
     ...(giftRegistry === undefined
       ? []
       : [{ key: "gift-registry", label: "Mesa de regalos", value: giftRegistry }]),
@@ -100,30 +107,42 @@ export function WeddingArchRenderer({
     names: [data.coupleNameOne, data.coupleNameTwo],
     date: data.date,
     photoAlt: `Foto de ${couple}`,
-    ceremony: {
-      key: "ceremony",
-      label: "Ceremonia",
-      place: data.ceremonyPlace,
-      address: data.ceremonyAddress,
-      time: data.ceremonyTime,
-    },
-    reception: {
-      key: "reception",
-      label: "Recepción",
-      place: data.receptionPlace,
-      address: data.receptionAddress,
-      time: data.receptionTime,
-    },
+    ...(hidden.has("ceremonyPlace")
+      ? {}
+      : {
+          ceremony: {
+            key: "ceremony",
+            label: "Ceremonia",
+            place: data.ceremonyPlace,
+            address: data.ceremonyAddress,
+            time: data.ceremonyTime,
+          },
+        }),
+    ...(hidden.has("receptionPlace")
+      ? {}
+      : {
+          reception: {
+            key: "reception",
+            label: "Recepción",
+            place: data.receptionPlace,
+            address: data.receptionAddress,
+            time: data.receptionTime,
+          },
+        }),
     family,
     details,
-    message: {
-      text: data.message,
-      signature: couple,
-      ...(data.hashtag === undefined ? {} : { hashtag: data.hashtag }),
-    },
-    rsvpContact: data.rsvpContact,
+    ...(hidden.has("message")
+      ? {}
+      : {
+          message: {
+            text: data.message,
+            signature: couple,
+            ...(data.hashtag === undefined ? {} : { hashtag: data.hashtag }),
+          },
+        }),
+    ...(hidden.has("rsvpContact") ? {} : { rsvpContact: data.rsvpContact }),
     ...(data.mainPhoto === undefined ? {} : { mainPhoto: data.mainPhoto }),
-    facts: weddingArchEventFacts(data),
+    facts: weddingArchEventFacts(data, hiddenFields),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
   });

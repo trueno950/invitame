@@ -11,6 +11,7 @@ import {
   parseBirthdayMapContent,
 } from "../../../../lib/renderers/birthday-map-01.ts";
 import { BIRTHDAY_THEME } from "../../../../lib/renderers/birthday-themes.ts";
+import { hiddenFieldSet } from "../../../../lib/renderers/invitation-fields.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { Motif } from "../birthday/motif.ts";
 import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthday/theme.ts";
@@ -37,6 +38,8 @@ export interface BirthdayMapRendererProps {
   readonly features?: InvitationFeatures;
   /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
   readonly calendarHref?: string;
+  /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
+  readonly hiddenFields?: readonly string[];
 }
 
 const h = createElement;
@@ -133,9 +136,11 @@ export function BirthdayMapRenderer({
   content,
   features,
   calendarHref,
+  hiddenFields,
 }: BirthdayMapRendererProps): ReactElement {
   const { theme: themeKey } = parseBirthdayMapConfiguration(configuration);
-  const data = parseBirthdayMapContent(content);
+  const data = parseBirthdayMapContent(content, hiddenFields);
+  const hidden = hiddenFieldSet(hiddenFields);
   const theme = BIRTHDAY_THEME[themeKey];
   const idPrefix = useId();
 
@@ -145,7 +150,7 @@ export function BirthdayMapRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: birthdayMapEventFacts(data),
+          facts: birthdayMapEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
         });
 
@@ -224,28 +229,30 @@ export function BirthdayMapRenderer({
           },
           data.celebrantName,
         ),
-        h(Compass, { age: data.age }),
-        h(
-          "figure",
-          {
-            className:
-              "relative mt-6 w-[min(100%,18rem)] rotate-[-2deg] rounded-2xl bg-(--inv-surface) p-2.5 shadow-lg",
-          },
-          h("img", {
-            src: data.mainPhoto,
-            alt: `Foto de ${data.celebrantName}`,
-            decoding: "async",
-            className: "aspect-square w-full rounded-lg object-cover",
-          }),
-          h(
-            "figcaption",
-            {
-              className:
-                "absolute -right-3 -bottom-3.5 grid size-20 rotate-[10deg] place-content-center rounded-full border-[3px] border-dashed border-(--inv-surface) bg-(--inv-accent) text-center text-[0.7rem] font-medium leading-tight text-(color:--inv-on-accent)",
-            },
-            "¡Gran expedición!",
-          ),
-        ),
+        data.age === undefined ? null : h(Compass, { age: data.age }),
+        data.mainPhoto === undefined
+          ? null
+          : h(
+              "figure",
+              {
+                className:
+                  "relative mt-6 w-[min(100%,18rem)] rotate-[-2deg] rounded-2xl bg-(--inv-surface) p-2.5 shadow-lg",
+              },
+              h("img", {
+                src: data.mainPhoto,
+                alt: `Foto de ${data.celebrantName}`,
+                decoding: "async",
+                className: "aspect-square w-full rounded-lg object-cover",
+              }),
+              h(
+                "figcaption",
+                {
+                  className:
+                    "absolute -right-3 -bottom-3.5 grid size-20 rotate-[10deg] place-content-center rounded-full border-[3px] border-dashed border-(--inv-surface) bg-(--inv-accent) text-center text-[0.7rem] font-medium leading-tight text-(color:--inv-on-accent)",
+                },
+                "¡Gran expedición!",
+              ),
+            ),
       ),
     ),
     h(
@@ -299,44 +306,46 @@ export function BirthdayMapRenderer({
       part: "divider",
       illustrationClassName: "pointer-events-none -mx-5 block",
     }),
-    h(
-      "section",
-      { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
-      h(
-        "p",
-        {
-          "aria-hidden": "true",
-          className: "text-center text-3xl leading-none text-(color:--inv-accent)",
-          style: DISPLAY_FONT,
-        },
-        "✕",
-      ),
-      h(
-        "h2",
-        { id: `${idPrefix}-message`, className: `mt-1 ${SECTION_TITLE}`, style: DISPLAY_FONT },
-        "Mensaje",
-      ),
-      h(
-        "div",
-        { className: "relative rounded-3xl bg-(--inv-soft) px-5 py-4" },
-        SCROLL_RODS.map((position) =>
-          h("span", {
-            key: position,
-            "aria-hidden": "true",
-            "data-scroll-rod": "",
-            className: `absolute inset-x-3.5 ${position} h-2.5 rounded-full`,
-            style: {
-              backgroundColor: "color-mix(in srgb, var(--inv-accent) 30%, var(--inv-soft))",
+    hidden.has("message")
+      ? null
+      : h(
+          "section",
+          { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
+          h(
+            "p",
+            {
+              "aria-hidden": "true",
+              className: "text-center text-3xl leading-none text-(color:--inv-accent)",
+              style: DISPLAY_FONT,
             },
-          }),
+            "✕",
+          ),
+          h(
+            "h2",
+            { id: `${idPrefix}-message`, className: `mt-1 ${SECTION_TITLE}`, style: DISPLAY_FONT },
+            "Mensaje",
+          ),
+          h(
+            "div",
+            { className: "relative rounded-3xl bg-(--inv-soft) px-5 py-4" },
+            SCROLL_RODS.map((position) =>
+              h("span", {
+                key: position,
+                "aria-hidden": "true",
+                "data-scroll-rod": "",
+                className: `absolute inset-x-3.5 ${position} h-2.5 rounded-full`,
+                style: {
+                  backgroundColor: "color-mix(in srgb, var(--inv-accent) 30%, var(--inv-soft))",
+                },
+              }),
+            ),
+            h(
+              "p",
+              { className: "text-center text-lg leading-relaxed text-(color:--inv-ink)" },
+              data.message,
+            ),
+          ),
         ),
-        h(
-          "p",
-          { className: "text-center text-lg leading-relaxed text-(color:--inv-ink)" },
-          data.message,
-        ),
-      ),
-    ),
     h(DecorationZone, {
       theme: themeKey,
       part: "footer",

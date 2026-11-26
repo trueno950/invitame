@@ -102,12 +102,16 @@ export interface OrnamentalLayoutProperties {
   readonly names: readonly string[];
   readonly date: string;
   readonly photoAlt: string;
-  readonly ceremony: ArchPlace;
-  readonly reception: ArchPlace;
+  /** The ceremony, or absent when the customer switched that section off (S8.3). */
+  readonly ceremony?: ArchPlace;
+  /** The reception, or absent when the customer switched that section off (S8.3). */
+  readonly reception?: ArchPlace;
   readonly family: readonly ArchNameRow[];
   readonly details: readonly ArchDetail[];
-  readonly message: ArchMessage;
-  readonly rsvpContact: string;
+  /** The message, or absent when the customer switched that section off (S8.3). */
+  readonly message?: ArchMessage;
+  /** Who confirms attendance, or absent when the customer switched that section off (S8.3). */
+  readonly rsvpContact?: string;
   readonly mainPhoto?: string;
   readonly features?: InvitationFeatures;
   readonly facts: EventFacts;
@@ -301,6 +305,8 @@ export function OrnamentalLayout({
 }: OrnamentalLayoutProperties): ReactElement {
   const idPrefix = useId();
   const initials = monogramOf(names);
+  // A row of names the customer switched off arrives empty, and an empty row draws nothing (S8.3).
+  const shownFamily = family.filter((row) => row.values.length > 0);
 
   // After the place blocks and the details, before the message: the ceremony, the reception, and how to
   // reach them, then what a guest can act on (S4).
@@ -445,7 +451,7 @@ export function OrnamentalLayout({
             }),
           ),
         ),
-        family.length === 0
+        shownFamily.length === 0
           ? null
           : h(
               "section",
@@ -458,11 +464,11 @@ export function OrnamentalLayout({
               h(
                 "dl",
                 { className: "mt-4 flex flex-col" },
-                family.map((row, index) => familyRow(theme, row, index === 0)),
+                shownFamily.map((row, index) => familyRow(theme, row, index === 0)),
               ),
             ),
-        placeBlock(theme, idPrefix, ceremony, BLOCK),
-        placeBlock(theme, idPrefix, reception, BLOCK),
+        ceremony === undefined ? null : placeBlock(theme, idPrefix, ceremony, BLOCK),
+        reception === undefined ? null : placeBlock(theme, idPrefix, reception, BLOCK),
         details.length === 0
           ? null
           : h(
@@ -498,52 +504,56 @@ export function OrnamentalLayout({
               ),
             ),
         featuresBlock,
-        h(
-          "section",
-          {
-            "data-section": "message",
-            "aria-labelledby": `${idPrefix}-message`,
-            className: BLOCK,
-          },
-          h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
-          h(
-            "p",
-            {
-              className: "mt-3 italic leading-relaxed text-(color:--inv-ink)",
-              style: { ...displayFontStyle(theme), fontSize: "1.05rem" },
-            },
-            message.text,
-          ),
-          message.hashtag === undefined
-            ? null
-            : h(
+        message === undefined
+          ? null
+          : h(
+              "section",
+              {
+                "data-section": "message",
+                "aria-labelledby": `${idPrefix}-message`,
+                className: BLOCK,
+              },
+              h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+              h(
                 "p",
-                { className: "mt-3 text-sm font-medium text-(color:--inv-accent)" },
-                message.hashtag,
+                {
+                  className: "mt-3 italic leading-relaxed text-(color:--inv-ink)",
+                  style: { ...displayFontStyle(theme), fontSize: "1.05rem" },
+                },
+                message.text,
               ),
-          h(
-            "p",
-            {
-              className: "mt-3 text-(color:--inv-accent)",
-              style: { ...scriptStyle(themeKey), fontSize: "1.9rem", lineHeight: 1 },
-            },
-            message.signature,
-          ),
-        ),
-        h(
-          "section",
-          {
-            "data-section": "rsvp",
-            "aria-labelledby": `${idPrefix}-rsvp`,
-            className: BLOCK,
-          },
-          h("h2", { id: `${idPrefix}-rsvp`, className: ROW_LABEL }, "Confirma tu asistencia"),
-          h(
-            "p",
-            { className: "mt-2 text-lg font-medium break-words text-(color:--inv-ink)" },
-            rsvpContact,
-          ),
-        ),
+              message.hashtag === undefined
+                ? null
+                : h(
+                    "p",
+                    { className: "mt-3 text-sm font-medium text-(color:--inv-accent)" },
+                    message.hashtag,
+                  ),
+              h(
+                "p",
+                {
+                  className: "mt-3 text-(color:--inv-accent)",
+                  style: { ...scriptStyle(themeKey), fontSize: "1.9rem", lineHeight: 1 },
+                },
+                message.signature,
+              ),
+            ),
+        rsvpContact === undefined
+          ? null
+          : h(
+              "section",
+              {
+                "data-section": "rsvp",
+                "aria-labelledby": `${idPrefix}-rsvp`,
+                className: BLOCK,
+              },
+              h("h2", { id: `${idPrefix}-rsvp`, className: ROW_LABEL }, "Confirma tu asistencia"),
+              h(
+                "p",
+                { className: "mt-2 text-lg font-medium break-words text-(color:--inv-ink)" },
+                rsvpContact,
+              ),
+            ),
         // The closing rule of the card: a foil hairline and the theme's own ornament, where no text sits.
         h("div", { key: "closing", className: "mt-7" }, h(FoilRule)),
         h(DecorationZone, {

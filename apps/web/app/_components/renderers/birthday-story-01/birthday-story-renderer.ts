@@ -7,6 +7,7 @@ import {
   parseBirthdayStoryContent,
 } from "../../../../lib/renderers/birthday-story-01.ts";
 import { BIRTHDAY_THEME } from "../../../../lib/renderers/birthday-themes.ts";
+import { hiddenFieldSet } from "../../../../lib/renderers/invitation-fields.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { Motif } from "../birthday/motif.ts";
 import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthday/theme.ts";
@@ -33,6 +34,8 @@ export interface BirthdayStoryRendererProps {
   readonly features?: InvitationFeatures;
   /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
   readonly calendarHref?: string;
+  /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
+  readonly hiddenFields?: readonly string[];
 }
 
 const h = createElement;
@@ -69,9 +72,11 @@ export function BirthdayStoryRenderer({
   content,
   features,
   calendarHref,
+  hiddenFields,
 }: BirthdayStoryRendererProps): ReactElement {
   const { theme: themeKey } = parseBirthdayStoryConfiguration(configuration);
-  const data = parseBirthdayStoryContent(content);
+  const data = parseBirthdayStoryContent(content, hiddenFields);
+  const hidden = hiddenFieldSet(hiddenFields);
   const theme = BIRTHDAY_THEME[themeKey];
   const idPrefix = useId();
 
@@ -81,7 +86,7 @@ export function BirthdayStoryRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: birthdayStoryEventFacts(data),
+          facts: birthdayStoryEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
         });
 
@@ -134,19 +139,21 @@ export function BirthdayStoryRenderer({
         h(
           "div",
           { className: "relative" },
-          h(
-            "div",
-            {
-              className:
-                "mx-auto h-64 w-52 overflow-hidden rounded-t-[6.5rem] rounded-b-lg border-[6px] border-(--inv-soft)",
-            },
-            h("img", {
-              src: data.mainPhoto,
-              alt: `Foto de ${data.celebrantName}`,
-              decoding: "async",
-              className: "size-full object-cover",
-            }),
-          ),
+          data.mainPhoto === undefined
+            ? null
+            : h(
+                "div",
+                {
+                  className:
+                    "mx-auto h-64 w-52 overflow-hidden rounded-t-[6.5rem] rounded-b-lg border-[6px] border-(--inv-soft)",
+                },
+                h("img", {
+                  src: data.mainPhoto,
+                  alt: `Foto de ${data.celebrantName}`,
+                  decoding: "async",
+                  className: "size-full object-cover",
+                }),
+              ),
           h(
             "p",
             { className: "mt-5 text-lg italic text-(color:--inv-ink)" },
@@ -164,9 +171,19 @@ export function BirthdayStoryRenderer({
           h(
             "p",
             { className: "mx-auto max-w-[30ch] text-base text-(color:--inv-ink)" },
-            "y en este capítulo de su historia cumple ",
-            h("b", { className: "text-(color:--inv-accent)" }, `${data.age} años`),
-            ". ¡Queremos que seas parte del cuento!",
+            ...(data.age === undefined
+              ? [
+                  "y en este capítulo de su historia te esperamos. ¡Queremos que seas parte del cuento!",
+                ]
+              : [
+                  "y en este capítulo de su historia cumple ",
+                  h(
+                    "b",
+                    { key: "age", className: "text-(color:--inv-accent)" },
+                    `${data.age} años`,
+                  ),
+                  ". ¡Queremos que seas parte del cuento!",
+                ]),
           ),
         ),
       ),
@@ -214,19 +231,25 @@ export function BirthdayStoryRenderer({
         part: "divider",
         illustrationClassName: "pointer-events-none -mx-6 block",
       }),
-      h(
-        "section",
-        { "data-section": "message", "aria-labelledby": `${idPrefix}-message`, className: "mt-7" },
-        h("h2", { id: `${idPrefix}-message`, className: CHAPTER }, "Capítulo 3 · Mensaje"),
-        h(
-          "p",
-          {
-            className:
-              "mt-2 border-l-[3px] border-(--inv-accent) pl-4 text-xl italic leading-relaxed text-(color:--inv-ink)",
-          },
-          data.message,
-        ),
-      ),
+      hidden.has("message")
+        ? null
+        : h(
+            "section",
+            {
+              "data-section": "message",
+              "aria-labelledby": `${idPrefix}-message`,
+              className: "mt-7",
+            },
+            h("h2", { id: `${idPrefix}-message`, className: CHAPTER }, "Capítulo 3 · Mensaje"),
+            h(
+              "p",
+              {
+                className:
+                  "mt-2 border-l-[3px] border-(--inv-accent) pl-4 text-xl italic leading-relaxed text-(color:--inv-ink)",
+              },
+              data.message,
+            ),
+          ),
       h(
         "p",
         {

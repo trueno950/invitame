@@ -11,6 +11,7 @@ import {
   parseBirthdayPosterContent,
 } from "../../../../lib/renderers/birthday-poster-01.ts";
 import { BIRTHDAY_THEME } from "../../../../lib/renderers/birthday-themes.ts";
+import { hiddenFieldSet } from "../../../../lib/renderers/invitation-fields.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { Motif } from "../birthday/motif.ts";
 import { DISPLAY_FONT, INVITATION_ROOT, themeStyle, titleStyle } from "../birthday/theme.ts";
@@ -37,6 +38,8 @@ export interface BirthdayPosterRendererProps {
   readonly features?: InvitationFeatures;
   /** The `.ics` download the public page owns; absent leaves the Google Calendar link alone. */
   readonly calendarHref?: string;
+  /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
+  readonly hiddenFields?: readonly string[];
 }
 
 const h = createElement;
@@ -56,9 +59,11 @@ export function BirthdayPosterRenderer({
   content,
   features,
   calendarHref,
+  hiddenFields,
 }: BirthdayPosterRendererProps): ReactElement {
   const { theme: themeKey } = parseBirthdayPosterConfiguration(configuration);
-  const data = parseBirthdayPosterContent(content);
+  const data = parseBirthdayPosterContent(content, hiddenFields);
+  const hidden = hiddenFieldSet(hiddenFields);
   const theme = BIRTHDAY_THEME[themeKey];
   const idPrefix = useId();
 
@@ -68,7 +73,7 @@ export function BirthdayPosterRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: birthdayPosterEventFacts(data),
+          facts: birthdayPosterEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
         });
 
@@ -130,61 +135,65 @@ export function BirthdayPosterRenderer({
             },
             data.celebrantName,
           ),
-          h(
-            "p",
-            {
-              "aria-label": formatAgeLabel(data.age),
-              className: "mt-1 flex items-center justify-center gap-3",
-            },
-            h(
-              "b",
-              {
-                "aria-hidden": "true",
-                className: "text-7xl leading-none",
-                style: {
-                  ...DISPLAY_FONT,
-                  color: "transparent",
-                  WebkitTextStroke: "3px var(--inv-on-accent)",
+          data.age === undefined
+            ? null
+            : h(
+                "p",
+                {
+                  "aria-label": formatAgeLabel(data.age),
+                  className: "mt-1 flex items-center justify-center gap-3",
                 },
-              },
-              String(data.age),
-            ),
-            h(
-              "span",
-              {
-                "aria-hidden": "true",
-                className: "text-left text-lg font-medium leading-tight",
-              },
-              formatAgeUnit(data.age),
-              h("br"),
-              "de risas",
-            ),
-          ),
+                h(
+                  "b",
+                  {
+                    "aria-hidden": "true",
+                    className: "text-7xl leading-none",
+                    style: {
+                      ...DISPLAY_FONT,
+                      color: "transparent",
+                      WebkitTextStroke: "3px var(--inv-on-accent)",
+                    },
+                  },
+                  String(data.age),
+                ),
+                h(
+                  "span",
+                  {
+                    "aria-hidden": "true",
+                    className: "text-left text-lg font-medium leading-tight",
+                  },
+                  formatAgeUnit(data.age),
+                  h("br"),
+                  "de risas",
+                ),
+              ),
         ),
       ),
     ),
-    h(
-      "figure",
-      {
-        className: "-mt-32 w-[15.5rem] self-center bg-(--inv-surface) px-3 pt-3 pb-3 shadow-xl",
-        style: { transform: "rotate(3deg)" },
-      },
-      h("img", {
-        src: data.mainPhoto,
-        alt: `Foto de ${data.celebrantName}`,
-        decoding: "async",
-        className: "block aspect-square w-full object-cover",
-      }),
-      // In flow under the photo: a long name wraps and grows the polaroid instead of covering the picture.
-      h(
-        "figcaption",
-        {
-          className:
-            "mt-2 break-words px-1 text-center text-base font-medium text-(color:--inv-accent)",
-        },
-        `¡${data.celebrantName}!`,
-      ),
-    ),
+    data.mainPhoto === undefined
+      ? null
+      : h(
+          "figure",
+          {
+            className: "-mt-32 w-[15.5rem] self-center bg-(--inv-surface) px-3 pt-3 pb-3 shadow-xl",
+            style: { transform: "rotate(3deg)" },
+          },
+          h("img", {
+            src: data.mainPhoto,
+            alt: `Foto de ${data.celebrantName}`,
+            decoding: "async",
+            className: "block aspect-square w-full object-cover",
+          }),
+          // In flow under the photo: a long name wraps and grows the polaroid instead of covering the picture.
+          h(
+            "figcaption",
+            {
+              className:
+                "mt-2 break-words px-1 text-center text-base font-medium text-(color:--inv-accent)",
+            },
+            `¡${data.celebrantName}!`,
+          ),
+        ),
     h(
       "div",
       { className: "flex flex-col gap-8 px-5 pt-7 pb-6" },
@@ -258,36 +267,38 @@ export function BirthdayPosterRenderer({
         part: "divider",
         illustrationClassName: "pointer-events-none -mx-5 block",
       }),
-      h(
-        "section",
-        { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
-        h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
-        h(
-          "div",
-          {
-            className:
-              "relative mt-3 rounded-3xl bg-(--inv-soft) px-5 py-4 text-lg leading-relaxed text-(color:--inv-ink)",
-          },
-          h("span", {
-            "aria-hidden": "true",
-            "data-bubble-tail": "",
-            className: "absolute -bottom-3 left-10 size-7",
-            style: {
-              backgroundColor: "var(--inv-soft)",
-              clipPath: "polygon(0 0, 100% 0, 0 100%)",
-            },
-          }),
-          h("p", null, data.message),
-        ),
-        h(
-          "p",
-          {
-            className: "mt-3 text-lg font-medium text-(color:--inv-ink)",
-            style: DISPLAY_FONT,
-          },
-          `— ${data.celebrantName}`,
-        ),
-      ),
+      hidden.has("message")
+        ? null
+        : h(
+            "section",
+            { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
+            h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+            h(
+              "div",
+              {
+                className:
+                  "relative mt-3 rounded-3xl bg-(--inv-soft) px-5 py-4 text-lg leading-relaxed text-(color:--inv-ink)",
+              },
+              h("span", {
+                "aria-hidden": "true",
+                "data-bubble-tail": "",
+                className: "absolute -bottom-3 left-10 size-7",
+                style: {
+                  backgroundColor: "var(--inv-soft)",
+                  clipPath: "polygon(0 0, 100% 0, 0 100%)",
+                },
+              }),
+              h("p", null, data.message),
+            ),
+            h(
+              "p",
+              {
+                className: "mt-3 text-lg font-medium text-(color:--inv-ink)",
+                style: DISPLAY_FONT,
+              },
+              `— ${data.celebrantName}`,
+            ),
+          ),
     ),
     h(DecorationZone, {
       theme: themeKey,
