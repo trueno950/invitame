@@ -42,6 +42,8 @@ const RESPONSE_ITEM = {
   name: "Ana Pérez",
   attending: true,
   partySize: 2,
+  companions: [{ name: "Luis", child: false }],
+  dietaryNotes: "Sin nueces",
   phone: "+525512345678",
   message: "Con mucho gusto",
   createdAt: AT,
@@ -58,13 +60,21 @@ const READ: RsvpRead = {
       name: "Luis Ramos",
       attending: false,
       partySize: 0,
+      companions: [],
+      dietaryNotes: null,
       phone: null,
       message: null,
       createdAt: "2026-11-11T09:00:00.000Z",
       updatedAt: "2026-11-11T09:30:00.000Z",
     },
   ],
-  totals: { attendingPeople: 2, declinedCount: 1, responses: 2 },
+  totals: {
+    attendingPeople: 2,
+    attendingAdults: 1,
+    attendingChildren: 1,
+    declinedCount: 1,
+    responses: 2,
+  },
 };
 
 describe("rsvpSettingsView", () => {
@@ -117,6 +127,44 @@ describe("rsvpResponsesView", () => {
     assert.equal(second?.message, "");
     assert.equal(second?.attending, false);
     assert.equal(second?.partySize, 0);
+  });
+
+  it("shows the companion names, the children, and the dietary notes of each answer (F3; L6.4)", () => {
+    const view = rsvpResponsesView(INVITATION, READ);
+    const [first, second] = view.rows;
+
+    assert.equal(first?.companions, "Luis");
+    assert.equal(first?.children, "0");
+    assert.equal(first?.dietaryNotes, "Sin nueces");
+    // A declining guest named nobody: the row shows a dash instead of an empty cell, and no children apply.
+    assert.equal(second?.companions, "—");
+    assert.equal(second?.children, "—");
+    assert.equal(second?.dietaryNotes, "—");
+  });
+
+  it("keeps an answer stored before the companions drawn the way it always was (F3; L6.1)", () => {
+    const legacy = {
+      ...READ,
+      responses: [
+        {
+          ...RESPONSE_ITEM,
+          companions: null,
+          dietaryNotes: null,
+        },
+      ],
+      totals: {
+        attendingPeople: 2,
+        attendingAdults: 2,
+        attendingChildren: 0,
+        declinedCount: 0,
+        responses: 1,
+      },
+    };
+    const [row] = rsvpResponsesView(INVITATION, legacy).rows;
+
+    assert.equal(row?.companions, "—");
+    assert.equal(row?.children, "0");
+    assert.equal(row?.dietaryNotes, "—");
   });
 
   it("points the download at the owner's CSV route", () => {

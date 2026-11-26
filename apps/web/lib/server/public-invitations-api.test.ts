@@ -72,6 +72,8 @@ const SUBMISSION = {
   name: "Ana Pérez",
   attending: true,
   partySize: 2,
+  companions: [{ name: "Luis", child: false }],
+  dietaryNotes: "Sin nueces",
   phone: "+525512345678",
   message: "Con mucho gusto",
   honeypot: "",

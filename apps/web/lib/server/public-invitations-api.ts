@@ -5,6 +5,12 @@ import { type Itinerary, parseItinerary } from "../invitation-features/itinerary
 import { type MusicLink, musicServiceOf } from "../invitation-features/music.ts";
 import { parseStoredPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
+import {
+  RSVP_COMPANIONS_MAX,
+  RSVP_COMPANION_NAME_MAX_LENGTH,
+  RSVP_DIETARY_NOTES_MAX_LENGTH,
+  type RsvpCompanionValue,
+} from "../public/rsvp-companions.ts";
 import { ApiClientError, type ApiClientOptions, sendApiRequest } from "./api-client.ts";
 import {
   GUEST_NAME_MAX_LENGTH,
@@ -407,6 +413,9 @@ export interface PublicGuestResponse {
   readonly response: {
     readonly attending: boolean;
     readonly partySize: number;
+    /** The companions the guest named, or null for an answer stored before they existed (F3; L6.1). */
+    readonly companions: readonly RsvpCompanionValue[] | null;
+    readonly dietaryNotes: string | null;
     readonly message: string | null;
   } | null;
   /** Whether the pass is offered: only for a confirmed guest of a package that grants `QR_PASS` (S4). */
@@ -416,6 +425,51 @@ export interface PublicGuestResponse {
 /** The personal page: the public projection of A7 plus one guest block (S4). */
 export interface PublicGuestInvitation extends PublicInvitation {
   readonly guest: PublicGuestResponse;
+}
+
+/**
+ * The companions a stored answer carries (F3; L6.1): a list of `{ name, child }` inside the API's own bounds, or null.
+ * An absent field is an API written before F3 and reads as null, so a rolling deploy keeps both generations working;
+ * another shape refuses the whole body instead of being shown.
+ */
+function parseCompanions(value: unknown): readonly RsvpCompanionValue[] | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (!Array.isArray(value) || value.length > RSVP_COMPANIONS_MAX) {
+    return undefined;
+  }
+
+  const companions: RsvpCompanionValue[] = [];
+  for (const item of value) {
+    const companion = record(item);
+
+    if (companion === undefined) {
+      return undefined;
+    }
+    const { name, child } = companion;
+
+    if (
+      typeof name !== "string" ||
+      [...name].length > RSVP_COMPANION_NAME_MAX_LENGTH ||
+      typeof child !== "boolean"
+    ) {
+      return undefined;
+    }
+    companions.push({ name, child });
+  }
+  return companions;
+}
+
+/** The dietary notes of a stored answer (F3; L6.1): a bounded text, or null; absent reads as null. */
+function parseDietaryNotes(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== "string" || [...value].length > RSVP_DIETARY_NOTES_MAX_LENGTH) {
+    return undefined;
+  }
+  return value;
 }
 
 /** One guest's answer, as the public block reads it: a confirmed answer names 1 to seats, a decline none. */
@@ -430,6 +484,8 @@ function parsePublicGuestResponse(
   }
 
   const { attending, partySize, message } = response;
+  const companions = parseCompanions(response.companions);
+  const dietaryNotes = parseDietaryNotes(response.dietaryNotes);
 
   if (
     typeof attending !== "boolean" ||
@@ -439,12 +495,14 @@ function parsePublicGuestResponse(
     partySize > seats ||
     (attending && partySize < 1) ||
     (!attending && partySize !== 0) ||
+    companions === undefined ||
+    dietaryNotes === undefined ||
     !(message === null || typeof message === "string")
   ) {
     return undefined;
   }
 
-  return { attending, partySize, message };
+  return { attending, partySize, companions, dietaryNotes, message };
 }
 
 /**
@@ -498,6 +556,10 @@ export interface PublicGuestRsvpSubmission {
   readonly attending: boolean;
   /** The people who come: 1 to the guest's seats; none at all for a decline. */
   readonly partySize: number;
+  /** The people who come with the guest: one per extra person, none for a decline (F3; L6.1). */
+  readonly companions: readonly RsvpCompanionValue[];
+  /** The dietary restrictions the guest typed, or null (F3; L6.1). */
+  readonly dietaryNotes: string | null;
   readonly message: string | null;
 }
 
@@ -521,6 +583,10 @@ export interface PublicRsvpSubmission {
   readonly name: string;
   readonly attending: boolean;
   readonly partySize: number;
+  /** The people who come with the guest: one per extra person, none for a decline (F3; L6.1). */
+  readonly companions: readonly RsvpCompanionValue[];
+  /** The dietary restrictions the guest typed, or null (F3; L6.1). */
+  readonly dietaryNotes: string | null;
   readonly phone: string | null;
   readonly message: string | null;
   /** The hidden field a bot fills; any value makes the API answer success without storing anything (S4). */

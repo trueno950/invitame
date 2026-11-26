@@ -11,6 +11,7 @@
  * block, gated by `giftRegistry` (F7).
  */
 
+import type { RsvpCompanionValue } from "../public/rsvp-companions.ts";
 import type { GalleryPhoto } from "./gallery.ts";
 import type { GiftRegistry } from "./gift-registry.ts";
 import type { ItineraryMoment } from "./itinerary.ts";
@@ -61,6 +62,13 @@ export interface GuestRsvpBlockView {
   readonly partySizes: readonly number[];
   /** The answer the guest last gave, or null when they have not answered yet. */
   readonly answer: { readonly attending: boolean; readonly partySize: number } | null;
+  /**
+   * The companions of the guest's last answer, so the rows start from it (F3; L6.1). Empty when they answered none or
+   * have not answered yet, and empty for an answer stored before the companions existed.
+   */
+  readonly companions: readonly RsvpCompanionValue[];
+  /** The dietary notes of the last answer, or "" when they left none (F3; L6.1). */
+  readonly dietaryNotes: string;
   /** The message the guest last left, or "" when they left none. */
   readonly message: string;
   /** The creator's deadline as an ISO instant, or null when the invitation has none. */

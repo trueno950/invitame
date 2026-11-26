@@ -1,4 +1,5 @@
 import { formatRsvpDeadline } from "../invitation-features/rsvp-deadline.ts";
+import type { RsvpCompanionValue } from "../public/rsvp-companions.ts";
 import { personalGuestPath } from "../public/guest-pass.ts";
 import {
   GUEST_NAME_MAX_LENGTH,
@@ -7,6 +8,7 @@ import {
   GUEST_SEATS_MIN,
   type GuestItem,
   type GuestList,
+  type GuestResponseSummary,
   type GuestWithToken,
   type InvitationResult,
   type InvitationsClient,
@@ -47,6 +49,12 @@ export interface GuestRow {
   readonly answerLabel: string;
   /** The confirmed party, or a dash for a guest who has not answered. */
   readonly partySize: string;
+  /** The companion names the guest gave, or a dash when they named none (F3; L6.4). */
+  readonly companions: string;
+  /** How many companions are children, as the row shows it, or a dash without a confirmed answer (F3; L6.4). */
+  readonly children: string;
+  /** The dietary restrictions, or a dash when the guest named none (F3; L6.4). */
+  readonly dietaryNotes: string;
   /** The first check-in on the invitation's clock, or the note that there is none. */
   readonly checkIn: string;
   /** The stored phone, or a dash when the creator left none. */
@@ -84,6 +92,22 @@ function orDash(value: string | null): string {
   return value === null || value === "" ? "—" : value;
 }
 
+/**
+ * The companion names of one answer, as the table shows them (F3; L6.4): in the guest's own order, joined by a comma,
+ * with a blank name left out because a guest may confirm a count without every name. A dash is what the page shows when
+ * nobody was named, which is also how an answer stored before the companions existed reads.
+ */
+function companionNames(companions: readonly RsvpCompanionValue[] | null): string {
+  const named = (companions ?? []).map((companion) => companion.name).filter((name) => name !== "");
+
+  return named.length === 0 ? "—" : named.join(", ");
+}
+
+/** How many companions of one answer are children (F3; L6.4). */
+function childrenOf(response: GuestResponseSummary): number {
+  return (response.companions ?? []).filter((companion) => companion.child).length;
+}
+
 /** One guest's answer as its Spanish label, and the party that comes with it. */
 function answerOf(guest: GuestItem): { label: string; party: string } {
   if (guest.response === null) {
@@ -111,6 +135,9 @@ export function guestListView(
       { label: GUEST_COPY.totalGuests, value: list.totals.guests },
       { label: GUEST_COPY.totalSeats, value: list.totals.seats },
       { label: GUEST_COPY.totalAttending, value: list.totals.attendingPeople },
+      // The confirmed people apart, adults and children (F3; L6.4).
+      { label: GUEST_COPY.totalAttendingAdults, value: list.totals.attendingAdults },
+      { label: GUEST_COPY.totalAttendingChildren, value: list.totals.attendingChildren },
       { label: GUEST_COPY.totalDeclined, value: list.totals.declinedCount },
       { label: GUEST_COPY.totalPending, value: list.totals.pendingCount },
       { label: GUEST_COPY.totalCheckedIn, value: list.totals.checkedInCount },
@@ -124,6 +151,9 @@ export function guestListView(
         seats: guest.seats,
         answerLabel: answer.label,
         partySize: answer.party,
+        companions: companionNames(guest.response?.companions ?? null),
+        children: guest.response?.attending === true ? String(childrenOf(guest.response)) : "—",
+        dietaryNotes: orDash(guest.response?.dietaryNotes ?? null),
         checkIn:
           guest.checkedInAt === null
             ? GUEST_COPY.checkInNone

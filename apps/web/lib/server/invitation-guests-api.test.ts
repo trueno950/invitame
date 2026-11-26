@@ -41,6 +41,8 @@ const GUEST: GuestItem = {
   response: {
     attending: true,
     partySize: 2,
+    companions: [{ name: "Luis", child: false }],
+    dietaryNotes: "Sin nueces",
     message: "Con gusto",
     createdAt: AT,
     updatedAt: AT,
@@ -54,6 +56,8 @@ const TOTALS: GuestList["totals"] = {
   seats: 4,
   attendingGuests: 1,
   attendingPeople: 2,
+  attendingAdults: 2,
+  attendingChildren: 0,
   declinedCount: 0,
   pendingCount: 0,
   checkedInCount: 0,

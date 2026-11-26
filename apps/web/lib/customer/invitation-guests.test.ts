@@ -59,6 +59,8 @@ function guest(overrides: Partial<GuestItem> = {}): GuestItem {
     response: {
       attending: true,
       partySize: 2,
+      companions: [{ name: "Luis", child: false }],
+      dietaryNotes: "Sin nueces",
       message: "Con gusto",
       createdAt: AT,
       updatedAt: AT,
@@ -86,6 +88,8 @@ const LIST: GuestList = {
     seats: 6,
     attendingGuests: 1,
     attendingPeople: 2,
+    attendingAdults: 2,
+    attendingChildren: 0,
     declinedCount: 0,
     pendingCount: 1,
     checkedInCount: 0,
@@ -111,6 +115,8 @@ describe("the guest list view", () => {
       { label: "Invitados", value: 2 },
       { label: "Lugares", value: 6 },
       { label: "Personas que asisten", value: 2 },
+      { label: "Adultos que asisten", value: 2 },
+      { label: "Niños que asisten", value: 0 },
       { label: "No asistirán", value: 0 },
       { label: "Sin responder", value: 1 },
       { label: "En la entrada", value: 0 },
@@ -120,6 +126,10 @@ describe("the guest list view", () => {
     assert.equal(first?.name, "Ana Pérez");
     assert.equal(first?.answerLabel, "Sí");
     assert.equal(first?.partySize, "2");
+    // The companion columns of F3: the names they gave, how many are children, and their dietary notes (L6.4).
+    assert.equal(first?.companions, "Luis");
+    assert.equal(first?.children, "0");
+    assert.equal(first?.dietaryNotes, "Sin nueces");
     assert.equal(first?.checkIn, "Sin registrar");
     assert.equal(first?.phone, "+525512345678");
     assert.equal(first?.note, "Mesa de la familia");
@@ -127,6 +137,9 @@ describe("the guest list view", () => {
     assert.equal(second?.answerLabel, "Sin responder");
     // A guest who has not answered names no party and shows a dash for what they left empty.
     assert.equal(second?.partySize, "—");
+    assert.equal(second?.companions, "—");
+    assert.equal(second?.children, "—");
+    assert.equal(second?.dietaryNotes, "—");
     assert.equal(second?.phone, "—");
     assert.equal(second?.note, "—");
   });
@@ -140,6 +153,8 @@ describe("the guest list view", () => {
           response: {
             attending: false,
             partySize: 0,
+            companions: [],
+            dietaryNotes: null,
             message: null,
             createdAt: AT,
             updatedAt: "2026-11-13T18:00:00.000Z",

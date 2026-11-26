@@ -6,6 +6,7 @@ import type {
   PublicRsvpFeature,
 } from "../server/public-invitations-api.ts";
 import { RSVP_PARTY_LIMIT_MAX, RSVP_PARTY_LIMIT_MIN } from "../server/public-invitations-api.ts";
+import { companionValues, dietaryNotesValue } from "./rsvp-companions.ts";
 
 /**
  * The guest's open RSVP form on `/i/[slug]` (M6 G3; S1, S4). The API owns every validation, the rate limit, the
@@ -88,6 +89,10 @@ export interface PublicRsvpFormValue {
   readonly name: string;
   readonly attending: boolean;
   readonly partySize: number;
+  /** The people who come with the guest: one per extra person, and none for a decline (F3; L6.1). */
+  readonly companions: readonly { readonly name: string; readonly child: boolean }[];
+  /** The dietary restrictions the guest typed, or null (F3; L6.1). */
+  readonly dietaryNotes: string | null;
   readonly phone: string | null;
   readonly message: string | null;
   readonly honeypot: string;
@@ -153,6 +158,10 @@ export function parseRsvpForm(form: FormData): RsvpFormParse {
       name,
       attending,
       partySize,
+      // The rows are rendered up to the invitation's limit, so the party size decides how many of them travel: a page
+      // with no client script submits them all and this keeps the ones the answer covers (F3; L6.3).
+      companions: companionValues(form, partySize),
+      dietaryNotes: dietaryNotesValue(form),
       phone: optional(text(form, "phone")),
       message: optional(text(form, "message")),
       honeypot: text(form, "honeypot") ?? "",

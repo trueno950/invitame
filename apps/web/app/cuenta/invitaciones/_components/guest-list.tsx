@@ -38,8 +38,9 @@ function Total({ label, value }: { label: string; value: number }) {
 
 /** The six totals of one guest list, in the order the page reads them. */
 export function GuestTotals({ totals }: { totals: GuestListView["totals"] }) {
+  // Eight totals now, the adults and the children among them (F3; L6.4), so the grid holds four per row at its widest.
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
       {totals.map((total) => (
         <Total key={total.label} label={total.label} value={total.value} />
       ))}
@@ -352,6 +353,9 @@ export function GuestTable({
               GUEST_COPY.columnSeats,
               GUEST_COPY.columnAnswer,
               GUEST_COPY.columnParty,
+              GUEST_COPY.columnCompanions,
+              GUEST_COPY.columnChildren,
+              GUEST_COPY.columnDietary,
               GUEST_COPY.columnCheckIn,
               GUEST_COPY.columnActions,
             ].map((heading) => (
@@ -387,6 +391,9 @@ export function GuestTable({
               <td className="px-4 py-3 text-ink">{row.seats}</td>
               <td className="px-4 py-3 text-ink">{row.answerLabel}</td>
               <td className="px-4 py-3 text-ink">{row.partySize}</td>
+              <td className="max-w-48 px-4 py-3 break-words text-ink">{row.companions}</td>
+              <td className="px-4 py-3 text-ink">{row.children}</td>
+              <td className="max-w-56 px-4 py-3 break-words text-ink">{row.dietaryNotes}</td>
               <td className="px-4 py-3 whitespace-nowrap text-muted">{row.checkIn}</td>
               <RowActions
                 action={action}

@@ -1,4 +1,5 @@
 import { deadlineInputValue, formatRsvpDeadline } from "../invitation-features/rsvp-deadline.ts";
+import type { RsvpCompanionValue } from "../public/rsvp-companions.ts";
 import {
   type InvitationResult,
   type OwnedInvitation,
@@ -91,6 +92,12 @@ export interface RsvpResponseRow {
   readonly name: string;
   readonly attending: boolean;
   readonly partySize: number;
+  /** The companion names the guest gave, joined for the row, or a dash when they named none (F3; L6.4). */
+  readonly companions: string;
+  /** How many companions are children, as the row shows it, or a dash when nobody confirmed (F3; L6.4). */
+  readonly children: string;
+  /** The dietary restrictions, or a dash when the guest named none (F3; L6.4). */
+  readonly dietaryNotes: string;
   /** The stored phone, or "" when the guest left none. */
   readonly phone: string;
   /** The stored message, or "" when the guest left none. */
@@ -126,6 +133,9 @@ export function rsvpResponsesView(invitation: OwnedInvitation, read: RsvpRead): 
       name: response.name,
       attending: response.attending,
       partySize: response.partySize,
+      companions: companionNames(response.companions),
+      children: response.attending ? String(childrenOf(response.companions)) : "—",
+      dietaryNotes: response.dietaryNotes === null ? "—" : response.dietaryNotes,
       phone: response.phone ?? "",
       message: response.message ?? "",
       answeredAt: formatRsvpDeadline(response.createdAt, invitation.timeZone) ?? response.createdAt,
@@ -134,6 +144,22 @@ export function rsvpResponsesView(invitation: OwnedInvitation, read: RsvpRead): 
     csvHref: RSVP_PATHS.csv(invitation.id),
     settings: rsvpSettingsView(invitation, read.settings),
   };
+}
+
+/**
+ * The companion names of one answer, as the page shows them (F3; L6.4): in the guest's own order, joined by a comma, with
+ * a blank name left out because a guest may confirm a count without every name. A dash is what the page shows when the
+ * guest named nobody, and an answer stored before the companions existed reads the same way.
+ */
+function companionNames(companions: readonly RsvpCompanionValue[] | null): string {
+  const named = (companions ?? []).map((companion) => companion.name).filter((name) => name !== "");
+
+  return named.length === 0 ? "—" : named.join(", ");
+}
+
+/** How many of one answer's companions are children (F3; L6.4); an answer stored before them counts none. */
+function childrenOf(companions: readonly RsvpCompanionValue[] | null): number {
+  return (companions ?? []).filter((companion) => companion.child).length;
 }
 
 /** The headers of the CSV download: never cached, because the answers change while the invitation is open. */

@@ -82,6 +82,9 @@ function ResponsesTable({ rows }: { rows: readonly RsvpResponseRow[] }) {
               RSVP_COPY.columnName,
               RSVP_COPY.columnAnswer,
               RSVP_COPY.columnParty,
+              RSVP_COPY.columnCompanions,
+              RSVP_COPY.columnChildren,
+              RSVP_COPY.columnDietary,
               RSVP_COPY.columnPhone,
               RSVP_COPY.columnMessage,
               RSVP_COPY.columnAnsweredAt,
@@ -111,6 +114,9 @@ function ResponsesTable({ rows }: { rows: readonly RsvpResponseRow[] }) {
                 {row.attending ? RSVP_COPY.attendingYes : RSVP_COPY.attendingNo}
               </td>
               <td className="px-4 py-3 text-ink">{row.partySize}</td>
+              <td className="max-w-48 px-4 py-3 break-words text-ink">{row.companions}</td>
+              <td className="px-4 py-3 text-ink">{row.children}</td>
+              <td className="max-w-56 px-4 py-3 break-words text-ink">{row.dietaryNotes}</td>
               <td className="px-4 py-3 text-ink">{row.phone === "" ? "—" : row.phone}</td>
               <td className="max-w-sm px-4 py-3 break-words text-ink">
                 {row.message === "" ? "—" : row.message}
@@ -335,8 +341,11 @@ export default async function RsvpResponsesPage({
       intro={RSVP_COPY.responsesIntro}
     >
       <div className="flex flex-col gap-4">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Total label={RSVP_COPY.totalAttending} value={view.totals.attendingPeople} />
+          {/* The confirmed people apart, so the owner reads how many are children at a glance (F3; L6.4). */}
+          <Total label={RSVP_COPY.totalAttendingAdults} value={view.totals.attendingAdults} />
+          <Total label={RSVP_COPY.totalAttendingChildren} value={view.totals.attendingChildren} />
           <Total label={RSVP_COPY.totalDeclined} value={view.totals.declinedCount} />
           <Total label={RSVP_COPY.totalResponses} value={view.totals.responses} />
         </div>

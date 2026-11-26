@@ -21,6 +21,12 @@ import {
 } from "../invitation-features/place-point.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import {
+  RSVP_COMPANIONS_MAX,
+  RSVP_COMPANION_NAME_MAX_LENGTH,
+  RSVP_DIETARY_NOTES_MAX_LENGTH,
+  type RsvpCompanionValue,
+} from "../public/rsvp-companions.ts";
+import {
   ApiClientError,
   type ApiClientOptions,
   sendApiDownload,
@@ -143,15 +149,23 @@ export interface RsvpResponseItem {
   readonly name: string;
   readonly attending: boolean;
   readonly partySize: number;
+  /** The companions of the answer, or null for an answer stored before they existed (F3; L6.1). */
+  readonly companions: readonly RsvpCompanionValue[] | null;
+  readonly dietaryNotes: string | null;
   readonly phone: string | null;
   readonly message: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
 
-/** The totals of one invitation's answers: confirmed people, declines, and rows (S1, S4). */
+/**
+ * The totals of one invitation's answers: confirmed people, the adults and children among them, declines, and rows
+ * (S1, S4, F3). The adults and the children always add up to the confirmed people.
+ */
 export interface RsvpTotals {
   readonly attendingPeople: number;
+  readonly attendingAdults: number;
+  readonly attendingChildren: number;
   readonly declinedCount: number;
   readonly responses: number;
 }
@@ -845,6 +859,8 @@ export function parseRsvpResponseItem(value: unknown): RsvpResponseItem | undefi
   }
 
   const { id, name, attending, partySize, phone, message, createdAt, updatedAt } = item;
+  const companions = parseStoredCompanions(item.companions);
+  const dietaryNotes = parseStoredDietaryNotes(item.dietaryNotes);
 
   if (
     !isInvitationId(id) ||
@@ -852,6 +868,8 @@ export function parseRsvpResponseItem(value: unknown): RsvpResponseItem | undefi
     typeof attending !== "boolean" ||
     !isCount(partySize) ||
     partySize > RSVP_PARTY_LIMIT_MAX ||
+    companions === undefined ||
+    dietaryNotes === undefined ||
     !(phone === null || typeof phone === "string") ||
     !(message === null || typeof message === "string") ||
     !isTimestamp(createdAt) ||
@@ -860,7 +878,63 @@ export function parseRsvpResponseItem(value: unknown): RsvpResponseItem | undefi
     return undefined;
   }
 
-  return { id, name, attending, partySize, phone, message, createdAt, updatedAt };
+  return {
+    id,
+    name,
+    attending,
+    partySize,
+    companions,
+    dietaryNotes,
+    phone,
+    message,
+    createdAt,
+    updatedAt,
+  };
+}
+
+/**
+ * The companions of a stored answer (F3; L6.1), mirrored from the API's own bounds: a list of `{ name, child }`, or
+ * null. An absent field is an API written before F3 and reads as null, so both generations of the body parse during a
+ * rolling deploy; a shape the API could not have stored refuses the whole response instead.
+ */
+function parseStoredCompanions(value: unknown): readonly RsvpCompanionValue[] | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (!Array.isArray(value) || value.length > RSVP_COMPANIONS_MAX) {
+    return undefined;
+  }
+
+  const companions: RsvpCompanionValue[] = [];
+  for (const item of value) {
+    const companion = record(item);
+
+    if (companion === undefined) {
+      return undefined;
+    }
+    const { name, child } = companion;
+
+    if (
+      typeof name !== "string" ||
+      [...name].length > RSVP_COMPANION_NAME_MAX_LENGTH ||
+      typeof child !== "boolean"
+    ) {
+      return undefined;
+    }
+    companions.push({ name, child });
+  }
+  return companions;
+}
+
+/** The dietary notes of a stored answer (F3; L6.1): a bounded text, null, or absent for an older API. */
+function parseStoredDietaryNotes(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== "string" || [...value].length > RSVP_DIETARY_NOTES_MAX_LENGTH) {
+    return undefined;
+  }
+  return value;
 }
 
 /** The totals of one invitation's answers, or undefined when a count is not one (S1, S4). */
@@ -877,7 +951,16 @@ function parseRsvpTotals(value: unknown): RsvpTotals | undefined {
     return undefined;
   }
 
-  return { attendingPeople, declinedCount, responses };
+  // An API written before F3 names no adults or children: the whole party counts as adults then, which is what those
+  // answers mean, so a page deployed before the field still renders sane totals (L6.4).
+  const attendingChildren = totals.attendingChildren ?? 0;
+  const attendingAdults = totals.attendingAdults ?? attendingPeople;
+
+  if (!isCount(attendingAdults) || !isCount(attendingChildren)) {
+    return undefined;
+  }
+
+  return { attendingPeople, attendingAdults, attendingChildren, declinedCount, responses };
 }
 
 /** The owner's whole read: the settings, every response newest first, and the totals (M6 G3; S1, S4). */
@@ -930,6 +1013,9 @@ export interface GuestResponseSummary {
   readonly attending: boolean;
   /** The people who come: 1 to the guest's seats when attending, 0 when not. */
   readonly partySize: number;
+  /** The companions of the answer, or null for an answer stored before they existed (F3; L6.1). */
+  readonly companions: readonly RsvpCompanionValue[] | null;
+  readonly dietaryNotes: string | null;
   readonly message: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -955,6 +1041,8 @@ export interface GuestTotals {
   readonly seats: number;
   readonly attendingGuests: number;
   readonly attendingPeople: number;
+  readonly attendingAdults: number;
+  readonly attendingChildren: number;
   readonly declinedCount: number;
   readonly pendingCount: number;
   readonly checkedInCount: number;
@@ -1034,6 +1122,8 @@ function parseGuestResponseSummary(
   }
 
   const { attending, partySize, message, createdAt, updatedAt } = summary;
+  const companions = parseStoredCompanions(summary.companions);
+  const dietaryNotes = parseStoredDietaryNotes(summary.dietaryNotes);
 
   if (
     typeof attending !== "boolean" ||
@@ -1041,6 +1131,8 @@ function parseGuestResponseSummary(
     partySize > seats ||
     (attending && partySize < 1) ||
     (!attending && partySize !== 0) ||
+    companions === undefined ||
+    dietaryNotes === undefined ||
     !isOptionalText(message) ||
     !isTimestamp(createdAt) ||
     !isTimestamp(updatedAt)
@@ -1048,7 +1140,7 @@ function parseGuestResponseSummary(
     return undefined;
   }
 
-  return { attending, partySize, message, createdAt, updatedAt };
+  return { attending, partySize, companions, dietaryNotes, message, createdAt, updatedAt };
 }
 
 /** One guest of the creator's list, or undefined when the body is not the documented shape (S4). */
@@ -1114,11 +1206,17 @@ function parseGuestTotals(value: unknown): GuestTotals | undefined {
     checkedInCount,
   } = totals;
 
+  // An API written before F3 names no adults or children: the whole party counts as adults then (L6.4).
+  const attendingChildren = totals.attendingChildren ?? 0;
+  const attendingAdults = totals.attendingAdults ?? attendingPeople;
+
   if (
     !isWholeCount(guests) ||
     !isWholeCount(seats) ||
     !isWholeCount(attendingGuests) ||
     !isWholeCount(attendingPeople) ||
+    !isWholeCount(attendingAdults) ||
+    !isWholeCount(attendingChildren) ||
     !isWholeCount(declinedCount) ||
     !isWholeCount(pendingCount) ||
     !isWholeCount(checkedInCount)
@@ -1131,6 +1229,8 @@ function parseGuestTotals(value: unknown): GuestTotals | undefined {
     seats,
     attendingGuests,
     attendingPeople,
+    attendingAdults,
+    attendingChildren,
     declinedCount,
     pendingCount,
     checkedInCount,

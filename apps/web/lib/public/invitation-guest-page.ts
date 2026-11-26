@@ -19,6 +19,7 @@ import type {
 } from "../server/public-invitations-api.ts";
 import { personalGuestPath } from "./guest-pass.ts";
 import { isRsvpClosed } from "./invitation-rsvp.ts";
+import { companionValues, dietaryNotesValue } from "./rsvp-companions.ts";
 
 /**
  * The personal page of one guest (M6 G4; S1, S4): the greeting, the seats they were given, and their own attendance
@@ -85,6 +86,10 @@ export function guestRsvpView(input: GuestRsvpViewInput): GuestRsvpBlockView | u
       guest.response === null
         ? null
         : { attending: guest.response.attending, partySize: guest.response.partySize },
+    // The companions the guest already named, so a change of mind starts from the last answer; a legacy answer named
+    // none, and then the rows start empty (F3; L6.1).
+    companions: guest.response?.companions ?? [],
+    dietaryNotes: guest.response?.dietaryNotes ?? "",
     message: guest.response?.message ?? "",
     deadline: expired ? null : rsvp.deadline,
     closed: isRsvpClosed(rsvp.deadline, input.now ?? new Date(), expired),
@@ -147,13 +152,19 @@ export function parseGuestRsvpForm(form: FormData): GuestRsvpFormParse {
     return { ok: false, slug, token };
   }
 
+  const partyOfAnswer = attending ? partySize : 0;
+
   return {
     ok: true,
     slug,
     token,
     value: {
       attending,
-      partySize: attending ? partySize : 0,
+      partySize: partyOfAnswer,
+      // The rows are rendered up to the guest's seats, so the party the guest chose decides how many of them travel;
+      // a page with no client script submits them all and this keeps the ones the answer covers (F3; L6.3).
+      companions: companionValues(form, partyOfAnswer),
+      dietaryNotes: dietaryNotesValue(form),
       message: optional(text(form, "message")),
     },
   };

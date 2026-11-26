@@ -55,7 +55,13 @@ const GUEST_PAGE: PublicGuestInvitation = {
   guest: {
     name: "Ana Pérez",
     seats: 4,
-    response: { attending: true, partySize: 2, message: "Con gusto" },
+    response: {
+      attending: true,
+      partySize: 2,
+      companions: [{ name: "Luis", child: false }],
+      dietaryNotes: "Sin nueces",
+      message: "Con gusto",
+    },
     qrPass: true,
   },
 };
@@ -63,6 +69,8 @@ const GUEST_PAGE: PublicGuestInvitation = {
 const SUBMISSION: PublicGuestRsvpSubmission = {
   attending: true,
   partySize: 2,
+  companions: [{ name: "Luis", child: false }],
+  dietaryNotes: "Sin nueces",
   message: "Con gusto",
 };
 
@@ -272,6 +280,41 @@ describe("parsePublicGuestInvitation", () => {
     });
 
     assert.deepEqual(parsed, GUEST_PAGE);
+  });
+
+  it("accepts an answer written before the companions existed (F3; L6.1)", () => {
+    // The API of the previous release answers no companions and no dietary notes; both read as none.
+    const parsed = parsePublicGuestInvitation({
+      ...GUEST_PAGE,
+      guest: {
+        ...GUEST_PAGE.guest,
+        response: { attending: true, partySize: 2, message: "Con gusto" },
+      },
+    });
+
+    assert.deepEqual(parsed?.guest.response, {
+      attending: true,
+      partySize: 2,
+      companions: null,
+      dietaryNotes: null,
+      message: "Con gusto",
+    });
+  });
+
+  it("refuses companions the API could not have stored", () => {
+    for (const companions of ["Luis", [{ name: "Luis" }], [{ name: 7, child: false }]]) {
+      assert.equal(
+        parsePublicGuestInvitation({
+          ...GUEST_PAGE,
+          guest: {
+            ...GUEST_PAGE.guest,
+            response: { attending: true, partySize: 2, companions, message: null },
+          },
+        }),
+        undefined,
+        JSON.stringify(companions),
+      );
+    }
   });
 
   it("accepts a guest who has not answered yet", () => {

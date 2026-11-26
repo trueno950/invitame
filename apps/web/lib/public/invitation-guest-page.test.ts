@@ -91,7 +91,13 @@ describe("the answer card", () => {
       guest: {
         name: "Ana",
         seats: 3,
-        response: { attending: false, partySize: 0, message: null },
+        response: {
+          attending: false,
+          partySize: 0,
+          companions: [],
+          dietaryNotes: null,
+          message: null,
+        },
         qrPass: true,
       },
       rsvp: GUEST_LIST,
@@ -105,6 +111,8 @@ describe("the answer card", () => {
       seats: 3,
       partySizes: [1, 2, 3],
       answer: { attending: false, partySize: 0 },
+      companions: [],
+      dietaryNotes: "",
       message: "",
       deadline: "2026-12-01T18:00:00.000Z",
       closed: false,
@@ -119,7 +127,13 @@ describe("the answer card", () => {
       guest: {
         name: "Ana",
         seats: 2,
-        response: { attending: true, partySize: 2, message: "Allí estaré" },
+        response: {
+          attending: true,
+          partySize: 2,
+          companions: [{ name: "Jorge", child: true }],
+          dietaryNotes: "Sin gluten",
+          message: "Allí estaré",
+        },
         qrPass: false,
       },
       rsvp: GUEST_LIST,
@@ -129,6 +143,8 @@ describe("the answer card", () => {
 
     assert.equal(view?.closed, true);
     assert.deepEqual(view?.answer, { attending: true, partySize: 2 });
+    assert.deepEqual(view?.companions, [{ name: "Jorge", child: true }]);
+    assert.equal(view?.dietaryNotes, "Sin gluten");
     assert.equal(view?.message, "Allí estaré");
   });
 
@@ -164,7 +180,13 @@ describe("the answer card", () => {
       guest: {
         name: "Ana",
         seats: 2,
-        response: { attending: true, partySize: 2, message: "Allí estaré" },
+        response: {
+          attending: true,
+          partySize: 2,
+          companions: [{ name: "Jorge", child: true }],
+          dietaryNotes: "Sin gluten",
+          message: "Allí estaré",
+        },
         qrPass: true,
       },
       rsvp: GUEST_LIST,
@@ -194,7 +216,13 @@ describe("the submitted answer", () => {
       ok: true,
       slug: SLUG,
       token: TOKEN,
-      value: { attending: true, partySize: 2, message: "Con mucho gusto" },
+      value: {
+        attending: true,
+        partySize: 2,
+        companions: [{ name: "", child: false }],
+        dietaryNotes: null,
+        message: "Con mucho gusto",
+      },
     });
   });
 
@@ -203,8 +231,28 @@ describe("the submitted answer", () => {
       ok: true,
       slug: SLUG,
       token: TOKEN,
-      value: { attending: false, partySize: 0, message: null },
+      value: { attending: false, partySize: 0, companions: [], dietaryNotes: null, message: null },
     });
+  });
+
+  it("reads the companion rows the guest's seats cover and the dietary notes (F3; L6.1, L6.3)", () => {
+    const parsed = parseGuestRsvpForm(
+      form({
+        ...ANSWER,
+        partySize: "3",
+        "companionName-1": "Jorge",
+        "companionChild-1": "on",
+        "companionName-2": "Sofía",
+        "companionName-3": "Fuera de los lugares",
+        dietaryNotes: "  Sin gluten  ",
+      }),
+    );
+
+    assert.deepEqual(parsed.ok && parsed.value.companions, [
+      { name: "Jorge", child: true },
+      { name: "Sofía", child: false },
+    ]);
+    assert.equal(parsed.ok && parsed.value.dietaryNotes, "Sin gluten");
   });
 
   it("refuses a form whose slug or token cannot be one, without naming a page", () => {
@@ -253,7 +301,13 @@ describe("the answer's request", () => {
       {
         slug: SLUG,
         token: TOKEN,
-        submission: { attending: true, partySize: 2, message: "Con mucho gusto" },
+        submission: {
+          attending: true,
+          partySize: 2,
+          companions: [{ name: "", child: false }],
+          dietaryNotes: null,
+          message: "Con mucho gusto",
+        },
         options: { clientAddress: "203.0.113.9" },
       },
     ]);

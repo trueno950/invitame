@@ -137,11 +137,41 @@ describe("parseRsvpForm", () => {
         name: "Ana   Pérez",
         attending: true,
         partySize: 2,
+        companions: [{ name: "", child: false }],
+        dietaryNotes: null,
         phone: "55 1234 5678",
         message: "Con mucho gusto",
         honeypot: "",
       },
     });
+  });
+
+  it("reads the companion rows the party covers and the dietary notes (F3; L6.1, L6.3)", () => {
+    const parsed = parseRsvpForm(
+      form({
+        ...ANSWER,
+        partySize: "3",
+        "companionName-1": "  Jorge   Gómez ",
+        "companionChild-2": "on",
+        "companionName-2": "Sofía Gómez",
+        "companionName-3": "Fuera de la fiesta",
+        dietaryNotes: "  Sofía es alérgica a la nuez  ",
+      }),
+    );
+
+    assert.deepEqual(parsed.ok && parsed.value.companions, [
+      { name: "Jorge   Gómez", child: false },
+      { name: "Sofía Gómez", child: true },
+    ]);
+    assert.equal(parsed.ok && parsed.value.dietaryNotes, "Sofía es alérgica a la nuez");
+  });
+
+  it("names no companion when the guest will not attend (F3; L6.1)", () => {
+    const parsed = parseRsvpForm(
+      form({ ...ANSWER, attending: "no", partySize: "2", "companionName-1": "Jorge" }),
+    );
+
+    assert.deepEqual(parsed.ok && parsed.value.companions, []);
   });
 
   it("stores no phone and no message when the guest leaves them empty", () => {
@@ -151,6 +181,8 @@ describe("parseRsvpForm", () => {
       name: "Ana   Pérez",
       attending: true,
       partySize: 2,
+      companions: [{ name: "", child: false }],
+      dietaryNotes: null,
       phone: null,
       message: null,
       honeypot: "",
@@ -206,6 +238,8 @@ describe("submitPublicRsvpForm", () => {
           name: "Ana   Pérez",
           attending: true,
           partySize: 2,
+          companions: [{ name: "", child: false }],
+          dietaryNotes: null,
           phone: "55 1234 5678",
           message: "Con mucho gusto",
           honeypot: "",

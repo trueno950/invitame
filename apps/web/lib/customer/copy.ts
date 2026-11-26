@@ -687,6 +687,9 @@ export const RSVP_COPY = {
     "Aquí están las respuestas que recibió tu invitación, de la más reciente a la más antigua.",
   totalsHeading: "Totales",
   totalAttending: "Personas que asisten",
+  /** The confirmed people apart: the adults and the children (F3; L6.4). */
+  totalAttendingAdults: "Adultos que asisten",
+  totalAttendingChildren: "Niños que asisten",
   totalDeclined: "No asistirán",
   totalResponses: "Respuestas",
   emptyNote:
@@ -695,6 +698,10 @@ export const RSVP_COPY = {
   columnName: "Nombre",
   columnAnswer: "¿Asiste?",
   columnParty: "Personas",
+  /** The companion columns of F3: their names, how many are children, and what they cannot eat (L6.4). */
+  columnCompanions: "Acompañantes",
+  columnChildren: "Niños",
+  columnDietary: "Restricciones",
   columnPhone: "Teléfono",
   columnMessage: "Mensaje",
   columnAnsweredAt: "Respondió",
@@ -999,6 +1006,9 @@ export const GUEST_COPY = {
   totalGuests: "Invitados",
   totalSeats: "Lugares",
   totalAttending: "Personas que asisten",
+  /** The confirmed people apart: the adults and the children (F3; L6.4). */
+  totalAttendingAdults: "Adultos que asisten",
+  totalAttendingChildren: "Niños que asisten",
   totalDeclined: "No asistirán",
   totalPending: "Sin responder",
   totalCheckedIn: "En la entrada",
@@ -1008,6 +1018,10 @@ export const GUEST_COPY = {
   columnSeats: "Lugares",
   columnAnswer: "¿Asiste?",
   columnParty: "Personas",
+  /** The companion columns of F3: their names, how many are children, and what they cannot eat (L6.4). */
+  columnCompanions: "Acompañantes",
+  columnChildren: "Niños",
+  columnDietary: "Restricciones",
   columnCheckIn: "Entrada",
   columnActions: "Acciones",
   answerPending: "Sin responder",
@@ -1102,8 +1116,22 @@ export const RSVP_FORM_COPY = {
   attendingLegend: "¿Asistirás?",
   attendingYes: "Sí, asistiré",
   attendingNo: "No podré asistir",
-  partyLabel: "Número de personas",
+  partyLabel: "¿Cuántos van contigo?",
   partyHint: "Cuántas personas vienen contigo, incluido tú. Si no asistirás, no hace falta elegir.",
+  /** The seats the invitation holds, read next to the party select (F3; L6.3). */
+  partyLimitNote: (people: number) =>
+    people === 1 ? "Lugares para 1 persona." : `Lugares para ${people} personas.`,
+  /** The companion rows of F3: one per extra person, each with its name and its «Niño» mark (L6.3). */
+  companionsLegend: "Nombres de tus acompañantes",
+  companionsHint:
+    "Escribe el nombre de cada persona que viene contigo. Si todavía no lo sabes, puedes dejarlo en blanco.",
+  companionRow: (index: number) => `Acompañante ${index}`,
+  companionNamePlaceholder: "Nombre",
+  companionChildLabel: "Niño",
+  /** The dietary restrictions of the party (F3; L6.1). */
+  dietaryLabel: "Restricciones alimentarias (opcional)",
+  dietaryHint:
+    "Cuéntanos si alguien necesita un menú especial. Puedes escribir hasta 300 caracteres.",
   phoneLabel: "Teléfono (opcional)",
   phoneHint: "Solo lo usará quien organiza, por si necesita contactarte.",
   messageLabel: "Mensaje (opcional)",

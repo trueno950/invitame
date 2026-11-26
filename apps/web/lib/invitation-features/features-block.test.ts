@@ -66,6 +66,7 @@ const BAPTISM_FACTS: EventFacts = {
 };
 
 const CALENDAR_HREF = "/i/cumple-mateo/calendario.ics";
+const SLUG_FOR_GUEST = "invitacion-k7m2qx";
 
 /** The features of an invitation, with the ones a case does not name switched off. */
 function featuresOf(overrides: Partial<InvitationFeatures> = {}): InvitationFeatures {
@@ -624,7 +625,7 @@ describe("features block rendering rules", () => {
     assert.doesNotMatch(island.source, /\banimate-|\btransition-|animation:/);
   });
 
-  it("keeps the invitation's client components to the three deliberate islands", () => {
+  it("keeps the invitation's client components to the four deliberate islands", () => {
     const clientComponents = [...featuresSources(), ...rendererSources()].filter(({ source }) =>
       /^\s*["']use client["'];?/m.test(source),
     );
@@ -632,6 +633,9 @@ describe("features block rendering rules", () => {
     assert.deepEqual(
       clientComponents.map(({ file }) => file.replace(/^.*\/_components\//, "_components/")),
       [
+        // The companion rows of the RSVP form are the fourth island (F3; L6.3): they only show and hide the rows the
+        // server already rendered, so the form works without any script.
+        "_components/invitation-features/companion-rows-island.ts",
         // The CLABE copy button is one more deliberate island (F2; L4.5): the clipboard only exists in the browser, and
         // its fallback selects the text the server already rendered.
         "_components/invitation-features/copy-clabe-island.ts",
@@ -713,13 +717,19 @@ describe("«Confirma tu asistencia» in the features block (M6 G3; S4)", () => {
       "¿Asistirás?",
       "Sí, asistiré",
       "No podré asistir",
-      "Número de personas",
+      "¿Cuántos van contigo?",
+      "Lugares para 4 personas.",
+      "Nombres de tus acompañantes",
+      "Acompañante 1",
+      "Niño",
+      "Restricciones alimentarias (opcional)",
       "Teléfono (opcional)",
       "Mensaje (opcional)",
       "Enviar respuesta",
     ]) {
       assert.ok(html.includes(text), text);
     }
+    // The party limit of this card is 4, so the answer may name three companions (F3; L6.3).
     const names = controlTags(html).map((tag) => attributeOf(tag, "name"));
     assert.deepEqual(names, [
       "slug",
@@ -728,12 +738,19 @@ describe("«Confirma tu asistencia» in the features block (M6 G3; S4)", () => {
       "attending",
       "attending",
       "partySize",
+      "companionName-1",
+      "companionChild-1",
+      "companionName-2",
+      "companionChild-2",
+      "companionName-3",
+      "companionChild-3",
+      "dietaryNotes",
       "phone",
       "message",
     ]);
     assert.equal(attributeOf(controlTags(html)[3] ?? "", "value"), "si");
     assert.equal(attributeOf(controlTags(html)[4] ?? "", "value"), "no");
-    assert.equal(attributeAnyCase(controlTags(html)[7] ?? "", "maxlength"), "280");
+    assert.equal(attributeAnyCase(controlTags(html)[14] ?? "", "maxlength"), "280");
   });
 
   it("offers the party size from 1 to the invitation's own limit", () => {
@@ -792,6 +809,97 @@ describe("«Confirma tu asistencia» in the features block (M6 G3; S4)", () => {
     assert.match(
       html,
       /La confirmación de asistencia cerró el 1 de diciembre de 2026 a las 12:00\./,
+    );
+  });
+
+  it("renders one companion row per extra person, none for a party of one (F3; L6.3)", () => {
+    for (const partyLimit of [1, 2, 4, 10]) {
+      const html = render(rsvpFeatures({ partyLimit }));
+      const rows = [...html.matchAll(/data-companion-row="(\d+)"/g)].map((match) =>
+        Number(match[1]),
+      );
+
+      assert.deepEqual(
+        rows,
+        Array.from({ length: partyLimit - 1 }, (_unused, index) => index + 1),
+        String(partyLimit),
+      );
+      // Each row carries its own name field and its own «Niño» mark, so the two can never be paired by mistake.
+      for (const row of rows) {
+        assert.match(html, new RegExp(`name="companionName-${row}"`));
+        assert.match(html, new RegExp(`name="companionChild-${row}"`));
+      }
+      assert.equal(
+        [...html.matchAll(/data-companion-rows/g)].length,
+        partyLimit > 1 ? 1 : 0,
+        String(partyLimit),
+      );
+    }
+  });
+
+  it("bounds the companion name and the dietary notes, and labels every one of them (F3; L6.1)", () => {
+    const html = render(rsvpFeatures());
+    const companion = controlTags(html).find(
+      (tag) => attributeOf(tag, "name") === "companionName-1",
+    );
+    const dietary = controlTags(html).find((tag) => attributeOf(tag, "name") === "dietaryNotes");
+
+    assert.equal(attributeAnyCase(companion ?? "", "maxlength"), "60");
+    assert.equal(attributeAnyCase(dietary ?? "", "maxlength"), "300");
+    assert.match(dietary ?? "", /^<textarea/);
+
+    const ids = new Set(
+      controlTags(html).flatMap((tag) => {
+        const id = attributeOf(tag, "id");
+
+        return id === undefined ? [] : [id];
+      }),
+    );
+    const labelled = [...html.matchAll(/<label[^>]*\bfor="([^"]+)"/g)].map((match) => match[1]);
+
+    for (const target of labelled) {
+      assert.ok(ids.has(target ?? ""), target ?? "");
+    }
+    // The «Niño» mark is a checkbox with its own label, and the child row is a text field, never colour alone.
+    const child = controlTags(html).find((tag) => attributeOf(tag, "name") === "companionChild-1");
+    assert.equal(attributeOf(child ?? "", "type"), "checkbox");
+    assert.match(html, />Niño</);
+  });
+
+  it("starts the guest's own rows from the answer they already gave (F3; L6.1)", () => {
+    const html = render(
+      featuresOf({
+        guest: {
+          greeting: "Hola, Ana",
+          seats: "Tienes 3 lugares reservados a tu nombre.",
+          rsvp: {
+            slug: SLUG_FOR_GUEST,
+            token: "AbCdEfGhIjKlMnOpQrStUv",
+            seats: 3,
+            partySizes: [1, 2, 3],
+            answer: { attending: true, partySize: 3 },
+            companions: [
+              { name: "Jorge", child: false },
+              { name: "Sofía", child: true },
+            ],
+            dietaryNotes: "Sin nueces",
+            message: "",
+            deadline: null,
+            closed: false,
+          },
+        },
+      }),
+    );
+
+    assert.match(html, /data-feature="guest-rsvp"/);
+    assert.match(html, /name="companionName-1"[^>]*value="Jorge"/);
+    assert.match(html, /name="companionName-2"[^>]*value="Sofía"/);
+    assert.match(html, /name="companionChild-2"[^>]*checked/);
+    assert.match(html, /<textarea[^>]*name="dietaryNotes"[^>]*>Sin nueces<\/textarea>/);
+    // The guest's card offers exactly the rows their seats cover: three seats, two companions.
+    assert.deepEqual(
+      [...html.matchAll(/data-companion-row="(\d+)"/g)].map((match) => Number(match[1])),
+      [1, 2],
     );
   });
 

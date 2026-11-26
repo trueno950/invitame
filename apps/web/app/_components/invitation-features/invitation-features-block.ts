@@ -45,11 +45,20 @@ import {
   musicButtonLabel,
 } from "../../../lib/invitation-features/music.ts";
 import { storedPlaceOf } from "../../../lib/invitation-features/place-point.ts";
+import {
+  companionChildField,
+  companionNameField,
+  RSVP_COMPANION_NAME_MAX_LENGTH,
+  RSVP_COMPANIONS_MAX,
+  RSVP_DIETARY_NOTES_MAX_LENGTH,
+  type RsvpCompanionValue,
+} from "../../../lib/public/rsvp-companions.ts";
 import { formatRsvpDeadline } from "../../../lib/invitation-features/rsvp-deadline.ts";
 import { startInstant } from "../../../lib/invitation-features/start-instant.ts";
 import { whatsappUrl } from "../../../lib/invitation-features/whatsapp.ts";
 import { guestPassDataUrl } from "../../../lib/server/guest-pass-qr.ts";
 import { DISPLAY_FONT } from "../renderers/themed/theme.ts";
+import { CompanionRowsIsland } from "./companion-rows-island.ts";
 import { CopyClabeIsland } from "./copy-clabe-island.ts";
 import { CountdownIsland } from "./countdown-island.ts";
 import { type MapMarker, PlaceMapIsland } from "./place-map-island.ts";
@@ -149,6 +158,104 @@ const TEXT_AREA = `${FIELD} min-h-24 resize-y`;
 /** A field a person never fills: off the screen, out of the tab order, and never autofilled. */
 const HONEYPOT = "absolute -left-[9999px] h-px w-px overflow-hidden";
 const SUBMIT = `${ACTION} self-start border-0`;
+
+// The companion rows of F3 (L6.3): one row per extra person, the name on the theme's surface and the «Niño» mark on its
+// own line, so a phone never has to fit both in one line. The rows the party does not cover are hidden and disabled by
+// the island once the page is interactive; without script they all stay visible and the answer keeps the ones it needs.
+const COMPANION_FIELDSET =
+  "mt-1 flex flex-col gap-2 border-t border-dashed border-(--inv-decoration-one) pt-3";
+const COMPANION_ROW = "grid gap-1.5 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-3";
+const COMPANION_CHILD = `${RADIO_LABEL} whitespace-nowrap`;
+const DIETARY_AREA = `${FIELD} min-h-16 resize-y`;
+
+/**
+ * The companion rows of one RSVP card (F3; S2.3, L6.1, L6.3): the names of the people who come with the guest and, next
+ * to each one, whether they are a child — which is what the creator's totals and exports count apart. The rows are
+ * rendered up to the party's own limit, and every one of them is labelled, so the card is usable with no client script
+ * and with a screen reader. A row keeps the answer the guest already gave when there is one.
+ */
+function companionRows(
+  key: "rsvp" | "guest",
+  covered: number,
+  idPrefix: string,
+  current: readonly RsvpCompanionValue[],
+): ReactElement | null {
+  if (covered < 1) {
+    return null;
+  }
+  const rows = Array.from(
+    { length: Math.min(covered, RSVP_COMPANIONS_MAX) },
+    (_unused, index) => index + 1,
+  );
+
+  return h(
+    "fieldset",
+    {
+      key: `${key}-companions`,
+      id: `${idPrefix}-${key}-companions`,
+      "data-companion-rows": "",
+      className: COMPANION_FIELDSET,
+    },
+    h("legend", { className: FIELD_LABEL }, RSVP_FORM_COPY.companionsLegend),
+    h("p", { className: HINT }, RSVP_FORM_COPY.companionsHint),
+    ...rows.map((row) => {
+      const nameId = `${idPrefix}-${key}-companion-${row}-name`;
+      const childId = `${idPrefix}-${key}-companion-${row}-child`;
+
+      return h(
+        "div",
+        { key: row, "data-companion-row": row, className: COMPANION_ROW },
+        h(
+          "div",
+          null,
+          h("label", { className: FIELD_LABEL, htmlFor: nameId }, RSVP_FORM_COPY.companionRow(row)),
+          h("input", {
+            id: nameId,
+            name: companionNameField(row),
+            type: "text",
+            maxLength: RSVP_COMPANION_NAME_MAX_LENGTH,
+            autoComplete: "off",
+            placeholder: RSVP_FORM_COPY.companionNamePlaceholder,
+            defaultValue: current[row - 1]?.name ?? "",
+            className: FIELD,
+          }),
+        ),
+        h(
+          "label",
+          { className: COMPANION_CHILD, htmlFor: childId },
+          h("input", {
+            id: childId,
+            name: companionChildField(row),
+            type: "checkbox",
+            defaultChecked: current[row - 1]?.child === true,
+            className: RADIO,
+          }),
+          RSVP_FORM_COPY.companionChildLabel,
+        ),
+      );
+    }),
+  );
+}
+
+/** The dietary restrictions of the party (F3; L6.1): one bounded text, prefilled with the last answer. */
+function dietaryNotesField(idPrefix: string, key: "rsvp" | "guest", value: string): ReactElement {
+  const id = `${idPrefix}-${key}-dietary-notes`;
+
+  return h(
+    "div",
+    { key: `${key}-dietary`, className: "mt-3" },
+    h("label", { className: FIELD_LABEL, htmlFor: id }, RSVP_FORM_COPY.dietaryLabel),
+    h("textarea", {
+      id,
+      name: "dietaryNotes",
+      maxLength: RSVP_DIETARY_NOTES_MAX_LENGTH,
+      rows: 2,
+      defaultValue: value,
+      className: DIETARY_AREA,
+    }),
+    h("p", { className: HINT }, RSVP_FORM_COPY.dietaryHint),
+  );
+}
 
 /**
  * The one sentence about the deadline: when answers close, or that they already closed (S4). A card closed without a
@@ -276,6 +383,13 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
               ),
               h("p", { className: HINT }, RSVP_FORM_COPY.partyHint),
             ),
+            h("p", { className: HINT }, RSVP_FORM_COPY.partyLimitNote(rsvp.partyLimit)),
+            companionRows("rsvp", rsvp.partyLimit - 1, idPrefix, []),
+            dietaryNotesField(idPrefix, "rsvp", ""),
+            h(CompanionRowsIsland, {
+              selectId: `${idPrefix}-rsvp-party`,
+              rowsId: `${idPrefix}-rsvp-companions`,
+            }),
             h(
               "div",
               null,
@@ -415,6 +529,13 @@ function guestRsvpSection(
                 ),
               ),
             ),
+            h("p", { className: HINT }, RSVP_FORM_COPY.partyLimitNote(rsvp.seats)),
+            companionRows("guest", rsvp.seats - 1, idPrefix, rsvp.companions),
+            dietaryNotesField(idPrefix, "guest", rsvp.dietaryNotes),
+            h(CompanionRowsIsland, {
+              selectId: `${idPrefix}-guest-party`,
+              rowsId: `${idPrefix}-guest-companions`,
+            }),
             h(
               "div",
               null,

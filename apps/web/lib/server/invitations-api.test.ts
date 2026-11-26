@@ -95,6 +95,8 @@ const RSVP_RESPONSE = {
   name: "Ana Pérez",
   attending: true,
   partySize: 2,
+  companions: [{ name: "Luis", child: true }],
+  dietaryNotes: "Sin nueces",
   phone: "+525512345678",
   message: "Con mucho gusto",
   createdAt: AT,
@@ -103,7 +105,13 @@ const RSVP_RESPONSE = {
 const RSVP_READ = {
   settings: RSVP_SETTINGS,
   responses: [RSVP_RESPONSE],
-  totals: { attendingPeople: 2, declinedCount: 0, responses: 1 },
+  totals: {
+    attendingPeople: 2,
+    attendingAdults: 1,
+    attendingChildren: 1,
+    declinedCount: 0,
+    responses: 1,
+  },
 };
 const RSVP_CSV = 'Nombre,Asiste,Personas\r\n"Ana Pérez",Sí,2\r\n';
 const RSVP_CSV_HEADERS = {
@@ -398,6 +406,55 @@ describe("RSVP routes of the owner (M6 G1, G3; S1, S4)", () => {
     assert.equal(request?.headers.cookie, SESSION_COOKIE);
     assert.equal(request?.headers["x-invitame-proxy-secret"], PROXY_SECRET);
     assert.equal(request?.body, "");
+  });
+
+  it("reads a body written before the companions existed, so a rolling deploy keeps both generations working (F3; L6.1)", async () => {
+    // The API of the previous release answers no companions, no dietary notes, and no adults or children.
+    answer(200, {
+      settings: RSVP_SETTINGS,
+      responses: [
+        {
+          id: RSVP_RESPONSE.id,
+          name: "Ana Pérez",
+          attending: true,
+          partySize: 2,
+          phone: null,
+          message: null,
+          createdAt: AT,
+          updatedAt: AT,
+        },
+      ],
+      totals: { attendingPeople: 2, declinedCount: 0, responses: 1 },
+    });
+
+    assert.deepEqual(await client().readRsvp(ID), {
+      ok: true,
+      value: {
+        settings: RSVP_SETTINGS,
+        responses: [
+          {
+            id: RSVP_RESPONSE.id,
+            name: "Ana Pérez",
+            attending: true,
+            partySize: 2,
+            companions: null,
+            dietaryNotes: null,
+            phone: null,
+            message: null,
+            createdAt: AT,
+            updatedAt: AT,
+          },
+        ],
+        // An answer that named nobody counts its whole party as adults, so the totals still add up.
+        totals: {
+          attendingPeople: 2,
+          attendingAdults: 2,
+          attendingChildren: 0,
+          declinedCount: 0,
+          responses: 1,
+        },
+      },
+    });
   });
 
   it("saves the deadline and the party limit as the whole pair, and keeps a null deadline", async () => {
