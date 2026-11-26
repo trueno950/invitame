@@ -83,6 +83,8 @@ export interface CreateGuestInput {
   seats: unknown;
   phone: unknown;
   note: unknown;
+  /** The table to assign (F5; L8.1); omitted by a client written before the column existed, which stores none. */
+  tableLabel?: unknown;
 }
 
 /** The values of one guest edit; the owner comes from the session, never from the request payload (S9). */
@@ -110,6 +112,8 @@ export interface PublicGuestAnswer {
 export interface PublicGuest {
   name: string;
   seats: number;
+  /** The table the owner assigned, or null: the pass draws it and nothing else does (F5; L8.4). */
+  tableLabel: string | null;
   /** The guest's own last answer, or null while they have not answered. */
   response: PublicGuestAnswer | null;
   /** Whether this page shows the access QR: the package grants `QR_PASS` and this guest confirmed. */
@@ -221,6 +225,7 @@ export class CreateGuestUseCase {
       seats: input.seats,
       phone: input.phone,
       note: input.note,
+      tableLabel: input.tableLabel,
     });
     if (!validation.ok) {
       throw new InvalidGuestError(validation.issues);
@@ -230,7 +235,12 @@ export class CreateGuestUseCase {
     const guest = await this.guests.create(
       input.ownerId,
       input.id,
-      { ...validation.value, tokenHash: guestTokenHash(token) },
+      {
+        ...validation.value,
+        // A new guest has no stored table to keep, so an omitted field simply stores none (F5; L8.1).
+        tableLabel: validation.value.tableLabel ?? null,
+        tokenHash: guestTokenHash(token),
+      },
       this.now(),
     );
 
@@ -270,6 +280,7 @@ export class UpdateGuestUseCase {
       seats: input.seats,
       phone: input.phone,
       note: input.note,
+      tableLabel: input.tableLabel,
     });
     if (!validation.ok) {
       throw new InvalidGuestError(validation.issues);
@@ -414,6 +425,7 @@ export class GetPublicGuestUseCase {
       guest: {
         name: guest.name,
         seats: guest.seats,
+        tableLabel: guest.tableLabel,
         response:
           response === null
             ? null

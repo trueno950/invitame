@@ -218,6 +218,7 @@ class MemoryGuestRepository implements GuestRepository {
       seats: guest.seats,
       phone: guest.phone,
       note: guest.note,
+      tableLabel: guest.tableLabel,
       tokenIssuedAt: guest.tokenIssuedAt,
       checkedInAt: guest.checkedInAt,
       createdAt: guest.createdAt,
@@ -255,6 +256,7 @@ class MemoryGuestRepository implements GuestRepository {
       seats: guest.seats,
       phone: guest.phone,
       note: guest.note,
+      tableLabel: guest.tableLabel,
       tokenHash: guest.tokenHash,
       tokenIssuedAt: at,
       checkedInAt: null,
@@ -316,7 +318,12 @@ class MemoryGuestRepository implements GuestRepository {
     if (answer?.attending === true && answer.partySize > fields.seats) {
       throw new GuestSeatsBelowConfirmedPartyError(answer.partySize);
     }
-    Object.assign(guest, fields, { updatedAt: at });
+    // An omitted table keeps the stored one, exactly like the adapter's statement (F5; L8.3, L20).
+    const { tableLabel, ...rest } = fields;
+    Object.assign(guest, rest, { updatedAt: at });
+    if (tableLabel !== undefined) {
+      guest.tableLabel = tableLabel;
+    }
     return this.withResponse(guest);
   }
 
@@ -510,7 +517,12 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
    * existing invitation adds another guest to it, which is how a list of more than one guest is built.
    */
   async function seedGuest(
-    overrides: SeedOptions & { seats?: number; name?: string; invitation?: InvitationRecord } = {},
+    overrides: SeedOptions & {
+      seats?: number;
+      name?: string;
+      tableLabel?: string | null;
+      invitation?: InvitationRecord;
+    } = {},
   ): Promise<{ invitation: InvitationRecord; guest: GuestRecord; token: string }> {
     const invitation = overrides.invitation ?? invitations.seed(overrides);
     const created = await create.execute({
@@ -520,6 +532,7 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
       seats: overrides.seats ?? 3,
       phone: "55 1234 5678",
       note: " Mesa 4 ",
+      ...(overrides.tableLabel === undefined ? {} : { tableLabel: overrides.tableLabel }),
     });
     assert.ok(created !== null, "the guest is created");
     return { invitation, guest: created.guest, token: created.token };
@@ -549,6 +562,109 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
       assert.equal(guests.tokenHashOf(created.guest.id), guestTokenHash(created.token));
       assert.equal(JSON.stringify(created.guest).includes(created.token), false);
       assert.equal(JSON.stringify(created.guest).includes("tokenHash"), false);
+    });
+
+    it("stores the table the creator assigns, keeps it when an edit omits it, and clears it when the edit blanks it (F5; L8.1, L8.3)", async () => {
+      const invitation = invitations.seed();
+      const created = await create.execute({
+        ownerId: invitation.ownerId,
+        id: invitation.id,
+        name: "Ana",
+        seats: 3,
+        phone: null,
+        note: null,
+        tableLabel: "  7  ",
+      });
+      assert.ok(created !== null);
+      assert.equal(created.guest.tableLabel, "7");
+
+      // A guest created without a table stores none.
+      const unassigned = await create.execute({
+        ownerId: invitation.ownerId,
+        id: invitation.id,
+        name: "Beto",
+        seats: 1,
+        phone: null,
+        note: null,
+      });
+      assert.equal(unassigned?.guest.tableLabel, null);
+
+      // An older client omits the field: the stored table stays, exactly as before the column existed (L20).
+      const kept = await update.execute({
+        ownerId: invitation.ownerId,
+        id: invitation.id,
+        guestId: created.guest.id,
+        name: "Ana María",
+        seats: 3,
+        phone: null,
+        note: "Mesa de la familia",
+      });
+      assert.equal(kept?.tableLabel, "7");
+
+      // A blank or a null table clears it.
+      for (const cleared of [null, "   "] as const) {
+        const assigned = await update.execute({
+          ownerId: invitation.ownerId,
+          id: invitation.id,
+          guestId: created.guest.id,
+          name: "Ana María",
+          seats: 3,
+          phone: null,
+          note: null,
+          tableLabel: "Principal",
+        });
+        assert.equal(assigned?.tableLabel, "Principal");
+        const emptied = await update.execute({
+          ownerId: invitation.ownerId,
+          id: invitation.id,
+          guestId: created.guest.id,
+          name: "Ana María",
+          seats: 3,
+          phone: null,
+          note: null,
+          tableLabel: cleared,
+        });
+        assert.equal(emptied?.tableLabel, null, JSON.stringify(cleared));
+      }
+    });
+
+    it("refuses a table the domain cannot store and keeps the stored one unchanged (F5; L8.1)", async () => {
+      const { invitation, guest } = await seedGuest({ tableLabel: "7" });
+
+      await assert.rejects(
+        create.execute({
+          ownerId: invitation.ownerId,
+          id: invitation.id,
+          name: "Otra",
+          seats: 1,
+          phone: null,
+          note: null,
+          tableLabel: "t".repeat(13),
+        }),
+        InvalidGuestError,
+      );
+      await assert.rejects(
+        update.execute({
+          ownerId: invitation.ownerId,
+          id: invitation.id,
+          guestId: guest.id,
+          name: guest.name,
+          seats: guest.seats,
+          phone: null,
+          note: null,
+          tableLabel: 7,
+        }),
+        InvalidGuestError,
+      );
+
+      const read = await guests.findGuest(invitation.ownerId, invitation.id, guest.id);
+      assert.equal(read?.tableLabel, "7");
+      assert.equal(
+        await guests
+          .findGuests(invitation.ownerId, invitation.id)
+          .then((list) => list?.guests.length),
+        1,
+      );
     });
 
     it("reads the guests with their answers and the totals of the page", async () => {
@@ -849,7 +965,12 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
 
   describe("the personal page and the guest's answer", () => {
     it("answers the public page plus the guest's own block, and nothing about another guest", async () => {
-      const first = await seedGuest({ packageId: "deluxe", seats: 3, name: "Ana" });
+      const first = await seedGuest({
+        packageId: "deluxe",
+        seats: 3,
+        name: "Ana",
+        tableLabel: "7",
+      });
       await seedGuest({ invitation: first.invitation, seats: 2, name: "Beto" });
       await submit.execute({
         slug: first.invitation.slug,
@@ -867,6 +988,8 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
       assert.equal(page?.page.features.rsvp.mode, "guest-list");
       assert.equal(page?.guest.name, "Ana");
       assert.equal(page?.guest.seats, 3);
+      // The table travels in the guest block only, which is what the pass draws (F5; L8.4).
+      assert.equal(page?.guest.tableLabel, "7");
       assert.deepEqual(page?.guest.response, {
         attending: true,
         partySize: 2,
@@ -888,6 +1011,11 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
       assert.equal(
         (await readGuest.execute(noQr.invitation.slug, noQr.token))?.guest.qrPass,
         false,
+      );
+      // A guest without a table reads none, so the page draws the people count alone (F5; L8.4).
+      assert.equal(
+        (await readGuest.execute(noQr.invitation.slug, noQr.token))?.guest.tableLabel,
+        null,
       );
 
       const deluxe = await seedGuest({ packageId: "deluxe", slug: "invitacion-qr0001" });
@@ -1361,9 +1489,9 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
 
       assert.equal(exported?.filename, `asistencia-${first.invitation.slug}.csv`);
       const lines = exported?.body.split("\r\n") ?? [];
-      assert.equal(lines[0]?.startsWith("Nombre,Lugares,"), true);
-      assert.equal(lines[1]?.startsWith("Beto,1,Pendiente,"), true);
-      assert.equal(lines[2]?.startsWith("Ana,3,Sí,2,"), true);
+      assert.equal(lines[0]?.startsWith("Nombre,Lugares,Mesa,"), true);
+      assert.equal(lines[1]?.startsWith("Beto,1,,Pendiente,"), true);
+      assert.equal(lines[2]?.startsWith("Ana,3,,Sí,2,"), true);
     });
 
     it("keeps the open form's response export, and answers 404 for a foreign invitation", async () => {

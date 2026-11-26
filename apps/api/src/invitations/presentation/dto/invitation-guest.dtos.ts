@@ -9,8 +9,8 @@ import { IsProvided } from "./invitation.dtos";
 
 /**
  * `POST /invitations/:id/guests` body (S4): the guest the creator adds. The name and the seats are required; the
- * phone and the note are optional and `null` or an empty string means "none", so they stay unknown here for the
- * domain to normalize.
+ * phone, the note, and the table are optional and `null` or an empty string means "none", so they stay unknown here
+ * for the domain to normalize.
  */
 export class CreateGuestDto {
   @IsString()
@@ -24,6 +24,13 @@ export class CreateGuestDto {
 
   @IsOptional()
   note?: unknown;
+
+  /**
+   * The table to assign (F5; L8.1). Optional like the phone and the note: an omitted field stores no table, and the
+   * domain normalizes it, so a blank one clears it and a value over 12 characters is refused with `INVALID_GUEST`.
+   */
+  @IsOptional()
+  tableLabel?: unknown;
 }
 
 /**
@@ -42,6 +49,13 @@ export class UpdateGuestDto {
 
   @IsProvided()
   note!: unknown;
+
+  /**
+   * The table to assign, or null to clear it (F5; L8.1, L8.3). Optional even on a whole replacement: a client written
+   * before the column existed omits it, and the stored table is kept instead of being cleared (L20).
+   */
+  @IsOptional()
+  tableLabel?: unknown;
 }
 
 /**

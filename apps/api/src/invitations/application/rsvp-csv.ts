@@ -14,8 +14,9 @@ import type { RsvpResponseRecord } from "./rsvp.repository";
 // The open form exports one line per response (G1). A guest list exports one line per guest (G2), pending guests
 // included, because the door needs the whole list and not only the answers already received. The companion columns of
 // F3 travel the same way: their names, how many of them are children, and the dietary notes the guest named, so the
-// same escaping rules apply to them as to every other cell. The header is Spanish because the file is product copy for
-// the creator; the values are the stored ones, and the columns stay in one fixed order.
+// same escaping rules apply to them as to every other cell. The table the owner assigned (F5) travels next to the
+// seats, because that is the pair the door checks. The header is Spanish because the file is product copy for the
+// creator; the values are the stored ones, and the columns stay in one fixed order.
 
 /** The header of the response export, in the order every row follows. */
 export const RSVP_CSV_HEADER = [
@@ -31,10 +32,11 @@ export const RSVP_CSV_HEADER = [
   "Última actualización",
 ] as const;
 
-/** The header of the guest-list export, in the order every row follows (M6 G2, F3). */
+/** The header of the guest-list export, in the order every row follows (M6 G2, F3, F5). */
 export const GUEST_CSV_HEADER = [
   "Nombre",
   "Lugares",
+  "Mesa",
   "Asistencia",
   "Personas",
   "Acompañantes",
@@ -122,6 +124,8 @@ function guestCellsOf(guest: GuestWithResponse): string[] {
   return [
     guest.name,
     String(guest.seats),
+    // The table the owner assigned, or an empty cell while none is assigned (F5; L8.3).
+    guest.tableLabel ?? "",
     guestAttendance(guest),
     guest.response === null ? "" : String(guest.response.partySize),
     guest.response === null ? "" : companionNames(guest.response.companions),

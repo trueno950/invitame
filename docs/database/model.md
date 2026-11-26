@@ -70,7 +70,11 @@ renders exactly as it did, so no row is rewritten and nothing is deleted. F4 add
 in the same file, because the seed never updates an existing package — the `LODGING` catalog feature row and its links
 to the `premium` and `deluxe` packages, both inserted with `ON CONFLICT DO NOTHING` so a second run stores nothing. The
 column is nullable, so no row is rewritten; the catalog rows are new, so no existing package or feature is changed and
-nothing is deleted. Future analytics design is documented separately in
+nothing is deleted. F5 adds the additive `20261206120000_add_guest_table_label` migration: the nullable
+`Guest.tableLabel` column (`VARCHAR(12)`) and its `Guest_tableLabel_length` check, and nothing else. It inserts no
+catalog row, because the existing `GUEST_LIST` and `QR_PASS` keys gate the feature; a guest stored before it reads
+`NULL` and renders exactly as it did, so no row is rewritten and nothing is deleted. Future analytics design is
+documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -91,7 +95,7 @@ nothing is deleted. Future analytics design is documented separately in
 | `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the publication-derived expiry `expiresAt`, the never-cleared first publication `firstPublishedAt`, JSONB `content`, the archive marker, the IANA `timeZone`, and the RSVP settings `rsvpDeadline` and `rsvpPartyLimit` |
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, the bounded companions `[{ name, child }]` of the party (one per extra person while attending, or `NULL` for an older answer), optional `dietaryNotes` (up to 300 characters), an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
-| `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
+| `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), the optional `tableLabel` the owner assigned (1-12 characters, printed on that guest's access pass), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
 | `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary`, `giftRegistry`, and `lodging` (or `NULL`), and timestamps |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
@@ -432,6 +436,14 @@ of a list — live in `apps/api/src/invitations/domain/invitation-guest.ts`; the
   `^\+[1-9][0-9]{7,14}$`), and `note` is 1 to 200 characters or `NULL` (`Guest_note_length`, with the domain storing
   `NULL` for a blank note). The phone is normalized by the same rule the WhatsApp contact and the response use, and
   it is never logged.
+- `Guest.tableLabel` is the table the owner assigned for that guest's access pass (F5; L8.1, L8.4), or `NULL` when
+  there is none. It is 1 to 12 characters after trimming (`Guest_tableLabel_length`, which also refuses a stored empty
+  string, so the domain stores `NULL` instead), it is plain text — a short number like «7» or a short name like
+  «Principal», never a color, an image, or a provider payload — and the migration leaves every existing guest at
+  `NULL`. The guest create and edit routes accept it as an optional field: an omitted `tableLabel` keeps the stored
+  one, so a client written before the column existed never clears it, while `null` or a blank value clears it. The
+  owner's read answers it, the guest-list CSV adds it as a spreadsheet-safe «Mesa» column next to the seats, and the
+  personal guest read adds it to that guest's block only, where the access pass prints it.
 - `checkedInAt` is the first check-in instant or `NULL`. The owner's check-in is one statement that requires the
   owned, non-archived invitation, the guest's own digest, and an attending response, and it keeps the first instant
   through `COALESCE`, so showing the same QR twice is idempotent.
@@ -455,6 +467,11 @@ of a list — live in `apps/api/src/invitations/domain/invitation-guest.ts`; the
   `DROP TABLE "Guest";`. Only guest lists and personal-link answers are lost; invitations, their content, their
   feature data, their lifecycle state, and the open form's answers are untouched. Never edit the applied migration
   file.
+- Rollback / recovery of `20261206120000_add_guest_table_label`: the change is additive, so recovery is redeploying the
+  previous migration set or dropping the column by hand —
+  `ALTER TABLE "Guest" DROP COLUMN "tableLabel";`. Only the assigned tables are lost; every guest, their answer,
+  their personal token digest, their check-in instant, and every other column are untouched. Never edit the applied
+  migration file.
 
 ## Invitation media
 

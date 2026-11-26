@@ -193,7 +193,13 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
   /** A guest created through the use case, with the plain token the test keeps. */
   async function newGuest(
     invitation: { id: string; ownerId: string },
-    overrides: { name?: string; seats?: number; phone?: string | null; note?: string | null } = {},
+    overrides: {
+      name?: string;
+      seats?: number;
+      phone?: string | null;
+      note?: string | null;
+      tableLabel?: string | null;
+    } = {},
   ) {
     const created = await create.execute({
       ownerId: invitation.ownerId,
@@ -202,6 +208,7 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
       seats: overrides.seats ?? 3,
       phone: overrides.phone === undefined ? "5512345678" : overrides.phone,
       note: overrides.note === undefined ? "Mesa 4" : overrides.note,
+      ...(overrides.tableLabel === undefined ? {} : { tableLabel: overrides.tableLabel }),
     });
     assert.ok(created !== null, "the guest is created");
     guestIds.push(created.guest.id);
@@ -241,6 +248,7 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
           ["note", "YES", 200],
           ["phone", "YES", 16],
           ["seats", "NO", null],
+          ["tableLabel", "YES", 12],
           ["tokenHash", "NO", 64],
           ["tokenIssuedAt", "NO", null],
           ["updatedAt", "NO", null],
@@ -272,6 +280,49 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
         indexes.find((index) => index.indexname === "Guest_tokenHash_key")?.indexdef ?? "",
         /UNIQUE INDEX .*\("tokenHash"\)/,
       );
+
+      // The table label is nullable and bounded by a CHECK the domain repeats (F5; L8.1).
+      const checks = await prisma.$queryRaw<Array<{ conname: string; definition: string }>>`
+        SELECT constraint_name AS conname, check_clause AS definition
+        FROM information_schema.check_constraints
+        WHERE constraint_name = 'Guest_tableLabel_length'
+      `;
+      assert.equal(checks.length, 1);
+      assert.match(checks[0]?.definition ?? "", /char_length/);
+    });
+
+    it("holds a table label of 1 to 12 characters or NULL (F5; L8.1)", async () => {
+      const { invitation } = await newInvitation(["RSVP", "GUEST_LIST"]);
+      // Every attempt carries its own token digest, so only the table rule can refuse it.
+      const base = () => ({
+        invitationId: invitation.id,
+        name: "Ana",
+        seats: 2,
+        phone: null,
+        note: null,
+        tokenHash: guestTokenHash(mintGuestToken()),
+        tokenIssuedAt: AT,
+        updatedAt: AT,
+      });
+
+      // A stored table is never blank: the domain stores NULL instead, and the database repeats that rule.
+      await assert.rejects(
+        prisma.guest.create({ data: { ...base(), tableLabel: "" } }),
+        /Guest_tableLabel_length/,
+      );
+      await assert.rejects(
+        prisma.guest.create({ data: { ...base(), tableLabel: "t".repeat(13) } }),
+        /Guest_tableLabel_length|too long/,
+      );
+      const stored = await prisma.guest.create({
+        data: { ...base(), tableLabel: "Principal" },
+      });
+      guestIds.push(stored.id);
+      assert.equal(stored.tableLabel, "Principal");
+      // A guest whose table is not assigned yet stores NULL, which is what the pass reads as "no table".
+      const unassigned = await prisma.guest.create({ data: base() });
+      guestIds.push(unassigned.id);
+      assert.equal(unassigned.tableLabel, null);
     });
 
     it("refuses a name, a seat count, a phone, a note, and a token digest the domain would never store", async () => {
@@ -444,6 +495,78 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
         GuestNotFoundError,
       );
       assert.equal((await storedGuest(guest.guest.id)).name, "Ana Pérez");
+    });
+
+    it("stores, keeps, and clears the table of one guest (F5; L8.1, L8.3)", async () => {
+      const { invitation, ownerId } = await newInvitation(["RSVP", "GUEST_LIST", "QR_PASS"]);
+      const guest = await newGuest(invitation, { seats: 3, tableLabel: "  7  " });
+      assert.equal((await storedGuest(guest.guest.id)).tableLabel, "7");
+
+      // An older client omits the field: the stored table stays (L20).
+      const kept = await update.execute({
+        ownerId,
+        id: invitation.id,
+        guestId: guest.guest.id,
+        name: "Ana María",
+        seats: 3,
+        phone: null,
+        note: null,
+      });
+      assert.equal(kept?.tableLabel, "7");
+      assert.equal((await storedGuest(guest.guest.id)).tableLabel, "7");
+
+      const reassigned = await update.execute({
+        ownerId,
+        id: invitation.id,
+        guestId: guest.guest.id,
+        name: "Ana María",
+        seats: 3,
+        phone: null,
+        note: null,
+        tableLabel: "Principal",
+      });
+      assert.equal(reassigned?.tableLabel, "Principal");
+
+      for (const cleared of [null, "   "] as const) {
+        await update.execute({
+          ownerId,
+          id: invitation.id,
+          guestId: guest.guest.id,
+          name: "Ana María",
+          seats: 3,
+          phone: null,
+          note: null,
+          tableLabel: "Principal",
+        });
+        const emptied = await update.execute({
+          ownerId,
+          id: invitation.id,
+          guestId: guest.guest.id,
+          name: "Ana María",
+          seats: 3,
+          phone: null,
+          note: null,
+          tableLabel: cleared,
+        });
+        assert.equal(emptied?.tableLabel, null, JSON.stringify(cleared));
+        assert.equal((await storedGuest(guest.guest.id)).tableLabel, null);
+      }
+
+      // The creator's read and this guest's own page both answer it.
+      const read = await list.execute(ownerId, invitation.id);
+      assert.equal(read?.guests[0]?.tableLabel, null);
+      await update.execute({
+        ownerId,
+        id: invitation.id,
+        guestId: guest.guest.id,
+        name: "Ana María",
+        seats: 3,
+        phone: null,
+        note: null,
+        tableLabel: "9",
+      });
+      assert.equal((await list.execute(ownerId, invitation.id))?.guests[0]?.tableLabel, "9");
+      assert.equal((await readGuest.execute(invitation.slug, guest.token))?.guest.tableLabel, "9");
     });
 
     it("edits a guest and rotates its token, so the previous link stops resolving", async () => {
@@ -753,7 +876,7 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
   describe("the public personal page", () => {
     it("carries the published page plus this guest, and nothing about another guest", async () => {
       const { invitation } = await newInvitation(["COUNTDOWN", "RSVP", "GUEST_LIST", "QR_PASS"]);
-      const guest = await newGuest(invitation, { name: "Ana", seats: 3 });
+      const guest = await newGuest(invitation, { name: "Ana", seats: 3, tableLabel: "7" });
       await newGuest(invitation, { name: "Beto", seats: 2 });
       assert.equal(
         await submit.execute({
@@ -779,6 +902,8 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
       assert.deepEqual(page?.guest, {
         name: "Ana",
         seats: 3,
+        // The table the owner assigned travels in the guest block only (F5; L8.4).
+        tableLabel: "7",
         response: {
           attending: true,
           partySize: 2,
@@ -867,7 +992,12 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
   describe("the guest-list export", () => {
     it("exports every guest, pending ones included, and never the token", async () => {
       const { invitation, ownerId } = await newInvitation(["RSVP", "GUEST_LIST"]);
-      const guest = await newGuest(invitation, { name: "Ana", seats: 3, note: "Mesa 4" });
+      const guest = await newGuest(invitation, {
+        name: "Ana",
+        seats: 3,
+        note: "Mesa 4",
+        tableLabel: "7",
+      });
       await newGuest(invitation, { name: "Beto", seats: 1, phone: null, note: null });
       await submit.execute({
         slug: invitation.slug,
@@ -883,12 +1013,12 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
       const lines = exported?.body.split("\r\n") ?? [];
       assert.equal(
         lines[0],
-        "Nombre,Lugares,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Nota,Mensaje,Primer check-in,Primera respuesta,Última actualización",
+        "Nombre,Lugares,Mesa,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Nota,Mensaje,Primer check-in,Primera respuesta,Última actualización",
       );
-      // Both guests are exported, whatever order the read answered them in; only Ana has an answer.
+      // Both guests are exported, whatever order the read answered them in; only Ana has an answer and a table.
       assert.deepEqual(lines.slice(1, 3).sort(), [
-        "Ana,3,Sí,2,,0,,'+525512345678,Mesa 4,Vamos,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
-        "Beto,1,Pendiente,,,,,,,,,,2026-11-20T10:00:00.000Z",
+        "Ana,3,7,Sí,2,,0,,'+525512345678,Mesa 4,Vamos,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+        "Beto,1,,Pendiente,,,,,,,,,,2026-11-20T10:00:00.000Z",
       ]);
       assert.equal(exported?.body.includes(guest.token), false);
       assert.equal(exported?.body.includes("tokenHash"), false);

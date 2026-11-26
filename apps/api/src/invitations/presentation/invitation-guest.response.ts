@@ -47,6 +47,8 @@ export interface GuestResponseItem {
   seats: number;
   phone: string | null;
   note: string | null;
+  /** The assigned table, or null when the owner left none (F5; L8.3). */
+  tableLabel: string | null;
   tokenIssuedAt: string;
   checkedInAt: string | null;
   response: {
@@ -93,6 +95,8 @@ export interface GuestCheckInResponse {
 export interface PublicGuestResponse {
   name: string;
   seats: number;
+  /** The assigned table, or null: only this guest's block carries it, never the open public read (F5; L8.4). */
+  tableLabel: string | null;
   response: {
     attending: boolean;
     partySize: number;
@@ -117,6 +121,7 @@ export function toGuestResponseItem(guest: GuestView): GuestResponseItem {
     seats: guest.seats,
     phone: guest.phone,
     note: guest.note,
+    tableLabel: guest.tableLabel,
     tokenIssuedAt: guest.tokenIssuedAt.toISOString(),
     checkedInAt: guest.checkedInAt?.toISOString() ?? null,
     response:
@@ -165,6 +170,7 @@ export function toPublicGuestInvitationResponse(
     guest: {
       name: read.guest.name,
       seats: read.guest.seats,
+      tableLabel: read.guest.tableLabel,
       response: read.guest.response === null ? null : { ...read.guest.response },
       qrPass: read.guest.qrPass,
     },

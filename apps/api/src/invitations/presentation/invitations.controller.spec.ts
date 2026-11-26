@@ -745,6 +745,7 @@ class MemoryGuestRepository implements GuestRepository {
       seats: guest.seats,
       phone: guest.phone,
       note: guest.note,
+      tableLabel: guest.tableLabel,
       tokenIssuedAt: guest.tokenIssuedAt,
       checkedInAt: guest.checkedInAt,
       createdAt: guest.createdAt,
@@ -781,6 +782,7 @@ class MemoryGuestRepository implements GuestRepository {
       seats: guest.seats,
       phone: guest.phone,
       note: guest.note,
+      tableLabel: guest.tableLabel,
       tokenHash: guest.tokenHash,
       tokenIssuedAt: at,
       checkedInAt: null,
@@ -840,7 +842,12 @@ class MemoryGuestRepository implements GuestRepository {
     if (answer?.attending === true && answer.partySize > fields.seats) {
       throw new GuestSeatsBelowConfirmedPartyError(answer.partySize);
     }
-    Object.assign(guest, fields, { updatedAt: at });
+    // An omitted table keeps the stored one, exactly like the adapter's statement (F5; L8.3, L20).
+    const { tableLabel, ...rest } = fields;
+    Object.assign(guest, rest, { updatedAt: at });
+    if (tableLabel !== undefined) {
+      guest.tableLabel = tableLabel;
+    }
     return this.withResponse(guest);
   }
 
@@ -959,6 +966,7 @@ class MemoryGuestRepository implements GuestRepository {
       seats: overrides.seats ?? 3,
       phone: overrides.phone ?? PHONE,
       note: overrides.note ?? "Mesa 4",
+      tableLabel: overrides.tableLabel ?? null,
       tokenHash: guestTokenHash(overrides.token),
       tokenIssuedAt: at,
       checkedInAt: overrides.checkedInAt ?? null,
@@ -4197,11 +4205,14 @@ describe("invitations routes: /invitations", () => {
         "phone",
         "response",
         "seats",
+        "tableLabel",
         "tokenIssuedAt",
         "updatedAt",
       ]);
       assert.equal(body.guest.name, "Ana Pérez");
       assert.equal(body.guest.seats, 3);
+      // A guest created without a table stores none, and the route answers it as null (F5; L8.1).
+      assert.equal(body.guest.tableLabel, null);
       assert.equal(body.guest.phone, "+525512345678");
       assert.equal(body.guest.note, "Mesa 4");
       assert.equal(body.guest.response, null);
@@ -4227,6 +4238,78 @@ describe("invitations routes: /invitations", () => {
       for (const internal of ["tokenHash", "dedupeKey", "invitationId", "ownerId"]) {
         assert.equal(text.includes(internal), false, internal);
       }
+    });
+
+    it("stores, keeps, and clears the table of a guest through the guest routes (F5; L8.1, L8.3, L20)", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+
+      const response = await send("POST", `${PATH}/${created.id}/guests`, cookie, {
+        ...GUEST,
+        tableLabel: "  7  ",
+      });
+      assert.equal(response.status, 201);
+      const body = (await response.json()) as Row & { guest: Row };
+      assert.equal(body.guest.tableLabel, "7");
+      const guestId = body.guest.id as string;
+
+      // An edit that omits the field keeps the stored table, so a page written before the column existed still works.
+      const omitted = await send("PUT", `${PATH}/${created.id}/guests/${guestId}`, cookie, {
+        ...GUEST,
+        name: "Ana María",
+      });
+      assert.equal(omitted.status, 200);
+      assert.equal(((await omitted.json()) as Row).tableLabel, "7");
+
+      const renamed = await send("PUT", `${PATH}/${created.id}/guests/${guestId}`, cookie, {
+        ...GUEST,
+        name: "Ana María",
+        tableLabel: "Principal",
+      });
+      assert.equal(((await renamed.json()) as Row).tableLabel, "Principal");
+
+      for (const cleared of [null, "   "] as const) {
+        const emptied = await send("PUT", `${PATH}/${created.id}/guests/${guestId}`, cookie, {
+          ...GUEST,
+          name: "Ana María",
+          tableLabel: cleared,
+        });
+        assert.equal(((await emptied.json()) as Row).tableLabel, null, JSON.stringify(cleared));
+        // Reassign it, so the next round frees a stored table again.
+        await send("PUT", `${PATH}/${created.id}/guests/${guestId}`, cookie, {
+          ...GUEST,
+          tableLabel: "7",
+        });
+      }
+    });
+
+    it("refuses a table the domain cannot store and leaves the stored guest unchanged (F5; L8.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const created = await owned(cookie);
+      const guest = await addGuest(cookie, created.id, { ...GUEST, tableLabel: "7" });
+
+      const refused: Array<[Record<string, unknown>, string[]]> = [
+        [{ ...GUEST, tableLabel: "t".repeat(13) }, ["tableLabel must be at most 12 characters"]],
+        [{ ...GUEST, tableLabel: 7 }, ["tableLabel must be a string or null"]],
+      ];
+
+      for (const [body, issues] of refused) {
+        const created2 = await send("POST", `${PATH}/${created.id}/guests`, cookie, body);
+        assert.equal(created2.status, 400, JSON.stringify(body));
+        assert.deepEqual(await created2.json(), { code: "INVALID_GUEST", issues });
+
+        const edited = await send("PUT", `${PATH}/${created.id}/guests/${guest.guest.id}`, cookie, {
+          ...GUEST,
+          ...body,
+        });
+        assert.equal(edited.status, 400, JSON.stringify(body));
+        assert.deepEqual(await edited.json(), { code: "INVALID_GUEST", issues });
+      }
+
+      assert.equal(guestsOf(created.id).length, 1);
+      const stored = guestsOf(created.id)[0];
+      assert.equal(stored?.tableLabel, "7");
+      assert.equal(stored?.name, "Ana Pérez");
     });
 
     it("answers 400 INVALID_GUEST with the domain issues and stores nothing", async () => {
@@ -4322,10 +4405,14 @@ describe("invitations routes: /invitations", () => {
       assert.equal(kept.guests.length, 1);
     });
 
-    it("reads the guests with their answers, the check-in state, and the totals", async () => {
+    it("reads the guests with their answers, the check-in state, the table, and the totals", async () => {
       const { cookie } = await signedInCustomer();
       const created = await owned(cookie);
-      const first = await addGuest(cookie, created.id, { ...GUEST, name: "Ana" });
+      const first = await addGuest(cookie, created.id, {
+        ...GUEST,
+        name: "Ana",
+        tableLabel: "7",
+      });
       const second = await addGuest(cookie, created.id, {
         ...GUEST,
         name: "Beto",
@@ -4374,6 +4461,9 @@ describe("invitations routes: /invitations", () => {
       ]);
       assert.equal(guests[1]?.checkedInAt, "2026-11-20T20:00:00.000Z");
       assert.equal(guests[0]?.response !== null, true);
+      // The creator's read answers the assigned table, and null for a guest the owner left unassigned (F5; L8.3).
+      assert.equal(guests[1]?.tableLabel, "7");
+      assert.equal(guests[0]?.tableLabel, null);
     });
 
     it("edits a guest, refuses a seat count below the confirmed party, and answers 404 for a stranger", async () => {
@@ -4545,7 +4635,12 @@ describe("invitations routes: /invitations", () => {
     it("exports the guest list in guest-list mode and keeps the open form's export otherwise", async () => {
       const { cookie } = await signedInCustomer();
       const guestList = await owned(cookie);
-      const guest = await addGuest(cookie, guestList.id, { ...GUEST, name: "Ana", seats: 3 });
+      const guest = await addGuest(cookie, guestList.id, {
+        ...GUEST,
+        name: "Ana",
+        seats: 3,
+        tableLabel: "7",
+      });
       await addGuest(cookie, guestList.id, {
         ...GUEST,
         name: "Beto",
@@ -4567,12 +4662,12 @@ describe("invitations routes: /invitations", () => {
       const lines = (await response.text()).split("\r\n");
       assert.equal(
         lines[0],
-        "Nombre,Lugares,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Nota,Mensaje,Primer check-in,Primera respuesta,Última actualización",
+        "Nombre,Lugares,Mesa,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Nota,Mensaje,Primer check-in,Primera respuesta,Última actualización",
       );
       const beto = guestsOf(guestList.id).find((row) => row.name === "Beto");
       assert.deepEqual(lines.slice(1, 3).sort(), [
-        "Ana,3,Sí,2,,0,,'+525512345678,Mesa 4,Vamos,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
-        `Beto,1,Pendiente,,,,,,,,,,${beto?.updatedAt.toISOString()}`,
+        "Ana,3,7,Sí,2,,0,,'+525512345678,Mesa 4,Vamos,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+        `Beto,1,,Pendiente,,,,,,,,,,${beto?.updatedAt.toISOString()}`,
       ]);
 
       // The open form keeps its own export (M6 G1 preserved).
@@ -4602,6 +4697,7 @@ describe("invitations routes: /invitations", () => {
         name: "Ana",
         seats: 3,
         note: "Mesa 4",
+        tableLabel: "7",
       });
       return { cookie, created, guest };
     }
@@ -4639,6 +4735,7 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(body.guest, {
         name: "Ana",
         seats: 3,
+        tableLabel: "7",
         response: {
           attending: true,
           partySize: 2,

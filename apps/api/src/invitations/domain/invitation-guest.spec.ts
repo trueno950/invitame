@@ -6,6 +6,9 @@ import {
   GUEST_NOTE_MAX_LENGTH,
   GUEST_SEATS_MAX,
   GUEST_SEATS_MIN,
+  GUEST_TABLE_LABEL_LENGTH_ISSUE,
+  GUEST_TABLE_LABEL_MAX_LENGTH,
+  GUEST_TABLE_LABEL_TYPE_ISSUE,
   GUEST_TOKEN_ISSUE,
   GUEST_TOKEN_LENGTH,
   guestTotalsOf,
@@ -18,9 +21,15 @@ import {
 // repository and the routes only carry values. A refused guest stores nothing.
 
 describe("guest input (M6 G2; S4)", () => {
-  const VALID = { name: "  Ana   Pérez ", seats: 2, phone: "55 1234 5678", note: "  Mesa 4 " };
+  const VALID = {
+    name: "  Ana   Pérez ",
+    seats: 2,
+    phone: "55 1234 5678",
+    note: "  Mesa 4 ",
+    tableLabel: "  7  ",
+  };
 
-  it("normalizes the name, the phone, and the note of a guest the creator added", () => {
+  it("normalizes the name, the phone, the note, and the table of a guest the creator added", () => {
     assert.deepEqual(validateGuestInput(VALID), {
       ok: true,
       value: {
@@ -28,6 +37,7 @@ describe("guest input (M6 G2; S4)", () => {
         seats: 2,
         phone: "+525512345678",
         note: "Mesa 4",
+        tableLabel: "7",
       },
     });
   });
@@ -41,6 +51,8 @@ describe("guest input (M6 G2; S4)", () => {
         seats: 1,
         phone: null,
         note: null,
+        // An omitted table is "not provided", which is not the same as "cleared" (F5; L8.3).
+        tableLabel: undefined,
       });
     }
   });
@@ -66,9 +78,15 @@ describe("guest input (M6 G2; S4)", () => {
     assert.equal(validateGuestInput({ name: "Ana", seats: 1, phone: null, note }).ok, true);
   });
 
-  it("reports every issue in a fixed order — name, seats, phone, note — and returns no value", () => {
+  it("reports every issue in a fixed order — name, seats, phone, note, table — and returns no value", () => {
     assert.deepEqual(
-      validateGuestInput({ name: "", seats: 0, phone: "12345", note: "n".repeat(201) }),
+      validateGuestInput({
+        name: "",
+        seats: 0,
+        phone: "12345",
+        note: "n".repeat(201),
+        tableLabel: "t".repeat(GUEST_TABLE_LABEL_MAX_LENGTH + 1),
+      }),
       {
         ok: false,
         issues: [
@@ -76,17 +94,75 @@ describe("guest input (M6 G2; S4)", () => {
           "seats must be between 1 and 10",
           "phone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
           "note must be at most 200 characters",
+          "tableLabel must be at most 12 characters",
         ],
       },
     );
-    assert.deepEqual(validateGuestInput({ name: 7, seats: "2", phone: 5, note: [] }), {
-      ok: false,
-      issues: [
-        "name must be a string",
-        "seats must be an integer",
-        "phone must be a string or null",
-        "note must be a string or null",
-      ],
+    assert.deepEqual(
+      validateGuestInput({ name: 7, seats: "2", phone: 5, note: [], tableLabel: 7 }),
+      {
+        ok: false,
+        issues: [
+          "name must be a string",
+          "seats must be an integer",
+          "phone must be a string or null",
+          "note must be a string or null",
+          "tableLabel must be a string or null",
+        ],
+      },
+    );
+  });
+
+  it("keeps the table a guest may be assigned within 1 to 12 trimmed characters (F5; L8.1)", () => {
+    assert.equal(GUEST_TABLE_LABEL_MAX_LENGTH, 12);
+    assert.deepEqual(
+      validateGuestInput({
+        name: "Ana",
+        seats: 2,
+        phone: null,
+        note: null,
+        tableLabel: "Principal",
+      }),
+      {
+        ok: true,
+        value: { name: "Ana", seats: 2, phone: null, note: null, tableLabel: "Principal" },
+      },
+    );
+
+    // The bound is counted in characters after trimming, so an emoji or an accent counts as one.
+    const longest = "á".repeat(GUEST_TABLE_LABEL_MAX_LENGTH);
+    assert.equal(
+      validateGuestInput({ name: "Ana", seats: 1, phone: null, note: null, tableLabel: longest })
+        .ok,
+      true,
+    );
+    assert.deepEqual(
+      validateGuestInput({
+        name: "Ana",
+        seats: 1,
+        phone: null,
+        note: null,
+        tableLabel: `${longest}t`,
+      }),
+      { ok: false, issues: [GUEST_TABLE_LABEL_LENGTH_ISSUE] },
+    );
+    assert.deepEqual(
+      validateGuestInput({ name: "Ana", seats: 1, phone: null, note: null, tableLabel: 7 }),
+      { ok: false, issues: [GUEST_TABLE_LABEL_TYPE_ISSUE] },
+    );
+  });
+
+  it("clears the table when the creator leaves it blank or null, and keeps it when the field is omitted", () => {
+    for (const blank of [null, "", "\t \n"]) {
+      assert.deepEqual(
+        validateGuestInput({ name: "Ana", seats: 1, phone: null, note: null, tableLabel: blank }),
+        { ok: true, value: { name: "Ana", seats: 1, phone: null, note: null, tableLabel: null } },
+        JSON.stringify(blank),
+      );
+    }
+    assert.deepEqual(validateGuestInput({ name: "Ana", seats: 1, phone: null, note: null }), {
+      ok: true,
+      value: { name: "Ana", seats: 1, phone: null, note: null, tableLabel: undefined },
     });
   });
 

@@ -1,8 +1,8 @@
 // The guest-list rules of an invitation (M6 G2; S1, S4). Five pure decisions live here, and none of them reads a
 // table, a clock, a request, or a provider:
 //
-// - the guest the creator adds or edits: a name of 1 to 80 characters, seats of 1 to 10, an optional E.164 phone,
-//   and an optional note of at most 200 characters;
+// - the guest the creator adds or edits: a name of 1 to 80 characters, seats of 1 to 10, an optional E.164 phone, an
+//   optional note of at most 200 characters, and an optional table of at most 12 trimmed characters (F5);
 // - the shape of a personal guest token, so a value that cannot have been minted is refused before any query;
 // - the totals of one guest list: guests, seats, confirmed people, declines, pending guests, and check-ins.
 //
@@ -37,6 +37,18 @@ export const GUEST_NOTE_TYPE_ISSUE = "note must be a string or null";
 /** The issue a note wider than `GUEST_NOTE_MAX_LENGTH` is refused with. */
 export const GUEST_NOTE_LENGTH_ISSUE = "note must be at most 200 characters";
 
+/**
+ * The widest table label, counted in characters after trimming: the width of `Guest.tableLabel` (F5; L8.1). A table is
+ * a short number like «7» or a short name like «Principal»; anything else names nothing to seat a guest at.
+ */
+export const GUEST_TABLE_LABEL_MAX_LENGTH = 12;
+
+/** The issue a table label that is not a string is refused with. */
+export const GUEST_TABLE_LABEL_TYPE_ISSUE = "tableLabel must be a string or null";
+
+/** The issue a table label wider than `GUEST_TABLE_LABEL_MAX_LENGTH` is refused with. */
+export const GUEST_TABLE_LABEL_LENGTH_ISSUE = "tableLabel must be at most 12 characters";
+
 /** The issue a phone of an unrecognized shape is refused with; the WhatsApp rules decide the shape. */
 export const GUEST_PHONE_SHAPE_ISSUE =
   "phone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +";
@@ -67,6 +79,11 @@ export interface GuestValue {
   readonly seats: number;
   readonly phone: string | null;
   readonly note: string | null;
+  /**
+   * The table the owner assigned (F5; L8.1): 1 to 12 trimmed characters, or null when there is none. `undefined` means
+   * the request did not carry the field at all, so an edit keeps the stored table instead of clearing it (L8.3, L20).
+   */
+  readonly tableLabel: string | null | undefined;
 }
 
 /** The guest a request asked for, validated, or every issue that refuses it. */
@@ -116,16 +133,46 @@ function normalizeGuestNote(
 }
 
 /**
+ * Normalizes the optional table label (F5; L8.1): a blank value or null clears it, an omitted field is kept apart so
+ * the caller can preserve the stored one, and a value over the bound is refused.
+ */
+function normalizeGuestTableLabel(
+  value: unknown,
+):
+  | { readonly ok: true; readonly tableLabel: string | null | undefined }
+  | { readonly ok: false; readonly issue: string } {
+  if (value === undefined) {
+    return { ok: true, tableLabel: undefined };
+  }
+  if (value === null) {
+    return { ok: true, tableLabel: null };
+  }
+  if (typeof value !== "string") {
+    return { ok: false, issue: GUEST_TABLE_LABEL_TYPE_ISSUE };
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return { ok: true, tableLabel: null };
+  }
+  if ([...trimmed].length > GUEST_TABLE_LABEL_MAX_LENGTH) {
+    return { ok: false, issue: GUEST_TABLE_LABEL_LENGTH_ISSUE };
+  }
+  return { ok: true, tableLabel: trimmed };
+}
+
+/**
  * Validates the guest a creator adds or edits (S4): the name is normalized like a response's, the seats are an
- * integer from 1 to 10, the phone is E.164 like the WhatsApp contact's, and the note is at most 200 characters.
- * Every issue is reported in a fixed order — name, seats, phone, note — so the client can show them one after
- * another. A refused guest stores nothing.
+ * integer from 1 to 10, the phone is E.164 like the WhatsApp contact's, the note is at most 200 characters, and the
+ * table is at most 12 trimmed characters or none (F5). Every issue is reported in a fixed order — name, seats, phone,
+ * note, table — so the client can show them one after another. A refused guest stores nothing.
  */
 export function validateGuestInput(input: {
   readonly name: unknown;
   readonly seats: unknown;
   readonly phone: unknown;
   readonly note: unknown;
+  /** Omitted by a client written before the table existed, which keeps the stored one (F5; L8.3). */
+  readonly tableLabel?: unknown;
 }): GuestValidation {
   const issues: string[] = [];
 
@@ -151,11 +198,17 @@ export function validateGuestInput(input: {
     issues.push(note.issue);
   }
 
+  const tableLabel = normalizeGuestTableLabel(input.tableLabel);
+  if (!tableLabel.ok) {
+    issues.push(tableLabel.issue);
+  }
+
   if (
     issues.length > 0 ||
     !name.ok ||
     !phone.ok ||
     !note.ok ||
+    !tableLabel.ok ||
     typeof seats !== "number" ||
     !Number.isInteger(seats)
   ) {
@@ -169,6 +222,7 @@ export function validateGuestInput(input: {
       seats: seats as number,
       phone: phone.phone,
       note: note.note,
+      tableLabel: tableLabel.tableLabel,
     },
   };
 }

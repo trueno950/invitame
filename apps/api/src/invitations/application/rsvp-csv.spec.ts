@@ -154,6 +154,7 @@ function guest(overrides: Partial<GuestWithResponse> = {}): GuestWithResponse {
     invitationId: "22222222-2222-4222-8222-222222222222",
     name: "Ana Pérez",
     seats: 3,
+    tableLabel: "7",
     phone: "+525512345678",
     note: "Mesa 4",
     tokenIssuedAt: new Date("2026-11-19T10:00:00.000Z"),
@@ -180,6 +181,7 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
     assert.deepEqual(GUEST_CSV_HEADER, [
       "Nombre",
       "Lugares",
+      "Mesa",
       "Asistencia",
       "Personas",
       "Acompañantes",
@@ -195,7 +197,7 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
     assert.equal(
       toGuestCsv([guest()]),
       `${HEADER}\r\n` +
-        "Ana Pérez,3,Sí,2,,0,,'+525512345678,Mesa 4,¡Con gusto!,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z\r\n",
+        "Ana Pérez,3,7,Sí,2,,0,,'+525512345678,Mesa 4,¡Con gusto!,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z\r\n",
     );
     assert.equal(toGuestCsv([]), `${HEADER}\r\n`);
   });
@@ -206,6 +208,7 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
         guest({
           name: "Beto",
           seats: 1,
+          tableLabel: "2",
           phone: null,
           note: null,
           response: {
@@ -221,6 +224,7 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
         guest({
           name: "Carla",
           seats: 2,
+          tableLabel: null,
           phone: null,
           note: null,
           updatedAt: new Date("2026-11-19T10:00:00.000Z"),
@@ -229,8 +233,8 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
       ]).split("\r\n"),
       [
         HEADER,
-        "Beto,1,No,0,,0,,,,,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
-        "Carla,2,Pendiente,,,,,,,,,,2026-11-19T10:00:00.000Z",
+        "Beto,1,2,No,0,,0,,,,,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+        "Carla,2,,Pendiente,,,,,,,,,,2026-11-19T10:00:00.000Z",
         "",
       ],
     );
@@ -247,7 +251,7 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
 
     assert.equal(
       csv.split("\r\n")[1],
-      "'=Ana,3,Sí,2,,0,,'+525512345678,'=1+1,¡Con gusto!,2026-11-21T20:00:00.000Z,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+      "'=Ana,3,7,Sí,2,,0,,'+525512345678,'=1+1,¡Con gusto!,2026-11-21T20:00:00.000Z,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
     );
   });
 
@@ -271,11 +275,26 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
 
     assert.equal(
       csv.split("\r\n")[1],
-      'Ana Pérez,3,Sí,3,"Jorge, Sofía",1,Sin gluten,\'+525512345678,Mesa 4,,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
+      'Ana Pérez,3,7,Sí,3,"Jorge, Sofía",1,Sin gluten,\'+525512345678,Mesa 4,,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
     );
   });
 
-  it("keeps the order it is given", () => {
+  it("writes the table the owner assigned to each guest, and an empty cell when there is none (F5; L8.3)", () => {
+    const csv = toGuestCsv([
+      guest({ name: "Ana", tableLabel: "Principal" }),
+      guest({ name: "Beto", tableLabel: null }),
+      // A table that starts with a spreadsheet formula character stays text, like every other cell.
+      guest({ name: "Carla", tableLabel: "=Mesa" }),
+    ]);
+
+    assert.deepEqual(csv.split("\r\n").slice(1, 4), [
+      "Ana,3,Principal,Sí,2,,0,,'+525512345678,Mesa 4,¡Con gusto!,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+      "Beto,3,,Sí,2,,0,,'+525512345678,Mesa 4,¡Con gusto!,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+      "Carla,3,'=Mesa,Sí,2,,0,,'+525512345678,Mesa 4,¡Con gusto!,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+    ]);
+  });
+
+  it("keeps the order it is given (F5; M6 G2)", () => {
     const lines = toGuestCsv([guest({ name: "Primera" }), guest({ name: "Segunda" })]).split(
       "\r\n",
     );

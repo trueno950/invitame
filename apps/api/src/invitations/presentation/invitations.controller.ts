@@ -468,6 +468,7 @@ export class InvitationsController {
           seats: body.seats,
           phone: body.phone,
           note: body.note,
+          tableLabel: body.tableLabel,
         }),
       );
     } catch (error) {
@@ -497,6 +498,7 @@ export class InvitationsController {
           seats: body.seats,
           phone: body.phone,
           note: body.note,
+          tableLabel: body.tableLabel,
         }),
       );
     } catch (error) {

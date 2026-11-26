@@ -21,6 +21,7 @@ const GUEST_SELECT = {
   seats: true,
   phone: true,
   note: true,
+  tableLabel: true,
   tokenIssuedAt: true,
   checkedInAt: true,
   createdAt: true,
@@ -55,6 +56,7 @@ interface GuestRow {
   seats: number;
   phone: string | null;
   note: string | null;
+  tableLabel: string | null;
   tokenIssuedAt: Date;
   checkedInAt: Date | null;
   createdAt: Date;
@@ -92,16 +94,16 @@ export class PrismaGuestRepository implements GuestRepository {
   ): Promise<GuestRecord | null> {
     const rows = await this.prisma.$queryRaw<GuestRow[]>`
       INSERT INTO "Guest"
-        ("id", "invitationId", "name", "seats", "phone", "note", "tokenHash", "tokenIssuedAt",
-         "createdAt", "updatedAt")
+        ("id", "invitationId", "name", "seats", "phone", "note", "tableLabel", "tokenHash",
+         "tokenIssuedAt", "createdAt", "updatedAt")
       SELECT gen_random_uuid(), invitation."id", ${guest.name}, ${guest.seats}, ${guest.phone},
-             ${guest.note}, ${guest.tokenHash}, ${at}, ${at}, ${at}
+             ${guest.note}, ${guest.tableLabel}, ${guest.tokenHash}, ${at}, ${at}, ${at}
       FROM "Invitation" AS invitation
       WHERE invitation."id" = ${invitationId}::uuid
         AND invitation."ownerId" = ${ownerId}::uuid
         AND invitation."status" IN ('DRAFT', 'PUBLISHED')
-      RETURNING "id", "invitationId", "name", "seats", "phone", "note", "tokenIssuedAt",
-                "checkedInAt", "createdAt", "updatedAt"
+      RETURNING "id", "invitationId", "name", "seats", "phone", "note", "tableLabel",
+                "tokenIssuedAt", "checkedInAt", "createdAt", "updatedAt"
     `;
 
     if (rows.length === 1) {
@@ -168,6 +170,11 @@ export class PrismaGuestRepository implements GuestRepository {
           "seats" = ${guest.seats},
           "phone" = ${guest.phone},
           "note" = ${guest.note},
+          -- An omitted table keeps the stored one; null or a blank value cleared by the domain clears it (F5; L8.3).
+          "tableLabel" = CASE
+            WHEN ${guest.tableLabel === undefined} THEN target."tableLabel"
+            ELSE ${guest.tableLabel ?? null}
+          END,
           "updatedAt" = ${at}
       FROM "Invitation" AS invitation
       WHERE target."id" = ${guestId}::uuid
@@ -182,8 +189,8 @@ export class PrismaGuestRepository implements GuestRepository {
             AND response."partySize" > ${guest.seats}
         )
       RETURNING target."id", target."invitationId", target."name", target."seats", target."phone",
-                target."note", target."tokenIssuedAt", target."checkedInAt", target."createdAt",
-                target."updatedAt"
+                target."note", target."tableLabel", target."tokenIssuedAt", target."checkedInAt",
+                target."createdAt", target."updatedAt"
     `;
 
     if (rows.length === 1) {
@@ -250,8 +257,8 @@ export class PrismaGuestRepository implements GuestRepository {
         AND invitation."ownerId" = ${ownerId}::uuid
         AND invitation."status" IN ('DRAFT', 'PUBLISHED')
       RETURNING target."id", target."invitationId", target."name", target."seats", target."phone",
-                target."note", target."tokenIssuedAt", target."checkedInAt", target."createdAt",
-                target."updatedAt"
+                target."note", target."tableLabel", target."tokenIssuedAt", target."checkedInAt",
+                target."createdAt", target."updatedAt"
     `;
 
     if (rows.length === 1) {

@@ -548,10 +548,12 @@ model MediaAsset {
 // token, the only form ever stored, and its unique index is what a personal link is looked up through. The token
 // itself is 128 bits drawn by the platform's cryptographic random source and is answered once, on creation or
 // rotation. The row carries bounded values only: a name of 1 to 80 characters, 1 to 10 seats, an optional E.164
-// phone, an optional note of at most 200 characters, and the check-in instant the owner's QR scan sets once.
+// phone, an optional note of at most 200 characters, an optional table of at most 12 characters (F5), and the
+// check-in instant the owner's QR scan sets once.
 // Migration 20261118120000_add_guests adds what Prisma cannot express: the CHECK constraints
 // "Guest_name_length", "Guest_seats_range", "Guest_phone_format", "Guest_note_length", and
-// "Guest_tokenHash_format", plus the RsvpResponse "guestId" column and its unique index.
+// "Guest_tokenHash_format", plus the RsvpResponse "guestId" column and its unique index. Migration
+// 20261206120000_add_guest_table_label adds the table's own CHECK, "Guest_tableLabel_length".
 model Guest {
   id            String    @id @default(uuid()) @db.Uuid
   invitationId  String    @db.Uuid
@@ -560,6 +562,10 @@ model Guest {
   seats         Int
   phone         String?   @db.VarChar(16)
   note          String?   @db.VarChar(200)
+  // The table the owner assigned for the guest's access pass (F5; L8.1, L8.4): 1 to 12 trimmed characters, e.g. «7»
+  // or «Principal», or NULL when none is assigned. A blank value is stored as NULL, and the migration's CHECK
+  // "Guest_tableLabel_length" repeats the bound.
+  tableLabel    String?   @db.VarChar(12)
   // The SHA-256 hex digest of the personal token: the only form stored, unique, and what a link looks up.
   tokenHash     String    @unique @db.VarChar(64)
   tokenIssuedAt DateTime  @db.Timestamptz(6)

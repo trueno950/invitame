@@ -21,6 +21,8 @@ export interface GuestRecord {
   seats: number;
   phone: string | null;
   note: string | null;
+  /** The table the owner assigned (F5; L8.1), 1 to 12 trimmed characters, or null when there is none. */
+  tableLabel: string | null;
   /** When the current personal token was minted; the token itself is not stored. */
   tokenIssuedAt: Date;
   /** When the owner first checked this guest in, or null while not checked in. */
@@ -62,16 +64,23 @@ export interface NewGuest {
   seats: number;
   phone: string | null;
   note: string | null;
+  /** The table to assign, or null: a new guest without a table stores none (F5; L8.1). */
+  tableLabel: string | null;
   /** The SHA-256 digest of the plain token, which is the only form ever stored. */
   tokenHash: string;
 }
 
-/** The fields an edit replaces; the token and the check-in state are not editable. */
+/**
+ * The fields an edit replaces; the token and the check-in state are not editable. The table is the one exception to a
+ * whole replacement: `undefined` means the request did not carry it, so the stored table is kept, which is what a
+ * client written before the column existed sends (F5; L8.3, L20).
+ */
 export interface GuestFields {
   name: string;
   seats: number;
   phone: string | null;
   note: string | null;
+  tableLabel: string | null | undefined;
 }
 
 /** The answer a guest submits through their personal link. */
@@ -128,7 +137,8 @@ export interface GuestRepository {
   ): Promise<GuestWithResponse | null>;
 
   /**
-   * Replaces the name, the seats, the phone, and the note of one guest of a DRAFT or a PUBLISHED invitation. Null
+   * Replaces the name, the seats, the phone, the note, and the table of one guest of a DRAFT or a PUBLISHED
+   * invitation, keeping the stored table when the request omitted it. Null
    * for a guest that is not part of this owned invitation (A4). Throws `InvitationNotEditableError` when the
    * invitation is owned but archived, and `GuestSeatsBelowConfirmedPartyError` when the new seats could not hold
    * the party the guest already confirmed.
