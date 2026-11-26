@@ -290,6 +290,13 @@ verification, CI, and its own merge to `master` before the next starts.
      the rendered locale.
   4. Gating: a new feature key `ENGLISH_INVITATION` granted to every package (migration by key, seed). Queued after
      F13 (it must cover the texts every earlier feature adds).
+- L20 — F2 evidence: commits `64d0360` (API), `a42dc3a` (review correction), `f10a978` (web). Native review
+  `review-0e4eb9d157cc6132` found R3-001 (the public `features.giftRegistry` changed from the boolean gate to the card,
+  breaking an already-deployed page during a rolling deploy); corrected in `a42dc3a` by keeping `giftRegistry` the
+  boolean gate and answering the card as `giftRegistryDetails`; approved and acknowledged. Advisory R3-002 (the
+  hidden-fields helper treats only null as an empty registry; the caller normalizes) is a follow-up. Gates green; API
+  2183/2183, web 2127/2127, db-specs 481/481 on a fresh seeded database; browser check of the guest card and «Copiar
+  CLABE». Independent verification: no blockers (API 19/19 and web 9/9 probes, baseline parity, live read).
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
