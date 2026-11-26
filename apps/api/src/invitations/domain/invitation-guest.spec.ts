@@ -157,6 +157,8 @@ describe("guest list totals (M6 G2; S1, S4)", () => {
         seats: 12,
         attendingGuests: 2,
         attendingPeople: 4,
+        attendingAdults: 4,
+        attendingChildren: 0,
         declinedCount: 1,
         pendingCount: 2,
         checkedInCount: 1,
@@ -170,9 +172,43 @@ describe("guest list totals (M6 G2; S1, S4)", () => {
       seats: 0,
       attendingGuests: 0,
       attendingPeople: 0,
+      attendingAdults: 0,
+      attendingChildren: 0,
       declinedCount: 0,
       pendingCount: 0,
       checkedInCount: 0,
     });
+  });
+
+  it("counts the children of the answers that named their companions (F3; L6.4)", () => {
+    assert.deepEqual(
+      guestTotalsOf([
+        {
+          seats: 4,
+          checkedInAt: null,
+          response: {
+            attending: true,
+            partySize: 3,
+            companions: [
+              { name: "Jorge", child: false },
+              { name: "Sofía", child: true },
+            ],
+          },
+        },
+        // An answer stored before the companions existed counts its whole party as adults.
+        { seats: 2, checkedInAt: null, response: { attending: true, partySize: 2 } },
+      ]),
+      {
+        guests: 2,
+        seats: 6,
+        attendingGuests: 2,
+        attendingPeople: 5,
+        attendingAdults: 4,
+        attendingChildren: 1,
+        declinedCount: 0,
+        pendingCount: 0,
+        checkedInCount: 0,
+      },
+    );
   });
 });

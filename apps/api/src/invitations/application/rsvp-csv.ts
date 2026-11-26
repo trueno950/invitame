@@ -1,3 +1,4 @@
+import type { RsvpCompanion } from "../domain/invitation-rsvp";
 import type { GuestWithResponse } from "./guest.repository";
 import type { RsvpResponseRecord } from "./rsvp.repository";
 
@@ -11,27 +12,34 @@ import type { RsvpResponseRecord } from "./rsvp.repository";
 //   content, and a cell that already starts with one is left alone.
 //
 // The open form exports one line per response (G1). A guest list exports one line per guest (G2), pending guests
-// included, because the door needs the whole list and not only the answers already received. The header is Spanish
-// because the file is product copy for the creator; the values are the stored ones, and the columns stay in one
-// fixed order.
+// included, because the door needs the whole list and not only the answers already received. The companion columns of
+// F3 travel the same way: their names, how many of them are children, and the dietary notes the guest named, so the
+// same escaping rules apply to them as to every other cell. The header is Spanish because the file is product copy for
+// the creator; the values are the stored ones, and the columns stay in one fixed order.
 
 /** The header of the response export, in the order every row follows. */
 export const RSVP_CSV_HEADER = [
   "Nombre",
   "Asistencia",
   "Personas",
+  "Acompañantes",
+  "Niños",
+  "Restricciones alimentarias",
   "Teléfono",
   "Mensaje",
   "Primera respuesta",
   "Última actualización",
 ] as const;
 
-/** The header of the guest-list export, in the order every row follows (M6 G2). */
+/** The header of the guest-list export, in the order every row follows (M6 G2, F3). */
 export const GUEST_CSV_HEADER = [
   "Nombre",
   "Lugares",
   "Asistencia",
   "Personas",
+  "Acompañantes",
+  "Niños",
+  "Restricciones alimentarias",
   "Teléfono",
   "Nota",
   "Mensaje",
@@ -58,11 +66,31 @@ function cellsOf(response: RsvpResponseRecord): string[] {
     response.name,
     response.attending ? "Sí" : "No",
     String(response.partySize),
+    companionNames(response.companions),
+    String(childrenOf(response.companions)),
+    response.dietaryNotes ?? "",
     response.phone ?? "",
     response.message ?? "",
     response.createdAt.toISOString(),
     response.updatedAt.toISOString(),
   ];
+}
+
+/**
+ * The companion names of one answer, as the creator reads them (F3; L6.4): one per extra person, in the order the guest
+ * gave them, joined by a comma and a space, with a blank name left out because a guest may confirm a count without
+ * every name. A legacy answer names none, so the cell is empty rather than invented.
+ */
+function companionNames(companions: readonly RsvpCompanion[] | null): string {
+  return (companions ?? [])
+    .map((companion) => companion.name)
+    .filter((name) => name !== "")
+    .join(", ");
+}
+
+/** How many companion entries of one answer are marked as a child (F3; L6.4); a legacy answer counts none. */
+function childrenOf(companions: readonly RsvpCompanion[] | null): number {
+  return (companions ?? []).filter((companion) => companion.child).length;
 }
 
 /**
@@ -96,6 +124,9 @@ function guestCellsOf(guest: GuestWithResponse): string[] {
     String(guest.seats),
     guestAttendance(guest),
     guest.response === null ? "" : String(guest.response.partySize),
+    guest.response === null ? "" : companionNames(guest.response.companions),
+    guest.response === null ? "" : String(childrenOf(guest.response.companions)),
+    guest.response?.dietaryNotes ?? "",
     guest.phone ?? "",
     guest.note ?? "",
     guest.response?.message ?? "",

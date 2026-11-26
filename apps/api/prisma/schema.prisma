@@ -463,6 +463,10 @@ model InvitationPlace {
 // Migration 20261117120000_add_rsvp_responses adds what Prisma cannot express: the CHECK constraints
 // "RsvpResponse_name_length", "RsvpResponse_partySize_range", "RsvpResponse_partySize_matches_attending",
 // "RsvpResponse_phone_format", and "RsvpResponse_message_length", plus "Invitation_rsvpPartyLimit_range".
+// Migration 20261204120000_add_rsvp_companions adds the nullable `companions` JSONB and `dietaryNotes` columns: the
+// bounded companions of the party (`[{ name, child }]`, one entry per extra person while attending) and the dietary
+// restrictions the guest named. Both are additive, so every answer stored before them reads NULL and renders exactly
+// as it did.
 model RsvpResponse {
   id           String   @id @default(uuid()) @db.Uuid
   invitationId String   @db.Uuid
@@ -476,6 +480,16 @@ model RsvpResponse {
   attending    Boolean
   // 0 when the guest declined; otherwise 1 to the invitation's `rsvpPartyLimit` (the domain checks the limit).
   partySize    Int
+  // The people who come with the guest (F3; L6.1): the bounded presentation payload `[{ name, child }]` with one entry
+  // per extra person, or NULL for an answer stored before it existed. The stored `partySize` stays the source of the
+  // count — `companions.length` is exactly `partySize - 1` while attending and 0 otherwise — so the domain
+  // (`domain/invitation-rsvp.ts`) is the authority on the shape, and no CHECK can state it. A name is at most 60
+  // characters and blank is valid, so a guest may confirm a count without every name; `child` is what the owner's
+  // totals count apart.
+  companions   Json?    @db.JsonB
+  // The dietary restrictions of the party (F3; L6.1), trimmed, at most 300 characters, or NULL when the guest named
+  // none. Plain text only: the page renders it as text, never as markup.
+  dietaryNotes String?  @db.VarChar(300)
   // E.164 or NULL; the domain normalizes a Mexican ten-digit number to `+52…` like the WhatsApp contact does.
   phone        String?  @db.VarChar(16)
   message      String?  @db.VarChar(280)

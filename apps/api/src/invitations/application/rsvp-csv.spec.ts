@@ -11,7 +11,8 @@ import { GUEST_CSV_HEADER, toGuestCsv, toRsvpCsv } from "./rsvp-csv";
 // stored ones. The open form exports one line per response (G1); a guest list exports one line per guest, with the
 // pending guests and the check-in time the door needs (G2).
 
-const HEADER = "Nombre,Asistencia,Personas,Teléfono,Mensaje,Primera respuesta,Última actualización";
+const HEADER =
+  "Nombre,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Mensaje,Primera respuesta,Última actualización";
 
 function record(overrides: Partial<RsvpResponseRecord> = {}): RsvpResponseRecord {
   return {
@@ -21,6 +22,8 @@ function record(overrides: Partial<RsvpResponseRecord> = {}): RsvpResponseRecord
     dedupeKey: "ana perez|+525512345678",
     attending: true,
     partySize: 2,
+    companions: [],
+    dietaryNotes: null,
     phone: "+525512345678",
     message: "¡Con gusto!",
     createdAt: new Date("2026-11-20T10:00:00.000Z"),
@@ -40,7 +43,7 @@ describe("RSVP CSV export (S1, S4)", () => {
 
     assert.equal(
       csv,
-      `${HEADER}\r\nAna Pérez,Sí,2,'+525512345678,¡Con gusto!,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z\r\n`,
+      `${HEADER}\r\nAna Pérez,Sí,2,,0,,'+525512345678,¡Con gusto!,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z\r\n`,
     );
   });
 
@@ -51,7 +54,7 @@ describe("RSVP CSV export (S1, S4)", () => {
   it("writes Sí and No, and leaves a missing phone or message as an empty cell", () => {
     assert.equal(
       dataLine(record({ attending: false, partySize: 0, phone: null, message: null })),
-      "Ana Pérez,No,0,,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+      "Ana Pérez,No,0,,0,,,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
     );
   });
 
@@ -60,11 +63,11 @@ describe("RSVP CSV export (S1, S4)", () => {
     assert.equal(dataLine(record({ name: 'Ana "Anita"' })).startsWith('"Ana ""Anita""",Sí'), true);
     assert.equal(
       dataLine(record({ message: "Hola,\n¿cómo están?" })),
-      'Ana Pérez,Sí,2,\'+525512345678,"Hola,\n¿cómo están?",2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
+      'Ana Pérez,Sí,2,,0,,\'+525512345678,"Hola,\n¿cómo están?",2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
     );
     assert.equal(
       dataLine(record({ message: 'Dijo: "sí", y "no"' })),
-      'Ana Pérez,Sí,2,\'+525512345678,"Dijo: ""sí"", y ""no""",2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
+      'Ana Pérez,Sí,2,,0,,\'+525512345678,"Dijo: ""sí"", y ""no""",2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
     );
   });
 
@@ -77,12 +80,49 @@ describe("RSVP CSV export (S1, S4)", () => {
     // A message is a formula carrier too, so the rule is not only about the name.
     assert.equal(
       dataLine(record({ message: '=HYPERLINK("http://x","click")' })),
-      'Ana Pérez,Sí,2,\'+525512345678,"\'=HYPERLINK(""http://x"",""click"")",2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
+      'Ana Pérez,Sí,2,,0,,\'+525512345678,"\'=HYPERLINK(""http://x"",""click"")",2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
     );
     // A cell that already starts with an apostrophe is text, so it is left as it is.
     assert.equal(dataLine(record({ name: "'=1+1" })).startsWith("'=1+1,Sí"), true);
     // A leading space does not make a formula, and a value that merely contains `=` is text.
     assert.equal(dataLine(record({ name: "Ana = 1" })).startsWith("Ana = 1,Sí"), true);
+  });
+
+  it("writes the companion names, the number of children, and the dietary notes (F3; L6.4)", () => {
+    assert.equal(
+      dataLine(
+        record({
+          partySize: 3,
+          companions: [
+            { name: "Jorge Gómez", child: false },
+            { name: "Sofía Gómez", child: true },
+          ],
+          dietaryNotes: "Sofía es alérgica a la nuez",
+        }),
+      ),
+      'Ana Pérez,Sí,3,"Jorge Gómez, Sofía Gómez",1,Sofía es alérgica a la nuez,\'+525512345678,¡Con gusto!,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
+    );
+    // A guest who confirmed a count without every name leaves the names the guest did give, and a legacy answer names
+    // nobody: its whole party is adult, so the children cell is 0.
+    assert.equal(
+      dataLine(record({ partySize: 2, companions: [{ name: "", child: false }] })).split(",")[3],
+      "",
+    );
+  });
+
+  it("neutralizes a formula in a companion name and in the dietary notes (S4, F3)", () => {
+    const line = dataLine(
+      record({
+        partySize: 2,
+        companions: [{ name: '=HYPERLINK("http://x","y")', child: true }],
+        dietaryNotes: "@SUM(A1)",
+      }),
+    );
+
+    assert.equal(
+      line,
+      'Ana Pérez,Sí,2,"\'=HYPERLINK(""http://x"",""y"")",1,\'@SUM(A1),\'+525512345678,¡Con gusto!,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
+    );
   });
 
   it("keeps the order it is given, which is the creator read's newest first", () => {
@@ -123,6 +163,8 @@ function guest(overrides: Partial<GuestWithResponse> = {}): GuestWithResponse {
     response: {
       attending: true,
       partySize: 2,
+      companions: [],
+      dietaryNotes: null,
       message: "¡Con gusto!",
       createdAt: new Date("2026-11-20T10:00:00.000Z"),
       updatedAt: new Date("2026-11-20T10:00:00.000Z"),
@@ -140,6 +182,9 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
       "Lugares",
       "Asistencia",
       "Personas",
+      "Acompañantes",
+      "Niños",
+      "Restricciones alimentarias",
       "Teléfono",
       "Nota",
       "Mensaje",
@@ -150,7 +195,7 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
     assert.equal(
       toGuestCsv([guest()]),
       `${HEADER}\r\n` +
-        "Ana Pérez,3,Sí,2,'+525512345678,Mesa 4,¡Con gusto!,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z\r\n",
+        "Ana Pérez,3,Sí,2,,0,,'+525512345678,Mesa 4,¡Con gusto!,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z\r\n",
     );
     assert.equal(toGuestCsv([]), `${HEADER}\r\n`);
   });
@@ -166,6 +211,8 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
           response: {
             attending: false,
             partySize: 0,
+            companions: [],
+            dietaryNotes: null,
             message: null,
             createdAt: new Date("2026-11-20T10:00:00.000Z"),
             updatedAt: new Date("2026-11-20T10:00:00.000Z"),
@@ -182,8 +229,8 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
       ]).split("\r\n"),
       [
         HEADER,
-        "Beto,1,No,0,,,,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
-        "Carla,2,Pendiente,,,,,,,2026-11-19T10:00:00.000Z",
+        "Beto,1,No,0,,0,,,,,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+        "Carla,2,Pendiente,,,,,,,,,,2026-11-19T10:00:00.000Z",
         "",
       ],
     );
@@ -200,7 +247,31 @@ describe("guest list CSV export (M6 G2; S1, S4)", () => {
 
     assert.equal(
       csv.split("\r\n")[1],
-      "'=Ana,3,Sí,2,'+525512345678,'=1+1,¡Con gusto!,2026-11-21T20:00:00.000Z,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+      "'=Ana,3,Sí,2,,0,,'+525512345678,'=1+1,¡Con gusto!,2026-11-21T20:00:00.000Z,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+    );
+  });
+
+  it("writes the companion columns of a guest answer (F3; L6.4)", () => {
+    const csv = toGuestCsv([
+      guest({
+        response: {
+          attending: true,
+          partySize: 3,
+          companions: [
+            { name: "Jorge", child: false },
+            { name: "Sofía", child: true },
+          ],
+          dietaryNotes: "Sin gluten",
+          message: null,
+          createdAt: new Date("2026-11-20T10:00:00.000Z"),
+          updatedAt: new Date("2026-11-20T10:00:00.000Z"),
+        },
+      }),
+    ]);
+
+    assert.equal(
+      csv.split("\r\n")[1],
+      'Ana Pérez,3,Sí,3,"Jorge, Sofía",1,Sin gluten,\'+525512345678,Mesa 4,,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z',
     );
   });
 

@@ -1,0 +1,32 @@
+-- Additive companions and dietary notes on the RSVP answers (F3; S2.3, L6.1).
+--
+-- Both RSVP paths — the open form and the guest list's personal answer — are rows of this one table (`RsvpResponse`
+-- carries the nullable `guestId` of a personal link), so one additive migration serves both. No existing row is
+-- rewritten, no column is dropped, and no default is needed: an answer stored before this migration reads NULL in both
+-- columns and renders exactly what it rendered before.
+--
+-- What the columns hold:
+--   * "companions" JSONB — the bounded presentation payload `[{ "name": string, "child": boolean }]` with one entry per
+--     extra person of an attending answer (0 to 9) and empty for a decline. The stored "partySize" stays the source of
+--     the count: the API's domain (`domain/invitation-rsvp.ts`) refuses a list whose length is not `partySize - 1`, so
+--     nothing here can name more people than the party it confirms. A name is at most 60 characters and blank is valid,
+--     so a guest may confirm a count without every name. It carries no image, link, or provider payload, so it stays
+--     inside the rule that JSONB holds only bounded, versioned presentation data.
+--   * "dietaryNotes" VARCHAR(300) — the dietary restrictions the guest named, already trimmed by the domain, or NULL.
+--     Plain text only.
+--
+-- The domain is the authority on both shapes, and Prisma cannot express them, so no CHECK is added: the columns are the
+-- storage and the API validates before every write.
+--
+-- No catalog statement belongs here: the feature is gated by the existing `RSVP` and `GUEST_LIST` keys, so this feature
+-- adds no key and changes no package link (L6.2). A database whose administrator changed those links keeps its
+-- decision.
+--
+-- Rollback / recovery: the change is additive. Recovery is applying the previous migration set, or by hand:
+--   ALTER TABLE "RsvpResponse" DROP COLUMN "companions", DROP COLUMN "dietaryNotes";
+-- Only the companion names and dietary notes are lost; the answers, their party sizes, and every other column are
+-- untouched. Run it as its own migration, never by editing this file after it was applied.
+
+-- AlterTable
+ALTER TABLE "RsvpResponse" ADD COLUMN     "companions" JSONB,
+ADD COLUMN     "dietaryNotes" VARCHAR(300);

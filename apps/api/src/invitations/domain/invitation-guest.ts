@@ -13,7 +13,7 @@
 // domain imports no runtime dependency.
 
 import { normalizeWhatsAppPhone, WHATSAPP_PHONE_TYPE_ISSUE } from "./invitation-features";
-import { normalizeRsvpName } from "./invitation-rsvp";
+import { normalizeRsvpName, type RsvpCompanion } from "./invitation-rsvp";
 
 /** The widest guest name, counted in characters: the width of `Guest.name`. */
 export const GUEST_NAME_MAX_LENGTH = 80;
@@ -177,7 +177,12 @@ export function validateGuestInput(input: {
 export interface GuestTotalsInput {
   readonly seats: number;
   readonly checkedInAt: Date | null;
-  readonly response: { readonly attending: boolean; readonly partySize: number } | null;
+  readonly response: {
+    readonly attending: boolean;
+    readonly partySize: number;
+    /** The companions of the party, absent or null for an answer stored before they existed (F3; L6.1). */
+    readonly companions?: readonly RsvpCompanion[] | null;
+  } | null;
 }
 
 /** The totals of one guest list (S1, S4), as the creator's page shows them. */
@@ -190,6 +195,13 @@ export interface GuestTotals {
   attendingGuests: number;
   /** The sum of the confirmed party sizes. */
   attendingPeople: number;
+  /**
+   * The adults among the confirmed people (F3; L6.4): the guests themselves plus every companion not marked as a child.
+   * An answer stored before the companions existed counts its whole party as adults, so the two totals always add up.
+   */
+  attendingAdults: number;
+  /** The confirmed people whose companion entry marks them as a child (F3; L6.4). */
+  attendingChildren: number;
   /** How many guests declined. */
   declinedCount: number;
   /** How many guests have not answered yet. */
@@ -203,6 +215,7 @@ export function guestTotalsOf(guests: readonly GuestTotalsInput[]): GuestTotals 
   let seats = 0;
   let attendingGuests = 0;
   let attendingPeople = 0;
+  let attendingChildren = 0;
   let declinedCount = 0;
   let pendingCount = 0;
   let checkedInCount = 0;
@@ -217,6 +230,9 @@ export function guestTotalsOf(guests: readonly GuestTotalsInput[]): GuestTotals 
     } else if (guest.response.attending) {
       attendingGuests += 1;
       attendingPeople += guest.response.partySize;
+      attendingChildren += (guest.response.companions ?? []).filter(
+        (companion) => companion.child,
+      ).length;
     } else {
       declinedCount += 1;
     }
@@ -227,6 +243,8 @@ export function guestTotalsOf(guests: readonly GuestTotalsInput[]): GuestTotals 
     seats,
     attendingGuests,
     attendingPeople,
+    attendingAdults: attendingPeople - attendingChildren,
+    attendingChildren,
     declinedCount,
     pendingCount,
     checkedInCount,

@@ -9,6 +9,8 @@
 // guest token never reaches this port: the application hashes it, and the port stores and looks up only the digest
 // through the unique index, so no secret is compared in application code.
 
+import type { RsvpCompanion } from "../domain/invitation-rsvp";
+
 /** One stored guest, without the token digest: the digest is internal and never leaves the adapter. */
 export interface GuestRecord {
   id: string;
@@ -32,6 +34,12 @@ export interface GuestResponseSummary {
   attending: boolean;
   /** 0 when the guest declined, otherwise 1 to the guest's seats. */
   partySize: number;
+  /**
+   * The people who come with the guest (F3; L6.1): `partySize - 1` entries when attending and empty when not, or null
+   * for an answer stored before the column existed, which then counts its whole party as adults.
+   */
+  companions: RsvpCompanion[] | null;
+  dietaryNotes: string | null;
   message: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -70,6 +78,9 @@ export interface GuestFields {
 export interface GuestResponseWrite {
   attending: boolean;
   partySize: number;
+  /** One entry per extra person when attending, empty when not (F3; L6.1). */
+  companions: RsvpCompanion[];
+  dietaryNotes: string | null;
   message: string | null;
 }
 

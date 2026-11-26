@@ -3,12 +3,11 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type {
   RsvpReadModel,
   RsvpRepository,
-  RsvpResponseRecord,
   RsvpResponseWrite,
 } from "../application/rsvp.repository";
 import { InvitationNotEditableError } from "../domain/invitation.errors";
 import { assertEditable } from "../domain/invitation-lifecycle";
-import type { RsvpSettings } from "../domain/invitation-rsvp";
+import { type RsvpSettings, storedCompanions } from "../domain/invitation-rsvp";
 
 const RESPONSE_SELECT = {
   id: true,
@@ -17,6 +16,8 @@ const RESPONSE_SELECT = {
   dedupeKey: true,
   attending: true,
   partySize: true,
+  companions: true,
+  dietaryNotes: true,
   phone: true,
   message: true,
   createdAt: true,
@@ -90,7 +91,12 @@ export class PrismaRsvpRepository implements RsvpRepository {
     return {
       slug: invitation.slug,
       settings: { deadline: invitation.rsvpDeadline, partyLimit: invitation.rsvpPartyLimit },
-      responses: responses satisfies RsvpResponseRecord[],
+      // The companions column is JSONB, so it is read through the domain's own guard: a value written by anything else
+      // reads as "no names" instead of reaching a page (F3; L6.1).
+      responses: responses.map((response) => ({
+        ...response,
+        companions: storedCompanions(response.companions),
+      })),
     };
   }
 
@@ -101,10 +107,11 @@ export class PrismaRsvpRepository implements RsvpRepository {
   ): Promise<boolean> {
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       INSERT INTO "RsvpResponse"
-        ("id", "invitationId", "dedupeKey", "name", "attending", "partySize", "phone", "message",
-         "createdAt", "updatedAt")
+        ("id", "invitationId", "dedupeKey", "name", "attending", "partySize", "companions",
+         "dietaryNotes", "phone", "message", "createdAt", "updatedAt")
       SELECT gen_random_uuid(), invitation."id", ${response.dedupeKey}, ${response.name},
-             ${response.attending}, ${response.partySize}, ${response.phone}, ${response.message},
+             ${response.attending}, ${response.partySize}, ${JSON.stringify(response.companions)}::jsonb,
+             ${response.dietaryNotes}, ${response.phone}, ${response.message},
              ${at}, ${at}
       FROM "Invitation" AS invitation
       WHERE invitation."id" = ${invitationId}::uuid
@@ -117,6 +124,8 @@ export class PrismaRsvpRepository implements RsvpRepository {
       SET "name" = EXCLUDED."name",
           "attending" = EXCLUDED."attending",
           "partySize" = EXCLUDED."partySize",
+          "companions" = EXCLUDED."companions",
+          "dietaryNotes" = EXCLUDED."dietaryNotes",
           "phone" = EXCLUDED."phone",
           "message" = EXCLUDED."message",
           "updatedAt" = EXCLUDED."updatedAt"

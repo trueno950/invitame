@@ -14,7 +14,7 @@ import {
 } from "../application/invitation-rsvp.errors";
 import type { RsvpRead } from "../application/invitation-rsvp.use-cases";
 import type { RsvpResponseRecord } from "../application/rsvp.repository";
-import type { RsvpSettings } from "../domain/invitation-rsvp";
+import type { RsvpSettings, RsvpCompanion } from "../domain/invitation-rsvp";
 import { mapInvitationError } from "./invitation.response";
 
 // The stable REST shapes of the RSVP routes (M6 G1; S1, S4). The creator's read carries the settings, the
@@ -39,17 +39,26 @@ export interface RsvpResponseItemResponse {
   name: string;
   attending: boolean;
   partySize: number;
+  /** The companions of the party, or null for an answer stored before they existed (F3; L6.1). */
+  companions: RsvpCompanion[] | null;
+  dietaryNotes: string | null;
   phone: string | null;
   message: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-/** The creator's read: settings, responses newest first, and the totals of the page (S1, S4). */
+/** The creator's read: settings, responses newest first, and the totals of the page (S1, S4, F3). */
 export interface RsvpReadResponse {
   settings: RsvpSettingsResponse;
   responses: RsvpResponseItemResponse[];
-  totals: { attendingPeople: number; declinedCount: number; responses: number };
+  totals: {
+    attendingPeople: number;
+    attendingAdults: number;
+    attendingChildren: number;
+    declinedCount: number;
+    responses: number;
+  };
 }
 
 /** The one public success body (S4): no id, no count, and nothing another guest could read. */
@@ -72,6 +81,8 @@ function toRsvpResponseItem(stored: RsvpResponseRecord): RsvpResponseItemRespons
     name: stored.name,
     attending: stored.attending,
     partySize: stored.partySize,
+    companions: stored.companions,
+    dietaryNotes: stored.dietaryNotes,
     phone: stored.phone,
     message: stored.message,
     createdAt: stored.createdAt.toISOString(),

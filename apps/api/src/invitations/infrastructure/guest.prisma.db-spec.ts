@@ -408,6 +408,8 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
         seats: 3,
         attendingGuests: 0,
         attendingPeople: 0,
+        attendingAdults: 0,
+        attendingChildren: 0,
         declinedCount: 0,
         pendingCount: 1,
         checkedInCount: 0,
@@ -498,6 +500,52 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
   });
 
   describe("the personal answer", () => {
+    it("stores and reads the companion names, the child marks, and the dietary notes (F3; L6.1)", async () => {
+      const { invitation } = await newInvitation(["RSVP", "GUEST_LIST"]);
+      const guest = await newGuest(invitation, { seats: 3 });
+
+      assert.equal(
+        await submit.execute({
+          slug: invitation.slug,
+          token: guest.token,
+          attending: true,
+          partySize: 3,
+          companions: [
+            { name: "Jorge", child: false },
+            { name: "Sofía", child: true },
+          ],
+          dietaryNotes: "Sin nueces",
+          message: null,
+        }),
+        true,
+      );
+
+      const read = await guests.findByToken(invitation.id, guestTokenHash(guest.token));
+      assert.deepEqual(read?.response?.companions, [
+        { name: "Jorge", child: false },
+        { name: "Sofía", child: true },
+      ]);
+      assert.equal(read?.response?.dietaryNotes, "Sin nueces");
+
+      // The stored party size stays the source of the count: a list that does not match it is refused and stored never.
+      await assert.rejects(
+        submit.execute({
+          slug: invitation.slug,
+          token: guest.token,
+          attending: true,
+          partySize: 2,
+          companions: [
+            { name: "Jorge", child: false },
+            { name: "Sofía", child: true },
+          ],
+          message: null,
+        }),
+      );
+      const rows = await prisma.rsvpResponse.findMany({ where: { guestId: guest.guest.id } });
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]?.partySize, 3);
+    });
+
     it("stores one answer per guest, updates a change of mind, and keeps the first answer instant", async () => {
       const { invitation } = await newInvitation(["RSVP", "GUEST_LIST"]);
       const guest = await newGuest(invitation, { seats: 4 });
@@ -534,6 +582,13 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
       assert.equal(rows[0]?.phone, null);
       assert.equal(rows[0]?.createdAt.getTime(), AT.getTime());
       assert.equal(rows[0]?.updatedAt.getTime(), new Date("2026-11-20T11:00:00.000Z").getTime());
+      // The client sent no companions, so the party size itself counts one unnamed adult per extra person (F3; L6.1).
+      assert.deepEqual(rows[0]?.companions, [
+        { name: "", child: false },
+        { name: "", child: false },
+        { name: "", child: false },
+      ]);
+      assert.equal(rows[0]?.dietaryNotes, null);
       // The dedupe key names the guest, so it stays unique per invitation without storing the name.
       assert.equal(rows[0]?.dedupeKey, `guest|${guest.guest.id}`);
     });
@@ -546,19 +601,31 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
         guests.upsertResponse(
           invitation.id,
           guest.guest.id,
-          { attending: true, partySize: 2, message: "uno" },
+          {
+            attending: true,
+            partySize: 2,
+            companions: [{ name: "", child: false }],
+            dietaryNotes: null,
+            message: "uno",
+          },
           AT,
         ),
         guests.upsertResponse(
           invitation.id,
           guest.guest.id,
-          { attending: true, partySize: 2, message: "dos" },
+          {
+            attending: true,
+            partySize: 2,
+            companions: [{ name: "", child: false }],
+            dietaryNotes: null,
+            message: "dos",
+          },
           AT,
         ),
         guests.upsertResponse(
           invitation.id,
           guest.guest.id,
-          { attending: false, partySize: 0, message: null },
+          { attending: false, partySize: 0, companions: [], dietaryNotes: null, message: null },
           AT,
         ),
       ]);
@@ -601,7 +668,13 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
         await guests.upsertResponse(
           closed.invitation.id,
           closedGuest.guest.id,
-          { attending: true, partySize: 1, message: null },
+          {
+            attending: true,
+            partySize: 1,
+            companions: [],
+            dietaryNotes: null,
+            message: null,
+          },
           AT,
         ),
         false,
@@ -627,7 +700,13 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
         await guests.upsertResponse(
           expired.invitation.id,
           expiredGuest.guest.id,
-          { attending: true, partySize: 1, message: null },
+          {
+            attending: true,
+            partySize: 1,
+            companions: [],
+            dietaryNotes: null,
+            message: null,
+          },
           AT,
         ),
         false,
@@ -700,7 +779,14 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
       assert.deepEqual(page?.guest, {
         name: "Ana",
         seats: 3,
-        response: { attending: true, partySize: 2, message: "Vamos" },
+        response: {
+          attending: true,
+          partySize: 2,
+          // The answer named no companion, so the party size itself counts one unnamed adult (F3; L6.1).
+          companions: [{ name: "", child: false }],
+          dietaryNotes: null,
+          message: "Vamos",
+        },
         qrPass: true,
       });
       // The stored id is the application's own field (M9 T11; S7), so the guest read can count one opening; the REST
@@ -797,12 +883,12 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
       const lines = exported?.body.split("\r\n") ?? [];
       assert.equal(
         lines[0],
-        "Nombre,Lugares,Asistencia,Personas,Teléfono,Nota,Mensaje,Primer check-in,Primera respuesta,Última actualización",
+        "Nombre,Lugares,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Nota,Mensaje,Primer check-in,Primera respuesta,Última actualización",
       );
       // Both guests are exported, whatever order the read answered them in; only Ana has an answer.
       assert.deepEqual(lines.slice(1, 3).sort(), [
-        "Ana,3,Sí,2,'+525512345678,Mesa 4,Vamos,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
-        "Beto,1,Pendiente,,,,,,,2026-11-20T10:00:00.000Z",
+        "Ana,3,Sí,2,,0,,'+525512345678,Mesa 4,Vamos,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+        "Beto,1,Pendiente,,,,,,,,,,2026-11-20T10:00:00.000Z",
       ]);
       assert.equal(exported?.body.includes(guest.token), false);
       assert.equal(exported?.body.includes("tokenHash"), false);
@@ -825,7 +911,7 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
 
       assert.equal(
         exported?.body.split("\r\n")[0],
-        "Nombre,Asistencia,Personas,Teléfono,Mensaje,Primera respuesta,Última actualización",
+        "Nombre,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Mensaje,Primera respuesta,Última actualización",
       );
       assert.equal(exported?.body.split("\r\n")[1]?.startsWith("Ana,Sí,2,"), true);
     });

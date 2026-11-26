@@ -1,4 +1,4 @@
-import type { RsvpSettings } from "../domain/invitation-rsvp";
+import type { RsvpCompanion, RsvpSettings } from "../domain/invitation-rsvp";
 
 // Persistence port of RSVP data (M6 G1; S1, S4). It is separate from `InvitationRepository` on purpose: the
 // invitation port is about authored content and publication, while these rows are guest answers that the creator
@@ -23,6 +23,12 @@ export interface RsvpResponseRecord {
   attending: boolean;
   /** 0 when the guest declined, otherwise 1 to the invitation's party limit. */
   partySize: number;
+  /**
+   * The people who come with the guest (F3; L6.1): `partySize - 1` entries when attending and empty when not, or null
+   * for an answer stored before the column existed, which then counts its whole party as adults.
+   */
+  companions: RsvpCompanion[] | null;
+  dietaryNotes: string | null;
   phone: string | null;
   message: string | null;
   createdAt: Date;
@@ -35,6 +41,9 @@ export interface RsvpResponseWrite {
   dedupeKey: string;
   attending: boolean;
   partySize: number;
+  /** One entry per extra person when attending, empty when not (F3; L6.1). */
+  companions: RsvpCompanion[];
+  dietaryNotes: string | null;
   phone: string | null;
   message: string | null;
 }

@@ -2,6 +2,7 @@ import { isInvitationExpired } from "../domain/invitation-expiration";
 import { assertEditable } from "../domain/invitation-lifecycle";
 import {
   isRsvpOpenOn,
+  type RsvpCompanion,
   type RsvpSettings,
   rsvpModeOf,
   validateRsvpResponse,
@@ -42,10 +43,17 @@ import {
 // 7. the dedupe upsert, whose statement repeats the publication, expiry, and deadline rules so a concurrent unpublish,
 //    an elapsed deadline, or an expiry that just passed is refused by the database too.
 
-/** The totals of one invitation's answers (S1, S4): confirmed people, declines, and rows. */
+/** The totals of one invitation's answers (S1, S4, F3): confirmed people, declines, and rows. */
 export interface RsvpTotals {
   /** The sum of the party sizes of the attending responses. */
   attendingPeople: number;
+  /**
+   * The adults among the attending people (F3; L6.4): the guest plus every companion not marked as a child. An answer
+   * stored before the companions existed counts its whole party as adults, so the two totals always add up.
+   */
+  attendingAdults: number;
+  /** The attending people whose companion entry marks them as a child (F3; L6.4). */
+  attendingChildren: number;
   /** How many responses declined. */
   declinedCount: number;
   /** How many rows the invitation has, attending and declined together. */
@@ -71,6 +79,10 @@ export interface SubmitPublicRsvpInput {
   name: unknown;
   attending: unknown;
   partySize: unknown;
+  /** The people who come with the guest (F3; L6.1); omitted by a client written before the field existed. */
+  companions?: unknown;
+  /** The dietary restrictions of the party, or null (F3; L6.1). */
+  dietaryNotes?: unknown;
   phone: unknown;
   message: unknown;
   honeypot: unknown;
@@ -84,21 +96,40 @@ function isInvitationId(value: unknown): value is string {
   return typeof value === "string" && INVITATION_ID.test(value);
 }
 
-/** The totals of one invitation's responses (S4): confirmed people, declines, and rows. */
+/**
+ * The totals of one invitation's responses (S4, F3): confirmed people, the adults and the children among them,
+ * declines, and rows. The party size stays the source of the count, so the children are the companion entries marked
+ * as one and the adults are the rest of the party; an answer stored before the companions existed counts entirely as
+ * adults, which keeps `attendingAdults + attendingChildren === attendingPeople` for every read.
+ */
 export function rsvpTotalsOf(
-  responses: readonly { attending: boolean; partySize: number }[],
+  responses: readonly {
+    attending: boolean;
+    partySize: number;
+    companions?: readonly RsvpCompanion[] | null;
+  }[],
 ): RsvpTotals {
   let attendingPeople = 0;
+  let attendingChildren = 0;
   let declinedCount = 0;
 
   for (const response of responses) {
     if (response.attending) {
       attendingPeople += response.partySize;
+      attendingChildren += (response.companions ?? []).filter(
+        (companion) => companion.child,
+      ).length;
     } else {
       declinedCount += 1;
     }
   }
-  return { attendingPeople, declinedCount, responses: responses.length };
+  return {
+    attendingPeople,
+    attendingAdults: attendingPeople - attendingChildren,
+    attendingChildren,
+    declinedCount,
+    responses: responses.length,
+  };
 }
 
 /**
@@ -240,6 +271,8 @@ export class SubmitPublicRsvpUseCase {
         name: input.name,
         attending: input.attending,
         partySize: input.partySize,
+        companions: input.companions,
+        dietaryNotes: input.dietaryNotes,
         phone: input.phone,
         message: input.message,
       },

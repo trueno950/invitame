@@ -250,6 +250,8 @@ class MemoryRsvpRepository implements RsvpRepository {
       dedupeKey: "ana perez|+525512345678",
       attending: true,
       partySize: 2,
+      companions: [],
+      dietaryNotes: null,
       phone: "+525512345678",
       message: null,
       createdAt: at,
@@ -493,8 +495,50 @@ describe("GetRsvpResponsesUseCase (S1, S4)", () => {
       read?.responses.map((response) => response.id),
       [newer.id, older.id],
     );
-    assert.deepEqual(read?.totals, { attendingPeople: 3, declinedCount: 1, responses: 2 });
+    assert.deepEqual(read?.totals, {
+      attendingPeople: 3,
+      attendingAdults: 3,
+      attendingChildren: 0,
+      declinedCount: 1,
+      responses: 2,
+    });
     assert.equal(read?.slug, SLUG);
+  });
+
+  it("counts the adults and the children of the answers that named their companions", async () => {
+    const { invitations, rsvp } = seeded();
+    const invitation = invitations.rows[0] as InvitationRecordWithMusic;
+    rsvp.seedResponse(invitation.id, {
+      attending: true,
+      partySize: 3,
+      companions: [
+        { name: "Jorge", child: false },
+        { name: "Sofía", child: true },
+      ],
+      dietaryNotes: "Sofía es alérgica a la nuez",
+    });
+    // An answer stored before the companions existed keeps counting as adults, so the totals still add up.
+    rsvp.seedResponse(invitation.id, { name: "Beto", attending: true, partySize: 2 });
+
+    const read = await new GetRsvpResponsesUseCase(invitations, rsvp).execute(OWNER, invitation.id);
+
+    assert.deepEqual(read?.totals, {
+      attendingPeople: 5,
+      attendingAdults: 4,
+      attendingChildren: 1,
+      declinedCount: 0,
+      responses: 2,
+    });
+    assert.deepEqual(
+      read?.responses.map((response) => response.dietaryNotes).sort(),
+      [null, "Sofía es alérgica a la nuez"].sort(),
+    );
+    assert.deepEqual(
+      read?.responses
+        .flatMap((response) => response.companions ?? [])
+        .map((companion) => companion.name),
+      ["Jorge", "Sofía"],
+    );
   });
 
   it("counts no people and no declines when nobody answered", async () => {
@@ -504,7 +548,13 @@ describe("GetRsvpResponsesUseCase (S1, S4)", () => {
     const read = await new GetRsvpResponsesUseCase(invitations, rsvp).execute(OWNER, invitation.id);
 
     assert.deepEqual(read?.responses, []);
-    assert.deepEqual(read?.totals, { attendingPeople: 0, declinedCount: 0, responses: 0 });
+    assert.deepEqual(read?.totals, {
+      attendingPeople: 0,
+      attendingAdults: 0,
+      attendingChildren: 0,
+      declinedCount: 0,
+      responses: 0,
+    });
   });
 
   it("answers null for another owner's invitation, an unknown id, and a malformed id", async () => {
@@ -539,6 +589,9 @@ describe("SubmitPublicRsvpUseCase (S1, S4)", () => {
         dedupeKey: "ana perez|+525512345678",
         attending: true,
         partySize: 2,
+        // The older client names no companion, so one unnamed adult rides with the guest (F3; L6.1).
+        companions: [{ name: "", child: false }],
+        dietaryNotes: null,
         phone: "+525512345678",
         message: "¡Con gusto!",
         createdAt: undefined,
@@ -546,6 +599,43 @@ describe("SubmitPublicRsvpUseCase (S1, S4)", () => {
       },
     );
     assert.equal(rsvp.responses[0]?.updatedAt.getTime(), NOW.getTime());
+  });
+
+  it("stores the companion names, the child marks, and the dietary notes it was given", async () => {
+    const { rsvp, submit } = seeded();
+
+    await submit.execute({
+      ...SUBMISSION,
+      partySize: 3,
+      companions: [
+        { name: "  Jorge   Gómez ", child: false },
+        { name: "Sofía", child: true },
+      ],
+      dietaryNotes: "  Sin nueces  ",
+    });
+
+    assert.deepEqual(rsvp.responses[0]?.companions, [
+      { name: "Jorge Gómez", child: false },
+      { name: "Sofía", child: true },
+    ]);
+    assert.equal(rsvp.responses[0]?.dietaryNotes, "Sin nueces");
+  });
+
+  it("refuses a companion list that does not match the party size and stores nothing", async () => {
+    const { rsvp, submit } = seeded();
+
+    await assert.rejects(
+      submit.execute({
+        ...SUBMISSION,
+        partySize: 3,
+        companions: [{ name: "Jorge", child: false }],
+      }),
+      (error: unknown) =>
+        error instanceof InvalidRsvpResponseError &&
+        error.issues.includes("companions must have exactly 2 entries when attending"),
+    );
+    assert.equal(rsvp.responses.length, 0);
+    assert.equal(rsvp.upserted, false);
   });
 
   it("answers the same 404 for a malformed, unknown, draft, or archived slug, and stores nothing", async () => {

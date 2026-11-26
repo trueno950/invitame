@@ -11,7 +11,7 @@ import {
 } from "../domain/invitation-guest";
 import { assertEditable } from "../domain/invitation-lifecycle";
 import { isInvitationExpired } from "../domain/invitation-expiration";
-import { isRsvpOpenOn, validateRsvpResponse } from "../domain/invitation-rsvp";
+import { isRsvpOpenOn, type RsvpCompanion, validateRsvpResponse } from "../domain/invitation-rsvp";
 import { isValidInvitationSlug } from "../domain/invitation-slug";
 import type {
   GuestCheckIn,
@@ -100,6 +100,9 @@ export interface GuestWithToken {
 export interface PublicGuestAnswer {
   attending: boolean;
   partySize: number;
+  /** The companions the guest named, or null for an answer stored before they existed (F3; L6.1). */
+  companions: RsvpCompanion[] | null;
+  dietaryNotes: string | null;
   message: string | null;
 }
 
@@ -125,6 +128,10 @@ export interface SubmitGuestRsvpInput {
   token: string;
   attending: unknown;
   partySize: unknown;
+  /** The people who come with the guest (F3; L6.1); omitted by a client written before the field existed. */
+  companions?: unknown;
+  /** The dietary restrictions of the party, or null (F3; L6.1). */
+  dietaryNotes?: unknown;
   message: unknown;
 }
 
@@ -413,6 +420,8 @@ export class GetPublicGuestUseCase {
             : {
                 attending: response.attending,
                 partySize: response.partySize,
+                companions: response.companions,
+                dietaryNotes: response.dietaryNotes,
                 message: response.message,
               },
         // The pass belongs to a confirmed guest of a package that grants the QR (S3, S4).
@@ -480,6 +489,8 @@ export class SubmitGuestRsvpUseCase {
         name: guest.name,
         attending: input.attending,
         partySize: input.partySize,
+        companions: input.companions,
+        dietaryNotes: input.dietaryNotes,
         phone: guest.phone,
         message: input.message,
       },
@@ -496,6 +507,8 @@ export class SubmitGuestRsvpUseCase {
       {
         attending: validation.value.attending,
         partySize: validation.value.partySize,
+        companions: validation.value.companions,
+        dietaryNotes: validation.value.dietaryNotes,
         message: validation.value.message,
       },
       at,

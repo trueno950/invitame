@@ -6,6 +6,7 @@ import type {
   GuestResponseSummary,
   GuestWithResponse,
 } from "../application/guest.repository";
+import type { RsvpCompanion } from "../domain/invitation-rsvp";
 import {
   GuestListNotAvailableError,
   GuestNotConfirmedError,
@@ -51,6 +52,9 @@ export interface GuestResponseItem {
   response: {
     attending: boolean;
     partySize: number;
+    /** The companions of the party, or null for an answer stored before they existed (F3; L6.1). */
+    companions: RsvpCompanion[] | null;
+    dietaryNotes: string | null;
     message: string | null;
     createdAt: string;
     updatedAt: string;
@@ -89,7 +93,13 @@ export interface GuestCheckInResponse {
 export interface PublicGuestResponse {
   name: string;
   seats: number;
-  response: { attending: boolean; partySize: number; message: string | null } | null;
+  response: {
+    attending: boolean;
+    partySize: number;
+    companions: RsvpCompanion[] | null;
+    dietaryNotes: string | null;
+    message: string | null;
+  } | null;
   qrPass: boolean;
 }
 
@@ -115,6 +125,8 @@ export function toGuestResponseItem(guest: GuestView): GuestResponseItem {
         : {
             attending: response.attending,
             partySize: response.partySize,
+            companions: response.companions,
+            dietaryNotes: response.dietaryNotes,
             message: response.message,
             createdAt: response.createdAt.toISOString(),
             updatedAt: response.updatedAt.toISOString(),

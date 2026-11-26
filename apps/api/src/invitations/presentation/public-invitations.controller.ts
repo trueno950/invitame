@@ -185,6 +185,8 @@ export class PublicInvitationsController {
         token,
         attending: body.attending,
         partySize: body.partySize,
+        companions: body.companions,
+        dietaryNotes: body.dietaryNotes,
         message: body.message,
       });
 
@@ -235,6 +237,8 @@ export class PublicInvitationsController {
         name: body.name,
         attending: body.attending,
         partySize: body.partySize,
+        companions: body.companions,
+        dietaryNotes: body.dietaryNotes,
         phone: body.phone,
         message: body.message,
         honeypot: body.honeypot,

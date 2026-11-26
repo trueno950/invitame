@@ -367,6 +367,8 @@ describe("invitation analytics on real PostgreSQL (M9 T11; S2, S3, S7)", () => {
         dedupeKey,
         attending,
         partySize,
+        companions: Array.from({ length: partySize - 1 }, () => ({ name: "", child: false })),
+        dietaryNotes: null,
         phone: null,
         message: null,
       });

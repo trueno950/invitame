@@ -653,6 +653,8 @@ class MemoryRsvpRepository implements RsvpRepository {
       dedupeKey: "ana perez|+525512345678",
       attending: true,
       partySize: 2,
+      companions: [],
+      dietaryNotes: null,
       phone: "+525512345678",
       message: null,
       createdAt: at,
@@ -731,6 +733,8 @@ class MemoryGuestRepository implements GuestRepository {
           : {
               attending: answer.attending,
               partySize: answer.partySize,
+              companions: answer.companions,
+              dietaryNotes: answer.dietaryNotes,
               message: answer.message,
               createdAt: answer.createdAt,
               updatedAt: answer.updatedAt,
@@ -950,6 +954,8 @@ class MemoryGuestRepository implements GuestRepository {
       guestId,
       attending: true,
       partySize: 2,
+      companions: [],
+      dietaryNotes: null,
       message: "Vamos",
       createdAt: at,
       updatedAt: at,
@@ -3473,7 +3479,9 @@ describe("invitations routes: /invitations", () => {
         );
         assert.deepEqual(Object.keys((body.responses as Row[])[0] ?? {}).sort(), [
           "attending",
+          "companions",
           "createdAt",
+          "dietaryNotes",
           "id",
           "message",
           "name",
@@ -3481,7 +3489,13 @@ describe("invitations routes: /invitations", () => {
           "phone",
           "updatedAt",
         ]);
-        assert.deepEqual(body.totals, { attendingPeople: 3, declinedCount: 1, responses: 2 });
+        assert.deepEqual(body.totals, {
+          attendingPeople: 3,
+          attendingAdults: 3,
+          attendingChildren: 0,
+          declinedCount: 1,
+          responses: 2,
+        });
         // Nothing internal travels: no dedupe key, no invitation id, no owner id.
         const text = JSON.stringify(body);
         for (const internal of ["dedupeKey", created.id, "invitationId", "ownerId"]) {
@@ -3499,7 +3513,13 @@ describe("invitations routes: /invitations", () => {
         assert.deepEqual(await response.json(), {
           settings: { deadline: null, partyLimit: 4 },
           responses: [],
-          totals: { attendingPeople: 0, declinedCount: 0, responses: 0 },
+          totals: {
+            attendingPeople: 0,
+            attendingAdults: 0,
+            attendingChildren: 0,
+            declinedCount: 0,
+            responses: 0,
+          },
         });
       });
 
@@ -3567,15 +3587,15 @@ describe("invitations routes: /invitations", () => {
         const lines = (await response.text()).split("\r\n");
         assert.equal(
           lines[0],
-          "Nombre,Asistencia,Personas,Teléfono,Mensaje,Primera respuesta,Última actualización",
+          "Nombre,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Mensaje,Primera respuesta,Última actualización",
         );
         assert.equal(
           lines[1],
-          `'=Nueva,No,0,,"Dijo: ""sí""",2026-11-19T10:00:00.000Z,2026-11-19T10:00:00.000Z`,
+          `'=Nueva,No,0,,0,,,"Dijo: ""sí""",2026-11-19T10:00:00.000Z,2026-11-19T10:00:00.000Z`,
         );
         assert.equal(
           lines[2],
-          '"Vieja, Ana",Sí,1,\'+525512345678,,2026-11-18T10:00:00.000Z,2026-11-18T10:00:00.000Z',
+          '"Vieja, Ana",Sí,1,,0,,\'+525512345678,,2026-11-18T10:00:00.000Z,2026-11-18T10:00:00.000Z',
         );
       });
 
@@ -3587,7 +3607,7 @@ describe("invitations routes: /invitations", () => {
 
         assert.equal(response.status, 200);
         assert.deepEqual((await response.text()).split("\r\n"), [
-          "Nombre,Asistencia,Personas,Teléfono,Mensaje,Primera respuesta,Última actualización",
+          "Nombre,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Mensaje,Primera respuesta,Última actualización",
           "",
         ]);
       });
@@ -3661,6 +3681,48 @@ describe("invitations routes: /invitations", () => {
       assert.equal(afterRetry.length, 1);
       assert.equal(afterRetry[0]?.partySize, 4);
       assert.equal(afterRetry[0]?.id, stored[0]?.id);
+    });
+
+    it("stores the companions and the dietary notes of the answer and refuses a mismatched list (F3; L6.1)", async () => {
+      const { created } = await published();
+
+      assert.equal(
+        (
+          await submit(created.slug, {
+            ...ATTEMPT,
+            partySize: 3,
+            companions: [
+              { name: "  Jorge   Gómez ", child: false },
+              { name: "Sofía Gómez", child: true },
+            ],
+            dietaryNotes: "  Sin nueces  ",
+          })
+        ).status,
+        202,
+      );
+      const stored = rsvpRepository.responses.filter((item) => item.invitationId === created.id);
+      assert.deepEqual(stored[0]?.companions, [
+        { name: "Jorge Gómez", child: false },
+        { name: "Sofía Gómez", child: true },
+      ]);
+      assert.equal(stored[0]?.dietaryNotes, "Sin nueces");
+
+      const refused = await submit(created.slug, {
+        ...ATTEMPT,
+        name: "Beto",
+        partySize: 3,
+        companions: [{ name: "Jorge", child: false }],
+      });
+      assert.equal(refused.status, 400);
+      assert.deepEqual((await refused.json()) as Row, {
+        code: "INVALID_RSVP",
+        issues: ["companions must have exactly 2 entries when attending"],
+      });
+      // The refused answer stored nothing, so the first answer is still the only row.
+      assert.equal(
+        rsvpRepository.responses.filter((item) => item.invitationId === created.id).length,
+        1,
+      );
     });
 
     it("answers the same 202 without storing when the honeypot is filled", async () => {
@@ -3980,6 +4042,8 @@ describe("invitations routes: /invitations", () => {
         seats: 3,
         attendingGuests: 0,
         attendingPeople: 0,
+        attendingAdults: 0,
+        attendingChildren: 0,
         declinedCount: 0,
         pendingCount: 1,
         checkedInCount: 0,
@@ -4114,6 +4178,8 @@ describe("invitations routes: /invitations", () => {
         seats: 5,
         attendingGuests: 1,
         attendingPeople: 3,
+        attendingAdults: 3,
+        attendingChildren: 0,
         declinedCount: 1,
         pendingCount: 0,
         checkedInCount: 1,
@@ -4125,7 +4191,9 @@ describe("invitations routes: /invitations", () => {
       );
       assert.deepEqual(Object.keys(guests[1]?.response as Row).sort(), [
         "attending",
+        "companions",
         "createdAt",
+        "dietaryNotes",
         "message",
         "partySize",
         "updatedAt",
@@ -4325,12 +4393,12 @@ describe("invitations routes: /invitations", () => {
       const lines = (await response.text()).split("\r\n");
       assert.equal(
         lines[0],
-        "Nombre,Lugares,Asistencia,Personas,Teléfono,Nota,Mensaje,Primer check-in,Primera respuesta,Última actualización",
+        "Nombre,Lugares,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Nota,Mensaje,Primer check-in,Primera respuesta,Última actualización",
       );
       const beto = guestsOf(guestList.id).find((row) => row.name === "Beto");
       assert.deepEqual(lines.slice(1, 3).sort(), [
-        "Ana,3,Sí,2,'+525512345678,Mesa 4,Vamos,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
-        `Beto,1,Pendiente,,,,,,,${beto?.updatedAt.toISOString()}`,
+        "Ana,3,Sí,2,,0,,'+525512345678,Mesa 4,Vamos,,2026-11-20T10:00:00.000Z,2026-11-20T10:00:00.000Z",
+        `Beto,1,Pendiente,,,,,,,,,,${beto?.updatedAt.toISOString()}`,
       ]);
 
       // The open form keeps its own export (M6 G1 preserved).
@@ -4339,7 +4407,7 @@ describe("invitations routes: /invitations", () => {
       const open = await send("GET", `${PATH}/${premium.id}/rsvp.csv`, cookie);
       assert.equal(
         (await open.text()).split("\r\n")[0],
-        "Nombre,Asistencia,Personas,Teléfono,Mensaje,Primera respuesta,Última actualización",
+        "Nombre,Asistencia,Personas,Acompañantes,Niños,Restricciones alimentarias,Teléfono,Mensaje,Primera respuesta,Última actualización",
       );
     });
   });
@@ -4397,7 +4465,13 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(body.guest, {
         name: "Ana",
         seats: 3,
-        response: { attending: true, partySize: 2, message: "Vamos" },
+        response: {
+          attending: true,
+          partySize: 2,
+          companions: [],
+          dietaryNotes: null,
+          message: "Vamos",
+        },
         qrPass: true,
       });
       assert.deepEqual((body.features as Row).rsvp, {

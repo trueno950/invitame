@@ -225,8 +225,12 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         columns.map((column) => [column.column_name, column.is_nullable]),
         [
           ["attending", "NO"],
+          // The companions and the dietary notes of F3 are additive and nullable, so every answer stored before them
+          // keeps reading exactly what it read (L6.1).
+          ["companions", "YES"],
           ["createdAt", "NO"],
           ["dedupeKey", "NO"],
+          ["dietaryNotes", "YES"],
           ["guestId", "YES"],
           ["id", "NO"],
           ["invitationId", "NO"],
@@ -247,6 +251,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         name: "Ana",
         attending: true,
         partySize: 1,
+        companions: [],
+        dietaryNotes: null,
         phone: null,
         message: null,
       };
@@ -270,6 +276,74 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
       assert.equal(await prisma.rsvpResponse.count({ where: { invitationId: invitation.id } }), 0);
     });
 
+    it("stores the companions and the dietary notes, wide enough for 300 characters (F3; L6.1)", async () => {
+      const { invitation } = await newPublished(["RSVP"]);
+      const at = new Date("2026-11-20T10:00:00.000Z");
+
+      assert.equal(
+        await rsvp.upsertResponse(
+          invitation.id,
+          {
+            name: "Laura Gómez",
+            dedupeKey: `laura gomez|${runId}`,
+            attending: true,
+            partySize: 3,
+            companions: [
+              { name: "Jorge Gómez", child: false },
+              { name: "Sofía Gómez", child: true },
+            ],
+            dietaryNotes: "é".repeat(300),
+            phone: null,
+            message: null,
+          },
+          at,
+        ),
+        true,
+      );
+
+      const read = await rsvp.findResponses(invitation.ownerId, invitation.id);
+      const stored = read?.responses.find((response) => response.name === "Laura Gómez");
+      assert.deepEqual(stored?.companions, [
+        { name: "Jorge Gómez", child: false },
+        { name: "Sofía Gómez", child: true },
+      ]);
+      assert.equal(stored?.dietaryNotes?.length, 300);
+      // The column is exactly 300 characters wide, so one more is refused by the database itself.
+      await assert.rejects(
+        prisma.$executeRaw`UPDATE "RsvpResponse" SET "dietaryNotes" = ${"é".repeat(301)}
+          WHERE "invitationId" = ${invitation.id}::uuid`,
+        /value too long|too long/,
+      );
+    });
+
+    it("reads an answer stored before the companions existed as no names (F3; L6.1)", async () => {
+      const { invitation } = await newPublished(["RSVP"]);
+      await prisma.rsvpResponse.create({
+        data: {
+          invitationId: invitation.id,
+          dedupeKey: `legacy|${runId}`,
+          name: "Beto",
+          attending: true,
+          partySize: 2,
+        },
+      });
+
+      const read = await new GetRsvpResponsesUseCase(invitations, rsvp).execute(
+        invitation.ownerId,
+        invitation.id,
+      );
+
+      assert.equal(read?.responses[0]?.companions, null);
+      assert.equal(read?.responses[0]?.dietaryNotes, null);
+      assert.deepEqual(read?.totals, {
+        attendingPeople: 2,
+        attendingAdults: 2,
+        attendingChildren: 0,
+        declinedCount: 0,
+        responses: 1,
+      });
+    });
+
     it("holds one response per normalized guest per invitation and refuses to delete an answered invitation", async () => {
       const { invitation } = await newPublished(["RSVP"]);
       const data = {
@@ -278,6 +352,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         name: "Ana Pérez",
         attending: true,
         partySize: 2,
+        companions: [],
+        dietaryNotes: null,
         phone: null,
         message: null,
       };
@@ -305,6 +381,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         dedupeKey: "ana perez|+525512345678",
         attending: true,
         partySize: 2,
+        companions: [],
+        dietaryNotes: null,
         phone: "+525512345678",
         message: null,
       };
@@ -337,6 +415,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         dedupeKey: "ana perez|",
         attending: true,
         partySize: 2,
+        companions: [],
+        dietaryNotes: null,
         phone: null,
         message: null,
       };
@@ -366,6 +446,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
           dedupeKey: "ana|",
           attending: true,
           partySize: 1,
+          companions: [],
+          dietaryNotes: null,
           phone: null,
           message: null,
         },
@@ -378,6 +460,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
           dedupeKey: "beto|",
           attending: false,
           partySize: 0,
+          companions: [],
+          dietaryNotes: null,
           phone: null,
           message: null,
         },
@@ -394,6 +478,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         dedupeKey: "ana|",
         attending: true,
         partySize: 1,
+        companions: [],
+        dietaryNotes: null,
         phone: null,
         message: null,
       };
@@ -478,6 +564,8 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         dedupeKey: dedupe,
         attending,
         partySize,
+        companions: Array.from({ length: partySize - 1 }, () => ({ name: "", child: false })),
+        dietaryNotes: null,
         phone: null,
         message: null,
       });
@@ -501,7 +589,13 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         read?.responses.map((response) => response.name),
         ["Beto", "Ana"],
       );
-      assert.deepEqual(read?.totals, { attendingPeople: 3, declinedCount: 1, responses: 2 });
+      assert.deepEqual(read?.totals, {
+        attendingPeople: 3,
+        attendingAdults: 3,
+        attendingChildren: 0,
+        declinedCount: 1,
+        responses: 2,
+      });
 
       // The other creator reads their own answer and nothing of the first invitation.
       const otherRead = await new GetRsvpResponsesUseCase(invitations, rsvp).execute(

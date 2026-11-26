@@ -36,6 +36,17 @@ export class SubmitRsvpDto {
   @IsOptional()
   partySize?: unknown;
 
+  /**
+   * The people who come with the guest (F3; L6.1). Optional, so a page deployed before this field keeps answering: an
+   * omitted list means one unnamed adult per extra person, and a provided one must match the party size.
+   */
+  @IsOptional()
+  companions?: unknown;
+
+  /** The dietary restrictions of the party, or null (F3; L6.1). */
+  @IsOptional()
+  dietaryNotes?: unknown;
+
   @IsOptional()
   phone?: unknown;
 

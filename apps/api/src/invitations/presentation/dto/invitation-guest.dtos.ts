@@ -56,6 +56,17 @@ export class SubmitGuestRsvpDto {
   @IsOptional()
   partySize?: unknown;
 
+  /**
+   * The people who come with the guest (F3; L6.1). Optional like the open form's, so a page deployed before this field
+   * keeps answering; a provided list must match the party size, which is bounded by the guest's own seats.
+   */
+  @IsOptional()
+  companions?: unknown;
+
+  /** The dietary restrictions of the party, or null (F3; L6.1). */
+  @IsOptional()
+  dietaryNotes?: unknown;
+
   @IsOptional()
   message?: unknown;
 }

@@ -28,8 +28,20 @@ export const RSVP_NAME_MAX_LENGTH = 80;
 /** The widest message a response may carry, counted in characters: the width of `RsvpResponse.message`. */
 export const RSVP_MESSAGE_MAX_LENGTH = 280;
 
+/**
+ * The widest companion name a response may carry, counted in characters (F3; L6.1). A blank name is valid: a guest may
+ * confirm a count without every name.
+ */
+export const RSVP_COMPANION_NAME_MAX_LENGTH = 60;
+
+/** The widest dietary notes a response may carry, counted in characters (F3; L6.1). */
+export const RSVP_DIETARY_NOTES_MAX_LENGTH = 300;
+
 /** The widest party any invitation allows, whatever its own limit says: `RsvpResponse.partySize`. */
 export const RSVP_PARTY_SIZE_MAX = 10;
+
+/** How many companions one answer may name: one fewer than the widest party the column holds (F3; L6.1). */
+export const RSVP_COMPANIONS_MAX = RSVP_PARTY_SIZE_MAX - 1;
 
 /** The party limit bounds a creator may set (S4). The maximum is the widest the column accepts, never a policy. */
 export const RSVP_PARTY_LIMIT_MIN = 1;
@@ -74,6 +86,32 @@ export const RSVP_MESSAGE_TYPE_ISSUE = "message must be a string or null";
 
 /** The issue a message wider than `RSVP_MESSAGE_MAX_LENGTH` is refused with. */
 export const RSVP_MESSAGE_LENGTH_ISSUE = "message must be at most 280 characters";
+
+/** The issue a companions value that is not a list is refused with (F3; L6.1). */
+export const RSVP_COMPANIONS_TYPE_ISSUE = "companions must be a list";
+
+/** The issue a companion entry that is not `{ name, child }` is refused with. */
+export const RSVP_COMPANION_SHAPE_ISSUE = "each companion must be { name, child }";
+
+/** The issue a companion name wider than `RSVP_COMPANION_NAME_MAX_LENGTH` is refused with. */
+export const RSVP_COMPANION_NAME_LENGTH_ISSUE = "companion name must be at most 60 characters";
+
+/** The issue a declined answer that still names people is refused with. */
+export const RSVP_COMPANIONS_NOT_ATTENDING_ISSUE = "companions must be empty when not attending";
+
+/**
+ * The issue a companion list whose length does not match the party size is refused with: the stored party size stays
+ * the source of the count, so an attending answer of `n` people names exactly `n - 1` companions (F3; L6.1).
+ */
+export function companionsCountIssue(expected: number): string {
+  return `companions must have exactly ${expected} ${expected === 1 ? "entry" : "entries"} when attending`;
+}
+
+/** The issue dietary notes that are not a string are refused with. */
+export const RSVP_DIETARY_NOTES_TYPE_ISSUE = "dietaryNotes must be a string or null";
+
+/** The issue dietary notes wider than `RSVP_DIETARY_NOTES_MAX_LENGTH` are refused with. */
+export const RSVP_DIETARY_NOTES_LENGTH_ISSUE = "dietaryNotes must be at most 300 characters";
 
 /** The issue a deadline that is not an ISO instant with an offset is refused with. */
 export const RSVP_DEADLINE_ISSUE = "deadline must be an ISO 8601 instant with an offset, or null";
@@ -242,8 +280,25 @@ export interface RsvpResponseInput {
   readonly attending: unknown;
   /** Omitted means "no people named": it is valid for a declined response and refused for an attending one. */
   readonly partySize?: unknown;
+  /**
+   * The people who come with the guest (F3; L6.1). Omitted is the answer of a client written before this field
+   * existed, and it means one unnamed adult per extra person; a list whose length does not match the party size is
+   * refused instead.
+   */
+  readonly companions?: unknown;
+  /** The dietary restrictions of the party, or null (F3; L6.1). Untrusted like every other value. */
+  readonly dietaryNotes?: unknown;
   readonly phone: unknown;
   readonly message: unknown;
+}
+
+/**
+ * One companion of an answer (F3; L6.1): the name the guest typed, blank when they confirmed a count without it, and
+ * whether the person is a child, which is what the creator's totals and exports count apart.
+ */
+export interface RsvpCompanion {
+  readonly name: string;
+  readonly child: boolean;
 }
 
 /** A validated response: the stored fields plus the dedupe key the write uses. */
@@ -251,6 +306,12 @@ export interface RsvpResponseValue {
   readonly name: string;
   readonly attending: boolean;
   readonly partySize: number;
+  /**
+   * Exactly `partySize - 1` entries when attending, and empty when not: the stored party size stays the source of the
+   * count, so nothing can name more people than the party it confirms (F3; L6.1).
+   */
+  readonly companions: RsvpCompanion[];
+  readonly dietaryNotes: string | null;
   readonly phone: string | null;
   readonly message: string | null;
   readonly dedupeKey: string;
@@ -284,7 +345,32 @@ function normalizeRsvpPhone(
   };
 }
 
-/** Normalizes the optional message: blank stores null, and the length is counted in characters. */
+/**
+ * Reads the companions a stored answer carries (F3; L6.1). The write only ever stores a validated list, but a column
+ * can also be read by something else, so anything that is not a list of `{ name, child }` reads as "no names" instead
+ * of reaching a page. Null means the answer was stored before the field existed, and then the whole party is adult.
+ */
+export function storedCompanions(value: unknown): RsvpCompanion[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const companions: RsvpCompanion[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      return null;
+    }
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.name !== "string" || typeof entry.child !== "boolean") {
+      return null;
+    }
+    companions.push({ name: entry.name, child: entry.child });
+  }
+  return companions;
+}
+
+/**
+ * Normalizes the optional message: blank stores null, and the length is counted in characters.
+ */
 function normalizeRsvpMessage(
   value: unknown,
 ):
@@ -306,11 +392,71 @@ function normalizeRsvpMessage(
   return { ok: true, message: trimmed };
 }
 
+/** The one unnamed adult a party of a single guest carries, and every other entry of a count-only answer. */
+function unnamedCompanion(): RsvpCompanion {
+  return { name: "", child: false };
+}
+
 /**
- * Validates one response against the invitation's party limit (S4). An attending response carries 1 to the
- * limit people; a declined one carries none, and an omitted party size means zero. The issues are reported in a
- * fixed order — name, attending, party size, phone, message — so the client can show them one after another.
- * A refused response stores nothing.
+ * Normalizes the dietary notes (F3; L6.1): blank stores null, the surrounding whitespace is trimmed, and the length is
+ * counted in characters like every other bounded field.
+ */
+function normalizeDietaryNotes(
+  value: unknown,
+):
+  | { readonly ok: true; readonly dietaryNotes: string | null }
+  | { readonly ok: false; readonly issue: string } {
+  if (value === null || value === undefined) {
+    return { ok: true, dietaryNotes: null };
+  }
+  if (typeof value !== "string") {
+    return { ok: false, issue: RSVP_DIETARY_NOTES_TYPE_ISSUE };
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return { ok: true, dietaryNotes: null };
+  }
+  if ([...trimmed].length > RSVP_DIETARY_NOTES_MAX_LENGTH) {
+    return { ok: false, issue: RSVP_DIETARY_NOTES_LENGTH_ISSUE };
+  }
+  return { ok: true, dietaryNotes: trimmed };
+}
+
+/**
+ * One companion entry, or the issue that refuses it: `name` is a string trimmed and collapsed like the guest's own
+ * name, blank allowed, and `child` is a boolean (an absent mark is an adult, so a client that only sends names still
+ * parses).
+ */
+function normalizeCompanion(
+  value: unknown,
+):
+  | { readonly ok: true; readonly companion: RsvpCompanion }
+  | { readonly ok: false; readonly issue: string } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { ok: false, issue: RSVP_COMPANION_SHAPE_ISSUE };
+  }
+  const entry = value as Record<string, unknown>;
+  if (typeof entry.name !== "string") {
+    return { ok: false, issue: RSVP_COMPANION_SHAPE_ISSUE };
+  }
+  const name = collapseWhitespace(entry.name);
+  if ([...name].length > RSVP_COMPANION_NAME_MAX_LENGTH) {
+    return { ok: false, issue: RSVP_COMPANION_NAME_LENGTH_ISSUE };
+  }
+  const child = entry.child ?? false;
+  if (typeof child !== "boolean") {
+    return { ok: false, issue: RSVP_COMPANION_SHAPE_ISSUE };
+  }
+  return { ok: true, companion: { name, child } };
+}
+
+/**
+ * Validates one response against the invitation's party limit (S4, F3). An attending response carries 1 to the
+ * limit people; a declined one carries none, and an omitted party size means zero. The companions follow the party
+ * size: an attending answer names exactly one per extra person, a declined one names none, and a client that sends no
+ * list at all is accepted with one unnamed adult per extra person (L6.1, so a page deployed before this field still
+ * answers). The issues are reported in a fixed order — name, attending, party size, companions, dietary notes, phone,
+ * message — so the client can show them one after another. A refused response stores nothing.
  */
 export function validateRsvpResponse(
   input: RsvpResponseInput,
@@ -329,17 +475,68 @@ export function validateRsvpResponse(
   }
 
   const partySize = input.partySize === undefined ? 0 : input.partySize;
-  if (
-    typeof partySize !== "number" ||
-    !Number.isInteger(partySize) ||
-    partySize < 0 ||
-    partySize > RSVP_PARTY_SIZE_MAX
-  ) {
+  const partySizeIsCount =
+    typeof partySize === "number" &&
+    Number.isInteger(partySize) &&
+    partySize >= 0 &&
+    partySize <= RSVP_PARTY_SIZE_MAX;
+  if (!partySizeIsCount) {
     issues.push(RSVP_PARTY_SIZE_TYPE_ISSUE);
   } else if (attending === true && (partySize < 1 || partySize > settings.partyLimit)) {
     issues.push(attendingPartySizeIssue(settings.partyLimit));
   } else if (attending === false && partySize !== 0) {
     issues.push(RSVP_PARTY_SIZE_NOT_ATTENDING_ISSUE);
+  }
+
+  // The companions are only judged once the party size they must match is itself valid: a refused count is never
+  // reported twice, and a count out of bounds never produces a companion issue nobody can fix.
+  const partySizeAccepted =
+    partySizeIsCount &&
+    (attending === true
+      ? partySize >= 1 && partySize <= settings.partyLimit
+      : attending === false && partySize === 0);
+  let companions: RsvpCompanion[] | undefined;
+
+  if (input.companions === undefined) {
+    // The answer of a client written before the field existed: the party size itself counts unnamed adults (L6.1).
+    if (partySizeAccepted) {
+      companions =
+        attending === true ? Array.from({ length: partySize - 1 }, unnamedCompanion) : [];
+    }
+  } else if (partySizeAccepted) {
+    const submitted = input.companions;
+    if (!Array.isArray(submitted)) {
+      issues.push(RSVP_COMPANIONS_TYPE_ISSUE);
+    } else if (attending === false) {
+      if (submitted.length > 0) {
+        issues.push(RSVP_COMPANIONS_NOT_ATTENDING_ISSUE);
+      } else {
+        companions = [];
+      }
+    } else {
+      const expected = partySize - 1;
+      if (submitted.length !== expected) {
+        issues.push(companionsCountIssue(expected));
+      } else {
+        const parsed: RsvpCompanion[] = [];
+        for (const item of submitted) {
+          const companion = normalizeCompanion(item);
+          if (!companion.ok) {
+            issues.push(companion.issue);
+            break;
+          }
+          parsed.push(companion.companion);
+        }
+        if (parsed.length === expected) {
+          companions = parsed;
+        }
+      }
+    }
+  }
+
+  const dietaryNotes = normalizeDietaryNotes(input.dietaryNotes);
+  if (!dietaryNotes.ok) {
+    issues.push(dietaryNotes.issue);
   }
 
   const phone = normalizeRsvpPhone(input.phone);
@@ -357,6 +554,8 @@ export function validateRsvpResponse(
     !name.ok ||
     !phone.ok ||
     !message.ok ||
+    !dietaryNotes.ok ||
+    companions === undefined ||
     typeof attending !== "boolean" ||
     typeof partySize !== "number"
   ) {
@@ -369,6 +568,8 @@ export function validateRsvpResponse(
       name: name.value,
       attending,
       partySize,
+      companions,
+      dietaryNotes: dietaryNotes.dietaryNotes,
       phone: phone.phone,
       message: message.message,
       dedupeKey: rsvpDedupeKey(name.value, phone.phone),

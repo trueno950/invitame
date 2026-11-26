@@ -5,6 +5,8 @@ import {
   DEFAULT_RSVP_PARTY_LIMIT,
   isRsvpOpenOn,
   normalizeRsvpName,
+  RSVP_COMPANION_NAME_MAX_LENGTH,
+  RSVP_DIETARY_NOTES_MAX_LENGTH,
   RSVP_MESSAGE_MAX_LENGTH,
   RSVP_NAME_MAX_LENGTH,
   RSVP_PARTY_SIZE_MAX,
@@ -237,6 +239,13 @@ describe("RSVP response validation (S4)", () => {
         name: "Ana Pérez",
         attending: true,
         partySize: 4,
+        // The older client names no companion, so the party size itself counts the unnamed adults (F3; L6.1).
+        companions: [
+          { name: "", child: false },
+          { name: "", child: false },
+          { name: "", child: false },
+        ],
+        dietaryNotes: null,
         phone: "+525512345678",
         message: "¡Con gusto!",
         dedupeKey: "ana perez|+525512345678",
@@ -409,6 +418,7 @@ describe("RSVP response validation (S4)", () => {
             name: "",
             attending: "yes",
             partySize: 99,
+            dietaryNotes: 42,
             phone: "12345",
             message: "x".repeat(281),
           },
@@ -419,9 +429,186 @@ describe("RSVP response validation (S4)", () => {
         "name must be between 1 and 80 characters",
         "attending must be a boolean",
         "partySize must be an integer between 0 and 10",
+        "dietaryNotes must be a string or null",
         "phone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
         "message must be at most 280 characters",
       ],
+    );
+  });
+});
+
+describe("RSVP companions and dietary notes (F3; L6.1)", () => {
+  it("stores one companion per extra person, with its name and whether it is a child", () => {
+    const result = validateRsvpResponse(
+      {
+        name: "Laura Gómez",
+        attending: true,
+        partySize: 4,
+        companions: [
+          { name: "  Jorge   Gómez ", child: false },
+          { name: "Sofía Gómez", child: true },
+          { name: "", child: false },
+        ],
+        dietaryNotes: "  Sofía es alérgica a la nuez  ",
+        phone: null,
+        message: null,
+      },
+      LIMIT,
+    );
+
+    assert.deepEqual(result, {
+      ok: true,
+      value: {
+        name: "Laura Gómez",
+        attending: true,
+        partySize: 4,
+        companions: [
+          { name: "Jorge Gómez", child: false },
+          { name: "Sofía Gómez", child: true },
+          { name: "", child: false },
+        ],
+        dietaryNotes: "Sofía es alérgica a la nuez",
+        phone: null,
+        message: null,
+        dedupeKey: "laura gomez|",
+      },
+    });
+  });
+
+  it("accepts an unnamed companion, so a guest may confirm a count without every name", () => {
+    const result = validateRsvpResponse(
+      {
+        name: "Ana",
+        attending: true,
+        partySize: 2,
+        companions: [{ name: "   ", child: false }],
+        dietaryNotes: null,
+        phone: null,
+        message: null,
+      },
+      LIMIT,
+    );
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.ok ? result.value.companions : null, [{ name: "", child: false }]);
+  });
+
+  it("refuses a list that does not match the party size minus one", () => {
+    for (const [partySize, companions, issue] of [
+      [
+        3,
+        [{ name: "Jorge", child: false }],
+        "companions must have exactly 2 entries when attending",
+      ],
+      [
+        2,
+        [
+          { name: "Jorge", child: false },
+          { name: "Sofía", child: true },
+        ],
+        "companions must have exactly 1 entry when attending",
+      ],
+      [
+        1,
+        [{ name: "Jorge", child: false }],
+        "companions must have exactly 0 entries when attending",
+      ],
+    ] as const) {
+      assert.deepEqual(
+        issuesOf(
+          validateRsvpResponse(
+            { name: "Ana", attending: true, partySize, companions, phone: null, message: null },
+            LIMIT,
+          ),
+        ),
+        [issue],
+        String(partySize),
+      );
+    }
+  });
+
+  it("refuses a list that is not a list of names and child marks", () => {
+    for (const [companions, issue] of [
+      ["Jorge", "companions must be a list"],
+      [42, "companions must be a list"],
+      [{}, "companions must be a list"],
+      [["Jorge"], "each companion must be { name, child }"],
+      [[{ child: false }], "each companion must be { name, child }"],
+      [[{ name: 42, child: false }], "each companion must be { name, child }"],
+      [[{ name: "Jorge", child: "yes" }], "each companion must be { name, child }"],
+    ] as const) {
+      assert.deepEqual(
+        issuesOf(
+          validateRsvpResponse(
+            { name: "Ana", attending: true, partySize: 2, companions, phone: null, message: null },
+            LIMIT,
+          ),
+        ),
+        [issue],
+        JSON.stringify(companions),
+      );
+    }
+  });
+
+  it("refuses a companion name wider than 60 characters", () => {
+    assert.equal(RSVP_COMPANION_NAME_MAX_LENGTH, 60);
+    assert.deepEqual(
+      issuesOf(
+        validateRsvpResponse(
+          {
+            name: "Ana",
+            attending: true,
+            partySize: 2,
+            companions: [{ name: "Á".repeat(61), child: false }],
+            phone: null,
+            message: null,
+          },
+          LIMIT,
+        ),
+      ),
+      ["companion name must be at most 60 characters"],
+    );
+  });
+
+  it("stores no companion for a declined answer and refuses names on one", () => {
+    const declined = validateRsvpResponse(
+      { name: "Ana", attending: false, partySize: 0, phone: null, message: null },
+      LIMIT,
+    );
+    assert.deepEqual(declined.ok ? declined.value.companions : null, []);
+
+    assert.deepEqual(
+      issuesOf(
+        validateRsvpResponse(
+          {
+            name: "Ana",
+            attending: false,
+            partySize: 0,
+            companions: [{ name: "Jorge", child: false }],
+            phone: null,
+            message: null,
+          },
+          LIMIT,
+        ),
+      ),
+      ["companions must be empty when not attending"],
+    );
+  });
+
+  it("keeps the dietary notes optional, trimmed, and bounded to 300 characters", () => {
+    assert.equal(RSVP_DIETARY_NOTES_MAX_LENGTH, 300);
+
+    const base = { name: "Ana", attending: true, partySize: 1, phone: null, message: null };
+    const blank = validateRsvpResponse({ ...base, dietaryNotes: "   " }, LIMIT);
+    assert.equal(blank.ok ? blank.value.dietaryNotes : "unset", null);
+
+    const widest = validateRsvpResponse({ ...base, dietaryNotes: "é".repeat(300) }, LIMIT);
+    assert.equal(widest.ok, true);
+    assert.equal(widest.ok ? widest.value.dietaryNotes?.length : null, 300);
+
+    assert.deepEqual(
+      issuesOf(validateRsvpResponse({ ...base, dietaryNotes: "é".repeat(301) }, LIMIT)),
+      ["dietaryNotes must be at most 300 characters"],
     );
   });
 });

@@ -5,12 +5,14 @@ import type {
   GuestListReadModel,
   GuestRecord,
   GuestRepository,
+  GuestResponseSummary,
   GuestResponseWrite,
   GuestWithResponse,
   NewGuest,
 } from "../application/guest.repository";
 import { GuestSeatsBelowConfirmedPartyError } from "../application/invitation-guest.errors";
 import { assertEditable } from "../domain/invitation-lifecycle";
+import { storedCompanions } from "../domain/invitation-rsvp";
 
 const GUEST_SELECT = {
   id: true,
@@ -28,10 +30,22 @@ const GUEST_SELECT = {
 const RESPONSE_SELECT = {
   attending: true,
   partySize: true,
+  companions: true,
+  dietaryNotes: true,
   message: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.RsvpResponseSelect;
+
+/**
+ * One guest's answer as the port reads it: the companions column is JSONB, so it passes the domain's own guard and a
+ * value written by anything else reads as "no names" instead of reaching a page (F3; L6.1).
+ */
+function responseWithCompanions(
+  response: Prisma.RsvpResponseGetPayload<{ select: typeof RESPONSE_SELECT }>,
+): GuestResponseSummary {
+  return { ...response, companions: storedCompanions(response.companions) };
+}
 
 /** One row of the guarded writes below: the guest columns every statement returns. */
 interface GuestRow {
@@ -115,7 +129,10 @@ export class PrismaGuestRepository implements GuestRepository {
 
     return {
       slug: invitation.slug,
-      guests: rows.map(({ rsvpResponse, ...guest }) => ({ ...guest, response: rsvpResponse })),
+      guests: rows.map(({ rsvpResponse, ...guest }) => ({
+        ...guest,
+        response: rsvpResponse === null ? null : responseWithCompanions(rsvpResponse),
+      })),
     };
   }
 
@@ -132,7 +149,10 @@ export class PrismaGuestRepository implements GuestRepository {
       return null;
     }
     const { rsvpResponse, ...guest } = row;
-    return { ...guest, response: rsvpResponse };
+    return {
+      ...guest,
+      response: rsvpResponse === null ? null : responseWithCompanions(rsvpResponse),
+    };
   }
 
   async update(
@@ -251,7 +271,10 @@ export class PrismaGuestRepository implements GuestRepository {
       return null;
     }
     const { rsvpResponse, ...guest } = row;
-    return { ...guest, response: rsvpResponse };
+    return {
+      ...guest,
+      response: rsvpResponse === null ? null : responseWithCompanions(rsvpResponse),
+    };
   }
 
   async upsertResponse(
@@ -264,10 +287,11 @@ export class PrismaGuestRepository implements GuestRepository {
     // `ON CONFLICT ("guestId")` target is the unique index that makes one guest have one answer.
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       INSERT INTO "RsvpResponse"
-        ("id", "invitationId", "guestId", "dedupeKey", "name", "attending", "partySize", "phone",
-         "message", "createdAt", "updatedAt")
+        ("id", "invitationId", "guestId", "dedupeKey", "name", "attending", "partySize", "companions",
+         "dietaryNotes", "phone", "message", "createdAt", "updatedAt")
       SELECT gen_random_uuid(), guest."invitationId", guest."id", 'guest|' || guest."id"::text,
              guest."name", ${response.attending}, ${response.partySize},
+             ${JSON.stringify(response.companions)}::jsonb, ${response.dietaryNotes},
              -- The guest row owns the phone; the answer does not duplicate it.
              NULL::varchar,
              ${response.message}, ${at}, ${at}
@@ -284,6 +308,8 @@ export class PrismaGuestRepository implements GuestRepository {
       SET "name" = EXCLUDED."name",
           "attending" = EXCLUDED."attending",
           "partySize" = EXCLUDED."partySize",
+          "companions" = EXCLUDED."companions",
+          "dietaryNotes" = EXCLUDED."dietaryNotes",
           "phone" = EXCLUDED."phone",
           "message" = EXCLUDED."message",
           "updatedAt" = EXCLUDED."updatedAt"

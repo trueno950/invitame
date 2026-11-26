@@ -227,6 +227,8 @@ class MemoryGuestRepository implements GuestRepository {
           : {
               attending: answer.attending,
               partySize: answer.partySize,
+              companions: answer.companions,
+              dietaryNotes: answer.dietaryNotes,
               message: answer.message,
               createdAt: answer.createdAt,
               updatedAt: answer.updatedAt,
@@ -574,6 +576,8 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
         seats: 5,
         attendingGuests: 1,
         attendingPeople: 3,
+        attendingAdults: 3,
+        attendingChildren: 0,
         declinedCount: 1,
         pendingCount: 0,
         checkedInCount: 0,
@@ -865,6 +869,9 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
       assert.deepEqual(page?.guest.response, {
         attending: true,
         partySize: 2,
+        // The client sent no companions, so the party size itself counts one unnamed adult next to the guest.
+        companions: [{ name: "", child: false }],
+        dietaryNotes: null,
         message: "Vamos",
       });
       // Deluxe grants the QR pass, and this guest confirmed: the page offers it.
@@ -963,6 +970,61 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
       assert.equal(answers[0]?.partySize, 4);
       assert.equal(answers[0]?.message, null);
       assert.equal(answers[0]?.createdAt.toISOString(), NOW.toISOString());
+    });
+
+    it("stores the companions, the child marks, and the dietary notes of a personal answer (F3; L6.1)", async () => {
+      const { invitation, guest, token } = await seedGuest({ seats: 3 });
+
+      assert.equal(
+        await submit.execute({
+          slug: invitation.slug,
+          token,
+          attending: true,
+          partySize: 3,
+          companions: [
+            { name: "  Jorge  ", child: false },
+            { name: "Sofía", child: true },
+          ],
+          dietaryNotes: "  Sin nueces  ",
+          message: null,
+        }),
+        true,
+      );
+
+      const answers = guests.responses.filter((row) => row.guestId === guest.id);
+      assert.deepEqual(answers[0]?.companions, [
+        { name: "Jorge", child: false },
+        { name: "Sofía", child: true },
+      ]);
+      assert.equal(answers[0]?.dietaryNotes, "Sin nueces");
+      // The party size stays the source of the count, so a list that does not match it is refused before the write.
+      await assert.rejects(
+        submit.execute({
+          slug: invitation.slug,
+          token,
+          attending: true,
+          partySize: 3,
+          companions: [{ name: "Jorge", child: false }],
+          message: null,
+        }),
+        InvalidRsvpResponseError,
+      );
+      assert.equal(guests.responses.filter((row) => row.guestId === guest.id).length, 1);
+    });
+
+    it("reads a legacy answer without companions as one unnamed adult per extra person (F3; L6.1)", async () => {
+      const { invitation, guest, token } = await seedGuest({ seats: 3 });
+      await submit.execute({
+        slug: invitation.slug,
+        token,
+        attending: true,
+        partySize: 2,
+        message: null,
+      });
+
+      const read = await guests.findByToken(invitation.id, guests.tokenHashOf(guest.id) ?? "");
+      assert.deepEqual(read?.response?.companions, [{ name: "", child: false }]);
+      assert.equal(read?.response?.dietaryNotes, null);
     });
 
     it("refuses a party above the guest's seats and a declined answer that names people", async () => {

@@ -60,7 +60,12 @@ run stores nothing. The column is nullable, so no row is rewritten; the catalog 
 feature is changed and nothing is deleted. F2 adds the additive `20261203120000_add_invitation_gift_registry`
 migration: the nullable `InvitationFeatureSettings.giftRegistry` JSONB column, and nothing else. It inserts no catalog
 row, because `GIFT_REGISTRY` already exists and Deluxe already grants it; no existing row is rewritten, no package link
-changes, and nothing is deleted. The legacy `Invitation.content.giftRegistry` text field is left untouched. Future analytics design is documented separately in
+changes, and nothing is deleted. The legacy `Invitation.content.giftRegistry` text field is left untouched. F3 adds the
+additive `20261204120000_add_rsvp_companions` migration: the nullable `RsvpResponse.companions` JSONB column and the
+nullable `RsvpResponse.dietaryNotes` column (up to 300 characters). Both RSVP paths — the open form and the guest list's
+personal answer — are rows of that one table, so one migration serves both; it inserts no catalog row, because the
+existing `RSVP` and `GUEST_LIST` keys gate the feature. Every answer stored before it reads `NULL` in both columns and
+renders exactly as it did, so no row is rewritten and nothing is deleted. Future analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -79,7 +84,7 @@ changes, and nothing is deleted. The legacy `Invitation.content.giftRegistry` te
 | `Template` | Mutable template master metadata and category relation |
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
 | `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the publication-derived expiry `expiresAt`, the never-cleared first publication `firstPublishedAt`, JSONB `content`, the archive marker, the IANA `timeZone`, and the RSVP settings `rsvpDeadline` and `rsvpPartyLimit` |
-| `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, an optional E.164 `phone`, an optional `message`, and timestamps |
+| `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, the bounded companions `[{ name, child }]` of the party (one per extra person while attending, or `NULL` for an older answer), optional `dietaryNotes` (up to 300 characters), an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
 | `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary` and `giftRegistry` (or `NULL`), and timestamps |
@@ -351,12 +356,25 @@ the settings bounds, the response bounds against the invitation's party limit, a
   characters. The unique index `RsvpResponse_invitationId_dedupeKey_key` on `(invitationId, dedupeKey)` is what makes
   a retry update that response instead of duplicating it, and what makes two concurrent identical submissions end in
   one row. The displayed `name` keeps the guest's spelling of the latest submission; the key never stores it.
-- `RsvpResponse` carries bounded values only, never free-form JSONB: `name` is 1 to 80 characters
+- `RsvpResponse` carries bounded values only: `name` is 1 to 80 characters
   (`RsvpResponse_name_length`), `partySize` is 0 to 10 (`RsvpResponse_partySize_range`), a declined response names
   no people and an attending one names at least one (`RsvpResponse_partySize_matches_attending`), `phone` is E.164 or
   `NULL` exactly like the WhatsApp contact (`RsvpResponse_phone_format`, `^\+[1-9][0-9]{7,14}$`), and `message` is 1
   to 280 characters or `NULL` (`RsvpResponse_message_length`). The per-invitation party limit is checked by the
   domain, because a CHECK cannot read another table.
+- `RsvpResponse.companions` is the one bounded JSONB payload of an answer (F3; L6.1): the versioned-free list
+  `[{ "name": string, "child": boolean }]`, from 0 to 9 entries, with a name of at most 60 characters (blank allowed,
+  so a guest may confirm a count without every name) and a boolean child mark. `partySize` stays the source of the
+  count: a stored answer names exactly `partySize - 1` companions while attending and none when it declines, and the
+  domain (`domain/invitation-rsvp.ts`) refuses any other length before the write, so no CHECK is added — a CHECK
+  cannot state the pairing either. `dietaryNotes` is `VARCHAR(300)` or `NULL`, trimmed by the domain. Both columns are
+  additive and nullable: an answer stored before them reads `NULL`, which the read renders as no names, no dietary
+  notes and a whole party of adults, so `attendingAdults + attendingChildren = attendingPeople` on every read. The
+  companion columns are bounded presentation data only: no image, link, or provider payload.
+- The owner's read and both CSV exports carry the new columns (F3; L6.4): the companion names, how many of them are
+  children, and the dietary notes of each answer, escaped by the same spreadsheet-safe rules as every other cell, and
+  the totals of the page name the adults and the children apart. A refused answer stores nothing, so a refused
+  companion list leaves the stored answer and every total unchanged.
 - The public submission is one statement: `INSERT … SELECT` from the invitation guarded by `status = 'PUBLISHED'`
   and the deadline, with `ON CONFLICT (invitationId, dedupeKey) DO UPDATE`. A response that races an unpublish or a
   deadline that just passed is refused by the database, not by an earlier read.
