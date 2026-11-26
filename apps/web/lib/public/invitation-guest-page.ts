@@ -44,8 +44,37 @@ export function guestSeatsSentence(seats: number): string {
   return seats === 1 ? GUEST_PAGE_COPY.seatsOne : GUEST_PAGE_COPY.seatsMany(seats);
 }
 
-/** The attendance card of a personal page, as the shared features block renders it (S4). */
+/** The attendance card and the access pass of a personal page, as the shared features block renders them (S4). */
 export type { GuestPassBlockView, GuestRsvpBlockView };
+
+/** The values the access pass of one personal page prints. */
+export interface GuestPassViewInput {
+  /** The absolute check-in URL the QR encodes, built from the request's own origin (S4). */
+  readonly checkInUrl: string;
+  /** The guest block of the personal read: the name, the assigned table, and the answer it admitted (F5; L8.4). */
+  readonly guest: PublicGuestResponse;
+}
+
+/**
+ * The access pass of one personal page, or undefined when the API offers none: a guest who confirmed on a package that
+ * grants `QR_PASS` (S4). The ticket prints the table the owner assigned and the confirmed people, so the guest reads
+ * exactly where they sit and how many the pass admits (F5; L8.4); without a table it prints only the people count.
+ */
+export function guestPassView(input: GuestPassViewInput): GuestPassBlockView | undefined {
+  const { checkInUrl, guest } = input;
+  const response = guest.response;
+
+  if (guest.qrPass !== true || response === null || !response.attending || response.partySize < 1) {
+    return undefined;
+  }
+
+  return {
+    checkInUrl,
+    name: guest.name,
+    tableLabel: guest.tableLabel,
+    people: response.partySize,
+  };
+}
 
 export interface GuestRsvpViewInput {
   readonly slug: string;

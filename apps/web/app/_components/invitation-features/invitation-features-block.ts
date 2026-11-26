@@ -117,6 +117,12 @@ const ACTION =
   "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-(--inv-accent) px-5 text-sm font-medium text-(color:--inv-on-accent)";
 /** The counters sit on the softer theme surface so they read as a highlight, not as another card. */
 const COUNTDOWN_CARD = `${CARD} bg-(--inv-soft)`;
+/** The ticket's own type scale: an uppercase label, a large value, and the accent for the table (F5; L8.4). */
+const PASS_LABEL = "text-[0.7rem] font-medium uppercase tracking-[0.16em] text-(color:--inv-ink)";
+const PASS_VALUE = "mt-0.5 text-2xl font-semibold text-(color:--inv-ink)";
+const PASS_TABLE_VALUE = "mt-0.5 text-4xl font-semibold text-(color:--inv-accent)";
+// The negative inline margin lets the dashed line reach both edges of the card, as the artboard draws it.
+const PASS_TEAR = "mt-5 -mx-4 border-t-2 border-dashed border-(--inv-decoration-one) pb-3";
 const SURFACE_CARD = `${CARD} bg-(--inv-surface)`;
 /** The playlist cover: square, rounded like the card, and never wider than the card itself (S2). */
 const MUSIC_COVER = "mt-3 aspect-square w-full max-w-[18rem] rounded-xl object-cover";
@@ -639,11 +645,17 @@ function gallerySection(photos: readonly GalleryPhoto[]): ReactElement {
 }
 
 /**
- * The access pass of a confirmed guest (M6 G4; S4): the SVG QR drawn on the server, handed to an `<img>` as a data
- * URL, so the page injects no markup and the image document cannot run script. A pass whose URL cannot be drawn is
- * not shown at all, instead of breaking the guest's page.
+ * The access pass of a confirmed guest (M6 G4; S4; F5): the artboard's ticket. The QR is drawn on the server and handed
+ * to an `<img>` as a data URL, so the page injects no markup and the image document cannot run script; on the other
+ * side the ticket prints «Mesa» with the assigned table in the theme's accent and «Personas» with the confirmed party.
+ * The table is a labelled text, never a color: a guest who cannot see the accent still reads «Mesa 7». A guest without
+ * a table prints only the people count, and a pass whose URL cannot be drawn is not shown at all, instead of breaking
+ * the guest's page.
  */
-function guestPassSection(pass: GuestPassBlockView): ReactElement | null {
+function guestPassSection(
+  pass: GuestPassBlockView,
+  venue: string | undefined,
+): ReactElement | null {
   let source: string;
 
   try {
@@ -652,18 +664,58 @@ function guestPassSection(pass: GuestPassBlockView): ReactElement | null {
     return null;
   }
 
+  const ticketFacts: ReactElement[] = [];
+
+  if (pass.tableLabel !== null) {
+    ticketFacts.push(
+      h(
+        "div",
+        { key: "table" },
+        h("dt", { className: PASS_LABEL }, GUEST_PAGE_COPY.passTableLabel),
+        h("dd", { className: PASS_TABLE_VALUE, style: DISPLAY_FONT }, pass.tableLabel),
+      ),
+    );
+  }
+  ticketFacts.push(
+    h(
+      "div",
+      { key: "people" },
+      h("dt", { className: PASS_LABEL }, GUEST_PAGE_COPY.passPeopleLabel),
+      h("dd", { className: PASS_VALUE, style: DISPLAY_FONT }, String(pass.people)),
+    ),
+  );
+
   return h(
     "div",
-    { key: "pass", "data-feature": "pass", className: SURFACE_CARD },
-    h("h3", { className: FEATURE_TITLE }, GUEST_PAGE_COPY.passTitle),
-    h("p", { className: HINT }, GUEST_PAGE_COPY.passHint),
-    h("img", {
-      src: source,
-      alt: GUEST_PAGE_COPY.passAlt,
-      width: 224,
-      height: 224,
-      className: "mt-3 h-auto w-full max-w-56 rounded-lg",
-    }),
+    { key: "pass", "data-feature": "pass", className: `${SURFACE_CARD} overflow-hidden` },
+    h("p", { className: FEATURE_TITLE }, GUEST_PAGE_COPY.passKicker),
+    h(
+      "h3",
+      {
+        className: "mt-1 text-center text-2xl font-medium text-(color:--inv-ink)",
+        style: DISPLAY_FONT,
+      },
+      pass.name,
+    ),
+    h(
+      "div",
+      { className: "mt-3 grid grid-cols-[7.5rem_1fr] items-center gap-4" },
+      h("img", {
+        src: source,
+        alt: GUEST_PAGE_COPY.passAlt,
+        width: 224,
+        height: 224,
+        className: "h-auto w-full rounded-lg p-1 ring-1 ring-(--inv-soft)",
+      }),
+      h("dl", { className: "flex flex-col gap-2.5" }, ticketFacts),
+    ),
+    // The dashed tear line of the artboard separates the ticket from what it asks the guest to do.
+    h("div", { "aria-hidden": "true", className: PASS_TEAR }),
+    h(
+      "p",
+      { className: "text-center text-xs text-(color:--inv-ink)" },
+      venue === undefined ? GUEST_PAGE_COPY.passHint : GUEST_PAGE_COPY.passVenueHint(venue),
+    ),
   );
 }
 
@@ -1185,7 +1237,8 @@ export function InvitationFeaturesBlock({
     sections.push(guestRsvpSection(features.guest.rsvp, features.timeZone, idPrefix));
   }
   if (features.guest?.pass !== undefined) {
-    const pass = guestPassSection(features.guest.pass);
+    // The venue is the last place the invitation shows: the reception when there is one, the only place otherwise.
+    const pass = guestPassSection(features.guest.pass, facts.places[facts.places.length - 1]?.name);
 
     if (pass !== null) {
       sections.push(pass);

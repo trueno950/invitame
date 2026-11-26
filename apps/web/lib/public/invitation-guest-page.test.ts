@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type {
+  PublicGuestResponse,
   PublicGuestRsvpSubmission,
   PublicGuestRsvpSubmitResult,
   PublicRsvpFeature,
 } from "../server/public-invitations-api.ts";
 import {
   guestGreeting,
+  guestPassView,
   guestRsvpView,
   guestSeatsSentence,
   parseGuestRsvpForm,
@@ -83,6 +85,80 @@ describe("greeting", () => {
   });
 });
 
+/** One guest of the personal read, with the pass the API offers a confirmed guest of a deluxe package. */
+const CONFIRMED_GUEST: PublicGuestResponse = {
+  name: "Familia Gómez",
+  seats: 4,
+  tableLabel: "7",
+  response: {
+    attending: true,
+    partySize: 3,
+    companions: [
+      { name: "Jorge", child: false },
+      { name: "Sofía", child: true },
+    ],
+    dietaryNotes: null,
+    message: null,
+  },
+  qrPass: true,
+};
+
+describe("the access pass", () => {
+  it("carries the check-in URL, the guest's name, the table, and the party it prints (F5; L8.4)", () => {
+    assert.deepEqual(
+      guestPassView({
+        checkInUrl: "http://localhost:3000/cuenta/acceso/slug/token",
+        guest: CONFIRMED_GUEST,
+      }),
+      {
+        checkInUrl: "http://localhost:3000/cuenta/acceso/slug/token",
+        name: "Familia Gómez",
+        tableLabel: "7",
+        people: 3,
+      },
+    );
+  });
+
+  it("prints no table for a guest the owner has not seated (F5; L8.4)", () => {
+    assert.equal(
+      guestPassView({
+        checkInUrl: "http://localhost:3000/cuenta/acceso/slug/token",
+        guest: { ...CONFIRMED_GUEST, tableLabel: null },
+      })?.tableLabel,
+      null,
+    );
+  });
+
+  it("offers no pass while the API does not, or while the guest has not confirmed (S4, F5)", () => {
+    const checkInUrl = "http://localhost:3000/cuenta/acceso/slug/token";
+
+    assert.equal(
+      guestPassView({ checkInUrl, guest: { ...CONFIRMED_GUEST, qrPass: false } }),
+      undefined,
+    );
+    assert.equal(
+      guestPassView({ checkInUrl, guest: { ...CONFIRMED_GUEST, response: null } }),
+      undefined,
+    );
+    assert.equal(
+      guestPassView({
+        checkInUrl,
+        guest: {
+          ...CONFIRMED_GUEST,
+          response: {
+            attending: false,
+            partySize: 0,
+            companions: [],
+            dietaryNotes: null,
+            message: null,
+          },
+        },
+      }),
+      undefined,
+    );
+  });
+});
+
 describe("the answer card", () => {
   it("offers one party size per seat the guest has and the answer they gave", () => {
     const view = guestRsvpView({
@@ -98,6 +174,7 @@ describe("the answer card", () => {
           dietaryNotes: null,
           message: null,
         },
+        tableLabel: null,
         qrPass: true,
       },
       rsvp: GUEST_LIST,
@@ -134,6 +211,7 @@ describe("the answer card", () => {
           dietaryNotes: "Sin gluten",
           message: "Allí estaré",
         },
+        tableLabel: "7",
         qrPass: false,
       },
       rsvp: GUEST_LIST,
@@ -149,7 +227,7 @@ describe("the answer card", () => {
   });
 
   it("shows nothing to answer with when the invitation does not take personal answers", () => {
-    const guest = { name: "Ana", seats: 2, response: null, qrPass: false };
+    const guest = { name: "Ana", seats: 2, tableLabel: null, response: null, qrPass: false };
 
     assert.equal(
       guestRsvpView({
@@ -187,6 +265,7 @@ describe("the answer card", () => {
           dietaryNotes: "Sin gluten",
           message: "Allí estaré",
         },
+        tableLabel: "7",
         qrPass: true,
       },
       rsvp: GUEST_LIST,

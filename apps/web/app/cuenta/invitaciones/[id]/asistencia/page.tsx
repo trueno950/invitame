@@ -24,6 +24,7 @@ import {
   GuestLinkReveal,
   GuestListFooter,
   GuestTable,
+  GuestTableSummary,
   GuestTotals,
   RemoveGuestPanel,
 } from "../../_components/guest-list.tsx";
@@ -173,6 +174,8 @@ function GuestListMode({
         <Notices error={notices.error} issues={notices.issues} notice={notices.notice} />
         {flash === undefined ? null : <GuestLinkReveal flash={flash} />}
         <GuestTotals totals={view.totals} />
+        {/* The seating plan of F5: one pill per table and one for the guests still without one (L8.3). */}
+        <GuestTableSummary summaries={view.tableSummaries} />
         {settings === undefined ? (
           <p className={statusNote}>{RSVP_COPY.unavailable}</p>
         ) : (
@@ -211,6 +214,7 @@ function GuestListMode({
           action={rotateGuestLinkAction}
           backHref={backHref}
           invitationId={id}
+          saveTableAction={saveGuestAction}
           slug={slug}
           view={view}
         />

@@ -52,6 +52,7 @@ function guest(overrides: Partial<GuestItem> = {}): GuestItem {
     id: GUEST_ID,
     name: "Ana Pérez",
     seats: 4,
+    tableLabel: "7",
     phone: "+525512345678",
     note: "Mesa de la familia",
     tokenIssuedAt: AT,
@@ -78,6 +79,7 @@ const LIST: GuestList = {
       id: OTHER_ID,
       name: "Luis Gómez",
       seats: 2,
+      tableLabel: null,
       phone: null,
       note: null,
       response: null,
@@ -133,6 +135,13 @@ describe("the guest list view", () => {
     assert.equal(first?.checkIn, "Sin registrar");
     assert.equal(first?.phone, "+525512345678");
     assert.equal(first?.note, "Mesa de la familia");
+    assert.equal(first?.phoneValue, "+525512345678");
+    assert.equal(first?.noteValue, "Mesa de la familia");
+    // The table column of F5: the assigned one, and a dash for a guest the owner has not seated yet.
+    assert.equal(first?.tableLabel, "7");
+    assert.equal(first?.tableLabelValue, "7");
+    assert.equal(second?.tableLabel, "—");
+    assert.equal(second?.tableLabelValue, "");
 
     assert.equal(second?.answerLabel, "Sin responder");
     // A guest who has not answered names no party and shows a dash for what they left empty.
@@ -142,6 +151,121 @@ describe("the guest list view", () => {
     assert.equal(second?.dietaryNotes, "—");
     assert.equal(second?.phone, "—");
     assert.equal(second?.note, "—");
+    // The cell's form hands the stored values back: an empty field is what clears them, never the dash.
+    assert.equal(second?.phoneValue, "");
+    assert.equal(second?.noteValue, "");
+  });
+
+  it("summarizes how many confirmed people sit at each table and who still has no table (F5; L8.3)", () => {
+    const view = guestListView(INVITATION, {
+      ...LIST,
+      guests: [
+        // «Mesa 7» seats the confirmed party of Ana (F5).
+        guest(),
+        guest({
+          id: OTHER_ID,
+          name: "Familia Gómez",
+          seats: 4,
+          tableLabel: "7",
+          response: {
+            attending: true,
+            partySize: 3,
+            companions: [
+              { name: "Jorge", child: false },
+              { name: "Sofía", child: true },
+            ],
+            dietaryNotes: null,
+            message: null,
+            createdAt: AT,
+            updatedAt: AT,
+          },
+        }),
+        guest({
+          id: "3e1a6b7c-8091-4d05-9e46-7a8b9c0d1e25",
+          name: "Tía Rosa",
+          seats: 1,
+          tableLabel: "2",
+          response: null,
+        }),
+        guest({
+          id: "4f2b7c8d-9102-4e16-af57-8b9c0d1e2f36",
+          name: "Primos Ruiz",
+          seats: 3,
+          tableLabel: null,
+          response: {
+            attending: true,
+            partySize: 2,
+            companions: [{ name: "Diego", child: false }],
+            dietaryNotes: null,
+            message: null,
+            createdAt: AT,
+            updatedAt: AT,
+          },
+        }),
+      ],
+    });
+
+    // One line per stored table in its own order, then the guests without a table. A pending table keeps its line
+    // at zero confirmed people, so the owner sees it exists.
+    assert.deepEqual(view.tableSummaries, [
+      "Mesa 2 · 0 personas",
+      "Mesa 7 · 5 personas",
+      "Sin mesa · 1 invitado",
+    ]);
+    // The summary counts confirmed people, never seats: Ana confirmed 2 and Familia Gómez confirmed 3.
+    assert.equal(JSON.stringify(view).includes(TOKEN), false);
+  });
+
+  it("says «1 persona» and «1 invitado» when the count is one (F5; L8.3)", () => {
+    const view = guestListView(INVITATION, {
+      guests: [guest({ seats: 2, tableLabel: "Principal" })],
+      totals: LIST.totals,
+    });
+
+    assert.deepEqual(view.tableSummaries, ["Mesa Principal · 2 personas"]);
+    const single = guestListView(INVITATION, {
+      guests: [
+        guest({
+          seats: 1,
+          tableLabel: "Principal",
+          response: {
+            attending: true,
+            partySize: 1,
+            companions: [],
+            dietaryNotes: null,
+            message: null,
+            createdAt: AT,
+            updatedAt: AT,
+          },
+        }),
+      ],
+      totals: LIST.totals,
+    });
+    assert.deepEqual(single.tableSummaries, ["Mesa Principal · 1 persona"]);
+
+    const unseated = guestListView(INVITATION, {
+      guests: [guest({ tableLabel: null, response: null })],
+      totals: LIST.totals,
+    });
+    assert.deepEqual(unseated.tableSummaries, ["Sin mesa · 1 invitado"]);
+  });
+
+  it("answers no table summary for an empty guest list (F5)", () => {
+    const view = guestListView(INVITATION, {
+      guests: [],
+      totals: {
+        ...LIST.totals,
+        guests: 0,
+        seats: 0,
+        attendingGuests: 0,
+        attendingPeople: 0,
+        attendingAdults: 0,
+        attendingChildren: 0,
+        pendingCount: 0,
+      },
+    });
+
+    assert.deepEqual(view.tableSummaries, []);
   });
 
   it("reads a check-in on the invitation's own clock and marks a changed answer", () => {
@@ -197,6 +321,7 @@ describe("the guest a page asks for", () => {
         id: GUEST_ID,
         name: "Ana Pérez",
         seats: 4,
+        tableLabel: "7",
         phone: "+525512345678",
         note: "Mesa de la familia",
       },
@@ -222,23 +347,45 @@ describe("the guest a page asks for", () => {
 });
 
 describe("the submitted guest", () => {
-  it("reads a name, its seats, and the optional phone and note", () => {
+  it("reads a name, its seats, the optional phone and note, and the table (F5; L8.1)", () => {
     assert.deepEqual(
       parseGuestForm(
-        form({ name: "  Ana Pérez ", seats: "4", phone: " 55 1234 5678 ", note: "  Mesa 3 " }),
+        form({
+          name: "  Ana Pérez ",
+          seats: "4",
+          phone: " 55 1234 5678 ",
+          note: "  Mesa 3 ",
+          tableLabel: "  7  ",
+        }),
       ),
       {
         ok: true,
-        value: { name: "Ana Pérez", seats: 4, phone: "55 1234 5678", note: "Mesa 3" },
+        value: {
+          name: "Ana Pérez",
+          seats: 4,
+          phone: "55 1234 5678",
+          note: "Mesa 3",
+          tableLabel: "7",
+        },
       },
     );
   });
 
-  it("stores null for a phone and a note the creator left empty", () => {
-    assert.deepEqual(parseGuestForm(form({ name: "Ana", seats: "1", phone: " ", note: "" })), {
-      ok: true,
-      value: { name: "Ana", seats: 1, phone: null, note: null },
-    });
+  it("stores null for a phone, a note, and a table the creator left empty", () => {
+    assert.deepEqual(
+      parseGuestForm(form({ name: "Ana", seats: "1", phone: " ", note: "", tableLabel: "  " })),
+      {
+        ok: true,
+        value: { name: "Ana", seats: 1, phone: null, note: null, tableLabel: null },
+      },
+    );
+  });
+
+  it("sends no table at all when the form does not carry the field, so an older page keeps the stored one (F5; L20)", () => {
+    const parsed = parseGuestForm(form({ name: "Ana", seats: "1", phone: "", note: "" }));
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.ok ? "tableLabel" in parsed.value : true, false);
   });
 
   it("refuses a guest no request could store", () => {
@@ -253,6 +400,7 @@ describe("the submitted guest", () => {
       { name: "Ana", seats: "" },
       { name: "Ana", seats: "2", note: "a".repeat(201) },
       { name: "Ana", seats: "2", phone: "1".repeat(33) },
+      { name: "Ana", seats: "2", tableLabel: "t".repeat(13) },
     ]) {
       assert.deepEqual(parseGuestForm(form(entries)), { ok: false }, JSON.stringify(entries));
     }
@@ -264,19 +412,27 @@ interface CreateCall {
   seats: number;
   phone: string | null;
   note: string | null;
+  tableLabel?: string | null;
 }
 
 function fakeClient(result: InvitationResult<GuestWithToken>, calls: CreateCall[] = []) {
   return {
     async createGuest(
       _id: string,
-      input: { name: string; seats: number; phone?: string | null; note?: string | null },
+      input: {
+        name: string;
+        seats: number;
+        phone?: string | null;
+        note?: string | null;
+        tableLabel?: string | null;
+      },
     ): Promise<InvitationResult<GuestWithToken>> {
       calls.push({
         name: input.name,
         seats: input.seats,
         phone: input.phone ?? null,
         note: input.note ?? null,
+        ...(input.tableLabel === undefined ? {} : { tableLabel: input.tableLabel }),
       });
       return result;
     },
@@ -295,6 +451,7 @@ const ADD = {
   seats: "4",
   phone: "5512345678",
   note: "Mesa 3",
+  tableLabel: "7",
 };
 
 describe("adding a guest", () => {
@@ -302,7 +459,9 @@ describe("adding a guest", () => {
     const calls: CreateCall[] = [];
     const outcome = await createGuest(fakeClient(CREATED, calls), form(ADD));
 
-    assert.deepEqual(calls, [{ name: "Ana Pérez", seats: 4, phone: "5512345678", note: "Mesa 3" }]);
+    assert.deepEqual(calls, [
+      { name: "Ana Pérez", seats: 4, phone: "5512345678", note: "Mesa 3", tableLabel: "7" },
+    ]);
     assert.deepEqual(outcome, {
       kind: "link",
       target: `/cuenta/invitaciones/${INVITATION_ID}/asistencia?notice=guest-added`,
@@ -375,7 +534,13 @@ describe("editing, removing, and rotating", () => {
       async updateGuest(
         _id: string,
         guestId: string,
-        input: { name: string; seats: number; phone?: string | null; note?: string | null },
+        input: {
+          name: string;
+          seats: number;
+          phone?: string | null;
+          note?: string | null;
+          tableLabel?: string | null;
+        },
       ): Promise<InvitationResult<GuestItem>> {
         calls.push({
           guestId,
@@ -384,6 +549,7 @@ describe("editing, removing, and rotating", () => {
             seats: input.seats,
             phone: input.phone ?? null,
             note: input.note ?? null,
+            tableLabel: input.tableLabel ?? null,
           },
         });
         return { ok: true, value: guest() };
@@ -400,6 +566,7 @@ describe("editing, removing, and rotating", () => {
       seats: 4,
       phone: "5512345678",
       note: "Mesa 3",
+      tableLabel: "7",
     });
   });
 

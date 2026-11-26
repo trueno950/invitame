@@ -79,9 +79,19 @@ export interface GuestRsvpBlockView {
   readonly action?: RsvpFormAction;
 }
 
-/** The access pass of a confirmed guest (M6 G4; S4): the absolute check-in URL the QR encodes, and nothing else. */
+/**
+ * The access pass of a confirmed guest (M6 G4; S4; F5): the absolute check-in URL the QR encodes, the guest's name as
+ * the ticket heads it, the table the owner assigned, and the confirmed people it counts. Only the pass draws the
+ * table: the rest of the page never mentions it (L8.4).
+ */
 export interface GuestPassBlockView {
   readonly checkInUrl: string;
+  /** The guest's name as the ticket heads it, from the personal read. */
+  readonly name: string;
+  /** The table the owner assigned, or null: the ticket then prints only the people count (F5; L8.4). */
+  readonly tableLabel: string | null;
+  /** The people this pass admits: the confirmed party size, never the seats the owner reserved (F5; L8.4). */
+  readonly people: number;
 }
 
 /**

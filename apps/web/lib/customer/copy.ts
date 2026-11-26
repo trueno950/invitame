@@ -1019,7 +1019,12 @@ export const GUEST_PAGE_COPY = {
   shareMessage: (firstName: string, url: string) =>
     `Hola ${firstName}, aquí está tu invitación personal: ${url}`,
   passTitle: "Tu pase de acceso",
+  /** The ticket of F5: the kicker above the guest's name, its two labelled facts, and the venue hint (L8.4). */
+  passKicker: "Pase de acceso",
+  passTableLabel: "Mesa",
+  passPeopleLabel: "Personas",
   passHint: "Muéstralo en la entrada. Es personal: no lo compartas.",
+  passVenueHint: (venue: string) => `Muestra este código en la entrada · ${venue}`,
   passAlt: "Código QR de tu pase de acceso",
 } as const;
 
@@ -1046,6 +1051,8 @@ export const GUEST_COPY = {
     "Todavía no tienes invitados. Agrega el primero y comparte su enlace personal cuando lo tengas.",
   columnGuest: "Invitado",
   columnSeats: "Lugares",
+  /** The table column of F5: the editable cell and the summary below the totals (L8.3). */
+  columnTable: "Mesa",
   columnAnswer: "¿Asiste?",
   columnParty: "Personas",
   /** The companion columns of F3: their names, how many are children, and what they cannot eat (L6.4). */
@@ -1072,6 +1079,17 @@ export const GUEST_COPY = {
     "Escribe 10 dígitos o un número internacional que empiece con +. Solo lo usas tú, para contactarlo.",
   noteLabel: "Nota (opcional)",
   noteHint: "Hasta 200 caracteres. Solo la ves tú.",
+  /** The table of one guest (F5; L8.1): short, optional, and printed on that guest's access pass. */
+  tableLabel: "Mesa (opcional)",
+  tableHint:
+    "Hasta 12 caracteres, por ejemplo 7 o Principal. Aparece en el pase de acceso del invitado.",
+  tableSave: "Guardar mesa",
+  tableNone: "Sin mesa",
+  tableSummaryNone: (guests: number) =>
+    guests === 1 ? "Sin mesa · 1 invitado" : `Sin mesa · ${guests} invitados`,
+  /** One table of the summary: «Mesa 7 · 3 personas», counting the people who confirmed there (F5; L8.3). */
+  tableSummary: (label: string, people: number) =>
+    `Mesa ${label} · ${people === 1 ? "1 persona" : `${people} personas`}`,
   add: "Agregar invitado",
   editHeading: (name: string) => `Editar a ${name}`,
   edit: "Editar",

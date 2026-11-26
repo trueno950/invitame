@@ -34,6 +34,7 @@ const GUEST: GuestItem = {
   id: GUEST_ID,
   name: "Ana Pérez",
   seats: 4,
+  tableLabel: "7",
   phone: "+525512345678",
   note: "Mesa de la familia",
   tokenIssuedAt: AT,
@@ -188,6 +189,48 @@ describe("guest writes", () => {
       phone: "+525512345678",
       note: "Mesa de la familia",
     });
+  });
+
+  it("sends the table the creator assigned, and clears it with null (F5; L8.1, L8.3)", async () => {
+    answer(201, WITH_TOKEN);
+    await client().createGuest(INVITATION_ID, {
+      name: "Ana Pérez",
+      seats: 1,
+      phone: null,
+      note: null,
+      tableLabel: "7",
+    });
+
+    assert.deepEqual(JSON.parse(received[0]?.body ?? ""), {
+      name: "Ana Pérez",
+      seats: 1,
+      phone: null,
+      note: null,
+      tableLabel: "7",
+    });
+
+    received = [];
+    answer(200, GUEST);
+    await client().updateGuest(INVITATION_ID, GUEST_ID, {
+      name: "Ana Pérez",
+      seats: 1,
+      phone: null,
+      note: null,
+      tableLabel: null,
+    });
+    assert.equal(JSON.parse(received[0]?.body ?? "").tableLabel, null);
+  });
+
+  it("sends no table at all for an edit that omits it, so the stored one stays (F5; L8.3, L20)", async () => {
+    answer(200, GUEST);
+    await client().updateGuest(INVITATION_ID, GUEST_ID, {
+      name: "Ana Pérez",
+      seats: 1,
+      phone: null,
+      note: null,
+    });
+
+    assert.equal("tableLabel" in JSON.parse(received[0]?.body ?? ""), false);
   });
 
   it("sends null for a phone and a note the creator left empty", async () => {
@@ -353,6 +396,21 @@ describe("strict parsers", () => {
       phone: null,
       note: null,
     });
+  });
+
+  it("reads the table the creator assigned, and an API written before it as none (F5; L8.1, L20)", () => {
+    assert.equal(parseGuestItem(GUEST)?.tableLabel, "7");
+    // A rolling deploy answers a guest without the field, and the page then shows no table instead of refusing the row.
+    const { tableLabel: _table, ...older } = GUEST;
+    assert.deepEqual(parseGuestItem(older), { ...GUEST, tableLabel: null });
+    assert.deepEqual(parseGuestItem({ ...GUEST, tableLabel: null }), {
+      ...GUEST,
+      tableLabel: null,
+    });
+    // A stored table is 1 to 12 characters: a blank one or a wider one is not this contract.
+    for (const tableLabel of ["", " ", "t".repeat(13), 7, true]) {
+      assert.equal(parseGuestItem({ ...GUEST, tableLabel }), undefined, JSON.stringify(tableLabel));
+    }
   });
 
   it("refuses a guest whose seats, name, answer, or timestamps break the contract", () => {

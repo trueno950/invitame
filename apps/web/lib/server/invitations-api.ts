@@ -1017,6 +1017,8 @@ export const GUEST_SEATS_MIN = 1;
 export const GUEST_SEATS_MAX = 10;
 /** The widest guest note, in characters: the API's own bound on `Guest.note`. */
 export const GUEST_NOTE_MAX_LENGTH = 200;
+/** The widest table label, in characters: the API's own bound on `Guest.tableLabel` (F5; L8.1). */
+export const GUEST_TABLE_LABEL_MAX_LENGTH = 12;
 /** The exact width of a personal guest token: 128 bits, base64url-encoded without padding. */
 export const GUEST_TOKEN_LENGTH = 22;
 
@@ -1050,6 +1052,11 @@ export interface GuestItem {
   readonly seats: number;
   readonly phone: string | null;
   readonly note: string | null;
+  /**
+   * The table the owner assigned, or null when there is none (F5; L8.1). An API written before the column existed
+   * answers no field, which reads as null, so a rolling deploy keeps this page working (L20).
+   */
+  readonly tableLabel: string | null;
   readonly tokenIssuedAt: string;
   readonly checkedInAt: string | null;
   readonly response: GuestResponseSummary | null;
@@ -1091,12 +1098,17 @@ export interface GuestCheckIn {
   readonly checkedInAt: string;
 }
 
-/** One guest as the creator's form sends it; `PUT` replaces every field, so a blank phone or note clears it. */
+/**
+ * One guest as the creator's form sends it; `PUT` replaces every field, so a blank phone or note clears it. The table
+ * is the one field a request may omit: an omitted one keeps the stored table, which is what a form rendered before the
+ * column existed posts (F5; L8.3, L20).
+ */
 export interface GuestInput {
   readonly name: string;
   readonly seats: number;
   readonly phone?: string | null;
   readonly note?: string | null;
+  readonly tableLabel?: string | null;
 }
 
 /** A whole count, as a total is: `undefined` for anything else. */
@@ -1116,6 +1128,26 @@ function isGuestName(value: unknown): value is string {
 /** An optional stored text: a string, or null when the creator left it empty. */
 function isOptionalText(value: unknown): value is string | null {
   return value === null || typeof value === "string";
+}
+
+/**
+ * The table of one guest (F5; L8.1): a trimmed text of 1 to 12 characters, null when none is assigned, or null for an
+ * API written before the column existed (L20). Any other shape refuses the whole guest instead of showing it.
+ */
+function parseStoredTableLabel(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+
+  return trimmed === value &&
+    [...trimmed].length >= 1 &&
+    [...trimmed].length <= GUEST_TABLE_LABEL_MAX_LENGTH
+    ? trimmed
+    : undefined;
 }
 
 /** The seats of one guest: an integer from 1 to 10 (S4). */
@@ -1173,7 +1205,19 @@ export function parseGuestItem(value: unknown): GuestItem | undefined {
     return undefined;
   }
 
-  const { id, name, seats, phone, note, tokenIssuedAt, checkedInAt, createdAt, updatedAt } = guest;
+  const {
+    id,
+    name,
+    seats,
+    phone,
+    note,
+    tableLabel,
+    tokenIssuedAt,
+    checkedInAt,
+    createdAt,
+    updatedAt,
+  } = guest;
+  const storedTableLabel = parseStoredTableLabel(tableLabel);
 
   if (
     !isInvitationId(id) ||
@@ -1181,6 +1225,7 @@ export function parseGuestItem(value: unknown): GuestItem | undefined {
     !isSeats(seats) ||
     !isOptionalText(phone) ||
     !isOptionalText(note) ||
+    storedTableLabel === undefined ||
     !isTimestamp(tokenIssuedAt) ||
     !(checkedInAt === null || isTimestamp(checkedInAt)) ||
     !isTimestamp(createdAt) ||
@@ -1202,6 +1247,7 @@ export function parseGuestItem(value: unknown): GuestItem | undefined {
     seats,
     phone,
     note,
+    tableLabel: storedTableLabel,
     tokenIssuedAt,
     checkedInAt,
     response,

@@ -90,6 +90,30 @@ export function GuestLinkReveal({ flash }: { flash: GuestLinkFlash }) {
   );
 }
 
+/**
+ * The seating plan of one guest list (F5; L8.3): one pill per stored table and one for the guests without a table, as
+ * the owner's artboard draws them. Each pill is readable text with its own «Mesa» label, so the line never depends on
+ * color, and a list nobody has seated yet shows the single «Sin mesa» pill.
+ */
+export function GuestTableSummary({ summaries }: { summaries: GuestListView["tableSummaries"] }) {
+  if (summaries.length === 0) {
+    return null;
+  }
+
+  return (
+    <ul className="flex flex-wrap gap-2" data-guest-table-summary="">
+      {summaries.map((summary) => (
+        <li
+          className="rounded-full bg-rose-50 px-3 py-1.5 text-sm text-muted ring-1 ring-rose-100"
+          key={summary}
+        >
+          {summary}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The shell of a guest form, so the add and the edit panels read the same. */
 function GuestFormShell({
   heading,
@@ -178,6 +202,20 @@ function GuestFields({ values, prefix }: { values: GuestFormValues | undefined; 
           type="text"
         />
         <p className={fieldHint}>{GUEST_COPY.noteHint}</p>
+      </div>
+      <div>
+        <label className={fieldLabel} htmlFor={`${prefix}-table`}>
+          {GUEST_COPY.tableLabel}
+        </label>
+        <input
+          className={textField}
+          defaultValue={values?.tableLabel ?? ""}
+          id={`${prefix}-table`}
+          maxLength={12}
+          name="tableLabel"
+          type="text"
+        />
+        <p className={fieldHint}>{GUEST_COPY.tableHint}</p>
       </div>
     </>
   );
@@ -325,15 +363,71 @@ function RowActions({
   );
 }
 
+/**
+ * The «Mesa» cell of one row (F5; L8.3): the table the owner assigned and, while the invitation is editable, one plain
+ * server-rendered form that assigns or clears it. The form carries the guest's other fields as hidden values, because
+ * the owner's route replaces the whole guest; a blank field clears the table, which is what the API stores as none.
+ */
+function TableCell({
+  action,
+  invitationId,
+  row,
+  editable,
+}: {
+  action: (formData: FormData) => Promise<void>;
+  invitationId: string;
+  row: GuestRow;
+  editable: boolean;
+}) {
+  if (!editable) {
+    return (
+      <td className="px-4 py-3 text-ink">
+        {row.tableLabel === "—" ? GUEST_COPY.tableNone : row.tableLabel}
+      </td>
+    );
+  }
+
+  return (
+    <td className="px-4 py-3 align-top">
+      <form action={action} className="flex flex-col items-start gap-2">
+        <input name="id" type="hidden" value={invitationId} />
+        <input name="guestId" type="hidden" value={row.id} />
+        <input name="name" type="hidden" value={row.name} />
+        <input name="seats" type="hidden" value={row.seats} />
+        <input name="phone" type="hidden" value={row.phoneValue} />
+        <input name="note" type="hidden" value={row.noteValue} />
+        <label className="sr-only" htmlFor={`guest-table-${row.id}`}>
+          {GUEST_COPY.columnTable}
+        </label>
+        <input
+          className={`${textField} w-24 text-center`}
+          defaultValue={row.tableLabelValue}
+          id={`guest-table-${row.id}`}
+          maxLength={12}
+          name="tableLabel"
+          placeholder={GUEST_COPY.tableNone}
+          type="text"
+        />
+        <button className={textButton} type="submit">
+          {GUEST_COPY.tableSave}
+        </button>
+      </form>
+    </td>
+  );
+}
+
 /** The one table of guests; a field the creator left empty shows a dash instead of a blank cell. */
 export function GuestTable({
   action,
+  saveTableAction,
   invitationId,
   slug,
   view,
   backHref,
 }: {
   action: (formData: FormData) => Promise<void>;
+  /** The write that assigns or clears one guest's table, the same edit route the page's form posts to (F5; L8.3). */
+  saveTableAction: (formData: FormData) => Promise<void>;
   invitationId: string;
   slug: string;
   view: GuestListView;
@@ -351,6 +445,7 @@ export function GuestTable({
             {[
               GUEST_COPY.columnGuest,
               GUEST_COPY.columnSeats,
+              GUEST_COPY.columnTable,
               GUEST_COPY.columnAnswer,
               GUEST_COPY.columnParty,
               GUEST_COPY.columnCompanions,
@@ -389,6 +484,12 @@ export function GuestTable({
                 )}
               </th>
               <td className="px-4 py-3 text-ink">{row.seats}</td>
+              <TableCell
+                action={saveTableAction}
+                editable={view.editable}
+                invitationId={invitationId}
+                row={row}
+              />
               <td className="px-4 py-3 text-ink">{row.answerLabel}</td>
               <td className="px-4 py-3 text-ink">{row.partySize}</td>
               <td className="max-w-48 px-4 py-3 break-words text-ink">{row.companions}</td>

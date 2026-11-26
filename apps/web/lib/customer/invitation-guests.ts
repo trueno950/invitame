@@ -6,6 +6,7 @@ import {
   GUEST_NOTE_MAX_LENGTH,
   GUEST_SEATS_MAX,
   GUEST_SEATS_MIN,
+  GUEST_TABLE_LABEL_MAX_LENGTH,
   type GuestItem,
   type GuestList,
   type GuestResponseSummary,
@@ -61,6 +62,14 @@ export interface GuestRow {
   readonly phone: string;
   /** The stored note, or a dash when the creator left none. */
   readonly note: string;
+  /** The stored phone as the inline table form sends it back, "" when none (F5; L8.3). */
+  readonly phoneValue: string;
+  /** The stored note as the inline table form sends it back, "" when none (F5; L8.3). */
+  readonly noteValue: string;
+  /** The assigned table, or a dash when the owner seated nobody there yet (F5; L8.3). */
+  readonly tableLabel: string;
+  /** The table as the editable cell shows it: the stored value, or "" because a blank one clears it (F5). */
+  readonly tableLabelValue: string;
   /** Whether the guest answered again, so the creator knows this row is the newer one. */
   readonly updated: boolean;
 }
@@ -72,6 +81,8 @@ export interface GuestFormValues {
   readonly seats: number;
   readonly phone: string;
   readonly note: string;
+  /** The assigned table as the form shows it, or "" when there is none (F5; L8.1). */
+  readonly tableLabel: string;
 }
 
 /** Everything the guest list of one invitation renders (S1, S4). */
@@ -81,6 +92,12 @@ export interface GuestListView {
   readonly editable: boolean;
   readonly totals: readonly { readonly label: string; readonly value: number }[];
   readonly rows: readonly GuestRow[];
+  /**
+   * One line per table and one for the guests without a table (F5; L8.3): «Mesa 7 · 3 personas», «Sin mesa · 1
+   * invitado». The tables keep their own order — numbers first, then names — and each line counts the people who
+   * confirmed there, so the owner reads the seating plan at a glance.
+   */
+  readonly tableSummaries: readonly string[];
   /** The CSV of the same guest list, pending guests and check-in times included. */
   readonly csvHref: string;
   /** Why no personal link is listed here, next to the actions that mint a new one (S4). */
@@ -117,6 +134,45 @@ function answerOf(guest: GuestItem): { label: string; party: string } {
     label: guest.response.attending ? GUEST_COPY.answerYes : GUEST_COPY.answerNo,
     party: String(guest.response.partySize),
   };
+}
+
+/** The order of two table labels: the numeric ones first and by value, then the names alphabetically (F5; L8.3). */
+function tableLabelOrder(left: string, right: string): number {
+  const leftIsNumber = /^\d+$/.test(left);
+  const rightIsNumber = /^\d+$/.test(right);
+
+  if (leftIsNumber && rightIsNumber) {
+    return Number(left) - Number(right) || left.localeCompare(right, "es");
+  }
+  if (leftIsNumber !== rightIsNumber) {
+    return leftIsNumber ? -1 : 1;
+  }
+  return left.localeCompare(right, "es");
+}
+
+/**
+ * The per-table summary of one guest list (F5; L8.3): one line per stored table, counting the people who confirmed
+ * there — never the seats, so a table with a pending guest keeps its line at zero — and one line for the guests the
+ * owner has not seated. No line at all is written for a list with no guests.
+ */
+function tableSummariesOf(guests: readonly GuestItem[]): string[] {
+  const confirmedPeople = new Map<string, number>();
+  let unseated = 0;
+
+  for (const guest of guests) {
+    if (guest.tableLabel === null) {
+      unseated += 1;
+      continue;
+    }
+    const people = guest.response?.attending === true ? guest.response.partySize : 0;
+    confirmedPeople.set(guest.tableLabel, (confirmedPeople.get(guest.tableLabel) ?? 0) + people);
+  }
+
+  const summaries = [...confirmedPeople.keys()]
+    .sort(tableLabelOrder)
+    .map((label) => GUEST_COPY.tableSummary(label, confirmedPeople.get(label) ?? 0));
+
+  return unseated === 0 ? summaries : [...summaries, GUEST_COPY.tableSummaryNone(unseated)];
 }
 
 /**
@@ -162,9 +218,15 @@ export function guestListView(
               ),
         phone: orDash(guest.phone),
         note: orDash(guest.note),
+        // The whole guest is replaced by the edit route, so the cell hands the stored values back unchanged.
+        phoneValue: guest.phone ?? "",
+        noteValue: guest.note ?? "",
+        tableLabel: orDash(guest.tableLabel),
+        tableLabelValue: guest.tableLabel ?? "",
         updated: guest.response !== null && guest.response.updatedAt !== guest.response.createdAt,
       };
     }),
+    tableSummaries: tableSummariesOf(list.guests),
     csvHref: GUEST_PATHS.csv(invitation.id),
     note: GUEST_COPY.linkOnceNote,
   };
@@ -189,6 +251,7 @@ export function guestFormValues(guest: GuestItem): GuestFormValues {
     seats: guest.seats,
     phone: guest.phone ?? "",
     note: guest.note ?? "",
+    tableLabel: guest.tableLabel ?? "",
   };
 }
 
@@ -225,6 +288,8 @@ export type GuestFormParse =
         readonly seats: number;
         readonly phone: string | null;
         readonly note: string | null;
+        /** Absent when the form did not carry the field, so the API keeps the stored table (F5; L8.3, L20). */
+        readonly tableLabel?: string | null;
       };
     }
   | { readonly ok: false };
@@ -248,6 +313,9 @@ export function parseGuestForm(form: FormData): GuestFormParse {
   const seats = /^\d{1,2}$/.test(seatsText) ? Number(seatsText) : Number.NaN;
   const phone = text(form, "phone")?.trim() ?? "";
   const note = text(form, "note")?.trim() ?? "";
+  // A form rendered before the table existed sends no field at all: the stored table then stays (F5; L8.3, L20).
+  const tableLabelText = text(form, "tableLabel");
+  const tableLabel = tableLabelText?.trim();
 
   if (
     name === "" ||
@@ -256,7 +324,8 @@ export function parseGuestForm(form: FormData): GuestFormParse {
     seats < GUEST_SEATS_MIN ||
     seats > GUEST_SEATS_MAX ||
     [...phone].length > MAX_PHONE_TEXT_LENGTH ||
-    [...note].length > GUEST_NOTE_MAX_LENGTH
+    [...note].length > GUEST_NOTE_MAX_LENGTH ||
+    (tableLabel !== undefined && [...tableLabel].length > GUEST_TABLE_LABEL_MAX_LENGTH)
   ) {
     return { ok: false };
   }
@@ -268,6 +337,7 @@ export function parseGuestForm(form: FormData): GuestFormParse {
       seats,
       phone: phone === "" ? null : phone,
       note: note === "" ? null : note,
+      ...(tableLabel === undefined ? {} : { tableLabel: tableLabel === "" ? null : tableLabel }),
     },
   };
 }

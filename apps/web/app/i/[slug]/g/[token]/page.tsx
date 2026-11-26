@@ -10,6 +10,7 @@ import { checkInUrl } from "../../../../../lib/public/guest-pass.ts";
 import { publicFeatureBlock } from "../../../../../lib/public/invitation-features.ts";
 import {
   guestGreeting,
+  guestPassView,
   guestRsvpView,
   guestSeatsSentence,
 } from "../../../../../lib/public/invitation-guest-page.ts";
@@ -112,11 +113,16 @@ export default async function GuestInvitationPage({
     // An expired invitation is still rendered here, and its personal card closes instead of asking (S2, T5).
     expired: invitation.expired,
   });
+  // The pass is the artboard's ticket: the QR, the table the owner assigned, and the confirmed people (F5; L8.4).
+  const pass =
+    passUrl === undefined
+      ? undefined
+      : guestPassView({ checkInUrl: passUrl, guest: invitation.guest });
   const guest: GuestPageBlockView = {
     greeting: guestGreeting(invitation.guest.name),
     seats: guestSeatsSentence(invitation.guest.seats),
     ...(rsvp === undefined ? {} : { rsvp }),
-    ...(passUrl === undefined ? {} : { pass: { checkInUrl: passUrl } }),
+    ...(pass === undefined ? {} : { pass }),
   };
 
   const block = publicFeatureBlock(invitation, undefined, guest);

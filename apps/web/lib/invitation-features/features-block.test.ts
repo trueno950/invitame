@@ -8,7 +8,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { InvitationFeaturesBlock } from "../../app/_components/invitation-features/invitation-features-block.ts";
 import type { EventFacts } from "./event-facts.ts";
-import type { InvitationFeatures, RsvpBlockView } from "./invitation-features.ts";
+import type {
+  GuestPassBlockView,
+  InvitationFeatures,
+  RsvpBlockView,
+} from "./invitation-features.ts";
 
 // The shared themed features block of the guest page (S3, S4): countdown, «Cómo llegar», «Agregar al
 // calendario», and «Escribir por WhatsApp», each rendered only when the API says the invitation has it. It is
@@ -1344,5 +1348,104 @@ describe("the gift registry of a guest page (F2; L4.5)", () => {
       html.indexOf('data-feature="gift-registry"') < html.indexOf('data-feature="map"'),
       true,
     );
+  });
+});
+
+/** One guest page's own block, with the pass of a confirmed guest (F5; L8.4). */
+function guestFeatures(pass: GuestPassBlockView | undefined): InvitationFeatures {
+  return featuresOf({
+    guest: {
+      greeting: "Hola, Ana",
+      seats: "Tienes 4 lugares reservados a tu nombre.",
+      ...(pass === undefined ? {} : { pass }),
+    },
+  });
+}
+
+const CHECK_IN_URL = "http://localhost:3000/cuenta/acceso/invitacion-k7m2qx/AbCdEfGhIjKlMnOpQrStUv";
+
+describe("the access pass of a guest page (F5; L8.4)", () => {
+  it("draws the ticket with the QR, the table in the accent, and the confirmed people", () => {
+    const html = render(
+      guestFeatures({
+        checkInUrl: CHECK_IN_URL,
+        name: "Familia Gómez",
+        tableLabel: "7",
+        people: 3,
+      }),
+    );
+
+    assert.match(html, /data-feature="pass"/);
+    // The artboard's kicker and the guest's own name head the ticket.
+    assert.match(html, /Pase de acceso/);
+    assert.match(html, /Familia Gómez/);
+    // The QR stays a server-drawn image document, never inline markup.
+    assert.match(html, /src="data:image\/svg\+xml/);
+    // The table is readable as text next to its own label, never by color alone.
+    assert.match(html, /<dt[^>]*>Mesa<\/dt>/);
+    assert.match(html, /<dd[^>]*>7<\/dd>/);
+    assert.match(html, /<dt[^>]*>Personas<\/dt>/);
+    assert.match(html, /<dd[^>]*>3<\/dd>/);
+    // The large value takes the theme's accent, with the label carrying the meaning.
+    const mesaValue = /<dd[^>]*class="[^"]*--inv-accent[^"]*"[^>]*>7<\/dd>/.test(html);
+    assert.equal(mesaValue, true, html);
+  });
+
+  it("separates the ticket from its hint with a dashed tear line and names the venue", () => {
+    const html = render(
+      guestFeatures({
+        checkInUrl: CHECK_IN_URL,
+        name: "Familia Gómez",
+        tableLabel: "7",
+        people: 3,
+      }),
+    );
+
+    assert.match(html, /border-dashed/);
+    // The venue is the last place the invitation shows: the reception when there is one.
+    assert.match(html, /Muestra este código en la entrada · Jardín Los Arcos/);
+
+    const baptism = render(
+      guestFeatures({
+        checkInUrl: CHECK_IN_URL,
+        name: "Emilia",
+        tableLabel: "Principal",
+        people: 1,
+      }),
+      BAPTISM_FACTS,
+    );
+    assert.match(baptism, /Casa de los abuelos/);
+  });
+
+  it("shows only the people count when the owner assigned no table", () => {
+    const html = render(
+      guestFeatures({
+        checkInUrl: CHECK_IN_URL,
+        name: "Familia Gómez",
+        tableLabel: null,
+        people: 3,
+      }),
+    );
+
+    assert.match(html, /data-feature="pass"/);
+    assert.doesNotMatch(html, /<dt[^>]*>Mesa<\/dt>/);
+    assert.doesNotMatch(html, /<dt[^>]*>Mesa<\/dt>[\s\S]*Principal/);
+    assert.match(html, /<dt[^>]*>Personas<\/dt>/);
+    assert.match(html, /<dd[^>]*>3<\/dd>/);
+  });
+
+  it("escapes the guest's name and the table instead of turning them into markup", () => {
+    const html = render(
+      guestFeatures({
+        checkInUrl: CHECK_IN_URL,
+        name: "<script>alert('Ana')</script>",
+        tableLabel: "<b>7</b>",
+        people: 1,
+      }),
+    );
+
+    assert.doesNotMatch(html, /<script>alert/);
+    assert.doesNotMatch(html, /<b>7<\/b>/);
+    assert.match(html, /&lt;b&gt;7&lt;\/b&gt;/);
   });
 });

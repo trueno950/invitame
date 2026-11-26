@@ -56,6 +56,7 @@ const GUEST_PAGE: PublicGuestInvitation = {
   guest: {
     name: "Ana Pérez",
     seats: 4,
+    tableLabel: "7",
     response: {
       attending: true,
       partySize: 2,
@@ -325,6 +326,27 @@ describe("parsePublicGuestInvitation", () => {
     });
 
     assert.deepEqual(parsed?.guest.response, null);
+  });
+
+  it("reads the table on the guest block, and an API written before it as no table (F5; L8.4, L20)", () => {
+    assert.equal(parsePublicGuestInvitation(GUEST_PAGE)?.guest.tableLabel, "7");
+    // A rolling deploy answers a guest block without the field: the pass then draws the people count alone.
+    const { tableLabel: _table, ...older } = GUEST_PAGE.guest;
+    assert.deepEqual(parsePublicGuestInvitation({ ...GUEST_PAGE, guest: older })?.guest, {
+      ...GUEST_PAGE.guest,
+      tableLabel: null,
+    });
+    // The column is 1 to 12 characters or null, so nothing else may reach the ticket.
+    for (const tableLabel of ["", " ", "t".repeat(13), 7, true]) {
+      assert.equal(
+        parsePublicGuestInvitation({
+          ...GUEST_PAGE,
+          guest: { ...GUEST_PAGE.guest, tableLabel },
+        }),
+        undefined,
+        JSON.stringify(tableLabel),
+      );
+    }
   });
 
   it("refuses a guest block that breaks the contract", () => {

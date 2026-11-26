@@ -17,6 +17,7 @@ import {
   GUEST_NAME_MAX_LENGTH,
   GUEST_SEATS_MAX,
   GUEST_SEATS_MIN,
+  GUEST_TABLE_LABEL_MAX_LENGTH,
   isGuestToken,
   isInvitationSlug,
 } from "./invitations-api.ts";
@@ -422,6 +423,12 @@ const NOT_FOUND: PublicInvitationResult = { ok: false, failure: "not-found" };
 export interface PublicGuestResponse {
   readonly name: string;
   readonly seats: number;
+  /**
+   * The table the owner assigned, or null when there is none (F5; L8.4). Only this guest's block carries it: the open
+   * public read has no guest block at all. An API written before the column existed answers no field, which reads as
+   * null (L20).
+   */
+  readonly tableLabel: string | null;
   readonly response: {
     readonly attending: boolean;
     readonly partySize: number;
@@ -444,6 +451,26 @@ export interface PublicGuestInvitation extends PublicInvitation {
  * An absent field is an API written before F3 and reads as null, so a rolling deploy keeps both generations working;
  * another shape refuses the whole body instead of being shown.
  */
+/**
+ * The table of the guest's own block (F5; L8.1): a trimmed text of 1 to 12 characters, null when none is assigned, or
+ * null for an API written before the column existed (L20).
+ */
+function parseStoredTableLabel(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+
+  return trimmed === value &&
+    [...trimmed].length >= 1 &&
+    [...trimmed].length <= GUEST_TABLE_LABEL_MAX_LENGTH
+    ? trimmed
+    : undefined;
+}
+
 function parseCompanions(value: unknown): readonly RsvpCompanionValue[] | null | undefined {
   if (value === undefined || value === null) {
     return null;
@@ -533,7 +560,8 @@ export function parsePublicGuestInvitation(
     return undefined;
   }
 
-  const { name, seats, qrPass } = guest;
+  const { name, seats, qrPass, tableLabel } = guest;
+  const storedTableLabel = parseStoredTableLabel(tableLabel);
 
   if (
     typeof name !== "string" ||
@@ -543,7 +571,8 @@ export function parsePublicGuestInvitation(
     !Number.isInteger(seats) ||
     seats < GUEST_SEATS_MIN ||
     seats > GUEST_SEATS_MAX ||
-    typeof qrPass !== "boolean"
+    typeof qrPass !== "boolean" ||
+    storedTableLabel === undefined
   ) {
     return undefined;
   }
@@ -554,7 +583,7 @@ export function parsePublicGuestInvitation(
     return undefined;
   }
 
-  return { ...page, guest: { name, seats, response, qrPass } };
+  return { ...page, guest: { name, seats, tableLabel: storedTableLabel, response, qrPass } };
 }
 
 export type PublicGuestResult =
