@@ -24,6 +24,7 @@ import {
 } from "./invitation-features";
 import type { GiftRegistryStore, InvitationGiftRegistry } from "./invitation-gift-registry";
 import type { InvitationItinerary } from "./invitation-itinerary";
+import type { InvitationLodging } from "./invitation-lodging";
 
 // The feature rules of an invitation (F1; S3, S4). The time zone allow-list, the WhatsApp phone normalization,
 // and the feature gating are pure domain rules: the package contributes data keys only, the Spanish labels stay
@@ -32,7 +33,7 @@ import type { InvitationItinerary } from "./invitation-itinerary";
 /** The stored feature keys of every seeded package (prisma/catalog-seed.ts), by package key. */
 const SEEDED_PACKAGE_FEATURES = {
   basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
-  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
+  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP", "LODGING"],
   deluxe: [
     "ITINERARY",
     "COUNTDOWN",
@@ -42,6 +43,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "RSVP",
     "WHATSAPP",
     "GIFT_REGISTRY",
+    "LODGING",
     "GUEST_LIST",
     "QR_PASS",
   ],
@@ -315,6 +317,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         playlistUrl: PLAYLIST,
         itinerary: { version: 1, items: [{ time: "17:00", title: " Misa " }] },
         giftRegistry: null,
+        lodging: null,
       }),
       {
         ok: true,
@@ -324,6 +327,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           playlistUrl: PLAYLIST,
           itinerary: { version: 1, items: [{ time: "17:00", title: "Misa" }] },
           giftRegistry: null,
+          lodging: null,
         },
       },
     );
@@ -337,6 +341,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         playlistUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       }),
       {
         ok: true,
@@ -346,6 +351,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           playlistUrl: null,
           itinerary: null,
           giftRegistry: null,
+          lodging: null,
         },
       },
     );
@@ -356,6 +362,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         playlistUrl: "  ",
         itinerary: { version: 1, items: [] },
         giftRegistry: null,
+        lodging: null,
       }),
       {
         ok: true,
@@ -365,6 +372,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           playlistUrl: null,
           itinerary: null,
           giftRegistry: null,
+          lodging: null,
         },
       },
     );
@@ -378,6 +386,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         playlistUrl: "http://open.spotify.com/x",
         itinerary: { version: 1, items: [{ time: "26:00", title: "Misa" }] },
         giftRegistry: null,
+        lodging: null,
       }),
       {
         ok: false,
@@ -399,6 +408,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         playlistUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
 
       assert.equal(result.ok, false);
@@ -418,6 +428,7 @@ describe("feature gating (S4, F1)", () => {
     playlistCoverUrl: string | null = null,
     itinerary: InvitationItinerary | null = ITINERARY,
     giftRegistry: InvitationGiftRegistry | null = null,
+    lodging: InvitationLodging | null = null,
   ) =>
     availableFeatureKeys({
       includedFeatureKeys,
@@ -427,6 +438,7 @@ describe("feature gating (S4, F1)", () => {
       playlistCoverUrl,
       itinerary,
       giftRegistry,
+      lodging,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     });
@@ -439,6 +451,7 @@ describe("feature gating (S4, F1)", () => {
     playlistCoverUrl?: string | null;
     itinerary?: InvitationItinerary | null;
     giftRegistry?: InvitationGiftRegistry | null;
+    lodging?: InvitationLodging | null;
     rsvpDeadline?: Date | null;
     rsvpPartyLimit?: number;
   }) =>
@@ -447,6 +460,7 @@ describe("feature gating (S4, F1)", () => {
       playlistCoverUrl: null,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       ...gate,
@@ -461,6 +475,7 @@ describe("feature gating (S4, F1)", () => {
       "WHATSAPP",
       "MUSIC",
       "GIFT_REGISTRY",
+      "LODGING",
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
@@ -599,6 +614,7 @@ describe("feature gating (S4, F1)", () => {
         itinerary: null,
         giftRegistry: false,
         giftRegistryDetails: null,
+        lodging: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -624,6 +640,7 @@ describe("feature gating (S4, F1)", () => {
         playlistUrl: null,
         itinerary: ITINERARY,
         giftRegistry: null,
+        lodging: null,
       }).itinerary,
       { items: ITINERARY.items },
     );
@@ -635,6 +652,7 @@ describe("feature gating (S4, F1)", () => {
         playlistUrl: null,
         itinerary: ITINERARY,
         giftRegistry: null,
+        lodging: null,
       }).itinerary,
       null,
     );
@@ -646,6 +664,7 @@ describe("feature gating (S4, F1)", () => {
         playlistUrl: null,
         itinerary: { version: 1, items: [] },
         giftRegistry: null,
+        lodging: null,
       }).itinerary,
       null,
     );
@@ -741,6 +760,7 @@ describe("feature gating (S4, F1)", () => {
         itinerary: null,
         giftRegistry: false,
         giftRegistryDetails: null,
+        lodging: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -760,6 +780,7 @@ describe("feature gating (S4, F1)", () => {
         itinerary: null,
         giftRegistry: false,
         giftRegistryDetails: null,
+        lodging: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -779,6 +800,7 @@ describe("feature gating (S4, F1)", () => {
         itinerary: null,
         giftRegistry: true,
         giftRegistryDetails: null,
+        lodging: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -924,6 +946,7 @@ describe("the playlist metadata bounds (S2)", () => {
       playlistCoverUrl: "https://evil.test/cover.jpg",
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     };

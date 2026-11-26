@@ -1,6 +1,7 @@
 import type { JsonObject } from "../domain/invitation-content";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
+import type { InvitationLodging } from "../domain/invitation-lodging";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
 
@@ -80,6 +81,8 @@ export interface InvitationFeatureSettingsWrite {
   itinerary: InvitationItinerary | null;
   /** The validated gift registry payload, or null when the invitation has none (F2; L4.1). */
   giftRegistry: InvitationGiftRegistry | null;
+  /** The validated lodging payload, or null when the invitation has none (F4; L7.1). */
+  lodging: InvitationLodging | null;
 }
 
 /** A new DRAFT: the owner from the session, the pinned snapshot, the chosen package, and a generated slug. */
@@ -133,6 +136,11 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
    * exactly as it was.
    */
   giftRegistry: InvitationGiftRegistry | null;
+  /**
+   * The validated lodging, in the owner's order, or null when the invitation has none (F4; L7.1). A row written around
+   * the API reads null instead of a value no rule validated, so a guest never draws one.
+   */
+  lodging: InvitationLodging | null;
 }
 
 /**
@@ -186,7 +194,7 @@ export interface InvitationRepository {
 
   /**
    * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone, the
-   * playlist link, the itinerary, and the gift registry in its one-to-one settings row — in one transaction whose
+   * playlist link, the itinerary, the gift registry, and the lodging in its one-to-one settings row — in one transaction whose
    * `WHERE` names the owner and both
    * editable statuses, so a published invitation changes live (S7), an archived one is refused with
    * `InvitationNotEditableError` even by a concurrent archive (A2), and another owner's id answers null,

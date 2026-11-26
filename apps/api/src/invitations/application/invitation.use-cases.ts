@@ -21,6 +21,7 @@ import {
 } from "../domain/invitation-features";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
+import type { InvitationLodging } from "../domain/invitation-lodging";
 import {
   archive,
   assertEditable,
@@ -119,6 +120,12 @@ export interface UpdateFeaturesInput {
    * a registry it never knew about.
    */
   giftRegistry?: unknown;
+  /**
+   * The lodging as the request carried it, or `undefined` when the body omitted it (F4; L7.1, L7.3): an omitted value
+   * keeps the stored lodging, which is what lets a client built before F4 save the other fields without clearing a
+   * block it never knew about.
+   */
+  lodging?: unknown;
 }
 
 /** A row of "Mis invitaciones": the editor loads one invitation when it opens it. */
@@ -175,6 +182,8 @@ export interface OwnedInvitation extends InvitationSummary {
     itinerary: InvitationItinerary | null;
     /** The stored gift registry, or null when the invitation has none (F2; L4.1). */
     giftRegistry: InvitationGiftRegistry | null;
+    /** The stored lodging, or null when the invitation has none (F4; L7.1). */
+    lodging: InvitationLodging | null;
   };
   /**
    * The gated keys of the features this invitation will show, `CALENDAR` included (S4). The package's keys are
@@ -231,6 +240,7 @@ export function toOwnedInvitation(
       playlistCoverUrl: record.playlistCoverUrl,
       itinerary: record.itinerary,
       giftRegistry: record.giftRegistry,
+      lodging: record.lodging,
     },
     availableFeatures: availableFeatureKeys({
       includedFeatureKeys,
@@ -240,6 +250,7 @@ export function toOwnedInvitation(
       playlistCoverUrl: record.playlistCoverUrl,
       itinerary: record.itinerary,
       giftRegistry: record.giftRegistry,
+      lodging: record.lodging,
       rsvpDeadline: record.rsvpDeadline,
       rsvpPartyLimit: record.rsvpPartyLimit,
     }),
@@ -512,6 +523,9 @@ export class UpdateInvitationFeaturesUseCase {
       // The gift registry follows the same rule (F2; L4.3): an omitted value keeps the stored registry, and only
       // `null` or a payload that would show nothing clears it.
       giftRegistry: input.giftRegistry === undefined ? stored.giftRegistry : input.giftRegistry,
+      // The lodging follows the same rule (F4; L7.3): an omitted value keeps the stored lodging, and only `null` or a
+      // payload with no hotel and no transport line clears it.
+      lodging: input.lodging === undefined ? stored.lodging : input.lodging,
     });
     if (!validation.ok) {
       throw new InvalidInvitationFeaturesError(validation.issues);
@@ -775,6 +789,7 @@ export class GetPublicInvitationUseCase {
         playlistCoverUrl: published.playlistCoverUrl,
         itinerary: published.itinerary,
         giftRegistry: published.giftRegistry,
+        lodging: published.lodging,
         rsvpDeadline: published.rsvpDeadline,
         rsvpPartyLimit: published.rsvpPartyLimit,
       },

@@ -38,6 +38,7 @@ const gateOf = (overrides: Partial<InvitationFeatureGate> = {}): InvitationFeatu
   playlistCoverUrl: null,
   itinerary: { version: 1, items: [MOMENT] },
   giftRegistry: null,
+  lodging: null,
   rsvpDeadline: null,
   rsvpPartyLimit: 4,
   ...overrides,

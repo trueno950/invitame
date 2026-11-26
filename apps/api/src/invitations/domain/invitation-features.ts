@@ -11,9 +11,9 @@
 //   calendar feature, which is not catalog data; WhatsApp also needs a stored phone, music a usable link, and the
 //   itinerary at least one stored moment (F1).
 //
-// The itinerary payload itself is `domain/invitation-itinerary.ts` and the gift registry is
-// `domain/invitation-gift-registry.ts`: this module only decides whether a guest may see them and hands them to the
-// projection, so one reader owns each shape.
+// The itinerary payload itself is `domain/invitation-itinerary.ts`, the gift registry is
+// `domain/invitation-gift-registry.ts`, and the lodging is `domain/invitation-lodging.ts`: this module only decides
+// whether a guest may see them and hands them to the projection, so one reader owns each shape.
 //
 // Package and feature names never select a code path (AGENTS.md): the gate compares keys and nothing else, so a
 // new catalog key never makes a feature appear, and an unknown key is simply not implemented.
@@ -43,6 +43,14 @@ import {
   storedItinerary,
   validateItinerary,
 } from "./invitation-itinerary";
+import {
+  type InvitationLodging,
+  lodgingHasContent,
+  type PublicLodging,
+  publicLodging,
+  storedLodging,
+  validateLodging,
+} from "./invitation-lodging";
 
 export const INVITATION_TIME_ZONES = [
   "America/Mexico_City",
@@ -74,7 +82,8 @@ export function isInvitationTimeZone(value: unknown): value is InvitationTimeZon
  * `RSVP` and `GUEST_LIST` arrived with Milestone 6 (`GUEST_LIST` is the personal-link guest list, M6 G2),
  * `QR_PASS` is the guest list's access pass for the door, also M6 G2, and `GALLERY` is the invitation's photo
  * gallery (M8 S3, S4). `ITINERARY` is the plan of the day (F1; S2.1, L3.2) and comes first because it is the first
- * capability of the owner's list. The order is the order the owner's feature list follows.
+ * capability of the owner's list; `LODGING` is the lodging and transport block (F4; S2.4, L7.2). The order is the
+ * order the owner's feature list follows.
  */
 export const IMPLEMENTED_INVITATION_FEATURES = [
   "ITINERARY",
@@ -84,6 +93,7 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   "WHATSAPP",
   "MUSIC",
   "GIFT_REGISTRY",
+  "LODGING",
   "GUEST_LIST",
   "QR_PASS",
   "GALLERY",
@@ -115,6 +125,13 @@ export const ITINERARY_FEATURE_KEY = "ITINERARY";
  * structured registry (L4.3).
  */
 export const GIFT_REGISTRY_FEATURE_KEY = "GIFT_REGISTRY";
+
+/**
+ * The catalog key that grants the lodging and transport block (F4; S2.4, L7.2), granted by Premium and Deluxe. The
+ * key stays while the invitation stores no hotel and no transport line, because only the data decides whether a card
+ * exists; the public read answers the block itself only when there is something to draw.
+ */
+export const LODGING_FEATURE_KEY = "LODGING";
 
 /**
  * The public shape of one itinerary moment (F1; L3.1, L3.3): the wall clock, the title, and the place and address
@@ -499,6 +516,8 @@ export interface InvitationFeatureSettingsValue {
   readonly itinerary: InvitationItinerary | null;
   /** The validated gift registry, or null when the invitation has none or it would show nothing (F2; L4.1). */
   readonly giftRegistry: InvitationGiftRegistry | null;
+  /** The validated lodging, or null when the invitation has none or it would show nothing (F4; L7.1). */
+  readonly lodging: InvitationLodging | null;
 }
 
 /** The feature settings a request asked for, validated, or every issue that refuses them. */
@@ -520,6 +539,7 @@ export function validateInvitationFeatureSettings(input: {
   readonly playlistUrl: unknown;
   readonly itinerary: unknown;
   readonly giftRegistry: unknown;
+  readonly lodging: unknown;
 }): InvitationFeatureSettingsValidation {
   const issues: string[] = [];
 
@@ -547,12 +567,18 @@ export function validateInvitationFeatureSettings(input: {
     issues.push(...giftRegistry.issues);
   }
 
+  const lodging = validateLodging(input.lodging);
+  if (!lodging.ok) {
+    issues.push(...lodging.issues);
+  }
+
   if (
     issues.length > 0 ||
     !phone.ok ||
     !playlist.ok ||
     !itinerary.ok ||
     !giftRegistry.ok ||
+    !lodging.ok ||
     !isInvitationTimeZone(input.timeZone)
   ) {
     return { ok: false, issues };
@@ -566,6 +592,7 @@ export function validateInvitationFeatureSettings(input: {
       playlistUrl: playlist.url,
       itinerary: itinerary.value,
       giftRegistry: giftRegistry.value,
+      lodging: lodging.value,
     },
   };
 }
@@ -584,6 +611,8 @@ export interface InvitationFeatureGate {
   readonly itinerary: InvitationItinerary | null;
   /** The stored gift registry, or null when there is none (F2; L4.1). */
   readonly giftRegistry: InvitationGiftRegistry | null;
+  /** The stored lodging, or null when there is none (F4; L7.1). */
+  readonly lodging: InvitationLodging | null;
   /** The owner's RSVP deadline, or null for one that never closes (M6 S4). */
   readonly rsvpDeadline: Date | null;
   /** The owner's party limit, 1 to 10 (M6 S4). */
@@ -613,6 +642,11 @@ export function availableFeatureKeys(gate: InvitationFeatureGate): string[] {
       continue;
     }
     if (featureKey === ITINERARY_FEATURE_KEY && (gate.itinerary?.items.length ?? 0) === 0) {
+      continue;
+    }
+    // The lodging follows the same rule as the itinerary: the key is offered only while there is something to draw
+    // (F4; L7.2, L7.3).
+    if (featureKey === LODGING_FEATURE_KEY && !lodgingHasContent(gate.lodging)) {
       continue;
     }
     keys.push(featureKey);
@@ -656,6 +690,12 @@ export interface PublicInvitationFeatures {
    * and note are answered as null so a page always reads the same keys.
    */
   readonly giftRegistryDetails: PublicGiftRegistry | null;
+  /**
+   * The hotel cards and the transport line a guest's block draws, or null when the package does not grant `LODGING` or
+   * the invitation stores nothing there (F4; L7.3). The payload's version stays in the API, and the transport is
+   * answered as null so a page always reads the same keys.
+   */
+  readonly lodging: PublicLodging | null;
   /**
    * The gallery photos the page renders, ordered by position (M8 S4). Empty when the package does not grant
    * `GALLERY`, so the shape is stable and a layout can always read an array; an empty array and an absent gallery
@@ -705,6 +745,8 @@ export function publicInvitationFeatures(
   const coverUrl = isMusicCoverUrl(gate.playlistCoverUrl) ? gate.playlistCoverUrl : null;
   // A row written around the API reads as no registry, exactly like an itinerary it refuses (F2; L4.1).
   const registry = storedGiftRegistry(gate.giftRegistry);
+  // The same rule for the lodging: a row no rule validated draws nothing (F4; L7.1).
+  const lodging = storedLodging(gate.lodging);
 
   return {
     countdown: keys.has("COUNTDOWN"),
@@ -723,6 +765,8 @@ export function publicInvitationFeatures(
       keys.has(GIFT_REGISTRY_FEATURE_KEY) && giftRegistryHasContent(registry)
         ? publicGiftRegistry(registry)
         : null,
+    lodging:
+      keys.has(LODGING_FEATURE_KEY) && lodgingHasContent(lodging) ? publicLodging(lodging) : null,
     // Only a package that grants GALLERY renders photos; the read passes none otherwise, and this repeats the gate.
     gallery: keys.has(GALLERY_FEATURE_KEY) ? galleryPhotos : [],
     rsvp: {

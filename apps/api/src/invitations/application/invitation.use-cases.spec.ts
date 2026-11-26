@@ -123,6 +123,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       playlistCoverUrl: null,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
       rsvpDeadline: null,
       places: {},
       ...input,
@@ -190,6 +191,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     stored.playlistTitle = features.playlistTitle;
     stored.playlistCoverUrl = features.playlistCoverUrl;
     stored.itinerary = features.itinerary;
+    stored.lodging = features.lodging;
     stored.updatedAt = new Date(stored.updatedAt.getTime() + 1000);
     return { ...stored, content: { ...stored.content } };
   }
@@ -462,7 +464,7 @@ function features(
 /** The feature keys of every seeded package (prisma/catalog-seed.ts), by package key (S4). */
 const SEEDED_PACKAGE_FEATURES = {
   basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
-  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
+  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP", "LODGING"],
   deluxe: [
     "ITINERARY",
     "COUNTDOWN",
@@ -472,6 +474,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "RSVP",
     "WHATSAPP",
     "GIFT_REGISTRY",
+    "LODGING",
     "GUEST_LIST",
     "QR_PASS",
   ],
@@ -479,6 +482,21 @@ const SEEDED_PACKAGE_FEATURES = {
 
 const PHONE = "+525512345678";
 const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
+const LODGING = {
+  version: 1,
+  hotels: [
+    {
+      name: "Hotel Misión",
+      distance: "A 5 min",
+      price: "Desde $1,450 por noche",
+      groupCode: "BODA-AYL",
+      bookingUrl: "https://hotelmision.example.com/reserva",
+      address: "Av. Juárez 120, Centro",
+    },
+    { name: "City Express", address: "Blvd. Bernardo Quintana 45" },
+  ],
+  transport: "Habrá camión del hotel al salón a las 19:00 y de regreso a la 1:00.",
+} as const;
 const ITINERARY: InvitationItinerary = {
   version: 1,
   items: [
@@ -847,6 +865,7 @@ describe("GetOwnInvitationUseCase", () => {
       playlistCoverUrl: null,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
     // WhatsApp needs a stored phone, and no catalog feature outside the implemented list appears (S4).
     assert.deepEqual(stored?.availableFeatures, ["COUNTDOWN", "MAP", "CALENDAR"]);
@@ -1012,6 +1031,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: PLAYLIST,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
 
     assert.equal(updated?.timeZone, "America/Tijuana");
@@ -1022,6 +1042,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistCoverUrl: null,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
     assert.deepEqual(updated?.availableFeatures, [
       "COUNTDOWN",
@@ -1051,6 +1072,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: null,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
 
     for (const cleared of [null, "", "   "]) {
@@ -1062,6 +1084,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         playlistUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
 
       assert.deepEqual(
@@ -1073,6 +1096,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           playlistCoverUrl: null,
           itinerary: null,
           giftRegistry: null,
+          lodging: null,
         },
         String(cleared),
       );
@@ -1093,6 +1117,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: PLAYLIST,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
 
     for (const cleared of [null, "", "   "]) {
@@ -1104,6 +1129,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         playlistUrl: cleared,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
 
       assert.equal(updated?.featureSettings.playlistUrl, null, String(cleared));
@@ -1130,6 +1156,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: null,
       itinerary: ITINERARY,
       giftRegistry: null,
+      lodging: null,
     });
 
     assert.equal(updated?.featureSettings.itinerary?.version, 1);
@@ -1196,6 +1223,129 @@ describe("UpdateInvitationFeaturesUseCase", () => {
     assert.deepEqual(fixture.repository.rows[0], before);
   });
 
+  it("stores the hotel cards and the transport text and answers them to the owner (F4; L7.1)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.premium });
+    const created = await createDraft(fixture);
+
+    const updated = await features(fixture).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+      lodging: LODGING,
+    });
+
+    // The cards keep the owner's order, and the transport text is stored with them (L7.1).
+    assert.deepEqual(updated?.featureSettings.lodging, LODGING);
+    // The granted key is offered only because the invitation now stores something to draw (L7.2).
+    assert.deepEqual(updated?.availableFeatures, [
+      "COUNTDOWN",
+      "MAP",
+      "RSVP",
+      "LODGING",
+      "GALLERY",
+      "CALENDAR",
+    ]);
+    assert.deepEqual(fixture.repository.rows[0]?.lodging, LODGING);
+
+    const stored = await new GetOwnInvitationUseCase(fixture.repository, fixture.catalog).execute(
+      fixture.ownerId,
+      created.id,
+    );
+    assert.deepEqual(stored?.featureSettings.lodging, LODGING);
+  });
+
+  it("keeps the stored lodging when a save omits it, and clears it with null or an empty payload (F4; L7.3)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.premium });
+    const created = await createDraft(fixture);
+    const useCase = features(fixture);
+    const base = {
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+    };
+    await useCase.execute({ ...base, lodging: LODGING });
+
+    // A client built before F4 omits the field, and the stored cards stay (L7.3).
+    const kept = await useCase.execute(base);
+    assert.deepEqual(kept?.featureSettings.lodging, LODGING);
+    assert.deepEqual(fixture.repository.rows[0]?.lodging, LODGING);
+
+    for (const cleared of [
+      null,
+      { version: 1, hotels: [] },
+      { version: 1, hotels: [], transport: "  " },
+    ]) {
+      const updated = await useCase.execute({ ...base, lodging: cleared });
+
+      assert.equal(updated?.featureSettings.lodging, null, JSON.stringify(cleared));
+      assert.deepEqual(updated?.availableFeatures, [
+        "COUNTDOWN",
+        "MAP",
+        "RSVP",
+        "GALLERY",
+        "CALENDAR",
+      ]);
+      assert.equal(fixture.repository.rows[0]?.lodging, null);
+    }
+  });
+
+  it("refuses a lodging payload outside its bounds and stores nothing (F4; L7.1)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.premium });
+    const created = await createDraft(fixture);
+    const useCase = features(fixture);
+    const base = {
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+      lodging: null,
+    };
+    await useCase.execute({ ...base, lodging: LODGING });
+    const before = { ...fixture.repository.rows[0] };
+
+    for (const [lodging, issues] of [
+      [
+        { version: 1, hotels: [{ name: "", bookingUrl: "http://hotel.test" }] },
+        [
+          "lodging.hotels[0].name must be between 1 and 60 characters",
+          "lodging.hotels[0].bookingUrl must be an https link of at most 500 characters",
+        ],
+      ],
+      [
+        { version: 1, hotels: Array.from({ length: 7 }, () => ({ name: "Hotel" })) },
+        ["lodging.hotels must have at most 6 hotels"],
+      ],
+      [
+        { version: 1, hotels: [{ name: "Hotel", distance: "d".repeat(41) }] },
+        ["lodging.hotels[0].distance must be a string of at most 40 characters"],
+      ],
+      [
+        { version: 1, hotels: [], transport: "t".repeat(401) },
+        ["lodging.transport must be a string of at most 400 characters"],
+      ],
+      [{ version: 2, hotels: [] }, ["lodging.version must be 1"]],
+    ] as const) {
+      await assert.rejects(useCase.execute({ ...base, lodging }), (error: unknown) => {
+        assert.ok(error instanceof InvalidInvitationFeaturesError);
+        assert.deepEqual(error.issues, [...issues], JSON.stringify(lodging));
+        return true;
+      });
+    }
+
+    assert.deepEqual(fixture.repository.rows[0], before);
+  });
+
   it("refuses a zone outside the allow-list, a phone it cannot normalize, and a link it cannot store (S4, S7)", async () => {
     const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
     const created = await createDraft(fixture);
@@ -1210,6 +1360,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         playlistUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       }),
       (error: unknown) => {
         assert.ok(error instanceof InvalidInvitationFeaturesError);
@@ -1239,6 +1390,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           playlistUrl,
           itinerary: null,
           giftRegistry: null,
+          lodging: null,
         }),
         (error: unknown) => {
           assert.ok(error instanceof InvalidInvitationFeaturesError);
@@ -1267,6 +1419,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         playlistUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       }),
       InvitationNotEditableError,
     );
@@ -1289,6 +1442,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         playlistUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       }),
       null,
     );
@@ -1302,6 +1456,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           playlistUrl: null,
           itinerary: null,
           giftRegistry: null,
+          lodging: null,
         }),
         null,
       );
@@ -1322,6 +1477,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: null,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
 
     assert.equal(updated?.status, "PUBLISHED");
@@ -1351,6 +1507,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
 
     return { fixture, created, updated, useCase };
@@ -1370,6 +1527,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistCoverUrl: METADATA.coverUrl,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
     // The metadata is stored with the link, so a later or public read answers it without a provider.
     assert.equal(fixture.repository.rows[0]?.playlistTitle, METADATA.title);
@@ -1392,6 +1550,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: PLAYLIST,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
 
     assert.equal(music.asked.length, 1);
@@ -1414,6 +1573,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         playlistUrl: cleared,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
 
       assert.equal(music.asked.length, 1, String(cleared));
@@ -1441,6 +1601,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistCoverUrl: null,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
     assert.equal(fixture.repository.rows[0]?.playlistUrl, PLAYLIST);
   });
@@ -1498,6 +1659,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: PLAYLIST,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
     await publisher(fixture).useCase.execute(fixture.ownerId, created.id);
 
@@ -1911,6 +2073,7 @@ describe("GetPublicInvitationUseCase", () => {
         itinerary: null,
         giftRegistry: false,
         giftRegistryDetails: null,
+        lodging: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -2113,6 +2276,7 @@ describe("GetPublicInvitationUseCase", () => {
           itinerary: null,
           giftRegistry: packageKey === "deluxe",
           giftRegistryDetails: null,
+          lodging: null,
           gallery: [],
           // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form (M6 S4).
           rsvp: {
@@ -2134,6 +2298,7 @@ describe("GetPublicInvitationUseCase", () => {
         playlistUrl: PLAYLIST,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
 
       const page = await publicReader(fixture).execute(created.slug);
@@ -2153,6 +2318,7 @@ describe("GetPublicInvitationUseCase", () => {
           itinerary: null,
           giftRegistry: packageKey === "deluxe",
           giftRegistryDetails: null,
+          lodging: null,
           gallery: [],
           rsvp: {
             mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
@@ -2172,6 +2338,7 @@ describe("GetPublicInvitationUseCase", () => {
         "giftRegistry",
         "giftRegistryDetails",
         "itinerary",
+        "lodging",
         "map",
         "music",
         "rsvp",
@@ -2192,6 +2359,7 @@ describe("GetPublicInvitationUseCase", () => {
       playlistUrl: PLAYLIST,
       itinerary: null,
       giftRegistry: null,
+      lodging: null,
     });
 
     const page = await publicReader(fixture).execute(created.slug);
@@ -2206,6 +2374,7 @@ describe("GetPublicInvitationUseCase", () => {
       itinerary: null,
       giftRegistry: false,
       giftRegistryDetails: null,
+      lodging: null,
       gallery: [],
       rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
     });
@@ -2235,6 +2404,57 @@ describe("GetPublicInvitationUseCase", () => {
     assert.equal((await publicReader(fixture).execute(created.slug))?.features.itinerary, null);
   });
 
+  it("answers the hotel cards only while the package grants LODGING and the invitation stores some (F4; L7.3)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.deluxe });
+    const created = await publishedInvitation(fixture);
+    const save = (lodging: unknown) =>
+      features(fixture).execute({
+        ownerId: fixture.ownerId,
+        id: created.id,
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging,
+      });
+
+    await save(LODGING);
+    assert.deepEqual((await publicReader(fixture).execute(created.slug))?.features.lodging, {
+      hotels: LODGING.hotels,
+      transport: LODGING.transport,
+    });
+
+    // A transport line alone is a lodging section; no hotel and no transport is none at all.
+    await save({ version: 1, hotels: [], transport: LODGING.transport });
+    assert.deepEqual((await publicReader(fixture).execute(created.slug))?.features.lodging, {
+      hotels: [],
+      transport: LODGING.transport,
+    });
+
+    await save(null);
+    assert.equal((await publicReader(fixture).execute(created.slug))?.features.lodging, null);
+  });
+
+  it("keeps a stored lodging private when the package does not grant LODGING (F4; L7.3)", async () => {
+    const fixture = seeded({ includedFeatureKeys: ["COUNTDOWN"] });
+    const created = await publishedInvitation(fixture);
+    await features(fixture).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+      lodging: LODGING,
+    });
+    const page = await publicReader(fixture).execute(created.slug);
+
+    assert.equal(page?.features.lodging, null);
+    assert.equal(JSON.stringify(page).includes("Hotel Misión"), false);
+  });
+
   it("keeps a stored itinerary private when the package does not grant ITINERARY (F1; L3.3)", async () => {
     const fixture = seeded({ includedFeatureKeys: ["COUNTDOWN"] });
     const created = await publishedInvitation(fixture);
@@ -2246,6 +2466,7 @@ describe("GetPublicInvitationUseCase", () => {
       playlistUrl: null,
       itinerary: ITINERARY,
       giftRegistry: null,
+      lodging: null,
     });
     const page = await publicReader(fixture).execute(created.slug);
 

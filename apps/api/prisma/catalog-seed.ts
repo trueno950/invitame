@@ -106,6 +106,11 @@ const FEATURE_SEEDS = [
     description: "Información para compartir opciones de regalos.",
   },
   {
+    key: "LODGING",
+    name: "Hospedaje y transporte",
+    description: "Hoteles con tarifa especial para tus invitados y cómo moverse el día del evento.",
+  },
+  {
     key: "GUEST_LIST",
     name: "Lista de invitados",
     description: "Una lista para organizar a las personas invitadas.",
@@ -132,7 +137,16 @@ const PACKAGE_SEEDS = [
     description: "Más recursos para una experiencia visual completa.",
     // S1: «Premium 90 días».
     durationDays: 90,
-    featureKeys: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
+    featureKeys: [
+      "ITINERARY",
+      "COUNTDOWN",
+      "MUSIC",
+      "GALLERY",
+      "MAP",
+      "RSVP",
+      "WHATSAPP",
+      "LODGING",
+    ],
   },
   {
     key: "deluxe",
@@ -149,6 +163,7 @@ const PACKAGE_SEEDS = [
       "RSVP",
       "WHATSAPP",
       "GIFT_REGISTRY",
+      "LODGING",
       "GUEST_LIST",
       "QR_PASS",
     ],

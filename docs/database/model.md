@@ -65,7 +65,12 @@ additive `20261204120000_add_rsvp_companions` migration: the nullable `RsvpRespo
 nullable `RsvpResponse.dietaryNotes` column (up to 300 characters). Both RSVP paths — the open form and the guest list's
 personal answer — are rows of that one table, so one migration serves both; it inserts no catalog row, because the
 existing `RSVP` and `GUEST_LIST` keys gate the feature. Every answer stored before it reads `NULL` in both columns and
-renders exactly as it did, so no row is rewritten and nothing is deleted. Future analytics design is documented separately in
+renders exactly as it did, so no row is rewritten and nothing is deleted. F4 adds the additive
+`20261205120000_add_invitation_lodging` migration: the nullable `InvitationFeatureSettings.lodging` JSONB column, and —
+in the same file, because the seed never updates an existing package — the `LODGING` catalog feature row and its links
+to the `premium` and `deluxe` packages, both inserted with `ON CONFLICT DO NOTHING` so a second run stores nothing. The
+column is nullable, so no row is rewritten; the catalog rows are new, so no existing package or feature is changed and
+nothing is deleted. Future analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -87,7 +92,7 @@ renders exactly as it did, so no row is rewritten and nothing is deleted. Future
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, the bounded companions `[{ name, child }]` of the party (one per extra person while attending, or `NULL` for an older answer), optional `dietaryNotes` (up to 300 characters), an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
-| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary` and `giftRegistry` (or `NULL`), and timestamps |
+| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary`, `giftRegistry`, and `lodging` (or `NULL`), and timestamps |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
@@ -275,6 +280,16 @@ normalization, the playlist link allow-list, and the gating — lives in
   provider payload, no query-critical field, and no rule that a column could enforce, so the API domain
   (`apps/api/src/invitations/domain/invitation-gift-registry.ts`) is the only authority on the shape and a value written
   around it reads as no registry instead of reaching a guest. The gate is the existing `GIFT_REGISTRY` key (L4.2).
+- `InvitationFeatureSettings.lodging` is JSONB and nullable, and holds one bounded, versioned presentation payload
+  (F4; L7.1): `{ "version": 1, "hotels": [{ "name", "distance"?, "price"?, "groupCode"?, "bookingUrl"?, "address"? }],
+  "transport"?: string }`. `hotels` carries 0 to 6 hotels in the owner's order, `name` is 1 to 60 trimmed characters,
+  `distance` at most 40, `price` at most 60, `groupCode` at most 40, `bookingUrl` an `https` link of at most 500, and
+  `address` at most 160; the optional `transport` is at most 400 trimmed characters, and a blank optional value is
+  absent. `NULL` is "no lodging", and so is a payload with no hotel and no transport line, which the API normalizes to
+  `NULL` before writing. It is presentation data only: no image, no provider payload, no query-critical field, and no
+  rule that a column could enforce, so the API domain (`apps/api/src/invitations/domain/invitation-lodging.ts`) is the
+  only authority on the shape and a value written around it reads as no lodging instead of reaching a guest. The gate is
+  the new `LODGING` key, granted to Premium and Deluxe (L7.2).
 - The legacy `Invitation.content.giftRegistry` text field stays for existing invitations (F2; L4.3): the public read
   withholds it — and names it in `hiddenFields` — while the structured registry has a store, a transfer, or the
   envelopes line, so a guest never sees the old text and the new card at the same time. An invitation with only the old
@@ -308,6 +323,10 @@ normalization, the playlist link allow-list, and the gating — lives in
   migration set, or by hand `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "giftRegistry";`. Only the stored
   registries are lost; invitations, their content (the legacy text included), and every other feature setting stay. It
   changes no catalog row. Never edit the applied migration file.
+- Rollback / recovery of `20261205120000_add_invitation_lodging`: additive, so recovery is redeploying the previous
+  migration set, or by hand deleting the two `PackageFeature` links and the `LODGING` `Feature` row by key and then
+  `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "lodging";`. Only the stored lodgings and the catalog key are
+  lost; invitations, their content, and every other feature setting stay. Never edit the applied migration file.
 
 ## Invitation places
 
@@ -666,11 +685,13 @@ Prisma. The database suites (`pnpm --filter @invitame/api test:db`) exercise the
 ## JSONB boundary
 
 Prisma `Json` maps `TemplateVersion.schema`, `TemplateVersion.configuration`, `Invitation.content`,
-`InvitationFeatureSettings.itinerary`, and `InvitationFeatureSettings.giftRegistry` to PostgreSQL JSONB. The template
+`InvitationFeatureSettings.itinerary`, `InvitationFeatureSettings.giftRegistry`, and
+`InvitationFeatureSettings.lodging` to PostgreSQL JSONB. The template
 schema is a validated form contract and configuration is a validated presentation contract; an invitation's content is
 the bounded form data validated against its pinned version; the itinerary is a versioned, bounded presentation payload
 (1 to 15 moments of four short texts); the gift registry is a versioned, bounded presentation payload (0 to 8 stores, an
-optional transfer of three short texts, a flag, and a note). Renderer identity, relationships,
+optional transfer of three short texts, a flag, and a note); the lodging is a versioned, bounded presentation payload
+(0 to 6 hotels of a name and five optional short texts, one of them an `https` booking link, plus one transport note). Renderer identity, relationships,
 catalog keys, lifecycle statuses, and fields used for querying remain normalized columns.
 
 ## Analytics data

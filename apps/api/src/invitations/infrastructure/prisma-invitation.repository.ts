@@ -20,6 +20,7 @@ import {
 import type { JsonObject } from "../domain/invitation-content";
 import { storedGiftRegistry } from "../domain/invitation-gift-registry";
 import { storedItinerary } from "../domain/invitation-itinerary";
+import { storedLodging } from "../domain/invitation-lodging";
 import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
 import {
   isAddressFieldName,
@@ -51,10 +52,11 @@ const INVITATION_SELECT = {
       playlistUrl: true,
       playlistTitle: true,
       playlistCoverUrl: true,
-      // The stored plan of the day and gift registry travel with the row too (F1, F2); the domain decides whether
-      // they read as one.
+      // The stored plan of the day, gift registry, and lodging travel with the row too (F1, F2, F4); the domain decides
+      // whether they read as one.
       itinerary: true,
       giftRegistry: true,
+      lodging: true,
     },
   },
   // The stored points travel with the row too (S2): the public projection decides which of them a guest may see, and
@@ -112,6 +114,8 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     itinerary: storedItinerary(row.featureSettings?.itinerary),
     // The gift registry follows the same rule (F2; L4.1).
     giftRegistry: storedGiftRegistry(row.featureSettings?.giftRegistry),
+    // And the lodging too (F4; L7.1).
+    lodging: storedLodging(row.featureSettings?.lodging),
     rsvpDeadline: row.rsvpDeadline,
     rsvpPartyLimit: row.rsvpPartyLimit,
     // The points are keyed by their content field, which is the name the layout's address field carries (S2).
@@ -276,6 +280,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
           playlistCoverUrl: features.playlistCoverUrl,
           itinerary: jsonPayloadColumn(features.itinerary),
           giftRegistry: jsonPayloadColumn(features.giftRegistry),
+          lodging: jsonPayloadColumn(features.lodging),
         },
         update: {
           whatsappPhone: features.whatsappPhone,
@@ -284,10 +289,11 @@ export class PrismaInvitationRepository implements InvitationRepository {
           // never survives a change (S2).
           playlistTitle: features.playlistTitle,
           playlistCoverUrl: features.playlistCoverUrl,
-          // A cleared itinerary or gift registry is SQL NULL, never the JSON value `null`, so the column reads as
-          // absent (F1, F2).
+          // A cleared itinerary, gift registry, or lodging is SQL NULL, never the JSON value `null`, so the column
+          // reads as absent (F1, F2, F4).
           itinerary: jsonPayloadColumn(features.itinerary),
           giftRegistry: jsonPayloadColumn(features.giftRegistry),
+          lodging: jsonPayloadColumn(features.lodging),
         },
       });
 

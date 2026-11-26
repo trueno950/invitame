@@ -10,6 +10,7 @@ import { GetPublicInvitationUseCase } from "../application/invitation.use-cases"
 import { InvitationNotEditableError } from "../domain/invitation.errors";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
+import type { InvitationLodging } from "../domain/invitation-lodging";
 import { CatalogInvitationReader } from "./catalog-invitation-reader";
 import { PrismaInvitationRepository } from "./prisma-invitation.repository";
 
@@ -47,11 +48,26 @@ const ITINERARY: InvitationItinerary = {
     { time: "19:30", title: "Recepción y cóctel" },
   ],
 };
+const LODGING: InvitationLodging = {
+  version: 1,
+  hotels: [
+    {
+      name: "Hotel Misión",
+      distance: "A 5 min",
+      price: "Desde $1,450 por noche",
+      groupCode: "BODA-AYL",
+      bookingUrl: "https://hotelmision.example.com/reserva",
+      address: "Av. Juárez 120, Centro",
+    },
+    { name: "City Express", address: "Blvd. Bernardo Quintana 45" },
+  ],
+  transport: "Habrá camión del hotel al salón a las 19:00 y de regreso a la 1:00.",
+};
 
 /** The feature keys of every seeded package (prisma/catalog-seed.ts), which is what gating intersects with S4. */
 const SEEDED_PACKAGE_FEATURES = {
   basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
-  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
+  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP", "LODGING"],
   deluxe: [
     "ITINERARY",
     "COUNTDOWN",
@@ -61,6 +77,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "RSVP",
     "WHATSAPP",
     "GIFT_REGISTRY",
+    "LODGING",
     "GUEST_LIST",
     "QR_PASS",
   ],
@@ -461,6 +478,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: PLAYLIST_COVER,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
       assert.equal(stored?.playlistTitle, PLAYLIST_TITLE);
       assert.equal(stored?.playlistCoverUrl, PLAYLIST_COVER);
@@ -480,6 +498,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
       assert.equal(cleared?.playlistTitle, null);
       assert.equal(cleared?.playlistCoverUrl, null);
@@ -575,6 +594,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
 
       assert.equal(updated?.timeZone, "America/Ojinaga");
@@ -609,6 +629,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
 
       const cleared = await repository.updateFeatures(invitation.ownerId, invitation.id, {
@@ -619,6 +640,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
 
       assert.equal(cleared?.whatsappPhone, null);
@@ -640,6 +662,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: ITINERARY,
         giftRegistry: null,
+        lodging: null,
       });
 
       assert.deepEqual(written?.itinerary, ITINERARY);
@@ -674,6 +697,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
       assert.equal(cleared?.itinerary, null);
       assert.deepEqual(
@@ -716,6 +740,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: null,
         giftRegistry: GIFT_REGISTRY,
+        lodging: null,
       });
 
       assert.deepEqual(written?.giftRegistry, GIFT_REGISTRY);
@@ -755,6 +780,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
       assert.equal(cleared?.giftRegistry, null);
       assert.deepEqual(
@@ -763,6 +789,85 @@ describe("invitation feature data (real PostgreSQL)", () => {
           select: { giftRegistry: true },
         }),
         { giftRegistry: null },
+      );
+    });
+
+    it("adds a nullable lodging JSONB column and grants LODGING to Premium and Deluxe only (F4; L7.1, L7.2)", async () => {
+      const columns = await prisma.$queryRaw<Array<{ is_nullable: string; data_type: string }>>`
+        SELECT is_nullable, data_type
+        FROM information_schema.columns
+        WHERE table_name = 'InvitationFeatureSettings' AND column_name = 'lodging'
+      `;
+
+      // Additive and nullable: every row written before the migration reads NULL and renders today's page.
+      assert.deepEqual(columns, [{ is_nullable: "YES", data_type: "jsonb" }]);
+
+      const links = await prisma.packageFeature.findMany({
+        where: { feature: { key: "LODGING" } },
+        select: { package: { select: { key: true } } },
+      });
+      // Premium and Deluxe grant it; the seeded Basic does not. Other rows of a shared database may grant it too, so
+      // the assertion names the two seeded links instead of the whole list.
+      const granted = links.map((link) => link.package.key);
+
+      assert.ok(granted.includes("premium"), "premium grants LODGING");
+      assert.ok(granted.includes("deluxe"), "deluxe grants LODGING");
+      assert.equal(granted.includes("basic"), false, "basic does not grant LODGING");
+    });
+
+    it("stores the lodging payload and reads it back, and shows none for a row written around the API (F4; L7.1)", async () => {
+      const { invitation } = await newDraft(SEEDED_PACKAGE_FEATURES.premium);
+      const written = await repository.updateFeatures(invitation.ownerId, invitation.id, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: LODGING,
+      });
+
+      assert.deepEqual(written?.lodging, LODGING);
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { lodging: true },
+        }),
+        { lodging: LODGING },
+      );
+
+      // A row written around the API — a booking link that is not https — reads as no lodging instead of reaching a
+      // guest.
+      await prisma.invitationFeatureSettings.update({
+        where: { invitationId: invitation.id },
+        data: {
+          lodging: {
+            ...LODGING,
+            hotels: [{ name: "Hotel Misión", bookingUrl: "http://hotel.test" }],
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      assert.equal((await repository.findOwned(invitation.ownerId, invitation.id))?.lodging, null);
+
+      // Clearing writes SQL NULL, which is what "no lodging" is.
+      const cleared = await repository.updateFeatures(invitation.ownerId, invitation.id, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+      });
+      assert.equal(cleared?.lodging, null);
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { lodging: true },
+        }),
+        { lodging: null },
       );
     });
 
@@ -776,6 +881,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: null,
         giftRegistry: null,
+        lodging: null,
       });
       await repository.archive(invitation.ownerId, invitation.id);
 
@@ -788,6 +894,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           playlistCoverUrl: null,
           itinerary: null,
           giftRegistry: null,
+          lodging: null,
         }),
         InvitationNotEditableError,
       );
@@ -816,6 +923,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
             playlistCoverUrl: null,
             itinerary: null,
             giftRegistry: null,
+            lodging: null,
           }),
           null,
         );
@@ -841,6 +949,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl?: string | null;
         itinerary?: InvitationItinerary | null;
         giftRegistry?: InvitationGiftRegistry | null;
+        lodging?: InvitationLodging | null;
       } | null,
     ) {
       const draft = await newDraft(featureKeys);
@@ -850,6 +959,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           playlistCoverUrl: null,
           itinerary: null,
           giftRegistry: null,
+          lodging: null,
           ...features,
         });
       }
@@ -870,6 +980,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           playlistUrl: PLAYLIST,
           itinerary: ITINERARY,
           giftRegistry: null,
+          lodging: null,
         });
 
         const page = await useCase.execute(slug);
@@ -891,6 +1002,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
             itinerary: { items: ITINERARY.items },
             giftRegistry: packageKey === "deluxe",
             giftRegistryDetails: null,
+            lodging: null,
             gallery: [],
             // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form.
             rsvp: {
@@ -949,6 +1061,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: false,
         giftRegistryDetails: null,
+        lodging: null,
         gallery: [],
         rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -972,6 +1085,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: true,
         giftRegistryDetails: null,
+        lodging: null,
         gallery: [],
         rsvp: { mode: "guest-list", deadline: null, partyLimit: 4, qrPass: true },
       });
@@ -986,6 +1100,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         playlistCoverUrl: null,
         itinerary: ITINERARY,
         giftRegistry: null,
+        lodging: null,
       });
 
       const page = await useCase.execute(slug);
@@ -1000,6 +1115,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: false,
         giftRegistryDetails: null,
+        lodging: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -1026,6 +1142,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "giftRegistry",
         "giftRegistryDetails",
         "itinerary",
+        "lodging",
         "map",
         "music",
         "rsvp",

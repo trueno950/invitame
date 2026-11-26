@@ -110,6 +110,22 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
       envelopes: boolean;
       note?: string;
     } | null;
+    /**
+     * The stored lodging as the validated payload `{ version: 1, hotels, transport? }`, or null when the invitation has
+     * none (F4; L7.1). The owner's read answers the version so the editor can send the same payload back.
+     */
+    lodging: {
+      version: 1;
+      hotels: Array<{
+        name: string;
+        distance?: string;
+        price?: string;
+        groupCode?: string;
+        bookingUrl?: string;
+        address?: string;
+      }>;
+      transport?: string;
+    } | null;
   };
   /** The gated feature keys the guest will see, `CALENDAR` included (S4). */
   availableFeatures: string[];
@@ -177,6 +193,21 @@ export interface PublicInvitationResponse {
       transfer: { bank: string; holder: string; clabe: string } | null;
       envelopes: boolean;
       note: string | null;
+    } | null;
+    /**
+     * The hotel cards and the transport line a guest's block draws, or null when the package does not grant `LODGING`
+     * or the invitation stores nothing there (F4; L7.3). The transport is always present, null when there is none.
+     */
+    lodging: {
+      hotels: Array<{
+        name: string;
+        distance?: string;
+        price?: string;
+        groupCode?: string;
+        bookingUrl?: string;
+        address?: string;
+      }>;
+      transport: string | null;
     } | null;
     /**
      * The gallery photos in position order (M8 S4), an empty array when the package does not grant `GALLERY`; each
@@ -279,6 +310,23 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
                 ? {}
                 : { note: stored.featureSettings.giftRegistry.note }),
             },
+      lodging:
+        stored.featureSettings.lodging === null
+          ? null
+          : {
+              version: 1,
+              hotels: stored.featureSettings.lodging.hotels.map((hotel) => ({
+                name: hotel.name,
+                ...(hotel.distance === undefined ? {} : { distance: hotel.distance }),
+                ...(hotel.price === undefined ? {} : { price: hotel.price }),
+                ...(hotel.groupCode === undefined ? {} : { groupCode: hotel.groupCode }),
+                ...(hotel.bookingUrl === undefined ? {} : { bookingUrl: hotel.bookingUrl }),
+                ...(hotel.address === undefined ? {} : { address: hotel.address }),
+              })),
+              ...(stored.featureSettings.lodging.transport === undefined
+                ? {}
+                : { transport: stored.featureSettings.lodging.transport }),
+            },
     },
     availableFeatures: [...stored.availableFeatures],
     places: { ...stored.places },
@@ -348,6 +396,20 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
         height: photo.height,
         alt: photo.alt,
       })),
+      lodging:
+        stored.features.lodging === null
+          ? null
+          : {
+              hotels: stored.features.lodging.hotels.map((hotel) => ({
+                name: hotel.name,
+                ...(hotel.distance === undefined ? {} : { distance: hotel.distance }),
+                ...(hotel.price === undefined ? {} : { price: hotel.price }),
+                ...(hotel.groupCode === undefined ? {} : { groupCode: hotel.groupCode }),
+                ...(hotel.bookingUrl === undefined ? {} : { bookingUrl: hotel.bookingUrl }),
+                ...(hotel.address === undefined ? {} : { address: hotel.address }),
+              })),
+              transport: stored.features.lodging.transport,
+            },
       rsvp: {
         mode: stored.features.rsvp.mode,
         deadline: stored.features.rsvp.deadline?.toISOString() ?? null,

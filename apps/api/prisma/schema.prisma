@@ -392,6 +392,8 @@ model Invitation {
 // migration inserts the `ITINERARY` catalog feature row and its links to the basic, premium, and deluxe packages.
 // Migration 20261203120000_add_invitation_gift_registry adds the nullable `giftRegistry` JSONB column; the
 // `GIFT_REGISTRY` catalog key already existed, so that migration changes no catalog row.
+// Migration 20261205120000_add_invitation_lodging adds the nullable `lodging` JSONB column, and the same migration
+// inserts the `LODGING` catalog feature row and its links to the premium and deluxe packages.
 model InvitationFeatureSettings {
   invitationId     String   @id @db.Uuid
   // E.164: `+` and eight to fifteen digits. Null while the owner has not set one (S4).
@@ -419,6 +421,13 @@ model InvitationFeatureSettings {
   // state it. An older invitation's `content.giftRegistry` text stays untouched; the public read withholds it while
   // this payload has something to show (L4.3).
   giftRegistry     Json?    @db.JsonB
+  // The lodging and transport of the celebration (F4; S2.4, L7.1): the versioned presentation payload
+  // `{ "version": 1, "hotels": [{ name, distance?, price?, groupCode?, bookingUrl?, address? }], "transport"? }`
+  // with 0 to 6 hotels, or NULL while the owner has not filled one. Bounded, versioned, presentation data only: no
+  // image, no provider payload, no query-critical field. The domain (`domain/invitation-lodging.ts`) is the authority
+  // on the shape, the `https` booking link included; the column stores it as JSONB and nothing else, and no CHECK can
+  // state it.
+  lodging          Json?    @db.JsonB
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 

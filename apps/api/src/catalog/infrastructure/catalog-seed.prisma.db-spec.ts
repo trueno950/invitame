@@ -47,6 +47,7 @@ const SEEDED_FEATURE_KEYS = [
   "RSVP",
   "WHATSAPP",
   "GIFT_REGISTRY",
+  "LODGING",
   "GUEST_LIST",
   "QR_PASS",
 ];
@@ -59,6 +60,7 @@ const PREMIUM_FEATURE_KEYS = [
   "MAP",
   "RSVP",
   "WHATSAPP",
+  "LODGING",
 ];
 
 const ZERO_SUMMARY = {
