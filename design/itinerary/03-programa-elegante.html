@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Itinerario — programa elegante</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;overflow:hidden;box-shadow:0 30px 60px -30px rgb(0 0 0/40%);padding:22px}
+  .paper{background:var(--surface);border-radius:4px;padding:30px 26px;box-shadow:0 0 0 1px var(--deco),0 0 0 6px var(--surface),0 0 0 7px var(--deco)}
+  h2{font-family:var(--font-display);font-style:italic;font-weight:600;font-size:32px;text-align:center;margin:0}
+  .rule{width:80px;height:1px;background:var(--deco);margin:10px auto 20px}
+  dl{margin:0}
+  .row{display:flex;align-items:baseline;gap:8px;padding:9px 0}
+  dt{font-family:var(--font-display);font-size:18px;font-weight:600;white-space:nowrap}
+  .lead{flex:1;border-bottom:1px dotted var(--deco);transform:translateY(-4px)}
+  dd{margin:0;font-family:var(--font-display);font-size:18px;color:var(--accent);font-weight:600}
+  .place{font-size:12px;color:#6d5752;margin:-6px 0 4px;letter-spacing:.04em}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="paper">
+    <h2>Programa</h2>
+    <div class="rule"></div>
+    <dl>
+      <div class="row"><dt>Misa</dt><span class="lead"></span><dd>17:00</dd></div>
+      <p class="place">Parroquia de San Juan</p>
+      <div class="row"><dt>Sesión de fotos</dt><span class="lead"></span><dd>18:30</dd></div>
+      <div class="row"><dt>Cóctel</dt><span class="lead"></span><dd>19:30</dd></div>
+      <p class="place">Salón Jardín Las Rosas</p>
+      <div class="row"><dt>Vals</dt><span class="lead"></span><dd>20:30</dd></div>
+      <div class="row"><dt>Cena</dt><span class="lead"></span><dd>21:00</dd></div>
+      <div class="row"><dt>¡A bailar!</dt><span class="lead"></span><dd>22:00</dd></div>
+    </dl>
+  </div>
+</div>
+</body>
+</html>

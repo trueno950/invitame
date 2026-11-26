@@ -1,0 +1,28 @@
+{
+  "title": "Itinerario del evento",
+  "brief": "Cómo ve el invitado el programa del día (misa, fotos, cóctel, vals, cena, baile) dentro de su invitación; los colores siguen el tema elegido.",
+  "feature": "odd/tasks/guest-features-v2.md",
+  "artboards": [
+    {
+      "file": "01-linea-de-tiempo.html",
+      "title": "Línea de tiempo",
+      "tradeoff": "Muy clara y escaneable, con «Cómo llegar» por momento; la más larga en celular",
+      "width": 470,
+      "height": 820
+    },
+    {
+      "file": "02-tarjetas-con-icono.html",
+      "title": "Tarjetas con ícono",
+      "tradeoff": "Visual y juvenil, ideal para XV y cumpleaños; los íconos deben elegirse por momento",
+      "width": 470,
+      "height": 820
+    },
+    {
+      "file": "03-programa-elegante.html",
+      "title": "Programa elegante",
+      "tradeoff": "Papelería clásica con líneas punteadas, ideal para bodas; menos espacio para detalles",
+      "width": 470,
+      "height": 820
+    }
+  ]
+}

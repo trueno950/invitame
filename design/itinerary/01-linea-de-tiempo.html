@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Itinerario — línea de tiempo</title>
+<style>
+  :root{--bg:#f7ede8;--surface:#fffaf7;--soft:#f1dfd6;--ink:#3d2b28;--accent:#9b5a4f;--deco:#d8b59a;
+    --font-display:"Cormorant Garamond","Iowan Old Style",Palatino,serif;--font-sans:"Jost","Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif}
+  *{box-sizing:border-box}body{margin:0;background:#e9e3df;font-family:var(--font-sans);color:var(--ink);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .phone{width:390px;background:var(--bg);border-radius:28px;overflow:hidden;box-shadow:0 30px 60px -30px rgb(0 0 0/40%)}
+  .card{margin:20px;background:var(--surface);border-radius:20px;padding:24px 22px;box-shadow:inset 0 0 0 1px var(--soft)}
+  .kicker{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent);text-align:center}
+  h2{font-family:var(--font-display);font-weight:600;font-size:30px;text-align:center;margin:4px 0 18px}
+  ol{list-style:none;margin:0;padding:0;position:relative}
+  ol::before{content:"";position:absolute;left:58px;top:6px;bottom:6px;width:1.5px;background:var(--deco)}
+  li{display:grid;grid-template-columns:50px 18px 1fr;gap:10px;align-items:start;padding:10px 0}
+  .time{font-family:var(--font-display);font-size:19px;font-weight:600;text-align:right;line-height:1.2}
+  .dot{width:13px;height:13px;border-radius:50%;background:var(--surface);box-shadow:0 0 0 2px var(--accent);margin:4px auto 0;position:relative;z-index:1}
+  li:first-child .dot{background:var(--accent)}
+  .what b{display:block;font-size:15px}.what span{font-size:13px;color:#6d5752}
+  .what a{font-size:12px;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <section class="card" aria-labelledby="t">
+    <div class="kicker">Sábado 15 de agosto</div>
+    <h2 id="t">Itinerario</h2>
+    <ol>
+      <li><span class="time">17:00</span><span class="dot"></span><div class="what"><b>Misa</b><span>Parroquia de San Juan</span><br><a href="#">Cómo llegar</a></div></li>
+      <li><span class="time">18:30</span><span class="dot"></span><div class="what"><b>Sesión de fotos</b><span>Jardín de la parroquia</span></div></li>
+      <li><span class="time">19:30</span><span class="dot"></span><div class="what"><b>Recepción y cóctel</b><span>Salón Jardín Las Rosas</span><br><a href="#">Cómo llegar</a></div></li>
+      <li><span class="time">20:30</span><span class="dot"></span><div class="what"><b>Vals</b></div></li>
+      <li><span class="time">21:00</span><span class="dot"></span><div class="what"><b>Cena</b></div></li>
+      <li><span class="time">22:00</span><span class="dot"></span><div class="what"><b>¡A bailar!</b></div></li>
+    </ol>
+  </section>
+</div>
+</body>
+</html>
