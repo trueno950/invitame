@@ -113,11 +113,19 @@ interface Failure {
   readonly error: string;
 }
 
+/** One draft that moved (or would move), with both versions, so the operator can undo it from this report alone. */
+interface Move {
+  readonly invitationId: string;
+  readonly fromVersionId: string;
+  readonly toVersionId: string;
+}
+
 /** What the run counted. */
 interface Report {
   scanned: number;
   planned: number;
   moved: number;
+  moves: Move[];
   alreadyCurrent: number;
   skipped: Record<CountedSkipReason, number>;
   refused: Refusal[];
@@ -129,6 +137,7 @@ function emptyReport(): Report {
     scanned: 0,
     planned: 0,
     moved: 0,
+    moves: [],
     alreadyCurrent: 0,
     skipped: Object.fromEntries(SKIP_REASONS.map((reason) => [reason, 0])) as Record<
       CountedSkipReason,
@@ -183,6 +192,11 @@ async function repairDrafts(options: {
 
       if (decision.move) {
         report.planned += 1;
+        report.moves.push({
+          invitationId: candidate.invitationId,
+          fromVersionId: command.pinnedVersionId,
+          toVersionId: decision.toVersionId,
+        });
         continue;
       }
       countSkip(report, candidate.invitationId, decision.reason, decision.issues);
@@ -194,6 +208,11 @@ async function repairDrafts(options: {
 
       if (outcome.outcome === "moved") {
         report.moved += 1;
+        report.moves.push({
+          invitationId: candidate.invitationId,
+          fromVersionId: command.pinnedVersionId,
+          toVersionId: command.target?.id ?? "",
+        });
         continue;
       }
       countSkip(report, candidate.invitationId, outcome.reason, outcome.issues);
@@ -242,6 +261,9 @@ async function main(): Promise<void> {
         // In a dry run nothing moves, so `planned` says what would have; in an apply run it stays zero.
         planned: report.planned,
         moved: report.moved,
+        // Each planned or moved draft with its previous and new version ids: the recovery in
+        // docs/database/model.md re-pins exactly these, and nothing here is a stored value or personal data.
+        moves: report.moves,
         alreadyCurrent: report.alreadyCurrent,
         skipped: report.skipped,
         // Invitation ids and the pinned schema's own issues: never a stored value, an owner, or an email.
