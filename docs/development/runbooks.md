@@ -103,6 +103,25 @@ Three phases, in this order. Nothing here is a script: each step is a command or
      red API health is exactly the pair it is designed to show.
    - Both are the Railway health check path of their service (`railway.api.json:19`, `railway.web.json:18`).
 
+3. **One-off catalog and draft commands, when a release ships them.** The first release that contains omittable
+   content sections (`odd/tasks/omittable-sections.md`) needs two commands, run once against the production
+   database after the migrations, each first with `--dry-run`:
+
+   ```bash
+   pnpm --filter @invitame/api catalog:omittable-sections -- --dry-run   # then without --dry-run
+   pnpm --filter @invitame/api invitations:repin-drafts -- --dry-run     # then without --dry-run
+   ```
+
+   - `catalog:omittable-sections` publishes a new version of each catalog template that declares which sections a
+     customer may turn off; the previous version is retired, never edited. A template the renderer contract refuses
+     is listed under `refused` with its issues and the run continues; any `refused` or `failed` entry exits 1 and is
+     a stop to read, not a retry. A second run creates nothing.
+   - `invitations:repin-drafts` moves each DRAFT invitation to its template's current published version, after
+     validating the stored content against it; published and archived invitations never move. Keep its JSON output:
+     `moves` lists every moved invitation with `fromVersionId` and `toVersionId`, which is what the recovery in
+     `docs/database/model.md` («Draft re-pin») needs. A second run moves nothing.
+   - Run the catalog command first: until a template has its new version, its drafts have nothing to move to.
+
 ### Phase 3 — post-release verification
 
 Six actions, in order, on the deployed system. Every one of them is a real user path, not a probe.

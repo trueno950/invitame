@@ -54,9 +54,9 @@ required to publish and the design does not draw it. Design first, then implemen
 | T1 | Design directions for the section switch under `design/omittable-sections/`; owner picks one | S3, S6 | inline | |
 | T2 | Contract and API: omitted-sections list in the schemas, renderer contract (essentials vs omittable), readiness that skips omitted sections and enforces at least one place, new versions script | S3, S4 | worker | 9a5ac6e |
 | T3 | Web renderers hide omitted sections (elegant arch, ornamental, baptism classic, baby shower, birthday) | S3, S4 | worker | b8957fe, 4b4be8c, 78b32ad, fce528a, 70d3e71 |
-| T4 | Editor: the switch on each content card, missing counts that skip omitted sections, essentials locked | S3, S6 | worker | |
-| T5 | Move existing drafts to the new versions (S5), with an independent verification | S5 | worker + verify | |
-| T6 | Browser walkthrough, gates, docs, commit, push, CI | S1-S6 | inline | |
+| T4 | Editor: the switch on each content card, missing counts that skip omitted sections, essentials locked | S3, S6 | worker | d65e2f7 |
+| T5 | Move existing drafts to the new versions (S5), with an independent verification | S5 | worker + verify | eb20187, 542e159 |
+| T6 | Browser walkthrough, gates, docs, commit, push, CI | S1-S6 | inline | a65ebb5, 572eb3d, docs |
 
 ## Log
 
@@ -95,3 +95,17 @@ required to publish and the design does not draw it. Design first, then implemen
   BLOCKER — the public read still sent the hidden address's map point (`confirmedPlaces` read the raw content).
   Fixed in `70d3e71` with the verifier's probe (RED observed: `[ceremonyAddress, receptionAddress]`), native
   review `review-e14057f7938843e7` approved. API 2107 tests.
+- L8 — T4 (worker, `d65e2f7`): owner read and autosave accept `omittedSections`; one card per omittable group with a
+  `role="switch"`; essentials «Siempre se muestra»; require-one refused in place; counts skip omitted groups; issue
+  `sections:` mapped; preview passes `hiddenFieldsOf`. Web 2030 tests; native assess medium, not due.
+- L9 — T5 (worker, `eb20187`): migration `20261201120000_allow_draft_invitation_repin` (draft-only re-pin to the same
+  template's PUBLISHED version), domain rule, repository, use case, `invitations:repin-drafts`. Native review
+  `review-33a14cbc05b3587d` approved (advisories: unbounded scan; infrastructure errors counted per row).
+  Independent verification met; non-blocking: the report did not name moved drafts, fixed in `542e159` (`moves`
+  with both version ids). `a65ebb5` adds `hiddenFields` to a features db-spec key set the T3 change broke.
+- L10 — T6: the catalog script's apply aborted on five `m9-*` db-spec fixture templates because its plan did not run
+  the create-time contract; fixed in `572eb3d` (plan validates the contract, a refusal is recorded and the run
+  continues). Dev DB: 86 templates carry the new version; five fixture versions retired by hand; re-pin moved 35
+  drafts, 0 failed, second dry run plans 0. Browser at 1440 px: seven switches, progress 13 → 12 when a group is
+  off, require-one refusal shown, state kept after reload, no page error. Runbook phase 2 documents both commands.
+  Follow-up: the list card miniature has no schema, so an invitation with an omitted section falls back to text.

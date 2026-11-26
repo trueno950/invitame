@@ -1065,7 +1065,13 @@ production.
   «← Mis invitaciones» link (`app/_components/back-link.tsx`, the `back` prop of `CustomerWorkspaceShell`). A published
   invitation's «Publicar» panel offers «Copiar enlace», «Compartir por WhatsApp», and «Ver mi invitación» with the
   absolute public URL (`share-panel.tsx`, `lib/customer/invitation-share.ts`), and the phone's bottom bar names the
-  next step beside «Ver vista previa». «Contenido» itself is a stack of
+  next step beside «Ver vista previa». A version may declare omittable sections in its schema (`x-omittable`,
+  `x-require-one`; odd/tasks/omittable-sections.md): each such group is its own card with a «Mostrar» / «Oculta»
+  switch, an off card is folded and stored in `content.omittedSections` (typed values are kept), its fields stop
+  counting as missing, the essentials read «Siempre se muestra», and turning off the last shown group of a require-one
+  set is refused in place; the API skips omitted groups at publication, sends `hiddenFields` in the public read
+  without their values or map points, and every renderer and the event facts draw no block for them. «Contenido»
+  itself is a stack of
   cards (`apps/web/lib/customer/content-cards.ts`): the template's own sections in order, one card open at a time
   (each header is a button with `aria-expanded` and `aria-controls`, and only the open card mounts its inputs), and the
   tab opens on the first card that still owes a required field. A closed card keeps its title, one line of the values it
