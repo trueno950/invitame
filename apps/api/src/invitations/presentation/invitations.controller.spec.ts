@@ -128,6 +128,8 @@ const GUEST_LIST_PACKAGE_ID = "99999999-9999-4999-8999-999999999999";
 const QR_PASS_PACKAGE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 /** An ACTIVE package that grants `ITINERARY` and no other implemented key: the plan of the day (F1; L3.2). */
 const ITINERARY_PACKAGE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+/** An ACTIVE package that grants `LODGING` and no other implemented key: hotels and transport (F4; L7.2). */
+const LODGING_PACKAGE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 /** A PUBLISHED version whose schema declares the address fields a place may belong to (S2). */
 const PLACE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 /** A PUBLISHED version whose schema declares the legacy gift registry text field (F2; L4.3). */
@@ -461,6 +463,8 @@ class MemoryInvitationCatalog implements InvitationCatalog {
       ITINERARY_PACKAGE_ID,
       { status: "ACTIVE", includedFeatureKeys: ["ITINERARY"], durationDays: 30 },
     ],
+    // The lodging key alone (F4; L7.2).
+    [LODGING_PACKAGE_ID, { status: "ACTIVE", includedFeatureKeys: ["LODGING"], durationDays: 30 }],
   ]);
 
   /** Every version renders with the allow-listed component unless it says otherwise. */
@@ -3109,6 +3113,54 @@ describe("invitations routes: /invitations", () => {
 
       assert.equal((withheldBody.features as Row).itinerary, null);
       assert.equal(JSON.stringify(withheldBody).includes("Misa"), false);
+    });
+
+    it("answers the lodging cards and the transport only for a package that grants LODGING (F4; L7.2, L7.3)", async () => {
+      const granted = seed({
+        slug: "invitacion-hosped1",
+        status: "PUBLISHED",
+        packageId: LODGING_PACKAGE_ID,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: LODGING,
+      });
+      const grantedResponse = await send("GET", `${PUBLIC_PATH}/${granted.slug}`);
+
+      assert.equal(grantedResponse.status, 200);
+      const grantedBody = (await grantedResponse.json()) as Row;
+      assert.deepEqual(Object.keys(grantedBody).sort(), PUBLIC_KEYS);
+      // The version stays in the API, and an absent optional text stays absent rather than null.
+      assert.deepEqual((grantedBody.features as Row).lodging, {
+        hotels: LODGING.hotels,
+        transport: LODGING.transport,
+      });
+
+      const withheld = seed({
+        slug: "invitacion-hosped2",
+        status: "PUBLISHED",
+        packageId: FEATURE_PACKAGE_ID,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: LODGING,
+      });
+      const withheldBody = (await (
+        await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
+      ).json()) as Row;
+
+      assert.equal((withheldBody.features as Row).lodging, null);
+      assert.equal(JSON.stringify(withheldBody).includes("Hotel Misión"), false);
+
+      const empty = seed({
+        slug: "invitacion-hosped3",
+        status: "PUBLISHED",
+        packageId: LODGING_PACKAGE_ID,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+      });
+      const emptyBody = (await (await send("GET", `${PUBLIC_PATH}/${empty.slug}`)).json()) as Row;
+
+      assert.equal((emptyBody.features as Row).lodging, null);
     });
 
     it("answers the gift registry only for a package that grants it and only while it shows something (F2; L4.3)", async () => {

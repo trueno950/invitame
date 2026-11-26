@@ -304,6 +304,15 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   failure, baseline differential with no unintended difference; db-specs 484/484 on a fresh seeded database; browser
   check of a three-person answer (stored companions and dietary notes). Deployment note: the API must deploy before the
   web, because an older API refuses the new submission fields (`forbidNonWhitelisted`).
+- L22 — F4 evidence: commits `881eda0` (API, migration `20261205120000_add_invitation_lodging`, key `LODGING` for
+  premium and deluxe) and `363798b` (web; the fixed section line was changed to «Te dejamos opciones para hospedarte
+  cerca del evento.», since a fixed promise of special rates is not true for every owner). Native review
+  `review-7cbe2f37872fb9a7` approved; advisories: R3-002 (the migration's rollback notes delete only the premium and
+  deluxe links before the feature row; a manual rollback must delete every `LODGING` link first) and R3-003 (no HTTP
+  test for a non-null lodging; closed by the controller test in the evidence commit). Independent verification: every
+  L7 item met, 58 probes with no failure, migration idempotent, baseline differential differs only by the added
+  `features.lodging`; db-specs 486/486 on a fresh seeded database; browser check of the hotel and transport cards.
+  Deployment note (as L21): the API deploys before the web.
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
