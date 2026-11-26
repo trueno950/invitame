@@ -78,6 +78,12 @@ export interface PublicInvitation {
   configuration: Record<string, unknown>;
   /** The pinned schema's declared content properties, parsed by the renderer. */
   content: Record<string, unknown>;
+  /**
+   * The content property names the omitted sections cover (S3, S8.3): the renderer draws no block for them and
+   * their values are absent from `content`. Always a list, empty when the invitation omits nothing — and for an
+   * API that predates the field, so an older deployment renders exactly what it rendered before.
+   */
+  hiddenFields: readonly string[];
   publishedAt: string | null;
   /** The invitation's stored IANA zone, which every wall clock of the page is read in (S4). */
   timeZone: string;
@@ -114,6 +120,40 @@ function isTimestamp(value: unknown): value is string {
 
 /** The longest renderer key this page accepts; every registered key is far shorter. */
 const MAX_COMPONENT_KEY_LENGTH = 120;
+
+/** How many hidden content names one read may carry; every line declares far fewer. */
+const MAX_HIDDEN_FIELDS = 40;
+
+/** The longest content property name a schema declares; longer values are not this contract. */
+const MAX_FIELD_NAME_LENGTH = 60;
+
+/**
+ * The content fields the omitted sections cover (S8.3). A body that states them must state a bounded list of
+ * distinct property names, so the layouts receive exactly what the API computed and never an unbounded value;
+ * an absent field is an API that predates the contract and means "nothing is hidden".
+ */
+function parseHiddenFields(value: unknown): readonly string[] | undefined {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > MAX_HIDDEN_FIELDS) {
+    return undefined;
+  }
+
+  const fields: string[] = [];
+  for (const field of value) {
+    if (
+      typeof field !== "string" ||
+      field.length === 0 ||
+      field.length > MAX_FIELD_NAME_LENGTH ||
+      fields.includes(field)
+    ) {
+      return undefined;
+    }
+    fields.push(field);
+  }
+  return fields;
+}
 
 /**
  * The RSVP mode of one invitation (S4). The API decides it from the package's catalog keys alone: `guest-list` when
@@ -285,6 +325,7 @@ export function parsePublicInvitation(
   const componentKey = invitation.componentKey;
   const features = parsePublicFeatures(invitation.features, apiOrigin);
   const places = parseStoredPlaces(invitation.places);
+  const hiddenFields = parseHiddenFields(invitation.hiddenFields);
   // The read-only flag is part of the contract, so a body without it is not this API's answer (S2, T3).
   const expired = invitation.expired;
 
@@ -298,6 +339,7 @@ export function parsePublicInvitation(
     content === undefined ||
     features === undefined ||
     places === undefined ||
+    hiddenFields === undefined ||
     !isInvitationTimeZone(invitation.timeZone) ||
     !(invitation.publishedAt === null || isTimestamp(invitation.publishedAt))
   ) {
@@ -313,6 +355,7 @@ export function parsePublicInvitation(
     timeZone: invitation.timeZone,
     features,
     places,
+    hiddenFields,
     expired,
   };
 }

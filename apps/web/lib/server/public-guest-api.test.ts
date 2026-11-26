@@ -33,6 +33,8 @@ const GUEST_PAGE: PublicGuestInvitation = {
   componentKey: "birthday-poster-01",
   configuration: { componentKey: "birthday-poster-01", theme: "dinosaurs" },
   content: { celebrantName: "Ana", date: "2026-12-05", time: "16:30" },
+  // The pinned schema of this fixture omits no section, so the page hides no block (S8.3).
+  hiddenFields: [],
   places: {},
   publishedAt: AT,
   timeZone: "America/Mexico_City",
@@ -130,6 +132,17 @@ describe("personal read", () => {
     assert.equal(received[0]?.url, `/public/invitations/${SLUG}/guests/${TOKEN}`);
     assert.equal(received[0]?.headers.cookie, undefined);
     assert.equal(received[0]?.headers["x-invitame-proxy-secret"], PROXY_SECRET);
+  });
+
+  it("carries the hidden fields of the omitted sections the public read sends (S8.3)", async () => {
+    answer(200, { ...GUEST_PAGE, hiddenFields: ["message"] });
+
+    const result = await client().getGuest(SLUG, TOKEN);
+
+    assert.deepEqual(result, {
+      ok: true,
+      value: { ...GUEST_PAGE, hiddenFields: ["message"] },
+    });
   });
 
   it("answers not-found for a 404, and makes no request for a slug or token that cannot be one", async () => {

@@ -21,6 +21,8 @@ export interface GuestInvitationProps {
   readonly componentKey: string;
   readonly configuration: unknown;
   readonly content: unknown;
+  /** The content fields the omitted sections cover (S8.3); absent means the version omits nothing. */
+  readonly hiddenFields?: readonly string[];
   /** The features block's props; absent when the invitation has nothing beyond its own content (F3; S4). */
   readonly features?: InvitationFeatures;
   /** The `.ics` download the public page owns; the owner's preview passes none, because it serves no draft. */
@@ -33,6 +35,7 @@ export function GuestInvitation({
   componentKey,
   configuration,
   content,
+  hiddenFields,
   features,
   calendarHref,
   notice,
@@ -47,6 +50,7 @@ export function GuestInvitation({
   const props = {
     configuration,
     content,
+    ...(hiddenFields === undefined ? {} : { hiddenFields }),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
   };

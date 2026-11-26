@@ -81,7 +81,11 @@ export default async function GuestInvitationPage({
     notFound();
   }
 
-  const props = { configuration: invitation.configuration, content: invitation.content };
+  const props = {
+    configuration: invitation.configuration,
+    content: invitation.content,
+    hiddenFields: invitation.hiddenFields,
+  };
 
   // A snapshot the renderer refuses is an operational error, but the guest sees a missing page (A3).
   if (!rendererAcceptsProps(invitation.componentKey, props)) {

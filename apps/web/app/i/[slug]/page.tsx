@@ -118,6 +118,7 @@ export default async function PublicInvitationPage({
       componentKey={invitation.componentKey}
       configuration={invitation.configuration}
       content={invitation.content}
+      hiddenFields={invitation.hiddenFields}
       {...(block === undefined
         ? {}
         : { features: block.features, calendarHref: block.calendarHref })}

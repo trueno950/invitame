@@ -283,6 +283,79 @@ describe("event facts per layout", () => {
   });
 });
 
+describe("event facts with an omitted section (S8.3)", () => {
+  const HIDDEN_CEREMONY = ["ceremonyPlace", "ceremonyAddress", "ceremonyTime"] as const;
+  const HIDDEN_RECEPTION = ["receptionPlace", "receptionAddress", "receptionTime"] as const;
+
+  it("drops the ceremony and starts the day at the reception", () => {
+    const facts = weddingArchEventFacts(WEDDING, HIDDEN_CEREMONY);
+
+    assert.equal(facts.time, "19:30");
+    assert.deepEqual(facts.places, [
+      {
+        label: "Recepción",
+        field: "receptionAddress",
+        name: "Hacienda San Gabriel",
+        address: "Camino a la Hacienda 8, Querétaro",
+      },
+    ]);
+    assert.deepEqual(weddingOrnamentalEventFacts(WEDDING, HIDDEN_CEREMONY), facts);
+  });
+
+  it("drops the reception and keeps the ceremony as the day's only place", () => {
+    const facts = xvArchEventFacts(XV, HIDDEN_RECEPTION);
+
+    assert.equal(facts.time, "18:00");
+    assert.deepEqual(
+      facts.places.map((place) => place.label),
+      ["Ceremonia"],
+    );
+    assert.deepEqual(xvOrnamentalEventFacts(XV, HIDDEN_RECEPTION), facts);
+    assert.equal(baptismEventFacts(BAPTISM, HIDDEN_RECEPTION).time, "11:00");
+  });
+
+  it("reads the content of a layout whose own sections are omitted", () => {
+    // A birthday hides its age, its photo, and its message: the facts name only the celebration and the place.
+    const { age: _age, mainPhoto: _photo, message: _message, ...rest } = BIRTHDAY;
+
+    assert.deepEqual(birthdayPosterEventFacts(rest, ["age", "mainPhoto", "message"]), {
+      title: "Cumpleaños de Mateo",
+      date: "2026-12-05",
+      time: "16:30",
+      places: [
+        {
+          label: "Lugar",
+          field: "address",
+          name: "Jardín Los Arcos",
+          address: "Av. de las Flores 214, Ciudad de México",
+        },
+      ],
+    });
+    assert.deepEqual(babyShowerEventFacts({ ...BABY_SHOWER, message: undefined }, ["message"]), {
+      title: "Baby shower de Mariana y Lucía Ruiz",
+      date: "2027-03-13",
+      time: "12:00",
+      places: [
+        {
+          label: "Lugar",
+          field: "address",
+          name: "Jardín Las Palmas",
+          address: "Av. de los Cedros 88, Ciudad de México",
+        },
+      ],
+    });
+  });
+
+  it("reads a hidden place through the allow-listed key, the way the page does", () => {
+    assert.deepEqual(
+      eventFactsFor("wedding-arch-01", WEDDING, HIDDEN_RECEPTION)?.places.map(
+        (place) => place.label,
+      ),
+      ["Ceremonia"],
+    );
+  });
+});
+
 describe("the address field of each place (S1, S2)", () => {
   // The point of a place is stored under the content field the layout shows, so a place names that field and the
   // public `places` map keys it. The name is the schema rule the API also applies, never a layout name.

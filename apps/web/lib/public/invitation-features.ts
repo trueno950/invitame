@@ -68,10 +68,18 @@ export interface PublicFeatureBlock {
   readonly calendarHref: string;
 }
 
-/** The facts of a rendered snapshot, or undefined when its layout refuses the content. */
-function factsOf(snapshot: { componentKey: string; content: unknown }): EventFacts | undefined {
+/**
+ * The facts of a rendered snapshot, or undefined when its layout refuses the content. The snapshot's
+ * `hiddenFields` (S8.3) travel with it, so a place the customer switched off is never named by the map, the
+ * countdown, or the calendar, and the start hour comes from a place that stays shown.
+ */
+function factsOf(snapshot: {
+  componentKey: string;
+  content: unknown;
+  hiddenFields?: readonly string[];
+}): EventFacts | undefined {
   try {
-    return eventFactsFor(snapshot.componentKey, snapshot.content);
+    return eventFactsFor(snapshot.componentKey, snapshot.content, snapshot.hiddenFields ?? []);
   } catch {
     return undefined;
   }
@@ -103,6 +111,11 @@ export interface GatedFeatures {
 export interface FeatureBlockSource {
   readonly componentKey: string;
   readonly content: unknown;
+  /**
+   * The content fields the invitation's omitted sections cover (S8.3), as the API computed them for the public
+   * read and as the preview derives them; absent means the version hides nothing.
+   */
+  readonly hiddenFields?: readonly string[];
   /** The invitation's stored zone, which decides whether a wall clock can be shown at all. */
   readonly timeZone: string;
   /** The features this deployment is willing to show for the invitation, before the zone has its say. */
@@ -171,6 +184,7 @@ export function publicFeatureBlock(
   const parts = featureBlockParts({
     componentKey: invitation.componentKey,
     content: invitation.content,
+    hiddenFields: invitation.hiddenFields,
     timeZone: invitation.timeZone,
     gated: invitation.features,
     places: invitation.places,

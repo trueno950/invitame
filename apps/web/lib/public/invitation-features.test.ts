@@ -42,6 +42,8 @@ const PUBLIC: PublicInvitation = {
     gallery: [],
     rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
   },
+  // The pinned schema of this fixture omits no section, so the page hides no block (S8.3).
+  hiddenFields: [],
   places: {},
   // The read-only flag the API decided (S2, T3); this projection only renders what it is given.
   expired: false,
@@ -57,6 +59,54 @@ const FACTS = {
     { label: "Lugar", field: "address", name: "Jardín Los Pinos", address: "Calle Reforma 123" },
   ],
 };
+
+/** A wedding whose reception the customer switched off (S8.3): the API withheld its three values. */
+const WEDDING_WITHOUT_RECEPTION: PublicInvitation = {
+  ...PUBLIC,
+  componentKey: "wedding-arch-01",
+  configuration: { componentKey: "wedding-arch-01", theme: "blush-gold" },
+  content: {
+    coupleNameOne: "Ana Sofía",
+    coupleNameTwo: "Daniel",
+    date: "2026-09-12",
+    ceremonyPlace: "Parroquia de Santa Ana",
+    ceremonyAddress: "Av. Juárez 120, Centro, Querétaro",
+    ceremonyTime: "17:00",
+    dressCode: "Formal",
+    message: "Nos encantaría celebrar contigo.",
+    rsvpContact: "Confirma con Ana Sofía al 55 1234 5678",
+    omittedSections: ["reception"],
+  },
+  hiddenFields: ["receptionPlace", "receptionAddress", "receptionTime"],
+};
+
+describe("the features of an invitation that omits a section (S8.3)", () => {
+  it("keeps the block, and names only the place that stays shown", () => {
+    const block = publicFeatureBlock(WEDDING_WITHOUT_RECEPTION);
+
+    assert.deepEqual(block?.facts.time, "17:00");
+    assert.deepEqual(block?.facts.places, [
+      {
+        label: "Ceremonia",
+        field: "ceremonyAddress",
+        name: "Parroquia de Santa Ana",
+        address: "Av. Juárez 120, Centro, Querétaro",
+      },
+    ]);
+    // The gated features are untouched: an omission hides a block, it never closes a feature (S3, S6).
+    assert.equal(block?.features.countdown, true);
+    assert.equal(block?.features.map, true);
+    assert.equal(block?.features.calendar, true);
+  });
+
+  it("builds the .ics from the place that stays shown", () => {
+    const file = invitationCalendar(WEDDING_WITHOUT_RECEPTION, NOW);
+
+    assert.ok(file !== undefined);
+    assert.match(file, /Parroquia de Santa Ana/);
+    assert.doesNotMatch(file, /Hacienda San Gabriel/);
+  });
+});
 
 describe("publicFeatureBlock", () => {
   it("maps the public read to the block's features, facts, and download path", () => {

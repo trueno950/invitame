@@ -55,8 +55,56 @@ export interface EventFacts {
   readonly places: readonly EventPlace[];
 }
 
-/** The facts function of one layout: pure, and it refuses content its layout cannot render. */
-export type EventFactsOf = (content: unknown) => EventFacts;
+/**
+ * The facts function of one layout: pure, and it refuses content its layout cannot render. A layout reads the
+ * fields of an omitted section into `hiddenFields` (S8.3), so the facts it answers name only the places that
+ * stay shown, exactly like the renderer.
+ */
+export type EventFactsOf = (content: unknown, hiddenFields?: readonly string[]) => EventFacts;
+
+/** The two places of a celebration that announces a ceremony and a reception, read for the shown ones. */
+function placeFactsOf(
+  content: {
+    readonly ceremonyPlace: string;
+    readonly ceremonyAddress: string;
+    readonly ceremonyTime: string;
+    readonly receptionPlace: string;
+    readonly receptionAddress: string;
+    readonly receptionTime: string;
+  },
+  hiddenFields: readonly string[],
+): { time: string; places: EventPlace[] } {
+  const hidden = new Set(hiddenFields);
+  const showsCeremony = !hidden.has("ceremonyPlace");
+  const showsReception = !hidden.has("receptionPlace");
+
+  return {
+    // The day starts with the first place that stays shown; with neither, the ceremony's empty hour.
+    time: showsCeremony ? content.ceremonyTime : content.receptionTime,
+    places: [
+      ...(showsCeremony
+        ? [
+            {
+              label: "Ceremonia",
+              field: "ceremonyAddress",
+              name: content.ceremonyPlace,
+              address: content.ceremonyAddress,
+            },
+          ]
+        : []),
+      ...(showsReception
+        ? [
+            {
+              label: "Recepción",
+              field: "receptionAddress",
+              name: content.receptionPlace,
+              address: content.receptionAddress,
+            },
+          ]
+        : []),
+    ],
+  };
+}
 
 /** The three birthday layouts share one content shape, so they share one mapping. */
 function birthdayFacts(content: BirthdayContent): EventFacts {
@@ -71,18 +119,27 @@ function birthdayFacts(content: BirthdayContent): EventFacts {
 }
 
 /** The facts of a stored `birthday-map-01` invitation. */
-export function birthdayMapEventFacts(content: unknown): EventFacts {
-  return birthdayFacts(parseBirthdayMapContent(content));
+export function birthdayMapEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return birthdayFacts(parseBirthdayMapContent(content, hiddenFields));
 }
 
 /** The facts of a stored `birthday-poster-01` invitation. */
-export function birthdayPosterEventFacts(content: unknown): EventFacts {
-  return birthdayFacts(parseBirthdayPosterContent(content));
+export function birthdayPosterEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return birthdayFacts(parseBirthdayPosterContent(content, hiddenFields));
 }
 
 /** The facts of a stored `birthday-story-01` invitation. */
-export function birthdayStoryEventFacts(content: unknown): EventFacts {
-  return birthdayFacts(parseBirthdayStoryContent(content));
+export function birthdayStoryEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return birthdayFacts(parseBirthdayStoryContent(content, hiddenFields));
 }
 
 /**
@@ -103,121 +160,106 @@ function babyShowerFacts(content: BabyShowerContent): EventFacts {
 }
 
 /** The facts of a stored `baby-shower-classic-01` invitation. */
-export function babyShowerEventFacts(content: unknown): EventFacts {
-  return babyShowerFacts(parseBabyShowerClassicContent(content));
+export function babyShowerEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return babyShowerFacts(parseBabyShowerClassicContent(content, hiddenFields));
 }
 
 /**
  * The facts of a baptism: the ceremony starts the day, and the reception is the second place, so the map,
  * the calendar description, and the copy all carry both.
  */
-function baptismFacts(content: BaptismContent): EventFacts {
+function baptismFacts(content: BaptismContent, hiddenFields: readonly string[] = []): EventFacts {
   return {
     title: `Bautizo de ${content.celebrantName}`,
     date: content.date,
-    time: content.ceremonyTime,
-    places: [
-      {
-        label: "Ceremonia",
-        field: "ceremonyAddress",
-        name: content.ceremonyPlace,
-        address: content.ceremonyAddress,
-      },
-      {
-        label: "Recepción",
-        field: "receptionAddress",
-        name: content.receptionPlace,
-        address: content.receptionAddress,
-      },
-    ],
+    ...placeFactsOf(content, hiddenFields),
   };
 }
 
 /** The facts of a stored `baptism-classic-01` invitation. */
-export function baptismEventFacts(content: unknown): EventFacts {
-  return baptismFacts(parseBaptismClassicContent(content));
+export function baptismEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return baptismFacts(parseBaptismClassicContent(content, hiddenFields), hiddenFields);
 }
 
 /**
  * The facts of an XV años (E3c; S4): it starts with the ceremony, the reception is the second place, and
  * the title names the celebrant.
  */
-function xvArchFacts(content: XVArchContent): EventFacts {
+function xvArchFacts(content: XVArchContent, hiddenFields: readonly string[] = []): EventFacts {
   return {
     title: `XV años de ${content.celebrantName}`,
     date: content.date,
-    time: content.ceremonyTime,
-    places: [
-      {
-        label: "Ceremonia",
-        field: "ceremonyAddress",
-        name: content.ceremonyPlace,
-        address: content.ceremonyAddress,
-      },
-      {
-        label: "Recepción",
-        field: "receptionAddress",
-        name: content.receptionPlace,
-        address: content.receptionAddress,
-      },
-    ],
+    ...placeFactsOf(content, hiddenFields),
   };
 }
 
 /** The facts of a stored `xv-arch-01` invitation. */
-export function xvArchEventFacts(content: unknown): EventFacts {
-  return xvArchFacts(parseXVArchContent(content));
+export function xvArchEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return xvArchFacts(parseXVArchContent(content, undefined, hiddenFields), hiddenFields);
 }
 
 /** The facts of a wedding (E3c; S4): the title names the couple and the day starts with the ceremony. */
-function weddingArchFacts(content: WeddingArchContent): EventFacts {
+function weddingArchFacts(
+  content: WeddingArchContent,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
   return {
     title: `Boda de ${content.coupleNameOne} y ${content.coupleNameTwo}`,
     date: content.date,
-    time: content.ceremonyTime,
-    places: [
-      {
-        label: "Ceremonia",
-        field: "ceremonyAddress",
-        name: content.ceremonyPlace,
-        address: content.ceremonyAddress,
-      },
-      {
-        label: "Recepción",
-        field: "receptionAddress",
-        name: content.receptionPlace,
-        address: content.receptionAddress,
-      },
-    ],
+    ...placeFactsOf(content, hiddenFields),
   };
 }
 
 /** The facts of a stored `wedding-arch-01` invitation. */
-export function weddingArchEventFacts(content: unknown): EventFacts {
-  return weddingArchFacts(parseWeddingArchContent(content));
+export function weddingArchEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return weddingArchFacts(parseWeddingArchContent(content, undefined, hiddenFields), hiddenFields);
 }
 
 /** The facts of a stored `baptism-arch-01` invitation: the same content and facts as the themed baptism. */
-export function baptismArchEventFacts(content: unknown): EventFacts {
-  return baptismFacts(parseBaptismArchContent(content));
+export function baptismArchEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return baptismFacts(parseBaptismArchContent(content, hiddenFields), hiddenFields);
 }
 
 // The ornamental layouts of the elegant line (E4b; S5) read the same content as their arch siblings, so
 // they answer the same facts through the same mapping — only the parser names the layout it refuses.
 
 /** The facts of a stored `xv-ornamental-01` invitation: the arch layout's facts, read through its parser. */
-export function xvOrnamentalEventFacts(content: unknown): EventFacts {
-  return xvArchFacts(parseXVOrnamentalContent(content));
+export function xvOrnamentalEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return xvArchFacts(parseXVOrnamentalContent(content, hiddenFields), hiddenFields);
 }
 
 /** The facts of a stored `wedding-ornamental-01` invitation, the same as the arch layout's. */
-export function weddingOrnamentalEventFacts(content: unknown): EventFacts {
-  return weddingArchFacts(parseWeddingOrnamentalContent(content));
+export function weddingOrnamentalEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return weddingArchFacts(parseWeddingOrnamentalContent(content, hiddenFields), hiddenFields);
 }
 
 /** The facts of a stored `baptism-ornamental-01` invitation, the same as the themed baptism's. */
-export function baptismOrnamentalEventFacts(content: unknown): EventFacts {
-  return baptismFacts(parseBaptismOrnamentalContent(content));
+export function baptismOrnamentalEventFacts(
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts {
+  return baptismFacts(parseBaptismOrnamentalContent(content, hiddenFields), hiddenFields);
 }
 
 /** The allow-listed facts functions, keyed by the `componentKey` they belong to. */
@@ -236,8 +278,12 @@ export const EVENT_FACTS: ReadonlyMap<string, EventFactsOf> = new Map<string, Ev
 ]);
 
 /** The facts of a stored invitation, or undefined for a key this map does not allow. */
-export function eventFactsFor(componentKey: string, content: unknown): EventFacts | undefined {
+export function eventFactsFor(
+  componentKey: string,
+  content: unknown,
+  hiddenFields: readonly string[] = [],
+): EventFacts | undefined {
   const facts = EVENT_FACTS.get(componentKey);
 
-  return facts === undefined ? undefined : facts(content);
+  return facts === undefined ? undefined : facts(content, hiddenFields);
 }

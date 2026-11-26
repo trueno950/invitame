@@ -53,6 +53,8 @@ const PUBLIC: PublicInvitation = {
   },
   // The precise-locations slice (S2): the points the API already filtered — MAP granted, and the label still equal to
   // the address the content holds. A package without MAP answers an empty map.
+  // The pinned schema of this fixture omits no section, so the page hides no block (S8.3).
+  hiddenFields: [],
   places: {},
   // The read-only state the API decided (S2, T3): the page still renders and its RSVP is closed.
   expired: false,
@@ -215,6 +217,35 @@ describe("parsePublicInvitation", () => {
       ...PUBLIC,
       publishedAt: null,
     });
+  });
+
+  it("reads the hidden fields of the omitted sections, and answers none for an older API (S8.3)", () => {
+    assert.deepEqual(
+      parsePublicInvitation({ ...PUBLIC, hiddenFields: ["message", "age"] })?.hiddenFields,
+      ["message", "age"],
+    );
+    // An API that predates the field renders exactly what it rendered before: nothing is hidden.
+    const { hiddenFields: _hidden, ...older } = PUBLIC;
+
+    assert.deepEqual(parsePublicInvitation(older)?.hiddenFields, []);
+  });
+
+  it("refuses a hidden list that is not a bounded list of distinct property names", () => {
+    for (const hiddenFields of [
+      null,
+      "message",
+      ["message", 7],
+      ["message", ""],
+      ["message", "m".repeat(61)],
+      ["message", "message"],
+      Array.from({ length: 41 }, (_value, index) => `field${index}`),
+    ]) {
+      assert.equal(
+        parsePublicInvitation({ ...PUBLIC, hiddenFields }),
+        undefined,
+        JSON.stringify(hiddenFields),
+      );
+    }
   });
 
   it("reads the read-only flag the API decided, and refuses a body that does not state it (S2, T3)", () => {
