@@ -246,6 +246,44 @@ describe("featureSettingsView", () => {
     assert.deepEqual(featureSettingsView(OWNED, [LODGING_PACKAGE]).lodging.hotels, []);
   });
 
+  it("offers the reminder block only to a granting package, with its stored switches and the capability (F6; L9.1, L9.2, L9.5)", () => {
+    const remindersPackage = creatorPackage(PACKAGE_ID, ["WHATSAPP_REMINDERS"], "deluxe", "Deluxe");
+    const stored: OwnedInvitation = {
+      ...OWNED,
+      featureSettings: {
+        ...OWNED.featureSettings,
+        reminders: { version: 1, pendingRsvp: true, eventEve: false },
+      },
+      remindersConfigured: false,
+    };
+
+    const granted = featureSettingsView(stored, [remindersPackage]);
+
+    assert.equal(granted.showReminders, true);
+    assert.deepEqual(granted.reminders, { pendingRsvp: true, eventEve: false });
+    // This deployment has no provider, which is what the block shows as «Aún no está activo» (S6, L9.5).
+    assert.equal(granted.remindersConfigured, false);
+
+    // A package without the key, and a catalog that could not be read, offer no reminder editor.
+    assert.equal(featureSettingsView(stored, [BASIC]).showReminders, false);
+    assert.equal(featureSettingsView(stored, undefined).showReminders, false);
+    // An invitation without stored switches shows them off, so the owner can switch one on.
+    assert.deepEqual(featureSettingsView(OWNED, [remindersPackage]).reminders, {
+      pendingRsvp: false,
+      eventEve: false,
+    });
+    // A body written before F6 carries no capability, which reads as «not configured» rather than as an error.
+    assert.equal(featureSettingsView(OWNED, [remindersPackage]).remindersConfigured, false);
+  });
+
+  it("names the reminder copy in Spanish (F6; L9.5, L9.6)", () => {
+    assert.equal(FEATURE_COPY.remindersTitle, "Recordatorios por WhatsApp");
+    assert.equal(FEATURE_COPY.remindersInactiveTitle, "Aún no está activo");
+    assert.match(FEATURE_COPY.remindersPendingRsvpHint, /7 días y 2 días/);
+    assert.match(FEATURE_COPY.remindersEventEveHint, /Un día antes/);
+    assert.equal(FEATURE_COPY.remindersPreviewTitle, "Vista previa del mensaje");
+  });
+
   it("names the lodging sentence of a refusal (F4; L7.4)", () => {
     assert.deepEqual(
       featureIssueCodes([

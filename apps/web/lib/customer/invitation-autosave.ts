@@ -31,6 +31,7 @@ import {
   lodgingDraftOf,
   lodgingPayloadOf,
 } from "./lodging.ts";
+import { EMPTY_REMINDERS, type RemindersDraft, remindersPayloadOf } from "./reminders.ts";
 import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "./omittable-sections.ts";
 import { rsvpSettingsIssueCodes } from "./rsvp-issue.ts";
 
@@ -289,6 +290,8 @@ export interface FeatureChanges {
   readonly giftRegistry?: GiftRegistryDraft | null;
   /** The lodging as the editor holds it, or null when the owner cleared it (F4; L7.4). */
   readonly lodging?: LodgingDraft | null;
+  /** The reminder switches as the editor holds them (F6; L9.1). */
+  readonly reminders?: RemindersDraft;
 }
 
 export type FeatureChangesParse =
@@ -462,6 +465,27 @@ function readLodgingDraft(value: unknown): LodgingDraft | null | undefined {
   return lodgingPayloadOf(draft) === undefined ? undefined : draft;
 }
 
+/**
+ * The reminder switches the editor sent, read from an untrusted payload (F6; L9.1): the pair of booleans, or `undefined`
+ * when the body is not this shape. There is no half-written switch — a control is on or off — so a value that is not one
+ * of the two states refuses the payload instead of being guessed at.
+ */
+function readRemindersDraft(value: unknown): RemindersDraft | undefined {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  if (Object.keys(value).some((key) => key !== "pendingRsvp" && key !== "eventEve")) {
+    return undefined;
+  }
+
+  const { pendingRsvp, eventEve } = value;
+
+  if (typeof pendingRsvp !== "boolean" || typeof eventEve !== "boolean") {
+    return undefined;
+  }
+  return { pendingRsvp, eventEve };
+}
+
 /** The most characters a submitted phone may carry, as the feature form already bounds it (S4). */
 const MAX_PHONE_TEXT_LENGTH = 32;
 
@@ -505,6 +529,7 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
     itinerary?: readonly ItineraryDraftMoment[] | null;
     giftRegistry?: GiftRegistryDraft | null;
     lodging?: LodgingDraft | null;
+    reminders?: RemindersDraft;
   } = {};
 
   for (const [name, value] of Object.entries(payload)) {
@@ -561,6 +586,15 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
       changes.lodging = lodging;
       continue;
     }
+    if (name === "reminders") {
+      const reminders = readRemindersDraft(value);
+      if (reminders === undefined) {
+        issues.push({ field: name, message: FEATURE_ISSUE_COPY.reminders });
+        continue;
+      }
+      changes.reminders = reminders;
+      continue;
+    }
     issues.push({ field: name, message: AUTOSAVE_COPY.unknownField });
   }
 
@@ -581,6 +615,7 @@ export function mergeFeatureChanges(
   let itinerary = stored.itinerary;
   let giftRegistry = stored.giftRegistry;
   let lodging = stored.lodging;
+  let reminders = stored.reminders ?? null;
 
   if (Object.hasOwn(changes, "lodging")) {
     // A lodging the contract refuses is left out of the change instead of clearing what is stored, and a hotel the
@@ -605,6 +640,11 @@ export function mergeFeatureChanges(
     }
   }
 
+  if (Object.hasOwn(changes, "reminders")) {
+    // Both switches off stores no reminder settings, which is the same value the API normalizes the pair to (F6; L9.1).
+    reminders = remindersPayloadOf(changes.reminders ?? EMPTY_REMINDERS);
+  }
+
   if (Object.hasOwn(changes, "itinerary")) {
     const payload = itineraryPayloadOf(changes.itinerary ?? [], stored.itinerary);
 
@@ -625,6 +665,7 @@ export function mergeFeatureChanges(
     itinerary,
     giftRegistry,
     ...(lodging === undefined ? {} : { lodging }),
+    reminders,
   };
 }
 
@@ -756,6 +797,7 @@ function fieldIssuesOf(channel: AutosaveChannel, issues: readonly string[]): Aut
       itinerary: "itinerary",
       "gift-registry": "giftRegistry",
       lodging: "lodging",
+      reminders: "reminders",
     };
     for (const code of featureIssueCodes(issues)) {
       const field = Object.hasOwn(fieldOf, code) ? fieldOf[code] : undefined;

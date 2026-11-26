@@ -431,6 +431,11 @@ export interface EditorShellProps {
   readonly photoCount: number;
   /** The absolute address of a published invitation, built from the page's own request origin (S2.2). */
   readonly publicUrl: string;
+  /**
+   * The message the reminder block previews, built by the page from the invitation's own data (F6; L9.6, L9.5).
+   * Undefined while the page cannot name the occasion, and the block then offers the switches without a preview.
+   */
+  readonly reminderPreview: string | undefined;
   /** The server-rendered blocks: the photo upload, the gallery, and the payment panel. */
   readonly mainPhoto: ReactNode;
   readonly gallery: ReactNode;
@@ -468,6 +473,7 @@ export function EditorShell({
   initialField,
   photoCount,
   publicUrl,
+  reminderPreview,
   mainPhoto,
   gallery,
   payment,
@@ -485,6 +491,7 @@ export function EditorShell({
     itinerary: featureView.itinerary,
     giftRegistry: featureView.giftRegistry,
     lodging: featureView.lodging,
+    reminders: featureView.reminders,
   }));
   const [rsvp, setRsvp] = useState<RsvpValues>(() => ({
     deadline: rsvpView?.deadlineValue ?? "",
@@ -736,6 +743,7 @@ export function EditorShell({
               issues={issues}
               onChange={changeFeatures}
               onFlush={() => void autosave.flush()}
+              reminderPreview={reminderPreview}
               values={features}
               view={featureView}
             />

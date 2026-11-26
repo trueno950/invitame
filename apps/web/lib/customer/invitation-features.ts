@@ -4,6 +4,7 @@ import { FEATURE_COPY, INVITATION_TIME_ZONE_LABELS } from "./copy.ts";
 import { type GiftRegistryDraft, giftRegistryDraftOf } from "./gift-registry.ts";
 import { type ItineraryDraftMoment, itineraryDraftsOf } from "./itinerary.ts";
 import { type LodgingDraft, lodgingDraftOf } from "./lodging.ts";
+import { type RemindersDraft, remindersDraftOf } from "./reminders.ts";
 
 /**
  * The creator's «Funcionalidades» section (F3, F6, F7; S3, S4, S7). The feature data belongs to the invitation,
@@ -46,6 +47,8 @@ const RSVP_FEATURE_KEY = "RSVP";
 const GIFT_REGISTRY_FEATURE_KEY = "GIFT_REGISTRY";
 const ITINERARY_FEATURE_KEY = "ITINERARY";
 const LODGING_FEATURE_KEY = "LODGING";
+/** The catalog key that grants WhatsApp reminders (F6; L9.2), granted by Deluxe. */
+const WHATSAPP_REMINDERS_FEATURE_KEY = "WHATSAPP_REMINDERS";
 
 /** Everything the section renders for one draft. */
 export interface FeatureSettingsView {
@@ -87,6 +90,20 @@ export interface FeatureSettingsView {
   readonly showLodging: boolean;
   /** The stored lodging as the editor holds it: six texts per hotel, and the transport note (F4). */
   readonly lodging: LodgingDraft;
+  /**
+   * Whether the package includes WHATSAPP_REMINDERS, which is the only reason the «Recordatorios por WhatsApp» block
+   * is shown (F6; L9.2, L9.5). A package without the key keeps stored switches private instead of offering an editor
+   * nobody can use.
+   */
+  readonly showReminders: boolean;
+  /** The stored reminder switches, both off while the invitation has none (F6; L9.1). */
+  readonly reminders: RemindersDraft;
+  /**
+   * Whether this deployment can deliver a reminder at all (F6; S6, L9.5): a capability, never a secret. False is what
+   * the block shows as «Aún no está activo», and it never hides the switches, because they are stored and take effect
+   * the moment a sender is configured.
+   */
+  readonly remindersConfigured: boolean;
   /**
    * Whether the package includes RSVP, which is the only reason the draft offers its «Asistencia» section
    * (M6 G3; S4). A package with the guest list instead keeps that section for the guest-list tools (G4).
@@ -176,6 +193,9 @@ export function featureSettingsView(
     giftRegistry: giftRegistryDraftOf(invitation.featureSettings.giftRegistry),
     showLodging: included.has(LODGING_FEATURE_KEY),
     lodging: lodgingDraftOf(invitation.featureSettings.lodging),
+    showReminders: included.has(WHATSAPP_REMINDERS_FEATURE_KEY),
+    reminders: remindersDraftOf(invitation.featureSettings.reminders),
+    remindersConfigured: invitation.remindersConfigured === true,
     showRsvp: included.has(RSVP_FEATURE_KEY),
     giftRegistryNote: giftRegistryNote(packages, included),
     automaticFeatures: AUTOMATIC_FEATURES.filter(

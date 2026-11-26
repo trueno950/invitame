@@ -86,6 +86,11 @@ import {
   uploadGalleryPhotoAction,
   uploadMainPhotoAction,
 } from "../actions.ts";
+import {
+  deadlineDateOf,
+  REMINDERS_PREVIEW_GUEST,
+  reminderPreviewMessage,
+} from "../../../../lib/customer/reminders.ts";
 import { EditorShell } from "./_components/editor-shell.tsx";
 
 export const metadata: Metadata = {
@@ -367,6 +372,23 @@ export default async function InvitationDetailPage({
   const attendance = attendanceTab(invitation.availableFeatures);
   const rsvpView =
     rsvp?.status === "ok" ? rsvpSettingsView(invitation, rsvp.value.settings) : undefined;
+  /**
+   * The message the reminder block previews (F6; L9.6): the pending-RSVP reminder the command would send, in the words
+   * of the API's own template, greeting a stand-in guest by name and naming the occasion, the deadline the owner set,
+   * and this invitation's own public address. A draft has no absolute address yet, so its preview shows the path the
+   * invitation will live at instead of a host nobody chose. Without a catalog read there is no occasion to name, so the
+   * block offers its switches and no preview instead of inventing one.
+   */
+  const occasion = pinned?.template.category.name;
+  const reminderPreview =
+    occasion === undefined
+      ? undefined
+      : reminderPreviewMessage({
+          guestName: REMINDERS_PREVIEW_GUEST,
+          occasion,
+          deadline: deadlineDateOf(rsvpView?.deadlineValue),
+          link: publicUrl === "" ? publicInvitationPath(invitation.slug) : publicUrl,
+        });
 
   /**
    * The identity of the stored draft the editor starts from. A navigation that answered a different stored draft (the
@@ -412,6 +434,7 @@ export default async function InvitationDetailPage({
             detailPath={INVITATION_PATHS.detail(invitation.id)}
             photoCount={photoCount}
             publicUrl={publicUrl}
+            reminderPreview={reminderPreview}
             key={editorKey}
             mainPhoto={
               <MainPhotoUpload

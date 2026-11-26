@@ -65,7 +65,11 @@ const OWNED = {
     itinerary: null,
     giftRegistry: null,
     lodging: null,
+    // The reminder switches (F6; L9.1): null while the owner switched nothing on.
+    reminders: null,
   },
+  // This deployment has no WhatsApp provider, so the capability the read answers is false (F6; S6, L9.5).
+  remindersConfigured: false,
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
   // The precise-locations slice (S2): every stored point, keyed by the address field it belongs to.
   places: {},
@@ -83,7 +87,9 @@ const FEATURED = {
     itinerary: null,
     giftRegistry: null,
     lodging: null,
+    reminders: null,
   },
+  remindersConfigured: false,
   availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "MUSIC", "GIFT_REGISTRY", "CALENDAR"],
 };
 /** A published invitation, as `POST /invitations/:id/publish` returns it (M5 T4). */
@@ -888,6 +894,76 @@ describe("validators", () => {
     assert.deepEqual(parseCreatorPackages([{ ...PACKAGE, status: "ACTIVE" }]), [PACKAGE]);
   });
 
+  it("reads the reminder switches and the capability, and tolerates a body written before them (F6; L9.1, L9.5, L20)", () => {
+    const stored = {
+      ...OWNED,
+      featureSettings: {
+        ...OWNED.featureSettings,
+        reminders: { version: 1, pendingRsvp: true, eventEve: false },
+      },
+      remindersConfigured: false,
+    };
+
+    assert.deepEqual(parseOwnedInvitation(stored)?.featureSettings.reminders, {
+      version: 1,
+      pendingRsvp: true,
+      eventEve: false,
+    });
+    assert.equal(parseOwnedInvitation(stored)?.remindersConfigured, false);
+
+    // A body written before F6 carries neither the switches nor the capability: both read as "nothing on" (L20).
+    const older = {
+      ...OWNED,
+      featureSettings: {
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+      },
+    };
+    const read = parseOwnedInvitation(older);
+
+    assert.equal(read?.featureSettings.reminders, null);
+    assert.equal(read?.remindersConfigured, false);
+
+    // A pair with nothing switched on reads as no settings, and a shape nobody wrote refuses the whole body.
+    assert.equal(
+      parseOwnedInvitation({
+        ...OWNED,
+        featureSettings: {
+          ...OWNED.featureSettings,
+          reminders: { version: 1, pendingRsvp: false, eventEve: false },
+        },
+      })?.featureSettings.reminders,
+      null,
+    );
+    for (const reminders of [
+      { version: 2, pendingRsvp: true, eventEve: true },
+      { version: 1, pendingRsvp: "sí", eventEve: true },
+      [],
+      "on",
+    ]) {
+      assert.equal(
+        parseOwnedInvitation({
+          ...OWNED,
+          featureSettings: { ...OWNED.featureSettings, reminders },
+        }),
+        undefined,
+        JSON.stringify(reminders),
+      );
+    }
+    for (const remindersConfigured of ["false", 0, null]) {
+      assert.equal(
+        parseOwnedInvitation({ ...OWNED, remindersConfigured }),
+        undefined,
+        JSON.stringify(remindersConfigured),
+      );
+    }
+  });
+
   it("refuses a summary with a status, slug, timestamp, or id that breaks the contract", () => {
     const broken = [
       { ...SUMMARY, id: "1" },
@@ -1094,6 +1170,7 @@ describe("validators", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      reminders: null,
     };
     const parse = (featureSettings: unknown) =>
       parseOwnedInvitation({ ...OWNED, featureSettings })?.featureSettings;

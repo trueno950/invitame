@@ -658,6 +658,24 @@ export const FEATURE_COPY = {
   giftRegistryNoteMany: (packageNames: string) =>
     `La mesa de regalos se muestra con los paquetes ${packageNames}.`,
   giftRegistryNoteAny: "La mesa de regalos se muestra con un paquete que la incluya.",
+  /** The reminder block of «Funciones» (F6; L9.5, L9.6). */
+  remindersTitle: "Recordatorios por WhatsApp",
+  remindersHint:
+    "Recordamos a tus invitados que confirmen, sin que tengas que escribirle a cada uno.",
+  remindersInactiveTitle: "Aún no está activo",
+  remindersInactiveBody:
+    "Esta función se activará pronto. Puedes dejarla configurada y empezará a enviar en cuanto esté disponible.",
+  remindersPendingRsvpLabel: "Recordar a quien no ha confirmado",
+  remindersPendingRsvpHint: "7 días y 2 días antes de la fecha límite",
+  remindersEventEveLabel: "Recordatorio del evento",
+  remindersEventEveHint: "Un día antes, con la hora y la ubicación",
+  remindersPreviewTitle: "Vista previa del mensaje",
+  remindersPreviewNote:
+    "Así verá el mensaje un invitado que tenga un teléfono guardado en tu lista. Los invitados sin teléfono no reciben recordatorios.",
+  remindersNoDeadlineNote:
+    "Tu invitación no tiene fecha límite de confirmación: el recordatorio dirá solo el evento y el enlace.",
+  remindersArchivedNote:
+    "Los recordatorios se guardan con la invitación, así que puedes consultarlos aquí aunque ya no se puedan editar.",
   /** The lodging block of «Funciones» (F4; L7.4). */
   lodgingTitle: "Hospedaje y transporte",
   lodgingHint:
@@ -777,6 +795,8 @@ export const FEATURE_ISSUE_COPY = {
     "Revisa la mesa de regalos: cada tienda necesita un nombre de 1 a 40 caracteres y un enlace https de hasta 500; la CLABE debe tener 18 dígitos con un dígito verificador válido.",
   lodging:
     "Revisa el hospedaje: cada hotel necesita un nombre de 1 a 60 caracteres y un enlace de reserva https de hasta 500; la distancia, el precio y el código de grupo admiten hasta 40, 60 y 40, y el transporte hasta 400.",
+  reminders:
+    "Revisa los recordatorios: cada opción debe estar activada o desactivada. Vuelve a intentarlo.",
   other:
     "Hay un dato de las funcionalidades que no pudimos guardar. Revísalo y vuelve a intentarlo.",
 } as const;

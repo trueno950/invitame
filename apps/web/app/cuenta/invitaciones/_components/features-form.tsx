@@ -161,6 +161,35 @@ function LodgingSummary({ view }: { view: FeatureSettingsView }) {
   );
 }
 
+/** The stored reminder switches as a read-only pair, which is what an archived invitation shows (F6; L9.5). */
+function RemindersSummary({ view }: { view: FeatureSettingsView }) {
+  if (!view.showReminders) {
+    return null;
+  }
+
+  return (
+    <div>
+      <p className={fieldLabel}>{FEATURE_COPY.remindersTitle}</p>
+      {view.remindersConfigured ? null : (
+        <p className="mt-2 text-sm leading-6 text-muted">
+          {FEATURE_COPY.remindersInactiveTitle}: {FEATURE_COPY.remindersInactiveBody}
+        </p>
+      )}
+      <ul className="mt-2 list-disc pl-5 text-sm leading-6 text-ink">
+        <li>
+          {FEATURE_COPY.remindersPendingRsvpLabel}:{" "}
+          {view.reminders.pendingRsvp ? "Activado" : "Desactivado"}
+        </li>
+        <li>
+          {FEATURE_COPY.remindersEventEveLabel}:{" "}
+          {view.reminders.eventEve ? "Activado" : "Desactivado"}
+        </li>
+      </ul>
+      <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.remindersArchivedNote}</p>
+    </div>
+  );
+}
+
 /** The archived invitation's feature data: readable, with no form and no way to save. */
 export function FeaturesSummary({ view }: { view: FeatureSettingsView }) {
   const zone =
@@ -181,6 +210,7 @@ export function FeaturesSummary({ view }: { view: FeatureSettingsView }) {
         <ItinerarySummary view={view} />
         <GiftRegistrySummary view={view} />
         <LodgingSummary view={view} />
+        <RemindersSummary view={view} />
         <p className="text-sm leading-6 text-muted">{FEATURE_COPY.archivedNote}</p>
         <AutomaticFeatures view={view} />
       </div>

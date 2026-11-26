@@ -23,6 +23,7 @@ export const FEATURE_ISSUE_CODES = [
   "itinerary",
   "gift-registry",
   "lodging",
+  "reminders",
   "other",
 ] as const;
 export type FeatureIssueCode = (typeof FEATURE_ISSUE_CODES)[number];
@@ -66,6 +67,9 @@ const GIFT_REGISTRY_ISSUE_PREFIX = /^giftRegistry(?:\.|\s|$)/;
 /** The lodging's issues name the hotel or the transport field that refused them, so they share one prefix (F4; L7.1). */
 const LODGING_ISSUE_PREFIX = /^lodging(?:\.|\s|$)/;
 
+/** The reminder switches' issues name the version or the switch that refused them, so they share one prefix (F6; L9.1). */
+const REMINDERS_ISSUE_PREFIX = /^reminders(?:\.|\s|$)/;
+
 /** One code per distinct issue, and `other` when the refusal named none this module knows. */
 export function featureIssueCodes(issues: readonly string[]): FeatureIssueCode[] {
   const codes: FeatureIssueCode[] = [];
@@ -79,7 +83,9 @@ export function featureIssueCodes(issues: readonly string[]): FeatureIssueCode[]
           ? "gift-registry"
           : LODGING_ISSUE_PREFIX.test(issue)
             ? "lodging"
-            : "other";
+            : REMINDERS_ISSUE_PREFIX.test(issue)
+              ? "reminders"
+              : "other";
 
     if (!codes.includes(code)) {
       codes.push(code);
@@ -93,7 +99,8 @@ export function featureIssuesTarget(path: string, codes: readonly FeatureIssueCo
   return `${path}?error=${FEATURE_ERROR_CODE}&issues=${codes.join(",")}`;
 }
 
-const ISSUE_CODE = /^(?:timezone|phone|phone-type|playlist|itinerary|gift-registry|lodging|other)$/;
+const ISSUE_CODE =
+  /^(?:timezone|phone|phone-type|playlist|itinerary|gift-registry|lodging|reminders|other)$/;
 
 /** The Spanish sentence of one code; nothing at all for a code this page does not know. */
 function issueMessage(code: string): string | undefined {

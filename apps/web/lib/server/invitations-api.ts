@@ -6,6 +6,7 @@ import {
 } from "../invitation-features/gift-registry.ts";
 import { type ItineraryPayload, parseItineraryPayload } from "../invitation-features/itinerary.ts";
 import { type LodgingPayload, parseLodgingPayload } from "../invitation-features/lodging.ts";
+import { type RemindersPayload, parseRemindersPayload } from "../invitation-features/reminders.ts";
 import {
   musicCoverUrlOf,
   musicTitleOf,
@@ -107,7 +108,19 @@ export interface OwnedInvitation extends InvitationSummary {
      * that as "no lodging" exactly like null.
      */
     lodging?: LodgingPayload | null;
+    /**
+     * The stored reminder switches as the API's validated payload `{ version: 1, pendingRsvp, eventEve }`, or null while
+     * the owner switched nothing on (F6; L9.1). It is absent from a body written before the switches existed, and a
+     * reader treats that as "no settings" exactly like null.
+     */
+    reminders?: RemindersPayload | null;
   };
+  /**
+   * Whether this deployment can deliver a WhatsApp reminder at all (F6; S6, L9.5). It is a capability, never a secret:
+   * false is what the editor shows as «Aún no está activo». It is absent from a body written before F6, and a reader
+   * treats that as false.
+   */
+  remindersConfigured?: boolean;
   /**
    * The gated feature keys the guest page will show, `CALENDAR` included (S4). The package's other keys are
    * never here, and a key this deployment does not implement is refused by the parser.
@@ -140,6 +153,12 @@ export interface InvitationFeatureInput {
    * the PUT replaces the whole feature data.
    */
   lodging?: LodgingPayload | null;
+  /**
+   * The reminder switches the owner stored, or null to clear them (F6; L9.1). The API validates the payload and accepts an
+   * omitted value as "keep the stored one"; a field the editor does not change still travels as the stored pair, because
+   * the PUT replaces the whole feature data.
+   */
+  reminders?: RemindersPayload | null;
 }
 
 // The RSVP routes of the owner (M6 G1, G3; S1, S4). The deadline is an ISO instant or null, the party limit is how
@@ -575,6 +594,14 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     return undefined;
   }
 
+  // The reminder switches follow the same rule (F6; L9.1): an absent value reads as no settings, and any other shape
+  // refuses the whole body instead of reaching the editor.
+  const reminders = parseRemindersPayload(settings.reminders);
+
+  if (reminders === undefined) {
+    return undefined;
+  }
+
   // The stored metadata follows the same rules the guest page applies to a public body (S2): a title of at most 200
   // characters and a cover on an allow-listed image host over `https`. A value this deployment does not accept is
   // dropped to null instead of refusing the whole invitation, because the link is still the owner's playlist.
@@ -590,6 +617,7 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     itinerary,
     giftRegistry,
     lodging,
+    reminders,
   };
 }
 
@@ -623,6 +651,10 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
   const featureSettings = parseFeatureSettings(owned.featureSettings);
   const availableFeatures = parseAllowedNames(owned.availableFeatures, isInvitationFeatureKey);
   const places = parseStoredPlaces(owned.places);
+  // A body written before F6 carries no capability at all, which reads as "not configured" (L20); an explicit value
+  // is a boolean or the body is refused, so a shape nobody writes never becomes a capability.
+  const remindersConfigured =
+    owned.remindersConfigured === undefined ? false : owned.remindersConfigured;
 
   if (
     content === undefined ||
@@ -630,6 +662,7 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     featureSettings === undefined ||
     availableFeatures === undefined ||
     places === undefined ||
+    typeof remindersConfigured !== "boolean" ||
     !isInvitationTimeZone(owned.timeZone)
   ) {
     return undefined;
@@ -641,6 +674,7 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     missingRequiredFields: missing,
     timeZone: owned.timeZone,
     featureSettings,
+    remindersConfigured,
     availableFeatures,
     places,
   };

@@ -44,6 +44,7 @@ import {
   setLodgingTransport,
   updateLodgingHotel,
 } from "../../../../../lib/customer/lodging.ts";
+import type { RemindersDraft } from "../../../../../lib/customer/reminders.ts";
 import {
   activeOptionId,
   blurredPicker,
@@ -546,6 +547,139 @@ export interface FeatureValues {
   readonly giftRegistry: GiftRegistryDraft;
   /** The lodging as the browser holds it: the hotels in the owner's order and the transport note (F4; L7.4). */
   readonly lodging: LodgingDraft;
+  /** The WhatsApp reminder switches as the browser holds them (F6; L9.1). */
+  readonly reminders: RemindersDraft;
+}
+
+/** The switch of one reminder, matching the editor's other switches: a track, a knob, and the word of its state. */
+const reminderSwitchBase =
+  "inline-flex items-center gap-2 rounded-full py-1 pr-2 pl-1 text-sm font-medium transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+
+/**
+ * The «Recordatorios por WhatsApp» block of «Funciones» (F6; S2.6, S6, L9.5, L9.6), following
+ * `design/whatsapp-reminders/01-automaticos.html` with the app's own tokens: the status card while this deployment has
+ * no provider, the two switches — stored either way, so they work the moment it is activated — and the preview of the
+ * message the command would send, built from the invitation's own data.
+ *
+ * The card never dims or disables the switches: a control that looks off but works is a trap, and the switches are
+ * exactly what the owner is asked to leave ready (L9.5). The status is a worded note with an icon and never colour
+ * alone, and the preview is plain text, because the message is plain text.
+ */
+function RemindersFields({
+  view,
+  values,
+  issue,
+  onChange,
+  onFlush,
+  preview,
+}: {
+  view: FeatureSettingsView;
+  values: FeatureValues;
+  issue: string | undefined;
+  onChange: (next: Partial<FeatureValues>) => void;
+  onFlush: () => void;
+  preview: string | undefined;
+}) {
+  const rows = [
+    {
+      key: "pendingRsvp" as const,
+      label: FEATURE_COPY.remindersPendingRsvpLabel,
+      hint: FEATURE_COPY.remindersPendingRsvpHint,
+    },
+    {
+      key: "eventEve" as const,
+      label: FEATURE_COPY.remindersEventEveLabel,
+      hint: FEATURE_COPY.remindersEventEveHint,
+    },
+  ];
+
+  return (
+    <div>
+      <p className={fieldLabel}>{FEATURE_COPY.remindersTitle}</p>
+      <p className={fieldHint}>{FEATURE_COPY.remindersHint}</p>
+
+      {view.remindersConfigured ? null : (
+        <div
+          className="mt-3 flex items-start gap-3 rounded-field bg-rose-50 p-3 ring-1 ring-rose-100"
+          role="status"
+        >
+          <span aria-hidden="true" className="text-base leading-6">
+            ⏸
+          </span>
+          <div>
+            <p className="text-sm font-medium text-ink">{FEATURE_COPY.remindersInactiveTitle}</p>
+            <p className="mt-1 text-sm leading-6 text-muted">
+              {FEATURE_COPY.remindersInactiveBody}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <ul className="mt-3 flex flex-col">
+        {rows.map((row) => {
+          const checked = values.reminders[row.key];
+          const labelId = `reminders-${row.key}-label`;
+          const hintId = `reminders-${row.key}-hint`;
+
+          return (
+            <li
+              className="flex items-center justify-between gap-3 border-b border-rose-100 py-3 last:border-b-0"
+              key={row.key}
+            >
+              <div>
+                <p className="text-sm font-medium text-ink" id={labelId}>
+                  {row.label}
+                </p>
+                <p className="mt-1 text-sm leading-6 text-muted" id={hintId}>
+                  {row.hint}
+                </p>
+              </div>
+              {/* The label names the control and «Activado» / «Desactivado» states its value, so the state is never
+                  colour alone and a screen reader hears one switch with its own name (L9.5). */}
+              <button
+                aria-checked={checked}
+                aria-describedby={hintId}
+                aria-labelledby={`${labelId} ${labelId}-state`}
+                className={`${reminderSwitchBase} ${checked ? "text-primary" : "text-muted"}`}
+                onClick={() => {
+                  onChange({ reminders: { ...values.reminders, [row.key]: !checked } });
+                  // A switch is one deliberate action: it is sent at once instead of waiting for the debounce.
+                  onFlush();
+                }}
+                role="switch"
+                type="button"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors motion-reduce:transition-none ${
+                    checked ? "bg-primary" : "bg-field-border"
+                  }`}
+                >
+                  <span
+                    className={`absolute left-0.5 size-5 rounded-full bg-surface shadow-soft transition-transform motion-reduce:transition-none ${
+                      checked ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </span>
+                <span id={`${labelId}-state`}>{checked ? "Activado" : "Desactivado"}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <FieldRefusal id="reminders-error" message={issue} />
+
+      {preview === undefined ? null : (
+        <div className="mt-3 rounded-field bg-rose-50 p-3 ring-1 ring-rose-100">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">
+            {FEATURE_COPY.remindersPreviewTitle}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-ink">{preview}</p>
+          <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.remindersPreviewNote}</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** The small controls of one itinerary moment: no form, no navigation, so each press is a save of its own (L3.4). */
@@ -1202,12 +1336,15 @@ export function FeatureFields({
   issues,
   onChange,
   onFlush,
+  reminderPreview,
 }: {
   view: FeatureSettingsView;
   values: FeatureValues;
   issues: FieldIssues | undefined;
   onChange: (next: Partial<FeatureValues>) => void;
   onFlush: () => void;
+  /** The message the reminder block previews, built by the page from the invitation's own data (F6; L9.6). */
+  reminderPreview: string | undefined;
 }) {
   const zoneId = "features-time-zone";
   const phoneId = "features-whatsapp-phone";
@@ -1306,6 +1443,17 @@ export function FeatureFields({
           onChange={onChange}
           onFlush={onFlush}
           values={values}
+        />
+      ) : null}
+
+      {view.showReminders ? (
+        <RemindersFields
+          issue={issues?.reminders}
+          onChange={onChange}
+          onFlush={onFlush}
+          preview={reminderPreview}
+          values={values}
+          view={view}
         />
       ) : null}
 

@@ -68,6 +68,7 @@ const STORED_FEATURES: InvitationFeatureInput = {
   },
   giftRegistry: null,
   lodging: null,
+  reminders: null,
 };
 
 const STORED_RSVP: RsvpSettings = { deadline: "2026-12-01T23:30:00.000Z", partyLimit: 4 };
@@ -213,7 +214,63 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       itinerary: STORED_FEATURES.itinerary,
       giftRegistry: null,
       lodging: null,
+      reminders: null,
     });
+  });
+
+  it("sends the reminder switches, and carries the stored ones through a save of another field (F6; L9.1)", () => {
+    const switched = parseFeatureChanges({ reminders: { pendingRsvp: true, eventEve: true } });
+
+    assert.equal(switched.ok, true);
+    assert.deepEqual(
+      switched.ok ? mergeFeatureChanges(STORED_FEATURES, switched.changes) : undefined,
+      {
+        ...STORED_FEATURES,
+        reminders: { version: 1, pendingRsvp: true, eventEve: true },
+      },
+    );
+
+    // The pair is stored, so a change of another field carries it instead of clearing it (the PUT replaces everything).
+    const kept = parseFeatureChanges({ timeZone: "America/Tijuana" });
+    assert.deepEqual(
+      kept.ok
+        ? mergeFeatureChanges(
+            { ...STORED_FEATURES, reminders: { version: 1, pendingRsvp: false, eventEve: true } },
+            kept.changes,
+          )
+        : undefined,
+      {
+        ...STORED_FEATURES,
+        timeZone: "America/Tijuana",
+        reminders: { version: 1, pendingRsvp: false, eventEve: true },
+      },
+    );
+
+    // Both switches off clears the stored settings, which is what the API stores for an empty pair (L9.1).
+    const cleared = parseFeatureChanges({ reminders: { pendingRsvp: false, eventEve: false } });
+    assert.deepEqual(
+      cleared.ok
+        ? mergeFeatureChanges(
+            { ...STORED_FEATURES, reminders: { version: 1, pendingRsvp: true, eventEve: true } },
+            cleared.changes,
+          )
+        : undefined,
+      { ...STORED_FEATURES, reminders: null },
+    );
+  });
+
+  it("refuses a reminder payload no control could have written (F6; L9.1)", () => {
+    for (const reminders of [
+      null,
+      { pendingRsvp: "sí", eventEve: true },
+      { pendingRsvp: true },
+      { pendingRsvp: true, eventEve: true, version: 2 },
+    ]) {
+      assert.deepEqual(parseFeatureChanges({ reminders }), {
+        ok: false,
+        fieldIssues: [{ field: "reminders", message: FEATURE_ISSUE_COPY.reminders }],
+      });
+    }
   });
 
   it("clears the phone the creator emptied, and keeps the playlist", () => {
@@ -227,6 +284,7 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       itinerary: STORED_FEATURES.itinerary,
       giftRegistry: null,
       lodging: null,
+      reminders: null,
     });
   });
 
