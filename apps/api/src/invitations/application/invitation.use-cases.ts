@@ -745,6 +745,7 @@ export class GetPublicInvitationUseCase {
     // The fields the omitted sections cover (S8.3), computed once from the pinned schema and the stored list: the
     // guest page draws no block for them, and their values are withheld from the projection below.
     const hiddenFields = publicHiddenFields(render.schema, published.content);
+    const content = projectPublicContent(render.schema, published.content, hiddenFields);
 
     return {
       // The id is internal to the API: the response mapper never answers it, and the public read counts with it (S7).
@@ -752,7 +753,7 @@ export class GetPublicInvitationUseCase {
       slug: published.slug,
       componentKey: render.componentKey,
       configuration: render.configuration,
-      content: projectPublicContent(render.schema, published.content, hiddenFields),
+      content,
       hiddenFields,
       publishedAt: published.publishedAt,
       timeZone: published.timeZone,
@@ -769,10 +770,12 @@ export class GetPublicInvitationUseCase {
         gallery,
       ),
       // Only a package that grants MAP shows a point, and only while the address text still carries the label it
-      // was stored with (S2): the gate and the staleness rule live in the domain, never here.
+      // was stored with (S2): the gate and the staleness rule live in the domain, never here. The rule reads the
+      // projected content, so an address of an omitted section has no text left to match and its point (label and
+      // coordinates) is withheld like its value (S8.3).
       places: confirmedPlaces(
         published.places,
-        published.content,
+        content,
         includedFeatureKeys.includes(MAP_FEATURE_KEY),
       ),
       // An elapsed expiry is not a 404: the page still renders and the RSVP closes (S2, T3).
