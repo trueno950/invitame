@@ -161,6 +161,8 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       playlistUrl: settings?.playlistUrl ?? null,
       playlistTitle: settings?.playlistTitle ?? null,
       playlistCoverUrl: settings?.playlistCoverUrl ?? null,
+      // No settings row yet means no plan of the day, which is the null the port answers (F1; L3.1).
+      itinerary: settings?.itinerary ?? null,
       // No place row yet means no stored point, which is the empty object the port answers (S2).
       places: {},
     };

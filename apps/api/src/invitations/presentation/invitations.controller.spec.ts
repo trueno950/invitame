@@ -86,6 +86,7 @@ import {
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
 import type { PlaylistMetadata } from "../domain/invitation-features";
+import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
@@ -123,10 +124,19 @@ const RSVP_PACKAGE_ID = "88888888-8888-4888-8888-888888888888";
 const GUEST_LIST_PACKAGE_ID = "99999999-9999-4999-8999-999999999999";
 /** The seeded Deluxe keys (M6 S3): the guest list and its access pass (G2). */
 const QR_PASS_PACKAGE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+/** An ACTIVE package that grants `ITINERARY` and no other implemented key: the plan of the day (F1; L3.2). */
+const ITINERARY_PACKAGE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 /** A PUBLISHED version whose schema declares the address fields a place may belong to (S2). */
 const PLACE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const PHONE = "+525512345678";
 const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
+const ITINERARY: InvitationItinerary = {
+  version: 1,
+  items: [
+    { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
+    { time: "19:30", title: "Recepción y cóctel" },
+  ],
+};
 const RENDERER = "birthday-poster-01";
 const UNREGISTERED_RENDERER = "unregistered-renderer-99";
 const SCHEMA = {
@@ -176,6 +186,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       playlistUrl: null,
       playlistTitle: null,
       playlistCoverUrl: null,
+      itinerary: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       places: {},
@@ -279,6 +290,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     row.playlistUrl = features.playlistUrl;
     row.playlistTitle = features.playlistTitle;
     row.playlistCoverUrl = features.playlistCoverUrl;
+    row.itinerary = features.itinerary;
     return structuredClone(row);
   }
 
@@ -396,6 +408,11 @@ class MemoryInvitationCatalog implements InvitationCatalog {
         includedFeatureKeys: ["COUNTDOWN", "RSVP", "GUEST_LIST", "QR_PASS"],
         durationDays: 180,
       },
+    ],
+    // The itinerary key alone (F1; L3.2), so a guest who sees the plan sees nothing else with it.
+    [
+      ITINERARY_PACKAGE_ID,
+      { status: "ACTIVE", includedFeatureKeys: ["ITINERARY"], durationDays: 30 },
     ],
   ]);
 
@@ -1179,6 +1196,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: null,
         playlistTitle: null,
         playlistCoverUrl: null,
+        itinerary: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -1351,6 +1369,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: null,
         playlistTitle: null,
         playlistCoverUrl: null,
+        itinerary: null,
       });
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
     });
@@ -1506,6 +1525,8 @@ describe("invitations routes: /invitations", () => {
         timeZone: "America/Tijuana",
         whatsappPhone: "(55) 1234-5678",
         playlistUrl: PLAYLIST,
+
+        itinerary: null,
       });
 
       assert.equal(response.status, 200);
@@ -1517,6 +1538,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
         playlistTitle: null,
         playlistCoverUrl: null,
+        itinerary: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -1534,6 +1556,8 @@ describe("invitations routes: /invitations", () => {
         timeZone: "America/Cancun",
         whatsappPhone: PHONE,
         playlistUrl: null,
+
+        itinerary: null,
       });
 
       for (const whatsappPhone of [null, ""]) {
@@ -1541,6 +1565,8 @@ describe("invitations routes: /invitations", () => {
           timeZone: "America/Cancun",
           whatsappPhone,
           playlistUrl: null,
+
+          itinerary: null,
         });
 
         assert.equal(response.status, 200, String(whatsappPhone));
@@ -1549,6 +1575,7 @@ describe("invitations routes: /invitations", () => {
           playlistUrl: null,
           playlistTitle: null,
           playlistCoverUrl: null,
+          itinerary: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.whatsappPhone, null);
       }
@@ -1567,6 +1594,8 @@ describe("invitations routes: /invitations", () => {
         timeZone: "America/Mexico_City",
         whatsappPhone: null,
         playlistUrl: PLAYLIST,
+
+        itinerary: null,
       });
 
       assert.equal(response.status, 200);
@@ -1577,6 +1606,8 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
         playlistTitle: "Today’s Top Hits",
         playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+
+        itinerary: null,
       });
       assert.deepEqual(musicMetadata.asked, [{ playlistUrl: PLAYLIST, provider: "spotify" }]);
 
@@ -1586,6 +1617,8 @@ describe("invitations routes: /invitations", () => {
         timeZone: "America/Cancun",
         whatsappPhone: null,
         playlistUrl: PLAYLIST,
+
+        itinerary: null,
       });
 
       assert.equal(again.status, 200);
@@ -1595,6 +1628,8 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
         playlistTitle: "Today’s Top Hits",
         playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+
+        itinerary: null,
       });
 
       // A later owner read answers the same stored metadata, so the editor and the preview render it too (S2).
@@ -1604,6 +1639,8 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
         playlistTitle: "Today’s Top Hits",
         playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+
+        itinerary: null,
       });
     });
 
@@ -1616,12 +1653,16 @@ describe("invitations routes: /invitations", () => {
         timeZone: "America/Mexico_City",
         whatsappPhone: null,
         playlistUrl: PLAYLIST,
+
+        itinerary: null,
       });
 
       const cleared = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
         timeZone: "America/Mexico_City",
         whatsappPhone: null,
         playlistUrl: null,
+
+        itinerary: null,
       });
 
       assert.equal(cleared.status, 200);
@@ -1630,8 +1671,60 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: null,
         playlistTitle: null,
         playlistCoverUrl: null,
+        itinerary: null,
       });
       assert.equal(musicMetadata.asked.length, 1);
+    });
+
+    it("stores the itinerary and answers it in the owner read (F1; L3.1, L3.3)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: ITINERARY,
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), OWNED_KEYS);
+      assert.deepEqual((body.featureSettings as Row).itinerary, ITINERARY);
+      const stored = repository.rows.find((row) => row.id === draft.id);
+      assert.deepEqual(stored?.itinerary, ITINERARY);
+
+      // The owner read answers the same payload the write stored, so the editor can round-trip it.
+      const read = await send("GET", `${PATH}/${draft.id}`, cookie);
+      assert.equal(read.status, 200);
+      assert.deepEqual(
+        ((await read.json()) as { featureSettings: Row }).featureSettings.itinerary,
+        ITINERARY,
+      );
+    });
+
+    it("clears the stored itinerary with null and with an empty list (F1; L3.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      const body = (itinerary: unknown) => ({
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary,
+      });
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, body(ITINERARY));
+
+      for (const cleared of [null, { version: 1, items: [] }]) {
+        const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, body(cleared));
+
+        assert.equal(response.status, 200, JSON.stringify(cleared));
+        assert.equal(
+          ((await response.json()) as { featureSettings: Row }).featureSettings.itinerary,
+          null,
+          JSON.stringify(cleared),
+        );
+        assert.equal(repository.rows.find((row) => row.id === draft.id)?.itinerary, null);
+      }
     });
 
     it("clears the stored playlist link with null and with an empty value (F6; S7)", async () => {
@@ -1641,6 +1734,8 @@ describe("invitations routes: /invitations", () => {
         timeZone: "America/Cancun",
         whatsappPhone: PHONE,
         playlistUrl: PLAYLIST,
+
+        itinerary: null,
       });
 
       for (const playlistUrl of [null, ""]) {
@@ -1648,6 +1743,7 @@ describe("invitations routes: /invitations", () => {
           timeZone: "America/Cancun",
           whatsappPhone: PHONE,
           playlistUrl,
+          itinerary: null,
         });
 
         assert.equal(response.status, 200, String(playlistUrl));
@@ -1656,6 +1752,7 @@ describe("invitations routes: /invitations", () => {
           playlistUrl: null,
           playlistTitle: null,
           playlistCoverUrl: null,
+          itinerary: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.playlistUrl, null);
       }
@@ -1669,19 +1766,29 @@ describe("invitations routes: /invitations", () => {
       const refused: Array<[string, Record<string, unknown>, string[]]> = [
         [
           "a zone outside the allow-list",
-          { timeZone: "Europe/Madrid", whatsappPhone: null, playlistUrl: null },
+          { timeZone: "Europe/Madrid", whatsappPhone: null, playlistUrl: null, itinerary: null },
           ["timeZone must be one of the supported time zones"],
         ],
         [
           "a phone it cannot normalize",
-          { timeZone: "America/Mexico_City", whatsappPhone: "12345", playlistUrl: null },
+          {
+            timeZone: "America/Mexico_City",
+            whatsappPhone: "12345",
+            playlistUrl: null,
+            itinerary: null,
+          },
           [
             "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
           ],
         ],
         [
           "a phone that is not a string",
-          { timeZone: "America/Mexico_City", whatsappPhone: 5512345678, playlistUrl: null },
+          {
+            timeZone: "America/Mexico_City",
+            whatsappPhone: 5512345678,
+            playlistUrl: null,
+            itinerary: null,
+          },
           ["whatsappPhone must be a string or null"],
         ],
         [
@@ -1690,6 +1797,7 @@ describe("invitations routes: /invitations", () => {
             timeZone: "America/Mexico_City",
             whatsappPhone: null,
             playlistUrl: "http://open.spotify.com/playlist/abc",
+            itinerary: null,
           },
           ["playlistUrl must be an https link"],
         ],
@@ -1699,17 +1807,57 @@ describe("invitations routes: /invitations", () => {
             timeZone: "America/Mexico_City",
             whatsappPhone: null,
             playlistUrl: "https://example.com/playlist/abc",
+            itinerary: null,
           },
           ["playlistUrl must link to Spotify, Apple Music, YouTube, Deezer, or SoundCloud"],
         ],
         [
           "a link that is not a string",
-          { timeZone: "America/Mexico_City", whatsappPhone: null, playlistUrl: 42 },
+          {
+            timeZone: "America/Mexico_City",
+            whatsappPhone: null,
+            playlistUrl: 42,
+            itinerary: null,
+          },
           ["playlistUrl must be a string or null"],
         ],
         [
+          "an itinerary of another version",
+          {
+            timeZone: "America/Mexico_City",
+            whatsappPhone: null,
+            playlistUrl: null,
+            itinerary: { version: 2, items: [{ time: "17:00", title: "Misa" }] },
+          },
+          ["itinerary.version must be 1"],
+        ],
+        [
+          "an itinerary moment outside the contract",
+          {
+            timeZone: "America/Mexico_City",
+            whatsappPhone: null,
+            playlistUrl: null,
+            itinerary: {
+              version: 1,
+              items: [
+                { time: "17:00", title: "Misa" },
+                { time: "25:00", title: "" },
+              ],
+            },
+          },
+          [
+            "itinerary.items[1].time must be a time between 00:00 and 23:59",
+            "itinerary.items[1].title must be between 1 and 60 characters",
+          ],
+        ],
+        [
           "every value wrong, the zone first and the playlist last",
-          { timeZone: "not-a-zone", whatsappPhone: "12345", playlistUrl: "http://x.test" },
+          {
+            timeZone: "not-a-zone",
+            whatsappPhone: "12345",
+            playlistUrl: "http://x.test",
+            itinerary: null,
+          },
           [
             "timeZone must be one of the supported time zones",
             "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
@@ -1784,6 +1932,8 @@ describe("invitations routes: /invitations", () => {
         timeZone: "America/Tijuana",
         whatsappPhone: PHONE,
         playlistUrl: PLAYLIST,
+
+        itinerary: null,
       });
 
       assert.equal(response.status, 409);
@@ -1805,6 +1955,8 @@ describe("invitations routes: /invitations", () => {
           timeZone: "America/Tijuana",
           whatsappPhone: PHONE,
           playlistUrl: PLAYLIST,
+
+          itinerary: null,
         });
 
         assert.equal(response.status, 404, id);
@@ -2317,6 +2469,7 @@ describe("invitations routes: /invitations", () => {
       playlistUrl?: string | null;
       playlistTitle?: string | null;
       playlistCoverUrl?: string | null;
+      itinerary?: InvitationItinerary | null;
       rsvpDeadline?: Date | null;
       rsvpPartyLimit?: number;
       places?: Record<string, { label: string; lat: number; lng: number }>;
@@ -2339,6 +2492,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: overrides.playlistUrl ?? null,
         playlistTitle: overrides.playlistTitle ?? null,
         playlistCoverUrl: overrides.playlistCoverUrl ?? null,
+        itinerary: overrides.itinerary ?? null,
         rsvpDeadline: overrides.rsvpDeadline ?? null,
         rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
         places: overrides.places ?? {},
@@ -2376,6 +2530,7 @@ describe("invitations routes: /invitations", () => {
         calendar: true,
         whatsapp: null,
         music: null,
+        itinerary: null,
         giftRegistry: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -2543,6 +2698,7 @@ describe("invitations routes: /invitations", () => {
         calendar: true,
         whatsapp: { phone: PHONE },
         music: null,
+        itinerary: null,
         giftRegistry: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -2574,11 +2730,53 @@ describe("invitations routes: /invitations", () => {
         calendar: true,
         whatsapp: { phone: PHONE },
         music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
+        itinerary: null,
         giftRegistry: true,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
       assert.equal(JSON.stringify(body).includes(MUSIC_PACKAGE_ID), false);
+    });
+
+    it("answers the itinerary moments only for a package that grants ITINERARY (F1; L3.3)", async () => {
+      const granted = seed({
+        slug: "invitacion-itiner1",
+        status: "PUBLISHED",
+        packageId: ITINERARY_PACKAGE_ID,
+        itinerary: ITINERARY,
+      });
+      const grantedResponse = await send("GET", `${PUBLIC_PATH}/${granted.slug}`);
+
+      assert.equal(grantedResponse.status, 200);
+      const grantedBody = (await grantedResponse.json()) as Row;
+      assert.deepEqual(Object.keys(grantedBody).sort(), PUBLIC_KEYS);
+      // The guest reads the moments in the owner's order, and the payload's version stays in the API.
+      assert.deepEqual((grantedBody.features as Row).itinerary, { items: ITINERARY.items });
+
+      const withheld = seed({
+        slug: "invitacion-itiner2",
+        status: "PUBLISHED",
+        packageId: FEATURE_PACKAGE_ID,
+        itinerary: ITINERARY,
+      });
+      const withheldBody = (await (
+        await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
+      ).json()) as Row;
+
+      assert.equal((withheldBody.features as Row).itinerary, null);
+      assert.equal(JSON.stringify(withheldBody).includes("Misa"), false);
+    });
+
+    it("answers no itinerary when the invitation stores none, whatever the package grants (F1; L3.3)", async () => {
+      const row = seed({
+        slug: "invitacion-itiner3",
+        status: "PUBLISHED",
+        packageId: ITINERARY_PACKAGE_ID,
+      });
+      const response = await send("GET", `${PUBLIC_PATH}/${row.slug}`);
+
+      assert.equal(response.status, 200);
+      assert.equal(((await response.json()) as { features: Row }).features.itinerary, null);
     });
 
     it("answers the stored playlist title and cover to a guest, in the music feature (S2, A7)", async () => {
@@ -2660,6 +2858,7 @@ describe("invitations routes: /invitations", () => {
         calendar: true,
         whatsapp: null,
         music: null,
+        itinerary: null,
         giftRegistry: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -4123,6 +4322,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: null,
         playlistTitle: null,
         playlistCoverUrl: null,
+        itinerary: null,
         rsvpDeadline: null,
         rsvpPartyLimit: 4,
         places: {},

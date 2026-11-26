@@ -19,6 +19,7 @@ import {
   publicInvitationFeatures,
   validateInvitationFeatureSettings,
 } from "../domain/invitation-features";
+import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import {
   archive,
   assertEditable,
@@ -108,6 +109,8 @@ export interface UpdateFeaturesInput {
   timeZone: unknown;
   whatsappPhone: unknown;
   playlistUrl: unknown;
+  /** The plan of the day as the request carried it; the domain validates it before anything is stored (F1; L3.1). */
+  itinerary: unknown;
 }
 
 /** A row of "Mis invitaciones": the editor loads one invitation when it opens it. */
@@ -160,6 +163,8 @@ export interface OwnedInvitation extends InvitationSummary {
     playlistUrl: string | null;
     playlistTitle: string | null;
     playlistCoverUrl: string | null;
+    /** The stored plan of the day, or null when the invitation has none (F1; L3.1). */
+    itinerary: InvitationItinerary | null;
   };
   /**
    * The gated keys of the features this invitation will show, `CALENDAR` included (S4). The package's keys are
@@ -214,6 +219,7 @@ export function toOwnedInvitation(
       playlistUrl: record.playlistUrl,
       playlistTitle: record.playlistTitle,
       playlistCoverUrl: record.playlistCoverUrl,
+      itinerary: record.itinerary,
     },
     availableFeatures: availableFeatureKeys({
       includedFeatureKeys,
@@ -221,6 +227,7 @@ export function toOwnedInvitation(
       playlistUrl: record.playlistUrl,
       playlistTitle: record.playlistTitle,
       playlistCoverUrl: record.playlistCoverUrl,
+      itinerary: record.itinerary,
       rsvpDeadline: record.rsvpDeadline,
       rsvpPartyLimit: record.rsvpPartyLimit,
     }),
@@ -488,6 +495,7 @@ export class UpdateInvitationFeaturesUseCase {
       timeZone: input.timeZone,
       whatsappPhone: input.whatsappPhone,
       playlistUrl: input.playlistUrl,
+      itinerary: input.itinerary,
     });
     if (!validation.ok) {
       throw new InvalidInvitationFeaturesError(validation.issues);
@@ -764,6 +772,7 @@ export class GetPublicInvitationUseCase {
           playlistUrl: published.playlistUrl,
           playlistTitle: published.playlistTitle,
           playlistCoverUrl: published.playlistCoverUrl,
+          itinerary: published.itinerary,
           rsvpDeadline: published.rsvpDeadline,
           rsvpPartyLimit: published.rsvpPartyLimit,
         },

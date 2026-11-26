@@ -388,6 +388,8 @@ model Invitation {
 // "InvitationFeatureSettings_playlistUrl_https" check (NULL or a value that starts with `https://`).
 // Migration 20261122120000_add_invitation_feature_music_metadata adds "playlistTitle" and "playlistCoverUrl",
 // with "InvitationFeatureSettings_playlistCoverUrl_https" (NULL or a value that starts with `https://`).
+// Migration 20261202120000_add_invitation_itinerary adds the nullable `itinerary` JSONB column, and the same
+// migration inserts the `ITINERARY` catalog feature row and its links to the basic, premium, and deluxe packages.
 model InvitationFeatureSettings {
   invitationId     String   @id @db.Uuid
   // E.164: `+` and eight to fifteen digits. Null while the owner has not set one (S4).
@@ -401,6 +403,12 @@ model InvitationFeatureSettings {
   // allow-list and the trimming are the API domain's; the cover column also checks the scheme.
   playlistTitle    String?  @db.VarChar(200)
   playlistCoverUrl String?  @db.VarChar(500)
+  // The itinerary of the day (F1; S2.1, L3.1): the versioned presentation payload
+  // `{ "version": 1, "items": [{ time, title, place?, address? }] }` with 1 to 15 moments, or NULL while the owner
+  // has not filled one. Bounded, versioned, presentation data only: no image, no link, no provider payload. The domain
+  // (`domain/invitation-features.ts`) is the authority on the shape; the column stores it as JSONB and nothing else,
+  // and no CHECK can state it.
+  itinerary        Json?    @db.JsonB
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 

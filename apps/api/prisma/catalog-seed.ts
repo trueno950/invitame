@@ -66,6 +66,11 @@ const CATEGORY_SEEDS = [
 
 const FEATURE_SEEDS = [
   {
+    key: "ITINERARY",
+    name: "Itinerario",
+    description: "El programa del día: cada momento con su hora, su lugar y cómo llegar.",
+  },
+  {
     key: "COUNTDOWN",
     name: "Cuenta regresiva",
     description: "Un contador para acompañar la espera hasta el evento.",
@@ -119,7 +124,7 @@ const PACKAGE_SEEDS = [
     description: "Una selección inicial para empezar a planificar.",
     // S1: «Básico 30 días». Each package states its own lifetime, counted from the publication instant.
     durationDays: 30,
-    featureKeys: ["COUNTDOWN", "MAP", "WHATSAPP"],
+    featureKeys: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
   },
   {
     key: "premium",
@@ -127,7 +132,7 @@ const PACKAGE_SEEDS = [
     description: "Más recursos para una experiencia visual completa.",
     // S1: «Premium 90 días».
     durationDays: 90,
-    featureKeys: ["COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
+    featureKeys: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
   },
   {
     key: "deluxe",
@@ -136,6 +141,7 @@ const PACKAGE_SEEDS = [
     // S1: «Deluxe 180 días».
     durationDays: 180,
     featureKeys: [
+      "ITINERARY",
       "COUNTDOWN",
       "MUSIC",
       "GALLERY",

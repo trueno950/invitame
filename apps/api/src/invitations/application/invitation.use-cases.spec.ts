@@ -18,6 +18,7 @@ import {
   PLAYLIST_URL_MAX_LENGTH,
   type PlaylistMetadata,
 } from "../domain/invitation-features";
+import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import {
   InvalidInvitationContentError,
   InvalidInvitationFeaturesError,
@@ -120,6 +121,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       playlistUrl: null,
       playlistTitle: null,
       playlistCoverUrl: null,
+      itinerary: null,
       rsvpDeadline: null,
       places: {},
       ...input,
@@ -186,6 +188,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     stored.playlistUrl = features.playlistUrl;
     stored.playlistTitle = features.playlistTitle;
     stored.playlistCoverUrl = features.playlistCoverUrl;
+    stored.itinerary = features.itinerary;
     stored.updatedAt = new Date(stored.updatedAt.getTime() + 1000);
     return { ...stored, content: { ...stored.content } };
   }
@@ -457,9 +460,10 @@ function features(
 
 /** The feature keys of every seeded package (prisma/catalog-seed.ts), by package key (S4). */
 const SEEDED_PACKAGE_FEATURES = {
-  basic: ["COUNTDOWN", "MAP", "WHATSAPP"],
-  premium: ["COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
+  basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
+  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
   deluxe: [
+    "ITINERARY",
     "COUNTDOWN",
     "MUSIC",
     "GALLERY",
@@ -474,6 +478,13 @@ const SEEDED_PACKAGE_FEATURES = {
 
 const PHONE = "+525512345678";
 const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
+const ITINERARY: InvitationItinerary = {
+  version: 1,
+  items: [
+    { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
+    { time: "19:30", title: "Recepción y cóctel" },
+  ],
+};
 
 /** Publishes a complete draft through the use case, so a fixture starts from a real PUBLISHED row (S7). */
 async function publishedInvitation(fixture: ReturnType<typeof seeded>, nextSlug?: () => string) {
@@ -833,6 +844,7 @@ describe("GetOwnInvitationUseCase", () => {
       playlistUrl: null,
       playlistTitle: null,
       playlistCoverUrl: null,
+      itinerary: null,
     });
     // WhatsApp needs a stored phone, and no catalog feature outside the implemented list appears (S4).
     assert.deepEqual(stored?.availableFeatures, ["COUNTDOWN", "MAP", "CALENDAR"]);
@@ -996,6 +1008,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       timeZone: "America/Tijuana",
       whatsappPhone: "(55) 1234-5678",
       playlistUrl: PLAYLIST,
+      itinerary: null,
     });
 
     assert.equal(updated?.timeZone, "America/Tijuana");
@@ -1004,6 +1017,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: PLAYLIST,
       playlistTitle: null,
       playlistCoverUrl: null,
+      itinerary: null,
     });
     assert.deepEqual(updated?.availableFeatures, [
       "COUNTDOWN",
@@ -1031,6 +1045,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       timeZone: "America/Cancun",
       whatsappPhone: PHONE,
       playlistUrl: null,
+      itinerary: null,
     });
 
     for (const cleared of [null, "", "   "]) {
@@ -1040,6 +1055,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         timeZone: "America/Cancun",
         whatsappPhone: cleared,
         playlistUrl: null,
+        itinerary: null,
       });
 
       assert.deepEqual(
@@ -1049,6 +1065,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           playlistUrl: null,
           playlistTitle: null,
           playlistCoverUrl: null,
+          itinerary: null,
         },
         String(cleared),
       );
@@ -1067,6 +1084,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       timeZone: "America/Cancun",
       whatsappPhone: null,
       playlistUrl: PLAYLIST,
+      itinerary: null,
     });
 
     for (const cleared of [null, "", "   "]) {
@@ -1076,6 +1094,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         timeZone: "America/Cancun",
         whatsappPhone: null,
         playlistUrl: cleared,
+        itinerary: null,
       });
 
       assert.equal(updated?.featureSettings.playlistUrl, null, String(cleared));
@@ -1090,6 +1109,83 @@ describe("UpdateInvitationFeaturesUseCase", () => {
     }
   });
 
+  it("stores the itinerary moments in the owner's order and answers them in the owner read (F1; L3.1, L3.3)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await createDraft(fixture);
+
+    const updated = await features(fixture).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: ITINERARY,
+    });
+
+    assert.equal(updated?.featureSettings.itinerary?.version, 1);
+    assert.deepEqual(updated?.featureSettings.itinerary?.items, ITINERARY.items);
+    // The granted key appears only because the invitation now stores a moment (F1; L3.2).
+    assert.deepEqual(updated?.availableFeatures, ["ITINERARY", "COUNTDOWN", "MAP", "CALENDAR"]);
+    assert.deepEqual(fixture.repository.rows[0]?.itinerary, ITINERARY);
+
+    const stored = await new GetOwnInvitationUseCase(fixture.repository, fixture.catalog).execute(
+      fixture.ownerId,
+      created.id,
+    );
+
+    assert.deepEqual(stored?.featureSettings.itinerary, ITINERARY);
+  });
+
+  it("clears a stored itinerary with null and with an empty list (F1; L3.1)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await createDraft(fixture);
+    const useCase = features(fixture);
+    const base = {
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+    };
+    await useCase.execute({ ...base, itinerary: ITINERARY });
+
+    for (const cleared of [null, { version: 1, items: [] }]) {
+      const updated = await useCase.execute({ ...base, itinerary: cleared });
+
+      assert.equal(updated?.featureSettings.itinerary, null, JSON.stringify(cleared));
+      assert.deepEqual(updated?.availableFeatures, ["COUNTDOWN", "MAP", "CALENDAR"]);
+      assert.equal(fixture.repository.rows[0]?.itinerary, null);
+    }
+  });
+
+  it("refuses an itinerary the contract does not allow and stores nothing (F1; L3.1)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
+    const created = await createDraft(fixture);
+    const before = { ...fixture.repository.rows[0] };
+
+    await assert.rejects(
+      features(fixture).execute({
+        ownerId: fixture.ownerId,
+        id: created.id,
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: {
+          version: 1,
+          items: [{ time: "24:00", title: "" }],
+        },
+      }),
+      (error: unknown) =>
+        error instanceof InvalidInvitationFeaturesError &&
+        JSON.stringify(error.issues) ===
+          JSON.stringify([
+            "itinerary.items[0].time must be a time between 00:00 and 23:59",
+            "itinerary.items[0].title must be between 1 and 60 characters",
+          ]),
+    );
+    assert.deepEqual(fixture.repository.rows[0], before);
+  });
+
   it("refuses a zone outside the allow-list, a phone it cannot normalize, and a link it cannot store (S4, S7)", async () => {
     const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.basic });
     const created = await createDraft(fixture);
@@ -1102,6 +1198,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         timeZone: "Europe/Madrid",
         whatsappPhone: "12345",
         playlistUrl: null,
+        itinerary: null,
       }),
       (error: unknown) => {
         assert.ok(error instanceof InvalidInvitationFeaturesError);
@@ -1129,6 +1226,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           timeZone: "America/Mexico_City",
           whatsappPhone: null,
           playlistUrl,
+          itinerary: null,
         }),
         (error: unknown) => {
           assert.ok(error instanceof InvalidInvitationFeaturesError);
@@ -1155,6 +1253,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         timeZone: "America/Tijuana",
         whatsappPhone: PHONE,
         playlistUrl: null,
+        itinerary: null,
       }),
       InvitationNotEditableError,
     );
@@ -1175,6 +1274,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         timeZone: "America/Tijuana",
         whatsappPhone: PHONE,
         playlistUrl: null,
+        itinerary: null,
       }),
       null,
     );
@@ -1186,6 +1286,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           timeZone: "America/Tijuana",
           whatsappPhone: PHONE,
           playlistUrl: null,
+          itinerary: null,
         }),
         null,
       );
@@ -1204,6 +1305,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       timeZone: "America/Merida",
       whatsappPhone: PHONE,
       playlistUrl: null,
+      itinerary: null,
     });
 
     assert.equal(updated?.status, "PUBLISHED");
@@ -1231,6 +1333,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl,
+      itinerary: null,
     });
 
     return { fixture, created, updated, useCase };
@@ -1248,6 +1351,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: PLAYLIST,
       playlistTitle: METADATA.title,
       playlistCoverUrl: METADATA.coverUrl,
+      itinerary: null,
     });
     // The metadata is stored with the link, so a later or public read answers it without a provider.
     assert.equal(fixture.repository.rows[0]?.playlistTitle, METADATA.title);
@@ -1268,6 +1372,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       timeZone: "America/Cancun",
       whatsappPhone: PHONE,
       playlistUrl: PLAYLIST,
+      itinerary: null,
     });
 
     assert.equal(music.asked.length, 1);
@@ -1288,6 +1393,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         timeZone: "America/Mexico_City",
         whatsappPhone: null,
         playlistUrl: cleared,
+        itinerary: null,
       });
 
       assert.equal(music.asked.length, 1, String(cleared));
@@ -1313,6 +1419,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistUrl: PLAYLIST,
       playlistTitle: null,
       playlistCoverUrl: null,
+      itinerary: null,
     });
     assert.equal(fixture.repository.rows[0]?.playlistUrl, PLAYLIST);
   });
@@ -1368,6 +1475,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl: PLAYLIST,
+      itinerary: null,
     });
     await publisher(fixture).useCase.execute(fixture.ownerId, created.id);
 
@@ -1778,6 +1886,7 @@ describe("GetPublicInvitationUseCase", () => {
         calendar: true,
         whatsapp: null,
         music: null,
+        itinerary: null,
         giftRegistry: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -1977,6 +2086,8 @@ describe("GetPublicInvitationUseCase", () => {
           calendar: true,
           whatsapp: null,
           music: null,
+          // The fixture stores no itinerary, so the granted key shows nothing (F1; L3.3).
+          itinerary: null,
           giftRegistry: packageKey === "deluxe",
           gallery: [],
           // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form (M6 S4).
@@ -1997,6 +2108,7 @@ describe("GetPublicInvitationUseCase", () => {
         timeZone: "America/Tijuana",
         whatsappPhone: PHONE,
         playlistUrl: PLAYLIST,
+        itinerary: null,
       });
 
       const page = await publicReader(fixture).execute(created.slug);
@@ -2013,6 +2125,7 @@ describe("GetPublicInvitationUseCase", () => {
             packageKey === "basic"
               ? null
               : { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
+          itinerary: null,
           giftRegistry: packageKey === "deluxe",
           gallery: [],
           rsvp: {
@@ -2031,6 +2144,7 @@ describe("GetPublicInvitationUseCase", () => {
         "countdown",
         "gallery",
         "giftRegistry",
+        "itinerary",
         "map",
         "music",
         "rsvp",
@@ -2049,6 +2163,7 @@ describe("GetPublicInvitationUseCase", () => {
       timeZone: "America/Cancun",
       whatsappPhone: PHONE,
       playlistUrl: PLAYLIST,
+      itinerary: null,
     });
 
     const page = await publicReader(fixture).execute(created.slug);
@@ -2060,10 +2175,51 @@ describe("GetPublicInvitationUseCase", () => {
       calendar: true,
       whatsapp: null,
       music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
+      itinerary: null,
       giftRegistry: false,
       gallery: [],
       rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
     });
     assert.equal(JSON.stringify(page).includes(PHONE), false);
+  });
+
+  it("answers the itinerary moments only while the package grants ITINERARY and the invitation stores some (F1; L3.3)", async () => {
+    const fixture = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.deluxe });
+    const created = await publishedInvitation(fixture);
+    const save = (itinerary: unknown) =>
+      features(fixture).execute({
+        ownerId: fixture.ownerId,
+        id: created.id,
+        timeZone: "America/Mexico_City",
+        whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
+        itinerary,
+      });
+
+    await save(ITINERARY);
+    assert.deepEqual((await publicReader(fixture).execute(created.slug))?.features.itinerary, {
+      items: ITINERARY.items,
+    });
+
+    // An empty itinerary is no itinerary, so there is nothing to draw.
+    await save(null);
+    assert.equal((await publicReader(fixture).execute(created.slug))?.features.itinerary, null);
+  });
+
+  it("keeps a stored itinerary private when the package does not grant ITINERARY (F1; L3.3)", async () => {
+    const fixture = seeded({ includedFeatureKeys: ["COUNTDOWN"] });
+    const created = await publishedInvitation(fixture);
+    await features(fixture).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: ITINERARY,
+    });
+    const page = await publicReader(fixture).execute(created.slug);
+
+    assert.equal(page?.features.itinerary, null);
+    assert.equal(JSON.stringify(page).includes("Misa"), false);
   });
 });

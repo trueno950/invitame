@@ -18,6 +18,7 @@ import {
   InvitationNotPublishedError,
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
+import { storedItinerary } from "../domain/invitation-itinerary";
 import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
 import {
   isAddressFieldName,
@@ -49,6 +50,8 @@ const INVITATION_SELECT = {
       playlistUrl: true,
       playlistTitle: true,
       playlistCoverUrl: true,
+      // The stored plan of the day travels with the row too (F1; L3.1); the domain decides whether it reads as one.
+      itinerary: true,
     },
   },
   // The stored points travel with the row too (S2): the public projection decides which of them a guest may see, and
@@ -102,6 +105,8 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     // A row written before the lookup existed, or one whose lookup failed, carries no metadata (S2).
     playlistTitle: row.featureSettings?.playlistTitle ?? null,
     playlistCoverUrl: row.featureSettings?.playlistCoverUrl ?? null,
+    // A row written around the API reads as no itinerary instead of a payload no rule validated (F1; L3.1).
+    itinerary: storedItinerary(row.featureSettings?.itinerary),
     rsvpDeadline: row.rsvpDeadline,
     rsvpPartyLimit: row.rsvpPartyLimit,
     // The points are keyed by their content field, which is the name the layout's address field carries (S2).
@@ -113,6 +118,17 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+/**
+ * The JSONB value of a nullable itinerary column (F1; L3.1): SQL NULL for "no itinerary", which is what a cleared
+ * plan is, and the validated payload otherwise. `Prisma.DbNull` is the database's NULL rather than the JSON `null`,
+ * so the column never stores a value no reader can tell apart from an empty payload.
+ */
+function itineraryColumn(
+  itinerary: InvitationRecordWithMusic["itinerary"],
+): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  return itinerary === null ? Prisma.DbNull : (itinerary as unknown as Prisma.InputJsonValue);
 }
 
 function isPrismaError(error: unknown, code: string): boolean {
@@ -255,6 +271,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
           playlistUrl: features.playlistUrl,
           playlistTitle: features.playlistTitle,
           playlistCoverUrl: features.playlistCoverUrl,
+          itinerary: itineraryColumn(features.itinerary),
         },
         update: {
           whatsappPhone: features.whatsappPhone,
@@ -263,6 +280,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
           // never survives a change (S2).
           playlistTitle: features.playlistTitle,
           playlistCoverUrl: features.playlistCoverUrl,
+          // A cleared itinerary is SQL NULL, never the JSON value `null`, so the column reads as absent (F1).
+          itinerary: itineraryColumn(features.itinerary),
         },
       });
 

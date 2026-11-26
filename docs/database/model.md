@@ -52,7 +52,12 @@ rewritten by any of them and nothing is deleted. The expiration slice adds the a
 `20261130120000_add_package_duration_days` migration: the `Package.durationDays` column, `INTEGER NOT NULL DEFAULT 30`,
 with the `Package_durationDays_positive` check. The default keeps every existing package valid, and the migration
 backfills the three seeded catalog keys to their known lifetimes (basic 30, premium 90, deluxe 180) before an
-administrator can customize them; no row is invalidated and nothing is deleted. Future analytics design is documented separately in
+administrator can customize them; no row is invalidated and nothing is deleted. The guest-features slice (F1) adds the
+additive `20261202120000_add_invitation_itinerary` migration: the nullable `InvitationFeatureSettings.itinerary` JSONB
+column, and — in the same file, because the seed never updates an existing package — the `ITINERARY` catalog feature row
+and its links to the `basic`, `premium`, and `deluxe` packages, both inserted with `ON CONFLICT DO NOTHING` so a second
+run stores nothing. The column is nullable, so no row is rewritten; the catalog rows are new, so no existing package or
+feature is changed and nothing is deleted. Future analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -74,7 +79,7 @@ administrator can customize them; no row is invalidated and nothing is deleted. 
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
-| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), and timestamps |
+| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payload `itinerary` (or `NULL`), and timestamps |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
@@ -242,6 +247,15 @@ normalization, the playlist link allow-list, and the gating — lives in
   image-host allow-list (`i.scdn.co`, `image-cdn-*.spotifycdn.com`, `i.ytimg.com`) is the API's, like the music-host
   allow-list; the database checks only the scheme the column can state. Both columns belong to the link: a changed or
   cleared `playlistUrl` writes its metadata with it, so no stale cover describes a link the invitation no longer has.
+- `InvitationFeatureSettings.itinerary` is JSONB and nullable, and holds one bounded, versioned presentation payload
+  (F1; L3.1): `{ "version": 1, "items": [{ "time": "HH:MM", "title", "place"?, "address"? }] }`. `items` carries 1 to 15
+  moments in the owner's order, `time` is a wall clock from `00:00` to `23:59`, `title` is 1 to 60 trimmed characters,
+  and `place` and `address` are at most 160 trimmed characters each, a blank optional value being absent. `NULL` is "no
+  itinerary", and so is an empty list, which the API normalizes to `NULL` before writing. It is presentation data only:
+  no image, no link, no provider payload, no query-critical field, and no rule that a column could enforce, so the API
+  domain (`apps/api/src/invitations/domain/invitation-itinerary.ts`) is the only authority on the shape and a value
+  written around it reads as no itinerary instead of reaching a guest. It belongs to the invitation, so changing the
+  template version never loses it, and the gate — the pinned package's `ITINERARY` key — decides whether a guest sees it.
 - The feature data belongs to the invitation, not to its template: the template version stays pinned and changing the
   template never touches these rows. A stored phone or link is kept even when the pinned package does not include
   `WHATSAPP` or `MUSIC`; the gate, not the write, decides whether a guest sees those buttons, so an upgrade later does
@@ -261,6 +275,10 @@ normalization, the playlist link allow-list, and the gating — lives in
   `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "playlistCoverUrl", DROP COLUMN "playlistTitle";`. Only the
   stored titles and covers are lost; the playlist links and everything else stay. Never edit the applied migration
   file.
+- Rollback / recovery of `20261202120000_add_invitation_itinerary`: additive, so recovery is redeploying the previous
+  migration set, or by hand deleting the three `PackageFeature` links and the `ITINERARY` `Feature` row by key and then
+  `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "itinerary";`. Only the stored itineraries and the catalog key are
+  lost; invitations, their content, and every other feature setting stay. Never edit the applied migration file.
 
 ## Invitation places
 
@@ -605,9 +623,10 @@ Prisma. The database suites (`pnpm --filter @invitame/api test:db`) exercise the
 
 ## JSONB boundary
 
-Prisma `Json` maps `TemplateVersion.schema`, `TemplateVersion.configuration`, and `Invitation.content` to PostgreSQL
-JSONB. The template schema is a validated form contract and configuration is a validated presentation contract; an
-invitation's content is the bounded form data validated against its pinned version. Renderer identity, relationships,
+Prisma `Json` maps `TemplateVersion.schema`, `TemplateVersion.configuration`, `Invitation.content`, and
+`InvitationFeatureSettings.itinerary` to PostgreSQL JSONB. The template schema is a validated form contract and
+configuration is a validated presentation contract; an invitation's content is the bounded form data validated against
+its pinned version; the itinerary is a versioned, bounded presentation payload (1 to 15 moments of four short texts). Renderer identity, relationships,
 catalog keys, lifecycle statuses, and fields used for querying remain normalized columns.
 
 ## Analytics data

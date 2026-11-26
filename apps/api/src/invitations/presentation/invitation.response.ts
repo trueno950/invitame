@@ -90,6 +90,14 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
     playlistUrl: string | null;
     playlistTitle: string | null;
     playlistCoverUrl: string | null;
+    /**
+     * The stored plan of the day as the validated payload `{ version: 1, items: [...] }`, or null when the invitation
+     * has none (F1; L3.1). The owner's read answers the version so the editor can send the same payload back.
+     */
+    itinerary: {
+      version: 1;
+      items: Array<{ time: string; title: string; place?: string; address?: string }>;
+    } | null;
   };
   /** The gated feature keys the guest will see, `CALENDAR` included (S4). */
   availableFeatures: string[];
@@ -133,6 +141,13 @@ export interface PublicInvitationResponse {
       provider: string;
       title: string | null;
       coverUrl: string | null;
+    } | null;
+    /**
+     * The moments of the day in the owner's order, or null when the package does not grant `ITINERARY` or the
+     * invitation stores none (F1; L3.3). A guest page reads the list, never the payload's version.
+     */
+    itinerary: {
+      items: Array<{ time: string; title: string; place?: string; address?: string }>;
     } | null;
     /** Whether the layouts render their gift registry block (S7). */
     giftRegistry: boolean;
@@ -201,6 +216,18 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
       playlistUrl: stored.featureSettings.playlistUrl,
       playlistTitle: stored.featureSettings.playlistTitle,
       playlistCoverUrl: stored.featureSettings.playlistCoverUrl,
+      itinerary:
+        stored.featureSettings.itinerary === null
+          ? null
+          : {
+              version: 1,
+              items: stored.featureSettings.itinerary.items.map((moment) => ({
+                time: moment.time,
+                title: moment.title,
+                ...(moment.place === undefined ? {} : { place: moment.place }),
+                ...(moment.address === undefined ? {} : { address: moment.address }),
+              })),
+            },
     },
     availableFeatures: [...stored.availableFeatures],
     places: { ...stored.places },
@@ -231,6 +258,17 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
               provider: stored.features.music.provider,
               title: stored.features.music.title,
               coverUrl: stored.features.music.coverUrl,
+            },
+      itinerary:
+        stored.features.itinerary === null
+          ? null
+          : {
+              items: stored.features.itinerary.items.map((moment) => ({
+                time: moment.time,
+                title: moment.title,
+                ...(moment.place === undefined ? {} : { place: moment.place }),
+                ...(moment.address === undefined ? {} : { address: moment.address }),
+              })),
             },
       giftRegistry: stored.features.giftRegistry,
       gallery: stored.features.gallery.map((photo) => ({

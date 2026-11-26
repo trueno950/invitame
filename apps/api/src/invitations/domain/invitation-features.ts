@@ -8,7 +8,11 @@
 // - playlist metadata bounds: the title the provider answered as one bounded line of visible text, and a cover
 //   only from an allow-listed image host over `https` (S2);
 // - feature gating: the package's feature keys intersected with the implemented allow-list, plus the add-to-
-//   calendar feature, which is not catalog data; WhatsApp also needs a stored phone, and music a usable link.
+//   calendar feature, which is not catalog data; WhatsApp also needs a stored phone, music a usable link, and the
+//   itinerary at least one stored moment (F1).
+//
+// The itinerary payload itself is `domain/invitation-itinerary.ts`: this module only decides whether a guest may see
+// it and hands it to the projection, so one reader owns its shape.
 //
 // Package and feature names never select a code path (AGENTS.md): the gate compares keys and nothing else, so a
 // new catalog key never makes a feature appear, and an unknown key is simply not implemented.
@@ -25,6 +29,12 @@
  * `America/Ojinaga` matches `America/Matamoros` on the United States daylight-saving rule — but they are
  * distinct places with distinct historical rules, so the owner still picks the one that names their location.
  */
+import {
+  type InvitationItinerary,
+  storedItinerary,
+  validateItinerary,
+} from "./invitation-itinerary";
+
 export const INVITATION_TIME_ZONES = [
   "America/Mexico_City",
   "America/Cancun",
@@ -54,9 +64,11 @@ export function isInvitationTimeZone(value: unknown): value is InvitationTimeZon
  * catalog data that no current layout renders, so gating drops it instead of letting a key select a component.
  * `RSVP` and `GUEST_LIST` arrived with Milestone 6 (`GUEST_LIST` is the personal-link guest list, M6 G2),
  * `QR_PASS` is the guest list's access pass for the door, also M6 G2, and `GALLERY` is the invitation's photo
- * gallery (M8 S3, S4). The order is the order the owner's feature list follows.
+ * gallery (M8 S3, S4). `ITINERARY` is the plan of the day (F1; S2.1, L3.2) and comes first because it is the first
+ * capability of the owner's list. The order is the order the owner's feature list follows.
  */
 export const IMPLEMENTED_INVITATION_FEATURES = [
+  "ITINERARY",
   "COUNTDOWN",
   "MAP",
   "RSVP",
@@ -84,6 +96,15 @@ export const QR_PASS_FEATURE_KEY = "QR_PASS";
 
 /** The catalog key that grants the invitation's photo gallery (M8 S3, S4); Premium and Deluxe include it. */
 export const GALLERY_FEATURE_KEY = "GALLERY";
+
+/** The catalog key that grants the plan of the day (F1; S2.1, L3.2); every seeded package includes it. */
+export const ITINERARY_FEATURE_KEY = "ITINERARY";
+
+/**
+ * The public shape of one itinerary moment (F1; L3.1, L3.3): the wall clock, the title, and the place and address
+ * when they say something. The projection carries the validated moments and no version.
+ */
+export type ItineraryMoment = InvitationItinerary["items"][number];
 
 /**
  * One gallery photo as a guest renders it (M8 S4): the absolute API URL of the image, the dimensions the layout
@@ -452,12 +473,14 @@ function refuseShape(): WhatsAppPhoneNormalization {
   return { ok: false, issue: WHATSAPP_PHONE_SHAPE_ISSUE };
 }
 
-/** The feature settings a creator saves: the time zone, the stored E.164 phone, and the playlist link. */
+/** The feature settings a creator saves: the time zone, the stored E.164 phone, the playlist link, and the plan. */
 export interface InvitationFeatureSettingsValue {
   readonly timeZone: InvitationTimeZone;
   readonly whatsappPhone: string | null;
   /** A normalized `https` link on an allow-listed music host, or null (S7). */
   readonly playlistUrl: string | null;
+  /** The validated plan of the day, or null when the invitation has none (F1; L3.1). */
+  readonly itinerary: InvitationItinerary | null;
 }
 
 /** The feature settings a request asked for, validated, or every issue that refuses them. */
@@ -466,15 +489,16 @@ export type InvitationFeatureSettingsValidation =
   | { readonly ok: false; readonly issues: string[] };
 
 /**
- * Validates a feature-settings request (S4, S7): the zone must be an allow-list member, the phone must
- * normalize, and the playlist link must be an `https` link on an allow-listed host. Every issue is reported, the
- * zone, then the phone, then the playlist, and nothing is transformed except the phone and the link. A refused
- * request stores nothing.
+ * Validates a feature-settings request (S4, S7, F1): the zone must be an allow-list member, the phone must normalize,
+ * the playlist link must be an `https` link on an allow-listed host, and the itinerary must be the versioned payload
+ * of L3.1 or absent. Every issue is reported, the zone, then the phone, then the playlist, then the itinerary, and
+ * nothing is transformed except the phone, the link, and the moments' texts. A refused request stores nothing.
  */
 export function validateInvitationFeatureSettings(input: {
   readonly timeZone: unknown;
   readonly whatsappPhone: unknown;
   readonly playlistUrl: unknown;
+  readonly itinerary: unknown;
 }): InvitationFeatureSettingsValidation {
   const issues: string[] = [];
 
@@ -492,7 +516,18 @@ export function validateInvitationFeatureSettings(input: {
     issues.push(playlist.issue);
   }
 
-  if (issues.length > 0 || !phone.ok || !playlist.ok || !isInvitationTimeZone(input.timeZone)) {
+  const itinerary = validateItinerary(input.itinerary);
+  if (!itinerary.ok) {
+    issues.push(...itinerary.issues);
+  }
+
+  if (
+    issues.length > 0 ||
+    !phone.ok ||
+    !playlist.ok ||
+    !itinerary.ok ||
+    !isInvitationTimeZone(input.timeZone)
+  ) {
     return { ok: false, issues };
   }
 
@@ -502,6 +537,7 @@ export function validateInvitationFeatureSettings(input: {
       timeZone: input.timeZone,
       whatsappPhone: phone.phone,
       playlistUrl: playlist.url,
+      itinerary: itinerary.value,
     },
   };
 }
@@ -516,6 +552,8 @@ export interface InvitationFeatureGate {
   readonly playlistTitle: string | null;
   /** The stored cover URL the provider answered, or null when there is none (S2). */
   readonly playlistCoverUrl: string | null;
+  /** The stored plan of the day, or null when there is none (F1; L3.1). */
+  readonly itinerary: InvitationItinerary | null;
   /** The owner's RSVP deadline, or null for one that never closes (M6 S4). */
   readonly rsvpDeadline: Date | null;
   /** The owner's party limit, 1 to 10 (M6 S4). */
@@ -525,8 +563,9 @@ export interface InvitationFeatureGate {
 /**
  * The feature keys an invitation may show (S4, S7): the package's keys intersected with
  * `IMPLEMENTED_INVITATION_FEATURES`, in that allow-list's order, with `CALENDAR` appended because it is always
- * available and is not catalog data. WhatsApp is dropped while no phone is stored, and music while no usable
- * playlist link is stored. Duplicates and unknown keys never appear, and the package name plays no part.
+ * available and is not catalog data. WhatsApp is dropped while no phone is stored, music while no usable playlist
+ * link is stored, and the itinerary while no moment is stored. Duplicates and unknown keys never appear, and the
+ * package name plays no part.
  */
 export function availableFeatureKeys(gate: InvitationFeatureGate): string[] {
   const included = new Set(gate.includedFeatureKeys);
@@ -540,6 +579,9 @@ export function availableFeatureKeys(gate: InvitationFeatureGate): string[] {
       continue;
     }
     if (featureKey === "MUSIC" && musicProviderOf(gate.playlistUrl) === null) {
+      continue;
+    }
+    if (featureKey === ITINERARY_FEATURE_KEY && (gate.itinerary?.items.length ?? 0) === 0) {
       continue;
     }
     keys.push(featureKey);
@@ -566,6 +608,11 @@ export interface PublicInvitationFeatures {
     readonly title: string | null;
     readonly coverUrl: string | null;
   } | null;
+  /**
+   * The moments of the day, in the owner's order, or null when the package does not grant `ITINERARY` or the
+   * invitation stores none (F1; L3.3). The payload's version stays in the API: a guest page reads the list.
+   */
+  readonly itinerary: { readonly items: readonly ItineraryMoment[] } | null;
   /** Whether the layouts render their gift registry block (S7); the content decides its value, not the API. */
   readonly giftRegistry: boolean;
   /**
@@ -607,6 +654,8 @@ export function publicInvitationFeatures(
   galleryPhotos: readonly PublicGalleryPhoto[] = [],
 ): PublicInvitationFeatures {
   const keys = new Set(availableFeatureKeys(gate));
+  // A row written around the API reads as no itinerary at all, exactly like a title or a cover it refuses (S2, F1).
+  const itinerary = storedItinerary(gate.itinerary);
   const provider = keys.has("MUSIC") ? musicProviderOf(gate.playlistUrl) : null;
   const mode = rsvpModeOf(gate.includedFeatureKeys);
   // A stored value the deployment does not allow is not shown, even if a row was written around the API (S2).
@@ -623,6 +672,8 @@ export function publicInvitationFeatures(
       provider === null || gate.playlistUrl === null
         ? null
         : { url: gate.playlistUrl, provider, title, coverUrl },
+    itinerary:
+      keys.has(ITINERARY_FEATURE_KEY) && itinerary !== null ? { items: itinerary.items } : null,
     giftRegistry: keys.has("GIFT_REGISTRY"),
     // Only a package that grants GALLERY renders photos; the read passes none otherwise, and this repeats the gate.
     gallery: keys.has(GALLERY_FEATURE_KEY) ? galleryPhotos : [],

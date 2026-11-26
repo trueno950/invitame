@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { INITIAL_OPERATIONAL_SETTINGS } from "../../settings/domain/operational-settings";
 import { InvitationNotEditableError } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
 import type { PlacePoint } from "../domain/invitation-place";
@@ -23,7 +24,6 @@ import {
 } from "./invitation-place.use-cases";
 import type { PlaceSearch } from "./place-search";
 import { InMemoryPlaceSearchCache, placeSearchCacheKey } from "./place-search-cache";
-import { INITIAL_OPERATIONAL_SETTINGS } from "../../settings/domain/operational-settings";
 import type { PlaceSearchRateLimiter } from "./place-search-rate-limiter";
 
 // The place use cases (S1-S3): the search answers at most five suggestions for the text the owner typed, asks the
@@ -70,6 +70,7 @@ function record(overrides: Partial<InvitationRecordWithMusic> = {}): InvitationR
     playlistUrl: null,
     playlistTitle: null,
     playlistCoverUrl: null,
+    itinerary: null,
     rsvpDeadline: null,
     rsvpPartyLimit: 4,
     archivedAt: null,

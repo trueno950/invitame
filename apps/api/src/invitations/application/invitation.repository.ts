@@ -1,4 +1,5 @@
 import type { JsonObject } from "../domain/invitation-content";
+import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
 
@@ -62,9 +63,9 @@ export interface InvitationRecord {
 
 /**
  * The feature data one write stores (F1, F6; S4, S7; S2): an allow-listed zone, an E.164 phone or null, a
- * normalized playlist link or null, and the playlist metadata the provider answered or null. The application
- * validates all of them before the port is asked; the port only persists them, the metadata included, so a write
- * always states every column it owns and no stale value survives a link change.
+ * normalized playlist link or null, the playlist metadata the provider answered or null, and the validated plan of
+ * the day or null. The application validates all of them before the port is asked; the port only persists them, the
+ * metadata included, so a write always states every column it owns and no stale value survives a change.
  */
 export interface InvitationFeatureSettingsWrite {
   timeZone: string;
@@ -74,6 +75,8 @@ export interface InvitationFeatureSettingsWrite {
   playlistTitle: string | null;
   /** The cover URL the provider answered, `https` on an allow-listed image host, or null (S2). */
   playlistCoverUrl: string | null;
+  /** The validated itinerary payload, or null when the invitation has none (F1; L3.1). */
+  itinerary: InvitationItinerary | null;
 }
 
 /** A new DRAFT: the owner from the session, the pinned snapshot, the chosen package, and a generated slug. */
@@ -116,6 +119,11 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
    * the lookup existed, or one whose lookup failed, reads null and renders the link-only card.
    */
   playlistCoverUrl: string | null;
+  /**
+   * The validated plan of the day, in the owner's order, or null when the invitation has none (F1; L3.1). A row
+   * written around the API reads null instead of a value no rule validated, so a guest never draws one.
+   */
+  itinerary: InvitationItinerary | null;
 }
 
 /**
@@ -168,8 +176,9 @@ export interface InvitationRepository {
   ): Promise<InvitationRecordWithMusic | null>;
 
   /**
-   * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone and
-   * playlist link in its one-to-one settings row — in one transaction whose `WHERE` names the owner and both
+   * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone, the
+   * playlist link, and the itinerary in its one-to-one settings row — in one transaction whose `WHERE` names the
+   * owner and both
    * editable statuses, so a published invitation changes live (S7), an archived one is refused with
    * `InvitationNotEditableError` even by a concurrent archive (A2), and another owner's id answers null,
    * changing nothing (A4).

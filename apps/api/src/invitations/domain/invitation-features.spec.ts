@@ -7,6 +7,7 @@ import {
   DEFAULT_INVITATION_TIME_ZONE,
   IMPLEMENTED_INVITATION_FEATURES,
   INVITATION_TIME_ZONES,
+  ITINERARY_FEATURE_KEY,
   isInvitationTimeZone,
   isMusicCoverUrl,
   MUSIC_COVER_HOSTS,
@@ -21,6 +22,7 @@ import {
   publicInvitationFeatures,
   validateInvitationFeatureSettings,
 } from "./invitation-features";
+import type { InvitationItinerary } from "./invitation-itinerary";
 
 // The feature rules of an invitation (F1; S3, S4). The time zone allow-list, the WhatsApp phone normalization,
 // and the feature gating are pure domain rules: the package contributes data keys only, the Spanish labels stay
@@ -28,9 +30,10 @@ import {
 
 /** The stored feature keys of every seeded package (prisma/catalog-seed.ts), by package key. */
 const SEEDED_PACKAGE_FEATURES = {
-  basic: ["COUNTDOWN", "MAP", "WHATSAPP"],
-  premium: ["COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
+  basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
+  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"],
   deluxe: [
+    "ITINERARY",
     "COUNTDOWN",
     "MUSIC",
     "GALLERY",
@@ -45,6 +48,13 @@ const SEEDED_PACKAGE_FEATURES = {
 
 const PHONE = "+525512345678";
 const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
+const ITINERARY: InvitationItinerary = {
+  version: 1,
+  items: [
+    { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
+    { time: "19:30", title: "Recepción y cóctel" },
+  ],
+};
 
 describe("invitation time zones (S4)", () => {
   it("keeps every allow-listed zone inside the database Invitation_timeZone_format check", () => {
@@ -295,46 +305,71 @@ describe("playlist link normalization (S7)", () => {
   });
 });
 
-describe("feature settings validation (S4, S7)", () => {
-  it("accepts an allow-listed zone, a normalized phone, and a playlist link", () => {
+describe("feature settings validation (S4, S7, F1)", () => {
+  it("accepts an allow-listed zone, a normalized phone, a playlist link, and an itinerary", () => {
     assert.deepEqual(
       validateInvitationFeatureSettings({
         timeZone: "America/Tijuana",
         whatsappPhone: "55-1234-5678",
         playlistUrl: PLAYLIST,
+        itinerary: { version: 1, items: [{ time: "17:00", title: " Misa " }] },
       }),
       {
         ok: true,
-        value: { timeZone: "America/Tijuana", whatsappPhone: PHONE, playlistUrl: PLAYLIST },
+        value: {
+          timeZone: "America/Tijuana",
+          whatsappPhone: PHONE,
+          playlistUrl: PLAYLIST,
+          itinerary: { version: 1, items: [{ time: "17:00", title: "Misa" }] },
+        },
       },
     );
   });
 
-  it("accepts a cleared phone and a cleared playlist link", () => {
+  it("accepts a cleared phone, a cleared playlist link, and a cleared itinerary", () => {
     assert.deepEqual(
       validateInvitationFeatureSettings({
         timeZone: "America/Cancun",
         whatsappPhone: null,
         playlistUrl: null,
+        itinerary: null,
       }),
-      { ok: true, value: { timeZone: "America/Cancun", whatsappPhone: null, playlistUrl: null } },
+      {
+        ok: true,
+        value: {
+          timeZone: "America/Cancun",
+          whatsappPhone: null,
+          playlistUrl: null,
+          itinerary: null,
+        },
+      },
     );
     assert.deepEqual(
       validateInvitationFeatureSettings({
         timeZone: "America/Cancun",
         whatsappPhone: "",
         playlistUrl: "  ",
+        itinerary: { version: 1, items: [] },
       }),
-      { ok: true, value: { timeZone: "America/Cancun", whatsappPhone: null, playlistUrl: null } },
+      {
+        ok: true,
+        value: {
+          timeZone: "America/Cancun",
+          whatsappPhone: null,
+          playlistUrl: null,
+          itinerary: null,
+        },
+      },
     );
   });
 
-  it("reports every refused value, the zone, then the phone, then the playlist", () => {
+  it("reports every refused value, the zone, then the phone, then the playlist, then the itinerary", () => {
     assert.deepEqual(
       validateInvitationFeatureSettings({
         timeZone: "Europe/Madrid",
         whatsappPhone: "123",
         playlistUrl: "http://open.spotify.com/x",
+        itinerary: { version: 1, items: [{ time: "26:00", title: "Misa" }] },
       }),
       {
         ok: false,
@@ -342,6 +377,7 @@ describe("feature settings validation (S4, S7)", () => {
           "timeZone must be one of the supported time zones",
           "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
           "playlistUrl must be an https link",
+          "itinerary.items[0].time must be a time between 00:00 and 23:59",
         ],
       },
     );
@@ -353,6 +389,7 @@ describe("feature settings validation (S4, S7)", () => {
         timeZone,
         whatsappPhone: null,
         playlistUrl: null,
+        itinerary: null,
       });
 
       assert.equal(result.ok, false);
@@ -363,13 +400,14 @@ describe("feature settings validation (S4, S7)", () => {
   });
 });
 
-describe("feature gating (S4)", () => {
+describe("feature gating (S4, F1)", () => {
   const gated = (
     includedFeatureKeys: readonly string[],
     whatsappPhone: string | null = PHONE,
     playlistUrl: string | null = PLAYLIST,
     playlistTitle: string | null = null,
     playlistCoverUrl: string | null = null,
+    itinerary: InvitationItinerary | null = ITINERARY,
   ) =>
     availableFeatureKeys({
       includedFeatureKeys,
@@ -377,6 +415,7 @@ describe("feature gating (S4)", () => {
       playlistUrl,
       playlistTitle,
       playlistCoverUrl,
+      itinerary,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     });
@@ -387,19 +426,22 @@ describe("feature gating (S4)", () => {
     playlistUrl: string | null;
     playlistTitle?: string | null;
     playlistCoverUrl?: string | null;
+    itinerary?: InvitationItinerary | null;
     rsvpDeadline?: Date | null;
     rsvpPartyLimit?: number;
   }) =>
     publicInvitationFeatures({
       playlistTitle: null,
       playlistCoverUrl: null,
+      itinerary: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       ...gate,
     });
 
-  it("implements exactly COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, GUEST_LIST, QR_PASS, and GALLERY, with CALENDAR always added", () => {
+  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, GUEST_LIST, QR_PASS, and GALLERY, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
+      "ITINERARY",
       "COUNTDOWN",
       "MAP",
       "RSVP",
@@ -411,7 +453,10 @@ describe("feature gating (S4)", () => {
       "GALLERY",
     ]);
     assert.equal(CALENDAR_FEATURE_KEY, "CALENDAR");
-    // The photo gallery arrived with M8 (S3, S4); a key this batch does not implement never becomes a feature.
+    assert.equal(ITINERARY_FEATURE_KEY, "ITINERARY");
+    // The itinerary arrived with F1 and is granted to every package; a key this batch does not implement never
+    // becomes a feature.
+    assert.deepEqual(gated(["ITINERARY"]), ["ITINERARY", "CALENDAR"]);
     assert.deepEqual(gated(["GALLERY"]), ["GALLERY", "CALENDAR"]);
     assert.deepEqual(gated(["VIDEO"]), ["CALENDAR"]);
     // The guest list and its QR pass are implemented by M6 G2 (S3, S4).
@@ -419,14 +464,16 @@ describe("feature gating (S4)", () => {
   });
 
   it("shows the features each seeded package includes, plus CALENDAR", () => {
-    // Basic grants neither MUSIC nor GIFT_REGISTRY (prisma/catalog-seed.ts, S7).
+    // Basic grants neither MUSIC nor GIFT_REGISTRY, and every seeded package now grants ITINERARY (F1; S7).
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.basic), [
+      "ITINERARY",
       "COUNTDOWN",
       "MAP",
       "WHATSAPP",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.premium), [
+      "ITINERARY",
       "COUNTDOWN",
       "MAP",
       "RSVP",
@@ -436,6 +483,7 @@ describe("feature gating (S4)", () => {
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe), [
+      "ITINERARY",
       "COUNTDOWN",
       "MAP",
       "RSVP",
@@ -449,9 +497,33 @@ describe("feature gating (S4)", () => {
     ]);
   });
 
+  it("drops the itinerary while the invitation has none, whatever the package includes", () => {
+    assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.basic, PHONE, PLAYLIST, null, null, null), [
+      "COUNTDOWN",
+      "MAP",
+      "WHATSAPP",
+      "CALENDAR",
+    ]);
+    assert.deepEqual(
+      gated(SEEDED_PACKAGE_FEATURES.premium, PHONE, PLAYLIST, null, null, {
+        version: 1,
+        items: [],
+      }),
+      ["COUNTDOWN", "MAP", "RSVP", "WHATSAPP", "MUSIC", "GALLERY", "CALENDAR"],
+    );
+    // A package that does not grant the key shows no itinerary even while one is stored.
+    assert.deepEqual(gated(["COUNTDOWN"], PHONE, PLAYLIST), ["COUNTDOWN", "CALENDAR"]);
+  });
+
   it("drops WhatsApp while no phone is stored, whatever the package includes", () => {
-    assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.basic, null), ["COUNTDOWN", "MAP", "CALENDAR"]);
+    assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.basic, null), [
+      "ITINERARY",
+      "COUNTDOWN",
+      "MAP",
+      "CALENDAR",
+    ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.premium, null), [
+      "ITINERARY",
       "COUNTDOWN",
       "MAP",
       "RSVP",
@@ -460,6 +532,7 @@ describe("feature gating (S4)", () => {
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe, null), [
+      "ITINERARY",
       "COUNTDOWN",
       "MAP",
       "RSVP",
@@ -474,6 +547,7 @@ describe("feature gating (S4)", () => {
 
   it("keeps MUSIC out while no playlist link is stored, whatever the package includes", () => {
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.premium, PHONE, null), [
+      "ITINERARY",
       "COUNTDOWN",
       "MAP",
       "RSVP",
@@ -482,6 +556,7 @@ describe("feature gating (S4)", () => {
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe, PHONE, null), [
+      "ITINERARY",
       "COUNTDOWN",
       "MAP",
       "RSVP",
@@ -508,6 +583,7 @@ describe("feature gating (S4)", () => {
         calendar: true,
         whatsapp: null,
         music: null,
+        itinerary: null,
         giftRegistry: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -526,6 +602,38 @@ describe("feature gating (S4)", () => {
     assert.deepEqual(gated([], PHONE), ["CALENDAR"]);
   });
 
+  it("answers the stored itinerary only while the package grants ITINERARY (F1; L3.3)", () => {
+    assert.deepEqual(
+      featuresOf({
+        includedFeatureKeys: ["ITINERARY"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: ITINERARY,
+      }).itinerary,
+      { items: ITINERARY.items },
+    );
+    // A stored itinerary the package does not grant stays private, exactly like the stored phone and link.
+    assert.equal(
+      featuresOf({
+        includedFeatureKeys: ["COUNTDOWN"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: ITINERARY,
+      }).itinerary,
+      null,
+    );
+    // An empty list means no itinerary, so there is nothing to draw.
+    assert.equal(
+      featuresOf({
+        includedFeatureKeys: ["ITINERARY"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: { version: 1, items: [] },
+      }).itinerary,
+      null,
+    );
+  });
+
   it("maps the gated keys to the guest booleans, the phone, the music link, and the gift registry", () => {
     assert.deepEqual(
       featuresOf({
@@ -539,6 +647,7 @@ describe("feature gating (S4)", () => {
         calendar: true,
         whatsapp: null,
         music: null,
+        itinerary: null,
         giftRegistry: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -556,6 +665,7 @@ describe("feature gating (S4)", () => {
         calendar: true,
         whatsapp: { phone: PHONE },
         music: null,
+        itinerary: null,
         giftRegistry: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -573,6 +683,7 @@ describe("feature gating (S4)", () => {
         calendar: true,
         whatsapp: null,
         music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
+        itinerary: null,
         giftRegistry: true,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -717,6 +828,7 @@ describe("the playlist metadata bounds (S2)", () => {
       playlistUrl: PLAYLIST,
       playlistTitle: "  La boda  ",
       playlistCoverUrl: "https://evil.test/cover.jpg",
+      itinerary: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     };
