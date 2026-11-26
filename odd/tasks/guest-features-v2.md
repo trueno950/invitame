@@ -2,7 +2,8 @@
 
 Close the feature gap against the market (Mexican digital invitation services and Joy/Zola/Paperless Post/Greenvelope),
 one feature at a time, in priority order. Each feature gets design directions, the owner's pick, implementation,
-verification, CI, and its own merge to `master` before the next starts.
+verification, CI, and its own merge to `master` before the next starts. Task IDs: `F<n>` in the table is task `T<n>`
+(F3 = T3).
 
 ## Specs
 
@@ -297,6 +298,12 @@ verification, CI, and its own merge to `master` before the next starts.
   hidden-fields helper treats only null as an empty registry; the caller normalizes) is a follow-up. Gates green; API
   2183/2183, web 2127/2127, db-specs 481/481 on a fresh seeded database; browser check of the guest card and «Copiar
   CLABE». Independent verification: no blockers (API 19/19 and web 9/9 probes, baseline parity, live read).
+- L21 — F3 evidence: commits `7d4a447` (API, migration `20261204120000_add_rsvp_companions`) and `d3b136b` (web).
+  Native review `review-fcd9b9f0ff326c49` approved (one reviewer transport failure, relaunched once on the reoffered
+  slot; the CSV column-order finding was refuted). Independent verification: every L6 item met, 70 probes with no
+  failure, baseline differential with no unintended difference; db-specs 484/484 on a fresh seeded database; browser
+  check of a three-person answer (stored companions and dietary notes). Deployment note: the API must deploy before the
+  web, because an older API refuses the new submission fields (`forbidNonWhitelisted`).
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
