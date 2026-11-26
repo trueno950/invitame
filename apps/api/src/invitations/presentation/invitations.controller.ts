@@ -200,11 +200,12 @@ export class InvitationsController {
   }
 
   /**
-   * Replaces the feature data of a DRAFT or a PUBLISHED invitation (F1, F6; S4, S7): the time zone, the WhatsApp
-   * phone, the playlist link, and the itinerary. Creator-owned and refused for an archived invitation exactly like a
-   * content save; `null` or an empty `whatsappPhone` clears the stored phone, `null` or an empty `playlistUrl` clears
-   * the stored link, and `null` or an empty list clears the stored itinerary. `PUT` and not `PATCH`: the whole
-   * feature data is replaced.
+   * Replaces the feature data of a DRAFT or a PUBLISHED invitation (F1, F2, F6; S4, S7): the time zone, the WhatsApp
+   * phone, the playlist link, the itinerary, and the gift registry. Creator-owned and refused for an archived
+   * invitation exactly like a content save; `null` or an empty `whatsappPhone` clears the stored phone, `null` or an
+   * empty `playlistUrl` clears the stored link, `null` or an empty list clears the stored itinerary, and `null` or an
+   * empty registry clears the stored registry. An omitted `itinerary` or `giftRegistry` keeps the stored one. `PUT`
+   * and not `PATCH`: the whole feature data is replaced.
    */
   @Put(":id/features")
   async replaceFeatures(
@@ -221,6 +222,7 @@ export class InvitationsController {
           whatsappPhone: body.whatsappPhone,
           playlistUrl: body.playlistUrl,
           itinerary: body.itinerary,
+          giftRegistry: body.giftRegistry,
         }),
       );
     } catch (error) {

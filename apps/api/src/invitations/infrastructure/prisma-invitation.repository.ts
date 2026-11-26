@@ -18,6 +18,7 @@ import {
   InvitationNotPublishedError,
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
+import { storedGiftRegistry } from "../domain/invitation-gift-registry";
 import { storedItinerary } from "../domain/invitation-itinerary";
 import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
 import {
@@ -50,8 +51,10 @@ const INVITATION_SELECT = {
       playlistUrl: true,
       playlistTitle: true,
       playlistCoverUrl: true,
-      // The stored plan of the day travels with the row too (F1; L3.1); the domain decides whether it reads as one.
+      // The stored plan of the day and gift registry travel with the row too (F1, F2); the domain decides whether
+      // they read as one.
       itinerary: true,
+      giftRegistry: true,
     },
   },
   // The stored points travel with the row too (S2): the public projection decides which of them a guest may see, and
@@ -107,6 +110,8 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     playlistCoverUrl: row.featureSettings?.playlistCoverUrl ?? null,
     // A row written around the API reads as no itinerary instead of a payload no rule validated (F1; L3.1).
     itinerary: storedItinerary(row.featureSettings?.itinerary),
+    // The gift registry follows the same rule (F2; L4.1).
+    giftRegistry: storedGiftRegistry(row.featureSettings?.giftRegistry),
     rsvpDeadline: row.rsvpDeadline,
     rsvpPartyLimit: row.rsvpPartyLimit,
     // The points are keyed by their content field, which is the name the layout's address field carries (S2).
@@ -121,14 +126,12 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
 }
 
 /**
- * The JSONB value of a nullable itinerary column (F1; L3.1): SQL NULL for "no itinerary", which is what a cleared
- * plan is, and the validated payload otherwise. `Prisma.DbNull` is the database's NULL rather than the JSON `null`,
- * so the column never stores a value no reader can tell apart from an empty payload.
+ * The JSONB value of a nullable payload column (F1, F2): SQL NULL for "nothing stored", which is what a cleared
+ * itinerary or gift registry is, and the validated payload otherwise. `Prisma.DbNull` is the database's NULL rather
+ * than the JSON `null`, so the column never stores a value no reader can tell apart from an empty payload.
  */
-function itineraryColumn(
-  itinerary: InvitationRecordWithMusic["itinerary"],
-): Prisma.InputJsonValue | typeof Prisma.DbNull {
-  return itinerary === null ? Prisma.DbNull : (itinerary as unknown as Prisma.InputJsonValue);
+function jsonPayloadColumn<T>(payload: T | null): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  return payload === null ? Prisma.DbNull : (payload as unknown as Prisma.InputJsonValue);
 }
 
 function isPrismaError(error: unknown, code: string): boolean {
@@ -271,7 +274,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
           playlistUrl: features.playlistUrl,
           playlistTitle: features.playlistTitle,
           playlistCoverUrl: features.playlistCoverUrl,
-          itinerary: itineraryColumn(features.itinerary),
+          itinerary: jsonPayloadColumn(features.itinerary),
+          giftRegistry: jsonPayloadColumn(features.giftRegistry),
         },
         update: {
           whatsappPhone: features.whatsappPhone,
@@ -280,8 +284,10 @@ export class PrismaInvitationRepository implements InvitationRepository {
           // never survives a change (S2).
           playlistTitle: features.playlistTitle,
           playlistCoverUrl: features.playlistCoverUrl,
-          // A cleared itinerary is SQL NULL, never the JSON value `null`, so the column reads as absent (F1).
-          itinerary: itineraryColumn(features.itinerary),
+          // A cleared itinerary or gift registry is SQL NULL, never the JSON value `null`, so the column reads as
+          // absent (F1, F2).
+          itinerary: jsonPayloadColumn(features.itinerary),
+          giftRegistry: jsonPayloadColumn(features.giftRegistry),
         },
       });
 

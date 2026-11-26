@@ -1,5 +1,6 @@
 import type { JsonObject } from "../domain/invitation-content";
 import { omittedSectionFields } from "../domain/invitation-content";
+import type { PublicGiftRegistry } from "../domain/invitation-gift-registry";
 import type { PublicInvitationFeatures } from "../domain/invitation-features";
 import type { PlacePoint } from "../domain/invitation-place";
 
@@ -113,4 +114,27 @@ export function projectPublicContent(
  */
 export function publicHiddenFields(schema: unknown, content: JsonObject): string[] {
   return [...omittedSectionFields(schema, content)];
+}
+
+/**
+ * The content field the layouts read an older invitation's gift registry text from (F2; L4.3). The structured registry
+ * replaced it, so it is withheld exactly like an omitted section's field while a card would show the new one.
+ */
+export const LEGACY_GIFT_REGISTRY_FIELD = "giftRegistry";
+
+/**
+ * The hidden fields of a public read, with the legacy gift registry text withheld while the structured registry has
+ * something to show (F2; L4.3). A guest then sees the new card and never both: the value is dropped from the
+ * projection and the layouts draw no block for it. An empty registry changes nothing, so an older invitation keeps its
+ * text; the list keeps its order and never names a field twice.
+ */
+export function legacyGiftRegistryHiddenFields(
+  hiddenFields: readonly string[],
+  giftRegistry: PublicGiftRegistry | null,
+): string[] {
+  if (giftRegistry === null || hiddenFields.includes(LEGACY_GIFT_REGISTRY_FIELD)) {
+    return [...hiddenFields];
+  }
+
+  return [...hiddenFields, LEGACY_GIFT_REGISTRY_FIELD];
 }

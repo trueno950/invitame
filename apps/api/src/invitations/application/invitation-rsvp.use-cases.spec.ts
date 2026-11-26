@@ -113,6 +113,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       playlistTitle: null,
       playlistCoverUrl: null,
       itinerary: null,
+      giftRegistry: null,
       rsvpDeadline: overrides.rsvpDeadline ?? null,
       rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
       places: {},

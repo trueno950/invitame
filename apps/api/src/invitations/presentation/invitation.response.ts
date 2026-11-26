@@ -98,6 +98,18 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
       version: 1;
       items: Array<{ time: string; title: string; place?: string; address?: string }>;
     } | null;
+    /**
+     * The stored gift registry as the validated payload `{ version: 1, stores, transfer?, envelopes, note? }`, or null
+     * when the invitation has none (F2; L4.1). The owner's read answers the version so the editor can send the same
+     * payload back.
+     */
+    giftRegistry: {
+      version: 1;
+      stores: Array<{ name: string; reference?: string; url: string }>;
+      transfer?: { bank: string; holder: string; clabe: string };
+      envelopes: boolean;
+      note?: string;
+    } | null;
   };
   /** The gated feature keys the guest will see, `CALENDAR` included (S4). */
   availableFeatures: string[];
@@ -149,8 +161,22 @@ export interface PublicInvitationResponse {
     itinerary: {
       items: Array<{ time: string; title: string; place?: string; address?: string }>;
     } | null;
-    /** Whether the layouts render their gift registry block (S7). */
-    giftRegistry: boolean;
+    /**
+     * The structured gift registry a guest's card draws, or null when the package does not grant `GIFT_REGISTRY` or
+     * the invitation stores nothing a card would show (F2; L4.3). The transfer and the note are always present, null
+     * when there is none.
+     */
+    giftRegistry: {
+      stores: Array<{ name: string; reference?: string; url: string }>;
+      transfer: { bank: string; holder: string; clabe: string } | null;
+      envelopes: boolean;
+      note: string | null;
+    } | null;
+    /**
+     * Whether the pinned package grants `GIFT_REGISTRY`, which is also what lets each layout draw an older
+     * invitation's content text field (F2; L4.3). It is the gate, never the data.
+     */
+    giftRegistryGranted: boolean;
     /**
      * The gallery photos in position order (M8 S4), an empty array when the package does not grant `GALLERY`; each
      * one is an absolute API URL with the dimensions the layout reserves and the creator's alt text.
@@ -228,6 +254,30 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
                 ...(moment.address === undefined ? {} : { address: moment.address }),
               })),
             },
+      giftRegistry:
+        stored.featureSettings.giftRegistry === null
+          ? null
+          : {
+              version: 1,
+              stores: stored.featureSettings.giftRegistry.stores.map((store) => ({
+                name: store.name,
+                ...(store.reference === undefined ? {} : { reference: store.reference }),
+                url: store.url,
+              })),
+              ...(stored.featureSettings.giftRegistry.transfer === undefined
+                ? {}
+                : {
+                    transfer: {
+                      bank: stored.featureSettings.giftRegistry.transfer.bank,
+                      holder: stored.featureSettings.giftRegistry.transfer.holder,
+                      clabe: stored.featureSettings.giftRegistry.transfer.clabe,
+                    },
+                  }),
+              envelopes: stored.featureSettings.giftRegistry.envelopes,
+              ...(stored.featureSettings.giftRegistry.note === undefined
+                ? {}
+                : { note: stored.featureSettings.giftRegistry.note }),
+            },
     },
     availableFeatures: [...stored.availableFeatures],
     places: { ...stored.places },
@@ -270,7 +320,27 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
                 ...(moment.address === undefined ? {} : { address: moment.address }),
               })),
             },
-      giftRegistry: stored.features.giftRegistry,
+      giftRegistry:
+        stored.features.giftRegistry === null
+          ? null
+          : {
+              stores: stored.features.giftRegistry.stores.map((store) => ({
+                name: store.name,
+                ...(store.reference === undefined ? {} : { reference: store.reference }),
+                url: store.url,
+              })),
+              transfer:
+                stored.features.giftRegistry.transfer === null
+                  ? null
+                  : {
+                      bank: stored.features.giftRegistry.transfer.bank,
+                      holder: stored.features.giftRegistry.transfer.holder,
+                      clabe: stored.features.giftRegistry.transfer.clabe,
+                    },
+              envelopes: stored.features.giftRegistry.envelopes,
+              note: stored.features.giftRegistry.note,
+            },
+      giftRegistryGranted: stored.features.giftRegistryGranted,
       gallery: stored.features.gallery.map((photo) => ({
         url: photo.url,
         width: photo.width,

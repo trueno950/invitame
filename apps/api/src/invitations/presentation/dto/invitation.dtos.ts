@@ -60,9 +60,9 @@ export class UpdateInvitationContentDto {
 /**
  * `PUT /invitations/:id/features` body (F1, F6; S4, S7). Every field is required and every value is validated by
  * the domain, which owns the time zone allow-list, the phone rules, the playlist host allow-list, and the itinerary
- * payload (F1; L3.1); only their presence is checked here, so a value the domain refuses reaches the client as 400
- * `INVALID_INVITATION_FEATURES` with its issues. `whatsappPhone`, `playlistUrl`, and `itinerary` accept null or an
- * empty value to clear the stored one. Every field is required because this is a `PUT`: the whole feature data is
+ * payload (F1; L3.1) with the gift registry (F2; L4.1); only their presence is checked here, so a value the domain
+ * refuses reaches the client as 400 `INVALID_INVITATION_FEATURES` with its issues. `whatsappPhone`, `playlistUrl`,
+ * `itinerary`, and `giftRegistry` accept null or an empty value to clear the stored one. Every field is required because this is a `PUT`: the whole feature data is
  * replaced, so a body that omits one is refused by the global pipe (400) instead of clearing data the client never
  * mentioned. `PUT` not `PATCH`, and the web client sends it from a server action, like a content save.
  */
@@ -83,6 +83,14 @@ export class UpdateInvitationFeaturesDto {
    */
   @IsOptional()
   itinerary?: unknown;
+
+  /**
+   * Optional like the itinerary, and for the same reason (F2; L4.3): a body that omits it keeps the stored gift
+   * registry, so a client built before F2 can still save the time zone, phone, and playlist without clearing a
+   * registry it never knew about. `null` or a payload that would show nothing clears it.
+   */
+  @IsOptional()
+  giftRegistry?: unknown;
 }
 
 /**

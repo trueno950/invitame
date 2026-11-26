@@ -1,0 +1,26 @@
+-- Additive gift registry (F2; S2.2, S3-S5, L4.1, L4.2): one nullable JSONB column on the existing one-to-one feature
+-- settings table. No existing row is rewritten, no column is dropped, and no default is needed: an invitation that never
+-- saved a registry reads NULL and renders exactly the page it rendered before.
+--
+-- What the column holds: the versioned presentation payload
+-- { "version": 1, "stores": [{ name, reference?, url }], "transfer"?: { bank, holder, clabe }, "envelopes", "note"? }
+-- the API validates (domain/invitation-gift-registry.ts). It is bounded presentation data — at most 8 stores of a name,
+-- an optional reference, and an https link, an optional transfer of three short texts, the envelopes flag, and one
+-- note — and it never carries an image or a provider payload, so it stays inside the rule that JSONB is only for
+-- bounded, versioned, presentation payloads. Prisma cannot express that shape, so the column is the storage and the
+-- domain is the authority on the contents.
+--
+-- Why there is no catalog statement here: `GIFT_REGISTRY` already exists as a feature key and Deluxe already grants it
+-- (F7; L4.2), so this feature adds no key and changes no package link. A database whose administrator removed that link
+-- on purpose keeps its decision, exactly like every other catalog row this migration set never rewrites.
+--
+-- The legacy `Invitation.content.giftRegistry` text field is untouched: existing invitations keep it, and the public
+-- read withholds it while the structured registry has something to show (L4.3).
+--
+-- Rollback / recovery: the change is additive. Recovery is applying the previous migration set, or by hand:
+--   ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "giftRegistry";
+-- Only the stored registries are lost; invitations, their content (the legacy text included), and every other feature
+-- setting are untouched. Run it as its own migration, never by editing this file after it was applied:
+
+-- AlterTable
+ALTER TABLE "InvitationFeatureSettings" ADD COLUMN     "giftRegistry" JSONB;

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { projectPublicContent, publicHiddenFields } from "./invitation-public";
+import {
+  legacyGiftRegistryHiddenFields,
+  projectPublicContent,
+  publicHiddenFields,
+} from "./invitation-public";
 
 // The public projection of a published invitation (A7; S8.2, S8.3). The projection copies only the keys the
 // pinned schema declares, and since T3 it also withholds the values of the fields an omitted section covers:
@@ -115,5 +119,36 @@ describe("projectPublicContent", () => {
       ]),
       { celebrantName: "Ana" },
     );
+  });
+});
+
+describe("legacyGiftRegistryHiddenFields", () => {
+  const REGISTRY = {
+    stores: [{ name: "Liverpool", url: "https://x.mx/1" }],
+    transfer: null,
+    envelopes: false,
+    note: null,
+  };
+
+  it("adds the legacy gift registry field while the structured registry shows (F2; L4.3)", () => {
+    assert.deepEqual(legacyGiftRegistryHiddenFields([], REGISTRY), ["giftRegistry"]);
+    assert.deepEqual(legacyGiftRegistryHiddenFields(["message"], REGISTRY), [
+      "message",
+      "giftRegistry",
+    ]);
+  });
+
+  it("changes nothing for an empty registry or a field it already names", () => {
+    assert.deepEqual(legacyGiftRegistryHiddenFields([], null), []);
+    assert.deepEqual(legacyGiftRegistryHiddenFields(["giftRegistry"], REGISTRY), ["giftRegistry"]);
+    assert.deepEqual(legacyGiftRegistryHiddenFields(["message"], null), ["message"]);
+  });
+
+  it("answers a copy, so the omitted sections of one read never leak into another", () => {
+    const omitted = ["message"];
+    const hidden = legacyGiftRegistryHiddenFields(omitted, REGISTRY);
+
+    hidden.push("otra");
+    assert.deepEqual(omitted, ["message"]);
   });
 });

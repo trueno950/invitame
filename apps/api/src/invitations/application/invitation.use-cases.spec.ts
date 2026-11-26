@@ -122,6 +122,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       playlistTitle: null,
       playlistCoverUrl: null,
       itinerary: null,
+      giftRegistry: null,
       rsvpDeadline: null,
       places: {},
       ...input,
@@ -845,6 +846,7 @@ describe("GetOwnInvitationUseCase", () => {
       playlistTitle: null,
       playlistCoverUrl: null,
       itinerary: null,
+      giftRegistry: null,
     });
     // WhatsApp needs a stored phone, and no catalog feature outside the implemented list appears (S4).
     assert.deepEqual(stored?.availableFeatures, ["COUNTDOWN", "MAP", "CALENDAR"]);
@@ -1009,6 +1011,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       whatsappPhone: "(55) 1234-5678",
       playlistUrl: PLAYLIST,
       itinerary: null,
+      giftRegistry: null,
     });
 
     assert.equal(updated?.timeZone, "America/Tijuana");
@@ -1018,6 +1021,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistTitle: null,
       playlistCoverUrl: null,
       itinerary: null,
+      giftRegistry: null,
     });
     assert.deepEqual(updated?.availableFeatures, [
       "COUNTDOWN",
@@ -1046,6 +1050,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       whatsappPhone: PHONE,
       playlistUrl: null,
       itinerary: null,
+      giftRegistry: null,
     });
 
     for (const cleared of [null, "", "   "]) {
@@ -1056,6 +1061,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         whatsappPhone: cleared,
         playlistUrl: null,
         itinerary: null,
+        giftRegistry: null,
       });
 
       assert.deepEqual(
@@ -1066,6 +1072,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           playlistTitle: null,
           playlistCoverUrl: null,
           itinerary: null,
+          giftRegistry: null,
         },
         String(cleared),
       );
@@ -1085,6 +1092,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       whatsappPhone: null,
       playlistUrl: PLAYLIST,
       itinerary: null,
+      giftRegistry: null,
     });
 
     for (const cleared of [null, "", "   "]) {
@@ -1095,6 +1103,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         whatsappPhone: null,
         playlistUrl: cleared,
         itinerary: null,
+        giftRegistry: null,
       });
 
       assert.equal(updated?.featureSettings.playlistUrl, null, String(cleared));
@@ -1120,6 +1129,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       whatsappPhone: null,
       playlistUrl: null,
       itinerary: ITINERARY,
+      giftRegistry: null,
     });
 
     assert.equal(updated?.featureSettings.itinerary?.version, 1);
@@ -1199,6 +1209,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         whatsappPhone: "12345",
         playlistUrl: null,
         itinerary: null,
+        giftRegistry: null,
       }),
       (error: unknown) => {
         assert.ok(error instanceof InvalidInvitationFeaturesError);
@@ -1227,6 +1238,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           whatsappPhone: null,
           playlistUrl,
           itinerary: null,
+          giftRegistry: null,
         }),
         (error: unknown) => {
           assert.ok(error instanceof InvalidInvitationFeaturesError);
@@ -1254,6 +1266,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         whatsappPhone: PHONE,
         playlistUrl: null,
         itinerary: null,
+        giftRegistry: null,
       }),
       InvitationNotEditableError,
     );
@@ -1275,6 +1288,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         whatsappPhone: PHONE,
         playlistUrl: null,
         itinerary: null,
+        giftRegistry: null,
       }),
       null,
     );
@@ -1287,6 +1301,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           whatsappPhone: PHONE,
           playlistUrl: null,
           itinerary: null,
+          giftRegistry: null,
         }),
         null,
       );
@@ -1306,6 +1321,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       whatsappPhone: PHONE,
       playlistUrl: null,
       itinerary: null,
+      giftRegistry: null,
     });
 
     assert.equal(updated?.status, "PUBLISHED");
@@ -1334,6 +1350,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       whatsappPhone: null,
       playlistUrl,
       itinerary: null,
+      giftRegistry: null,
     });
 
     return { fixture, created, updated, useCase };
@@ -1352,6 +1369,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistTitle: METADATA.title,
       playlistCoverUrl: METADATA.coverUrl,
       itinerary: null,
+      giftRegistry: null,
     });
     // The metadata is stored with the link, so a later or public read answers it without a provider.
     assert.equal(fixture.repository.rows[0]?.playlistTitle, METADATA.title);
@@ -1373,6 +1391,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       whatsappPhone: PHONE,
       playlistUrl: PLAYLIST,
       itinerary: null,
+      giftRegistry: null,
     });
 
     assert.equal(music.asked.length, 1);
@@ -1394,6 +1413,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         whatsappPhone: null,
         playlistUrl: cleared,
         itinerary: null,
+        giftRegistry: null,
       });
 
       assert.equal(music.asked.length, 1, String(cleared));
@@ -1420,6 +1440,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       playlistTitle: null,
       playlistCoverUrl: null,
       itinerary: null,
+      giftRegistry: null,
     });
     assert.equal(fixture.repository.rows[0]?.playlistUrl, PLAYLIST);
   });
@@ -1476,6 +1497,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       whatsappPhone: null,
       playlistUrl: PLAYLIST,
       itinerary: null,
+      giftRegistry: null,
     });
     await publisher(fixture).useCase.execute(fixture.ownerId, created.id);
 
@@ -1887,7 +1909,8 @@ describe("GetPublicInvitationUseCase", () => {
         whatsapp: null,
         music: null,
         itinerary: null,
-        giftRegistry: false,
+        giftRegistry: null,
+        giftRegistryGranted: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -2088,7 +2111,8 @@ describe("GetPublicInvitationUseCase", () => {
           music: null,
           // The fixture stores no itinerary, so the granted key shows nothing (F1; L3.3).
           itinerary: null,
-          giftRegistry: packageKey === "deluxe",
+          giftRegistry: null,
+          giftRegistryGranted: packageKey === "deluxe",
           gallery: [],
           // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form (M6 S4).
           rsvp: {
@@ -2109,6 +2133,7 @@ describe("GetPublicInvitationUseCase", () => {
         whatsappPhone: PHONE,
         playlistUrl: PLAYLIST,
         itinerary: null,
+        giftRegistry: null,
       });
 
       const page = await publicReader(fixture).execute(created.slug);
@@ -2126,7 +2151,8 @@ describe("GetPublicInvitationUseCase", () => {
               ? null
               : { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
           itinerary: null,
-          giftRegistry: packageKey === "deluxe",
+          giftRegistry: null,
+          giftRegistryGranted: packageKey === "deluxe",
           gallery: [],
           rsvp: {
             mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
@@ -2144,6 +2170,7 @@ describe("GetPublicInvitationUseCase", () => {
         "countdown",
         "gallery",
         "giftRegistry",
+        "giftRegistryGranted",
         "itinerary",
         "map",
         "music",
@@ -2164,6 +2191,7 @@ describe("GetPublicInvitationUseCase", () => {
       whatsappPhone: PHONE,
       playlistUrl: PLAYLIST,
       itinerary: null,
+      giftRegistry: null,
     });
 
     const page = await publicReader(fixture).execute(created.slug);
@@ -2176,7 +2204,8 @@ describe("GetPublicInvitationUseCase", () => {
       whatsapp: null,
       music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
       itinerary: null,
-      giftRegistry: false,
+      giftRegistry: null,
+      giftRegistryGranted: false,
       gallery: [],
       rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
     });
@@ -2216,6 +2245,7 @@ describe("GetPublicInvitationUseCase", () => {
       whatsappPhone: null,
       playlistUrl: null,
       itinerary: ITINERARY,
+      giftRegistry: null,
     });
     const page = await publicReader(fixture).execute(created.slug);
 

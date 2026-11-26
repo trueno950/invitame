@@ -19,6 +19,7 @@ import {
   publicInvitationFeatures,
   validateInvitationFeatureSettings,
 } from "../domain/invitation-features";
+import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import {
   archive,
@@ -56,6 +57,7 @@ import type { CatalogVersionRenderData, InvitationCatalog } from "./invitation-c
 import type { InvitationGalleryReader } from "./invitation-gallery";
 import type { InvitationPaymentGate } from "./invitation-payment-gate";
 import {
+  legacyGiftRegistryHiddenFields,
   type PublicInvitation,
   projectPublicContent,
   publicHiddenFields,
@@ -111,6 +113,12 @@ export interface UpdateFeaturesInput {
   playlistUrl: unknown;
   /** The plan of the day as the request carried it; the domain validates it before anything is stored (F1; L3.1). */
   itinerary: unknown;
+  /**
+   * The gift registry as the request carried it, or `undefined` when the body omitted it (F2; L4.1, L4.3): an omitted
+   * value keeps the stored registry, which is what lets a client built before F2 save the other fields without clearing
+   * a registry it never knew about.
+   */
+  giftRegistry?: unknown;
 }
 
 /** A row of "Mis invitaciones": the editor loads one invitation when it opens it. */
@@ -165,6 +173,8 @@ export interface OwnedInvitation extends InvitationSummary {
     playlistCoverUrl: string | null;
     /** The stored plan of the day, or null when the invitation has none (F1; L3.1). */
     itinerary: InvitationItinerary | null;
+    /** The stored gift registry, or null when the invitation has none (F2; L4.1). */
+    giftRegistry: InvitationGiftRegistry | null;
   };
   /**
    * The gated keys of the features this invitation will show, `CALENDAR` included (S4). The package's keys are
@@ -220,6 +230,7 @@ export function toOwnedInvitation(
       playlistTitle: record.playlistTitle,
       playlistCoverUrl: record.playlistCoverUrl,
       itinerary: record.itinerary,
+      giftRegistry: record.giftRegistry,
     },
     availableFeatures: availableFeatureKeys({
       includedFeatureKeys,
@@ -228,6 +239,7 @@ export function toOwnedInvitation(
       playlistTitle: record.playlistTitle,
       playlistCoverUrl: record.playlistCoverUrl,
       itinerary: record.itinerary,
+      giftRegistry: record.giftRegistry,
       rsvpDeadline: record.rsvpDeadline,
       rsvpPartyLimit: record.rsvpPartyLimit,
     }),
@@ -497,6 +509,9 @@ export class UpdateInvitationFeaturesUseCase {
       playlistUrl: input.playlistUrl,
       // An omitted itinerary keeps the stored one (review R3-001): only `null` or an empty list clears it.
       itinerary: input.itinerary === undefined ? stored.itinerary : input.itinerary,
+      // The gift registry follows the same rule (F2; L4.3): an omitted value keeps the stored registry, and only
+      // `null` or a payload that would show nothing clears it.
+      giftRegistry: input.giftRegistry === undefined ? stored.giftRegistry : input.giftRegistry,
     });
     if (!validation.ok) {
       throw new InvalidInvitationFeaturesError(validation.issues);
@@ -751,9 +766,28 @@ export class GetPublicInvitationUseCase {
       ? await this.gallery.readGallery(published.id)
       : [];
 
+    const features = publicInvitationFeatures(
+      {
+        includedFeatureKeys,
+        whatsappPhone: published.whatsappPhone,
+        playlistUrl: published.playlistUrl,
+        playlistTitle: published.playlistTitle,
+        playlistCoverUrl: published.playlistCoverUrl,
+        itinerary: published.itinerary,
+        giftRegistry: published.giftRegistry,
+        rsvpDeadline: published.rsvpDeadline,
+        rsvpPartyLimit: published.rsvpPartyLimit,
+      },
+      gallery,
+    );
     // The fields the omitted sections cover (S8.3), computed once from the pinned schema and the stored list: the
-    // guest page draws no block for them, and their values are withheld from the projection below.
-    const hiddenFields = publicHiddenFields(render.schema, published.content);
+    // guest page draws no block for them, and their values are withheld from the projection below. A structured gift
+    // registry adds the legacy content field to that list, so a guest never sees the old text and the new card at the
+    // same time (F2; L4.3).
+    const hiddenFields = legacyGiftRegistryHiddenFields(
+      publicHiddenFields(render.schema, published.content),
+      features.giftRegistry,
+    );
     const content = projectPublicContent(render.schema, published.content, hiddenFields);
 
     return {
@@ -766,19 +800,7 @@ export class GetPublicInvitationUseCase {
       hiddenFields,
       publishedAt: published.publishedAt,
       timeZone: published.timeZone,
-      features: publicInvitationFeatures(
-        {
-          includedFeatureKeys,
-          whatsappPhone: published.whatsappPhone,
-          playlistUrl: published.playlistUrl,
-          playlistTitle: published.playlistTitle,
-          playlistCoverUrl: published.playlistCoverUrl,
-          itinerary: published.itinerary,
-          rsvpDeadline: published.rsvpDeadline,
-          rsvpPartyLimit: published.rsvpPartyLimit,
-        },
-        gallery,
-      ),
+      features,
       // Only a package that grants MAP shows a point, and only while the address text still carries the label it
       // was stored with (S2): the gate and the staleness rule live in the domain, never here. The rule reads the
       // projected content, so an address of an omitted section has no text left to match and its point (label and

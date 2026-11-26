@@ -71,6 +71,7 @@ function record(overrides: Partial<InvitationRecordWithMusic> = {}): InvitationR
     playlistTitle: null,
     playlistCoverUrl: null,
     itinerary: null,
+    giftRegistry: null,
     rsvpDeadline: null,
     rsvpPartyLimit: 4,
     archivedAt: null,

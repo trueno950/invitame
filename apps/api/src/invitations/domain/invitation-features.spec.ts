@@ -22,6 +22,7 @@ import {
   publicInvitationFeatures,
   validateInvitationFeatureSettings,
 } from "./invitation-features";
+import type { GiftRegistryStore, InvitationGiftRegistry } from "./invitation-gift-registry";
 import type { InvitationItinerary } from "./invitation-itinerary";
 
 // The feature rules of an invitation (F1; S3, S4). The time zone allow-list, the WhatsApp phone normalization,
@@ -313,6 +314,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         whatsappPhone: "55-1234-5678",
         playlistUrl: PLAYLIST,
         itinerary: { version: 1, items: [{ time: "17:00", title: " Misa " }] },
+        giftRegistry: null,
       }),
       {
         ok: true,
@@ -321,6 +323,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           whatsappPhone: PHONE,
           playlistUrl: PLAYLIST,
           itinerary: { version: 1, items: [{ time: "17:00", title: "Misa" }] },
+          giftRegistry: null,
         },
       },
     );
@@ -333,6 +336,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         whatsappPhone: null,
         playlistUrl: null,
         itinerary: null,
+        giftRegistry: null,
       }),
       {
         ok: true,
@@ -341,6 +345,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           whatsappPhone: null,
           playlistUrl: null,
           itinerary: null,
+          giftRegistry: null,
         },
       },
     );
@@ -350,6 +355,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         whatsappPhone: "",
         playlistUrl: "  ",
         itinerary: { version: 1, items: [] },
+        giftRegistry: null,
       }),
       {
         ok: true,
@@ -358,6 +364,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           whatsappPhone: null,
           playlistUrl: null,
           itinerary: null,
+          giftRegistry: null,
         },
       },
     );
@@ -370,6 +377,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         whatsappPhone: "123",
         playlistUrl: "http://open.spotify.com/x",
         itinerary: { version: 1, items: [{ time: "26:00", title: "Misa" }] },
+        giftRegistry: null,
       }),
       {
         ok: false,
@@ -390,6 +398,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         whatsappPhone: null,
         playlistUrl: null,
         itinerary: null,
+        giftRegistry: null,
       });
 
       assert.equal(result.ok, false);
@@ -408,6 +417,7 @@ describe("feature gating (S4, F1)", () => {
     playlistTitle: string | null = null,
     playlistCoverUrl: string | null = null,
     itinerary: InvitationItinerary | null = ITINERARY,
+    giftRegistry: InvitationGiftRegistry | null = null,
   ) =>
     availableFeatureKeys({
       includedFeatureKeys,
@@ -416,6 +426,7 @@ describe("feature gating (S4, F1)", () => {
       playlistTitle,
       playlistCoverUrl,
       itinerary,
+      giftRegistry,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     });
@@ -427,6 +438,7 @@ describe("feature gating (S4, F1)", () => {
     playlistTitle?: string | null;
     playlistCoverUrl?: string | null;
     itinerary?: InvitationItinerary | null;
+    giftRegistry?: InvitationGiftRegistry | null;
     rsvpDeadline?: Date | null;
     rsvpPartyLimit?: number;
   }) =>
@@ -434,6 +446,7 @@ describe("feature gating (S4, F1)", () => {
       playlistTitle: null,
       playlistCoverUrl: null,
       itinerary: null,
+      giftRegistry: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       ...gate,
@@ -584,7 +597,8 @@ describe("feature gating (S4, F1)", () => {
         whatsapp: null,
         music: null,
         itinerary: null,
-        giftRegistry: false,
+        giftRegistry: null,
+        giftRegistryGranted: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -609,6 +623,7 @@ describe("feature gating (S4, F1)", () => {
         whatsappPhone: null,
         playlistUrl: null,
         itinerary: ITINERARY,
+        giftRegistry: null,
       }).itinerary,
       { items: ITINERARY.items },
     );
@@ -619,6 +634,7 @@ describe("feature gating (S4, F1)", () => {
         whatsappPhone: null,
         playlistUrl: null,
         itinerary: ITINERARY,
+        giftRegistry: null,
       }).itinerary,
       null,
     );
@@ -629,9 +645,84 @@ describe("feature gating (S4, F1)", () => {
         whatsappPhone: null,
         playlistUrl: null,
         itinerary: { version: 1, items: [] },
+        giftRegistry: null,
       }).itinerary,
       null,
     );
+  });
+
+  it("answers the stored gift registry only while the package grants it and it shows something (F2; L4.1, L4.3)", () => {
+    const store: GiftRegistryStore = { name: "Liverpool", url: "https://x.mx/1" };
+    const registry: InvitationGiftRegistry = {
+      version: 1,
+      stores: [store],
+      transfer: { bank: "BBVA", holder: "Ana", clabe: "012180000123456782" },
+      envelopes: true,
+      note: "Con cariño",
+    };
+
+    // The granted package reads the registry without its version, and the transfer and the note as null when absent.
+    assert.deepEqual(
+      featuresOf({
+        includedFeatureKeys: ["GIFT_REGISTRY"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        giftRegistry: registry,
+      }).giftRegistry,
+      {
+        stores: [store],
+        transfer: { bank: "BBVA", holder: "Ana", clabe: "012180000123456782" },
+        envelopes: true,
+        note: "Con cariño",
+      },
+    );
+    assert.deepEqual(
+      featuresOf({
+        includedFeatureKeys: ["GIFT_REGISTRY"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        giftRegistry: { version: 1, stores: [store], envelopes: false },
+      }).giftRegistry,
+      { stores: [store], transfer: null, envelopes: false, note: null },
+    );
+    // A package without the key keeps a stored registry private, and the grant is still answered for the legacy text.
+    const withheld = featuresOf({
+      includedFeatureKeys: ["COUNTDOWN"],
+      whatsappPhone: null,
+      playlistUrl: null,
+      giftRegistry: registry,
+    });
+    assert.equal(withheld.giftRegistry, null);
+    assert.equal(withheld.giftRegistryGranted, false);
+
+    // An empty registry is no registry, while the grant still lets an older invitation's text field show (L4.3).
+    for (const giftRegistry of [null, { version: 1, stores: [], envelopes: false }] as const) {
+      const features = featuresOf({
+        includedFeatureKeys: ["GIFT_REGISTRY"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        giftRegistry,
+      });
+      assert.equal(features.giftRegistry, null);
+      assert.equal(features.giftRegistryGranted, true);
+    }
+    // A row written around the API is no registry at all.
+    assert.equal(
+      featuresOf({
+        includedFeatureKeys: ["GIFT_REGISTRY"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        giftRegistry: { version: 7, stores: [store], envelopes: false } as never,
+      }).giftRegistry,
+      null,
+    );
+  });
+
+  it("keeps GIFT_REGISTRY in the owner's gated keys while the package grants it, even with no registry (F2; L4.3)", () => {
+    assert.deepEqual(gated(["GIFT_REGISTRY"], PHONE, PLAYLIST, null, null, null, null), [
+      "GIFT_REGISTRY",
+      "CALENDAR",
+    ]);
   });
 
   it("maps the gated keys to the guest booleans, the phone, the music link, and the gift registry", () => {
@@ -648,7 +739,8 @@ describe("feature gating (S4, F1)", () => {
         whatsapp: null,
         music: null,
         itinerary: null,
-        giftRegistry: false,
+        giftRegistry: null,
+        giftRegistryGranted: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -666,7 +758,8 @@ describe("feature gating (S4, F1)", () => {
         whatsapp: { phone: PHONE },
         music: null,
         itinerary: null,
-        giftRegistry: false,
+        giftRegistry: null,
+        giftRegistryGranted: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -684,7 +777,8 @@ describe("feature gating (S4, F1)", () => {
         whatsapp: null,
         music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
         itinerary: null,
-        giftRegistry: true,
+        giftRegistry: null,
+        giftRegistryGranted: true,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -829,6 +923,7 @@ describe("the playlist metadata bounds (S2)", () => {
       playlistTitle: "  La boda  ",
       playlistCoverUrl: "https://evil.test/cover.jpg",
       itinerary: null,
+      giftRegistry: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     };

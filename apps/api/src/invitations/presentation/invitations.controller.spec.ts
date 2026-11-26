@@ -86,6 +86,7 @@ import {
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
 import type { PlaylistMetadata } from "../domain/invitation-features";
+import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
@@ -128,8 +129,24 @@ const QR_PASS_PACKAGE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ITINERARY_PACKAGE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 /** A PUBLISHED version whose schema declares the address fields a place may belong to (S2). */
 const PLACE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+/** A PUBLISHED version whose schema declares the legacy gift registry text field (F2; L4.3). */
+const GIFT_TEXT_VERSION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const PHONE = "+525512345678";
 const PLAYLIST = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M";
+/** A gift registry of one store, one transfer, and the envelopes line (F2; L4.1). */
+const GIFT_REGISTRY: InvitationGiftRegistry = {
+  version: 1,
+  stores: [
+    {
+      name: "Liverpool",
+      reference: "Evento 51234567",
+      url: "https://mesaderegalos.liverpool.com.mx/milistadelivery/51234567",
+    },
+  ],
+  transfer: { bank: "BBVA", holder: "Ana Martínez", clabe: "012180000123456782" },
+  envelopes: true,
+  note: "Si prefieres, también puedes llevarlo el día del evento.",
+};
 const ITINERARY: InvitationItinerary = {
   version: 1,
   items: [
@@ -143,6 +160,15 @@ const SCHEMA = {
   type: "object",
   required: ["title"],
   properties: { title: { type: "string", maxLength: 120 } },
+};
+/** The schema that still declares the gift registry text field an older invitation stores (F2; L4.3). */
+const GIFT_TEXT_SCHEMA = {
+  type: "object",
+  required: ["title"],
+  properties: {
+    title: { type: "string", maxLength: 120 },
+    giftRegistry: { type: "string", maxLength: 200 },
+  },
 };
 /** The address fields a place write validates against: `address` and `ceremonyAddress`, never `receptionPlace`. */
 const ADDRESS_SCHEMA = {
@@ -187,6 +213,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       playlistTitle: null,
       playlistCoverUrl: null,
       itinerary: null,
+      giftRegistry: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       places: {},
@@ -291,6 +318,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     row.playlistTitle = features.playlistTitle;
     row.playlistCoverUrl = features.playlistCoverUrl;
     row.itinerary = features.itinerary;
+    row.giftRegistry = features.giftRegistry;
     return structuredClone(row);
   }
 
@@ -363,6 +391,7 @@ class MemoryInvitationCatalog implements InvitationCatalog {
   >([
     [PUBLISHED_VERSION_ID, { published: true, schema: SCHEMA }],
     [PLACE_VERSION_ID, { published: true, schema: ADDRESS_SCHEMA }],
+    [GIFT_TEXT_VERSION_ID, { published: true, schema: GIFT_TEXT_SCHEMA }],
     [DRAFT_VERSION_ID, { published: false, schema: SCHEMA }],
     [
       UNRENDERABLE_VERSION_ID,
@@ -1197,6 +1226,7 @@ describe("invitations routes: /invitations", () => {
         playlistTitle: null,
         playlistCoverUrl: null,
         itinerary: null,
+        giftRegistry: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -1370,6 +1400,7 @@ describe("invitations routes: /invitations", () => {
         playlistTitle: null,
         playlistCoverUrl: null,
         itinerary: null,
+        giftRegistry: null,
       });
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
     });
@@ -1527,6 +1558,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
 
         itinerary: null,
+        giftRegistry: null,
       });
 
       assert.equal(response.status, 200);
@@ -1539,6 +1571,7 @@ describe("invitations routes: /invitations", () => {
         playlistTitle: null,
         playlistCoverUrl: null,
         itinerary: null,
+        giftRegistry: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -1558,6 +1591,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: null,
 
         itinerary: null,
+        giftRegistry: null,
       });
 
       for (const whatsappPhone of [null, ""]) {
@@ -1567,6 +1601,7 @@ describe("invitations routes: /invitations", () => {
           playlistUrl: null,
 
           itinerary: null,
+          giftRegistry: null,
         });
 
         assert.equal(response.status, 200, String(whatsappPhone));
@@ -1576,6 +1611,7 @@ describe("invitations routes: /invitations", () => {
           playlistTitle: null,
           playlistCoverUrl: null,
           itinerary: null,
+          giftRegistry: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.whatsappPhone, null);
       }
@@ -1596,6 +1632,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
 
         itinerary: null,
+        giftRegistry: null,
       });
 
       assert.equal(response.status, 200);
@@ -1608,6 +1645,7 @@ describe("invitations routes: /invitations", () => {
         playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
 
         itinerary: null,
+        giftRegistry: null,
       });
       assert.deepEqual(musicMetadata.asked, [{ playlistUrl: PLAYLIST, provider: "spotify" }]);
 
@@ -1619,6 +1657,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
 
         itinerary: null,
+        giftRegistry: null,
       });
 
       assert.equal(again.status, 200);
@@ -1630,6 +1669,7 @@ describe("invitations routes: /invitations", () => {
         playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
 
         itinerary: null,
+        giftRegistry: null,
       });
 
       // A later owner read answers the same stored metadata, so the editor and the preview render it too (S2).
@@ -1641,6 +1681,7 @@ describe("invitations routes: /invitations", () => {
         playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
 
         itinerary: null,
+        giftRegistry: null,
       });
     });
 
@@ -1655,6 +1696,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
 
         itinerary: null,
+        giftRegistry: null,
       });
 
       const cleared = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
@@ -1663,6 +1705,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: null,
 
         itinerary: null,
+        giftRegistry: null,
       });
 
       assert.equal(cleared.status, 200);
@@ -1672,6 +1715,7 @@ describe("invitations routes: /invitations", () => {
         playlistTitle: null,
         playlistCoverUrl: null,
         itinerary: null,
+        giftRegistry: null,
       });
       assert.equal(musicMetadata.asked.length, 1);
     });
@@ -1685,6 +1729,7 @@ describe("invitations routes: /invitations", () => {
         whatsappPhone: null,
         playlistUrl: null,
         itinerary: ITINERARY,
+        giftRegistry: null,
       });
 
       assert.equal(response.status, 200);
@@ -1711,6 +1756,7 @@ describe("invitations routes: /invitations", () => {
         whatsappPhone: null,
         playlistUrl: null,
         itinerary: ITINERARY,
+        giftRegistry: null,
       });
 
       const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
@@ -1750,6 +1796,135 @@ describe("invitations routes: /invitations", () => {
       }
     });
 
+    it("stores the gift registry, answers it in the owner read, and withholds the legacy text (F2; L4.1, L4.3)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        giftRegistry: GIFT_REGISTRY,
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), OWNED_KEYS);
+      assert.deepEqual((body.featureSettings as Row).giftRegistry, GIFT_REGISTRY);
+      assert.deepEqual(
+        repository.rows.find((row) => row.id === draft.id)?.giftRegistry,
+        GIFT_REGISTRY,
+      );
+
+      // The owner read answers the same payload the write stored, so the editor can round-trip it.
+      const read = await send("GET", `${PATH}/${draft.id}`, cookie);
+      assert.equal(read.status, 200);
+      assert.deepEqual(
+        ((await read.json()) as { featureSettings: Row }).featureSettings.giftRegistry,
+        GIFT_REGISTRY,
+      );
+    });
+
+    it("keeps the stored gift registry when a body omits it, so an older client never clears it (F2; L4.3)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        giftRegistry: GIFT_REGISTRY,
+      });
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Tijuana",
+        whatsappPhone: null,
+        playlistUrl: null,
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.equal(body.timeZone, "America/Tijuana");
+      assert.deepEqual((body.featureSettings as Row).giftRegistry, GIFT_REGISTRY);
+      assert.deepEqual(
+        repository.rows.find((row) => row.id === draft.id)?.giftRegistry,
+        GIFT_REGISTRY,
+      );
+    });
+
+    it("clears the stored gift registry with null and with an empty payload (F2; L4.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      const body = (giftRegistry: unknown) => ({
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        giftRegistry,
+      });
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, body(GIFT_REGISTRY));
+
+      for (const cleared of [null, { version: 1, stores: [], envelopes: false }]) {
+        const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, body(cleared));
+
+        assert.equal(response.status, 200, JSON.stringify(cleared));
+        assert.equal(
+          ((await response.json()) as { featureSettings: Row }).featureSettings.giftRegistry,
+          null,
+          JSON.stringify(cleared),
+        );
+        assert.equal(repository.rows.find((row) => row.id === draft.id)?.giftRegistry, null);
+      }
+    });
+
+    it("refuses a gift registry the contract does not allow and stores nothing (F2; L4.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      const before = structuredClone(repository.rows.find((row) => row.id === draft.id));
+      const refused = {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        giftRegistry: {
+          version: 1,
+          stores: [{ name: "Liverpool", url: "http://mesaderegalos.liverpool.com.mx/1" }],
+          transfer: { bank: "BBVA", holder: "Ana", clabe: "012180000123456788" },
+          envelopes: "sí",
+        },
+      };
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, refused);
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), {
+        code: "INVALID_INVITATION_FEATURES",
+        issues: [
+          "giftRegistry.stores[0].url must be an https link of at most 500 characters",
+          "giftRegistry.transfer.clabe must be an 18-digit CLABE with a valid control digit",
+          "giftRegistry.envelopes must be true or false",
+        ],
+      });
+      assert.deepEqual(
+        repository.rows.find((row) => row.id === draft.id),
+        before,
+      );
+    });
+
+    it("refuses a gift registry write to an archived invitation (F2; L4.3, A2)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      await send("POST", `${PATH}/${draft.id}/archive`, cookie);
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        giftRegistry: GIFT_REGISTRY,
+      });
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_NOT_EDITABLE" });
+      assert.equal(repository.rows.find((row) => row.id === draft.id)?.giftRegistry, null);
+    });
+
     it("clears the stored playlist link with null and with an empty value (F6; S7)", async () => {
       const { cookie } = await signedInCustomer();
       const draft = await createDraft(cookie);
@@ -1759,6 +1934,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
 
         itinerary: null,
+        giftRegistry: null,
       });
 
       for (const playlistUrl of [null, ""]) {
@@ -1767,6 +1943,7 @@ describe("invitations routes: /invitations", () => {
           whatsappPhone: PHONE,
           playlistUrl,
           itinerary: null,
+          giftRegistry: null,
         });
 
         assert.equal(response.status, 200, String(playlistUrl));
@@ -1776,6 +1953,7 @@ describe("invitations routes: /invitations", () => {
           playlistTitle: null,
           playlistCoverUrl: null,
           itinerary: null,
+          giftRegistry: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.playlistUrl, null);
       }
@@ -1799,6 +1977,7 @@ describe("invitations routes: /invitations", () => {
             whatsappPhone: "12345",
             playlistUrl: null,
             itinerary: null,
+            giftRegistry: null,
           },
           [
             "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
@@ -1811,6 +1990,7 @@ describe("invitations routes: /invitations", () => {
             whatsappPhone: 5512345678,
             playlistUrl: null,
             itinerary: null,
+            giftRegistry: null,
           },
           ["whatsappPhone must be a string or null"],
         ],
@@ -1821,6 +2001,7 @@ describe("invitations routes: /invitations", () => {
             whatsappPhone: null,
             playlistUrl: "http://open.spotify.com/playlist/abc",
             itinerary: null,
+            giftRegistry: null,
           },
           ["playlistUrl must be an https link"],
         ],
@@ -1831,6 +2012,7 @@ describe("invitations routes: /invitations", () => {
             whatsappPhone: null,
             playlistUrl: "https://example.com/playlist/abc",
             itinerary: null,
+            giftRegistry: null,
           },
           ["playlistUrl must link to Spotify, Apple Music, YouTube, Deezer, or SoundCloud"],
         ],
@@ -1841,6 +2023,7 @@ describe("invitations routes: /invitations", () => {
             whatsappPhone: null,
             playlistUrl: 42,
             itinerary: null,
+            giftRegistry: null,
           },
           ["playlistUrl must be a string or null"],
         ],
@@ -1851,6 +2034,7 @@ describe("invitations routes: /invitations", () => {
             whatsappPhone: null,
             playlistUrl: null,
             itinerary: { version: 2, items: [{ time: "17:00", title: "Misa" }] },
+            giftRegistry: null,
           },
           ["itinerary.version must be 1"],
         ],
@@ -1880,6 +2064,7 @@ describe("invitations routes: /invitations", () => {
             whatsappPhone: "12345",
             playlistUrl: "http://x.test",
             itinerary: null,
+            giftRegistry: null,
           },
           [
             "timeZone must be one of the supported time zones",
@@ -1957,6 +2142,7 @@ describe("invitations routes: /invitations", () => {
         playlistUrl: PLAYLIST,
 
         itinerary: null,
+        giftRegistry: null,
       });
 
       assert.equal(response.status, 409);
@@ -1980,6 +2166,7 @@ describe("invitations routes: /invitations", () => {
           playlistUrl: PLAYLIST,
 
           itinerary: null,
+          giftRegistry: null,
         });
 
         assert.equal(response.status, 404, id);
@@ -2493,6 +2680,7 @@ describe("invitations routes: /invitations", () => {
       playlistTitle?: string | null;
       playlistCoverUrl?: string | null;
       itinerary?: InvitationItinerary | null;
+      giftRegistry?: InvitationGiftRegistry | null;
       rsvpDeadline?: Date | null;
       rsvpPartyLimit?: number;
       places?: Record<string, { label: string; lat: number; lng: number }>;
@@ -2516,6 +2704,7 @@ describe("invitations routes: /invitations", () => {
         playlistTitle: overrides.playlistTitle ?? null,
         playlistCoverUrl: overrides.playlistCoverUrl ?? null,
         itinerary: overrides.itinerary ?? null,
+        giftRegistry: overrides.giftRegistry ?? null,
         rsvpDeadline: overrides.rsvpDeadline ?? null,
         rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
         places: overrides.places ?? {},
@@ -2554,7 +2743,8 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         itinerary: null,
-        giftRegistry: false,
+        giftRegistry: null,
+        giftRegistryGranted: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -2722,7 +2912,8 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: null,
         itinerary: null,
-        giftRegistry: false,
+        giftRegistry: null,
+        giftRegistryGranted: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -2754,7 +2945,8 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
         itinerary: null,
-        giftRegistry: true,
+        giftRegistry: null,
+        giftRegistryGranted: true,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -2767,6 +2959,7 @@ describe("invitations routes: /invitations", () => {
         status: "PUBLISHED",
         packageId: ITINERARY_PACKAGE_ID,
         itinerary: ITINERARY,
+        giftRegistry: null,
       });
       const grantedResponse = await send("GET", `${PUBLIC_PATH}/${granted.slug}`);
 
@@ -2781,6 +2974,7 @@ describe("invitations routes: /invitations", () => {
         status: "PUBLISHED",
         packageId: FEATURE_PACKAGE_ID,
         itinerary: ITINERARY,
+        giftRegistry: null,
       });
       const withheldBody = (await (
         await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
@@ -2788,6 +2982,98 @@ describe("invitations routes: /invitations", () => {
 
       assert.equal((withheldBody.features as Row).itinerary, null);
       assert.equal(JSON.stringify(withheldBody).includes("Misa"), false);
+    });
+
+    it("answers the gift registry only for a package that grants it and only while it shows something (F2; L4.3)", async () => {
+      const granted = seed({
+        slug: "invitacion-regal01",
+        status: "PUBLISHED",
+        packageId: MUSIC_PACKAGE_ID,
+        giftRegistry: GIFT_REGISTRY,
+      });
+      const grantedBody = (await (
+        await send("GET", `${PUBLIC_PATH}/${granted.slug}`)
+      ).json()) as Row;
+
+      assert.deepEqual(Object.keys(grantedBody).sort(), PUBLIC_KEYS);
+      // The guest reads the stores in the owner's order, and the payload's version stays in the API.
+      assert.deepEqual((grantedBody.features as Row).giftRegistry, {
+        stores: GIFT_REGISTRY.stores,
+        transfer: GIFT_REGISTRY.transfer,
+        envelopes: true,
+        note: GIFT_REGISTRY.note,
+      });
+      assert.equal((grantedBody.features as Row).giftRegistryGranted, true);
+
+      // A package without the key answers no registry, and the stored one stays private.
+      const withheld = seed({
+        slug: "invitacion-regal02",
+        status: "PUBLISHED",
+        packageId: FEATURE_PACKAGE_ID,
+        giftRegistry: GIFT_REGISTRY,
+      });
+      const withheldBody = (await (
+        await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
+      ).json()) as Row;
+      assert.equal((withheldBody.features as Row).giftRegistry, null);
+      assert.equal(JSON.stringify(withheldBody).includes("Liverpool"), false);
+      assert.equal(JSON.stringify(withheldBody).includes("012180000123456782"), false);
+
+      // An empty registry is no registry, even for a package that grants the key.
+      const empty = seed({
+        slug: "invitacion-regal03",
+        status: "PUBLISHED",
+        packageId: MUSIC_PACKAGE_ID,
+        giftRegistry: { version: 1, stores: [], envelopes: false },
+      });
+      const emptyBody = (await (await send("GET", `${PUBLIC_PATH}/${empty.slug}`)).json()) as Row;
+      assert.equal((emptyBody.features as Row).giftRegistry, null);
+      assert.equal((emptyBody.features as Row).giftRegistryGranted, true);
+    });
+
+    it("withholds the legacy gift registry text while the structured registry shows (F2; L4.3)", async () => {
+      const legacyContent = {
+        title: "Cumpleaños de Ana",
+        giftRegistry: "Mesa de regalos Liverpool · Código 5123 4471",
+      };
+      const legacy = seed({
+        slug: "invitacion-regal04",
+        status: "PUBLISHED",
+        templateVersionId: GIFT_TEXT_VERSION_ID,
+        packageId: MUSIC_PACKAGE_ID,
+        content: legacyContent,
+      });
+      const legacyBody = (await (await send("GET", `${PUBLIC_PATH}/${legacy.slug}`)).json()) as Row;
+
+      // An invitation with only the old text keeps it: nothing changed for it.
+      assert.deepEqual(legacyBody.hiddenFields, []);
+      assert.equal(
+        (legacyBody.content as Row).giftRegistry,
+        "Mesa de regalos Liverpool · Código 5123 4471",
+      );
+
+      const structured = seed({
+        slug: "invitacion-regal05",
+        status: "PUBLISHED",
+        templateVersionId: GIFT_TEXT_VERSION_ID,
+        packageId: MUSIC_PACKAGE_ID,
+        content: legacyContent,
+        giftRegistry: GIFT_REGISTRY,
+      });
+      const structuredResponse = await send("GET", `${PUBLIC_PATH}/${structured.slug}`);
+
+      assert.equal(structuredResponse.status, 200);
+      const structuredBody = (await structuredResponse.json()) as Row;
+      // The guest never sees both: the old field is named as hidden and its value never travels.
+      assert.deepEqual(structuredBody.hiddenFields, ["giftRegistry"]);
+      assert.equal((structuredBody.content as Row).giftRegistry, undefined);
+      assert.equal(JSON.stringify(structuredBody).includes("Código 5123 4471"), false);
+      assert.deepEqual((structuredBody.features as Row).giftRegistry, {
+        stores: GIFT_REGISTRY.stores,
+        transfer: GIFT_REGISTRY.transfer,
+        envelopes: true,
+        note: GIFT_REGISTRY.note,
+      });
     });
 
     it("answers no itinerary when the invitation stores none, whatever the package grants (F1; L3.3)", async () => {
@@ -2882,7 +3168,8 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         itinerary: null,
-        giftRegistry: false,
+        giftRegistry: null,
+        giftRegistryGranted: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -4346,6 +4633,7 @@ describe("invitations routes: /invitations", () => {
         playlistTitle: null,
         playlistCoverUrl: null,
         itinerary: null,
+        giftRegistry: null,
         rsvpDeadline: null,
         rsvpPartyLimit: 4,
         places: {},

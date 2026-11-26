@@ -1,4 +1,5 @@
 import type { JsonObject } from "../domain/invitation-content";
+import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
@@ -77,6 +78,8 @@ export interface InvitationFeatureSettingsWrite {
   playlistCoverUrl: string | null;
   /** The validated itinerary payload, or null when the invitation has none (F1; L3.1). */
   itinerary: InvitationItinerary | null;
+  /** The validated gift registry payload, or null when the invitation has none (F2; L4.1). */
+  giftRegistry: InvitationGiftRegistry | null;
 }
 
 /** A new DRAFT: the owner from the session, the pinned snapshot, the chosen package, and a generated slug. */
@@ -124,6 +127,12 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
    * written around the API reads null instead of a value no rule validated, so a guest never draws one.
    */
   itinerary: InvitationItinerary | null;
+  /**
+   * The validated gift registry, in the owner's order, or null when the invitation has none (F2; L4.1). A row written
+   * around the API reads null instead of a value no rule validated, so the legacy content field it would withhold stays
+   * exactly as it was.
+   */
+  giftRegistry: InvitationGiftRegistry | null;
 }
 
 /**
@@ -177,8 +186,8 @@ export interface InvitationRepository {
 
   /**
    * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone, the
-   * playlist link, and the itinerary in its one-to-one settings row — in one transaction whose `WHERE` names the
-   * owner and both
+   * playlist link, the itinerary, and the gift registry in its one-to-one settings row — in one transaction whose
+   * `WHERE` names the owner and both
    * editable statuses, so a published invitation changes live (S7), an archived one is refused with
    * `InvitationNotEditableError` even by a concurrent archive (A2), and another owner's id answers null,
    * changing nothing (A4).

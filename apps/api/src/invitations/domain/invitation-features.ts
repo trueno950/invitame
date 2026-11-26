@@ -11,8 +11,9 @@
 //   calendar feature, which is not catalog data; WhatsApp also needs a stored phone, music a usable link, and the
 //   itinerary at least one stored moment (F1).
 //
-// The itinerary payload itself is `domain/invitation-itinerary.ts`: this module only decides whether a guest may see
-// it and hands it to the projection, so one reader owns its shape.
+// The itinerary payload itself is `domain/invitation-itinerary.ts` and the gift registry is
+// `domain/invitation-gift-registry.ts`: this module only decides whether a guest may see them and hands them to the
+// projection, so one reader owns each shape.
 //
 // Package and feature names never select a code path (AGENTS.md): the gate compares keys and nothing else, so a
 // new catalog key never makes a feature appear, and an unknown key is simply not implemented.
@@ -29,6 +30,14 @@
  * `America/Ojinaga` matches `America/Matamoros` on the United States daylight-saving rule — but they are
  * distinct places with distinct historical rules, so the owner still picks the one that names their location.
  */
+import {
+  giftRegistryHasContent,
+  type InvitationGiftRegistry,
+  type PublicGiftRegistry,
+  publicGiftRegistry,
+  storedGiftRegistry,
+  validateGiftRegistry,
+} from "./invitation-gift-registry";
 import {
   type InvitationItinerary,
   storedItinerary,
@@ -99,6 +108,13 @@ export const GALLERY_FEATURE_KEY = "GALLERY";
 
 /** The catalog key that grants the plan of the day (F1; S2.1, L3.2); every seeded package includes it. */
 export const ITINERARY_FEATURE_KEY = "ITINERARY";
+
+/**
+ * The catalog key that grants the gift registry (F2; S2.2, L4.2); the existing key, granted by Deluxe. The same key
+ * still lets each layout draw an older invitation's content text field, which is why it is answered apart from the
+ * structured registry (L4.3).
+ */
+export const GIFT_REGISTRY_FEATURE_KEY = "GIFT_REGISTRY";
 
 /**
  * The public shape of one itinerary moment (F1; L3.1, L3.3): the wall clock, the title, and the place and address
@@ -481,6 +497,8 @@ export interface InvitationFeatureSettingsValue {
   readonly playlistUrl: string | null;
   /** The validated plan of the day, or null when the invitation has none (F1; L3.1). */
   readonly itinerary: InvitationItinerary | null;
+  /** The validated gift registry, or null when the invitation has none or it would show nothing (F2; L4.1). */
+  readonly giftRegistry: InvitationGiftRegistry | null;
 }
 
 /** The feature settings a request asked for, validated, or every issue that refuses them. */
@@ -489,16 +507,19 @@ export type InvitationFeatureSettingsValidation =
   | { readonly ok: false; readonly issues: string[] };
 
 /**
- * Validates a feature-settings request (S4, S7, F1): the zone must be an allow-list member, the phone must normalize,
- * the playlist link must be an `https` link on an allow-listed host, and the itinerary must be the versioned payload
- * of L3.1 or absent. Every issue is reported, the zone, then the phone, then the playlist, then the itinerary, and
- * nothing is transformed except the phone, the link, and the moments' texts. A refused request stores nothing.
+ * Validates a feature-settings request (S4, S7, F1, F2): the zone must be an allow-list member, the phone must
+ * normalize, the playlist link must be an `https` link on an allow-listed host, the itinerary must be the versioned
+ * payload of L3.1 or absent, and the gift registry must be the versioned payload of L4.1 or absent. Every issue is
+ * reported, the zone, then the phone, then the playlist, then the itinerary, then the gift registry, and nothing is
+ * transformed except the phone, the link, and the texts of the moments and the registry. A refused request stores
+ * nothing.
  */
 export function validateInvitationFeatureSettings(input: {
   readonly timeZone: unknown;
   readonly whatsappPhone: unknown;
   readonly playlistUrl: unknown;
   readonly itinerary: unknown;
+  readonly giftRegistry: unknown;
 }): InvitationFeatureSettingsValidation {
   const issues: string[] = [];
 
@@ -521,11 +542,17 @@ export function validateInvitationFeatureSettings(input: {
     issues.push(...itinerary.issues);
   }
 
+  const giftRegistry = validateGiftRegistry(input.giftRegistry);
+  if (!giftRegistry.ok) {
+    issues.push(...giftRegistry.issues);
+  }
+
   if (
     issues.length > 0 ||
     !phone.ok ||
     !playlist.ok ||
     !itinerary.ok ||
+    !giftRegistry.ok ||
     !isInvitationTimeZone(input.timeZone)
   ) {
     return { ok: false, issues };
@@ -538,6 +565,7 @@ export function validateInvitationFeatureSettings(input: {
       whatsappPhone: phone.phone,
       playlistUrl: playlist.url,
       itinerary: itinerary.value,
+      giftRegistry: giftRegistry.value,
     },
   };
 }
@@ -554,6 +582,8 @@ export interface InvitationFeatureGate {
   readonly playlistCoverUrl: string | null;
   /** The stored plan of the day, or null when there is none (F1; L3.1). */
   readonly itinerary: InvitationItinerary | null;
+  /** The stored gift registry, or null when there is none (F2; L4.1). */
+  readonly giftRegistry: InvitationGiftRegistry | null;
   /** The owner's RSVP deadline, or null for one that never closes (M6 S4). */
   readonly rsvpDeadline: Date | null;
   /** The owner's party limit, 1 to 10 (M6 S4). */
@@ -565,7 +595,8 @@ export interface InvitationFeatureGate {
  * `IMPLEMENTED_INVITATION_FEATURES`, in that allow-list's order, with `CALENDAR` appended because it is always
  * available and is not catalog data. WhatsApp is dropped while no phone is stored, music while no usable playlist
  * link is stored, and the itinerary while no moment is stored. Duplicates and unknown keys never appear, and the
- * package name plays no part.
+ * package name plays no part. `GIFT_REGISTRY` stays while the package grants it, because the same key also lets each
+ * layout draw an older invitation's content text field (F2; L4.3).
  */
 export function availableFeatureKeys(gate: InvitationFeatureGate): string[] {
   const included = new Set(gate.includedFeatureKeys);
@@ -613,8 +644,18 @@ export interface PublicInvitationFeatures {
    * invitation stores none (F1; L3.3). The payload's version stays in the API: a guest page reads the list.
    */
   readonly itinerary: { readonly items: readonly ItineraryMoment[] } | null;
-  /** Whether the layouts render their gift registry block (S7); the content decides its value, not the API. */
-  readonly giftRegistry: boolean;
+  /**
+   * The structured gift registry a guest's card draws, or null when the package does not grant `GIFT_REGISTRY` or the
+   * invitation stores nothing a card would show (F2; L4.3). The payload's version stays in the API, and the transfer
+   * and note are answered as null so a page always reads the same keys.
+   */
+  readonly giftRegistry: PublicGiftRegistry | null;
+  /**
+   * Whether the pinned package grants `GIFT_REGISTRY`, which is also what lets each layout draw an older invitation's
+   * content text field (F2; L4.3). It is the gate, not the data: a granted package with no stored registry answers
+   * true here and null above, and the legacy text still shows while the API does not withhold it.
+   */
+  readonly giftRegistryGranted: boolean;
   /**
    * The gallery photos the page renders, ordered by position (M8 S4). Empty when the package does not grant
    * `GALLERY`, so the shape is stable and a layout can always read an array; an empty array and an absent gallery
@@ -644,10 +685,11 @@ export interface PublicInvitationFeatures {
  * The guest's view of the gated features (S4, S7, M6 S4): the same intersection `availableFeatureKeys` decides,
  * shaped as the booleans the public read returns. WhatsApp answers the stored phone only while the package
  * includes WHATSAPP, and music answers the stored link only while the package includes MUSIC and the link names an
- * allow-listed service; a stored value the package does not grant stays private. The gift registry is a boolean
- * because the layout, not the API, knows whether the content has a value to show. The RSVP mode is decided from
- * the package's keys directly, together with the deadline, the party limit, and whether the guest-list access
- * pass is granted (M6 G2).
+ * allow-listed service; a stored value the package does not grant stays private. The structured gift registry is
+ * answered only to a package that grants `GIFT_REGISTRY` and only while it would show something (F2; L4.3), together
+ * with the grant itself, which the layouts keep reading for an older invitation's content text field. The RSVP mode is
+ * decided from the package's keys directly, together with the deadline, the party limit, and whether the guest-list
+ * access pass is granted (M6 G2).
  */
 export function publicInvitationFeatures(
   gate: InvitationFeatureGate,
@@ -661,6 +703,8 @@ export function publicInvitationFeatures(
   // A stored value the deployment does not allow is not shown, even if a row was written around the API (S2).
   const title = normalizePlaylistTitle(gate.playlistTitle);
   const coverUrl = isMusicCoverUrl(gate.playlistCoverUrl) ? gate.playlistCoverUrl : null;
+  // A row written around the API reads as no registry, exactly like an itinerary it refuses (F2; L4.1).
+  const registry = storedGiftRegistry(gate.giftRegistry);
 
   return {
     countdown: keys.has("COUNTDOWN"),
@@ -674,7 +718,11 @@ export function publicInvitationFeatures(
         : { url: gate.playlistUrl, provider, title, coverUrl },
     itinerary:
       keys.has(ITINERARY_FEATURE_KEY) && itinerary !== null ? { items: itinerary.items } : null,
-    giftRegistry: keys.has("GIFT_REGISTRY"),
+    giftRegistry:
+      keys.has(GIFT_REGISTRY_FEATURE_KEY) && giftRegistryHasContent(registry)
+        ? publicGiftRegistry(registry)
+        : null,
+    giftRegistryGranted: keys.has(GIFT_REGISTRY_FEATURE_KEY),
     // Only a package that grants GALLERY renders photos; the read passes none otherwise, and this repeats the gate.
     gallery: keys.has(GALLERY_FEATURE_KEY) ? galleryPhotos : [],
     rsvp: {

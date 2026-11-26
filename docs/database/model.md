@@ -57,7 +57,10 @@ additive `20261202120000_add_invitation_itinerary` migration: the nullable `Invi
 column, and — in the same file, because the seed never updates an existing package — the `ITINERARY` catalog feature row
 and its links to the `basic`, `premium`, and `deluxe` packages, both inserted with `ON CONFLICT DO NOTHING` so a second
 run stores nothing. The column is nullable, so no row is rewritten; the catalog rows are new, so no existing package or
-feature is changed and nothing is deleted. Future analytics design is documented separately in
+feature is changed and nothing is deleted. F2 adds the additive `20261203120000_add_invitation_gift_registry`
+migration: the nullable `InvitationFeatureSettings.giftRegistry` JSONB column, and nothing else. It inserts no catalog
+row, because `GIFT_REGISTRY` already exists and Deluxe already grants it; no existing row is rewritten, no package link
+changes, and nothing is deleted. The legacy `Invitation.content.giftRegistry` text field is left untouched. Future analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -79,7 +82,7 @@ feature is changed and nothing is deleted. Future analytics design is documented
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
-| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payload `itinerary` (or `NULL`), and timestamps |
+| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary` and `giftRegistry` (or `NULL`), and timestamps |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
@@ -256,11 +259,28 @@ normalization, the playlist link allow-list, and the gating — lives in
   domain (`apps/api/src/invitations/domain/invitation-itinerary.ts`) is the only authority on the shape and a value
   written around it reads as no itinerary instead of reaching a guest. It belongs to the invitation, so changing the
   template version never loses it, and the gate — the pinned package's `ITINERARY` key — decides whether a guest sees it.
+- `InvitationFeatureSettings.giftRegistry` is JSONB and nullable, and holds one bounded, versioned presentation payload
+  (F2; L4.1): `{ "version": 1, "stores": [{ "name", "reference"?, "url" }], "transfer"?: { "bank", "holder", "clabe" },
+  "envelopes": boolean, "note"?: string }`. `stores` carries 0 to 8 stores in the owner's order, `name` is 1 to 40
+  trimmed characters, `reference` at most 60, and `url` an `https` link of at most 500 characters; the optional
+  `transfer` needs a bank and a holder of 1 to 60 trimmed characters and an eighteen-digit CLABE whose control digit is
+  right; `envelopes` is required; `note` is at most 200 trimmed characters, and a blank optional value is absent. `NULL`
+  is "no registry", and so is a payload that would show nothing — no store, no transfer, and no envelopes line, a note
+  alone included — which the API normalizes to `NULL` before writing. It is presentation data only: no image, no
+  provider payload, no query-critical field, and no rule that a column could enforce, so the API domain
+  (`apps/api/src/invitations/domain/invitation-gift-registry.ts`) is the only authority on the shape and a value written
+  around it reads as no registry instead of reaching a guest. The gate is the existing `GIFT_REGISTRY` key (L4.2).
+- The legacy `Invitation.content.giftRegistry` text field stays for existing invitations (F2; L4.3): the public read
+  withholds it — and names it in `hiddenFields` — while the structured registry has a store, a transfer, or the
+  envelopes line, so a guest never sees the old text and the new card at the same time. An invitation with only the old
+  text keeps rendering it, gated by the same `GIFT_REGISTRY` key, exactly as before.
 - The feature data belongs to the invitation, not to its template: the template version stays pinned and changing the
   template never touches these rows. A stored phone or link is kept even when the pinned package does not include
   `WHATSAPP` or `MUSIC`; the gate, not the write, decides whether a guest sees those buttons, so an upgrade later does
-  not require the value again. The gift registry is different: its text is an ordinary `Invitation.content` field, and
-  only the gate (`GIFT_REGISTRY`) decides whether a layout renders it (F7).
+  not require the value again. The gift registry keeps both shapes for the same reason: its structured payload is
+  feature data gated by `GIFT_REGISTRY` (F2), and an older invitation's text lives in the ordinary
+  `Invitation.content.giftRegistry` field, which the same gate decides whether a layout renders (F7) and the public read
+  withholds while the structured registry shows.
 - Rollback / recovery of `20261113164740_add_invitation_features`: the change is additive, so recovery is either
   redeploying the previous migration set or dropping the two objects by hand —
   `DROP TABLE "InvitationFeatureSettings";` then `ALTER TABLE "Invitation" DROP COLUMN "timeZone";`. Either way only
@@ -279,6 +299,10 @@ normalization, the playlist link allow-list, and the gating — lives in
   migration set, or by hand deleting the three `PackageFeature` links and the `ITINERARY` `Feature` row by key and then
   `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "itinerary";`. Only the stored itineraries and the catalog key are
   lost; invitations, their content, and every other feature setting stay. Never edit the applied migration file.
+- Rollback / recovery of `20261203120000_add_invitation_gift_registry`: additive, so recovery is redeploying the previous
+  migration set, or by hand `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "giftRegistry";`. Only the stored
+  registries are lost; invitations, their content (the legacy text included), and every other feature setting stay. It
+  changes no catalog row. Never edit the applied migration file.
 
 ## Invitation places
 
@@ -623,10 +647,12 @@ Prisma. The database suites (`pnpm --filter @invitame/api test:db`) exercise the
 
 ## JSONB boundary
 
-Prisma `Json` maps `TemplateVersion.schema`, `TemplateVersion.configuration`, `Invitation.content`, and
-`InvitationFeatureSettings.itinerary` to PostgreSQL JSONB. The template schema is a validated form contract and
-configuration is a validated presentation contract; an invitation's content is the bounded form data validated against
-its pinned version; the itinerary is a versioned, bounded presentation payload (1 to 15 moments of four short texts). Renderer identity, relationships,
+Prisma `Json` maps `TemplateVersion.schema`, `TemplateVersion.configuration`, `Invitation.content`,
+`InvitationFeatureSettings.itinerary`, and `InvitationFeatureSettings.giftRegistry` to PostgreSQL JSONB. The template
+schema is a validated form contract and configuration is a validated presentation contract; an invitation's content is
+the bounded form data validated against its pinned version; the itinerary is a versioned, bounded presentation payload
+(1 to 15 moments of four short texts); the gift registry is a versioned, bounded presentation payload (0 to 8 stores, an
+optional transfer of three short texts, a flag, and a note). Renderer identity, relationships,
 catalog keys, lifecycle statuses, and fields used for querying remain normalized columns.
 
 ## Analytics data
