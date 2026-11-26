@@ -39,6 +39,7 @@ const SEEDED_CATEGORY_KEYS = [
   "corporate-event",
 ];
 const SEEDED_FEATURE_KEYS = [
+  "ITINERARY",
   "COUNTDOWN",
   "MUSIC",
   "GALLERY",
@@ -50,7 +51,15 @@ const SEEDED_FEATURE_KEYS = [
   "QR_PASS",
 ];
 const SEEDED_PACKAGE_KEYS = ["basic", "premium", "deluxe"];
-const PREMIUM_FEATURE_KEYS = ["COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP"];
+const PREMIUM_FEATURE_KEYS = [
+  "ITINERARY",
+  "COUNTDOWN",
+  "MUSIC",
+  "GALLERY",
+  "MAP",
+  "RSVP",
+  "WHATSAPP",
+];
 
 const ZERO_SUMMARY = {
   categories: 0,
