@@ -540,32 +540,14 @@ describe("every refusal becomes a Spanish result the status line can show (S2, S
     );
   });
 
-  it("shows a content field's own sentence when its payload is refused (T2a; S2)", () => {
-    // A content autosave of a value the pinned schema refuses names the field, and the status line says what to fix
-    // instead of telling the customer to reload a page that is not stale.
-    const parsed = parseContentChanges(FIELDS, { date: "no-es-una-fecha" });
-
-    assert.equal(parsed.ok, false);
-    const refused = invalidPayload(parsed.ok ? [] : parsed.fieldIssues);
-
-    assert.deepEqual(
-      refused.fieldIssues?.map((issue) => issue.field),
-      ["date"],
-    );
-    assert.equal(refused.reason, "invalid");
-    assert.equal(refused.message, AUTOSAVE_COPY.fieldIssue(fieldLabel("date")));
-    assert.notEqual(refused.message, AUTOSAVE_COPY.invalidPayload);
-  });
-
   it("names a payload the server could not read, with the issues it collected", () => {
-    // A payload refused for a named field says what to fix under that field; the generic sentence is for a refusal
-    // that names nothing, because only then is there nothing the owner can do but try again.
+    // The status line keeps the generic sentence for every field but the itinerary, whose moments name what to fix.
     assert.deepEqual(
       invalidPayload([{ field: "date", message: AUTOSAVE_COPY.fieldIssue("Fecha") }]),
       {
         ok: false,
         reason: "invalid",
-        message: AUTOSAVE_COPY.fieldIssue("Fecha"),
+        message: AUTOSAVE_COPY.invalidPayload,
         fieldIssues: [{ field: "date", message: AUTOSAVE_COPY.fieldIssue("Fecha") }],
       },
     );

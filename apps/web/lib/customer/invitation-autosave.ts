@@ -625,15 +625,18 @@ export function refusal(
 }
 
 /**
- * A payload this server could not read, with the fields it refused; nothing of it is sent to the API. A refusal that
- * names a field says what to fix, under that field and in the status line, so the owner never reads «Recarga la página»
- * for a value they can simply correct; the generic sentence is kept for a refusal that names nothing.
+ * A payload this server could not read, with the fields it refused; nothing of it is sent to the API. The status line
+ * keeps the generic sentence, as before, and each field shows its own issue under it. The itinerary is the one
+ * exception (F1; L3.4): a complete moment out of bounds names what to fix in the status line too, because its rows
+ * have no single field the generic sentence could point at.
  */
 export function invalidPayload(fieldIssues: readonly AutosaveFieldIssue[]): AutosaveRefused {
+  const itinerary = fieldIssues.find((issue) => issue.field === "itinerary");
+
   return {
     ok: false,
     reason: "invalid",
-    message: fieldIssues[0]?.message ?? AUTOSAVE_COPY.invalidPayload,
+    message: itinerary?.message ?? AUTOSAVE_COPY.invalidPayload,
     ...(fieldIssues.length === 0 ? {} : { fieldIssues }),
   };
 }
