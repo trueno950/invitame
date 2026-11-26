@@ -27,6 +27,12 @@ import { focusRing } from "../../../../_components/ui.ts";
 /** How often the relative time is recomputed; the line itself is only announced when its text changes. */
 const RELATIVE_TIME_TICK_MS = 1_000;
 
+/**
+ * How long a confirmation stays on screen. A stored state is good news, not something to keep reading: after this the
+ * line folds away until the next change, while «Guardando…» and a failure stay until they are resolved.
+ */
+const SAVED_VISIBLE_MS = 4_000;
+
 const strip =
   "flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-field bg-rose-50 px-4 py-2 text-sm leading-6 text-ink ring-1 ring-rose-100";
 
@@ -70,6 +76,7 @@ export function SaveStatus({ state, onRetry, className }: SaveStatusProps) {
   // waits for the save that follows a moment later.
   const shownAt = state.kind === "saved" ? state.savedAt : undefined;
   const [now, setNow] = useState<number | undefined>(undefined);
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     if (shownAt === undefined) {
@@ -77,14 +84,21 @@ export function SaveStatus({ state, onRetry, className }: SaveStatusProps) {
     }
 
     setNow(Date.now());
+    setSettled(false);
     const ticker = setInterval(() => setNow(Date.now()), RELATIVE_TIME_TICK_MS);
-    return () => clearInterval(ticker);
+    const fold = setTimeout(() => setSettled(true), SAVED_VISIBLE_MS);
+    return () => {
+      clearInterval(ticker);
+      clearTimeout(fold);
+    };
   }, [shownAt]);
 
   // Before the first tick the label is the one of a save that just happened, so a server render and the browser
   // agree on it.
   const savedLabel =
-    shownAt === undefined ? undefined : savedStatusLabel(shownAt, now ?? Date.parse(shownAt));
+    shownAt === undefined || settled
+      ? undefined
+      : savedStatusLabel(shownAt, now ?? Date.parse(shownAt));
   // `dirty` with nothing stored yet and `idle` are not states the line shows, so the region stays mounted (a live
   // region created together with its text may not be announced) but empty and collapsed.
   const visible = state.kind === "saving" || savedLabel !== undefined || state.kind === "error";

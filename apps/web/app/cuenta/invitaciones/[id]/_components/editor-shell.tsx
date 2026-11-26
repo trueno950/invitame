@@ -828,7 +828,8 @@ export function EditorShell({
                   onRetry={autosave.retry}
                   state={autosave.state}
                 />
-                {autosave.state.kind === "idle" ? null : (
+                {/* Only while something is still waiting to be stored, so a settled editor shows no bar at all. */}
+                {!autosave.unsaved ? null : (
                   <button
                     className={saveNowButton}
                     disabled={!autosave.unsaved}
