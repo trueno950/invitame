@@ -825,6 +825,47 @@ describe("validators", () => {
     assert.equal(parseOwnedInvitation({ ...OWNED, missingRequiredFields: [1] }), undefined);
   });
 
+  it("accepts the omitted sections the pinned schema stores, and nothing else of that shape (S8.2)", () => {
+    const content = { celebrantName: "Ana", omittedSections: ["ceremony", "reception"] };
+
+    assert.deepEqual(parseOwnedInvitation({ ...OWNED, content })?.content, content);
+    assert.deepEqual(parseInvitationListItems([{ ...LIST_ITEM, content }])?.[0]?.content, content);
+    // An empty list is a stored answer too: the owner showed every section again.
+    assert.deepEqual(
+      parseOwnedInvitation({ ...OWNED, content: { omittedSections: [] } })?.content,
+      {
+        omittedSections: [],
+      },
+    );
+
+    for (const omittedSections of [
+      "ceremony",
+      ["ceremony", "ceremony"],
+      ["Ceremony"],
+      ["ceremony-1"],
+      [""],
+      [1],
+      [null],
+      { key: "ceremony" },
+      Array.from({ length: 25 }, (_, index) => `key${index}`),
+    ]) {
+      assert.equal(
+        parseOwnedInvitation({ ...OWNED, content: { omittedSections } }),
+        undefined,
+        JSON.stringify(omittedSections),
+      );
+    }
+
+    // Every other property still has to be a primitive: the list is the one exception, and only under its own name.
+    for (const extra of [{ tags: ["uno"] }, { sections: { ceremony: true } }, { empty: null }]) {
+      assert.equal(
+        parseOwnedInvitation({ ...OWNED, content: { celebrantName: "Ana", ...extra } }),
+        undefined,
+        JSON.stringify(extra),
+      );
+    }
+  });
+
   it("keeps the stored feature data, and refuses a zone or a feature key it does not know (S4)", () => {
     const broken = [
       { ...OWNED, timeZone: undefined },

@@ -41,6 +41,13 @@ import {
 import type { FeatureSettingsView } from "../../../../../lib/customer/invitation-features.ts";
 import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rsvp.ts";
 import type { ContentField, ContentSection } from "../../../../../lib/customer/invitations.ts";
+import {
+  OMITTED_SECTIONS_PROPERTY,
+  type OmittableSections,
+  omittedSectionKeys,
+  shownFieldsOf,
+  withSectionShown,
+} from "../../../../../lib/customer/omittable-sections.ts";
 import type {
   PlaceSearchResult,
   PlaceWriteResult,
@@ -91,7 +98,12 @@ import { SharePanel } from "./share-panel.tsx";
  * - every field saves on its own through the T2a queue, and one sticky status line says whether the work is on its
  *   way, stored, or failed and can be retried;
  * - each tab label says what it still owes («Contenido · 4 de 12»), computed from the values in the browser, so the
- *   count falls while the owner types;
+ *   count falls while the owner types, and a section the owner switched off stops owing its fields (T4; S8.3);
+ * - the counters of the whole island (the tab label, «Primeros pasos», the missing-field action, and the «Faltan» list
+ *   of «Publicar») read the fields the invitation still shows, from the pinned schema's own `x-omittable` groups, so
+ *   one decision drives all of them;
+ * - a card's switch saves through the same autosave queue as a field, so the status line, the leave guard, and the
+ *   preview reload treat hiding a section exactly as they treat typing one;
  * - a compact «Primeros pasos» card above the editor names the three steps — the data, the photos, the publication —
  *   with the progress of the same count, and the required fields the draft still leaves empty are links that open the
  *   card of that field and focus it (T1; S2.1, S2.4);
@@ -329,6 +341,12 @@ export interface EditorShellProps {
   /** The tab the page read from its query, which is the tab the editor opens. */
   readonly initialSection: EditorSection;
   readonly sections: readonly ContentSection[];
+  /**
+   * The omittable sections the pinned version declares (T4; S8.1): the switch of a card, the refusal that keeps one
+   * place shown, and the fields that stop counting while their section is off. A version without the extension
+   * declares none, and the tab then behaves exactly as it did.
+   */
+  readonly omittable: OmittableSections;
   readonly content: Record<string, unknown>;
   /** Every stored point of the invitation, which the address fields read to say whether a location is confirmed. */
   readonly places: StoredPlaces;
@@ -380,6 +398,7 @@ export function EditorShell({
   invitationId,
   initialSection,
   sections,
+  omittable,
   content,
   places: storedPlaces,
   featureView,
@@ -479,11 +498,19 @@ export function EditorShell({
   );
 
   const fields = useMemo(() => sections.flatMap((group) => group.fields), [sections]);
-  const missing = missingRequiredNames(fields, values);
+  /**
+   * The fields the invitation still shows: the required fields of an omitted section stop counting, so «N de M listos»,
+   * the first-steps card, the missing-field action, and the «Faltan» list all read the same count (T4; S8.3).
+   */
+  const shownFields = useMemo(
+    () => shownFieldsOf(fields, omittable, omittedSectionKeys(values)),
+    [fields, omittable, values],
+  );
+  const missing = missingRequiredNames(shownFields, values);
   // The three first steps and the progress above them, counted by `missingRequiredNames` itself, so «4 de 12» and the
   // «Contenido» tab never disagree (T1; S2.1).
   const progress = editorProgress({
-    required: fields.filter((field) => field.required).length,
+    required: shownFields.filter((field) => field.required).length,
     missing: missing.length,
     photoCount,
     published: status === "PUBLISHED",
@@ -497,9 +524,12 @@ export function EditorShell({
     setFocus((current) => fieldFocus(name, current));
   };
   const issues = issuesOf(autosave.state);
-  // The cards of «Contenido» are recomputed from the values the browser holds, so a closed card's summary and its
-  // state follow every keystroke (T2).
-  const cards = useMemo(() => contentCards(sections, values), [sections, values]);
+  // The cards of «Contenido» are recomputed from the values the browser holds, so a closed card's summary, its state,
+  // and the switch of its section follow every keystroke (T2; T4).
+  const cards = useMemo(
+    () => contentCards(sections, values, omittable),
+    [sections, values, omittable],
+  );
 
   const tabs: readonly EditorTabView[] = EDITOR_SECTIONS.map((candidate) => {
     const meta =
@@ -513,6 +543,20 @@ export function EditorShell({
   const changeContent = (name: string, next: unknown) => {
     setValues((current) => ({ ...current, [name]: next }));
     autosave.changeContent({ [name]: next });
+  };
+
+  /**
+   * The switch of a card (T4; S3, S8.2): the stored list of omitted section keys travels through the same content
+   * autosave every field uses, so the status line says whether it is on its way, and the values already typed in the
+   * section stay stored — a key in this list never deletes content.
+   */
+  const showSection = (key: string, shown: boolean) => {
+    changeContent(
+      OMITTED_SECTIONS_PROPERTY,
+      withSectionShown(omittedSectionKeys(values), key, shown),
+    );
+    // A switch is one deliberate action, not a keystroke: it is sent at once instead of waiting for the debounce.
+    void autosave.flush();
   };
 
   const changeFeatures = (next: Partial<FeatureValues>) => {
@@ -697,8 +741,10 @@ export function EditorShell({
                 focus={focus}
                 idPrefix="content"
                 issues={issues}
+                omittable={omittable}
                 onChange={changeContent}
                 onFlush={() => void autosave.flush()}
+                onShowSection={showSection}
                 place={place}
                 values={values}
               />

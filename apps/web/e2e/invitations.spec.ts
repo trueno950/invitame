@@ -8,6 +8,7 @@ import {
   openEditorSection,
   signIn,
   test,
+  waitForSaved,
 } from "./support/customer.ts";
 
 /**
@@ -116,8 +117,9 @@ test.describe("customer invitation editor", () => {
     await openContentCard(page, "Fecha y hora");
     await expect(page.getByLabel("Fecha")).toHaveAttribute("type", "date");
     await expect(page.getByLabel("Hora")).toHaveAttribute("type", "time");
-    await openContentCard(page, "Mensaje y foto");
+    await openContentCard(page, "Foto principal");
     await expect(page.getByLabel("Foto principal (URL)")).toHaveAttribute("type", "url");
+    await openContentCard(page, "Mensaje");
     await expect(page.getByLabel("Mensaje")).toHaveJSProperty("tagName", "TEXTAREA");
 
     // The last card has no «Siguiente»: there is no group after it to open (T2).
@@ -128,6 +130,7 @@ test.describe("customer invitation editor", () => {
 
     await openContentCard(page, "Festejado");
     await fillAutosaved(page, "Nombre del festejado", "Ana");
+    await openContentCard(page, "Edad");
     await fillAutosaved(page, "Edad", "7");
 
     // The tab and the first-steps card count what is already filled, computed from the fields as they are typed, and
@@ -137,7 +140,8 @@ test.describe("customer invitation editor", () => {
     expect(later.total).toBe(initial.total);
     expect(later.done).toBeGreaterThan(initial.done);
     await expect(page.getByRole("button", { name: /^Festejado/ })).toContainText("Completo");
-    await expect(page.getByRole("button", { name: /^Festejado/ })).toContainText("Ana · 7");
+    await expect(page.getByRole("button", { name: /^Festejado/ })).toContainText("Ana");
+    await expect(page.getByRole("button", { name: /^Edad/ })).toContainText("7");
 
     // The footer of the open card names the next group and moves the focus to its header (T2).
     await page.getByRole("button", { name: "Siguiente: Fecha y hora" }).click();
@@ -163,6 +167,45 @@ test.describe("customer invitation editor", () => {
     );
     await openContentCard(page, "Festejado");
     await expect(page.getByLabel("Nombre del festejado")).toHaveValue("Ana");
+    await openContentCard(page, "Edad");
+    await expect(page.getByLabel("Edad")).toHaveValue("7");
+
+    // Every section the pinned version declares omittable carries its switch in the card header, and the cards that
+    // hold only the essentials say they are always shown (T4; S3, S7).
+    await expect(page.getByRole("button", { name: /^Fecha y hora/ })).toContainText(
+      EDITOR_COPY.cards.alwaysShown,
+    );
+    const ageSwitch = page.getByRole("switch", { name: /^Mostrar Edad/ });
+    await expect(ageSwitch).toHaveAttribute("aria-checked", "true");
+
+    // Hiding «Edad» folds it, says so, and stops counting its required field, so «N de M listos» moves too (S8.3).
+    const shownBefore = await readProgress(page);
+    await ageSwitch.click();
+    await expect(page.getByRole("switch", { name: /^Oculta Edad/ })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    await expect(page.getByRole("button", { name: /^Edad/ })).toContainText(
+      EDITOR_COPY.cards.hiddenSummary,
+    );
+    await waitForSaved(page);
+    const shownAfter = await readProgress(page);
+    expect(shownAfter.total).toBe(shownBefore.total - 1);
+
+    // The omission is stored and nothing typed is lost: the switch is off after a reload, and the value is still there
+    // once the section is shown again (S3).
+    await page.reload();
+    await expect(page.getByRole("switch", { name: /^Oculta Edad/ })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    await page.getByRole("switch", { name: /^Oculta Edad/ }).click();
+    await expect(page.getByRole("switch", { name: /^Mostrar Edad/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await waitForSaved(page);
+    await openContentCard(page, "Edad");
     await expect(page.getByLabel("Edad")).toHaveValue("7");
 
     // Switching tabs saves nothing and sends nothing: the values typed in another tab are still there (S2).
@@ -178,6 +221,7 @@ test.describe("customer invitation editor", () => {
     await openEditorSection(page, "Contenido");
     await openContentCard(page, "Festejado");
     await expect(page.getByLabel("Nombre del festejado")).toHaveValue("Ana");
+    await openContentCard(page, "Edad");
     await expect(page.getByLabel("Edad")).toHaveValue("7");
 
     // The preview beside the fields is the stored draft, framed at phone width (T2b).

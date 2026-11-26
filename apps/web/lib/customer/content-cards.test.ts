@@ -10,6 +10,7 @@ import {
 } from "./content-cards.ts";
 import { missingRequiredNames } from "./editor-sections.ts";
 import { contentFields, contentSections } from "./invitations.ts";
+import { omittableSectionsOf, omittedSectionKeys, shownFieldsOf } from "./omittable-sections.ts";
 
 // The cards of the editor's «Contenido» tab (S1-S4): the template's own sections become a short stack of cards, each
 // one closed with a one-line summary and a state, one open at a time. Every decision here is pure, so `node --test`
@@ -19,7 +20,7 @@ type Schema = Readonly<Record<string, unknown>>;
 
 /** The cards one schema produces for the values the editor holds. */
 function cardsOf(schema: Schema, values: Record<string, unknown> = {}): ContentCard[] {
-  return contentCards(contentSections(contentFields(schema)), values);
+  return contentCards(contentSections(contentFields(schema)), values, omittableSectionsOf(schema));
 }
 
 function titles(cards: readonly ContentCard[]): string[] {
@@ -346,5 +347,154 @@ describe("contentCards", () => {
     // A field no card of this template declares names no card, so a hand-edited query opens nothing.
     assert.equal(cardHoldingField(cards, "playlistUrl"), undefined);
     assert.equal(cardHoldingField([], "date"), undefined);
+  });
+});
+
+// The switch of each card (T4; S3, S7, S8.1): a version that declares `x-omittable` gives every group its own card
+// with its own switch, because a card is what the owner turns off. The fields no group covers keep their section's
+// card and carry no switch, and the optional ones still gather in the last «Extras opcionales» card.
+
+/** The groups and the sets a baptism version declares, exactly as the catalog writes them. */
+const BAPTISM_SECTIONS = {
+  "x-omittable": [
+    { key: "parents", fields: ["parents"] },
+    { key: "godparents", fields: ["godparents"] },
+    { key: "ceremony", fields: ["ceremonyPlace", "ceremonyAddress", "ceremonyTime"] },
+    { key: "reception", fields: ["receptionPlace", "receptionAddress", "receptionTime"] },
+    { key: "message", fields: ["message"] },
+    { key: "rsvpContact", fields: ["rsvpContact"] },
+  ],
+  "x-require-one": [["ceremony", "reception"]],
+};
+
+const OMITTABLE_BAPTISM: Schema = { ...BAPTISM, ...BAPTISM_SECTIONS };
+
+const OMITTABLE_BIRTHDAY: Schema = {
+  ...BIRTHDAY,
+  "x-omittable": [
+    { key: "age", fields: ["age"] },
+    { key: "mainPhoto", fields: ["mainPhoto"] },
+    { key: "message", fields: ["message"] },
+  ],
+  "x-require-one": [],
+};
+
+describe("contentCards with omittable sections", () => {
+  it("gives every group its own card, in the order of the fields it covers", () => {
+    const cards = cardsOf(OMITTABLE_BAPTISM);
+
+    assert.deepEqual(titles(cards), [
+      "Festejado",
+      "Padres",
+      "Padrinos",
+      "Cuándo",
+      "Ceremonia",
+      "Recepción",
+      "Mensaje",
+      "Confirmar asistencia",
+      "Extras opcionales",
+    ]);
+    assert.deepEqual(
+      cards.map((card) => card.section?.key),
+      [
+        undefined,
+        "parents",
+        "godparents",
+        undefined,
+        "ceremony",
+        "reception",
+        "message",
+        "rsvpContact",
+        undefined,
+      ],
+    );
+    // A card that is exactly one group keeps the group's fields whole, so its switch hides all of them.
+    assert.deepEqual(namesOf(cards[4]?.fields ?? []), [
+      "ceremonyPlace",
+      "ceremonyAddress",
+      "ceremonyTime",
+    ]);
+    assert.deepEqual(rowsOf(cards[4] as ContentCard), [
+      ["ceremonyPlace", "ceremonyAddress"],
+      ["ceremonyTime"],
+    ]);
+    // The fields no group covers stay in their own card, and the optional ones still gather at the end.
+    assert.deepEqual(namesOf(cards[0]?.fields ?? []), ["celebrantName"]);
+    assert.deepEqual(namesOf(cards[8]?.fields ?? []), ["mainPhoto", "giftRegistry"]);
+  });
+
+  it("reads the omitted keys of the content and folds the card they name", () => {
+    const cards = cardsOf(OMITTABLE_BAPTISM, {
+      celebrantName: "Mateo",
+      omittedSections: ["ceremony"],
+    });
+    const ceremony = cards[4] as ContentCard;
+    const reception = cards[5] as ContentCard;
+
+    assert.equal(ceremony.omitted, true);
+    assert.deepEqual(ceremony.state, { kind: "hidden" });
+    assert.equal(ceremony.summary, "No se mostrará en tu invitación");
+    // A section that is still shown reads exactly as it did before the switch existed.
+    assert.equal(reception.omitted, false);
+    assert.equal(reception.state.kind, "missing");
+
+    // The essentials never carry a group, so no stored key can fold them.
+    assert.equal(
+      cardsOf(OMITTABLE_BAPTISM, { omittedSections: ["celebrant", "date"] })[0]?.omitted,
+      false,
+    );
+  });
+
+  it("stops counting the required fields of an omitted card, card by card", () => {
+    const values = { celebrantName: "Mateo", parents: "Daniel y Lucía" };
+    const shown = cardsOf(OMITTABLE_BAPTISM, values);
+    const hidden = cardsOf(OMITTABLE_BAPTISM, {
+      ...values,
+      omittedSections: ["godparents", "ceremony", "message"],
+    });
+    const counted = (cards: readonly ContentCard[]) =>
+      cards.reduce(
+        (total, card) => total + (card.state.kind === "missing" ? card.state.count : 0),
+        0,
+      );
+
+    // The cards' own counts are exactly the count of the fields still shown, which is what the tab label states.
+    assert.equal(counted(shown), missingOf(OMITTABLE_BAPTISM, values));
+    assert.equal(counted(hidden), 5);
+    assert.equal(
+      counted(hidden),
+      missingRequiredNames(
+        shownFieldsOf(
+          contentFields(OMITTABLE_BAPTISM),
+          omittableSectionsOf(OMITTABLE_BAPTISM),
+          omittedSectionKeys({ omittedSections: ["godparents", "ceremony", "message"] }),
+        ),
+        { ...values, omittedSections: ["godparents", "ceremony", "message"] },
+      ).length,
+    );
+    // An omitted card is never the one the tab opens on, because it owes nothing any more.
+    assert.equal(defaultOpenCardKey(hidden), "when");
+  });
+
+  it("keeps a birthday's essentials in their own cards beside the groups of the same section", () => {
+    const cards = cardsOf(OMITTABLE_BIRTHDAY);
+
+    assert.deepEqual(titles(cards), [
+      "Festejado",
+      "Edad",
+      "Fecha y hora",
+      "Lugar y dirección",
+      "Foto principal",
+      "Mensaje",
+    ]);
+    assert.deepEqual(
+      cards.map((card) => card.section?.key),
+      [undefined, "age", undefined, undefined, "mainPhoto", "message"],
+    );
+    // A group card never gathers into «Extras opcionales», because it cannot be switched off from there.
+    assert.equal(
+      cards.some((card) => card.key === "extras"),
+      false,
+    );
   });
 });

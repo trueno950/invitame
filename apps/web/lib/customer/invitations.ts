@@ -19,6 +19,7 @@ import {
   INVITATION_STATUS_LABELS,
   type InvitationErrorCode,
   type InvitationNoticeCode,
+  OMITTABLE_SECTION_LABELS,
   PUBLISH_ISSUE_COPY,
 } from "./copy.ts";
 import { invitationHeading } from "./editor-progress.ts";
@@ -695,6 +696,12 @@ export async function archiveInvitation(api: InvitationsClient, form: FormData):
  * English text ever reaches the customer and nothing is guessed about an issue it does not know.
  */
 const REQUIRED_FIELD_ISSUE = /^content\.([A-Za-z0-9_]+) is required to publish$/;
+/**
+ * The API's own `x-require-one` issue (T4; S8.3): the content omits every section of a set, so the invitation would be
+ * published without the place it needs. The issue names the set's own keys, in the version's order.
+ */
+const REQUIRE_ONE_ISSUE =
+  /^content\.([a-z][A-Za-z0-9]{0,39}(?:,[a-z][A-Za-z0-9]{0,39}){0,7}) needs one shown$/;
 const PACKAGE_FIT_ISSUE = "package does not include the template's required features";
 const VERSION_RETIRED_ISSUE = "template version is no longer published";
 
@@ -702,28 +709,40 @@ const VERSION_RETIRED_ISSUE = "template version is no longer published";
 export const MAX_PUBLISH_ISSUE_CODES = 8;
 export const MAX_PUBLISH_ISSUES_SHOWN = 10;
 
-/** `field:<property>`, or one of the three issues that are not about a field. */
-const ISSUE_CODE = /^(?:field:[A-Za-z0-9_]{1,60}|package|version|other)$/;
+/** `field:<property>`, `sections:<keys>`, or one of the three issues that are not about a field. */
+const ISSUE_CODE =
+  /^(?:field:[A-Za-z0-9_]{1,60}|sections:[a-z][A-Za-z0-9]{0,39}(?:\.[a-z][A-Za-z0-9]{0,39}){0,7}|package|version|other)$/;
 
 const FIELD_CODE_PREFIX = "field:";
+const SECTIONS_CODE_PREFIX = "sections:";
+
+/**
+ * The separator of the keys inside one `sections:` code. It is a dot and not a comma because a comma separates the
+ * codes of the query itself (`invitationIssuesTarget`), and a comma inside one would be read as two codes.
+ */
+const SECTIONS_CODE_SEPARATOR = ".";
 
 /**
  * Each raw issue as a small code the page can put in its query: `field:date` for a missing required field,
- * `package`, `version`, or `other` for anything this module does not recognize, deduplicated and bounded.
+ * `sections:ceremony.reception` for the set that must keep one shown, `package`, `version`, or `other` for anything
+ * this module does not recognize, deduplicated and bounded.
  */
 export function publishIssueCodes(issues: readonly string[]): string[] {
   const codes: string[] = [];
 
   for (const issue of issues) {
     const name = REQUIRED_FIELD_ISSUE.exec(issue)?.[1];
+    const sections = REQUIRE_ONE_ISSUE.exec(issue)?.[1];
     const code =
-      name === undefined
-        ? issue === PACKAGE_FIT_ISSUE
-          ? "package"
-          : issue === VERSION_RETIRED_ISSUE
-            ? "version"
-            : "other"
-        : `${FIELD_CODE_PREFIX}${name}`;
+      name !== undefined
+        ? `${FIELD_CODE_PREFIX}${name}`
+        : sections !== undefined
+          ? `${SECTIONS_CODE_PREFIX}${sections.replaceAll(",", SECTIONS_CODE_SEPARATOR)}`
+          : issue === PACKAGE_FIT_ISSUE
+            ? "package"
+            : issue === VERSION_RETIRED_ISSUE
+              ? "version"
+              : "other";
 
     if (!codes.includes(code)) {
       codes.push(code);
@@ -745,6 +764,18 @@ export function invitationIssuesTarget(path: string, codes: readonly string[]): 
 function issueMessage(code: string): string | undefined {
   if (code.startsWith(FIELD_CODE_PREFIX)) {
     return INVITATION_COPY.missingOneLabel(fieldLabel(code.slice(FIELD_CODE_PREFIX.length)));
+  }
+  if (code.startsWith(SECTIONS_CODE_PREFIX)) {
+    // Every key is named in Spanish before the sentence is shown; one this deployment cannot name falls back to the
+    // generic sentence instead of putting an English key in front of the customer (S8.4).
+    const keys = code.slice(SECTIONS_CODE_PREFIX.length).split(SECTIONS_CODE_SEPARATOR);
+    const names = keys.map((key) =>
+      Object.hasOwn(OMITTABLE_SECTION_LABELS, key) ? OMITTABLE_SECTION_LABELS[key] : undefined,
+    );
+
+    return names.every((name): name is string => name !== undefined)
+      ? PUBLISH_ISSUE_COPY.needsOne(names.join(" o "))
+      : PUBLISH_ISSUE_COPY.other;
   }
   switch (code) {
     case "package":

@@ -99,6 +99,26 @@ function xvTemplate(
   };
 }
 
+/** The same version, extended with the sections a customer may switch off (S8.1, S8.4). */
+function omittableTemplate(): CreatorTemplate {
+  const template = xvTemplate();
+
+  return {
+    ...template,
+    publishedVersion: {
+      ...template.publishedVersion,
+      schema: {
+        ...XV_SCHEMA,
+        "x-omittable": [
+          { key: "ceremony", fields: ["ceremonyPlace", "ceremonyAddress", "ceremonyTime"] },
+          { key: "reception", fields: ["receptionPlace", "receptionAddress", "receptionTime"] },
+        ],
+        "x-require-one": [["ceremony", "reception"]],
+      },
+    },
+  };
+}
+
 function invitation(overrides: Partial<OwnedInvitation> = {}): OwnedInvitation {
   return {
     id: INVITATION_ID,
@@ -190,6 +210,56 @@ describe("invitationPreviewView: what it renders", () => {
     assert.equal(view.content.ceremonyTime, "18:00");
     // An optional field left empty stays empty: the renderer draws nothing for it, exactly as it does for a draft.
     assert.equal("giftRegistry" in view.content, false);
+  });
+
+  it("passes the fields an omitted section covers, so the preview hides it too (S8.3)", () => {
+    const view = rendered({
+      invitation: invitation({
+        content: { ...COMPLETE_CONTENT, omittedSections: ["ceremony"] },
+      }),
+      templates: [omittableTemplate()],
+      media: [],
+      rsvp: undefined,
+      origin: ORIGIN,
+      now: NOW,
+    });
+
+    assert.deepEqual(view.hiddenFields, ["ceremonyPlace", "ceremonyAddress", "ceremonyTime"]);
+  });
+
+  it("renders a draft whose only empty required fields belong to an omitted section (S8.3)", () => {
+    const {
+      ceremonyPlace: _place,
+      ceremonyAddress: _address,
+      ceremonyTime: _time,
+      ...rest
+    } = COMPLETE_CONTENT;
+    const content = { ...rest, omittedSections: ["ceremony"] };
+
+    // The section is not shown, so its required fields are not missing and no sample is stood in for them.
+    const view = rendered({
+      invitation: invitation({ content }),
+      templates: [omittableTemplate()],
+      media: [],
+      rsvp: undefined,
+      origin: ORIGIN,
+      now: NOW,
+    });
+    assert.equal("ceremonyPlace" in view.content, false);
+    assert.equal("ceremonyTime" in view.content, false);
+
+    // Without the omitted keys the same draft gets the template's own sample for those fields instead, exactly as a
+    // draft with an empty section did before the switch existed.
+    const shown = rendered({
+      invitation: invitation({ content: rest }),
+      templates: [omittableTemplate()],
+      media: [],
+      rsvp: undefined,
+      origin: ORIGIN,
+      now: NOW,
+    });
+    assert.equal(shown.content.ceremonyPlace, "Parroquia de San Agustín");
+    assert.deepEqual(shown.hiddenFields, []);
   });
 
   it("renders a stored optional field the owner filled", () => {

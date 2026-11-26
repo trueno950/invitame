@@ -150,6 +150,41 @@ describe("a content autosave merges only the changed fields (S2, S4)", () => {
       "celebrantName",
     );
   });
+
+  it("writes the omitted sections as a list of section keys, never as one text (S8.2)", () => {
+    assert.deepEqual(changesOf(parseContentChanges(FIELDS, { omittedSections: ["ceremony"] })), [
+      { name: "omittedSections", value: ["ceremony"] },
+    ]);
+    // Showing every section again stores the empty list, which replaces the stored one whole instead of keeping it.
+    assert.deepEqual(changesOf(parseContentChanges(FIELDS, { omittedSections: [] })), [
+      { name: "omittedSections", value: [] },
+    ]);
+    assert.deepEqual(
+      mergeContent({ ...STORED, omittedSections: ["ceremony"] }, [
+        { name: "omittedSections", value: [] },
+      ]),
+      { ...STORED, omittedSections: [] },
+    );
+
+    for (const refused of [
+      "ceremony",
+      ["ceremony", "ceremony"],
+      [""],
+      ["Ceremony"],
+      [1],
+      null,
+      { key: "ceremony" },
+      Array.from({ length: 25 }, (_, index) => `key${index}`),
+    ]) {
+      assert.deepEqual(
+        issuesOf(parseContentChanges(FIELDS, { omittedSections: refused })).map(
+          (issue) => issue.field,
+        ),
+        ["omittedSections"],
+        JSON.stringify(refused),
+      );
+    }
+  });
 });
 
 describe("a feature autosave merges only the changed fields (S2, S4)", () => {

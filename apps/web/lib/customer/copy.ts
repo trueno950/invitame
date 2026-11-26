@@ -132,6 +132,24 @@ export const INVITATION_FIELD_LABELS: Readonly<Record<string, string>> = {
   hashtag: "Hashtag (opcional)",
 };
 
+/**
+ * The Spanish name of each omittable section key (T4; S8.4), keyed by the stable English identifier the version's own
+ * `x-omittable` declares, because a key is catalog data and never a label. A key this map does not know falls back to
+ * the first field it covers (`sectionLabelOf`), so a newer version still reads in Spanish.
+ */
+export const OMITTABLE_SECTION_LABELS: Readonly<Record<string, string>> = {
+  age: "Edad",
+  mainPhoto: "Foto principal",
+  message: "Mensaje",
+  parents: "Padres",
+  godparents: "Padrinos",
+  honorSponsors: "Padrinos de honor",
+  ceremony: "Ceremonia",
+  reception: "Recepción",
+  dressCode: "Código de vestimenta",
+  rsvpContact: "Confirmar asistencia",
+};
+
 /** Copy of the three invitation pages under `/cuenta` (M4 T5; S1, S6, S7). */
 export const INVITATION_COPY = {
   pageTitle: "Mis invitaciones | InvitaMe",
@@ -492,6 +510,11 @@ export const PUBLISH_ISSUE_COPY = {
     "El paquete que elegiste ya no incluye lo que necesita esta plantilla. Elige otro paquete.",
   version: "La versión de la plantilla de esta invitación ya no está publicada.",
   other: "Hay un dato que no cumple lo que pide la plantilla. Revísalo y vuelve a intentarlo.",
+  /**
+   * The API's own `content.<keys> needs one shown` issue (T4; S8.3): the invitation omits every section of a set, so
+   * it would be published without the place it needs. The editor refuses the same state in place with this sentence.
+   */
+  needsOne: (names: string) => `Tu invitación necesita al menos una de estas secciones: ${names}.`,
 } as const;
 
 /**
@@ -700,6 +723,9 @@ export const AUTOSAVE_COPY = {
     "Ese dato no forma parte de esta plantilla. Recarga la página para ver los campos que puedes editar.",
   /** One field the API refused, named with the label the editor shows for it. */
   fieldIssue: (label: string) => `Revisa «${label}»: el valor no cumple lo que pide la plantilla.`,
+  /** A payload whose list of hidden sections is not a list of section keys (T4; S8.2). */
+  omittedSections:
+    "No pudimos guardar qué secciones quieres ocultar. Recarga la página y vuelve a intentarlo.",
   /** Why a save whose payload could not be read is refused; nothing of it is sent. */
   invalidPayload: "No pudimos guardar ese dato. Recarga la página y vuelve a intentarlo.",
   /** Why the template's fields could not be checked, so no autosave can name an unknown field. */
@@ -816,6 +842,18 @@ export const EDITOR_COPY = {
     summaryEmpty: "Aún sin datos",
     /** The footer of the open card: the group that comes next, so the reading never stops at a closed card. */
     next: (title: string) => `Siguiente: ${title}`,
+    /**
+     * The switch of an omittable card (T4; S3, S7, S8.1): the two words of its own state, the note it shows while it
+     * is off, and the note of the essentials, which no switch ever hides.
+     */
+    showSection: "Mostrar",
+    hideSection: "Oculta",
+    hiddenSummary: "No se mostrará en tu invitación",
+    hiddenNote:
+      "Esta sección no se mostrará en tu invitación. Tus datos siguen guardados y vuelven a aparecer si la muestras de nuevo.",
+    alwaysShown: "Siempre se muestra",
+    /** Why the last shown section of a set cannot be switched off (S8.3), naming the sections of the set. */
+    needsOne: PUBLISH_ISSUE_COPY.needsOne,
   },
   /**
    * The «Primeros pasos» card and the progress line above the tabs (T1; S2.1, S2.5): three steps the owner reads at a

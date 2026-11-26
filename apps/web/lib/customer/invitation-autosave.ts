@@ -16,6 +16,7 @@ import {
 } from "./copy.ts";
 import { featureIssueCodes } from "./feature-issues.ts";
 import { type ContentField, fieldLabel } from "./invitations.ts";
+import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "./omittable-sections.ts";
 import { rsvpSettingsIssueCodes } from "./rsvp-issue.ts";
 
 /**
@@ -178,6 +179,11 @@ function readContentValue(
  * version declares are accepted, because a key this deployment does not know could only be a stale page or a
  * tampered request; a value of the wrong type, outside the field's own bounds, or in a shape its control could not
  * have written refuses that field. A refused payload is refused whole, so one bad value never stores the rest.
+ *
+ * The one property that is not a field of the schema is `omittedSections` (T4; S8.2): the switch of a card writes the
+ * list of the section keys it hides, never a text, and the whole stored list is replaced so showing a section again
+ * takes its key out. Which keys exist is the pinned schema's own declaration, so the API remains the authority that
+ * refuses one it does not publish.
  */
 export function parseContentChanges(
   fields: readonly ContentField[],
@@ -192,6 +198,17 @@ export function parseContentChanges(
   const declared = new Map(fields.map((field) => [field.name, field]));
 
   for (const [name, value] of Object.entries(payload)) {
+    if (name === OMITTED_SECTIONS_PROPERTY) {
+      const omittedSections = parseOmittedSections(value);
+
+      if (omittedSections === undefined) {
+        issues.push({ field: name, message: AUTOSAVE_COPY.omittedSections });
+        continue;
+      }
+      changes.push({ name, value: omittedSections });
+      continue;
+    }
+
     const field = declared.get(name);
 
     if (field === undefined) {

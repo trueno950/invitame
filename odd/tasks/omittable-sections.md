@@ -53,7 +53,7 @@ required to publish and the design does not draw it. Design first, then implemen
 | --- | --- | --- | --- | --- |
 | T1 | Design directions for the section switch under `design/omittable-sections/`; owner picks one | S3, S6 | inline | |
 | T2 | Contract and API: omitted-sections list in the schemas, renderer contract (essentials vs omittable), readiness that skips omitted sections and enforces at least one place, new versions script | S3, S4 | worker | 9a5ac6e |
-| T3 | Web renderers hide omitted sections (elegant arch, ornamental, baptism classic, baby shower, birthday) | S3, S4 | worker | |
+| T3 | Web renderers hide omitted sections (elegant arch, ornamental, baptism classic, baby shower, birthday) | S3, S4 | worker | b8957fe, 4b4be8c, 78b32ad, fce528a, 70d3e71 |
 | T4 | Editor: the switch on each content card, missing counts that skip omitted sections, essentials locked | S3, S6 | worker | |
 | T5 | Move existing drafts to the new versions (S5), with an independent verification | S5 | worker + verify | |
 | T6 | Browser walkthrough, gates, docs, commit, push, CI | S1-S6 | inline | |
@@ -85,3 +85,13 @@ required to publish and the design does not draw it. Design first, then implemen
   must fix it before the script's apply mode runs; (b) the contract does not refuse a group that covers an essential
   field — T3 adds that guard; (c) the guest page has no schema, so the API's public read sends the computed
   `hiddenFields` (parent decision, T3).
+- L7 — T3 (worker, widened by `lib/invitation-features/event-facts.ts` after it showed the gated features and the
+  `.ics` would vanish): renderer contract `essential` guard; public read `hiddenFields` + withheld values; reader and
+  the 11 layouts hide omitted groups; event facts drop hidden places and start at the first shown one;
+  `lib/renderers/hidden-fields.ts` `hiddenFieldsOf` for the owner preview. API 2106, web 2008 tests. The 2,400-line
+  candidate exceeded the review context budget, so it was split into `b8957fe` (API, native review
+  `review-48b93b13a0896a35` approved; advisory: baptism ceremony is not essential, intended because require-one
+  covers it), `4b4be8c`, `78b32ad`, `fce528a` (web, medium, not due). Independent verification: items 1, 3-6 met;
+  BLOCKER — the public read still sent the hidden address's map point (`confirmedPlaces` read the raw content).
+  Fixed in `70d3e71` with the verifier's probe (RED observed: `[ceremonyAddress, receptionAddress]`), native
+  review `review-e14057f7938843e7` approved. API 2107 tests.

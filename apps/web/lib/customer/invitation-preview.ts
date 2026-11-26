@@ -13,6 +13,7 @@ import {
 import { featureBlockParts, type GatedFeatures } from "../public/invitation-features.ts";
 import { rendererAcceptsProps } from "../public/invitation-render.ts";
 import { publicRsvpBlock } from "../public/invitation-rsvp.ts";
+import { hiddenFieldsOf } from "../renderers/hidden-fields.ts";
 import { sampleContentFor } from "../renderers/samples.ts";
 import type { CreatorTemplate, OwnedInvitation, RsvpSettings } from "../server/invitations-api.ts";
 import type { MediaAsset } from "../server/media-api.ts";
@@ -148,6 +149,7 @@ export function previewContent(
   template: CreatorTemplate,
   content: Record<string, unknown>,
   origin: string | undefined,
+  hiddenFields: readonly string[] = [],
 ): Record<string, unknown> {
   const stored: Record<string, unknown> = {};
 
@@ -168,6 +170,10 @@ export function previewContent(
 
   for (const field of contentFields(template.publishedVersion.schema)) {
     if (!field.required || Object.hasOwn(merged, field.name)) {
+      continue;
+    }
+    // An omitted section is not drawn, so its own required fields are not missing and need no stand-in (S8.3).
+    if (hiddenFields.includes(field.name)) {
       continue;
     }
 
@@ -274,6 +280,8 @@ export type InvitationPreview =
       readonly content: Record<string, unknown>;
       /** The features block's props, or absent when this invitation has nothing to show. */
       readonly features?: InvitationFeatures;
+      /** The content fields the omitted sections cover, so the renderer hides them here too (S8.3). */
+      readonly hiddenFields: readonly string[];
     }
   | { readonly status: "archived" }
   | { readonly status: "unavailable" };
@@ -297,7 +305,10 @@ export function invitationPreviewView(input: InvitationPreviewInput): Invitation
   }
 
   const version = pinned.template.publishedVersion;
-  const content = previewContent(pinned.template, invitation.content, input.origin);
+  // The omitted sections are read from the pinned schema and the stored content, exactly as the API reads them for a
+  // guest, so the preview hides the same sections the published invitation will hide (S8.3).
+  const hiddenFields = hiddenFieldsOf(version.schema, invitation.content);
+  const content = previewContent(pinned.template, invitation.content, input.origin, hiddenFields);
   const rsvp = previewRsvp(invitation, input.rsvp, input.now ?? new Date());
   const parts = featureBlockParts({
     componentKey: version.componentKey,
@@ -312,9 +323,14 @@ export function invitationPreviewView(input: InvitationPreviewInput): Invitation
   });
 
   // The renderer's own parsers decide, exactly as they do on the guest page: a snapshot they refuse is a preview
-  // that cannot be shown, never a page that throws.
+  // that cannot be shown, never a page that throws. The hidden fields travel with it, so a required field of an
+  // omitted section is not a reason to refuse the snapshot.
   if (
-    !rendererAcceptsProps(version.componentKey, { configuration: version.configuration, content })
+    !rendererAcceptsProps(version.componentKey, {
+      configuration: version.configuration,
+      content,
+      hiddenFields,
+    })
   ) {
     return { status: "unavailable" };
   }
@@ -324,6 +340,7 @@ export function invitationPreviewView(input: InvitationPreviewInput): Invitation
     componentKey: version.componentKey,
     configuration: version.configuration,
     content,
+    hiddenFields,
     ...(parts === undefined ? {} : { features: parts.features }),
   };
 }

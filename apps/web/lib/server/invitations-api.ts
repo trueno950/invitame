@@ -1,3 +1,4 @@
+import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "../customer/omittable-sections.ts";
 import { isE164Phone, isInvitationFeatureKey } from "../invitation-features/invitation-features.ts";
 import {
   musicCoverUrlOf,
@@ -418,9 +419,10 @@ export function parseInvitationListItems(value: unknown): InvitationListItem[] |
 }
 
 /**
- * The draft content: a plain object whose values are the primitives the pinned schema validates. An own
- * `__proto__` key stays a plain property (`Object.fromEntries` never assigns a prototype), so a stored
- * key can never change the object the page reads.
+ * The draft content: a plain object whose values are the primitives the pinned schema validates, plus the one list
+ * the omittable-section contract stores — `omittedSections`, read strictly by its own rule (T4; S8.2). An own
+ * `__proto__` key stays a plain property (`Object.fromEntries` never assigns a prototype), so a stored key can never
+ * change the object the page reads, and any other non-primitive value still refuses the whole content.
  */
 function parseContent(value: unknown): Record<string, unknown> | undefined {
   const content = record(value);
@@ -430,7 +432,24 @@ function parseContent(value: unknown): Record<string, unknown> | undefined {
   }
 
   const entries = Object.entries(content);
-  return entries.every(([, item]) => isPrimitive(item)) ? Object.fromEntries(entries) : undefined;
+  const primitives = entries.filter(([name]) => name !== OMITTED_SECTIONS_PROPERTY);
+
+  if (!primitives.every(([, item]) => isPrimitive(item))) {
+    return undefined;
+  }
+
+  const parsed: Record<string, unknown> = Object.fromEntries(primitives);
+
+  // An absent list stays absent: a draft that omits nothing reads exactly as it did before the contract existed.
+  if (Object.hasOwn(content, OMITTED_SECTIONS_PROPERTY)) {
+    const omittedSections = parseOmittedSections(content[OMITTED_SECTIONS_PROPERTY]);
+
+    if (omittedSections === undefined) {
+      return undefined;
+    }
+    parsed[OMITTED_SECTIONS_PROPERTY] = omittedSections;
+  }
+  return parsed;
 }
 
 function parseNames(value: unknown): string[] | undefined {

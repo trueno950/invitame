@@ -17,6 +17,7 @@ import {
   INVITATION_FIELD_LABELS,
   INVITATION_NOTICE_COPY,
   INVITATION_STATUS_LABELS,
+  PUBLISH_ISSUE_COPY,
 } from "./copy.ts";
 import {
   archiveInvitation,
@@ -1303,6 +1304,23 @@ describe("publication issues", () => {
       ["other"],
     );
     assert.deepEqual(publishIssueCodes([]), ["other"]);
+  });
+
+  it("maps the omitted set that must keep one shown to a code and one Spanish sentence (S8.3)", () => {
+    assert.deepEqual(publishIssueCodes(["content.ceremony,reception needs one shown"]), [
+      "sections:ceremony.reception",
+    ]);
+    assert.deepEqual(publishIssueMessages("sections:ceremony.reception"), [
+      "Tu invitación necesita al menos una de estas secciones: Ceremonia o Recepción.",
+    ]);
+    // A set this page cannot name in Spanish still answers a sentence instead of echoing the English keys, and a code
+    // nobody wrote is ignored like every other invented code.
+    assert.deepEqual(publishIssueMessages("sections:ceremony.invented"), [
+      PUBLISH_ISSUE_COPY.other,
+    ]);
+    assert.deepEqual(publishIssueMessages("sections:Ceremony"), []);
+    assert.deepEqual(publishIssueMessages("sections:"), []);
+    assert.deepEqual(publishIssueCodes(["content.ceremony, reception needs one shown"]), ["other"]);
   });
 
   it("bounds the codes it puts in a query", () => {

@@ -40,6 +40,11 @@ import {
   missingFieldsMessage,
   statusLabel,
 } from "../../../../lib/customer/invitations.ts";
+import {
+  NO_OMITTABLE_SECTIONS,
+  OMITTED_SECTIONS_PROPERTY,
+  omittableSectionsOf,
+} from "../../../../lib/customer/omittable-sections.ts";
 import { publishHintFor } from "../../../../lib/customer/publish-copy.ts";
 import { publicInvitationPath } from "../../../../lib/public/invitation-page.ts";
 import type { OwnedInvitation, RsvpRead } from "../../../../lib/server/invitations-api.ts";
@@ -315,6 +320,14 @@ export default async function InvitationDetailPage({
     templates === undefined
       ? undefined
       : invitationFieldsFor(templates, invitation.templateVersionId);
+  /**
+   * The sections this invitation may switch off, read from its own pinned version (T4; S8.1). A version that declares
+   * no extension answers none, and the «Contenido» tab then behaves exactly as it did before.
+   */
+  const omittable =
+    pinned === undefined
+      ? NO_OMITTABLE_SECTIONS
+      : omittableSectionsOf(pinned.template.publishedVersion.schema);
   const archived = invitation.status === "ARCHIVED";
   const published = invitation.status === "PUBLISHED";
   const publicHref = published ? publicInvitationPath(invitation.slug) : null;
@@ -338,7 +351,11 @@ export default async function InvitationDetailPage({
   const editable = pinned !== undefined && !archived;
   const rows =
     pinned === undefined
-      ? Object.keys(invitation.content).map((name) => ({ name, label: fieldLabel(name) }))
+      ? Object.keys(invitation.content)
+          // The stored list of omitted sections is not a data field of any template, so the read-only summary of a
+          // version this deployment lost never shows it as one (T4; S8.2).
+          .filter((name) => name !== OMITTED_SECTIONS_PROPERTY)
+          .map((name) => ({ name, label: fieldLabel(name) }))
       : pinned.fields.map((field) => ({ name: field.name, label: field.label }));
   /** Why the form is missing: the pinned version left the catalog, or the catalog read itself failed. */
   const readOnlyNote =
@@ -390,6 +407,7 @@ export default async function InvitationDetailPage({
             initialSection={section}
             initialField={focusField}
             invitationId={invitation.id}
+            omittable={omittable}
             places={invitation.places}
             detailPath={INVITATION_PATHS.detail(invitation.id)}
             photoCount={photoCount}

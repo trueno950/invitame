@@ -1,6 +1,14 @@
 import { EDITOR_COPY, INVITATION_COPY } from "./copy.ts";
 import { missingRequiredNames } from "./editor-sections.ts";
 import type { ContentField, ContentSection } from "./invitations.ts";
+import {
+  NO_OMITTABLE_SECTIONS,
+  type OmittableSection,
+  type OmittableSections,
+  omittedSectionKeys,
+  sectionLabelOf,
+  sectionsOfFields,
+} from "./omittable-sections.ts";
 
 /**
  * The cards of the editor's «Contenido» tab (T2; S1-S4). A formal baptism declares fourteen fields and twelve of them
@@ -22,6 +30,13 @@ import type { ContentField, ContentSection } from "./invitations.ts";
  *   fields says «Opcional · k de n» and never stops a publication;
  * - optional fields whose whole section is optional gather in one last «Extras opcionales» card, while an optional
  *   field that has a required sibling stays beside it, where the owner expects to find it.
+ *
+ * The switch of a card (T4; S3, S7, S8.1) is read from the pinned version's own `x-omittable` groups, never from a
+ * template name: a card that is exactly one group carries that group's switch in its header, and a section that holds
+ * several groups becomes one card per group plus, when it still holds fields no group covers, the card of those
+ * fields. Regrouping instead of nesting the switches inside one card is what keeps the approved design's promise —
+ * one switch per card, in its header — true for every group of every line, and it keeps a card's switch and its
+ * fields in the same place. The fields no group covers are the essentials: their card carries no switch and says so.
  *
  * The summary is the filled values of the card joined in one line, and nothing else: a missing value is left out
  * instead of being replaced with a label, and the row is cut by the UI's own truncation, not by an invented ellipsis
@@ -68,22 +83,33 @@ export interface ContentCardRow {
   readonly fields: readonly ContentField[];
 }
 
-/** What a closed card says about itself. The optional one never counts as something that stops a publication. */
+/**
+ * What a closed card says about itself. The optional one never counts as something that stops a publication, and the
+ * hidden one owes nothing at all: a section the owner switched off stops counting as missing (S8.3).
+ */
 export type ContentCardState =
   | { readonly kind: "complete" }
   | { readonly kind: "missing"; readonly count: number; readonly names: readonly string[] }
-  | { readonly kind: "optional"; readonly filled: number; readonly total: number };
+  | { readonly kind: "optional"; readonly filled: number; readonly total: number }
+  | { readonly kind: "hidden" };
 
 /** One card of the «Contenido» tab: what it is called, what it holds, and what it still owes. */
 export interface ContentCard {
-  /** The section's own key, or `extras` for the last card. */
+  /** The section's own key, `group-<key>` for a card that is one omittable section, or `extras` for the last card. */
   readonly key: string;
   readonly title: string;
   readonly fields: readonly ContentField[];
   readonly rows: readonly ContentCardRow[];
   readonly summary: string;
   readonly state: ContentCardState;
+  /** The omittable section this card switches, read from the pinned schema; absent for the essentials (S8.1). */
+  readonly section: OmittableSection | undefined;
+  /** Whether the owner switched this card's section off, which folds its inputs and stops counting its fields. */
+  readonly omitted: boolean;
 }
+
+/** The key prefix of a card that is one omittable section, so it never collides with a section's own key. */
+export const GROUP_CARD_PREFIX = "group-";
 
 interface FieldRole {
   readonly role: RowRole;
@@ -244,11 +270,10 @@ function holdsRole(fields: readonly ContentField[], role: RowRole): boolean {
 }
 
 /** The card's title: the section's own name unless one of the copy's own reads better for what it holds. */
-function cardTitle(section: ContentSection): string {
-  const fields = section.fields;
+function cardTitle(key: ContentSection["key"], fields: readonly ContentField[]): string {
   const family = FAMILY_FIELDS.some((name) => holds(fields, name));
 
-  switch (section.key) {
+  switch (key) {
     case "celebrant":
       if (COUPLE_FIELDS.some((name) => holds(fields, name))) {
         return family ? EDITOR_COPY.cards.coupleFamily : EDITOR_COPY.cards.couple;
@@ -316,6 +341,9 @@ export function cardStateText(state: ContentCardState): string {
         : EDITOR_COPY.cards.stateMissing(state.count);
     case "optional":
       return EDITOR_COPY.cards.stateOptional(state.filled, state.total);
+    case "hidden":
+      // The switch beside it already says «Oculta», and the card's own line says it will not be shown.
+      return EDITOR_COPY.cards.hideSection;
   }
 }
 
@@ -333,6 +361,28 @@ function cardOf(
     rows,
     summary: summaryOf(fields, values),
     state: stateOf(fields, values),
+    section: undefined,
+    omitted: false,
+  };
+}
+
+/** The card of one omittable section: its own switch, its own fields, and its own reading while it is off. */
+function sectionCardOf(
+  section: OmittableSection,
+  fields: readonly ContentField[],
+  omitted: boolean,
+  values: Readonly<Record<string, unknown>>,
+): ContentCard {
+  return {
+    key: `${GROUP_CARD_PREFIX}${section.key}`,
+    title: sectionLabelOf(section),
+    fields,
+    rows: rowsOf(fields),
+    // An off card says what it will not do instead of the values it still keeps: nothing typed was lost (S3).
+    summary: omitted ? EDITOR_COPY.cards.hiddenSummary : summaryOf(fields, values),
+    state: omitted ? { kind: "hidden" } : stateOf(fields, values),
+    section,
+    omitted,
   };
 }
 
@@ -345,20 +395,57 @@ function cardOf(
 export function contentCards(
   sections: readonly ContentSection[],
   values: Readonly<Record<string, unknown>>,
+  omittable: OmittableSections = NO_OMITTABLE_SECTIONS,
 ): ContentCard[] {
   const cards: ContentCard[] = [];
   const extras: ContentField[] = [];
   const extrasRows: ContentCardRow[] = [];
+  const omitted = omittedSectionKeys(values);
 
   for (const section of sections) {
-    if (holdsRequired(section.fields)) {
-      cards.push(
-        cardOf(section.key, cardTitle(section), section.fields, rowsOf(section.fields), values),
-      );
-      continue;
+    // The groups this section holds, and the fields no group covers: the essentials of this section.
+    const groups = sectionsOfFields(omittable, section.fields);
+    const covered = new Set(groups.flatMap((group) => group.fields));
+    const rest = section.fields.filter((field) => !covered.has(field.name));
+    const parts: {
+      readonly fields: ContentField[];
+      readonly group: OmittableSection | undefined;
+    }[] = [
+      ...groups.map((group) => ({
+        group,
+        fields: section.fields.filter((field) => group.fields.includes(field.name)),
+      })),
+      ...(rest.length === 0 ? [] : [{ group: undefined, fields: rest }]),
+    ].sort(
+      (left, right) =>
+        section.fields.indexOf(left.fields[0] as ContentField) -
+        section.fields.indexOf(right.fields[0] as ContentField),
+    );
+
+    // One card per group, plus the card of the fields no group covers: a group's switch never lands on a field it
+    // does not cover, and an essential field never folds with a section the owner turned off (T4; S7, S8.1).
+    for (const part of parts) {
+      if (part.group !== undefined) {
+        cards.push(
+          sectionCardOf(part.group, part.fields, omitted.includes(part.group.key), values),
+        );
+        continue;
+      }
+      if (holdsRequired(part.fields)) {
+        cards.push(
+          cardOf(
+            section.key,
+            cardTitle(section.key, part.fields),
+            part.fields,
+            rowsOf(part.fields),
+            values,
+          ),
+        );
+        continue;
+      }
+      extras.push(...part.fields);
+      extrasRows.push(...rowsOf(part.fields));
     }
-    extras.push(...section.fields);
-    extrasRows.push(...rowsOf(section.fields));
   }
 
   if (extras.length > 0) {

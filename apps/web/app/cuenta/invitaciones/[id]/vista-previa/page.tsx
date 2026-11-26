@@ -117,6 +117,7 @@ export default async function InvitationPreviewPage({
       componentKey={view.componentKey}
       configuration={view.configuration}
       content={view.content}
+      hiddenFields={view.hiddenFields}
       {...(view.features === undefined ? {} : { features: view.features })}
     />
   );
