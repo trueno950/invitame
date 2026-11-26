@@ -17,9 +17,9 @@ export const WEDDING_ARCH_COMPONENT_KEY = "wedding-arch-01";
  * name per line.
  */
 export const WEDDING_ARCH_CONTENT_FIELDS: readonly RendererField[] = [
-  { name: "coupleNameOne", type: "string" },
-  { name: "coupleNameTwo", type: "string" },
-  { name: "date", type: "string" },
+  { name: "coupleNameOne", type: "string", essential: true },
+  { name: "coupleNameTwo", type: "string", essential: true },
+  { name: "date", type: "string", essential: true },
   { name: "ceremonyPlace", type: "string" },
   { name: "ceremonyAddress", type: "string" },
   { name: "ceremonyTime", type: "string" },

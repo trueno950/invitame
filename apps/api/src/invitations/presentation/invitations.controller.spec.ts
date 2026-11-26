@@ -17,6 +17,10 @@ import { EmailDeliveryService } from "../../email/application/email-delivery.ser
 import { InMemoryEmailSender } from "../../email/infrastructure/in-memory-email-sender";
 import { SystemEmailDeliveryRuntime } from "../../email/infrastructure/system-email-delivery-runtime";
 import {
+  INITIAL_OPERATIONAL_SETTINGS_READER,
+  OPERATIONAL_SETTINGS_READER,
+} from "../../settings/application/operational-settings";
+import {
   GUEST_REPOSITORY,
   type GuestCheckIn,
   type GuestFields,
@@ -56,8 +60,8 @@ import {
   type InvitationPaymentGate,
 } from "../application/invitation-payment-gate";
 import {
-  type InvitationViewRepository,
   INVITATION_VIEW_REPOSITORY,
+  type InvitationViewRepository,
 } from "../application/invitation-views";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "../application/music-metadata";
 import { PLACE_SEARCH, type PlaceSearch } from "../application/place-search";
@@ -85,10 +89,6 @@ import type { PlaylistMetadata } from "../domain/invitation-features";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
-import {
-  INITIAL_OPERATIONAL_SETTINGS_READER,
-  OPERATIONAL_SETTINGS_READER,
-} from "../../settings/application/operational-settings";
 import { INVITATION_USE_CASES } from "../invitations.module";
 import { InvitationsController } from "./invitations.controller";
 import { PublicInvitationsController } from "./public-invitations.controller";
@@ -2281,6 +2281,7 @@ describe("invitations routes: /invitations", () => {
       "content",
       "expired",
       "features",
+      "hiddenFields",
       "places",
       "publishedAt",
       "slug",
@@ -2365,6 +2366,8 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(body.configuration, { componentKey: RENDERER });
       // Only the keys the pinned schema declares; the stored `subtitle` never reaches a guest (A7).
       assert.deepEqual(body.content, { title: "Cumpleaños de Ana" });
+      // The pinned schema of this fixture declares no omitted section, so the page hides no block (S8.3).
+      assert.deepEqual(body.hiddenFields, []);
       assert.equal(body.timeZone, "America/Mexico_City");
       // The fixture's package includes no catalog feature, so only the calendar is left (S4).
       assert.deepEqual(body.features, {
@@ -3871,6 +3874,7 @@ describe("invitations routes: /invitations", () => {
         "expired",
         "features",
         "guest",
+        "hiddenFields",
         "places",
         "publishedAt",
         "slug",

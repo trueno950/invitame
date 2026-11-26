@@ -111,6 +111,12 @@ export interface PublicInvitationResponse {
   componentKey: string;
   configuration: unknown;
   content: JsonObject;
+  /**
+   * The content property names the invitation's omitted sections cover (S8.3), so the layouts know which block
+   * not to draw without holding the schema; the values of those fields are absent from `content`. Always a
+   * list, empty when the invitation omits nothing.
+   */
+  hiddenFields: string[];
   publishedAt: string | null;
   timeZone: string;
   features: {
@@ -208,6 +214,7 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
     componentKey: stored.componentKey,
     configuration: stored.configuration,
     content: stored.content,
+    hiddenFields: [...stored.hiddenFields],
     publishedAt: stored.publishedAt?.toISOString() ?? null,
     timeZone: stored.timeZone,
     features: {

@@ -1,4 +1,5 @@
 import type { JsonObject } from "../domain/invitation-content";
+import { omittedSectionFields } from "../domain/invitation-content";
 import type { PublicInvitationFeatures } from "../domain/invitation-features";
 import type { PlacePoint } from "../domain/invitation-place";
 
@@ -21,6 +22,12 @@ export interface PublicInvitation {
   configuration: unknown;
   /** Only the keys the pinned schema declares in `properties`; undeclared stored keys never reach a guest. */
   content: JsonObject;
+  /**
+   * The content property names the omitted sections cover (S8.2, S8.3): the guest page draws no block for
+   * them. It is computed from the pinned schema and the stored `omittedSections`, so the web mirrors no rule,
+   * and it is empty when nothing is omitted or the version declares no extension.
+   */
+  hiddenFields: string[];
   /**
    * The instant the invitation was published. The `Invitation_publishedAt_matches_status` check makes it a
    * date for this published row; it stays nullable here so the type never claims a value the read did not see.
@@ -69,14 +76,23 @@ export function declaredContentKeys(schema: unknown): string[] {
 }
 
 /**
- * The stored content reduced to the keys the pinned schema declares (A7). Values are copied as they are, in
- * schema order, and each key is defined as an own property, so a declared `__proto__` stays data and can never
- * become the prototype of the projection.
+ * The stored content reduced to the keys the pinned schema declares (A7), without the values of the fields an
+ * omitted section covers (S8.3). Values are copied as they are, in schema order, and each key is defined as an
+ * own property, so a declared `__proto__` stays data and can never become the prototype of the projection. A
+ * guest page hides that block, so its text never has to travel to a browser at all.
  */
-export function projectPublicContent(schema: unknown, content: JsonObject): JsonObject {
+export function projectPublicContent(
+  schema: unknown,
+  content: JsonObject,
+  hiddenFields: readonly string[] = [],
+): JsonObject {
   const projected: JsonObject = {};
+  const hidden = new Set(hiddenFields);
 
   for (const key of declaredContentKeys(schema)) {
+    if (hidden.has(key)) {
+      continue;
+    }
     if (Object.hasOwn(content, key)) {
       Object.defineProperty(projected, key, {
         value: content[key],
@@ -87,4 +103,14 @@ export function projectPublicContent(schema: unknown, content: JsonObject): Json
     }
   }
   return projected;
+}
+
+/**
+ * The content property names the omitted sections of a stored invitation cover (S8.3), read from the pinned
+ * schema's `x-omittable` groups and the content's own `omittedSections`. The invitations domain owns the rule
+ * (`omittedSectionFields`), so the API and the web compute one answer from one snapshot instead of inventing
+ * two; the order is the schema's, which makes the response stable.
+ */
+export function publicHiddenFields(schema: unknown, content: JsonObject): string[] {
+  return [...omittedSectionFields(schema, content)];
 }

@@ -12,12 +12,12 @@ import {
 
 /** The eight invitation fields every birthday layout reads, all of them required. */
 export const BIRTHDAY_CONTENT_FIELDS: readonly RendererField[] = [
-  { name: "celebrantName", type: "string" },
+  { name: "celebrantName", type: "string", essential: true },
   { name: "age", type: "integer" },
-  { name: "date", type: "string" },
-  { name: "time", type: "string" },
-  { name: "location", type: "string" },
-  { name: "address", type: "string" },
+  { name: "date", type: "string", essential: true },
+  { name: "time", type: "string", essential: true },
+  { name: "location", type: "string", essential: true },
+  { name: "address", type: "string", essential: true },
   { name: "mainPhoto", type: "string" },
   { name: "message", type: "string" },
 ];

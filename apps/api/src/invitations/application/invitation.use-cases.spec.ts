@@ -1767,6 +1767,8 @@ describe("GetPublicInvitationUseCase", () => {
       componentKey: "birthday-poster-01",
       configuration: { componentKey: "birthday-poster-01" },
       content: { celebrantName: "Ana", date: "2027-03-14" },
+      // Nothing is omitted in this fixture, so the guest page hides no block (S8.3).
+      hiddenFields: [],
       publishedAt: PUBLISHED_AT,
       timeZone: "America/Mexico_City",
       // The fixture's package includes no catalog feature, so only the always-available calendar is left (S4).
@@ -1793,6 +1795,7 @@ describe("GetPublicInvitationUseCase", () => {
       "content",
       "expired",
       "features",
+      "hiddenFields",
       "invitationId",
       "places",
       "publishedAt",
@@ -1818,6 +1821,63 @@ describe("GetPublicInvitationUseCase", () => {
 
     assert.deepEqual(page?.content, { celebrantName: "Ana", date: "2027-03-14" });
     assert.equal(Object.hasOwn(page?.content ?? {}, "guestSecret"), false);
+  });
+
+  it("names the fields of an omitted section and withholds their values (S8.2, S8.3)", async () => {
+    const sectionsSchema = {
+      ...SCHEMA,
+      "x-omittable": [{ key: "message", fields: ["message"] }],
+      "x-require-one": [],
+      properties: {
+        ...SCHEMA.properties,
+        omittedSections: {
+          type: "array",
+          items: { type: "string", enum: ["message"] },
+          uniqueItems: true,
+        },
+      },
+    };
+    const fixture = seeded();
+    const version = fixture.catalog.addPublishedVersion({
+      id: randomUUID(),
+      schema: sectionsSchema,
+    });
+    const created = await draft(fixture).execute({
+      ownerId: fixture.ownerId,
+      templateVersionId: version.id,
+      packageId: fixture.packageId,
+    });
+    await new UpdateInvitationContentUseCase(fixture.repository, fixture.catalog).execute({
+      ownerId: fixture.ownerId,
+      id: created.id,
+      content: {
+        celebrantName: "Ana",
+        date: "2027-03-14",
+        message: "Te esperamos en casa",
+        omittedSections: ["message"],
+      },
+    });
+    await publisher(fixture).useCase.execute(fixture.ownerId, created.id);
+
+    const page = await publicReader(fixture).execute(created.slug);
+
+    // The guest page learns which block not to draw, and the text of that block never travels to it (S8.3).
+    assert.deepEqual(page?.hiddenFields, ["message"]);
+    assert.deepEqual(page?.content, {
+      celebrantName: "Ana",
+      date: "2027-03-14",
+      omittedSections: ["message"],
+    });
+    assert.equal(JSON.stringify(page).includes("Te esperamos en casa"), false);
+  });
+
+  it("answers no hidden field for an invitation that omits nothing (S8.3)", async () => {
+    const fixture = seeded();
+    const created = await publishedInvitation(fixture);
+
+    const page = await publicReader(fixture).execute(created.slug);
+
+    assert.deepEqual(page?.hiddenFields, []);
   });
 
   it("keeps rendering the pinned version after the catalog retires it (A1)", async () => {

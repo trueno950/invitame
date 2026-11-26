@@ -52,7 +52,7 @@ required to publish and the design does not draw it. Design first, then implemen
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
 | T1 | Design directions for the section switch under `design/omittable-sections/`; owner picks one | S3, S6 | inline | |
-| T2 | Contract and API: omitted-sections list in the schemas, renderer contract (essentials vs omittable), readiness that skips omitted sections and enforces at least one place, new versions script | S3, S4 | worker | |
+| T2 | Contract and API: omitted-sections list in the schemas, renderer contract (essentials vs omittable), readiness that skips omitted sections and enforces at least one place, new versions script | S3, S4 | worker | 9a5ac6e |
 | T3 | Web renderers hide omitted sections (elegant arch, ornamental, baptism classic, baby shower, birthday) | S3, S4 | worker | |
 | T4 | Editor: the switch on each content card, missing counts that skip omitted sections, essentials locked | S3, S6 | worker | |
 | T5 | Move existing drafts to the new versions (S5), with an independent verification | S5 | worker + verify | |
@@ -75,3 +75,13 @@ required to publish and the design does not draw it. Design first, then implemen
   sections exist only in the web (`FIELD_SECTIONS`, `lib/customer/invitations.ts` ~:304), and the
   `templateVersionId` change is refused by the trigger of `20261111214752_add_invitations/migration.sql:61`; hence
   S8.1 and S8.6.
+- L6 — T2 (worker): `catalog/domain/omittable-sections.ts`, `omittable-section-groups.ts`,
+  `omittable-section-upgrade.ts`, renderer contract, `invitation-content.ts`, `publication-readiness.ts` (issue
+  `content.ceremony,reception needs one shown`), seed schemas, script `pnpm --filter @invitame/api
+  catalog:omittable-sections` (`--dry-run`). API 2094 tests. Commit `9a5ac6e`. Native review `review-1d10368ee590b31d`
+  approved (one CRITICAL refuted; advisories: the script can skip a template silently and leaves a DRAFT when a
+  publish fails). Independent verification: S8.1-S8.5 met, no blockers; dry run planned 86 versions and wrote none.
+  Follow-ups: (a) the web owner parser drops non-primitive content, so the editor breaks on `omittedSections` — T4
+  must fix it before the script's apply mode runs; (b) the contract does not refuse a group that covers an essential
+  field — T3 adds that guard; (c) the guest page has no schema, so the API's public read sends the computed
+  `hiddenFields` (parent decision, T3).

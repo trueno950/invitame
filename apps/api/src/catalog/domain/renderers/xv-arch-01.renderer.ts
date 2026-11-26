@@ -17,8 +17,8 @@ export const XV_ARCH_COMPONENT_KEY = "xv-arch-01";
  * the lists are one bounded text field with one name per line.
  */
 export const XV_ARCH_CONTENT_FIELDS: readonly RendererField[] = [
-  { name: "celebrantName", type: "string" },
-  { name: "date", type: "string" },
+  { name: "celebrantName", type: "string", essential: true },
+  { name: "date", type: "string", essential: true },
   { name: "parents", type: "string" },
   { name: "honorSponsors", type: "string" },
   { name: "ceremonyPlace", type: "string" },

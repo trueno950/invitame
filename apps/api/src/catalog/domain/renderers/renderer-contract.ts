@@ -37,6 +37,12 @@ export interface RendererField {
    * original rule — every renderer field is required — so no existing contract changes meaning.
    */
   readonly presence?: "optional";
+  /**
+   * `essential` marks the fields that are a line's identity, its date, or its only place (S3, S8.4): a
+   * customer may never switch them off, so the contract refuses an `x-omittable` group that covers one. An
+   * absent flag keeps the field omittable, so every declaration written before this rule keeps its meaning.
+   */
+  readonly essential?: true;
 }
 
 /**
@@ -156,8 +162,9 @@ export function validateRendererSchema(
 
 /**
  * The issues of a version's omittable-section extension: what the contract of `./omittable-sections` refuses,
- * plus the one rule only a renderer can state — a section covers fields this renderer reads, so a group never
- * promises an editor a section the guest page could not draw.
+ * plus the two rules only a renderer can state — a group covers fields this renderer reads, so it never
+ * promises an editor a section the guest page could not draw, and it never covers an essential field, so who
+ * celebrates, the date, and a line's only place always stay shown (S3, S8.4).
  */
 function omittableSectionsIssues(
   sections: ReturnType<typeof parseOmittableSections>,
@@ -171,6 +178,9 @@ function omittableSectionsIssues(
   }
 
   const rendererFieldNames = new Set(fields.map((field) => field.name));
+  const essentials = new Set(
+    fields.filter((field) => field.essential === true).map((field) => field.name),
+  );
   const issues: string[] = [];
 
   for (const group of sections.value.groups) {
@@ -178,6 +188,12 @@ function omittableSectionsIssues(
       if (!rendererFieldNames.has(name)) {
         issues.push(
           `schema["x-omittable"] group ${JSON.stringify(group.key)} names ${JSON.stringify(name)}, which the renderer does not read`,
+        );
+        continue;
+      }
+      if (essentials.has(name)) {
+        issues.push(
+          `schema["x-omittable"] group ${JSON.stringify(group.key)} names ${JSON.stringify(name)}, which is essential and cannot be omitted`,
         );
       }
     }

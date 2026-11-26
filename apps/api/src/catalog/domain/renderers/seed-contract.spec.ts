@@ -15,12 +15,19 @@ import {
   XV_ORNAMENTAL_TEMPLATE_SEEDS,
 } from "../../../../prisma/catalog-seed";
 import {
+  CONTENT_SECTION_FAMILIES,
+  type ContentSectionFamily,
   contentSectionFamilyOf,
   extendSchemaWithOmittableSections,
   OMITTABLE_SECTIONS_BY_FAMILY,
   omittedSectionsProperty,
 } from "../omittable-section-groups";
-import { OMITTED_SECTIONS_PROPERTY, parseOmittableSections } from "../omittable-sections";
+import {
+  OMITTED_SECTIONS_PROPERTY,
+  type OmittableSections,
+  omittedSectionsDeclaration,
+  parseOmittableSections,
+} from "../omittable-sections";
 import { BABY_SHOWER_THEMES } from "./baby-shower-themes";
 import { BAPTISM_THEMES } from "./baptism-themes";
 import { BIRTHDAY_THEMES } from "./birthday-themes";
@@ -275,6 +282,60 @@ it("declares the omittedSections content property as an optional unique list of 
       schema.required.includes(OMITTED_SECTIONS_PROPERTY),
       false,
       `${seed.key} keeps omittedSections optional`,
+    );
+  }
+});
+
+it("refuses a section group that covers an essential field of its own line (S3)", () => {
+  const essentials: Readonly<Record<ContentSectionFamily, string>> = {
+    birthday: "celebrantName",
+    babyShower: "hosts",
+    baptism: "celebrantName",
+    xv: "date",
+    wedding: "coupleNameTwo",
+  };
+
+  for (const family of CONTENT_SECTION_FAMILIES) {
+    const seed = SEEDED_TEMPLATE_SEEDS.find(
+      (entry) => contentSectionFamilyOf(entry.componentKey) === family,
+    );
+    assert.ok(seed, family);
+
+    const sections = parseOmittableSections(seed.schema);
+    assert.equal(sections.ok, true, seed.key);
+    if (!sections.ok || sections.value === null) {
+      continue;
+    }
+    const essential = essentials[family];
+    const extended: OmittableSections = {
+      groups: [...sections.value.groups, { key: "essential", fields: [essential] }],
+      requireOne: sections.value.requireOne,
+    };
+    const schema = seed.schema as { properties: Record<string, unknown> };
+
+    assert.deepEqual(
+      validateTemplateVersionContract({
+        componentKey: seed.componentKey,
+        schema: {
+          ...(seed.schema as Record<string, unknown>),
+          "x-omittable": extended.groups.map((group) => ({
+            key: group.key,
+            fields: [...group.fields],
+          })),
+          properties: {
+            ...schema.properties,
+            [OMITTED_SECTIONS_PROPERTY]: omittedSectionsDeclaration(extended),
+          },
+        },
+        configuration: seed.configuration,
+      }),
+      {
+        ok: false,
+        issues: [
+          `schema["x-omittable"] group "essential" names ${JSON.stringify(essential)}, which is essential and cannot be omitted`,
+        ],
+      },
+      seed.key,
     );
   }
 });

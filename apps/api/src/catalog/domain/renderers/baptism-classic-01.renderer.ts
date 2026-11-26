@@ -16,8 +16,8 @@ export const BAPTISM_CLASSIC_COMPONENT_KEY = "baptism-classic-01";
  * confirms attendance. The main photo and the gift registry are optional.
  */
 export const BAPTISM_CONTENT_FIELDS: readonly RendererField[] = [
-  { name: "celebrantName", type: "string" },
-  { name: "date", type: "string" },
+  { name: "celebrantName", type: "string", essential: true },
+  { name: "date", type: "string", essential: true },
   { name: "parents", type: "string" },
   { name: "godparents", type: "string" },
   { name: "ceremonyPlace", type: "string" },

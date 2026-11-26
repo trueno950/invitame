@@ -15,11 +15,11 @@ export const BABY_SHOWER_CLASSIC_COMPONENT_KEY = "baby-shower-classic-01";
  * the gender reveal, the gift registry, and the main photo are optional because a shower can be a surprise.
  */
 export const BABY_SHOWER_CONTENT_FIELDS: readonly RendererField[] = [
-  { name: "hosts", type: "string" },
-  { name: "date", type: "string" },
-  { name: "time", type: "string" },
-  { name: "location", type: "string" },
-  { name: "address", type: "string" },
+  { name: "hosts", type: "string", essential: true },
+  { name: "date", type: "string", essential: true },
+  { name: "time", type: "string", essential: true },
+  { name: "location", type: "string", essential: true },
+  { name: "address", type: "string", essential: true },
   { name: "message", type: "string" },
   { name: "rsvpContact", type: "string" },
   { name: "babyName", type: "string", presence: "optional" },

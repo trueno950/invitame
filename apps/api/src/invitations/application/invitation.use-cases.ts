@@ -1,9 +1,14 @@
+import {
+  INITIAL_OPERATIONAL_SETTINGS_READER,
+  type OperationalSettingsReader,
+} from "../../settings/application/operational-settings";
 import { InvitationNotPublishableError } from "../domain/invitation.errors";
 import {
   type JsonObject,
   missingRequiredFields,
   validateDraftContent,
 } from "../domain/invitation-content";
+import { invitationExpiresAt, isInvitationExpired } from "../domain/invitation-expiration";
 import {
   availableFeatureKeys,
   GALLERY_FEATURE_KEY,
@@ -21,7 +26,6 @@ import {
   publish,
   unpublish,
 } from "../domain/invitation-lifecycle";
-import { invitationExpiresAt, isInvitationExpired } from "../domain/invitation-expiration";
 import { confirmedPlaces, type PlacePoint } from "../domain/invitation-place";
 import {
   generateInvitationSlug,
@@ -50,12 +54,12 @@ import type {
 import type { CatalogVersionRenderData, InvitationCatalog } from "./invitation-catalog";
 import type { InvitationGalleryReader } from "./invitation-gallery";
 import type { InvitationPaymentGate } from "./invitation-payment-gate";
-import { type PublicInvitation, projectPublicContent } from "./invitation-public";
-import { type MusicMetadataProvider, NO_MUSIC_METADATA } from "./music-metadata";
 import {
-  INITIAL_OPERATIONAL_SETTINGS_READER,
-  type OperationalSettingsReader,
-} from "../../settings/application/operational-settings";
+  type PublicInvitation,
+  projectPublicContent,
+  publicHiddenFields,
+} from "./invitation-public";
+import { type MusicMetadataProvider, NO_MUSIC_METADATA } from "./music-metadata";
 
 // The invitation use cases (M4 T3 and M5 T3; S1, S2, S3, S6, S7, S9, A1, A3, A4, A7). Creating and editing a
 // draft is free for any signed-in customer: the chosen package is only validated against the pinned version's
@@ -738,13 +742,18 @@ export class GetPublicInvitationUseCase {
       ? await this.gallery.readGallery(published.id)
       : [];
 
+    // The fields the omitted sections cover (S8.3), computed once from the pinned schema and the stored list: the
+    // guest page draws no block for them, and their values are withheld from the projection below.
+    const hiddenFields = publicHiddenFields(render.schema, published.content);
+
     return {
       // The id is internal to the API: the response mapper never answers it, and the public read counts with it (S7).
       invitationId: published.id,
       slug: published.slug,
       componentKey: render.componentKey,
       configuration: render.configuration,
-      content: projectPublicContent(render.schema, published.content),
+      content: projectPublicContent(render.schema, published.content, hiddenFields),
+      hiddenFields,
       publishedAt: published.publishedAt,
       timeZone: published.timeZone,
       features: publicInvitationFeatures(

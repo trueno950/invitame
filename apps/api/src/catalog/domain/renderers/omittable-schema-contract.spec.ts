@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { omittedSectionsDeclaration, parseOmittableSections } from "../omittable-sections";
+import {
+  type OmittableSectionGroup,
+  omittedSectionsDeclaration,
+  parseOmittableSections,
+} from "../omittable-sections";
 import { validateTemplateVersionContract } from "./renderer-registry";
 
 // The renderer contract with omittable sections (S8.1, S8.2): a version that declares `x-omittable` may store
@@ -66,12 +70,67 @@ function extendedSchema(): SchemaFixture {
   };
 }
 
-function validate(schemaOrKey: unknown, componentKey: string = KEY) {
+function validate(schemaOrKey: unknown, componentKey: string = KEY, theme = "dinosaurs") {
   return validateTemplateVersionContract({
     componentKey,
     schema: schemaOrKey,
-    configuration: { componentKey, theme: "dinosaurs" },
+    configuration: { componentKey, theme },
   });
+}
+
+/** The extended birthday schema plus one more group, with the enum that accepts its key. */
+function withGroup(group: OmittableSectionGroup): SchemaFixture {
+  const base = extendedSchema();
+  const groups = [
+    ...SECTIONS.groups.map((declared) => ({ key: declared.key, fields: [...declared.fields] })),
+    { key: group.key, fields: [...group.fields] },
+  ];
+
+  return {
+    ...base,
+    "x-omittable": groups,
+    properties: {
+      ...(base.properties as SchemaFixture),
+      omittedSections: omittedSectionsDeclaration({ groups, requireOne: [] }),
+    },
+  };
+}
+
+/** The wedding content schema: the two names, the date, the two places, and the rest of the line. */
+function weddingSchema(): SchemaFixture {
+  const names = [
+    "coupleNameOne",
+    "coupleNameTwo",
+    "date",
+    "ceremonyPlace",
+    "ceremonyAddress",
+    "ceremonyTime",
+    "receptionPlace",
+    "receptionAddress",
+    "receptionTime",
+    "dressCode",
+    "message",
+    "rsvpContact",
+  ];
+  // The optional fields the wedding layout reads: declared with their type, absent from `required`.
+  const optional = [
+    "firstFamilyParents",
+    "secondFamilyParents",
+    "weddingSponsors",
+    "giftRegistry",
+    "mainPhoto",
+    "hashtag",
+  ];
+
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    additionalProperties: false,
+    required: names,
+    properties: Object.fromEntries(
+      [...names, ...optional].map((name) => [name, { type: "string" }]),
+    ),
+  };
 }
 
 function issuesOf(result: ReturnType<typeof validate>): readonly string[] {
@@ -140,6 +199,36 @@ describe("a version with omittable sections", () => {
     assert.deepEqual(issuesOf(validate(wrongEnum)), [
       'schema.properties.omittedSections.items.enum must be ["age","mainPhoto","message"]',
     ]);
+  });
+});
+
+describe("an essential field of the line (S3)", () => {
+  it("refuses a group that would hide the date of a birthday", () => {
+    assert.deepEqual(issuesOf(validate(withGroup({ key: "date", fields: ["date"] }))), [
+      'schema["x-omittable"] group "date" names "date", which is essential and cannot be omitted',
+    ]);
+  });
+
+  it("refuses a group that would hide a couple's name on a wedding", () => {
+    const base = weddingSchema();
+    const groups = [{ key: "names", fields: ["coupleNameOne"] }];
+    const schema: SchemaFixture = {
+      ...base,
+      "x-omittable": groups,
+      "x-require-one": [],
+      properties: {
+        ...(base.properties as SchemaFixture),
+        omittedSections: omittedSectionsDeclaration({ groups, requireOne: [] }),
+      },
+    };
+
+    assert.deepEqual(issuesOf(validate(schema, "wedding-arch-01", "blush-gold")), [
+      'schema["x-omittable"] group "names" names "coupleNameOne", which is essential and cannot be omitted',
+    ]);
+  });
+
+  it("keeps every declared group when none of them covers an essential field", () => {
+    assert.deepEqual(validate(extendedSchema()), { ok: true });
   });
 });
 
