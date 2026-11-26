@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.build.json",
     "catalog:omittable-sections": "node -r @swc-node/register scripts/omittable-sections.ts",
     "dev": "NODE_ENV=development node --watch -r @swc-node/register src/main.ts",
+    "invitations:repin-drafts": "node -r @swc-node/register scripts/repin-drafts.ts",
     "lint": "biome lint .",
     "media:cleanup": "node -r @swc-node/register scripts/media-cleanup.ts",
     "prisma:check": "tsx prisma/check-connection.ts",

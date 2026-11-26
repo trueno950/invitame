@@ -113,11 +113,12 @@ administrator can customize them; no row is invalidated and nothing is deleted. 
 - Current status: the `Invitation` table exists and an invitation references a `TemplateVersion`, never mutable
   `Template` fields. Milestone 4 created, edited, and archived invitations through the API, and Milestone 5 publishes
   and unpublishes them (`POST /invitations/:id/publish` and `/unpublish`), writing `status` and `publishedAt` together.
-- `Invitation` is pinned at creation: `ownerId`, `templateVersionId`, `packageId`, and `slug` are protected against
-  updates by the `Invitation_pinned_fields_immutable` trigger, so an invitation keeps rendering its pinned version
-  after the template catalog publishes a newer one. The three references are `ON DELETE RESTRICT`, so a referenced
-  `TemplateVersion`, `User`, or `Package` cannot be deleted while an invitation uses it. The trigger is unchanged by
-  the Milestone 5 migration and applies to a `PUBLISHED` row too, while `content` stays editable in place.
+- `Invitation` is pinned at creation: `ownerId`, `packageId`, and `slug` are protected against updates by the
+  `Invitation_pinned_fields_immutable` trigger, so an invitation keeps rendering the version it was created with after
+  the template catalog publishes a newer one. The one exception is the draft re-pin (S5, S8.6, section below): a
+  `DRAFT` may follow its template to the version that template publishes now. The three references are
+  `ON DELETE RESTRICT`, so a referenced `TemplateVersion`, `User`, or `Package` cannot be deleted while an invitation
+  uses it. The trigger still applies to a `PUBLISHED` and an `ARCHIVED` row, while `content` stays editable in place.
 - `Invitation.slug` is unique through the `Invitation_slug_key` index, so uniqueness is PostgreSQL's, not a preflight
   query. `Invitation_slug_format` requires `^[a-z0-9]+(-[a-z0-9]+)*$`, and `Invitation_slug_length` requires three to
   sixty characters (`VARCHAR(60)` caps the column as well).
@@ -172,8 +173,42 @@ administrator can customize them; no row is invalidated and nothing is deleted. 
   7 040-row offset).
 - The columns the application may update are `status`, `content`, `publishedAt`, `expiresAt`, `archivedAt`,
   `timeZone`, `rsvpDeadline`, `rsvpPartyLimit`, and `updatedAt`; publish writes `publishedAt` and `expiresAt` together,
-  unpublish and archive clear both, only the RSVP settings route writes the two RSVP columns, and the pinned fields can
-  never change.
+  unpublish and archive clear both, only the RSVP settings route writes the two RSVP columns, and the pinned fields
+  change only through the draft re-pin described below.
+
+## Draft re-pin (S5, S8.6)
+
+Current status: `20261201120000_allow_draft_invitation_repin` replaces the body of the function the existing
+`Invitation_pinned_fields_immutable` trigger runs, so one narrow change of `Invitation.templateVersionId` is allowed:
+the owner approved moving the invitations that already exist to the version their template publishes now, and the
+operator runs `pnpm --filter @invitame/api invitations:repin-drafts` (with `--dry-run` first) to do it. The trigger,
+its name, and its message (`Invitation pinned fields are immutable`) are unchanged, and this migration rewrites no row.
+
+- A change of `templateVersionId` is accepted only while all three conditions hold, and refused otherwise with the same
+  error every other pinned-field change gets: the stored row is `DRAFT` and the update leaves it `DRAFT`; the old and
+  the new version belong to the same `Template`; and the new version is `PUBLISHED` (the version a new draft of that
+  template would pin). A move can therefore never be combined with a publication in one statement, and a `PUBLISHED`
+  or `ARCHIVED` invitation keeps the version it has forever.
+- `ownerId`, `packageId`, and `slug` stay immutable for every row in every status, and `content` stays editable as
+  before. The rule reads `TemplateVersion`, never mutable `Template` metadata, and the `ON DELETE RESTRICT` references
+  are untouched.
+- The operation is API-owned, not a bare SQL edit: `apps/api/src/invitations/domain/invitation-repin.ts` decides which
+  invitation moves and to which version (only a draft, only the same template, only a version that is `PUBLISHED`), and
+  skips it with a reason when the stored content does not validate against the new schema, so the move never stores
+  content the new snapshot would refuse (S8.2 — the new versions only add the `x-omittable`/`x-require-one` extensions
+  and the optional `omittedSections` property, so every content a draft already has validates).
+  `apps/api/src/invitations/infrastructure/prisma-invitation-repin.repository.ts` performs the move as one `UPDATE`
+  whose `WHERE` names the invitation, the `DRAFT` status, and the version that was read, and whose `data` names only
+  `templateVersionId`; each move is its own transaction and a second run finds every moved draft already current, so
+  nothing moves twice.
+- Rollback / recovery of `20261201120000_allow_draft_invitation_repin`: restore the previous function body with
+  `CREATE OR REPLACE FUNCTION "prevent_invitation_pinned_field_mutation"()` exactly as
+  `20261111214752_add_invitations` declares it (the body is also quoted in the migration's header comment), which
+  returns the strict rule byte for byte and needs no data change: the trigger guards updates, so the drafts the script
+  already re-pinned keep their new version, and their content stays valid because the new versions only add the
+  extension. Restoring the versions of already re-pinned drafts is a deliberate data change — each moved draft is
+  named in the operator's report — and it only ever touches drafts: no `PUBLISHED` or `ARCHIVED` invitation moves, so
+  nothing public changes. Never edit the applied migration file.
 
 ## Invitation feature data
 

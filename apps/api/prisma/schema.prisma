@@ -306,11 +306,15 @@ model TemplateVersion {
 }
 
 // A creator's invitation draft (M4 T1; S2, S3, S5, S10, A3). It is pinned at creation to the published
-// template version it renders, the package its entitlements are checked against, and its public slug;
-// none of those four ever changes. `content` is the bounded form data, always a JSON object.
+// template version it renders, the package its entitlements are checked against, and its public slug; the owner,
+// the package, and the slug never change, and the pinned version changes only while the invitation is a DRAFT and
+// only to the PUBLISHED version of the same template (S5, S8.6). `content` is the bounded form data, always a JSON
+// object.
 // Migration 20261111214752_add_invitations adds what Prisma cannot express: the CHECK constraints
 // "Invitation_slug_format", "Invitation_slug_length", "Invitation_content_object", and
 // "Invitation_archivedAt_matches_status", and the "Invitation_pinned_fields_immutable" trigger.
+// Migration 20261201120000_allow_draft_invitation_repin replaces that trigger's function so the narrow re-pin is
+// allowed and every other change of `templateVersionId` is still refused with the same message.
 // Migration 2026111*_add_invitation_publication adds "Invitation_publishedAt_matches_status" and keeps the
 // archive check, which stays correct for three statuses.
 // Migration 2026111*_add_invitation_features adds "timeZone" (NOT NULL with the default every existing row

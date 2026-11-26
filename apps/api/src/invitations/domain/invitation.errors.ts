@@ -59,6 +59,18 @@ export class InvitationNotPublishedError extends Error {
 }
 
 /**
+ * The re-pin write matched no row: the invitation stopped being a DRAFT or stopped pinning the version the rule read,
+ * so another write reached it first and nothing moved (S5, S8.6). A repeated run that finds the invitation already
+ * current is a skip, not this error.
+ */
+export class InvitationRepinConflictError extends Error {
+  constructor(readonly invitationId: string) {
+    super(`The invitation ${invitationId} no longer pins the version the re-pin read.`);
+    this.name = "InvitationRepinConflictError";
+  }
+}
+
+/**
  * The invitation is not ready to publish: its content is incomplete or invalid against the pinned schema,
  * its package no longer fits, or the pinned template version is no longer published (A1). `issues` are the
  * deterministic English explanations `publicationIssues` produced; nothing was stored.
