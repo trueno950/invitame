@@ -1,3 +1,4 @@
+import { ITINERARY_MAX_ITEMS } from "../invitation-features/itinerary.ts";
 import { deadlineInstant } from "../invitation-features/rsvp-deadline.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import { isCalendarDate, isClockTime, isPlainObject } from "../renderers/invitation-fields.ts";
@@ -16,6 +17,7 @@ import {
 } from "./copy.ts";
 import { featureIssueCodes } from "./feature-issues.ts";
 import { type ContentField, fieldLabel } from "./invitations.ts";
+import { type ItineraryDraftMoment, itineraryPayloadOf } from "./itinerary.ts";
 import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "./omittable-sections.ts";
 import { rsvpSettingsIssueCodes } from "./rsvp-issue.ts";
 
@@ -254,18 +256,65 @@ export function mergeContent(
 // field fills the other two from the stored invitation: a save never clears a datum written elsewhere.
 
 /** The feature fields one autosave may change, and the only keys its payload may name. */
-export const FEATURE_CHANGE_FIELDS = ["timeZone", "whatsappPhone", "playlistUrl"] as const;
+export const FEATURE_CHANGE_FIELDS = [
+  "timeZone",
+  "whatsappPhone",
+  "playlistUrl",
+  "itinerary",
+] as const;
 
 /** The feature data one autosave asks to change; a key left out is a field the creator did not touch. */
 export interface FeatureChanges {
   readonly timeZone?: string;
   readonly whatsappPhone?: string | null;
   readonly playlistUrl?: string | null;
+  /** The moments of the day as the editor holds them, or null when the owner removed them all (F1; L3.4). */
+  readonly itinerary?: readonly ItineraryDraftMoment[] | null;
 }
 
 export type FeatureChangesParse =
   | { readonly ok: true; readonly changes: FeatureChanges }
   | { readonly ok: false; readonly fieldIssues: readonly AutosaveFieldIssue[] };
+
+/**
+ * The moments the editor sent, read from an untrusted payload (F1; L3.4): the four texts of every row, `null` for a
+ * list the owner emptied, or `undefined` when a row is not four texts, the list outgrew its bound, or a complete moment
+ * is outside its bounds. A row still being written is accepted — it stays in the browser and the save carries the
+ * complete moments (see `itineraryPayloadOf`) — so adding an empty moment never refuses a save.
+ */
+function readItineraryDrafts(value: unknown): readonly ItineraryDraftMoment[] | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (!Array.isArray(value) || value.length > ITINERARY_MAX_ITEMS) {
+    return undefined;
+  }
+
+  const drafts: ItineraryDraftMoment[] = [];
+  for (const item of value) {
+    if (!isPlainObject(item)) {
+      return undefined;
+    }
+
+    const time = item.time;
+    const title = item.title;
+    const place = item.place;
+    const address = item.address;
+
+    if (
+      typeof time !== "string" ||
+      typeof title !== "string" ||
+      typeof place !== "string" ||
+      typeof address !== "string"
+    ) {
+      return undefined;
+    }
+    drafts.push({ time, title, place, address });
+  }
+
+  // Only a complete moment outside its bounds is refused here; the one the owner is still writing is not an error.
+  return itineraryPayloadOf(drafts) === undefined ? undefined : drafts;
+}
 
 /** The most characters a submitted phone may carry, as the feature form already bounds it (S4). */
 const MAX_PHONE_TEXT_LENGTH = 32;
@@ -307,6 +356,7 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
     timeZone?: string;
     whatsappPhone?: string | null;
     playlistUrl?: string | null;
+    itinerary?: readonly ItineraryDraftMoment[] | null;
   } = {};
 
   for (const [name, value] of Object.entries(payload)) {
@@ -336,6 +386,15 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
       changes.playlistUrl = playlist.value;
       continue;
     }
+    if (name === "itinerary") {
+      const itinerary = readItineraryDrafts(value);
+      if (itinerary === undefined) {
+        issues.push({ field: name, message: FEATURE_ISSUE_COPY.itinerary });
+        continue;
+      }
+      changes.itinerary = itinerary;
+      continue;
+    }
     issues.push({ field: name, message: AUTOSAVE_COPY.unknownField });
   }
 
@@ -343,13 +402,27 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
 }
 
 /**
- * The feature data to write: the trio the API replaces, with every field the creator did not change filled from the
- * stored invitation. A field the creator cleared travels as `null`, so it is cleared instead of kept.
+ * The feature data to write: the whole set the API replaces, with every field the creator did not change filled from
+ * the stored invitation. A field the creator cleared travels as `null`, so it is cleared instead of kept. The itinerary
+ * is the one field the editor sends as the moments it holds, so it is turned into the payload here; a list the
+ * contract refuses is left out of the change instead of clearing what is stored, and a moment the owner is retyping
+ * keeps the version this invitation already stored (F1; L3.4).
  */
 export function mergeFeatureChanges(
   stored: InvitationFeatureInput,
   changes: FeatureChanges,
 ): InvitationFeatureInput {
+  let itinerary = stored.itinerary;
+
+  if (Object.hasOwn(changes, "itinerary")) {
+    const payload = itineraryPayloadOf(changes.itinerary ?? [], stored.itinerary);
+
+    // `undefined` is a list still being written, and no request is sent for it (see `parseFeatureChanges`).
+    if (payload !== undefined) {
+      itinerary = payload;
+    }
+  }
+
   return {
     timeZone: changes.timeZone ?? stored.timeZone,
     whatsappPhone: Object.hasOwn(changes, "whatsappPhone")
@@ -358,6 +431,7 @@ export function mergeFeatureChanges(
     playlistUrl: Object.hasOwn(changes, "playlistUrl")
       ? (changes.playlistUrl ?? null)
       : stored.playlistUrl,
+    itinerary,
   };
 }
 
@@ -486,6 +560,7 @@ function fieldIssuesOf(channel: AutosaveChannel, issues: readonly string[]): Aut
       phone: "whatsappPhone",
       "phone-type": "whatsappPhone",
       playlist: "playlistUrl",
+      itinerary: "itinerary",
     };
     for (const code of featureIssueCodes(issues)) {
       const field = Object.hasOwn(fieldOf, code) ? fieldOf[code] : undefined;
@@ -549,12 +624,16 @@ export function refusal(
   };
 }
 
-/** A payload this server could not read, with the fields it refused; nothing of it is sent to the API. */
+/**
+ * A payload this server could not read, with the fields it refused; nothing of it is sent to the API. A refusal that
+ * names a field says what to fix, under that field and in the status line, so the owner never reads «Recarga la página»
+ * for a value they can simply correct; the generic sentence is kept for a refusal that names nothing.
+ */
 export function invalidPayload(fieldIssues: readonly AutosaveFieldIssue[]): AutosaveRefused {
   return {
     ok: false,
     reason: "invalid",
-    message: AUTOSAVE_COPY.invalidPayload,
+    message: fieldIssues[0]?.message ?? AUTOSAVE_COPY.invalidPayload,
     ...(fieldIssues.length === 0 ? {} : { fieldIssues }),
   };
 }

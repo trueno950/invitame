@@ -1,5 +1,6 @@
 import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "../customer/omittable-sections.ts";
 import { isE164Phone, isInvitationFeatureKey } from "../invitation-features/invitation-features.ts";
+import { type ItineraryPayload, parseItineraryPayload } from "../invitation-features/itinerary.ts";
 import {
   musicCoverUrlOf,
   musicTitleOf,
@@ -77,6 +78,12 @@ export interface OwnedInvitation extends InvitationSummary {
     playlistUrl: string | null;
     playlistTitle?: string | null;
     playlistCoverUrl?: string | null;
+    /**
+     * The stored plan of the day as the API's validated payload `{ version: 1, items: [...] }`, or null when the
+     * invitation has none (F1; L3.1). It is absent from a body written before the column existed, and a reader treats
+     * that as "no itinerary" exactly like null.
+     */
+    itinerary?: ItineraryPayload | null;
   };
   /**
    * The gated feature keys the guest page will show, `CALENDAR` included (S4). The package's other keys are
@@ -97,6 +104,8 @@ export interface InvitationFeatureInput {
   whatsappPhone: string | null;
   /** The link the creator pasted, or null/empty to clear it; the API validates and normalizes it (S7). */
   playlistUrl: string | null;
+  /** The moments the owner stored, or null to clear the plan (F1; L3.1). The API validates the payload. */
+  itinerary: ItineraryPayload | null;
 }
 
 // The RSVP routes of the owner (M6 G1, G3; S1, S4). The deadline is an ISO instant or null, the party limit is how
@@ -500,6 +509,14 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     return undefined;
   }
 
+  // The itinerary is the versioned payload or nothing: an absent value (a body written before the column existed)
+  // reads as no itinerary, and a value of another shape refuses the whole body instead of reaching the editor (F1).
+  const itinerary = parseItineraryPayload(settings.itinerary);
+
+  if (itinerary === undefined) {
+    return undefined;
+  }
+
   // The stored metadata follows the same rules the guest page applies to a public body (S2): a title of at most 200
   // characters and a cover on an allow-listed image host over `https`. A value this deployment does not accept is
   // dropped to null instead of refusing the whole invitation, because the link is still the owner's playlist.
@@ -512,6 +529,7 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
       settings.playlistCoverUrl == null
         ? null
         : (musicCoverUrlOf(settings.playlistCoverUrl) ?? null),
+    itinerary,
   };
 }
 

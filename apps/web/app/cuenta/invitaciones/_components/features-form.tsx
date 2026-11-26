@@ -4,6 +4,41 @@ import { FEATURE_COPY } from "../../../../lib/customer/copy.ts";
 import type { FeatureSettingsView } from "../../../../lib/customer/invitation-features.ts";
 import { fieldHint, fieldLabel } from "../../../_components/ui.ts";
 
+/** The moments of a stored itinerary as a plain numbered list, which is what a read-only page can show (F1; L3.4). */
+function ItinerarySummary({ view }: { view: FeatureSettingsView }) {
+  if (!view.showItinerary) {
+    return null;
+  }
+
+  // One line per moment, numbered by its place in the plan: a stored moment has no id of its own and the order the
+  // owner saved is the order this list repeats.
+  let position = 0;
+  const moments = view.itinerary.map((moment) => {
+    const index = position;
+    position += 1;
+
+    return (
+      <li key={index}>
+        <span className="font-medium tabular-nums">{moment.time}</span> {moment.title}
+        {moment.place === "" ? null : <span className="text-muted"> · {moment.place}</span>}
+        {moment.address === "" ? null : <span className="text-muted"> · {moment.address}</span>}
+      </li>
+    );
+  });
+
+  return (
+    <div>
+      <p className={fieldLabel}>{FEATURE_COPY.itineraryTitle}</p>
+      {view.itinerary.length === 0 ? (
+        <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.itineraryEmpty}</p>
+      ) : (
+        <ol className="mt-2 list-decimal pl-5 text-sm leading-6 text-ink">{moments}</ol>
+      )}
+      <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.itineraryArchivedNote}</p>
+    </div>
+  );
+}
+
 /**
  * The «Funcionalidades» section of a draft as a read-only summary (F3, F6, F7; S3, S4, S7). The editable fields moved
  * into the editor's «Funciones» tab, where each one saves on its own (T2c); this block is what an archived invitation
@@ -60,6 +95,7 @@ export function FeaturesSummary({ view }: { view: FeatureSettingsView }) {
             <span className="font-normal text-ink">{view.whatsappPhone}</span>
           </p>
         )}
+        <ItinerarySummary view={view} />
         <p className="text-sm leading-6 text-muted">{FEATURE_COPY.archivedNote}</p>
         <AutomaticFeatures view={view} />
       </div>

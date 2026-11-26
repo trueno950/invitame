@@ -42,6 +42,12 @@ import type { FeatureSettingsView } from "../../../../../lib/customer/invitation
 import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rsvp.ts";
 import type { ContentField, ContentSection } from "../../../../../lib/customer/invitations.ts";
 import {
+  type ItineraryDraftMoment,
+  type ItineraryPayload,
+  itineraryNeedsSave,
+  itineraryPayloadOf,
+} from "../../../../../lib/customer/itinerary.ts";
+import {
   OMITTED_SECTIONS_PROPERTY,
   type OmittableSections,
   omittedSectionKeys,
@@ -326,6 +332,17 @@ function Panel({
 }
 
 /** The messages of a failed save, by the field name each one named. */
+/**
+ * The plan the page was rendered with, as the payload the API holds (F1; L3.4). The view answers the drafts of the
+ * stored itinerary, so this is their payload again; a value the contract would refuse cannot come from the API and
+ * reads as no plan.
+ */
+function storedPlanOf(drafts: readonly ItineraryDraftMoment[]): ItineraryPayload | null {
+  const plan = itineraryPayloadOf(drafts);
+
+  return plan === undefined ? null : plan;
+}
+
 function issuesOf(state: ReturnType<typeof useAutosave>["state"]): FieldIssues | undefined {
   if (state.kind !== "error") {
     return undefined;
@@ -431,11 +448,20 @@ export function EditorShell({
     timeZone: featureView.timeZone,
     whatsappPhone: featureView.whatsappPhone,
     playlistUrl: featureView.playlistUrl,
+    itinerary: featureView.itinerary,
   }));
   const [rsvp, setRsvp] = useState<RsvpValues>(() => ({
     deadline: rsvpView?.deadlineValue ?? "",
     partyLimit: rsvpView?.partyLimit ?? 1,
   }));
+  /**
+   * The plan the API holds right now (F1; L3.4): the drafts the page was rendered with, and then what each accepted
+   * feature save carried. It is what tells a row the owner is retyping from a row that was never complete, so retyping
+   * a stored moment saves nothing and «Quitar» still removes it.
+   */
+  const storedItinerary = useRef<ItineraryPayload | null>(storedPlanOf(featureView.itinerary));
+  const featuresRef = useRef(features);
+  featuresRef.current = features;
   const statusLine = useRef<HTMLDivElement>(null);
   // The field a missing-field link names, with the count that makes asking for the same field twice a new request (S2.4).
   const [focus, setFocus] = useState<FieldFocusRequest | undefined>(() =>
@@ -455,7 +481,17 @@ export function EditorShell({
   const autosave = useAutosave({
     invitationId,
     // The preview is reloaded only by a save the API accepted: its frame then reads the stored draft again.
-    onSaved: () => setPreviewKey((key) => key + 1),
+    onSaved: (channel) => {
+      if (channel === "features") {
+        // The API now holds the plan this save carried, which is the drafts as they were when it was sent.
+        const saved = itineraryPayloadOf(featuresRef.current.itinerary, storedItinerary.current);
+
+        if (saved !== undefined) {
+          storedItinerary.current = saved;
+        }
+      }
+      setPreviewKey((key) => key + 1);
+    },
   });
 
   // The tab is mirrored into the URL so a reload, a shared link, and a server action's redirect all come back to it.
@@ -561,6 +597,16 @@ export function EditorShell({
 
   const changeFeatures = (next: Partial<FeatureValues>) => {
     setFeatures((current) => ({ ...current, ...next }));
+
+    // A plan change that leaves the complete moments as they were is not a save (F1; L3.4): a moment being added or
+    // written, and the removal of one that was never complete, stay in the browser without a request — and without the
+    // refusal an incomplete payload would earn.
+    if (
+      next.itinerary !== undefined &&
+      !itineraryNeedsSave(features.itinerary, next.itinerary, storedItinerary.current)
+    ) {
+      return;
+    }
     autosave.changeFeatures(next);
   };
 

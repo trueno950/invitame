@@ -12,6 +12,7 @@
  */
 
 import type { GalleryPhoto } from "./gallery.ts";
+import type { ItineraryMoment } from "./itinerary.ts";
 import type { MusicLink } from "./music.ts";
 import type { StoredPlaces } from "./place-point.ts";
 
@@ -114,6 +115,11 @@ export interface InvitationFeatures {
    */
   readonly gallery?: readonly GalleryPhoto[];
   /**
+   * The moments of the day in the owner's order (F1; L3.3). Absent or empty renders no timeline, which is what a
+   * package without `ITINERARY`, or an invitation that stored no moment, answers.
+   */
+  readonly itinerary?: readonly ItineraryMoment[];
+  /**
    * The confirmed points of this invitation, keyed by the address field each one belongs to (S1, S2). Only a point
    * whose stored label still equals the text the field holds is here, so the block attaches a coordinate to exactly
    * the places a guest may be sent to. Absent or empty renders the map links of every layout unchanged.
@@ -140,6 +146,7 @@ export function isE164Phone(phone: string): boolean {
  * selects a code path on the guest page.
  */
 export const INVITATION_FEATURE_KEYS = [
+  "ITINERARY",
   "COUNTDOWN",
   "MAP",
   "WHATSAPP",
@@ -175,6 +182,7 @@ export function hasAnyFeature(features: InvitationFeatures): boolean {
     features.whatsapp !== null ||
     features.music !== null ||
     (features.gallery !== undefined && features.gallery.length > 0) ||
+    (features.itinerary !== undefined && features.itinerary.length > 0) ||
     features.rsvp !== undefined ||
     features.guest !== undefined
   );

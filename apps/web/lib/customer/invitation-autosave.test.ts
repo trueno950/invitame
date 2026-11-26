@@ -19,7 +19,15 @@ import {
   parseRsvpChanges,
   refusal,
 } from "./invitation-autosave.ts";
-import { contentFields } from "./invitations.ts";
+import { contentFields, fieldLabel } from "./invitations.ts";
+import {
+  addItineraryMoment,
+  EMPTY_ITINERARY_MOMENT,
+  type ItineraryDraftMoment,
+  itineraryNeedsSave,
+  removeItineraryMoment,
+  updateItineraryMoment,
+} from "./itinerary.ts";
 
 // The autosave building blocks (T2a; S2, S4): a content autosave merges only the fields the creator changed into
 // the content it reads from the API at that instant, so it never overwrites a field written elsewhere (the
@@ -54,6 +62,10 @@ const STORED_FEATURES: InvitationFeatureInput = {
   timeZone: "America/Mexico_City",
   whatsappPhone: "+525512345678",
   playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+  itinerary: {
+    version: 1,
+    items: [{ time: "17:00", title: "Misa", address: "Av. Juárez 45" }],
+  },
 };
 
 const STORED_RSVP: RsvpSettings = { deadline: "2026-12-01T23:30:00.000Z", partyLimit: 4 };
@@ -196,6 +208,7 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       timeZone: "America/Mexico_City",
       whatsappPhone: "55 1234 5678",
       playlistUrl: STORED_FEATURES.playlistUrl,
+      itinerary: STORED_FEATURES.itinerary,
     });
   });
 
@@ -207,10 +220,181 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       timeZone: "America/Mexico_City",
       whatsappPhone: null,
       playlistUrl: STORED_FEATURES.playlistUrl,
+      itinerary: STORED_FEATURES.itinerary,
     });
   });
 
-  it("refuses a key that is not one of the three feature fields", () => {
+  it("sends the moments of the itinerary as the payload the API stores (F1; L3.1, L3.4)", () => {
+    const parsed = parseFeatureChanges({
+      itinerary: [
+        { time: " 19:30 ", title: " Recepción y cóctel ", place: "", address: "" },
+        { time: "17:00", title: "Misa", place: " Parroquia ", address: "   " },
+      ],
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(
+      parsed.ok
+        ? mergeFeatureChanges({ ...STORED_FEATURES, itinerary: null }, parsed.changes)
+        : undefined,
+      {
+        ...STORED_FEATURES,
+        itinerary: {
+          version: 1,
+          items: [
+            { time: "19:30", title: "Recepción y cóctel" },
+            { time: "17:00", title: "Misa", place: "Parroquia" },
+          ],
+        },
+      },
+    );
+  });
+
+  it("clears the stored plan when the owner removes every moment (F1; L3.4)", () => {
+    const parsed = parseFeatureChanges({ itinerary: null });
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.ok ? mergeFeatureChanges(STORED_FEATURES, parsed.changes) : undefined, {
+      ...STORED_FEATURES,
+      itinerary: null,
+    });
+  });
+
+  it("accepts a moment that is still being written and sends only the complete ones (L3.4)", () => {
+    const blank = { time: "", title: "", place: "", address: "" };
+    const parsed = parseFeatureChanges({
+      itinerary: [{ time: "17:00", title: "Misa", place: "", address: "" }, blank],
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(
+      parsed.ok
+        ? mergeFeatureChanges({ ...STORED_FEATURES, itinerary: null }, parsed.changes)
+        : undefined,
+      {
+        ...STORED_FEATURES,
+        itinerary: { version: 1, items: [{ time: "17:00", title: "Misa" }] },
+      },
+    );
+
+    // A plan that only holds a row being written carries no moment at all, so it is nothing to store.
+    const onlyBlank = parseFeatureChanges({ itinerary: [blank] });
+
+    assert.equal(onlyBlank.ok, true);
+    assert.deepEqual(
+      onlyBlank.ok
+        ? mergeFeatureChanges({ ...STORED_FEATURES, itinerary: null }, onlyBlank.changes)
+        : undefined,
+      { ...STORED_FEATURES, itinerary: null },
+    );
+  });
+
+  it("sends the stored plan again when a row being written was added to it (L3.4)", () => {
+    const parsed = parseFeatureChanges({
+      itinerary: [
+        { time: "17:00", title: "Misa", place: "", address: "Av. Juárez 45" },
+        { time: "", title: "Cóctel", place: "", address: "" },
+      ],
+    });
+
+    assert.equal(parsed.ok, true);
+    // The stored payload is already the complete set, so the save is a no-op the queue never sends.
+    assert.deepEqual(
+      parsed.ok ? mergeFeatureChanges(STORED_FEATURES, parsed.changes) : undefined,
+      STORED_FEATURES,
+    );
+  });
+
+  it("keeps a stored moment whose title the owner is retyping, and drops it only when removed (L3.4)", () => {
+    const stored: InvitationFeatureInput = {
+      ...STORED_FEATURES,
+      itinerary: {
+        version: 1,
+        items: [
+          { time: "17:00", title: "Misa", place: "Parroquia", address: "Av. Juárez 45" },
+          { time: "19:30", title: "Recepción y cóctel" },
+        ],
+      },
+    };
+    const cleared = parseFeatureChanges({
+      itinerary: [
+        { time: "17:00", title: "  ", place: "Parroquia", address: "Av. Juárez 45" },
+        { time: "19:30", title: "Recepción y cóctel", place: "", address: "" },
+      ],
+    });
+
+    assert.equal(cleared.ok, true);
+    // The API receives the plan it already had, not a plan that lost the moment being retyped.
+    assert.deepEqual(
+      cleared.ok ? mergeFeatureChanges(stored, cleared.changes).itinerary : undefined,
+      stored.itinerary,
+    );
+
+    // «Quitar» is the way to remove it, and then it is gone from the payload.
+    const removed = parseFeatureChanges({
+      itinerary: [{ time: "19:30", title: "Recepción y cóctel", place: "", address: "" }],
+    });
+
+    assert.equal(removed.ok, true);
+    assert.deepEqual(
+      removed.ok ? mergeFeatureChanges(stored, removed.changes).itinerary : undefined,
+      { version: 1, items: [{ time: "19:30", title: "Recepción y cóctel" }] },
+    );
+  });
+
+  it("walks a moment added empty and filled step by step without a refusal (L3.4)", () => {
+    const stored = { ...STORED_FEATURES, itinerary: null };
+    let drafts: readonly ItineraryDraftMoment[] = [];
+
+    // «Agregar momento»: an empty row is nothing complete, so no request is made and no refusal can appear.
+    drafts = addItineraryMoment(drafts);
+    assert.equal(itineraryNeedsSave([], drafts), false);
+
+    // The owner types the time: the row is still being written, so nothing is sent yet.
+    const beforeTime = drafts;
+    drafts = updateItineraryMoment(drafts, 0, { time: "17:00" });
+    assert.equal(itineraryNeedsSave(beforeTime, drafts), false);
+
+    // The title completes it: this is the save, and its payload is one the API accepts.
+    const beforeTitle = drafts;
+    drafts = updateItineraryMoment(drafts, 0, { title: "Misa" });
+    assert.equal(itineraryNeedsSave(beforeTitle, drafts), true);
+
+    const parsed = parseFeatureChanges({ itinerary: drafts });
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(
+      parsed.ok ? mergeFeatureChanges(stored, parsed.changes).itinerary : undefined,
+      { version: 1, items: [{ time: "17:00", title: "Misa" }] },
+    );
+
+    // A second row added and removed while it is empty never asks for a save either.
+    const withEmpty = addItineraryMoment(drafts);
+    assert.equal(itineraryNeedsSave(drafts, withEmpty), false);
+    assert.equal(itineraryNeedsSave(withEmpty, removeItineraryMoment(withEmpty, 1)), false);
+    assert.ok(EMPTY_ITINERARY_MOMENT.time === "");
+  });
+
+  it("refuses a complete moment no control could have written (F1; L3.1, L3.4)", () => {
+    for (const refused of [
+      "Misa",
+      [{ time: "17:00", title: "Misa" }],
+      [{ time: 17, title: "Misa", place: "", address: "" }],
+      [{ time: "17:00", title: "Misa", place: null, address: "" }],
+      Array.from({ length: 16 }, () => ({ time: "17:00", title: "Misa", place: "", address: "" })),
+      [{ time: "24:00", title: "Misa", place: "", address: "" }],
+      [{ time: "17:00", title: "a".repeat(61), place: "", address: "" }],
+    ]) {
+      assert.deepEqual(
+        issuesOf(parseFeatureChanges({ itinerary: refused })).map((issue) => issue.field),
+        ["itinerary"],
+        JSON.stringify(refused),
+      );
+    }
+    assert.equal(FEATURE_ISSUE_COPY.itinerary.length > 0, true);
+  });
+
+  it("refuses a key that is not one of the feature fields", () => {
     assert.deepEqual(issuesOf(parseFeatureChanges({ gifts: "x" }))[0], {
       field: "gifts",
       message: AUTOSAVE_COPY.unknownField,
@@ -356,15 +540,43 @@ describe("every refusal becomes a Spanish result the status line can show (S2, S
     );
   });
 
+  it("shows a content field's own sentence when its payload is refused (T2a; S2)", () => {
+    // A content autosave of a value the pinned schema refuses names the field, and the status line says what to fix
+    // instead of telling the customer to reload a page that is not stale.
+    const parsed = parseContentChanges(FIELDS, { date: "no-es-una-fecha" });
+
+    assert.equal(parsed.ok, false);
+    const refused = invalidPayload(parsed.ok ? [] : parsed.fieldIssues);
+
+    assert.deepEqual(
+      refused.fieldIssues?.map((issue) => issue.field),
+      ["date"],
+    );
+    assert.equal(refused.reason, "invalid");
+    assert.equal(refused.message, AUTOSAVE_COPY.fieldIssue(fieldLabel("date")));
+    assert.notEqual(refused.message, AUTOSAVE_COPY.invalidPayload);
+  });
+
   it("names a payload the server could not read, with the issues it collected", () => {
+    // A payload refused for a named field says what to fix under that field; the generic sentence is for a refusal
+    // that names nothing, because only then is there nothing the owner can do but try again.
     assert.deepEqual(
       invalidPayload([{ field: "date", message: AUTOSAVE_COPY.fieldIssue("Fecha") }]),
       {
         ok: false,
         reason: "invalid",
-        message: AUTOSAVE_COPY.invalidPayload,
+        message: AUTOSAVE_COPY.fieldIssue("Fecha"),
         fieldIssues: [{ field: "date", message: AUTOSAVE_COPY.fieldIssue("Fecha") }],
       },
+    );
+    assert.deepEqual(invalidPayload([]), {
+      ok: false,
+      reason: "invalid",
+      message: AUTOSAVE_COPY.invalidPayload,
+    });
+    assert.equal(
+      invalidPayload([{ field: "itinerary", message: FEATURE_ISSUE_COPY.itinerary }]).message,
+      FEATURE_ISSUE_COPY.itinerary,
     );
   });
 });

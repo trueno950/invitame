@@ -604,6 +604,25 @@ export const FEATURE_COPY = {
   automaticMap: "Mapa con enlaces a Google Maps y Waze",
   automaticCalendar: "Botón para agregar al calendario",
   automaticNone: "Tu paquete no incluye funciones automáticas por ahora.",
+  /** The itinerary block of «Funciones» (F1; L3.4). */
+  itineraryTitle: "Itinerario",
+  itineraryHint:
+    "Agrega los momentos del día en el orden en que ocurren: la hora, el título y, si quieres, el lugar y la dirección para llegar.",
+  itineraryAdd: "Agregar momento",
+  itineraryRemove: "Quitar",
+  itineraryMoveUp: "Subir",
+  itineraryMoveDown: "Bajar",
+  itineraryMomentLabel: (position: number) => `Momento ${position}`,
+  itineraryTimeLabel: "Hora",
+  itineraryMomentTitleLabel: "Título",
+  itineraryPlaceLabel: "Lugar (opcional)",
+  itineraryAddressLabel: "Dirección (opcional)",
+  itineraryLimitNote: "Puedes agregar hasta 15 momentos.",
+  itineraryIncomplete: "Completa la hora y el título para guardar este momento.",
+  itineraryEmpty:
+    "Todavía no hay momentos. Agrega el primero para que tus invitados vean el programa del día.",
+  itineraryArchivedNote:
+    "El itinerario se guarda con la invitación, así que puedes consultarlo aquí aunque ya no se pueda editar.",
   /** The gift registry lives in the invitation content; these name why its block may not show (F7; S7). */
   giftRegistryNoteOne: (packageName: string) =>
     `La mesa de regalos se muestra con el paquete ${packageName}.`,
@@ -688,6 +707,8 @@ export const FEATURE_ISSUE_COPY = {
   "phone-type": "El número de WhatsApp no tiene un formato válido.",
   playlist:
     "Pega un enlace que empiece con https de Spotify, Apple Music, YouTube, Deezer o SoundCloud.",
+  itinerary:
+    "Revisa el itinerario: cada momento necesita una hora válida y un título de 1 a 60 caracteres; el lugar y la dirección admiten hasta 160.",
   other:
     "Hay un dato de las funcionalidades que no pudimos guardar. Revísalo y vuelve a intentarlo.",
 } as const;

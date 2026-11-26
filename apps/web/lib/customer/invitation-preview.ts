@@ -213,6 +213,9 @@ function gatedFeatures(
     giftRegistry: gated.has("GIFT_REGISTRY"),
     // The owner's own media read answers the stored photos; a package without `GALLERY` shows none of them.
     gallery: gated.has("GALLERY") ? galleryPhotos(media) : [],
+    // The owner read answers the stored plan of the day, and the preview shows it only while the package grants the
+    // key, exactly as a guest page does (F1; L3.3).
+    itinerary: gated.has("ITINERARY") ? (invitation.featureSettings.itinerary?.items ?? []) : [],
   };
 }
 

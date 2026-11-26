@@ -1,5 +1,6 @@
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import { isE164Phone } from "../invitation-features/invitation-features.ts";
+import { type Itinerary, parseItinerary } from "../invitation-features/itinerary.ts";
 import { type MusicLink, musicServiceOf } from "../invitation-features/music.ts";
 import { parseStoredPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
@@ -59,6 +60,11 @@ export interface PublicInvitationFeatures {
    * the value, so the card renders what it can.
    */
   readonly music: MusicLink | null;
+  /**
+   * The moments of the day in the owner's order, or null when the package does not grant `ITINERARY` or the invitation
+   * stores none (F1; L3.3). The API answers the list, never the payload's version, so this client reads no version.
+   */
+  readonly itinerary: Itinerary | null;
   /** Whether the layouts render their gift registry block (S7). */
   readonly giftRegistry: boolean;
   /**
@@ -275,8 +281,15 @@ function parsePublicFeatures(
   const music = features.music === null ? null : musicServiceOf(features.music);
   const rsvp = parsePublicRsvp(features.rsvp);
   const gallery = parseGallery(features.gallery, apiOrigin);
+  // An absent itinerary (a body written before the column existed) reads as none; another shape refuses the body.
+  const itinerary = features.itinerary === undefined ? null : parseItinerary(features.itinerary);
 
-  if (music === undefined || rsvp === undefined || gallery === undefined) {
+  if (
+    music === undefined ||
+    rsvp === undefined ||
+    gallery === undefined ||
+    itinerary === undefined
+  ) {
     return undefined;
   }
 
@@ -287,6 +300,7 @@ function parsePublicFeatures(
     calendar: true,
     giftRegistry: features.giftRegistry,
     music,
+    itinerary,
     gallery,
     rsvp,
   } as const;

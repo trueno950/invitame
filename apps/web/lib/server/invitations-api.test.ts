@@ -61,6 +61,8 @@ const OWNED = {
     playlistUrl: null,
     playlistTitle: null,
     playlistCoverUrl: null,
+    // The plan of the day the owner read carries (F1; L3.1); null while the invitation has none.
+    itinerary: null,
   },
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
   // The precise-locations slice (S2): every stored point, keyed by the address field it belongs to.
@@ -76,6 +78,7 @@ const FEATURED = {
     playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
     playlistTitle: "Today’s Top Hits",
     playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
+    itinerary: null,
   },
   availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "MUSIC", "GIFT_REGISTRY", "CALENDAR"],
 };
@@ -250,6 +253,7 @@ describe("requests", () => {
             timeZone: "America/Tijuana",
             whatsappPhone: "+525512345678",
             playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+            itinerary: null,
           }),
         "PUT",
         `/invitations/${ID}/features`,
@@ -257,6 +261,7 @@ describe("requests", () => {
           timeZone: "America/Tijuana",
           whatsappPhone: "+525512345678",
           playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+          itinerary: null,
         },
         FEATURED,
       ],
@@ -320,6 +325,7 @@ describe("requests", () => {
           timeZone: "America/Tijuana",
           whatsappPhone: null,
           playlistUrl: null,
+          itinerary: null,
         }),
         { ok: false, failure: "not-found" },
         id,
@@ -656,6 +662,7 @@ describe("errors", () => {
         timeZone: "Europe/Madrid",
         whatsappPhone: "12",
         playlistUrl: null,
+        itinerary: null,
       }),
       { ok: false, failure: "features-invalid", issues },
     );
@@ -666,6 +673,7 @@ describe("errors", () => {
         timeZone: "Europe/Madrid",
         whatsappPhone: null,
         playlistUrl: null,
+        itinerary: null,
       }),
       { ok: false, failure: "features-invalid" },
     );
@@ -902,9 +910,42 @@ describe("validators", () => {
     assert.deepEqual(parseOwnedInvitation(FEATURED), FEATURED);
   });
 
+  it("reads the stored itinerary payload and refuses one of another shape (F1; L3.1)", () => {
+    const itinerary = {
+      version: 1,
+      items: [{ time: "17:00", title: "Misa", address: "Av. Juárez 45" }],
+    };
+    const parse = (featureSettings: unknown) =>
+      parseOwnedInvitation({ ...OWNED, featureSettings })?.featureSettings.itinerary;
+
+    assert.deepEqual(parse({ ...OWNED.featureSettings, itinerary }), itinerary);
+    // A body written before the column existed reads as no itinerary, never as a missing value the editor guesses.
+    assert.equal(parse({ whatsappPhone: null, playlistUrl: null }), null);
+    assert.equal(parse({ ...OWNED.featureSettings, itinerary: null }), null);
+
+    for (const broken of [
+      { version: 2, items: itinerary.items },
+      { version: 1, items: [] },
+      { version: 1, items: "Misa" },
+      { version: 1, items: [{ time: "24:00", title: "Misa" }] },
+      { items: itinerary.items },
+      "Misa",
+    ]) {
+      assert.equal(
+        parse({ ...OWNED.featureSettings, itinerary: broken }),
+        undefined,
+        JSON.stringify(broken),
+      );
+    }
+  });
+
   it("reads the stored playlist title and cover, and drops a value it does not accept (S2)", () => {
     const cover = "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07";
-    const base = { whatsappPhone: null, playlistUrl: "https://open.spotify.com/playlist/abc" };
+    const base = {
+      whatsappPhone: null,
+      playlistUrl: "https://open.spotify.com/playlist/abc",
+      itinerary: null,
+    };
     const parse = (featureSettings: unknown) =>
       parseOwnedInvitation({ ...OWNED, featureSettings })?.featureSettings;
 

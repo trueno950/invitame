@@ -57,6 +57,12 @@ function creatorPackage(
 }
 
 const BASIC = creatorPackage(PACKAGE_ID, ["COUNTDOWN", "MAP", "WHATSAPP"]);
+const ITINERARY_PACKAGE = creatorPackage(
+  PACKAGE_ID,
+  ["ITINERARY", "COUNTDOWN", "MAP"],
+  "premium",
+  "Premium",
+);
 const MAP_ONLY = creatorPackage(PACKAGE_ID, ["MAP"], "esencial");
 
 describe("the feature section's Spanish copy (S7)", () => {
@@ -161,6 +167,52 @@ describe("featureSettingsView", () => {
     const basic = featureSettingsView(OWNED, [BASIC]);
     assert.equal(basic.showMusic, false);
     assert.equal(basic.playlistUrl, PLAYLIST);
+  });
+
+  it("offers the itinerary block only while the package grants it (F1; L3.2, L3.4)", () => {
+    const stored = {
+      ...OWNED,
+      featureSettings: {
+        ...OWNED.featureSettings,
+        itinerary: {
+          version: 1 as const,
+          items: [
+            {
+              time: "17:00",
+              title: "Misa",
+              place: "Parroquia de San Juan",
+              address: "Av. Juárez 45",
+            },
+            { time: "19:30", title: "Recepción y cóctel" },
+          ],
+        },
+      },
+    };
+
+    const granted = featureSettingsView(stored, [ITINERARY_PACKAGE]);
+
+    assert.equal(granted.showItinerary, true);
+    assert.deepEqual(granted.itinerary, [
+      { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
+      { time: "19:30", title: "Recepción y cóctel", place: "", address: "" },
+    ]);
+
+    // A package without the key, and a catalog that could not be read, offer no editor for the plan.
+    assert.equal(featureSettingsView(stored, [BASIC]).showItinerary, false);
+    assert.equal(featureSettingsView(stored, undefined).showItinerary, false);
+    // An invitation without a plan opens an empty list, which is what the editor adds the first moment to.
+    assert.deepEqual(featureSettingsView(OWNED, [ITINERARY_PACKAGE]).itinerary, []);
+  });
+
+  it("names the itinerary sentence of a refusal (F1; L3.4)", () => {
+    assert.deepEqual(
+      featureIssueCodes([
+        "itinerary.version must be 1",
+        "itinerary.items[2].title must be between 1 and 60 characters",
+      ]),
+      ["itinerary"],
+    );
+    assert.equal(FEATURE_ISSUE_COPY.itinerary.length > 0, true);
   });
 
   it("lists the packages that include the gift registry when this one does not (S7)", () => {

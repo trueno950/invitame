@@ -12,6 +12,7 @@ import {
   type RsvpBlockView,
   type WhatsAppContact,
 } from "../invitation-features/invitation-features.ts";
+import type { ItineraryMoment } from "../invitation-features/itinerary.ts";
 import type { MusicLink } from "../invitation-features/music.ts";
 import { confirmedPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isSupportedTimeZone, startInstant } from "../invitation-features/start-instant.ts";
@@ -105,6 +106,11 @@ export interface GatedFeatures {
   readonly music: MusicLink | null;
   readonly giftRegistry: boolean;
   readonly gallery: readonly GalleryPhoto[];
+  /**
+   * The moments of the day (F1; L3.3), already gated by the page that built this source: the public read answers
+   * them only while the package grants `ITINERARY`, and the preview applies the same rule from the owner's read.
+   */
+  readonly itinerary: readonly ItineraryMoment[];
 }
 
 /** Everything one page renders the shared features block from. */
@@ -162,6 +168,7 @@ export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts
     giftRegistry: source.gated.giftRegistry,
     // The API gates the gallery and answers it in the creator's order; the block renders it as it comes (M8 S4).
     gallery: source.gated.gallery,
+    ...(source.gated.itinerary.length === 0 ? {} : { itinerary: source.gated.itinerary }),
     ...(Object.keys(places).length === 0 ? {} : { places }),
     ...(source.rsvp === undefined ? {} : { rsvp: source.rsvp }),
     ...(source.guest === undefined ? {} : { guest: source.guest }),
@@ -186,7 +193,7 @@ export function publicFeatureBlock(
     content: invitation.content,
     hiddenFields: invitation.hiddenFields,
     timeZone: invitation.timeZone,
-    gated: invitation.features,
+    gated: { ...invitation.features, itinerary: invitation.features.itinerary?.items ?? [] },
     places: invitation.places,
     ...(rsvp === undefined ? {} : { rsvp }),
     ...(guest === undefined ? {} : { guest }),

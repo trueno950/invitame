@@ -39,6 +39,7 @@ const PUBLIC: PublicInvitation = {
     whatsapp: { phone: "+525512345678" },
     music: { url: PLAYLIST, provider: "spotify" },
     giftRegistry: true,
+    itinerary: null,
     gallery: [],
     rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
   },
@@ -172,6 +173,7 @@ describe("publicFeatureBlock", () => {
         whatsapp: null,
         music: null,
         giftRegistry: true,
+        itinerary: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -200,6 +202,25 @@ describe("publicFeatureBlock", () => {
     }
   });
 
+  it("carries the gated itinerary into the block, in the API's order (F1; L3.3, L3.5)", () => {
+    const items = [
+      { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
+      { time: "19:30", title: "Recepción y cóctel" },
+    ];
+    const block = publicFeatureBlock({
+      ...PUBLIC,
+      features: { ...PUBLIC.features, itinerary: { items } },
+    });
+
+    assert.deepEqual(block?.features.itinerary, items);
+  });
+
+  it("carries no itinerary while the page gates none", () => {
+    const block = publicFeatureBlock(PUBLIC);
+
+    assert.equal(block?.features.itinerary, undefined);
+  });
+
   it("keeps the map alone when the zone is unknown and nothing else is gated", () => {
     const block = publicFeatureBlock({
       ...PUBLIC,
@@ -211,6 +232,7 @@ describe("publicFeatureBlock", () => {
         whatsapp: null,
         music: null,
         giftRegistry: false,
+        itinerary: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },

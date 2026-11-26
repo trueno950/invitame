@@ -442,6 +442,99 @@ describe("«Escucha nuestra playlist» in the features block (F6; S7)", () => {
   });
 });
 
+describe("«Itinerario» in the features block (F1; L3.5)", () => {
+  const MOMENTS = [
+    {
+      time: "17:00",
+      title: "Misa",
+      place: "Parroquia de San Juan",
+      address: "Av. Juárez 45, Centro",
+    },
+    { time: "18:30", title: "Sesión de fotos", place: "Jardín de la parroquia" },
+    { time: "19:30", title: "Recepción y cóctel", address: "Salón Jardín Las Rosas" },
+  ] as const;
+
+  const itineraryOnly = (moments: readonly (typeof MOMENTS)[number][] = MOMENTS) =>
+    render(featuresOf({ itinerary: moments }));
+
+  it("draws the moments in the owner's order, with their time, title, and place", () => {
+    const html = itineraryOnly();
+
+    assert.match(html, /data-feature="itinerary"/);
+    assert.deepEqual(
+      [...html.matchAll(/<time[^>]*>([^<]+)<\/time>/g)].map((match) => match[1]),
+      ["17:00", "18:30", "19:30"],
+    );
+    for (const moment of MOMENTS) {
+      assert.match(html, new RegExp(moment.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    assert.match(html, /Parroquia de San Juan/);
+    assert.match(html, /Jardín de la parroquia/);
+    assert.match(html, /Itinerario/);
+  });
+
+  it("marks only the first moment, so the timeline reads as a start", () => {
+    const html = itineraryOnly();
+    const moments = html.match(/<li[\s>][\s\S]*?<\/li>/g) ?? [];
+
+    assert.equal(moments.length, MOMENTS.length);
+    assert.match(moments[0] ?? "", /Primer momento/);
+    for (const other of moments.slice(1)) {
+      assert.doesNotMatch(other, /Primer momento/);
+    }
+  });
+
+  it("offers «Cómo llegar» only for a moment with an address, as a Google Maps search", () => {
+    const html = itineraryOnly();
+    const links = linksOf(html);
+    const directions = links.filter((link) => link.includes("Cómo llegar a "));
+
+    // Two of the three moments carry an address, so exactly two links lead to the map.
+    assert.equal(directions.length, 2);
+    // React escapes the `&` of the query string, which is what a browser reads as the same URL.
+    assert.equal(
+      attributeOf(directions[0] as string, "href"),
+      `https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent("Av. Juárez 45, Centro")}`,
+    );
+    assert.equal(
+      attributeOf(directions[1] as string, "href"),
+      `https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent("Salón Jardín Las Rosas")}`,
+    );
+    assert.equal(
+      attributeOf(directions[0] as string, "aria-label"),
+      "Cómo llegar a Misa en Google Maps",
+    );
+    // A moment without an address asks for nothing: the title is not a destination anyone can navigate to.
+    assert.equal(
+      directions.some((link) => link.includes("Sesión de fotos")),
+      false,
+    );
+  });
+
+  it("opens every directions link in a new tab without leaking the opener", () => {
+    for (const link of linksOf(itineraryOnly())) {
+      assert.equal(attributeOf(link, "target"), "_blank");
+      assert.equal(attributeOf(link, "rel"), "noopener noreferrer");
+    }
+  });
+
+  it("renders no timeline when the invitation has no moment", () => {
+    assert.equal(render(featuresOf({ itinerary: [] })), "");
+    assert.doesNotMatch(render(featuresOf({ countdown: true })), /data-feature="itinerary"/);
+  });
+
+  it("escapes the moment texts so they cannot add markup", () => {
+    const html = render(
+      featuresOf({
+        itinerary: [{ time: "17:00", title: "<img src=x onerror=alert(1)>" }],
+      }),
+    );
+
+    assert.doesNotMatch(html, /<img src=x/);
+    assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  });
+});
+
 describe("features block rendering rules", () => {
   const ALL_ON = featuresOf({
     countdown: true,
@@ -449,6 +542,9 @@ describe("features block rendering rules", () => {
     calendar: true,
     whatsapp: { phone: "+525512345678" },
     music: { url: PLAYLIST, provider: "youtube" },
+    itinerary: [
+      { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
+    ],
   });
 
   it("escapes the content it renders so it cannot add markup", () => {

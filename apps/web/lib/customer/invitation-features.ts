@@ -1,6 +1,7 @@
 import { INVITATION_TIME_ZONES, isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import type { CreatorPackage, OwnedInvitation } from "../server/invitations-api.ts";
 import { FEATURE_COPY, INVITATION_TIME_ZONE_LABELS } from "./copy.ts";
+import { type ItineraryDraftMoment, itineraryDraftsOf } from "./itinerary.ts";
 
 /**
  * The creator's «Funcionalidades» section (F3, F6, F7; S3, S4, S7). The feature data belongs to the invitation,
@@ -41,6 +42,7 @@ const CALENDAR_FEATURE_KEY = "CALENDAR";
 const MUSIC_FEATURE_KEY = "MUSIC";
 const RSVP_FEATURE_KEY = "RSVP";
 const GIFT_REGISTRY_FEATURE_KEY = "GIFT_REGISTRY";
+const ITINERARY_FEATURE_KEY = "ITINERARY";
 
 /** Everything the section renders for one draft. */
 export interface FeatureSettingsView {
@@ -59,6 +61,13 @@ export interface FeatureSettingsView {
   readonly playlistUrl: string;
   /** Whether the package includes MUSIC, which is the only reason the link field is shown (S7). */
   readonly showMusic: boolean;
+  /**
+   * Whether the package includes ITINERARY, which is the only reason the «Itinerario» block is shown (F1; L3.2,
+   * L3.4). A package without the key keeps a stored plan private instead of offering an editor nobody can publish.
+   */
+  readonly showItinerary: boolean;
+  /** The stored moments as the editor holds them: four texts per row, in the owner's order (F1; L3.4). */
+  readonly itinerary: readonly ItineraryDraftMoment[];
   /**
    * Whether the package includes RSVP, which is the only reason the draft offers its «Asistencia» section
    * (M6 G3; S4). A package with the guest list instead keeps that section for the guest-list tools (G4).
@@ -142,6 +151,8 @@ export function featureSettingsView(
     showWhatsapp: included.has(WHATSAPP_FEATURE_KEY),
     playlistUrl: invitation.featureSettings.playlistUrl ?? "",
     showMusic: included.has(MUSIC_FEATURE_KEY),
+    showItinerary: included.has(ITINERARY_FEATURE_KEY),
+    itinerary: itineraryDraftsOf(invitation.featureSettings.itinerary),
     showRsvp: included.has(RSVP_FEATURE_KEY),
     giftRegistryNote: giftRegistryNote(packages, included),
     automaticFeatures: AUTOMATIC_FEATURES.filter(

@@ -12,6 +12,15 @@ import { timeZoneLabel } from "../../../../../lib/customer/invitation-features.t
 import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rsvp.ts";
 import type { ContentField } from "../../../../../lib/customer/invitations.ts";
 import {
+  addItineraryMoment,
+  canAddItineraryMoment,
+  type ItineraryDraftMoment,
+  isItineraryMomentIncomplete,
+  moveItineraryMoment,
+  removeItineraryMoment,
+  updateItineraryMoment,
+} from "../../../../../lib/customer/itinerary.ts";
+import {
   activeOptionId,
   blurredPicker,
   dismissedSuggestions,
@@ -39,7 +48,13 @@ import {
   type StoredPlaces,
   storedPlaceOf,
 } from "../../../../../lib/invitation-features/place-point.ts";
-import { fieldHint, fieldLabel, textButton, textField } from "../../../../_components/ui.ts";
+import {
+  fieldHint,
+  fieldLabel,
+  quietButton,
+  textButton,
+  textField,
+} from "../../../../_components/ui.ts";
 import { GuardedLink } from "../../_components/autosave/navigation-guard.tsx";
 
 /**
@@ -501,6 +516,172 @@ export interface FeatureValues {
   readonly timeZone: string;
   readonly whatsappPhone: string;
   readonly playlistUrl: string;
+  /** The moments of the day as the browser holds them, in the owner's order (F1; L3.4). */
+  readonly itinerary: readonly ItineraryDraftMoment[];
+}
+
+/** The small controls of one itinerary moment: no form, no navigation, so each press is a save of its own (L3.4). */
+const itineraryControl = `${textButton} min-h-11`;
+
+/**
+ * The «Itinerario» block of «Funciones» (F1; L3.4): one row per moment with its time, its title, and the two optional
+ * texts, plus the controls that add, remove, and reorder them. Every control is a real button with its own accessible
+ * name — «Subir Misa», «Quitar Momento 3» — so the order is never changed by color, drag, or an icon alone, and a
+ * moment the API would refuse is named in the status line instead of being stored half-written.
+ */
+function ItineraryFields({
+  values,
+  onChange,
+  onFlush,
+}: {
+  values: FeatureValues;
+  onChange: (next: Partial<FeatureValues>) => void;
+  onFlush: () => void;
+}) {
+  const drafts = values.itinerary;
+  const nameOf = (index: number): string => {
+    const title = drafts[index]?.title.trim() ?? "";
+
+    return title === "" ? FEATURE_COPY.itineraryMomentLabel(index + 1) : title;
+  };
+  const change = (next: readonly ItineraryDraftMoment[]) => {
+    onChange({ itinerary: next });
+    // A press is one deliberate action, not a keystroke: it is sent at once instead of waiting for the debounce.
+    onFlush();
+  };
+  const patch = (index: number, valuesOfMoment: Partial<ItineraryDraftMoment>) =>
+    onChange({ itinerary: updateItineraryMoment(drafts, index, valuesOfMoment) });
+
+  /**
+   * The id of the hint of one row, while that row is still being written. A row like that is not an error, but the hint
+   * under it says why it is not saved yet, and the time and the title both name it for a reader that never sees it.
+   */
+  const incompleteHintId = (index: number): string | undefined => {
+    const moment = drafts[index];
+
+    return moment !== undefined && isItineraryMomentIncomplete(moment)
+      ? `itinerary-${index}-incomplete`
+      : undefined;
+  };
+
+  const field = (
+    index: number,
+    key: keyof ItineraryDraftMoment,
+    label: string,
+    type: "text" | "time",
+    maxLength: number,
+  ) => {
+    const id = `itinerary-${index}-${key}`;
+
+    return (
+      <div>
+        <label className={fieldLabel} htmlFor={id}>
+          {label}
+        </label>
+        <input
+          aria-describedby={key === "time" || key === "title" ? incompleteHintId(index) : undefined}
+          className={textField}
+          id={id}
+          maxLength={maxLength}
+          name={id}
+          onBlur={onFlush}
+          onChange={(event) => patch(index, { [key]: event.target.value })}
+          type={type}
+          value={drafts[index]?.[key] ?? ""}
+        />
+      </div>
+    );
+  };
+
+  // One row per moment, numbered by its place in the plan: a moment has no id of its own, and the position is both the
+  // order the owner sees and the order the plan is stored in, so it is also the identity each row keeps while editing.
+  let position = 0;
+  const rows = drafts.map((_moment) => {
+    const index = position;
+    position += 1;
+
+    return (
+      <li
+        className="flex flex-col gap-3 rounded-field bg-surface p-3 ring-1 ring-field-border"
+        key={index}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className={fieldLabel}>
+            {nameOf(index)}
+            <span className="ml-2 text-xs font-normal text-muted">
+              {FEATURE_COPY.itineraryMomentLabel(index + 1)}
+            </span>
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              aria-label={`${FEATURE_COPY.itineraryMoveUp} ${nameOf(index)}`}
+              className={itineraryControl}
+              disabled={index === 0}
+              onClick={() => change(moveItineraryMoment(drafts, index, "up"))}
+              type="button"
+            >
+              {FEATURE_COPY.itineraryMoveUp}
+            </button>
+            <button
+              aria-label={`${FEATURE_COPY.itineraryMoveDown} ${nameOf(index)}`}
+              className={itineraryControl}
+              disabled={index === drafts.length - 1}
+              onClick={() => change(moveItineraryMoment(drafts, index, "down"))}
+              type="button"
+            >
+              {FEATURE_COPY.itineraryMoveDown}
+            </button>
+            <button
+              aria-label={`${FEATURE_COPY.itineraryRemove} ${nameOf(index)}`}
+              className={itineraryControl}
+              onClick={() => change(removeItineraryMoment(drafts, index))}
+              type="button"
+            >
+              {FEATURE_COPY.itineraryRemove}
+            </button>
+          </div>
+        </div>
+        {incompleteHintId(index) === undefined ? null : (
+          <p className="text-sm leading-6 text-muted" id={incompleteHintId(index)}>
+            {FEATURE_COPY.itineraryIncomplete}
+          </p>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {field(index, "time", FEATURE_COPY.itineraryTimeLabel, "time", 5)}
+          {field(index, "title", FEATURE_COPY.itineraryMomentTitleLabel, "text", 60)}
+          {field(index, "place", FEATURE_COPY.itineraryPlaceLabel, "text", 160)}
+          {field(index, "address", FEATURE_COPY.itineraryAddressLabel, "text", 160)}
+        </div>
+      </li>
+    );
+  });
+
+  return (
+    <div className="border-t border-rose-100 pt-6">
+      <p className={fieldLabel}>{FEATURE_COPY.itineraryTitle}</p>
+      <p className={fieldHint}>{FEATURE_COPY.itineraryHint}</p>
+
+      {drafts.length === 0 ? (
+        <p className="mt-3 text-sm leading-6 text-muted">{FEATURE_COPY.itineraryEmpty}</p>
+      ) : (
+        <ol className="mt-4 flex flex-col gap-4">{rows}</ol>
+      )}
+
+      <div className="mt-4 flex flex-col gap-2">
+        <button
+          className={`${quietButton} self-start`}
+          disabled={!canAddItineraryMoment(drafts)}
+          onClick={() => change(addItineraryMoment(drafts))}
+          type="button"
+        >
+          {FEATURE_COPY.itineraryAdd}
+        </button>
+        {canAddItineraryMoment(drafts) ? null : (
+          <p className="text-sm leading-6 text-muted">{FEATURE_COPY.itineraryLimitNote}</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** The automatic features a guest sees, as a plain list of what the package turns on (S4). */
@@ -616,6 +797,10 @@ export function FeatureFields({
           <p className={fieldHint}>{FEATURE_COPY.playlistHint}</p>
           <FieldRefusal id={`${playlistId}-error`} message={issues?.playlistUrl} />
         </div>
+      ) : null}
+
+      {view.showItinerary ? (
+        <ItineraryFields onChange={onChange} onFlush={onFlush} values={values} />
       ) : null}
 
       {view.giftRegistryNote === "" ? null : (

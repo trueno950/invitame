@@ -48,6 +48,12 @@ const PUBLIC: PublicInvitation = {
     whatsapp: { phone: "+525512345678" },
     music: { url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", provider: "spotify" },
     giftRegistry: true,
+    itinerary: {
+      items: [
+        { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
+        { time: "19:30", title: "Recepción y cóctel" },
+      ],
+    },
     gallery: [],
     rsvp: { mode: "open", deadline: "2026-12-01T18:00:00.000Z", partyLimit: 4, qrPass: false },
   },
@@ -336,6 +342,21 @@ describe("parsePublicInvitation", () => {
       // The gift registry is a boolean the layouts read (S7).
       { ...PUBLIC, features: { ...PUBLIC.features, giftRegistry: undefined } },
       { ...PUBLIC, features: { ...PUBLIC.features, giftRegistry: "true" } },
+      // The itinerary is the moments of the day, or null while the package grants no `ITINERARY` (F1; L3.3).
+      { ...PUBLIC, features: { ...PUBLIC.features, itinerary: "17:00 Misa" } },
+      { ...PUBLIC, features: { ...PUBLIC.features, itinerary: {} } },
+      { ...PUBLIC, features: { ...PUBLIC.features, itinerary: { items: [] } } },
+      {
+        ...PUBLIC,
+        features: {
+          ...PUBLIC.features,
+          itinerary: { version: 1, items: [{ time: "17:00", title: "Misa" }] },
+        },
+      },
+      {
+        ...PUBLIC,
+        features: { ...PUBLIC.features, itinerary: { items: [{ time: "24:00", title: "Misa" }] } },
+      },
       // Music is one allow-listed service with an https link, or null (S7).
       { ...PUBLIC, features: { ...PUBLIC.features, music: undefined } },
       { ...PUBLIC, features: { ...PUBLIC.features, music: "https://open.spotify.com/x" } },
@@ -388,6 +409,8 @@ describe("parsePublicInvitation", () => {
           whatsapp: null,
           music: null,
           giftRegistry: false,
+          // The itinerary is null while the package grants no `ITINERARY` or the invitation stores none (F1; L3.3).
+          itinerary: null,
           // The gallery is always a list, empty when the package grants no `GALLERY` (M8 S4).
           gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -402,11 +425,36 @@ describe("parsePublicInvitation", () => {
           whatsapp: null,
           music: null,
           giftRegistry: false,
+          itinerary: null,
           gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
         },
       },
     );
+  });
+});
+
+describe("the itinerary of the public read (F1; L3.3)", () => {
+  it("reads the moments the API answers, in its order", () => {
+    const parsed = parsePublicInvitation(PUBLIC);
+
+    assert.deepEqual(parsed?.features.itinerary, PUBLIC.features.itinerary);
+  });
+
+  it("reads an absent itinerary as none, so an older API body still renders the page", () => {
+    const { itinerary: _omitted, ...features } = PUBLIC.features;
+    const parsed = parsePublicInvitation({ ...PUBLIC, features });
+
+    assert.equal(parsed?.features.itinerary, null);
+  });
+
+  it("reads the API's null as none", () => {
+    const parsed = parsePublicInvitation({
+      ...PUBLIC,
+      features: { ...PUBLIC.features, itinerary: null },
+    });
+
+    assert.equal(parsed?.features.itinerary, null);
   });
 });
 

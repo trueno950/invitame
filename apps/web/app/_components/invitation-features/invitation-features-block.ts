@@ -18,6 +18,13 @@ import {
   type RsvpBlockView,
 } from "../../../lib/invitation-features/invitation-features.ts";
 import {
+  ITINERARY_DIRECTIONS_LABEL,
+  ITINERARY_SECTION_HINT,
+  ITINERARY_SECTION_TITLE,
+  type ItineraryMoment,
+  itineraryDirectionsUrl,
+} from "../../../lib/invitation-features/itinerary.ts";
+import {
   googleMapsUrl,
   type MapPlace,
   wazeUrl,
@@ -82,6 +89,24 @@ const SURFACE_CARD = `${CARD} bg-(--inv-surface)`;
 const MUSIC_COVER = "mt-3 aspect-square w-full max-w-[18rem] rounded-xl object-cover";
 /** The playlist title the provider named, in the card's own ink (S2). */
 const MUSIC_TITLE = "mt-2 text-lg leading-tight font-medium break-words text-(color:--inv-ink)";
+
+// The timeline of the day (F1; L3.5): the time in the display face, the dot on the theme's accent, and the connector
+// in the theme's decoration color. The grid keeps the three columns aligned on every row, so a long title wraps
+// without pushing the time or the line away.
+const TIMELINE = "mt-3 flex flex-col gap-4";
+const TIMELINE_ROW = "grid grid-cols-[3.25rem_1rem_1fr] items-start gap-3";
+const TIMELINE_TIME =
+  "text-right text-lg leading-tight font-medium text-(color:--inv-ink) tabular-nums";
+const TIMELINE_RAIL = "flex flex-col items-center self-stretch";
+const TIMELINE_DOT = "size-3 shrink-0 rounded-full bg-(--inv-surface) ring-2 ring-(--inv-accent)";
+/** The filled dot of the first moment: the timeline's start, named for a reader that cannot see the fill. */
+const TIMELINE_DOT_FIRST = "size-3 shrink-0 rounded-full bg-(--inv-accent)";
+const TIMELINE_LINE = "mt-1 w-px flex-1 bg-(--inv-decoration-one)";
+const TIMELINE_TITLE = "text-base leading-tight font-medium break-words text-(color:--inv-ink)";
+const TIMELINE_PLACE = "mt-0.5 text-sm text-(color:--inv-ink)";
+/** The directions link keeps the theme's accent and a 44 px tap target, so it reads as an action, not as body text. */
+const TIMELINE_LINK =
+  "mt-1 inline-flex min-h-11 min-w-11 items-center text-sm font-medium text-(color:--inv-accent) underline underline-offset-4";
 
 // The RSVP form (M6 G3; S4): one card of the block, its fields drawn only with the theme's variables, and its
 // submit the same 44 px accent pill as every other action of the block. It needs no client script at all.
@@ -463,6 +488,68 @@ function guestPassSection(pass: GuestPassBlockView): ReactElement | null {
 }
 
 /**
+ * The plan of the day (F1; L3.5): one row per moment, in the order the owner stored, with the first moment's dot filled
+ * so the timeline has a start. A moment with an address offers «Cómo llegar» as a Google Maps search of that address;
+ * a moment without one offers no link, because a title is not a destination anyone can navigate to.
+ */
+function itinerarySection(moments: readonly ItineraryMoment[]): ReactElement {
+  return h(
+    "div",
+    { key: "itinerary", "data-feature": "itinerary", className: SURFACE_CARD },
+    h("h3", { className: FEATURE_TITLE }, ITINERARY_SECTION_TITLE),
+    h("p", { className: HINT }, ITINERARY_SECTION_HINT),
+    h(
+      "ol",
+      { className: TIMELINE },
+      moments.map((moment, index) =>
+        h(
+          "li",
+          { key: `${index}-${moment.time}`, "data-moment": moment.time, className: TIMELINE_ROW },
+          h("time", { className: TIMELINE_TIME, dateTime: moment.time }, moment.time),
+          h(
+            "span",
+            { className: TIMELINE_RAIL },
+            index === 0
+              ? h("span", {
+                  "aria-label": "Primer momento",
+                  role: "img",
+                  className: TIMELINE_DOT_FIRST,
+                })
+              : h("span", { "aria-hidden": "true", className: TIMELINE_DOT }),
+            // The last row ends the line: nothing follows it, so the connector stops at the last dot.
+            index === moments.length - 1
+              ? null
+              : h("span", { "aria-hidden": "true", className: TIMELINE_LINE }),
+          ),
+          h(
+            "div",
+            { className: "flex flex-col" },
+            h("p", { className: TIMELINE_TITLE }, moment.title),
+            moment.place === undefined ? null : h("p", { className: TIMELINE_PLACE }, moment.place),
+            moment.address === undefined
+              ? null
+              : h("p", { className: TIMELINE_PLACE }, moment.address),
+            moment.address === undefined
+              ? null
+              : h(
+                  "a",
+                  {
+                    href: itineraryDirectionsUrl(moment.address),
+                    target: "_blank",
+                    rel: "noopener noreferrer",
+                    "aria-label": `${ITINERARY_DIRECTIONS_LABEL} a ${moment.title} en Google Maps`,
+                    className: TIMELINE_LINK,
+                  },
+                  ITINERARY_DIRECTIONS_LABEL,
+                ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/**
  * The place as the links and the map read it: the layout's words plus the point the owner confirmed for that address
  * field, when there is one (S1, S2). A place whose field stored no point keeps exactly the text links it had.
  */
@@ -536,6 +623,11 @@ export function InvitationFeaturesBlock({
         }),
       ),
     );
+  }
+
+  // The plan of the day comes right after the countdown: what is left to wait for, and then what happens when it starts.
+  if (features.itinerary !== undefined && features.itinerary.length > 0) {
+    sections.push(itinerarySection(features.itinerary));
   }
 
   if (features.map) {

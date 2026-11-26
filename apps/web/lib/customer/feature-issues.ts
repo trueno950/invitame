@@ -20,6 +20,7 @@ export const FEATURE_ISSUE_CODES = [
   "phone",
   "phone-type",
   "playlist",
+  "itinerary",
   "other",
 ] as const;
 export type FeatureIssueCode = (typeof FEATURE_ISSUE_CODES)[number];
@@ -51,6 +52,12 @@ const CODE_BY_ISSUE: Readonly<Record<string, FeatureIssueCode>> = {
   [PLAYLIST_LENGTH_ISSUE]: "playlist",
 };
 
+/**
+ * The issues of the itinerary payload name the moment that refused them (`itinerary.items[2].title ...`), so they
+ * are mapped by their prefix instead of by each exact sentence: every one of them is the same field to review.
+ */
+const ITINERARY_ISSUE_PREFIX = /^itinerary(?:\.|\s|$)/;
+
 /** One code per distinct issue, and `other` when the refusal named none this module knows. */
 export function featureIssueCodes(issues: readonly string[]): FeatureIssueCode[] {
   const codes: FeatureIssueCode[] = [];
@@ -58,7 +65,9 @@ export function featureIssueCodes(issues: readonly string[]): FeatureIssueCode[]
   for (const issue of issues) {
     const code = Object.hasOwn(CODE_BY_ISSUE, issue)
       ? (CODE_BY_ISSUE[issue] as FeatureIssueCode)
-      : "other";
+      : ITINERARY_ISSUE_PREFIX.test(issue)
+        ? "itinerary"
+        : "other";
 
     if (!codes.includes(code)) {
       codes.push(code);
@@ -72,7 +81,7 @@ export function featureIssuesTarget(path: string, codes: readonly FeatureIssueCo
   return `${path}?error=${FEATURE_ERROR_CODE}&issues=${codes.join(",")}`;
 }
 
-const ISSUE_CODE = /^(?:timezone|phone|phone-type|playlist|other)$/;
+const ISSUE_CODE = /^(?:timezone|phone|phone-type|playlist|itinerary|other)$/;
 
 /** The Spanish sentence of one code; nothing at all for a code this page does not know. */
 function issueMessage(code: string): string | undefined {

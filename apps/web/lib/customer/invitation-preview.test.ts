@@ -138,6 +138,7 @@ function invitation(overrides: Partial<OwnedInvitation> = {}): OwnedInvitation {
       playlistUrl: null,
       playlistTitle: null,
       playlistCoverUrl: null,
+      itinerary: null,
     },
     availableFeatures: [],
     places: {},
@@ -548,6 +549,55 @@ describe("invitationPreviewView: the features the guest page would show", () => 
     });
 
     assert.deepEqual(view.features?.gallery, []);
+  });
+
+  it("shows the stored itinerary only while the package grants it (F1; L3.3)", () => {
+    const itinerary = {
+      version: 1 as const,
+      items: [
+        { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
+        { time: "19:30", title: "Recepción y cóctel" },
+      ],
+    };
+    const granted = rendered({
+      invitation: invitation({
+        availableFeatures: ["ITINERARY"],
+        featureSettings: {
+          whatsappPhone: null,
+          playlistUrl: null,
+          playlistTitle: null,
+          playlistCoverUrl: null,
+          itinerary,
+        },
+      }),
+      templates: [xvTemplate()],
+      media: undefined,
+      rsvp: undefined,
+      origin: ORIGIN,
+      now: NOW,
+    });
+
+    assert.deepEqual(granted.features?.itinerary, itinerary.items);
+
+    const withheld = rendered({
+      invitation: invitation({
+        availableFeatures: ["MAP"],
+        featureSettings: {
+          whatsappPhone: null,
+          playlistUrl: null,
+          playlistTitle: null,
+          playlistCoverUrl: null,
+          itinerary,
+        },
+      }),
+      templates: [xvTemplate()],
+      media: undefined,
+      rsvp: undefined,
+      origin: ORIGIN,
+      now: NOW,
+    });
+
+    assert.equal(withheld.features?.itinerary, undefined);
   });
 });
 
