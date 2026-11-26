@@ -76,8 +76,13 @@ export class UpdateInvitationFeaturesDto {
   @IsProvided()
   playlistUrl!: unknown;
 
-  @IsProvided()
-  itinerary!: unknown;
+  /**
+   * Optional, unlike the other three: a body that omits it keeps the stored itinerary (F1; review R3-001), so a client
+   * built before the itinerary existed can still save its time zone, phone, and playlist without clearing a plan it
+   * never knew about. `null` or an empty list still clears it.
+   */
+  @IsOptional()
+  itinerary?: unknown;
 }
 
 /**

@@ -495,7 +495,8 @@ export class UpdateInvitationFeaturesUseCase {
       timeZone: input.timeZone,
       whatsappPhone: input.whatsappPhone,
       playlistUrl: input.playlistUrl,
-      itinerary: input.itinerary,
+      // An omitted itinerary keeps the stored one (review R3-001): only `null` or an empty list clears it.
+      itinerary: input.itinerary === undefined ? stored.itinerary : input.itinerary,
     });
     if (!validation.ok) {
       throw new InvalidInvitationFeaturesError(validation.issues);

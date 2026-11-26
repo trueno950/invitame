@@ -1703,6 +1703,29 @@ describe("invitations routes: /invitations", () => {
       );
     });
 
+    it("keeps the stored itinerary when a body omits it, so an older client never clears it (F1; review R3-001)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: ITINERARY,
+      });
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Tijuana",
+        whatsappPhone: null,
+        playlistUrl: null,
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.equal(body.timeZone, "America/Tijuana");
+      assert.deepEqual((body.featureSettings as Row).itinerary, ITINERARY);
+      assert.deepEqual(repository.rows.find((row) => row.id === draft.id)?.itinerary, ITINERARY);
+    });
+
     it("clears the stored itinerary with null and with an empty list (F1; L3.1)", async () => {
       const { cookie } = await signedInCustomer();
       const draft = await createDraft(cookie);
