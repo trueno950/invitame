@@ -51,6 +51,7 @@ import {
   storedLodging,
   validateLodging,
 } from "./invitation-lodging";
+import { type InvitationReminders, validateReminders } from "./invitation-reminders";
 
 export const INVITATION_TIME_ZONES = [
   "America/Mexico_City",
@@ -518,6 +519,11 @@ export interface InvitationFeatureSettingsValue {
   readonly giftRegistry: InvitationGiftRegistry | null;
   /** The validated lodging, or null when the invitation has none or it would show nothing (F4; L7.1). */
   readonly lodging: InvitationLodging | null;
+  /**
+   * The validated WhatsApp reminder switches, or null while the owner switched nothing on (F6; L9.1). They decide
+   * whether the command sends a reminder and never what a guest sees, so they take no part in the feature gate.
+   */
+  readonly reminders: InvitationReminders | null;
 }
 
 /** The feature settings a request asked for, validated, or every issue that refuses them. */
@@ -526,12 +532,13 @@ export type InvitationFeatureSettingsValidation =
   | { readonly ok: false; readonly issues: string[] };
 
 /**
- * Validates a feature-settings request (S4, S7, F1, F2): the zone must be an allow-list member, the phone must
+ * Validates a feature-settings request (S4, S7, F1, F2, F4, F6): the zone must be an allow-list member, the phone must
  * normalize, the playlist link must be an `https` link on an allow-listed host, the itinerary must be the versioned
- * payload of L3.1 or absent, and the gift registry must be the versioned payload of L4.1 or absent. Every issue is
- * reported, the zone, then the phone, then the playlist, then the itinerary, then the gift registry, and nothing is
- * transformed except the phone, the link, and the texts of the moments and the registry. A refused request stores
- * nothing.
+ * payload of L3.1 or absent, the gift registry the versioned payload of L4.1 or absent, the lodging the versioned
+ * payload of L7.1 or absent, and the reminders the versioned pair of switches of L9.1 or absent. Every issue is
+ * reported, the zone, then the phone, then the playlist, then the itinerary, then the gift registry, then the lodging,
+ * then the reminders, and nothing is transformed except the phone, the link, and the texts of the moments and the
+ * registry. A refused request stores nothing.
  */
 export function validateInvitationFeatureSettings(input: {
   readonly timeZone: unknown;
@@ -540,6 +547,7 @@ export function validateInvitationFeatureSettings(input: {
   readonly itinerary: unknown;
   readonly giftRegistry: unknown;
   readonly lodging: unknown;
+  readonly reminders: unknown;
 }): InvitationFeatureSettingsValidation {
   const issues: string[] = [];
 
@@ -572,6 +580,11 @@ export function validateInvitationFeatureSettings(input: {
     issues.push(...lodging.issues);
   }
 
+  const reminders = validateReminders(input.reminders);
+  if (!reminders.ok) {
+    issues.push(...reminders.issues);
+  }
+
   if (
     issues.length > 0 ||
     !phone.ok ||
@@ -579,6 +592,7 @@ export function validateInvitationFeatureSettings(input: {
     !itinerary.ok ||
     !giftRegistry.ok ||
     !lodging.ok ||
+    !reminders.ok ||
     !isInvitationTimeZone(input.timeZone)
   ) {
     return { ok: false, issues };
@@ -593,6 +607,7 @@ export function validateInvitationFeatureSettings(input: {
       itinerary: itinerary.value,
       giftRegistry: giftRegistry.value,
       lodging: lodging.value,
+      reminders: reminders.value,
     },
   };
 }

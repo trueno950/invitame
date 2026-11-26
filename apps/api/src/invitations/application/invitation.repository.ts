@@ -3,6 +3,7 @@ import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry"
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationLodging } from "../domain/invitation-lodging";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
+import type { InvitationReminders } from "../domain/invitation-reminders";
 import type { PlacePoint } from "../domain/invitation-place";
 
 /** One stored invitation; `content` is always a JSON object (the `Invitation_content_object` check). */
@@ -83,6 +84,8 @@ export interface InvitationFeatureSettingsWrite {
   giftRegistry: InvitationGiftRegistry | null;
   /** The validated lodging payload, or null when the invitation has none (F4; L7.1). */
   lodging: InvitationLodging | null;
+  /** The validated reminder switches, or null while the owner switched nothing on (F6; L9.1). */
+  reminders: InvitationReminders | null;
 }
 
 /** A new DRAFT: the owner from the session, the pinned snapshot, the chosen package, and a generated slug. */
@@ -141,6 +144,12 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
    * the API reads null instead of a value no rule validated, so a guest never draws one.
    */
   lodging: InvitationLodging | null;
+  /**
+   * The validated reminder switches, or null while the owner switched nothing on (F6; L9.1). It decides whether the
+   * command sends a reminder and never what a guest sees, so it takes no part in the public read. A row written around
+   * the API reads null instead of a value no rule validated.
+   */
+  reminders: InvitationReminders | null;
 }
 
 /**

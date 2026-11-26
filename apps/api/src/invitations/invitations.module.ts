@@ -17,6 +17,8 @@ import {
 } from "../settings/application/operational-settings";
 import { SettingsModule } from "../settings/settings.module";
 import { PaymentsModule } from "../payments/payments.module";
+import { REMINDER_SENDER, type ReminderSender } from "../reminders/application/reminder-sender";
+import { RemindersModule } from "../reminders/reminders.module";
 import { UsersModule } from "../users/users.module";
 import { GUEST_REPOSITORY, type GuestRepository } from "./application/guest.repository";
 import {
@@ -251,10 +253,26 @@ export const INVITATION_USE_CASES: Provider[] = [
       invitations: InvitationRepository,
       catalog: InvitationCatalog,
       settings: OperationalSettingsReader,
-    ) => new CreateInvitationDraftUseCase(invitations, catalog, undefined, settings),
-    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, OPERATIONAL_SETTINGS_READER],
+      reminders: ReminderSender,
+    ) => new CreateInvitationDraftUseCase(invitations, catalog, undefined, settings, reminders),
+    inject: [
+      INVITATION_REPOSITORY,
+      INVITATION_CATALOG,
+      OPERATIONAL_SETTINGS_READER,
+      REMINDER_SENDER,
+    ],
   },
-  useCase(GetOwnInvitationUseCase),
+  {
+    provide: GetOwnInvitationUseCase,
+    // The owner's read states whether this deployment can deliver a reminder (F6; S6, L9.5): a capability, never a
+    // secret, and never a message.
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      reminders: ReminderSender,
+    ) => new GetOwnInvitationUseCase(invitations, catalog, reminders),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, REMINDER_SENDER],
+  },
   // The place use cases (S1, S2): the search asks the geocoder port under the owner's own limit and cache, and both
   // writes validate the field against the pinned schema before storing the point.
   {
@@ -277,7 +295,16 @@ export const INVITATION_USE_CASES: Provider[] = [
   },
   useCase(UpdateInvitationPlaceUseCase),
   useCase(ClearInvitationPlaceUseCase),
-  useCase(UpdateInvitationContentUseCase),
+  {
+    provide: UpdateInvitationContentUseCase,
+    // A content save answers the same owned read, so it states the same reminder capability (F6; S6).
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      reminders: ReminderSender,
+    ) => new UpdateInvitationContentUseCase(invitations, catalog, reminders),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, REMINDER_SENDER],
+  },
   {
     provide: UpdateInvitationFeaturesUseCase,
     // The feature save asks the music metadata port once when the playlist link changes (S2).
@@ -285,8 +312,9 @@ export const INVITATION_USE_CASES: Provider[] = [
       invitations: InvitationRepository,
       catalog: InvitationCatalog,
       music: MusicMetadataProvider,
-    ) => new UpdateInvitationFeaturesUseCase(invitations, catalog, music),
-    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, MUSIC_METADATA_PROVIDER],
+      reminders: ReminderSender,
+    ) => new UpdateInvitationFeaturesUseCase(invitations, catalog, music, reminders),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, MUSIC_METADATA_PROVIDER, REMINDER_SENDER],
   },
   {
     provide: GetPublicInvitationUseCase,
@@ -315,8 +343,9 @@ export const INVITATION_USE_CASES: Provider[] = [
       invitations: InvitationRepository,
       catalog: InvitationCatalog,
       payments: InvitationPaymentGate,
-    ) => new PublishInvitationUseCase(invitations, catalog, payments),
-    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, INVITATION_PAYMENT_GATE],
+      reminders: ReminderSender,
+    ) => new PublishInvitationUseCase(invitations, catalog, payments, undefined, reminders),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, INVITATION_PAYMENT_GATE, REMINDER_SENDER],
   },
   {
     provide: UpdateRsvpSettingsUseCase,
@@ -456,6 +485,10 @@ export const INVITATION_USE_CASES: Provider[] = [
  * search port is bound the same way through `PLACE_SEARCH_PROVIDER` (S2), and its rate limit counts on the shared
  * `RateLimit` table, so an owner cannot exhaust the free public geocoder.
  *
+ * F6 (S2.6, S6, L9) adds the WhatsApp reminder capability, and the owned reads state it: this module imports
+ * `RemindersModule` for its `REMINDER_SENDER` port — never its adapter — and the use cases read only
+ * `isConfigured()`, so the editor's «Aún no está activo» is a capability and never a secret.
+ *
  * Milestone 9 adds the administrator's status view (T2; S1): `ADMIN_INVITATION_REPOSITORY` is the one global
  * invitation read, bound separately from the owner-scoped `INVITATION_REPOSITORY` exactly like the payments module's
  * refund port, so no owner use case can reach it. Its facets — the newest payment, the photo counts, and the owner's
@@ -469,7 +502,15 @@ export const INVITATION_USE_CASES: Provider[] = [
  * card can offer the account actions without this module reading a user table.
  */
 @Module({
-  imports: [AdminModule, CatalogModule, MediaModule, PaymentsModule, SettingsModule, UsersModule],
+  imports: [
+    AdminModule,
+    CatalogModule,
+    MediaModule,
+    PaymentsModule,
+    RemindersModule,
+    SettingsModule,
+    UsersModule,
+  ],
   controllers: [
     InvitationsController,
     PublicInvitationsController,

@@ -21,6 +21,7 @@ import type { JsonObject } from "../domain/invitation-content";
 import { storedGiftRegistry } from "../domain/invitation-gift-registry";
 import { storedItinerary } from "../domain/invitation-itinerary";
 import { storedLodging } from "../domain/invitation-lodging";
+import { storedReminders } from "../domain/invitation-reminders";
 import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
 import {
   isAddressFieldName,
@@ -52,11 +53,12 @@ const INVITATION_SELECT = {
       playlistUrl: true,
       playlistTitle: true,
       playlistCoverUrl: true,
-      // The stored plan of the day, gift registry, and lodging travel with the row too (F1, F2, F4); the domain decides
-      // whether they read as one.
+      // The stored plan of the day, gift registry, lodging, and reminder switches travel with the row too (F1, F2, F4,
+      // F6); the domain decides whether they read as one.
       itinerary: true,
       giftRegistry: true,
       lodging: true,
+      reminders: true,
     },
   },
   // The stored points travel with the row too (S2): the public projection decides which of them a guest may see, and
@@ -116,6 +118,8 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     giftRegistry: storedGiftRegistry(row.featureSettings?.giftRegistry),
     // And the lodging too (F4; L7.1).
     lodging: storedLodging(row.featureSettings?.lodging),
+    // The reminder switches read as none when a row written around the API does not satisfy their rules (F6; L9.1).
+    reminders: storedReminders(row.featureSettings?.reminders),
     rsvpDeadline: row.rsvpDeadline,
     rsvpPartyLimit: row.rsvpPartyLimit,
     // The points are keyed by their content field, which is the name the layout's address field carries (S2).
@@ -281,6 +285,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
           itinerary: jsonPayloadColumn(features.itinerary),
           giftRegistry: jsonPayloadColumn(features.giftRegistry),
           lodging: jsonPayloadColumn(features.lodging),
+          reminders: jsonPayloadColumn(features.reminders),
         },
         update: {
           whatsappPhone: features.whatsappPhone,
@@ -294,6 +299,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
           itinerary: jsonPayloadColumn(features.itinerary),
           giftRegistry: jsonPayloadColumn(features.giftRegistry),
           lodging: jsonPayloadColumn(features.lodging),
+          reminders: jsonPayloadColumn(features.reminders),
         },
       });
 

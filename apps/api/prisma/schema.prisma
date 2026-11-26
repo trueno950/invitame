@@ -365,6 +365,7 @@ model Invitation {
   payments        Payment[]
   adminActions    AdminAction[]
   views           InvitationView[]
+  reminderDeliveries ReminderDelivery[]
 
   @@index([ownerId])
   // The administrator's status view (M9 T2; S1) reads a page newest first, optionally filtered by one status, so
@@ -394,6 +395,8 @@ model Invitation {
 // `GIFT_REGISTRY` catalog key already existed, so that migration changes no catalog row.
 // Migration 20261205120000_add_invitation_lodging adds the nullable `lodging` JSONB column, and the same migration
 // inserts the `LODGING` catalog feature row and its links to the premium and deluxe packages.
+// Migration 20261207120000_add_whatsapp_reminders adds the nullable `reminders` JSONB column, the `ReminderDelivery`
+// table, and the `WHATSAPP_REMINDERS` catalog feature row with its link to the deluxe package.
 model InvitationFeatureSettings {
   invitationId     String   @id @db.Uuid
   // E.164: `+` and eight to fifteen digits. Null while the owner has not set one (S4).
@@ -428,10 +431,68 @@ model InvitationFeatureSettings {
   // on the shape, the `https` booking link included; the column stores it as JSONB and nothing else, and no CHECK can
   // state it.
   lodging          Json?    @db.JsonB
+  // The WhatsApp reminder switches of the invitation (F6; S2.6, S6, L9.1): the versioned payload
+  // `{ "version": 1, "pendingRsvp": boolean, "eventEve": boolean }`, or NULL while the owner switched nothing on. It
+  // is bounded, versioned, presentation data that decides *whether* a reminder is sent; it carries no phone, no
+  // provider, no credential, and no delivery state. The domain (`domain/invitation-reminders.ts`) is the authority on
+  // the shape, the column stores it as JSONB, and every attempt lives in `ReminderDelivery` instead.
+  reminders        Json?    @db.JsonB
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 
   invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+}
+
+// Which WhatsApp reminders the owner let the invitation send (F6; S2.6, S6). The switches are data, so the catalog can
+// grant the capability and the owner can still keep it off, and a package upgrade never sends anything by itself.
+enum ReminderKind {
+  // Seven days before the RSVP deadline, for the guests who have not answered yet (L9.1).
+  PENDING_RSVP_7D
+  // Two days before the RSVP deadline, for the guests who still have not answered (L9.1).
+  PENDING_RSVP_2D
+  // One day before the celebration, for the guests expected that day (L9.1).
+  EVENT_EVE
+}
+
+// What one attempt came to (F6; L9.4). `pending` is claimed by a run before the message leaves; the outcome replaces
+// it. A row is never deleted and never rewritten into another attempt: the day it belongs to is part of its key.
+enum ReminderDeliveryStatus {
+  pending
+  sent
+  skipped
+  failed
+}
+
+// One attempt to deliver one reminder (F6; S2.6, S6, L9.4). The four columns of the unique index are the identity of an
+// attempt — the invitation, the guest, the kind, and the calendar day of the invitation's own zone — so a second run of
+// the same day records nothing new and sends nothing twice. `status` and `reason` are the outcome: `sent`, `skipped`
+// with a stable reason (`not_configured` while no provider exists, S6), or `failed` with the sender's stable reason.
+// No phone, name, or message body is stored here: the row says that an attempt happened and how it ended, and the
+// guest's own data stays in the guest list. Migration 20261207120000_add_whatsapp_reminders adds the table, its unique
+// index, the nullable `reminders` column, and the `WHATSAPP_REMINDERS` catalog key with its Deluxe link.
+model ReminderDelivery {
+  id           String                 @id @default(uuid()) @db.Uuid
+  invitationId String                 @db.Uuid
+  guestId      String                 @db.Uuid
+  kind         ReminderKind
+  // The calendar day the reminder belongs to, as the invitation's own zone reads it (L9.4), stored as a DATE so two
+  // runs on the same day agree whatever hour they start at.
+  dueDate      DateTime               @db.Date
+  status       ReminderDeliveryStatus @default(pending)
+  // The stable reason of a skipped or failed attempt, at most 40 characters; NULL for a sent one.
+  reason       String?                @db.VarChar(40)
+  // When the run claimed the attempt, which is what tells one day's run from the next.
+  attemptedAt  DateTime               @db.Timestamptz(6)
+  createdAt    DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime               @updatedAt @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  guest      Guest      @relation(fields: [guestId], references: [id], onDelete: Restrict)
+
+  @@unique([invitationId, guestId, kind, dueDate])
+  // The owner's own page and any later report read the attempts of one invitation newest first, and the command
+  // reads nothing else.
+  @@index([invitationId, attemptedAt])
 }
 
 // The precise location of one address field of one invitation (S1, S2). The owner picks a suggestion from the
@@ -576,6 +637,8 @@ model Guest {
 
   invitation   Invitation    @relation(fields: [invitationId], references: [id], onDelete: Restrict)
   rsvpResponse RsvpResponse?
+  // The reminders this guest already received, one row per kind and day (F6; L9.4).
+  reminderDeliveries ReminderDelivery[]
 
   @@index([invitationId])
 }

@@ -11,6 +11,7 @@ import { InvitationNotEditableError } from "../domain/invitation.errors";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationLodging } from "../domain/invitation-lodging";
+import type { InvitationReminders } from "../domain/invitation-reminders";
 import { CatalogInvitationReader } from "./catalog-invitation-reader";
 import { PrismaInvitationRepository } from "./prisma-invitation.repository";
 
@@ -479,6 +480,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       assert.equal(stored?.playlistTitle, PLAYLIST_TITLE);
       assert.equal(stored?.playlistCoverUrl, PLAYLIST_COVER);
@@ -499,6 +501,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       assert.equal(cleared?.playlistTitle, null);
       assert.equal(cleared?.playlistCoverUrl, null);
@@ -595,6 +598,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.equal(updated?.timeZone, "America/Ojinaga");
@@ -630,6 +634,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       const cleared = await repository.updateFeatures(invitation.ownerId, invitation.id, {
@@ -641,6 +646,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.equal(cleared?.whatsappPhone, null);
@@ -663,6 +669,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.deepEqual(written?.itinerary, ITINERARY);
@@ -698,6 +705,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       assert.equal(cleared?.itinerary, null);
       assert.deepEqual(
@@ -741,6 +749,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: GIFT_REGISTRY,
         lodging: null,
+        reminders: null,
       });
 
       assert.deepEqual(written?.giftRegistry, GIFT_REGISTRY);
@@ -781,6 +790,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       assert.equal(cleared?.giftRegistry, null);
       assert.deepEqual(
@@ -826,6 +836,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: LODGING,
+        reminders: null,
       });
 
       assert.deepEqual(written?.lodging, LODGING);
@@ -860,6 +871,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       assert.equal(cleared?.lodging, null);
       assert.deepEqual(
@@ -882,6 +894,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       await repository.archive(invitation.ownerId, invitation.id);
 
@@ -895,6 +908,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         }),
         InvitationNotEditableError,
       );
@@ -924,6 +938,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            reminders: null,
           }),
           null,
         );
@@ -950,6 +965,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary?: InvitationItinerary | null;
         giftRegistry?: InvitationGiftRegistry | null;
         lodging?: InvitationLodging | null;
+        reminders?: InvitationReminders | null;
       } | null,
     ) {
       const draft = await newDraft(featureKeys);
@@ -960,6 +976,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
           ...features,
         });
       }
@@ -981,6 +998,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           itinerary: ITINERARY,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         });
 
         const page = await useCase.execute(slug);
@@ -1101,6 +1119,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       const page = await useCase.execute(slug);

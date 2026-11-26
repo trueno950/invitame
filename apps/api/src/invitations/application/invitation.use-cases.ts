@@ -22,6 +22,7 @@ import {
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationLodging } from "../domain/invitation-lodging";
+import type { InvitationReminders } from "../domain/invitation-reminders";
 import {
   archive,
   assertEditable,
@@ -64,6 +65,7 @@ import {
   publicHiddenFields,
 } from "./invitation-public";
 import { type MusicMetadataProvider, NO_MUSIC_METADATA } from "./music-metadata";
+import type { ReminderSender } from "../../reminders/application/reminder-sender";
 
 // The invitation use cases (M4 T3 and M5 T3; S1, S2, S3, S6, S7, S9, A1, A3, A4, A7). Creating and editing a
 // draft is free for any signed-in customer: the chosen package is only validated against the pinned version's
@@ -126,6 +128,12 @@ export interface UpdateFeaturesInput {
    * block it never knew about.
    */
   lodging?: unknown;
+  /**
+   * The reminder switches as the request carried them, or `undefined` when the body omitted them (F6; L9.1): an omitted
+   * value keeps the stored switches, which is what lets a client built before F6 save the other fields without
+   * switching a reminder off that it never knew about.
+   */
+  reminders?: unknown;
 }
 
 /** A row of "Mis invitaciones": the editor loads one invitation when it opens it. */
@@ -184,7 +192,15 @@ export interface OwnedInvitation extends InvitationSummary {
     giftRegistry: InvitationGiftRegistry | null;
     /** The stored lodging, or null when the invitation has none (F4; L7.1). */
     lodging: InvitationLodging | null;
+    /** The stored reminder switches, or null while the owner switched nothing on (F6; L9.1). */
+    reminders: InvitationReminders | null;
   };
+  /**
+   * Whether this deployment can deliver a WhatsApp reminder at all (F6; S6, L9.5). It is a capability, never a secret:
+   * false means every send is recorded as skipped `not_configured`, and the editor says «Aún no está activo». The
+   * switches are stored either way, so they work as soon as a sender is configured.
+   */
+  remindersConfigured: boolean;
   /**
    * The gated keys of the features this invitation will show, `CALENDAR` included (S4). The package's keys are
    * read at request time, because the gate is about what the catalog grants now.
@@ -227,6 +243,7 @@ export function toOwnedInvitation(
   record: InvitationRecordWithMusic,
   schema: unknown,
   includedFeatureKeys: readonly string[],
+  remindersConfigured = false,
 ): OwnedInvitation {
   return {
     ...toSummary(record),
@@ -241,7 +258,9 @@ export function toOwnedInvitation(
       itinerary: record.itinerary,
       giftRegistry: record.giftRegistry,
       lodging: record.lodging,
+      reminders: record.reminders,
     },
+    remindersConfigured,
     availableFeatures: availableFeatureKeys({
       includedFeatureKeys,
       whatsappPhone: record.whatsappPhone,
@@ -290,6 +309,12 @@ export class CreateInvitationDraftUseCase {
     // the moment the draft is created so a save takes effect on the next invitation. Composed without a settings
     // module, the reader answers the values the migration seeds.
     private readonly settings: OperationalSettingsReader = INITIAL_OPERATIONAL_SETTINGS_READER,
+    /**
+     * The WhatsApp reminder sender port (F6; S6), read only for its capability: the draft's read states whether this
+     * deployment can deliver a reminder, never a secret and never a message. A caller that omits it answers false,
+     * which is exactly what a deployment without a provider has.
+     */
+    private readonly reminders?: ReminderSender,
   ) {}
 
   async execute(input: CreateDraftInput): Promise<OwnedInvitation> {
@@ -333,7 +358,12 @@ export class CreateInvitationDraftUseCase {
       rsvpPartyLimit: settings.rsvpDefaultPartyLimit,
     });
 
-    return toOwnedInvitation(created, version.schema, entitlements.includedFeatureKeys);
+    return toOwnedInvitation(
+      created,
+      version.schema,
+      entitlements.includedFeatureKeys,
+      this.reminders?.isConfigured() ?? false,
+    );
   }
 
   /**
@@ -415,6 +445,8 @@ export class GetOwnInvitationUseCase {
   constructor(
     private readonly invitations: InvitationRepository,
     private readonly catalog: InvitationCatalog,
+    /** The reminder sender port (F6; S6): its capability is what the editor's reminder block shows. */
+    private readonly reminders?: ReminderSender,
   ) {}
 
   async execute(ownerId: string, id: string): Promise<OwnedInvitation | null> {
@@ -429,7 +461,12 @@ export class GetOwnInvitationUseCase {
     const snapshot = await this.catalog.findVersionSchema(stored.templateVersionId);
     const includedFeatureKeys = await includedFeatureKeysOf(this.catalog, stored.packageId);
 
-    return toOwnedInvitation(stored, snapshot?.schema ?? null, includedFeatureKeys);
+    return toOwnedInvitation(
+      stored,
+      snapshot?.schema ?? null,
+      includedFeatureKeys,
+      this.reminders?.isConfigured() ?? false,
+    );
   }
 }
 
@@ -445,6 +482,8 @@ export class UpdateInvitationContentUseCase {
   constructor(
     private readonly invitations: InvitationRepository,
     private readonly catalog: InvitationCatalog,
+    /** The reminder sender port (F6; S6), read only for its capability, like every owned read. */
+    private readonly reminders?: ReminderSender,
   ) {}
 
   async execute(input: UpdateContentInput): Promise<OwnedInvitation | null> {
@@ -476,7 +515,12 @@ export class UpdateInvitationContentUseCase {
 
     const includedFeatureKeys = await includedFeatureKeysOf(this.catalog, updated.packageId);
 
-    return toOwnedInvitation(updated, snapshot?.schema ?? null, includedFeatureKeys);
+    return toOwnedInvitation(
+      updated,
+      snapshot?.schema ?? null,
+      includedFeatureKeys,
+      this.reminders?.isConfigured() ?? false,
+    );
   }
 }
 
@@ -501,6 +545,8 @@ export class UpdateInvitationFeaturesUseCase {
     private readonly catalog: InvitationCatalog,
     /** The music metadata port (S2); the default answers nothing, so a caller that omits it stores no metadata. */
     private readonly music: MusicMetadataProvider = NO_MUSIC_METADATA,
+    /** The reminder sender port (F6; S6), read only for its capability, like every owned read. */
+    private readonly reminders?: ReminderSender,
   ) {}
 
   async execute(input: UpdateFeaturesInput): Promise<OwnedInvitation | null> {
@@ -526,6 +572,9 @@ export class UpdateInvitationFeaturesUseCase {
       // The lodging follows the same rule (F4; L7.3): an omitted value keeps the stored lodging, and only `null` or a
       // payload with no hotel and no transport line clears it.
       lodging: input.lodging === undefined ? stored.lodging : input.lodging,
+      // And the reminder switches too (F6; L9.1): an omitted value keeps them, and only `null` or a pair with nothing
+      // switched on clears them.
+      reminders: input.reminders === undefined ? stored.reminders : input.reminders,
     });
     if (!validation.ok) {
       throw new InvalidInvitationFeaturesError(validation.issues);
@@ -547,7 +596,12 @@ export class UpdateInvitationFeaturesUseCase {
       includedFeatureKeysOf(this.catalog, updated.packageId),
     ]);
 
-    return toOwnedInvitation(updated, snapshot?.schema ?? null, includedFeatureKeys);
+    return toOwnedInvitation(
+      updated,
+      snapshot?.schema ?? null,
+      includedFeatureKeys,
+      this.reminders?.isConfigured() ?? false,
+    );
   }
 
   /**
@@ -635,6 +689,8 @@ export class PublishInvitationUseCase {
     private readonly catalog: InvitationCatalog,
     private readonly payments: InvitationPaymentGate,
     private readonly now: PublicationClock = () => new Date(),
+    /** The reminder sender port (F6; S6), read only for its capability, like every owned read. */
+    private readonly reminders?: ReminderSender,
   ) {}
 
   async execute(ownerId: string, id: string): Promise<OwnedInvitation | null> {
@@ -697,6 +753,7 @@ export class PublishInvitationUseCase {
       published,
       snapshot?.schema ?? null,
       entitlements?.includedFeatureKeys ?? [],
+      this.reminders?.isConfigured() ?? false,
     );
   }
 }

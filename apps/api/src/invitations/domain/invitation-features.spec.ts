@@ -318,6 +318,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         itinerary: { version: 1, items: [{ time: "17:00", title: " Misa " }] },
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       }),
       {
         ok: true,
@@ -328,6 +329,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           itinerary: { version: 1, items: [{ time: "17:00", title: "Misa" }] },
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         },
       },
     );
@@ -342,6 +344,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       }),
       {
         ok: true,
@@ -352,6 +355,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         },
       },
     );
@@ -363,6 +367,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         itinerary: { version: 1, items: [] },
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       }),
       {
         ok: true,
@@ -373,6 +378,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         },
       },
     );
@@ -387,6 +393,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         itinerary: { version: 1, items: [{ time: "26:00", title: "Misa" }] },
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       }),
       {
         ok: false,
@@ -400,6 +407,78 @@ describe("feature settings validation (S4, S7, F1)", () => {
     );
   });
 
+  it("stores the reminder switches, and reports their issues after the lodging's (F6; L9.1)", () => {
+    // The two switches are part of the same feature-settings write, so one request saves them with the rest.
+    assert.deepEqual(
+      validateInvitationFeatureSettings({
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        reminders: { version: 1, pendingRsvp: true, eventEve: true },
+      }),
+      {
+        ok: true,
+        value: {
+          timeZone: "America/Mexico_City",
+          whatsappPhone: null,
+          playlistUrl: null,
+          itinerary: null,
+          giftRegistry: null,
+          lodging: null,
+          reminders: { version: 1, pendingRsvp: true, eventEve: true },
+        },
+      },
+    );
+
+    // A refused switch is named with its own issue, after the lodging's, in the order the write validates them.
+    assert.deepEqual(
+      validateInvitationFeatureSettings({
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: { version: 1, hotels: [{ name: "" }] },
+        reminders: { version: 1, pendingRsvp: "sí", eventEve: true },
+      }),
+      {
+        ok: false,
+        issues: [
+          "lodging.hotels[0].name must be between 1 and 60 characters",
+          "reminders.pendingRsvp must be true or false",
+        ],
+      },
+    );
+
+    // Nothing switched on is no reminder settings, exactly like an absent value.
+    assert.deepEqual(
+      validateInvitationFeatureSettings({
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        reminders: { version: 1, pendingRsvp: false, eventEve: false },
+      }),
+      {
+        ok: true,
+        value: {
+          timeZone: "America/Mexico_City",
+          whatsappPhone: null,
+          playlistUrl: null,
+          itinerary: null,
+          giftRegistry: null,
+          lodging: null,
+          reminders: null,
+        },
+      },
+    );
+  });
+
   it("reports a missing and a non-string zone with the same issue", () => {
     for (const timeZone of [undefined, null, 42, "", "America/Mexico_City "]) {
       const result = validateInvitationFeatureSettings({
@@ -409,6 +488,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.equal(result.ok, false);

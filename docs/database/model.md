@@ -73,8 +73,12 @@ column is nullable, so no row is rewritten; the catalog rows are new, so no exis
 nothing is deleted. F5 adds the additive `20261206120000_add_guest_table_label` migration: the nullable
 `Guest.tableLabel` column (`VARCHAR(12)`) and its `Guest_tableLabel_length` check, and nothing else. It inserts no
 catalog row, because the existing `GUEST_LIST` and `QR_PASS` keys gate the feature; a guest stored before it reads
-`NULL` and renders exactly as it did, so no row is rewritten and nothing is deleted. Future analytics design is
-documented separately in
+`NULL` and renders exactly as it did, so no row is rewritten and nothing is deleted. F6 adds the additive
+`20261207120000_add_whatsapp_reminders` migration: the nullable `InvitationFeatureSettings.reminders` JSONB column, the
+new `ReminderDelivery` table with its unique attempt key, and — in the same file, because the seed never updates an
+existing package — the `WHATSAPP_REMINDERS` catalog feature row and its link to the `deluxe` package, all inserted with
+`ON CONFLICT DO NOTHING` so a second run stores nothing. The column and the table are new, so no row is rewritten, and
+nothing is deleted. Future analytics design is documented separately in
 [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -96,7 +100,8 @@ documented separately in
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, the bounded companions `[{ name, child }]` of the party (one per extra person while attending, or `NULL` for an older answer), optional `dietaryNotes` (up to 300 characters), an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), the optional `tableLabel` the owner assigned (1-12 characters, printed on that guest's access pass), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
-| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary`, `giftRegistry`, and `lodging` (or `NULL`), and timestamps |
+| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary`, `giftRegistry`, and `lodging` (or `NULL`), the WhatsApp reminder switches `reminders` (or `NULL`), and timestamps |
+| `ReminderDelivery` | One attempt to deliver one WhatsApp reminder: the invitation and guest references, the `kind` (`PENDING_RSVP_7D`, `PENDING_RSVP_2D`, `EVENT_EVE`), the calendar `dueDate` of the invitation's own zone, the `status` (`pending`, `sent`, `skipped`, `failed`), a stable `reason` (up to 40 characters, `not_configured` while no provider exists), `attemptedAt`, and timestamps. The unique key `(invitationId, guestId, kind, dueDate)` is what makes a second run of the same day send nothing twice. No phone, name, or message body is stored |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
@@ -294,6 +299,20 @@ normalization, the playlist link allow-list, and the gating — lives in
   rule that a column could enforce, so the API domain (`apps/api/src/invitations/domain/invitation-lodging.ts`) is the
   only authority on the shape and a value written around it reads as no lodging instead of reaching a guest. The gate is
   the new `LODGING` key, granted to Premium and Deluxe (L7.2).
+- `InvitationFeatureSettings.reminders` is JSONB and nullable, and holds the two WhatsApp reminder switches as one
+  versioned payload (F6; L9.1): `{ "version": 1, "pendingRsvp": boolean, "eventEve": boolean }`. `NULL` is "no reminder
+  settings", and so is a pair with nothing switched on, which the API normalizes to `NULL` before writing. It is
+  presentation data that decides *whether* a reminder is sent and nothing else: no phone, no provider, no credential, and
+  no delivery state. The API domain (`apps/api/src/invitations/domain/invitation-reminders.ts`) is the only authority on
+  the shape, and the commands that read it (`apps/api/src/reminders/domain/reminder-schedule.ts`) refuse any stored value
+  that is not one. The gate is the new `WHATSAPP_REMINDERS` key, granted to Deluxe (L9.2).
+- `ReminderDelivery` records one attempt per `(invitationId, guestId, kind, dueDate)` (F6; L9.4). `dueDate` is a `DATE`
+  of the invitation's own calendar zone rather than an instant, so two runs on the same day agree whatever hour they
+  start at. A run claims the row as `pending` before the message leaves and then records the outcome — `sent`,
+  `skipped` with a stable reason (`not_configured` while no provider exists, S6), or `failed` — so a repeated run finds
+  the attempt and sends nothing twice, and a run interrupted after the claim leaves one attempt recorded instead of a
+  duplicate. The row carries no phone, name, or message body: the guest's own data stays in `Guest`. Both references are
+  `ON DELETE RESTRICT`, like every other reference here.
 - The legacy `Invitation.content.giftRegistry` text field stays for existing invitations (F2; L4.3): the public read
   withholds it — and names it in `hiddenFields` — while the structured registry has a store, a transfer, or the
   envelopes line, so a guest never sees the old text and the new card at the same time. An invitation with only the old
@@ -331,6 +350,12 @@ normalization, the playlist link allow-list, and the gating — lives in
   migration set, or by hand deleting the two `PackageFeature` links and the `LODGING` `Feature` row by key and then
   `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "lodging";`. Only the stored lodgings and the catalog key are
   lost; invitations, their content, and every other feature setting stay. Never edit the applied migration file.
+- Rollback / recovery of `20261207120000_add_whatsapp_reminders`: additive, so recovery is redeploying the previous
+  migration set, or by hand `DELETE FROM "ReminderDelivery";`, then deleting the `WHATSAPP_REMINDERS` `PackageFeature`
+  links and the `WHATSAPP_REMINDERS` `Feature` row by key, then
+  `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "reminders";`, and finally `DROP TABLE "ReminderDelivery";` with
+  its two enum types. Only the stored switches, the attempts, and the catalog key are lost; invitations, their content,
+  the guests, and every other feature setting stay. Never edit the applied migration file.
 
 ## Invitation places
 

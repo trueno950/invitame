@@ -111,6 +111,12 @@ const FEATURE_SEEDS = [
     description: "Hoteles con tarifa especial para tus invitados y cómo moverse el día del evento.",
   },
   {
+    key: "WHATSAPP_REMINDERS",
+    name: "Recordatorios por WhatsApp",
+    description:
+      "Recordatorios automáticos para tus invitados; se activan cuando el servicio esté disponible.",
+  },
+  {
     key: "GUEST_LIST",
     name: "Lista de invitados",
     description: "Una lista para organizar a las personas invitadas.",
@@ -164,6 +170,7 @@ const PACKAGE_SEEDS = [
       "WHATSAPP",
       "GIFT_REGISTRY",
       "LODGING",
+      "WHATSAPP_REMINDERS",
       "GUEST_LIST",
       "QR_PASS",
     ],

@@ -126,7 +126,19 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
       }>;
       transport?: string;
     } | null;
+    /**
+     * The stored reminder switches as the validated payload `{ version: 1, pendingRsvp, eventEve }`, or null while the
+     * owner switched nothing on (F6; L9.1). The owner's read answers the version so the editor can send the same payload
+     * back, and the switches work as soon as a sender is configured.
+     */
+    reminders: { version: 1; pendingRsvp: boolean; eventEve: boolean } | null;
   };
+  /**
+   * Whether this deployment can deliver a WhatsApp reminder at all (F6; S6, L9.5): a capability, never a secret. False
+   * is what the editor's reminder block shows as «Aún no está activo», and it never hides the switches, because they
+   * are stored and take effect the moment a provider is configured.
+   */
+  remindersConfigured: boolean;
   /** The gated feature keys the guest will see, `CALENDAR` included (S4). */
   availableFeatures: string[];
   /**
@@ -327,7 +339,16 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
                 ? {}
                 : { transport: stored.featureSettings.lodging.transport }),
             },
+      reminders:
+        stored.featureSettings.reminders === null
+          ? null
+          : {
+              version: 1,
+              pendingRsvp: stored.featureSettings.reminders.pendingRsvp,
+              eventEve: stored.featureSettings.reminders.eventEve,
+            },
     },
+    remindersConfigured: stored.remindersConfigured,
     availableFeatures: [...stored.availableFeatures],
     places: { ...stored.places },
   };

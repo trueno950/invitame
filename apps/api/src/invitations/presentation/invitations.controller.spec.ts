@@ -64,6 +64,8 @@ import {
   type InvitationViewRepository,
 } from "../application/invitation-views";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "../application/music-metadata";
+import { REMINDER_SENDER } from "../../reminders/application/reminder-sender";
+import { NotConfiguredReminderSender } from "../../reminders/infrastructure/not-configured-reminder-sender";
 import { PLACE_SEARCH, type PlaceSearch } from "../application/place-search";
 import { InMemoryPlaceSearchCache } from "../application/place-search-cache";
 import {
@@ -89,6 +91,7 @@ import type { PlaylistMetadata } from "../domain/invitation-features";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationLodging } from "../domain/invitation-lodging";
+import type { InvitationReminders } from "../domain/invitation-reminders";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
@@ -172,6 +175,7 @@ const LODGING: InvitationLodging = {
   ],
   transport: "Habrá camión del hotel al salón a las 19:00 y de regreso a la 1:00.",
 };
+const REMINDERS: InvitationReminders = { version: 1, pendingRsvp: true, eventEve: false };
 const RENDERER = "birthday-poster-01";
 const UNREGISTERED_RENDERER = "unregistered-renderer-99";
 const SCHEMA = {
@@ -233,6 +237,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      reminders: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       places: {},
@@ -339,6 +344,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     row.itinerary = features.itinerary;
     row.giftRegistry = features.giftRegistry;
     row.lodging = features.lodging;
+    row.reminders = features.reminders;
     return structuredClone(row);
   }
 
@@ -1067,6 +1073,8 @@ describe("invitations routes: /invitations", () => {
         // Publication is free in Milestone 5; the publish use case asks this gate (S6).
         { provide: INVITATION_PAYMENT_GATE, useValue: paymentGate },
         { provide: MUSIC_METADATA_PROVIDER, useValue: musicMetadata },
+        // This deployment has no WhatsApp Business account, so the sender is the adapter that sends nothing (F6; S6).
+        { provide: REMINDER_SENDER, useValue: new NotConfiguredReminderSender() },
         { provide: RSVP_REPOSITORY, useValue: rsvpRepository },
         { provide: GUEST_REPOSITORY, useValue: guestRepository },
         { provide: RSVP_RATE_LIMITER, useValue: rateLimiter },
@@ -1155,6 +1163,8 @@ describe("invitations routes: /invitations", () => {
     "featureSettings",
     "availableFeatures",
     "places",
+    // Whether this deployment can send a reminder at all (F6; S6, L9.5): a capability, never a secret.
+    "remindersConfigured",
   ].sort();
 
   describe("access control", () => {
@@ -1264,6 +1274,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -1439,6 +1450,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
     });
@@ -1598,6 +1610,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.equal(response.status, 200);
@@ -1612,6 +1625,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -1633,6 +1647,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       for (const whatsappPhone of [null, ""]) {
@@ -1644,6 +1659,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         });
 
         assert.equal(response.status, 200, String(whatsappPhone));
@@ -1655,6 +1671,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.whatsappPhone, null);
       }
@@ -1677,6 +1694,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.equal(response.status, 200);
@@ -1691,6 +1709,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       assert.deepEqual(musicMetadata.asked, [{ playlistUrl: PLAYLIST, provider: "spotify" }]);
 
@@ -1704,6 +1723,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.equal(again.status, 200);
@@ -1717,6 +1737,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       // A later owner read answers the same stored metadata, so the editor and the preview render it too (S2).
@@ -1730,6 +1751,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
     });
 
@@ -1746,6 +1768,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       const cleared = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
@@ -1756,6 +1779,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.equal(cleared.status, 200);
@@ -1767,6 +1791,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       assert.equal(musicMetadata.asked.length, 1);
     });
@@ -1782,6 +1807,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.equal(response.status, 200);
@@ -1810,6 +1836,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
@@ -1937,6 +1964,7 @@ describe("invitations routes: /invitations", () => {
         whatsappPhone: null,
         playlistUrl: null,
         lodging: LODGING,
+        reminders: null,
       });
 
       assert.equal(response.status, 200);
@@ -1965,6 +1993,117 @@ describe("invitations routes: /invitations", () => {
         ((await older.json()) as { featureSettings: Row }).featureSettings.lodging,
         LODGING,
       );
+    });
+
+    it("stores the reminder switches, answers them on the owner read, and reports the capability (F6; L9.1, L9.5)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        reminders: REMINDERS,
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual((body.featureSettings as Row).reminders, REMINDERS);
+      // This deployment has no provider, so the read says so and never a secret (S6, L9.5).
+      assert.equal(body.remindersConfigured, false);
+      assert.deepEqual(repository.rows.find((row) => row.id === draft.id)?.reminders, REMINDERS);
+
+      // The owner read answers the same pair the write stored, so the editor can round-trip it.
+      const read = await send("GET", `${PATH}/${draft.id}`, cookie);
+      assert.equal(read.status, 200);
+      const readBody = (await read.json()) as Row & { remindersConfigured: boolean };
+      assert.deepEqual((readBody.featureSettings as Row).reminders, REMINDERS);
+      assert.equal(readBody.remindersConfigured, false);
+    });
+
+    it("keeps the stored reminder switches when a body omits them, so an older client never switches them off (F6; L9.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        reminders: REMINDERS,
+      });
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Tijuana",
+        whatsappPhone: null,
+        playlistUrl: null,
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.equal(body.timeZone, "America/Tijuana");
+      assert.deepEqual((body.featureSettings as Row).reminders, REMINDERS);
+      assert.deepEqual(repository.rows.find((row) => row.id === draft.id)?.reminders, REMINDERS);
+    });
+
+    it("clears the reminder switches with null and with a pair switched off (F6; L9.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      const body = (reminders: unknown) => ({
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        reminders,
+      });
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, body(REMINDERS));
+
+      for (const cleared of [null, { version: 1, pendingRsvp: false, eventEve: false }]) {
+        const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, body(cleared));
+
+        assert.equal(response.status, 200, JSON.stringify(cleared));
+        assert.equal(
+          ((await response.json()) as { featureSettings: Row }).featureSettings.reminders,
+          null,
+          JSON.stringify(cleared),
+        );
+        assert.equal(repository.rows.find((row) => row.id === draft.id)?.reminders, null);
+      }
+    });
+
+    it("refuses reminder switches the contract does not allow and leaves the stored ones untouched (F6; L9.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: "+525512345678",
+        playlistUrl: null,
+        reminders: REMINDERS,
+      });
+      const before = structuredClone<InvitationRecordWithMusic | undefined>(
+        repository.rows.find((row) => row.id === draft.id),
+      );
+
+      for (const refused of [
+        { version: 2, pendingRsvp: true, eventEve: true },
+        { version: 1, pendingRsvp: "sí", eventEve: true },
+        { version: 1 },
+        "on",
+      ]) {
+        const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+          timeZone: "America/Tijuana",
+          whatsappPhone: "+525587654321",
+          playlistUrl: null,
+          reminders: refused,
+        });
+
+        assert.equal(response.status, 400, JSON.stringify(refused));
+        const body = (await response.json()) as { code: string; issues: string[] };
+        assert.equal(body.code, "INVALID_INVITATION_FEATURES");
+
+        // A refused request stores nothing: the switches, the phone, and the zone are the ones already stored.
+        const stored = repository.rows.find((row) => row.id === draft.id);
+        assert.deepEqual(stored?.reminders, before?.reminders);
+        assert.equal(stored?.whatsappPhone, before?.whatsappPhone);
+        assert.equal(stored?.timeZone, before?.timeZone);
+      }
     });
 
     it("refuses a lodging the contract does not allow and stores nothing (F4; L7.1)", async () => {
@@ -2056,6 +2195,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       for (const playlistUrl of [null, ""]) {
@@ -2066,6 +2206,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         });
 
         assert.equal(response.status, 200, String(playlistUrl));
@@ -2077,6 +2218,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.playlistUrl, null);
       }
@@ -2102,6 +2244,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            reminders: null,
           },
           [
             "whatsappPhone must be a Mexican 10-digit number or an international number with 8 to 15 digits after +",
@@ -2116,6 +2259,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            reminders: null,
           },
           ["whatsappPhone must be a string or null"],
         ],
@@ -2128,6 +2272,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            reminders: null,
           },
           ["playlistUrl must be an https link"],
         ],
@@ -2140,6 +2285,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            reminders: null,
           },
           ["playlistUrl must link to Spotify, Apple Music, YouTube, Deezer, or SoundCloud"],
         ],
@@ -2152,6 +2298,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            reminders: null,
           },
           ["playlistUrl must be a string or null"],
         ],
@@ -2164,6 +2311,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: { version: 2, items: [{ time: "17:00", title: "Misa" }] },
             giftRegistry: null,
             lodging: null,
+            reminders: null,
           },
           ["itinerary.version must be 1"],
         ],
@@ -2195,6 +2343,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            reminders: null,
           },
           [
             "timeZone must be one of the supported time zones",
@@ -2274,6 +2423,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
 
       assert.equal(response.status, 409);
@@ -2299,6 +2449,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          reminders: null,
         });
 
         assert.equal(response.status, 404, id);
@@ -2814,6 +2965,7 @@ describe("invitations routes: /invitations", () => {
       itinerary?: InvitationItinerary | null;
       giftRegistry?: InvitationGiftRegistry | null;
       lodging?: InvitationLodging | null;
+      reminders?: InvitationReminders | null;
       rsvpDeadline?: Date | null;
       rsvpPartyLimit?: number;
       places?: Record<string, { label: string; lat: number; lng: number }>;
@@ -2839,6 +2991,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: overrides.itinerary ?? null,
         giftRegistry: overrides.giftRegistry ?? null,
         lodging: overrides.lodging ?? null,
+        reminders: overrides.reminders ?? null,
         rsvpDeadline: overrides.rsvpDeadline ?? null,
         rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
         places: overrides.places ?? {},
@@ -3098,6 +3251,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       const grantedResponse = await send("GET", `${PUBLIC_PATH}/${granted.slug}`);
 
@@ -3114,6 +3268,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       const withheldBody = (await (
         await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
@@ -3131,6 +3286,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: LODGING,
+        reminders: null,
       });
       const grantedResponse = await send("GET", `${PUBLIC_PATH}/${granted.slug}`);
 
@@ -3150,6 +3306,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: LODGING,
+        reminders: null,
       });
       const withheldBody = (await (
         await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
@@ -3165,6 +3322,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
       });
       const emptyBody = (await (await send("GET", `${PUBLIC_PATH}/${empty.slug}`)).json()) as Row;
 
@@ -4997,6 +5155,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        reminders: null,
         rsvpDeadline: null,
         rsvpPartyLimit: 4,
         places: {},
