@@ -1,5 +1,9 @@
 import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "../customer/omittable-sections.ts";
 import { isE164Phone, isInvitationFeatureKey } from "../invitation-features/invitation-features.ts";
+import {
+  type GiftRegistryPayload,
+  parseGiftRegistryPayload,
+} from "../invitation-features/gift-registry.ts";
 import { type ItineraryPayload, parseItineraryPayload } from "../invitation-features/itinerary.ts";
 import {
   musicCoverUrlOf,
@@ -84,6 +88,12 @@ export interface OwnedInvitation extends InvitationSummary {
      * that as "no itinerary" exactly like null.
      */
     itinerary?: ItineraryPayload | null;
+    /**
+     * The stored gift registry as the API's validated payload `{ version: 1, stores, transfer?, envelopes, note? }`, or
+     * null when the invitation has none (F2; L4.1). It is absent from a body written before the field existed, and a
+     * reader treats that as "no registry" exactly like null.
+     */
+    giftRegistry?: GiftRegistryPayload | null;
   };
   /**
    * The gated feature keys the guest page will show, `CALENDAR` included (S4). The package's other keys are
@@ -106,6 +116,11 @@ export interface InvitationFeatureInput {
   playlistUrl: string | null;
   /** The moments the owner stored, or null to clear the plan (F1; L3.1). The API validates the payload. */
   itinerary: ItineraryPayload | null;
+  /**
+   * The gift registry the owner stored, or null to clear it (F2; L4.1). The API validates the payload; a field the
+   * editor does not change travels as the stored one, because the PUT replaces the whole feature data.
+   */
+  giftRegistry: GiftRegistryPayload | null;
 }
 
 // The RSVP routes of the owner (M6 G1, G3; S1, S4). The deadline is an ISO instant or null, the party limit is how
@@ -517,6 +532,14 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     return undefined;
   }
 
+  // The gift registry is the versioned payload or nothing (F2; L4.1): an absent value reads as no registry, and any
+  // other shape refuses the whole body instead of reaching the editor.
+  const giftRegistry = parseGiftRegistryPayload(settings.giftRegistry);
+
+  if (giftRegistry === undefined) {
+    return undefined;
+  }
+
   // The stored metadata follows the same rules the guest page applies to a public body (S2): a title of at most 200
   // characters and a cover on an allow-listed image host over `https`. A value this deployment does not accept is
   // dropped to null instead of refusing the whole invitation, because the link is still the owner's playlist.
@@ -530,6 +553,7 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
         ? null
         : (musicCoverUrlOf(settings.playlistCoverUrl) ?? null),
     itinerary,
+    giftRegistry,
   };
 }
 

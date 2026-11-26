@@ -63,6 +63,7 @@ const OWNED = {
     playlistCoverUrl: null,
     // The plan of the day the owner read carries (F1; L3.1); null while the invitation has none.
     itinerary: null,
+    giftRegistry: null,
   },
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
   // The precise-locations slice (S2): every stored point, keyed by the address field it belongs to.
@@ -79,6 +80,7 @@ const FEATURED = {
     playlistTitle: "Today’s Top Hits",
     playlistCoverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
     itinerary: null,
+    giftRegistry: null,
   },
   availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "MUSIC", "GIFT_REGISTRY", "CALENDAR"],
 };
@@ -220,6 +222,50 @@ function client(cookie: string | null = `theme=dark; ${SESSION_COOKIE}; _ga=GA1`
   );
 }
 
+describe("the feature write of the editor (F2; L4.3)", () => {
+  it("sends the stored gift registry with the whole feature data the PUT replaces", async () => {
+    const giftRegistry = {
+      version: 1 as const,
+      stores: [] as const,
+      envelopes: true as const,
+    };
+    answer(200, FEATURED);
+    const written = await client().updateInvitationFeatures(ID, {
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: null,
+      giftRegistry: { ...giftRegistry, stores: [] },
+    });
+
+    assert.equal(written.ok, true);
+    assert.deepEqual(JSON.parse(received[0]?.body ?? ""), {
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: null,
+      giftRegistry,
+    });
+  });
+
+  it("keeps the stored registry when an older client sends the payload without it (F2; L4.3)", async () => {
+    // The API keeps an omitted registry; this client always states it, and a body that omits it is no longer built
+    // here. The test pins that the write carries exactly what the editor merged, which is the stored one plus the
+    // fields it changed.
+    answer(200, FEATURED);
+    const written = await client().updateInvitationFeatures(ID, {
+      timeZone: "America/Tijuana",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+    });
+
+    assert.equal(written.ok, true);
+    assert.equal(JSON.parse(received[0]?.body ?? "").giftRegistry, null);
+  });
+});
+
 describe("requests", () => {
   it("sends each endpoint's method, path, and JSON body with only the session cookie and the secret", async () => {
     const api = client();
@@ -254,6 +300,7 @@ describe("requests", () => {
             whatsappPhone: "+525512345678",
             playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
             itinerary: null,
+            giftRegistry: null,
           }),
         "PUT",
         `/invitations/${ID}/features`,
@@ -262,6 +309,7 @@ describe("requests", () => {
           whatsappPhone: "+525512345678",
           playlistUrl: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
           itinerary: null,
+          giftRegistry: null,
         },
         FEATURED,
       ],
@@ -326,6 +374,7 @@ describe("requests", () => {
           whatsappPhone: null,
           playlistUrl: null,
           itinerary: null,
+          giftRegistry: null,
         }),
         { ok: false, failure: "not-found" },
         id,
@@ -663,6 +712,7 @@ describe("errors", () => {
         whatsappPhone: "12",
         playlistUrl: null,
         itinerary: null,
+        giftRegistry: null,
       }),
       { ok: false, failure: "features-invalid", issues },
     );
@@ -674,6 +724,7 @@ describe("errors", () => {
         whatsappPhone: null,
         playlistUrl: null,
         itinerary: null,
+        giftRegistry: null,
       }),
       { ok: false, failure: "features-invalid" },
     );
@@ -939,12 +990,44 @@ describe("validators", () => {
     }
   });
 
+  it("reads the stored gift registry payload and refuses one of another shape (F2; L4.1)", () => {
+    const giftRegistry = {
+      version: 1,
+      stores: [{ name: "Liverpool", reference: "Evento 51234567", url: "https://x.mx/1" }],
+      transfer: { bank: "BBVA", holder: "Ana Martínez", clabe: "012180000123456782" },
+      envelopes: true,
+      note: "Con cariño",
+    };
+    const parse = (featureSettings: unknown) =>
+      parseOwnedInvitation({ ...OWNED, featureSettings })?.featureSettings.giftRegistry;
+
+    assert.deepEqual(parse({ ...OWNED.featureSettings, giftRegistry }), giftRegistry);
+    // A body written before the column existed reads as no registry, never as a missing value the editor guesses.
+    assert.equal(parse({ whatsappPhone: null, playlistUrl: null }), null);
+    assert.equal(parse({ ...OWNED.featureSettings, giftRegistry: null }), null);
+
+    for (const broken of [
+      { ...giftRegistry, version: 2 },
+      { ...giftRegistry, stores: [{ name: "Liverpool", url: "http://x.mx/1" }] },
+      { ...giftRegistry, stores: [{ name: "Liverpool", url: "https://x.mx/1" }], extra: true },
+      { version: 1, stores: [] },
+      "mesa",
+    ]) {
+      assert.equal(
+        parse({ ...OWNED.featureSettings, giftRegistry: broken }),
+        undefined,
+        JSON.stringify(broken),
+      );
+    }
+  });
+
   it("reads the stored playlist title and cover, and drops a value it does not accept (S2)", () => {
     const cover = "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07";
     const base = {
       whatsappPhone: null,
       playlistUrl: "https://open.spotify.com/playlist/abc",
       itinerary: null,
+      giftRegistry: null,
     };
     const parse = (featureSettings: unknown) =>
       parseOwnedInvitation({ ...OWNED, featureSettings })?.featureSettings;

@@ -5,6 +5,7 @@ import {
 } from "../invitation-features/calendar.ts";
 import { type EventFacts, eventFactsFor } from "../invitation-features/event-facts.ts";
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
+import type { GiftRegistry } from "../invitation-features/gift-registry.ts";
 import {
   type GuestPageBlockView,
   hasAnyFeature,
@@ -104,7 +105,10 @@ export interface GatedFeatures {
   readonly calendar: boolean;
   readonly whatsapp: WhatsAppContact | null;
   readonly music: MusicLink | null;
+  /** Whether the pinned package grants `GIFT_REGISTRY`, the gate each layout reads for an older content text (F7, F2). */
   readonly giftRegistry: boolean;
+  /** The structured registry the shared block draws, or null when there is none to draw (F2; L4.5). */
+  readonly giftRegistryDetails: GiftRegistry | null;
   readonly gallery: readonly GalleryPhoto[];
   /**
    * The moments of the day (F1; L3.3), already gated by the page that built this source: the public read answers
@@ -166,6 +170,9 @@ export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts
     whatsapp: source.gated.whatsapp,
     music: source.gated.music,
     giftRegistry: source.gated.giftRegistry,
+    ...(source.gated.giftRegistryDetails === null
+      ? {}
+      : { giftRegistryDetails: source.gated.giftRegistryDetails }),
     // The API gates the gallery and answers it in the creator's order; the block renders it as it comes (M8 S4).
     gallery: source.gated.gallery,
     ...(source.gated.itinerary.length === 0 ? {} : { itinerary: source.gated.itinerary }),
@@ -193,7 +200,17 @@ export function publicFeatureBlock(
     content: invitation.content,
     hiddenFields: invitation.hiddenFields,
     timeZone: invitation.timeZone,
-    gated: { ...invitation.features, itinerary: invitation.features.itinerary?.items ?? [] },
+    gated: {
+      countdown: invitation.features.countdown,
+      map: invitation.features.map,
+      calendar: invitation.features.calendar,
+      whatsapp: invitation.features.whatsapp,
+      music: invitation.features.music,
+      giftRegistry: invitation.features.giftRegistry,
+      giftRegistryDetails: invitation.features.giftRegistryDetails,
+      gallery: invitation.features.gallery,
+      itinerary: invitation.features.itinerary?.items ?? [],
+    },
     places: invitation.places,
     ...(rsvp === undefined ? {} : { rsvp }),
     ...(guest === undefined ? {} : { guest }),

@@ -12,6 +12,19 @@ import { timeZoneLabel } from "../../../../../lib/customer/invitation-features.t
 import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rsvp.ts";
 import type { ContentField } from "../../../../../lib/customer/invitations.ts";
 import {
+  addGiftRegistryStore,
+  canAddGiftRegistryStore,
+  type GiftRegistryDraft,
+  type GiftRegistryDraftStore,
+  isGiftRegistryStoreIncomplete,
+  moveGiftRegistryStore,
+  removeGiftRegistryStore,
+  setGiftRegistryEnvelopes,
+  setGiftRegistryNote,
+  setGiftRegistryTransfer,
+  updateGiftRegistryStore,
+} from "../../../../../lib/customer/gift-registry.ts";
+import {
   addItineraryMoment,
   canAddItineraryMoment,
   type ItineraryDraftMoment,
@@ -518,6 +531,8 @@ export interface FeatureValues {
   readonly playlistUrl: string;
   /** The moments of the day as the browser holds them, in the owner's order (F1; L3.4). */
   readonly itinerary: readonly ItineraryDraftMoment[];
+  /** The gift registry as the browser holds it: stores, transfer, envelopes switch, and note (F2; L4.4). */
+  readonly giftRegistry: GiftRegistryDraft;
 }
 
 /** The small controls of one itinerary moment: no form, no navigation, so each press is a save of its own (L3.4). */
@@ -684,6 +699,263 @@ function ItineraryFields({
   );
 }
 
+/**
+ * The «Mesa de regalos» block of «Funciones» (F2; L4.4): one row per store with its name, its reference, and the link a
+ * guest opens, plus the controls that add, remove, and reorder them; then the transfer data, the «Lluvia de sobres»
+ * switch, and the note. Every control is a real button with its own accessible name — «Subir Liverpool», «Quitar Tienda
+ * 2» — so the order is never changed by color, drag, or an icon alone. A store that is still being written is never
+ * sent: it stays in the browser with a hint of its own, and the stored one keeps its last complete version while the
+ * owner retypes it.
+ */
+function GiftRegistryFields({
+  values,
+  issue,
+  onChange,
+  onFlush,
+}: {
+  values: FeatureValues;
+  issue: string | undefined;
+  onChange: (next: Partial<FeatureValues>) => void;
+  onFlush: () => void;
+}) {
+  const drafts = values.giftRegistry;
+  const nameOf = (index: number): string => {
+    const name = drafts.stores[index]?.name.trim() ?? "";
+
+    return name === "" ? FEATURE_COPY.giftRegistryStoreLabel(index + 1) : name;
+  };
+  const change = (next: GiftRegistryDraft) => {
+    onChange({ giftRegistry: next });
+    // A press is one deliberate action, not a keystroke: it is sent at once instead of waiting for the debounce.
+    onFlush();
+  };
+  const patch = (index: number, store: Partial<GiftRegistryDraftStore>) =>
+    onChange({ giftRegistry: updateGiftRegistryStore(drafts, index, store) });
+  const patchTransfer = (transfer: Partial<GiftRegistryDraft["transfer"]>) =>
+    onChange({ giftRegistry: setGiftRegistryTransfer(drafts, transfer) });
+
+  const incompleteHintId = (index: number): string | undefined => {
+    const store = drafts.stores[index];
+
+    return store !== undefined && isGiftRegistryStoreIncomplete(store)
+      ? `gift-registry-${index}-incomplete`
+      : undefined;
+  };
+
+  const field = (
+    index: number,
+    key: keyof GiftRegistryDraftStore,
+    label: string,
+    options: { maxLength: number; placeholder?: string; type?: "text" | "url" },
+  ) => {
+    const id = `gift-registry-${index}-${key}`;
+
+    return (
+      <div>
+        <label className={fieldLabel} htmlFor={id}>
+          {label}
+        </label>
+        <input
+          aria-describedby={key === "name" || key === "url" ? incompleteHintId(index) : undefined}
+          autoComplete={options.type === "url" ? "url" : "off"}
+          className={textField}
+          id={id}
+          inputMode={options.type === "url" ? "url" : undefined}
+          maxLength={options.maxLength}
+          name={id}
+          onBlur={onFlush}
+          onChange={(event) => patch(index, { [key]: event.target.value })}
+          placeholder={options.placeholder}
+          type={options.type ?? "text"}
+          value={drafts.stores[index]?.[key] ?? ""}
+        />
+      </div>
+    );
+  };
+
+  let position = 0;
+  const rows = drafts.stores.map((_store) => {
+    const index = position;
+    position += 1;
+
+    return (
+      <li
+        className="flex flex-col gap-3 rounded-field bg-surface p-3 ring-1 ring-field-border"
+        key={index}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className={fieldLabel}>
+            {nameOf(index)}
+            <span className="ml-2 text-xs font-normal text-muted">
+              {FEATURE_COPY.giftRegistryStoreLabel(index + 1)}
+            </span>
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              aria-label={`${FEATURE_COPY.giftRegistryMoveUp} ${nameOf(index)}`}
+              className={itineraryControl}
+              disabled={index === 0}
+              onClick={() => change(moveGiftRegistryStore(drafts, index, "up"))}
+              type="button"
+            >
+              {FEATURE_COPY.giftRegistryMoveUp}
+            </button>
+            <button
+              aria-label={`${FEATURE_COPY.giftRegistryMoveDown} ${nameOf(index)}`}
+              className={itineraryControl}
+              disabled={index === drafts.stores.length - 1}
+              onClick={() => change(moveGiftRegistryStore(drafts, index, "down"))}
+              type="button"
+            >
+              {FEATURE_COPY.giftRegistryMoveDown}
+            </button>
+            <button
+              aria-label={`${FEATURE_COPY.giftRegistryRemove} ${nameOf(index)}`}
+              className={itineraryControl}
+              onClick={() => change(removeGiftRegistryStore(drafts, index))}
+              type="button"
+            >
+              {FEATURE_COPY.giftRegistryRemove}
+            </button>
+          </div>
+        </div>
+        {incompleteHintId(index) === undefined ? null : (
+          <p className="text-sm leading-6 text-muted" id={incompleteHintId(index)}>
+            {FEATURE_COPY.giftRegistryIncomplete}
+          </p>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {field(index, "name", FEATURE_COPY.giftRegistryStoreNameLabel, { maxLength: 40 })}
+          {field(index, "reference", FEATURE_COPY.giftRegistryStoreReferenceLabel, {
+            maxLength: 60,
+          })}
+          <div className="sm:col-span-2">
+            {field(index, "url", FEATURE_COPY.giftRegistryStoreUrlLabel, {
+              maxLength: 500,
+              placeholder: FEATURE_COPY.giftRegistryStoreUrlPlaceholder,
+              type: "url",
+            })}
+          </div>
+        </div>
+      </li>
+    );
+  });
+
+  const transferField = (
+    key: keyof GiftRegistryDraft["transfer"],
+    label: string,
+    options: { maxLength: number; inputMode?: "numeric"; placeholder?: string },
+  ) => {
+    const id = `gift-registry-transfer-${key}`;
+
+    return (
+      <div>
+        <label className={fieldLabel} htmlFor={id}>
+          {label}
+        </label>
+        <input
+          autoComplete="off"
+          className={textField}
+          id={id}
+          inputMode={options.inputMode}
+          maxLength={options.maxLength}
+          name={id}
+          onBlur={onFlush}
+          onChange={(event) => patchTransfer({ [key]: event.target.value })}
+          placeholder={options.placeholder}
+          type="text"
+          value={drafts.transfer[key]}
+        />
+      </div>
+    );
+  };
+
+  const envelopesId = "gift-registry-envelopes";
+  const noteId = "gift-registry-note";
+
+  return (
+    <div className="border-t border-rose-100 pt-6">
+      <p className={fieldLabel}>{FEATURE_COPY.giftRegistryTitle}</p>
+      <p className={fieldHint}>{FEATURE_COPY.giftRegistryHint}</p>
+
+      {drafts.stores.length === 0 ? (
+        <p className="mt-3 text-sm leading-6 text-muted">{FEATURE_COPY.giftRegistryEmpty}</p>
+      ) : (
+        <ol className="mt-4 flex flex-col gap-4">{rows}</ol>
+      )}
+
+      <div className="mt-4 flex flex-col gap-2">
+        <button
+          className={`${quietButton} self-start`}
+          disabled={!canAddGiftRegistryStore(drafts)}
+          onClick={() => change(addGiftRegistryStore(drafts))}
+          type="button"
+        >
+          {FEATURE_COPY.giftRegistryAdd}
+        </button>
+        {canAddGiftRegistryStore(drafts) ? null : (
+          <p className="text-sm leading-6 text-muted">{FEATURE_COPY.giftRegistryLimitNote}</p>
+        )}
+      </div>
+
+      <div className="mt-6 border-t border-rose-100 pt-6">
+        <p className={fieldLabel}>{FEATURE_COPY.giftRegistryTransferTitle}</p>
+        <p className={fieldHint}>{FEATURE_COPY.giftRegistryTransferHint}</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {transferField("bank", FEATURE_COPY.giftRegistryBankLabel, { maxLength: 60 })}
+          {transferField("holder", FEATURE_COPY.giftRegistryHolderLabel, { maxLength: 60 })}
+          <div className="sm:col-span-2">
+            {transferField("clabe", FEATURE_COPY.giftRegistryClabeLabel, {
+              maxLength: 24,
+              inputMode: "numeric",
+              placeholder: "0121 8000 0123 4567 82",
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 flex items-start gap-3">
+        <input
+          checked={drafts.envelopes}
+          className={`${checkbox} mt-1`}
+          id={envelopesId}
+          name={envelopesId}
+          onChange={(event) =>
+            onChange({ giftRegistry: setGiftRegistryEnvelopes(drafts, event.target.checked) })
+          }
+          onBlur={onFlush}
+          type="checkbox"
+        />
+        <div>
+          <label className={fieldLabel} htmlFor={envelopesId}>
+            {FEATURE_COPY.giftRegistryEnvelopesLabel}
+          </label>
+          <p className={fieldHint}>{FEATURE_COPY.giftRegistryEnvelopesHint}</p>
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <label className={fieldLabel} htmlFor={noteId}>
+          {FEATURE_COPY.giftRegistryNoteLabel}
+        </label>
+        <textarea
+          className={multilineField}
+          id={noteId}
+          maxLength={200}
+          name={noteId}
+          onBlur={onFlush}
+          onChange={(event) =>
+            onChange({ giftRegistry: setGiftRegistryNote(drafts, event.target.value) })
+          }
+          rows={3}
+          value={drafts.note}
+        />
+        <FieldRefusal id="gift-registry-error" message={issue} />
+      </div>
+    </div>
+  );
+}
+
 /** The automatic features a guest sees, as a plain list of what the package turns on (S4). */
 function AutomaticFeatures({ view }: { view: FeatureSettingsView }) {
   return (
@@ -801,6 +1073,15 @@ export function FeatureFields({
 
       {view.showItinerary ? (
         <ItineraryFields onChange={onChange} onFlush={onFlush} values={values} />
+      ) : null}
+
+      {view.showGiftRegistry ? (
+        <GiftRegistryFields
+          issue={issues?.giftRegistry}
+          onChange={onChange}
+          onFlush={onFlush}
+          values={values}
+        />
       ) : null}
 
       {view.giftRegistryNote === "" ? null : (

@@ -25,6 +25,7 @@ const STORED_FEATURES: InvitationFeatureInput = {
   whatsappPhone: "+5215512345678",
   playlistUrl: null,
   itinerary: STORED,
+  giftRegistry: null,
 };
 
 function merged(payload: Record<string, unknown>): InvitationFeatureInput {

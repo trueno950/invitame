@@ -624,7 +624,7 @@ describe("features block rendering rules", () => {
     assert.doesNotMatch(island.source, /\banimate-|\btransition-|animation:/);
   });
 
-  it("keeps the countdown island the only client component of the invitation", () => {
+  it("keeps the invitation's client components to the three deliberate islands", () => {
     const clientComponents = [...featuresSources(), ...rendererSources()].filter(({ source }) =>
       /^\s*["']use client["'];?/m.test(source),
     );
@@ -632,6 +632,9 @@ describe("features block rendering rules", () => {
     assert.deepEqual(
       clientComponents.map(({ file }) => file.replace(/^.*\/_components\//, "_components/")),
       [
+        // The CLABE copy button is one more deliberate island (F2; L4.5): the clipboard only exists in the browser, and
+        // its fallback selects the text the server already rendered.
+        "_components/invitation-features/copy-clabe-island.ts",
         "_components/invitation-features/countdown-island.ts",
         // The map is the second deliberate island (S1, S2): it loads only when a guest scrolls it into view.
         "_components/invitation-features/place-map-island.ts",
@@ -990,5 +993,144 @@ describe("the confirmed point of a place (S1, S2)", () => {
 
     assert.doesNotMatch(html, /data-place-map/);
     assert.equal(html, "");
+  });
+});
+
+/** One registry, as the API answers it (F2; L4.3): two stores, a transfer, the envelopes line, and a note. */
+const GIFT_REGISTRY = {
+  stores: [
+    {
+      name: "Liverpool",
+      reference: "Evento 51234567",
+      url: "https://mesaderegalos.liverpool.com.mx/milestaderegalos/51234567",
+    },
+    { name: "Amazon", url: "https://www.amazon.com.mx/wedding/ana-y-luis" },
+  ],
+  transfer: { bank: "BBVA", holder: "Ana Martínez", clabe: "012180000123456782" },
+  envelopes: true,
+  note: "Gracias por acompañarnos.",
+} as const;
+
+describe("the gift registry of a guest page (F2; L4.5)", () => {
+  /** The block rendered from one registry, with nothing else gated on. */
+  function renderRegistry(registry: InvitationFeatures["giftRegistryDetails"]): string {
+    return render(
+      featuresOf(
+        registry === undefined
+          ? { giftRegistry: true }
+          : { giftRegistry: true, giftRegistryDetails: registry },
+      ),
+    );
+  }
+
+  it("draws one row per store, in the owner's order, with its reference and a «Ver mesa» link", () => {
+    const html = renderRegistry(GIFT_REGISTRY);
+    const rows = html.match(/<li[^>]*data-gift-store="[^"]*"[\s\S]*?<\/li>/g) ?? [];
+
+    assert.equal(rows.length, 2);
+    assert.match(rows[0] ?? "", /Liverpool/);
+    assert.match(rows[0] ?? "", /Evento 51234567/);
+    assert.match(rows[1] ?? "", /Amazon/);
+    assert.equal(html.indexOf("Liverpool") < html.indexOf("Amazon"), true);
+    // The card names itself once, with the artboard's own sentence.
+    assert.match(html, /data-feature="gift-registry"/);
+    assert.match(html, /Mesa de regalos/);
+    assert.match(html, /Tu presencia es nuestro mejor regalo/);
+  });
+
+  it("opens every store in a new tab without handing it the opener", () => {
+    const links = linksOf(renderRegistry(GIFT_REGISTRY));
+
+    assert.equal(links.length, 2);
+    for (const [index, link] of links.entries()) {
+      assert.equal(attributeOf(link, "target"), "_blank");
+      assert.equal(attributeOf(link, "rel"), "noopener noreferrer");
+      assert.equal(attributeOf(link, "href"), GIFT_REGISTRY.stores[index]?.url as string);
+      // The action is text, never an icon alone: «Ver mesa →» inside the link.
+      assert.match(link, /Ver mesa/);
+      assert.match(link, /→/);
+      // A reader that cannot see it hears which store it opens.
+      assert.equal(
+        attributeOf(link, "aria-label"),
+        `Ver mesa de ${GIFT_REGISTRY.stores[index]?.name} en una pestaña nueva`,
+      );
+    }
+  });
+
+  it("draws the transfer data with the CLABE grouped for reading and the copy button's own value", () => {
+    const html = renderRegistry(GIFT_REGISTRY);
+
+    assert.match(html, /data-gift-transfer/);
+    assert.match(html, /BBVA/);
+    assert.match(html, /Ana Martínez/);
+    // The artboard groups the digits: four, four, four, and the last two.
+    assert.match(html, /0121 8000 0123 4567 82/);
+    // The island receives the compact number and the id of the element its fallback selects.
+    assert.match(html, /data-copy-clabe="012180000123456782"/);
+    assert.match(html, /Copiar CLABE/);
+    assert.match(html, /aria-live="polite"/);
+  });
+
+  it("draws the envelopes line and the note only when the owner wrote them", () => {
+    const html = renderRegistry(GIFT_REGISTRY);
+
+    assert.match(html, /Lluvia|en un sobre/);
+    assert.match(html, /Gracias por acompañarnos\./);
+
+    const bare = renderRegistry({
+      stores: [{ name: "Liverpool", url: "https://x.mx/1" }],
+      transfer: null,
+      envelopes: false,
+      note: null,
+    });
+
+    assert.doesNotMatch(bare, /en un sobre/);
+    assert.doesNotMatch(bare, /Gracias por acompañarnos/);
+    assert.doesNotMatch(bare, /Copiar CLABE/);
+    assert.doesNotMatch(bare, /data-gift-transfer/);
+  });
+
+  it("escapes every owner text instead of turning it into markup", () => {
+    const html = renderRegistry({
+      stores: [
+        {
+          name: "<script>alert('Liverpool')</script>",
+          reference: "<img src=x onerror=alert(1)>",
+          url: "https://x.mx/1?a=%22%3E%3Cscript%3E",
+        },
+      ],
+      transfer: { bank: "<b>BBVA</b>", holder: "Ana & Luis", clabe: "012180000123456782" },
+      envelopes: true,
+      note: '<a href="https://evil.test">regalo</a>',
+    });
+
+    assert.doesNotMatch(html, /<script>alert/);
+    assert.doesNotMatch(html, /<img src=x/);
+    assert.doesNotMatch(html, /<b>BBVA<\/b>/);
+    assert.doesNotMatch(html, /<a href="https:\/\/evil\.test">/);
+    // The text is there, escaped, so nothing the owner typed disappears either.
+    assert.match(html, /&lt;script&gt;alert\(&#x27;Liverpool&#x27;\)&lt;\/script&gt;/);
+    assert.match(html, /Ana &amp; Luis/);
+    assert.match(html, /&lt;b&gt;BBVA&lt;\/b&gt;/);
+  });
+
+  it("draws the registry after the plan of the day and before the map", () => {
+    const html = render(
+      featuresOf({
+        giftRegistry: true,
+        giftRegistryDetails: GIFT_REGISTRY,
+        itinerary: [{ time: "17:00", title: "Misa" }],
+        map: true,
+      }),
+    );
+
+    assert.equal(
+      html.indexOf('data-feature="itinerary"') < html.indexOf('data-feature="gift-registry"'),
+      true,
+    );
+    assert.equal(
+      html.indexOf('data-feature="gift-registry"') < html.indexOf('data-feature="map"'),
+      true,
+    );
   });
 });

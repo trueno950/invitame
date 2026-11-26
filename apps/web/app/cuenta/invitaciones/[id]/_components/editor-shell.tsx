@@ -48,6 +48,12 @@ import {
   itineraryPayloadOf,
 } from "../../../../../lib/customer/itinerary.ts";
 import {
+  type GiftRegistryDraft,
+  type GiftRegistryPayload,
+  giftRegistryNeedsSave,
+  giftRegistryPayloadOf,
+} from "../../../../../lib/customer/gift-registry.ts";
+import {
   OMITTED_SECTIONS_PROPERTY,
   type OmittableSections,
   omittedSectionKeys,
@@ -343,6 +349,17 @@ function storedPlanOf(drafts: readonly ItineraryDraftMoment[]): ItineraryPayload
   return plan === undefined ? null : plan;
 }
 
+/**
+ * The gift registry the page was rendered with, as the payload the API holds (F2; L4.4). The view answers the drafts of
+ * the stored registry, so this is their payload again; a value the contract would refuse cannot come from the API and
+ * reads as no registry.
+ */
+function storedRegistryOf(drafts: GiftRegistryDraft): GiftRegistryPayload | null {
+  const registry = giftRegistryPayloadOf(drafts);
+
+  return registry === undefined ? null : registry;
+}
+
 function issuesOf(state: ReturnType<typeof useAutosave>["state"]): FieldIssues | undefined {
   if (state.kind !== "error") {
     return undefined;
@@ -449,6 +466,7 @@ export function EditorShell({
     whatsappPhone: featureView.whatsappPhone,
     playlistUrl: featureView.playlistUrl,
     itinerary: featureView.itinerary,
+    giftRegistry: featureView.giftRegistry,
   }));
   const [rsvp, setRsvp] = useState<RsvpValues>(() => ({
     deadline: rsvpView?.deadlineValue ?? "",
@@ -460,6 +478,13 @@ export function EditorShell({
    * a stored moment saves nothing and «Quitar» still removes it.
    */
   const storedItinerary = useRef<ItineraryPayload | null>(storedPlanOf(featureView.itinerary));
+  /**
+   * The registry the API holds right now (F2; L4.4), with the same role the stored plan has: it tells a store the owner
+   * is retyping from one that was never complete, so retyping a stored store saves nothing and «Quitar» removes it.
+   */
+  const storedGiftRegistry = useRef<GiftRegistryPayload | null>(
+    storedRegistryOf(featureView.giftRegistry),
+  );
   const featuresRef = useRef(features);
   featuresRef.current = features;
   const statusLine = useRef<HTMLDivElement>(null);
@@ -488,6 +513,15 @@ export function EditorShell({
 
         if (saved !== undefined) {
           storedItinerary.current = saved;
+        }
+
+        const registry = giftRegistryPayloadOf(
+          featuresRef.current.giftRegistry,
+          storedGiftRegistry.current,
+        );
+
+        if (registry !== undefined) {
+          storedGiftRegistry.current = registry;
         }
       }
       setPreviewKey((key) => key + 1);
@@ -604,6 +638,14 @@ export function EditorShell({
     if (
       next.itinerary !== undefined &&
       !itineraryNeedsSave(features.itinerary, next.itinerary, storedItinerary.current)
+    ) {
+      return;
+    }
+    // The registry follows the same rule (F2; L4.4): an empty row being added or written, and the removal of one that
+    // was never complete, stay in the browser without a request.
+    if (
+      next.giftRegistry !== undefined &&
+      !giftRegistryNeedsSave(features.giftRegistry, next.giftRegistry, storedGiftRegistry.current)
     ) {
       return;
     }

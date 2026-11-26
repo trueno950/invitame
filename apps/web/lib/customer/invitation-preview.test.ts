@@ -139,6 +139,7 @@ function invitation(overrides: Partial<OwnedInvitation> = {}): OwnedInvitation {
       playlistTitle: null,
       playlistCoverUrl: null,
       itinerary: null,
+      giftRegistry: null,
     },
     availableFeatures: [],
     places: {},
@@ -428,6 +429,67 @@ describe("invitationPreviewView: the features the guest page would show", () => 
       coverUrl: "https://i.scdn.co/image/ab67706f00000002f04528c743e20039ac4eff07",
     });
     assert.equal(view.features?.giftRegistry, true);
+  });
+
+  it("shows the structured gift registry and withholds the legacy text, so the preview never draws both (F2; L4.3)", () => {
+    const withRegistry = rendered({
+      invitation: invitation({
+        availableFeatures: ["CALENDAR", "GIFT_REGISTRY"],
+        content: {
+          ...COMPLETE_CONTENT,
+          giftRegistry: "Mesa de regalos Liverpool · Código 5123 4471",
+        },
+        featureSettings: {
+          whatsappPhone: null,
+          playlistUrl: null,
+          playlistTitle: null,
+          playlistCoverUrl: null,
+          itinerary: null,
+          giftRegistry: {
+            version: 1,
+            stores: [{ name: "Liverpool", url: "https://x.mx/1" }],
+            envelopes: false,
+          },
+        },
+      }),
+      templates: [xvTemplate()],
+      media: [],
+      rsvp: undefined,
+      origin: ORIGIN,
+      now: NOW,
+    });
+
+    // The preview keeps the stored text in `content` the same way it keeps every other omitted value, and the renderer
+    // hides it by name: the layout draws no legacy block, and the card below is the only registry the preview shows.
+    assert.deepEqual(withRegistry.hiddenFields, ["giftRegistry"]);
+    assert.deepEqual(withRegistry.features?.giftRegistryDetails, {
+      stores: [{ name: "Liverpool", url: "https://x.mx/1" }],
+      transfer: null,
+      envelopes: false,
+      note: null,
+    });
+    assert.equal(withRegistry.features?.giftRegistry, true);
+
+    // An invitation with only the old text keeps it, exactly as a guest sees it: the legacy field travels and no card is
+    // drawn for it.
+    const legacy = rendered({
+      invitation: invitation({
+        availableFeatures: ["CALENDAR", "GIFT_REGISTRY"],
+        content: {
+          ...COMPLETE_CONTENT,
+          giftRegistry: "Mesa de regalos Liverpool · Código 5123 4471",
+        },
+      }),
+      templates: [xvTemplate()],
+      media: [],
+      rsvp: undefined,
+      origin: ORIGIN,
+      now: NOW,
+    });
+
+    assert.deepEqual(legacy.hiddenFields, []);
+    assert.equal(legacy.content.giftRegistry, "Mesa de regalos Liverpool · Código 5123 4471");
+    assert.equal(legacy.features?.giftRegistryDetails, undefined);
   });
 
   it("shows no features block when the package grants none", () => {

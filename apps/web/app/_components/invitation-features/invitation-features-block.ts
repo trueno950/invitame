@@ -2,6 +2,16 @@ import { createElement, type ReactElement, useId } from "react";
 
 import { GUEST_PAGE_COPY, RSVP_FORM_COPY } from "../../../lib/customer/copy.ts";
 import { calendarEventFor, googleCalendarUrl } from "../../../lib/invitation-features/calendar.ts";
+import {
+  GIFT_REGISTRY_ENVELOPES_LINE,
+  GIFT_REGISTRY_SECTION_HINT,
+  GIFT_REGISTRY_SECTION_TITLE,
+  GIFT_REGISTRY_TRANSFER_TITLE,
+  GIFT_REGISTRY_VIEW_STORE,
+  GIFT_REGISTRY_VIEW_STORE_ARROW,
+  type GiftRegistry,
+  clabeGroups,
+} from "../../../lib/invitation-features/gift-registry.ts";
 import { countdownParts } from "../../../lib/invitation-features/countdown.ts";
 import type { EventFacts, EventPlace } from "../../../lib/invitation-features/event-facts.ts";
 import {
@@ -40,6 +50,7 @@ import { startInstant } from "../../../lib/invitation-features/start-instant.ts"
 import { whatsappUrl } from "../../../lib/invitation-features/whatsapp.ts";
 import { guestPassDataUrl } from "../../../lib/server/guest-pass-qr.ts";
 import { DISPLAY_FONT } from "../renderers/themed/theme.ts";
+import { CopyClabeIsland } from "./copy-clabe-island.ts";
 import { CountdownIsland } from "./countdown-island.ts";
 import { type MapMarker, PlaceMapIsland } from "./place-map-island.ts";
 
@@ -89,6 +100,24 @@ const SURFACE_CARD = `${CARD} bg-(--inv-surface)`;
 const MUSIC_COVER = "mt-3 aspect-square w-full max-w-[18rem] rounded-xl object-cover";
 /** The playlist title the provider named, in the card's own ink (S2). */
 const MUSIC_TITLE = "mt-2 text-lg leading-tight font-medium break-words text-(color:--inv-ink)";
+
+// The gift registry card (F2; L4.5): one row per store on the theme's soft surface, the link in the accent with a 44 px
+// tap target, and the transfer rows on the card itself, separated by a dashed line in the theme's decoration color.
+const STORE_LIST = "mt-3 flex flex-col gap-2.5";
+const STORE_ROW =
+  "flex items-center justify-between gap-3 rounded-xl bg-(--inv-soft) px-4 py-3.5 ring-1 ring-inset ring-(--inv-soft)";
+const STORE_NAME = "text-base leading-tight font-medium break-words text-(color:--inv-ink)";
+const STORE_REFERENCE = "mt-0.5 text-sm break-words text-(color:--inv-ink)";
+const STORE_LINK =
+  "inline-flex min-h-11 min-w-11 shrink-0 items-center text-sm font-medium text-(color:--inv-accent) underline underline-offset-4";
+const TRANSFER_BLOCK = "mt-4 border-t border-dashed border-(--inv-decoration-one) pt-4";
+const TRANSFER_TITLE = "text-center text-xl font-medium text-(color:--inv-ink)";
+const TRANSFER_ROW = "flex items-baseline justify-between gap-3 py-1.5 text-sm";
+const TRANSFER_LABEL = "text-(color:--inv-ink)";
+const TRANSFER_VALUE = "text-right font-medium break-words text-(color:--inv-ink)";
+/** The CLABE reads in groups of four; the number is the value the copy button hands over. */
+const TRANSFER_CLABE = "text-right font-medium break-all text-(color:--inv-ink) tabular-nums";
+const NOTE = "mt-4 text-sm leading-6 break-words text-(color:--inv-ink)";
 
 // The timeline of the day (F1; L3.5): the time in the display face, the dot on the theme's accent, and the connector
 // in the theme's decoration color. The grid keeps the three columns aligned on every row, so a long title wraps
@@ -550,6 +579,100 @@ function itinerarySection(moments: readonly ItineraryMoment[]): ReactElement {
 }
 
 /**
+ * The gift registry (F2; L4.5): one row per store, in the order the owner stored, with its reference and the «Ver mesa →»
+ * link that opens it in a new tab without handing the opener over; then the transfer block with the bank, the holder,
+ * and the CLABE grouped for reading next to its «Copiar CLABE» button; the envelopes line when the owner switched it
+ * on; and the note. Every text is React's own text node, so the owner's words are escaped and nothing they typed can
+ * become markup.
+ */
+function giftRegistrySection(registry: GiftRegistry, idPrefix: string): ReactElement {
+  const transfer = registry.transfer;
+  const clabeId = `${idPrefix}-gift-clabe`;
+  const stores =
+    registry.stores.length === 0
+      ? null
+      : h(
+          "ul",
+          { "data-gift-stores": "", className: STORE_LIST },
+          registry.stores.map((store, index) =>
+            h(
+              "li",
+              { key: `${index}-${store.url}`, "data-gift-store": store.name, className: STORE_ROW },
+              h(
+                "div",
+                { className: "flex min-w-0 flex-col" },
+                h("p", { className: STORE_NAME }, store.name),
+                store.reference === undefined
+                  ? null
+                  : h("p", { className: STORE_REFERENCE }, store.reference),
+              ),
+              h(
+                "a",
+                {
+                  href: store.url,
+                  target: "_blank",
+                  rel: "noopener noreferrer",
+                  "aria-label": `${GIFT_REGISTRY_VIEW_STORE} de ${store.name} en una pestaña nueva`,
+                  className: STORE_LINK,
+                },
+                `${GIFT_REGISTRY_VIEW_STORE} ${GIFT_REGISTRY_VIEW_STORE_ARROW}`,
+              ),
+            ),
+          ),
+        );
+
+  return h(
+    "div",
+    { key: "gift-registry", "data-feature": "gift-registry", className: SURFACE_CARD },
+    h("h3", { className: FEATURE_TITLE }, GIFT_REGISTRY_SECTION_TITLE),
+    h("p", { className: HINT }, GIFT_REGISTRY_SECTION_HINT),
+    stores,
+    transfer === null
+      ? null
+      : h(
+          "div",
+          { "data-gift-transfer": "", className: TRANSFER_BLOCK },
+          h("h4", { className: TRANSFER_TITLE }, GIFT_REGISTRY_TRANSFER_TITLE),
+          h(
+            "dl",
+            { className: "mt-1" },
+            h(
+              "div",
+              { className: TRANSFER_ROW },
+              h("dt", { className: TRANSFER_LABEL }, "Banco"),
+              h("dd", { className: TRANSFER_VALUE }, transfer.bank),
+            ),
+            h(
+              "div",
+              { className: TRANSFER_ROW },
+              h("dt", { className: TRANSFER_LABEL }, "Titular"),
+              h("dd", { className: TRANSFER_VALUE }, transfer.holder),
+            ),
+            h(
+              "div",
+              { className: TRANSFER_ROW },
+              h("dt", { className: TRANSFER_LABEL }, "CLABE"),
+              h(
+                "dd",
+                {
+                  id: clabeId,
+                  className: TRANSFER_CLABE,
+                  // The compact digits the copy button hands over, which the row above shows grouped for reading.
+                  "data-clabe": transfer.clabe,
+                },
+                clabeGroups(transfer.clabe),
+              ),
+            ),
+          ),
+          // The island takes the compact digits and the id of the element it selects, so both travel as plain strings.
+          h(CopyClabeIsland, { clabe: transfer.clabe, clabeId }),
+        ),
+    registry.envelopes ? h("p", { className: NOTE }, GIFT_REGISTRY_ENVELOPES_LINE) : null,
+    registry.note === null ? null : h("p", { className: NOTE }, registry.note),
+  );
+}
+
+/**
  * The place as the links and the map read it: the layout's words plus the point the owner confirmed for that address
  * field, when there is one (S1, S2). A place whose field stored no point keeps exactly the text links it had.
  */
@@ -628,6 +751,11 @@ export function InvitationFeaturesBlock({
   // The plan of the day comes right after the countdown: what is left to wait for, and then what happens when it starts.
   if (features.itinerary !== undefined && features.itinerary.length > 0) {
     sections.push(itinerarySection(features.itinerary));
+  }
+
+  // The gift registry follows the plan: where to look once a guest knows when the celebration starts (F2; L4.5).
+  if (features.giftRegistryDetails !== undefined) {
+    sections.push(giftRegistrySection(features.giftRegistryDetails, idPrefix));
   }
 
   if (features.map) {

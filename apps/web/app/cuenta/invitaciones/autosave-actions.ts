@@ -118,9 +118,10 @@ export async function autosaveFeaturesAction(
           timeZone: read.value.timeZone,
           whatsappPhone: read.value.featureSettings.whatsappPhone,
           playlistUrl: read.value.featureSettings.playlistUrl,
-          // The plan of the day is part of the whole feature data the PUT replaces, so a save of another field
-          // carries it through instead of clearing it (F1; L3.1, L3.4).
+          // The plan of the day and the gift registry are part of the whole feature data the PUT replaces, so a save of
+          // another field carries them through instead of clearing them (F1; L3.1, L3.4; F2; L4.3, L4.4).
           itinerary: read.value.featureSettings.itinerary ?? null,
+          giftRegistry: read.value.featureSettings.giftRegistry ?? null,
         },
         parsed.changes,
       ),

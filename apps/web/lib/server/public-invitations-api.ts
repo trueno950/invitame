@@ -1,4 +1,5 @@
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
+import { type GiftRegistry, parseGiftRegistry } from "../invitation-features/gift-registry.ts";
 import { isE164Phone } from "../invitation-features/invitation-features.ts";
 import { type Itinerary, parseItinerary } from "../invitation-features/itinerary.ts";
 import { type MusicLink, musicServiceOf } from "../invitation-features/music.ts";
@@ -65,8 +66,17 @@ export interface PublicInvitationFeatures {
    * stores none (F1; L3.3). The API answers the list, never the payload's version, so this client reads no version.
    */
   readonly itinerary: Itinerary | null;
-  /** Whether the layouts render their gift registry block (S7). */
+  /**
+   * Whether the pinned package grants `GIFT_REGISTRY`, which is also what lets each layout draw an older invitation's
+   * content text field (F2; L4.3). It is the gate, never the data, and the boolean the field always answered.
+   */
   readonly giftRegistry: boolean;
+  /**
+   * The structured gift registry a guest's card draws, or null when the package does not grant `GIFT_REGISTRY` or the
+   * invitation stores nothing a card would show (F2; L4.3). The transfer and the note are always present, null when
+   * there is none.
+   */
+  readonly giftRegistryDetails: GiftRegistry | null;
   /**
    * The gallery photos in the creator's order (M8 S3, S4), an empty array when the package does not grant `GALLERY`
    * and always a list, so a layout can read it without a guard.
@@ -260,7 +270,8 @@ function parseGallery(value: unknown, apiOrigin: string): GalleryPhoto[] | undef
  * The gated features of a guest page (S4, S7). The read always says `calendar: true`, because add-to-calendar is
  * not a catalog feature; a body that says otherwise is not this contract, so it is refused instead of being
  * normalized. `whatsapp` is the stored E.164 contact or null, `music` is an allow-listed `https` link and the
- * service it names or null, and `giftRegistry` is the boolean the layouts gate their own block with.
+ * service it names or null, `giftRegistry` is the gate each layout still reads for an older invitation's content
+ * text field, and `giftRegistryDetails` is the structured card the shared block draws or null (F2; L4.3).
  */
 function parsePublicFeatures(
   value: unknown,
@@ -272,8 +283,7 @@ function parsePublicFeatures(
     features === undefined ||
     typeof features.countdown !== "boolean" ||
     typeof features.map !== "boolean" ||
-    features.calendar !== true ||
-    typeof features.giftRegistry !== "boolean"
+    features.calendar !== true
   ) {
     return undefined;
   }
@@ -283,12 +293,22 @@ function parsePublicFeatures(
   const gallery = parseGallery(features.gallery, apiOrigin);
   // An absent itinerary (a body written before the column existed) reads as none; another shape refuses the body.
   const itinerary = features.itinerary === undefined ? null : parseItinerary(features.itinerary);
+  // The structured card follows the same rule (F2; L4.3): absent (a body written before F2) reads as none, and another
+  // shape refuses the body. The gate keeps the boolean it always was, so both API generations read the same way.
+  const giftRegistryGranted =
+    typeof features.giftRegistry === "boolean" ? features.giftRegistry : undefined;
+  const giftRegistry =
+    features.giftRegistryDetails === undefined
+      ? null
+      : parseGiftRegistry(features.giftRegistryDetails);
 
   if (
     music === undefined ||
     rsvp === undefined ||
     gallery === undefined ||
-    itinerary === undefined
+    itinerary === undefined ||
+    giftRegistry === undefined ||
+    giftRegistryGranted === undefined
   ) {
     return undefined;
   }
@@ -298,7 +318,8 @@ function parsePublicFeatures(
     countdown: features.countdown,
     map: features.map,
     calendar: true,
-    giftRegistry: features.giftRegistry,
+    giftRegistry: giftRegistryGranted,
+    giftRegistryDetails: giftRegistry,
     music,
     itinerary,
     gallery,

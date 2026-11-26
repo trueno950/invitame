@@ -21,6 +21,7 @@ export const FEATURE_ISSUE_CODES = [
   "phone-type",
   "playlist",
   "itinerary",
+  "gift-registry",
   "other",
 ] as const;
 export type FeatureIssueCode = (typeof FEATURE_ISSUE_CODES)[number];
@@ -58,6 +59,9 @@ const CODE_BY_ISSUE: Readonly<Record<string, FeatureIssueCode>> = {
  */
 const ITINERARY_ISSUE_PREFIX = /^itinerary(?:\.|\s|$)/;
 
+/** The gift registry's issues name the store or the transfer field that refused them, so they share one prefix (F2). */
+const GIFT_REGISTRY_ISSUE_PREFIX = /^giftRegistry(?:\.|\s|$)/;
+
 /** One code per distinct issue, and `other` when the refusal named none this module knows. */
 export function featureIssueCodes(issues: readonly string[]): FeatureIssueCode[] {
   const codes: FeatureIssueCode[] = [];
@@ -67,7 +71,9 @@ export function featureIssueCodes(issues: readonly string[]): FeatureIssueCode[]
       ? (CODE_BY_ISSUE[issue] as FeatureIssueCode)
       : ITINERARY_ISSUE_PREFIX.test(issue)
         ? "itinerary"
-        : "other";
+        : GIFT_REGISTRY_ISSUE_PREFIX.test(issue)
+          ? "gift-registry"
+          : "other";
 
     if (!codes.includes(code)) {
       codes.push(code);
@@ -81,7 +87,7 @@ export function featureIssuesTarget(path: string, codes: readonly FeatureIssueCo
   return `${path}?error=${FEATURE_ERROR_CODE}&issues=${codes.join(",")}`;
 }
 
-const ISSUE_CODE = /^(?:timezone|phone|phone-type|playlist|itinerary|other)$/;
+const ISSUE_CODE = /^(?:timezone|phone|phone-type|playlist|itinerary|gift-registry|other)$/;
 
 /** The Spanish sentence of one code; nothing at all for a code this page does not know. */
 function issueMessage(code: string): string | undefined {

@@ -1,4 +1,5 @@
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
+import { giftRegistryOf, hideLegacyGiftRegistry } from "../invitation-features/gift-registry.ts";
 import {
   type InvitationFeatures,
   isE164Phone,
@@ -211,6 +212,11 @@ function gatedFeatures(
         : null,
     music: music ?? null,
     giftRegistry: gated.has("GIFT_REGISTRY"),
+    // The preview shows only a registry the package grants, exactly as a guest page does (F2; L4.3).
+    giftRegistryDetails:
+      gated.has("GIFT_REGISTRY") && invitation.featureSettings.giftRegistry != null
+        ? giftRegistryOf(invitation.featureSettings.giftRegistry)
+        : null,
     // The owner's own media read answers the stored photos; a package without `GALLERY` shows none of them.
     gallery: gated.has("GALLERY") ? galleryPhotos(media) : [],
     // The owner read answers the stored plan of the day, and the preview shows it only while the package grants the
@@ -309,15 +315,20 @@ export function invitationPreviewView(input: InvitationPreviewInput): Invitation
 
   const version = pinned.template.publishedVersion;
   // The omitted sections are read from the pinned schema and the stored content, exactly as the API reads them for a
-  // guest, so the preview hides the same sections the published invitation will hide (S8.3).
-  const hiddenFields = hiddenFieldsOf(version.schema, invitation.content);
+  // guest, so the preview hides the same sections the published invitation will hide (S8.3). The legacy gift registry
+  // text is withheld the same way while the structured registry shows, so the preview never draws both (F2; L4.3).
+  const gated = gatedFeatures(invitation, input.media);
+  const hiddenFields = hideLegacyGiftRegistry(
+    hiddenFieldsOf(version.schema, invitation.content),
+    gated.giftRegistryDetails,
+  );
   const content = previewContent(pinned.template, invitation.content, input.origin, hiddenFields);
   const rsvp = previewRsvp(invitation, input.rsvp, input.now ?? new Date());
   const parts = featureBlockParts({
     componentKey: version.componentKey,
     content,
     timeZone: invitation.timeZone,
-    gated: gatedFeatures(invitation, input.media),
+    gated,
     // The owner read answers every stored point, so the preview applies the guest's own rule here: a point belongs to
     // a place only while the address text still equals the label it was stored with (S1, S2), and only a package that
     // grants MAP shows a map at all.

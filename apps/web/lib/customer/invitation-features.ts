@@ -1,6 +1,7 @@
 import { INVITATION_TIME_ZONES, isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import type { CreatorPackage, OwnedInvitation } from "../server/invitations-api.ts";
 import { FEATURE_COPY, INVITATION_TIME_ZONE_LABELS } from "./copy.ts";
+import { type GiftRegistryDraft, giftRegistryDraftOf } from "./gift-registry.ts";
 import { type ItineraryDraftMoment, itineraryDraftsOf } from "./itinerary.ts";
 
 /**
@@ -68,6 +69,14 @@ export interface FeatureSettingsView {
   readonly showItinerary: boolean;
   /** The stored moments as the editor holds them: four texts per row, in the owner's order (F1; L3.4). */
   readonly itinerary: readonly ItineraryDraftMoment[];
+  /**
+   * Whether the package includes GIFT_REGISTRY, which is the only reason the «Mesa de regalos» block is shown (F2;
+   * L4.2, L4.4). A package without the key keeps a stored registry private instead of offering an editor nobody can
+   * publish.
+   */
+  readonly showGiftRegistry: boolean;
+  /** The stored registry as the editor holds it: three texts per store, the transfer, the switch, and the note (F2). */
+  readonly giftRegistry: GiftRegistryDraft;
   /**
    * Whether the package includes RSVP, which is the only reason the draft offers its «Asistencia» section
    * (M6 G3; S4). A package with the guest list instead keeps that section for the guest-list tools (G4).
@@ -153,6 +162,8 @@ export function featureSettingsView(
     showMusic: included.has(MUSIC_FEATURE_KEY),
     showItinerary: included.has(ITINERARY_FEATURE_KEY),
     itinerary: itineraryDraftsOf(invitation.featureSettings.itinerary),
+    showGiftRegistry: included.has(GIFT_REGISTRY_FEATURE_KEY),
+    giftRegistry: giftRegistryDraftOf(invitation.featureSettings.giftRegistry),
     showRsvp: included.has(RSVP_FEATURE_KEY),
     giftRegistryNote: giftRegistryNote(packages, included),
     automaticFeatures: AUTOMATIC_FEATURES.filter(

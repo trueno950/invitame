@@ -19,7 +19,7 @@ import {
   parseRsvpChanges,
   refusal,
 } from "./invitation-autosave.ts";
-import { contentFields, fieldLabel } from "./invitations.ts";
+import { contentFields } from "./invitations.ts";
 import {
   addItineraryMoment,
   EMPTY_ITINERARY_MOMENT,
@@ -66,6 +66,7 @@ const STORED_FEATURES: InvitationFeatureInput = {
     version: 1,
     items: [{ time: "17:00", title: "Misa", address: "Av. Juárez 45" }],
   },
+  giftRegistry: null,
 };
 
 const STORED_RSVP: RsvpSettings = { deadline: "2026-12-01T23:30:00.000Z", partyLimit: 4 };
@@ -209,6 +210,7 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       whatsappPhone: "55 1234 5678",
       playlistUrl: STORED_FEATURES.playlistUrl,
       itinerary: STORED_FEATURES.itinerary,
+      giftRegistry: null,
     });
   });
 
@@ -221,6 +223,7 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       whatsappPhone: null,
       playlistUrl: STORED_FEATURES.playlistUrl,
       itinerary: STORED_FEATURES.itinerary,
+      giftRegistry: null,
     });
   });
 
@@ -415,6 +418,103 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
         parseFeatureChanges({ playlistUrl: `https://open.spotify.com/${"a".repeat(500)}` }),
       )[0]?.field,
       "playlistUrl",
+    );
+  });
+});
+
+describe("a gift registry autosave (F2; L4.4)", () => {
+  const STORE = { name: "Liverpool", reference: "Evento 51234567", url: "https://x.mx/1" };
+  const STORED_REGISTRY = {
+    version: 1 as const,
+    stores: [STORE],
+    envelopes: false,
+  };
+  const EMPTY = {
+    stores: [],
+    transfer: { bank: "", holder: "", clabe: "" },
+    envelopes: false,
+    note: "",
+  };
+  const draftOf = (overrides: Record<string, unknown> = {}) => ({ ...EMPTY, ...overrides });
+
+  it("reads the drafts the editor sent, an empty row included, and null to clear it", () => {
+    const parsed = parseFeatureChanges({
+      giftRegistry: draftOf({ stores: [{ ...STORE, url: "" }], envelopes: true }),
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(
+      parsed.ok ? parsed.changes.giftRegistry : undefined,
+      draftOf({
+        stores: [{ ...STORE, url: "" }],
+        envelopes: true,
+      }),
+    );
+    assert.equal(parseFeatureChanges({ giftRegistry: null }).ok, true);
+  });
+
+  it("refuses a body that is not this shape, and names the field in Spanish", () => {
+    for (const broken of [
+      "mesa",
+      { stores: "Liverpool" },
+      { stores: [{ name: "Liverpool" }] },
+      { stores: [], transfer: null },
+      { stores: [], envelopes: "true", note: "" },
+      { stores: [], envelopes: false, note: 7 },
+      { stores: [], envelopes: false, extra: true },
+    ]) {
+      const parsed = parseFeatureChanges({ giftRegistry: broken });
+
+      assert.equal(parsed.ok, false, JSON.stringify(broken));
+      assert.deepEqual(parsed.ok ? undefined : parsed.fieldIssues, [
+        { field: "giftRegistry", message: FEATURE_ISSUE_COPY["gift-registry"] },
+      ]);
+    }
+  });
+
+  it("sends the complete stores and keeps the stored store while the owner retypes it", () => {
+    const retyped = parseFeatureChanges({
+      giftRegistry: draftOf({ stores: [{ ...STORE, url: "" }] }),
+    });
+
+    assert.equal(retyped.ok, true);
+    assert.deepEqual(
+      retyped.ok
+        ? mergeFeatureChanges(
+            { ...STORED_FEATURES, giftRegistry: STORED_REGISTRY },
+            retyped.changes,
+          )
+        : undefined,
+      {
+        ...STORED_FEATURES,
+        giftRegistry: STORED_REGISTRY,
+      },
+    );
+  });
+
+  it("clears the stored registry when the owner emptied it, and keeps it on every other save", () => {
+    const cleared = parseFeatureChanges({ giftRegistry: draftOf() });
+    const untouched = parseFeatureChanges({ timeZone: "America/Tijuana" });
+
+    assert.equal(cleared.ok, true);
+    assert.equal(untouched.ok, true);
+    assert.equal(
+      cleared.ok
+        ? mergeFeatureChanges(
+            { ...STORED_FEATURES, giftRegistry: STORED_REGISTRY },
+            cleared.changes,
+          ).giftRegistry
+        : undefined,
+      null,
+    );
+    assert.deepEqual(
+      untouched.ok
+        ? mergeFeatureChanges(
+            { ...STORED_FEATURES, giftRegistry: STORED_REGISTRY },
+            untouched.changes,
+          ).giftRegistry
+        : undefined,
+      STORED_REGISTRY,
     );
   });
 });

@@ -12,6 +12,7 @@
  */
 
 import type { GalleryPhoto } from "./gallery.ts";
+import type { GiftRegistry } from "./gift-registry.ts";
 import type { ItineraryMoment } from "./itinerary.ts";
 import type { MusicLink } from "./music.ts";
 import type { StoredPlaces } from "./place-point.ts";
@@ -106,9 +107,16 @@ export interface InvitationFeatures {
   readonly music: MusicLink | null;
   /**
    * Whether the layouts render their own gift registry block (F7; S7). The content decides its value: the gate
-   * says the package grants it, the layout says whether there is something to show.
+   * says the package grants it, the layout says whether there is something to show. It stays a boolean for an older
+   * invitation's content text field, which the API withholds while the structured registry shows (F2; L4.3).
    */
   readonly giftRegistry: boolean;
+  /**
+   * The structured registry the shared block draws (F2; L4.5), or absent when the package does not grant
+   * `GIFT_REGISTRY` or the invitation stores nothing a card would show. The gate above and this card are answered
+   * apart, so a granted package with no registry keeps the legacy text it always had.
+   */
+  readonly giftRegistryDetails?: GiftRegistry;
   /**
    * The photos the guest may see, in the creator's order (M8 S3, S4). Absent or empty renders no gallery, which is
    * what a package without `GALLERY` answers; the block never invents a photo the API did not send.
@@ -183,6 +191,7 @@ export function hasAnyFeature(features: InvitationFeatures): boolean {
     features.music !== null ||
     (features.gallery !== undefined && features.gallery.length > 0) ||
     (features.itinerary !== undefined && features.itinerary.length > 0) ||
+    features.giftRegistryDetails !== undefined ||
     features.rsvp !== undefined ||
     features.guest !== undefined
   );

@@ -39,6 +39,47 @@ function ItinerarySummary({ view }: { view: FeatureSettingsView }) {
   );
 }
 
+/** The stored gift registry as a plain list, which is what a read-only page can show (F2; L4.4). */
+function GiftRegistrySummary({ view }: { view: FeatureSettingsView }) {
+  if (!view.showGiftRegistry) {
+    return null;
+  }
+
+  const { stores, transfer, envelopes, note } = view.giftRegistry;
+
+  return (
+    <div>
+      <p className={fieldLabel}>{FEATURE_COPY.giftRegistryTitle}</p>
+      {stores.length === 0 ? (
+        <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.giftRegistryEmpty}</p>
+      ) : (
+        <ul className="mt-2 list-disc pl-5 text-sm leading-6 text-ink">
+          {stores.map((store) => (
+            <li key={`${store.name}-${store.reference}-${store.url}`}>
+              {store.name}
+              {store.reference === "" ? null : (
+                <span className="text-muted"> · {store.reference}</span>
+              )}
+              {store.url === "" ? null : <span className="text-muted"> · {store.url}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {transfer.bank === "" && transfer.holder === "" && transfer.clabe === "" ? null : (
+        <p className="mt-2 text-sm leading-6 text-ink">
+          {FEATURE_COPY.giftRegistryTransferTitle}: {transfer.bank} · {transfer.holder} ·{" "}
+          {transfer.clabe}
+        </p>
+      )}
+      {envelopes ? (
+        <p className="mt-2 text-sm leading-6 text-ink">{FEATURE_COPY.giftRegistryEnvelopesLabel}</p>
+      ) : null}
+      {note === "" ? null : <p className="mt-2 text-sm leading-6 text-ink">{note}</p>}
+      <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.giftRegistryArchivedNote}</p>
+    </div>
+  );
+}
+
 /**
  * The «Funcionalidades» section of a draft as a read-only summary (F3, F6, F7; S3, S4, S7). The editable fields moved
  * into the editor's «Funciones» tab, where each one saves on its own (T2c); this block is what an archived invitation
@@ -96,6 +137,7 @@ export function FeaturesSummary({ view }: { view: FeatureSettingsView }) {
           </p>
         )}
         <ItinerarySummary view={view} />
+        <GiftRegistrySummary view={view} />
         <p className="text-sm leading-6 text-muted">{FEATURE_COPY.archivedNote}</p>
         <AutomaticFeatures view={view} />
       </div>

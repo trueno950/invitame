@@ -48,6 +48,7 @@ const PUBLIC: PublicInvitation = {
     whatsapp: { phone: "+525512345678" },
     music: { url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", provider: "spotify" },
     giftRegistry: true,
+    giftRegistryDetails: null,
     itinerary: {
       items: [
         { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
@@ -339,9 +340,22 @@ describe("parsePublicInvitation", () => {
       // A stored phone is E.164: a national number is not one a guest page reads.
       { ...PUBLIC, features: { ...PUBLIC.features, whatsapp: { phone: "5512345678" } } },
       { ...PUBLIC, features: { ...PUBLIC.features, whatsapp: { phone: 7 } } },
-      // The gift registry is a boolean the layouts read (S7).
+      // The gift registry is the grant the layouts read plus the structured card or null (F2; L4.3).
+      { ...PUBLIC, features: { ...PUBLIC.features, giftRegistryDetails: "mesa" } },
       { ...PUBLIC, features: { ...PUBLIC.features, giftRegistry: undefined } },
       { ...PUBLIC, features: { ...PUBLIC.features, giftRegistry: "true" } },
+      {
+        ...PUBLIC,
+        features: {
+          ...PUBLIC.features,
+          giftRegistry: {
+            stores: [{ name: "Liverpool", url: "http://x.mx/1" }],
+            transfer: null,
+            envelopes: false,
+            note: null,
+          },
+        },
+      },
       // The itinerary is the moments of the day, or null while the package grants no `ITINERARY` (F1; L3.3).
       { ...PUBLIC, features: { ...PUBLIC.features, itinerary: "17:00 Misa" } },
       { ...PUBLIC, features: { ...PUBLIC.features, itinerary: {} } },
@@ -399,6 +413,15 @@ describe("parsePublicInvitation", () => {
       }),
       PUBLIC,
     );
+    // An older API answers only the grant, with no card field: the page reads it as the gate and shows no card, so a
+    // rolling deploy never refuses an invitation the older API still serves (F2; L4.3; review R3-001).
+    assert.deepEqual(
+      parsePublicInvitation({
+        ...PUBLIC,
+        features: { ...PUBLIC.features, giftRegistryDetails: undefined },
+      }),
+      { ...PUBLIC, features: { ...PUBLIC.features, giftRegistryDetails: null } },
+    );
     assert.deepEqual(
       parsePublicInvitation({
         ...PUBLIC,
@@ -409,6 +432,7 @@ describe("parsePublicInvitation", () => {
           whatsapp: null,
           music: null,
           giftRegistry: false,
+          giftRegistryDetails: null,
           // The itinerary is null while the package grants no `ITINERARY` or the invitation stores none (F1; L3.3).
           itinerary: null,
           // The gallery is always a list, empty when the package grants no `GALLERY` (M8 S4).
@@ -425,6 +449,7 @@ describe("parsePublicInvitation", () => {
           whatsapp: null,
           music: null,
           giftRegistry: false,
+          giftRegistryDetails: null,
           itinerary: null,
           gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },

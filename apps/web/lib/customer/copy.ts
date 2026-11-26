@@ -623,6 +623,35 @@ export const FEATURE_COPY = {
     "Todavía no hay momentos. Agrega el primero para que tus invitados vean el programa del día.",
   itineraryArchivedNote:
     "El itinerario se guarda con la invitación, así que puedes consultarlo aquí aunque ya no se pueda editar.",
+  /** The gift registry block of «Funciones» (F2; L4.4). */
+  giftRegistryTitle: "Mesa de regalos",
+  giftRegistryHint:
+    "Agrega las tiendas donde tus invitados pueden buscarte, tus datos para una transferencia y una nota. Se muestran en el orden en que los guardes.",
+  giftRegistryAdd: "Agregar tienda",
+  giftRegistryRemove: "Quitar",
+  giftRegistryMoveUp: "Subir",
+  giftRegistryMoveDown: "Bajar",
+  giftRegistryStoreLabel: (position: number) => `Tienda ${position}`,
+  giftRegistryStoreNameLabel: "Tienda",
+  giftRegistryStoreReferenceLabel: "Referencia (opcional)",
+  giftRegistryStoreUrlLabel: "Enlace de la mesa",
+  giftRegistryStoreUrlPlaceholder: "https://…",
+  giftRegistryLimitNote: "Puedes agregar hasta 8 tiendas.",
+  giftRegistryIncomplete: "Completa el nombre y el enlace https para guardar esta tienda.",
+  giftRegistryEmpty:
+    "Todavía no hay tiendas. Agrega la primera para que tus invitados sepan dónde buscarte.",
+  giftRegistryTransferTitle: "Datos para transferencia",
+  giftRegistryTransferHint:
+    "Tus invitados verán el banco, el titular y la CLABE, con un botón para copiarla.",
+  giftRegistryBankLabel: "Banco",
+  giftRegistryHolderLabel: "Titular",
+  giftRegistryClabeLabel: "CLABE",
+  giftRegistryEnvelopesLabel: "Lluvia de sobres",
+  giftRegistryEnvelopesHint:
+    "Muestra una línea para quien prefiera darte su regalo en un sobre el día del evento.",
+  giftRegistryNoteLabel: "Nota (opcional)",
+  giftRegistryArchivedNote:
+    "La mesa de regalos se guarda con la invitación, así que puedes consultarla aquí aunque ya no se pueda editar.",
   /** The gift registry lives in the invitation content; these name why its block may not show (F7; S7). */
   giftRegistryNoteOne: (packageName: string) =>
     `La mesa de regalos se muestra con el paquete ${packageName}.`,
@@ -709,6 +738,8 @@ export const FEATURE_ISSUE_COPY = {
     "Pega un enlace que empiece con https de Spotify, Apple Music, YouTube, Deezer o SoundCloud.",
   itinerary:
     "Revisa el itinerario: cada momento necesita una hora válida y un título de 1 a 60 caracteres; el lugar y la dirección admiten hasta 160.",
+  "gift-registry":
+    "Revisa la mesa de regalos: cada tienda necesita un nombre de 1 a 40 caracteres y un enlace https de hasta 500; la CLABE debe tener 18 dígitos con un dígito verificador válido.",
   other:
     "Hay un dato de las funcionalidades que no pudimos guardar. Revísalo y vuelve a intentarlo.",
 } as const;

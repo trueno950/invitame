@@ -17,6 +17,12 @@ import {
 } from "./copy.ts";
 import { featureIssueCodes } from "./feature-issues.ts";
 import { type ContentField, fieldLabel } from "./invitations.ts";
+import { GIFT_REGISTRY_MAX_STORES } from "../invitation-features/gift-registry.ts";
+import {
+  type GiftRegistryDraft,
+  giftRegistryDraftOf,
+  giftRegistryPayloadOf,
+} from "./gift-registry.ts";
 import { type ItineraryDraftMoment, itineraryPayloadOf } from "./itinerary.ts";
 import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "./omittable-sections.ts";
 import { rsvpSettingsIssueCodes } from "./rsvp-issue.ts";
@@ -261,6 +267,7 @@ export const FEATURE_CHANGE_FIELDS = [
   "whatsappPhone",
   "playlistUrl",
   "itinerary",
+  "giftRegistry",
 ] as const;
 
 /** The feature data one autosave asks to change; a key left out is a field the creator did not touch. */
@@ -270,6 +277,8 @@ export interface FeatureChanges {
   readonly playlistUrl?: string | null;
   /** The moments of the day as the editor holds them, or null when the owner removed them all (F1; L3.4). */
   readonly itinerary?: readonly ItineraryDraftMoment[] | null;
+  /** The gift registry as the editor holds it, or null when the owner cleared it (F2; L4.4). */
+  readonly giftRegistry?: GiftRegistryDraft | null;
 }
 
 export type FeatureChangesParse =
@@ -316,6 +325,74 @@ function readItineraryDrafts(value: unknown): readonly ItineraryDraftMoment[] | 
   return itineraryPayloadOf(drafts) === undefined ? undefined : drafts;
 }
 
+/**
+ * The gift registry the editor sent, read from an untrusted payload (F2; L4.4): the four texts of every store, the
+ * three of the transfer, the envelopes flag, and the note; `null` for a registry the owner cleared, or `undefined`
+ * when the body is not this shape or a complete value is outside its bounds. A store still being written is accepted —
+ * it stays in the browser and the save carries the complete stores (see `giftRegistryPayloadOf`).
+ */
+function readGiftRegistryDraft(value: unknown): GiftRegistryDraft | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  if (
+    Object.keys(value).some((key) => !["stores", "transfer", "envelopes", "note"].includes(key))
+  ) {
+    return undefined;
+  }
+  if (typeof value.envelopes !== "boolean" || typeof value.note !== "string") {
+    return undefined;
+  }
+
+  const stores = value.stores;
+  const transfer = value.transfer;
+
+  if (
+    !Array.isArray(stores) ||
+    stores.length > GIFT_REGISTRY_MAX_STORES ||
+    !isPlainObject(transfer)
+  ) {
+    return undefined;
+  }
+
+  const drafts: { name: string; reference: string; url: string }[] = [];
+  for (const item of stores) {
+    if (!isPlainObject(item)) {
+      return undefined;
+    }
+    const name = item.name;
+    const reference = item.reference;
+    const url = item.url;
+
+    if (typeof name !== "string" || typeof reference !== "string" || typeof url !== "string") {
+      return undefined;
+    }
+    drafts.push({ name, reference, url });
+  }
+
+  const bank = transfer.bank;
+  const holder = transfer.holder;
+  const clabe = transfer.clabe;
+
+  if (typeof bank !== "string" || typeof holder !== "string" || typeof clabe !== "string") {
+    return undefined;
+  }
+
+  const draft: GiftRegistryDraft = {
+    stores: drafts,
+    transfer: { bank, holder, clabe },
+    envelopes: value.envelopes,
+    note: value.note,
+  };
+
+  // Only a complete store, transfer, or note outside its bounds is refused here; the one the owner is still writing is
+  // not an error, so adding an empty row never refuses a save (F2; L4.4).
+  return giftRegistryPayloadOf(draft) === undefined ? undefined : draft;
+}
+
 /** The most characters a submitted phone may carry, as the feature form already bounds it (S4). */
 const MAX_PHONE_TEXT_LENGTH = 32;
 
@@ -357,6 +434,7 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
     whatsappPhone?: string | null;
     playlistUrl?: string | null;
     itinerary?: readonly ItineraryDraftMoment[] | null;
+    giftRegistry?: GiftRegistryDraft | null;
   } = {};
 
   for (const [name, value] of Object.entries(payload)) {
@@ -395,6 +473,15 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
       changes.itinerary = itinerary;
       continue;
     }
+    if (name === "giftRegistry") {
+      const giftRegistry = readGiftRegistryDraft(value);
+      if (giftRegistry === undefined) {
+        issues.push({ field: name, message: FEATURE_ISSUE_COPY["gift-registry"] });
+        continue;
+      }
+      changes.giftRegistry = giftRegistry;
+      continue;
+    }
     issues.push({ field: name, message: AUTOSAVE_COPY.unknownField });
   }
 
@@ -413,6 +500,20 @@ export function mergeFeatureChanges(
   changes: FeatureChanges,
 ): InvitationFeatureInput {
   let itinerary = stored.itinerary;
+  let giftRegistry = stored.giftRegistry;
+
+  if (Object.hasOwn(changes, "giftRegistry")) {
+    // A registry the contract refuses is left out of the change instead of clearing what is stored, and a store the
+    // owner is retyping keeps the version this invitation already stored (F2; L4.4).
+    const payload = giftRegistryPayloadOf(
+      changes.giftRegistry ?? giftRegistryDraftOf(null),
+      stored.giftRegistry,
+    );
+
+    if (payload !== undefined) {
+      giftRegistry = payload;
+    }
+  }
 
   if (Object.hasOwn(changes, "itinerary")) {
     const payload = itineraryPayloadOf(changes.itinerary ?? [], stored.itinerary);
@@ -432,6 +533,7 @@ export function mergeFeatureChanges(
       ? (changes.playlistUrl ?? null)
       : stored.playlistUrl,
     itinerary,
+    giftRegistry,
   };
 }
 
@@ -561,6 +663,7 @@ function fieldIssuesOf(channel: AutosaveChannel, issues: readonly string[]): Aut
       "phone-type": "whatsappPhone",
       playlist: "playlistUrl",
       itinerary: "itinerary",
+      "gift-registry": "giftRegistry",
     };
     for (const code of featureIssueCodes(issues)) {
       const field = Object.hasOwn(fieldOf, code) ? fieldOf[code] : undefined;
