@@ -786,7 +786,7 @@ export class GetPublicInvitationUseCase {
     // same time (F2; L4.3).
     const hiddenFields = legacyGiftRegistryHiddenFields(
       publicHiddenFields(render.schema, published.content),
-      features.giftRegistry,
+      features.giftRegistryDetails,
     );
     const content = projectPublicContent(render.schema, published.content, hiddenFields);
 

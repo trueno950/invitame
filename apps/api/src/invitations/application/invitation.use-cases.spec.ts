@@ -1909,8 +1909,8 @@ describe("GetPublicInvitationUseCase", () => {
         whatsapp: null,
         music: null,
         itinerary: null,
-        giftRegistry: null,
-        giftRegistryGranted: false,
+        giftRegistry: false,
+        giftRegistryDetails: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -2111,8 +2111,8 @@ describe("GetPublicInvitationUseCase", () => {
           music: null,
           // The fixture stores no itinerary, so the granted key shows nothing (F1; L3.3).
           itinerary: null,
-          giftRegistry: null,
-          giftRegistryGranted: packageKey === "deluxe",
+          giftRegistry: packageKey === "deluxe",
+          giftRegistryDetails: null,
           gallery: [],
           // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form (M6 S4).
           rsvp: {
@@ -2151,8 +2151,8 @@ describe("GetPublicInvitationUseCase", () => {
               ? null
               : { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
           itinerary: null,
-          giftRegistry: null,
-          giftRegistryGranted: packageKey === "deluxe",
+          giftRegistry: packageKey === "deluxe",
+          giftRegistryDetails: null,
           gallery: [],
           rsvp: {
             mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
@@ -2170,7 +2170,7 @@ describe("GetPublicInvitationUseCase", () => {
         "countdown",
         "gallery",
         "giftRegistry",
-        "giftRegistryGranted",
+        "giftRegistryDetails",
         "itinerary",
         "map",
         "music",
@@ -2204,8 +2204,8 @@ describe("GetPublicInvitationUseCase", () => {
       whatsapp: null,
       music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
       itinerary: null,
-      giftRegistry: null,
-      giftRegistryGranted: false,
+      giftRegistry: false,
+      giftRegistryDetails: null,
       gallery: [],
       rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
     });

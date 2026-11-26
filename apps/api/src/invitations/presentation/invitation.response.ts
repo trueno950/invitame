@@ -162,21 +162,22 @@ export interface PublicInvitationResponse {
       items: Array<{ time: string; title: string; place?: string; address?: string }>;
     } | null;
     /**
+     * Whether the pinned package grants `GIFT_REGISTRY`, which is also what lets each layout draw an older
+     * invitation's content text field (F2; L4.3). It keeps the boolean the field always answered: the gate, never the
+     * data.
+     */
+    giftRegistry: boolean;
+    /**
      * The structured gift registry a guest's card draws, or null when the package does not grant `GIFT_REGISTRY` or
      * the invitation stores nothing a card would show (F2; L4.3). The transfer and the note are always present, null
      * when there is none.
      */
-    giftRegistry: {
+    giftRegistryDetails: {
       stores: Array<{ name: string; reference?: string; url: string }>;
       transfer: { bank: string; holder: string; clabe: string } | null;
       envelopes: boolean;
       note: string | null;
     } | null;
-    /**
-     * Whether the pinned package grants `GIFT_REGISTRY`, which is also what lets each layout draw an older
-     * invitation's content text field (F2; L4.3). It is the gate, never the data.
-     */
-    giftRegistryGranted: boolean;
     /**
      * The gallery photos in position order (M8 S4), an empty array when the package does not grant `GALLERY`; each
      * one is an absolute API URL with the dimensions the layout reserves and the creator's alt text.
@@ -320,27 +321,27 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
                 ...(moment.address === undefined ? {} : { address: moment.address }),
               })),
             },
-      giftRegistry:
-        stored.features.giftRegistry === null
+      giftRegistry: stored.features.giftRegistry,
+      giftRegistryDetails:
+        stored.features.giftRegistryDetails === null
           ? null
           : {
-              stores: stored.features.giftRegistry.stores.map((store) => ({
+              stores: stored.features.giftRegistryDetails.stores.map((store) => ({
                 name: store.name,
                 ...(store.reference === undefined ? {} : { reference: store.reference }),
                 url: store.url,
               })),
               transfer:
-                stored.features.giftRegistry.transfer === null
+                stored.features.giftRegistryDetails.transfer === null
                   ? null
                   : {
-                      bank: stored.features.giftRegistry.transfer.bank,
-                      holder: stored.features.giftRegistry.transfer.holder,
-                      clabe: stored.features.giftRegistry.transfer.clabe,
+                      bank: stored.features.giftRegistryDetails.transfer.bank,
+                      holder: stored.features.giftRegistryDetails.transfer.holder,
+                      clabe: stored.features.giftRegistryDetails.transfer.clabe,
                     },
-              envelopes: stored.features.giftRegistry.envelopes,
-              note: stored.features.giftRegistry.note,
+              envelopes: stored.features.giftRegistryDetails.envelopes,
+              note: stored.features.giftRegistryDetails.note,
             },
-      giftRegistryGranted: stored.features.giftRegistryGranted,
       gallery: stored.features.gallery.map((photo) => ({
         url: photo.url,
         width: photo.width,

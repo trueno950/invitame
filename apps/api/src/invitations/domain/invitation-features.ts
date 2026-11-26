@@ -645,17 +645,17 @@ export interface PublicInvitationFeatures {
    */
   readonly itinerary: { readonly items: readonly ItineraryMoment[] } | null;
   /**
+   * Whether the pinned package grants `GIFT_REGISTRY`, which is also what lets each layout draw an older invitation's
+   * content text field (F2; L4.3). It keeps the boolean the field always answered, so a page deployed before the
+   * structured registry still reads it as the gate: it is the gate, not the data.
+   */
+  readonly giftRegistry: boolean;
+  /**
    * The structured gift registry a guest's card draws, or null when the package does not grant `GIFT_REGISTRY` or the
    * invitation stores nothing a card would show (F2; L4.3). The payload's version stays in the API, and the transfer
    * and note are answered as null so a page always reads the same keys.
    */
-  readonly giftRegistry: PublicGiftRegistry | null;
-  /**
-   * Whether the pinned package grants `GIFT_REGISTRY`, which is also what lets each layout draw an older invitation's
-   * content text field (F2; L4.3). It is the gate, not the data: a granted package with no stored registry answers
-   * true here and null above, and the legacy text still shows while the API does not withhold it.
-   */
-  readonly giftRegistryGranted: boolean;
+  readonly giftRegistryDetails: PublicGiftRegistry | null;
   /**
    * The gallery photos the page renders, ordered by position (M8 S4). Empty when the package does not grant
    * `GALLERY`, so the shape is stable and a layout can always read an array; an empty array and an absent gallery
@@ -718,11 +718,11 @@ export function publicInvitationFeatures(
         : { url: gate.playlistUrl, provider, title, coverUrl },
     itinerary:
       keys.has(ITINERARY_FEATURE_KEY) && itinerary !== null ? { items: itinerary.items } : null,
-    giftRegistry:
+    giftRegistry: keys.has(GIFT_REGISTRY_FEATURE_KEY),
+    giftRegistryDetails:
       keys.has(GIFT_REGISTRY_FEATURE_KEY) && giftRegistryHasContent(registry)
         ? publicGiftRegistry(registry)
         : null,
-    giftRegistryGranted: keys.has(GIFT_REGISTRY_FEATURE_KEY),
     // Only a package that grants GALLERY renders photos; the read passes none otherwise, and this repeats the gate.
     gallery: keys.has(GALLERY_FEATURE_KEY) ? galleryPhotos : [],
     rsvp: {

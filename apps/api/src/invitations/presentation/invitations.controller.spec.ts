@@ -2743,8 +2743,8 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         itinerary: null,
-        giftRegistry: null,
-        giftRegistryGranted: false,
+        giftRegistry: false,
+        giftRegistryDetails: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -2912,8 +2912,8 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: null,
         itinerary: null,
-        giftRegistry: null,
-        giftRegistryGranted: false,
+        giftRegistry: false,
+        giftRegistryDetails: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -2945,8 +2945,8 @@ describe("invitations routes: /invitations", () => {
         whatsapp: { phone: PHONE },
         music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
         itinerary: null,
-        giftRegistry: null,
-        giftRegistryGranted: true,
+        giftRegistry: true,
+        giftRegistryDetails: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -2997,13 +2997,13 @@ describe("invitations routes: /invitations", () => {
 
       assert.deepEqual(Object.keys(grantedBody).sort(), PUBLIC_KEYS);
       // The guest reads the stores in the owner's order, and the payload's version stays in the API.
-      assert.deepEqual((grantedBody.features as Row).giftRegistry, {
+      assert.deepEqual((grantedBody.features as Row).giftRegistryDetails, {
         stores: GIFT_REGISTRY.stores,
         transfer: GIFT_REGISTRY.transfer,
         envelopes: true,
         note: GIFT_REGISTRY.note,
       });
-      assert.equal((grantedBody.features as Row).giftRegistryGranted, true);
+      assert.equal((grantedBody.features as Row).giftRegistry, true);
 
       // A package without the key answers no registry, and the stored one stays private.
       const withheld = seed({
@@ -3015,7 +3015,7 @@ describe("invitations routes: /invitations", () => {
       const withheldBody = (await (
         await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
       ).json()) as Row;
-      assert.equal((withheldBody.features as Row).giftRegistry, null);
+      assert.equal((withheldBody.features as Row).giftRegistryDetails, null);
       assert.equal(JSON.stringify(withheldBody).includes("Liverpool"), false);
       assert.equal(JSON.stringify(withheldBody).includes("012180000123456782"), false);
 
@@ -3027,8 +3027,8 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: { version: 1, stores: [], envelopes: false },
       });
       const emptyBody = (await (await send("GET", `${PUBLIC_PATH}/${empty.slug}`)).json()) as Row;
-      assert.equal((emptyBody.features as Row).giftRegistry, null);
-      assert.equal((emptyBody.features as Row).giftRegistryGranted, true);
+      assert.equal((emptyBody.features as Row).giftRegistryDetails, null);
+      assert.equal((emptyBody.features as Row).giftRegistry, true);
     });
 
     it("withholds the legacy gift registry text while the structured registry shows (F2; L4.3)", async () => {
@@ -3051,6 +3051,10 @@ describe("invitations routes: /invitations", () => {
         (legacyBody.content as Row).giftRegistry,
         "Mesa de regalos Liverpool · Código 5123 4471",
       );
+      // The gate keeps the boolean it always answered, so a page deployed before the structured registry still draws
+      // the old text (review R3-001); the card itself travels apart.
+      assert.equal((legacyBody.features as Row).giftRegistry, true);
+      assert.equal((legacyBody.features as Row).giftRegistryDetails, null);
 
       const structured = seed({
         slug: "invitacion-regal05",
@@ -3068,7 +3072,7 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(structuredBody.hiddenFields, ["giftRegistry"]);
       assert.equal((structuredBody.content as Row).giftRegistry, undefined);
       assert.equal(JSON.stringify(structuredBody).includes("Código 5123 4471"), false);
-      assert.deepEqual((structuredBody.features as Row).giftRegistry, {
+      assert.deepEqual((structuredBody.features as Row).giftRegistryDetails, {
         stores: GIFT_REGISTRY.stores,
         transfer: GIFT_REGISTRY.transfer,
         envelopes: true,
@@ -3168,8 +3172,8 @@ describe("invitations routes: /invitations", () => {
         whatsapp: null,
         music: null,
         itinerary: null,
-        giftRegistry: null,
-        giftRegistryGranted: false,
+        giftRegistry: false,
+        giftRegistryDetails: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });

@@ -889,8 +889,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
                 : { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
             // Every seeded package grants ITINERARY, and this loop stores one (F1; L3.2, L3.3).
             itinerary: { items: ITINERARY.items },
-            giftRegistry: null,
-            giftRegistryGranted: packageKey === "deluxe",
+            giftRegistry: packageKey === "deluxe",
+            giftRegistryDetails: null,
             gallery: [],
             // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form.
             rsvp: {
@@ -917,15 +917,18 @@ describe("invitation feature data (real PostgreSQL)", () => {
 
       const page = await useCase.execute(slug);
 
-      assert.deepEqual(page?.features.giftRegistry, {
+      assert.deepEqual(page?.features.giftRegistryDetails, {
         stores: GIFT_REGISTRY.stores,
         transfer: GIFT_REGISTRY.transfer,
         envelopes: true,
         note: GIFT_REGISTRY.note,
       });
-      assert.equal(page?.features.giftRegistryGranted, true);
+      assert.equal(page?.features.giftRegistry, true);
       // The structured payload never carries the version into a guest read.
-      assert.equal(Object.keys(page?.features.giftRegistry ?? {}).includes("version"), false);
+      assert.equal(
+        Object.keys(page?.features.giftRegistryDetails ?? {}).includes("version"),
+        false,
+      );
     });
 
     it("drops WhatsApp while no phone is stored and keeps the music the package grants", async () => {
@@ -944,8 +947,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
         whatsapp: null,
         music: { url: PLAYLIST, provider: "spotify", title: null, coverUrl: null },
         itinerary: null,
-        giftRegistry: null,
-        giftRegistryGranted: false,
+        giftRegistry: false,
+        giftRegistryDetails: null,
         gallery: [],
         rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -967,8 +970,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
         whatsapp: { phone: PHONE },
         music: null,
         itinerary: null,
-        giftRegistry: null,
-        giftRegistryGranted: true,
+        giftRegistry: true,
+        giftRegistryDetails: null,
         gallery: [],
         rsvp: { mode: "guest-list", deadline: null, partyLimit: 4, qrPass: true },
       });
@@ -995,8 +998,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
         whatsapp: null,
         music: null,
         itinerary: null,
-        giftRegistry: null,
-        giftRegistryGranted: false,
+        giftRegistry: false,
+        giftRegistryDetails: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -1021,7 +1024,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "countdown",
         "gallery",
         "giftRegistry",
-        "giftRegistryGranted",
+        "giftRegistryDetails",
         "itinerary",
         "map",
         "music",
