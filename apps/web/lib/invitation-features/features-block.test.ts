@@ -8,6 +8,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { InvitationFeaturesBlock } from "../../app/_components/invitation-features/invitation-features-block.ts";
 import type { EventFacts } from "./event-facts.ts";
+import { LIVESTREAM_IFRAME_SANDBOX, LIVESTREAM_IFRAME_TITLE } from "./livestream.ts";
 import type {
   GuestPassBlockView,
   InvitationFeatures,
@@ -644,6 +645,103 @@ describe("«Hospedaje y transporte» in the features block (F4; L7.5)", () => {
   });
 });
 
+describe("«Míralo en vivo» in the features block (F9; L12.3, L12.4, L12.5)", () => {
+  const LIVE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  const NOTE = "Inicia a las 17:00 h";
+
+  const livestreamOnly = (note: string | null = NOTE) =>
+    render(
+      featuresOf({
+        livestream: { url: LIVE_URL, videoId: "dQw4w9WgXcQ", note },
+      }),
+    );
+
+  it("draws the section with its heading, the note, and the fallback link", () => {
+    const html = livestreamOnly();
+
+    assert.match(html, /data-feature="livestream"/);
+    assert.match(html, />Míralo en vivo</);
+    assert.match(html, /Inicia a las 17:00 h/);
+    assert.match(html, />Si no carga, ábrela aquí</);
+  });
+
+  it("offers the facade as a real link to the stream, so a guest without script still opens it", () => {
+    const html = livestreamOnly();
+    const facade = linksOf(html).find((link) => link.includes("▶"));
+
+    assert.ok(facade !== undefined, html);
+    assert.equal(attributeOf(facade, "href"), LIVE_URL);
+    assert.equal(attributeOf(facade, "target"), "_blank");
+    assert.equal(attributeOf(facade, "rel"), "noopener noreferrer");
+    assert.equal(attributeOf(facade, "aria-label"), "Reproducir la transmisión");
+    // The mark is decoration: the link's accessible name is the label above, never the glyph.
+    assert.match(facade, /<span aria-hidden="true"/);
+  });
+
+  it("frames nothing before the tap: no iframe and no request to the provider", () => {
+    const html = livestreamOnly();
+
+    assert.doesNotMatch(html, /<iframe/i);
+    assert.doesNotMatch(html, /youtube-nocookie\.com\/embed/);
+    assert.doesNotMatch(html, /<script/i);
+    // The only addresses on the page are the stream itself and its fallback, both opened as a link.
+    for (const link of linksOf(html)) {
+      assert.equal(attributeOf(link, "href"), LIVE_URL);
+      assert.equal(attributeOf(link, "target"), "_blank");
+      assert.equal(attributeOf(link, "rel"), "noopener noreferrer");
+    }
+  });
+
+  it("shows only the action that opens a link this deployment does not embed", () => {
+    const url = "https://us02web.zoom.us/j/123456789";
+    const html = render(featuresOf({ livestream: { url, videoId: null, note: NOTE } }));
+    const links = linksOf(html);
+
+    assert.match(html, /data-feature="livestream"/);
+    assert.equal(links.length, 1);
+    assert.match(links[0] ?? "", />Abrir la transmisión</);
+    assert.equal(attributeOf(links[0] ?? "", "href"), url);
+    assert.equal(attributeOf(links[0] ?? "", "target"), "_blank");
+    assert.equal(attributeOf(links[0] ?? "", "rel"), "noopener noreferrer");
+    assert.match(html, /Inicia a las 17:00 h/);
+    assert.doesNotMatch(html, /▶/);
+    assert.doesNotMatch(html, /Si no carga/);
+    assert.doesNotMatch(html, /<iframe/i);
+  });
+
+  it("draws nothing for a livestream without a link", () => {
+    assert.doesNotMatch(
+      render(featuresOf({ livestream: { url: "", videoId: null, note: NOTE } })),
+      /data-feature="livestream"/,
+    );
+  });
+
+  it("frames the provider only after the tap, with the sandbox and the title playback needs (L12.4)", () => {
+    const island = featuresSources().find(({ file }) =>
+      file.endsWith("livestream-player-island.ts"),
+    );
+
+    assert.ok(island !== undefined, "the island source is readable");
+    // The frame is the last thing the island renders, and only once the guest tapped the facade.
+    assert.match(island.source, /setLoaded\(true\)/);
+    assert.match(island.source, /loaded\n?\s*\?/);
+    assert.match(island.source, /src: embedUrl/);
+    assert.match(island.source, /title: LIVESTREAM_IFRAME_TITLE/);
+    assert.match(island.source, /sandbox: LIVESTREAM_IFRAME_SANDBOX/);
+    assert.equal(LIVESTREAM_IFRAME_SANDBOX, "allow-scripts allow-same-origin allow-presentation");
+    assert.equal(LIVESTREAM_IFRAME_TITLE, "Transmisión en vivo");
+    // Nothing is prefetched or preconnected: the provider learns nothing before the tap.
+    assert.doesNotMatch(island.source, /prefetch|preconnect|preload/);
+  });
+
+  it("escapes the owner's note so it cannot add markup", () => {
+    const html = livestreamOnly("<img src=x onerror=alert(1)>");
+
+    assert.doesNotMatch(html, /<img src=x/);
+    assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  });
+});
+
 describe("features block rendering rules", () => {
   const ALL_ON = featuresOf({
     countdown: true,
@@ -733,7 +831,7 @@ describe("features block rendering rules", () => {
     assert.doesNotMatch(island.source, /\banimate-|\btransition-|animation:/);
   });
 
-  it("keeps the invitation's client components to the four deliberate islands", () => {
+  it("keeps the invitation's client components to the five deliberate islands", () => {
     const clientComponents = [...featuresSources(), ...rendererSources()].filter(({ source }) =>
       /^\s*["']use client["'];?/m.test(source),
     );
@@ -748,6 +846,9 @@ describe("features block rendering rules", () => {
         // its fallback selects the text the server already rendered.
         "_components/invitation-features/copy-clabe-island.ts",
         "_components/invitation-features/countdown-island.ts",
+        // The livestream player is the fifth deliberate island (F9; L12.4): it inserts the frame only after the guest
+        // taps the facade, which is a real link to the stream when no script runs.
+        "_components/invitation-features/livestream-player-island.ts",
         // The map is the second deliberate island (S1, S2): it loads only when a guest scrolls it into view.
         "_components/invitation-features/place-map-island.ts",
       ],

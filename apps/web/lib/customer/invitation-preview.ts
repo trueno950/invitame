@@ -1,5 +1,6 @@
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import { giftRegistryOf, hideLegacyGiftRegistry } from "../invitation-features/gift-registry.ts";
+import { livestreamOf } from "../invitation-features/livestream.ts";
 import { lodgingOf } from "../invitation-features/lodging.ts";
 import {
   type InvitationFeatures,
@@ -227,6 +228,11 @@ function gatedFeatures(
     lodging:
       gated.has("LODGING") && invitation.featureSettings.lodging != null
         ? lodgingOf(invitation.featureSettings.lodging)
+        : null,
+    // And the same for the livestream (F9; L12.3).
+    livestream:
+      gated.has("LIVESTREAM") && invitation.featureSettings.livestream != null
+        ? livestreamOf(invitation.featureSettings.livestream)
         : null,
   };
 }

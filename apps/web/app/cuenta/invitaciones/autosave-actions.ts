@@ -125,6 +125,9 @@ export async function autosaveFeaturesAction(
           // The lodging is part of the same whole, so a save of another field carries the stored cards through (F4;
           // L7.3, L7.4).
           lodging: read.value.featureSettings.lodging ?? null,
+          // The livestream is part of the same whole, so a save of another field carries the stored link through (F9;
+          // L12.1).
+          livestream: read.value.featureSettings.livestream ?? null,
           // The reminder switches are part of it too (F6; L9.1): saving the zone or the phone never switches a reminder
           // off that the owner stored.
           reminders: read.value.featureSettings.reminders ?? null,

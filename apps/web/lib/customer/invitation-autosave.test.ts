@@ -68,6 +68,7 @@ const STORED_FEATURES: InvitationFeatureInput = {
   },
   giftRegistry: null,
   lodging: null,
+  livestream: null,
   reminders: null,
 };
 
@@ -214,6 +215,7 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       itinerary: STORED_FEATURES.itinerary,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
   });
@@ -284,6 +286,7 @@ describe("a feature autosave merges only the changed fields (S2, S4)", () => {
       itinerary: STORED_FEATURES.itinerary,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
   });
@@ -676,6 +679,86 @@ describe("a lodging autosave (F4; L7.4)", () => {
             .lodging
         : undefined,
       STORED_LODGING,
+    );
+  });
+});
+
+describe("a livestream autosave (F9; L12.1)", () => {
+  const LIVE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  const STORED_LIVESTREAM = { version: 1 as const, url: LIVE_URL, note: "Inicia a las 17:00 h" };
+  const draftOf = (overrides: Record<string, unknown> = {}) => ({
+    url: "",
+    note: "",
+    ...overrides,
+  });
+
+  it("reads the drafts the editor sent, and null to clear the link", () => {
+    const parsed = parseFeatureChanges({
+      livestream: draftOf({ url: ` ${LIVE_URL} `, note: " Inicia a las 17:00 h " }),
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(
+      parsed.ok ? parsed.changes.livestream : undefined,
+      draftOf({ url: ` ${LIVE_URL} `, note: " Inicia a las 17:00 h " }),
+    );
+    assert.equal(parseFeatureChanges({ livestream: null }).ok, true);
+  });
+
+  it("refuses a body that is not this shape or a value outside its bounds, and names the field in Spanish", () => {
+    for (const broken of [
+      "https://youtu.be/dQw4w9WgXcQ",
+      { url: LIVE_URL },
+      { url: LIVE_URL, note: "", extra: true },
+      { url: 7, note: "" },
+      { url: "http://youtu.be/dQw4w9WgXcQ", note: "" },
+      { url: LIVE_URL, note: "n".repeat(121) },
+    ]) {
+      const parsed = parseFeatureChanges({ livestream: broken });
+
+      assert.equal(parsed.ok, false, JSON.stringify(broken));
+      assert.deepEqual(parsed.ok ? undefined : parsed.fieldIssues, [
+        { field: "livestream", message: FEATURE_ISSUE_COPY.livestream },
+      ]);
+    }
+  });
+
+  it("sends the trimmed payload, clears the stored link when the owner emptied it, and keeps it otherwise", () => {
+    const changed = parseFeatureChanges({
+      livestream: draftOf({ url: LIVE_URL, note: " Inicia a las 17:00 h " }),
+    });
+    const cleared = parseFeatureChanges({ livestream: draftOf() });
+    const untouched = parseFeatureChanges({ timeZone: "America/Tijuana" });
+
+    assert.equal(changed.ok, true);
+    assert.equal(cleared.ok, true);
+    assert.equal(untouched.ok, true);
+    assert.deepEqual(
+      changed.ok
+        ? mergeFeatureChanges(
+            { ...STORED_FEATURES, livestream: STORED_LIVESTREAM },
+            changed.changes,
+          ).livestream
+        : undefined,
+      STORED_LIVESTREAM,
+    );
+    assert.equal(
+      cleared.ok
+        ? mergeFeatureChanges(
+            { ...STORED_FEATURES, livestream: STORED_LIVESTREAM },
+            cleared.changes,
+          ).livestream
+        : undefined,
+      null,
+    );
+    assert.deepEqual(
+      untouched.ok
+        ? mergeFeatureChanges(
+            { ...STORED_FEATURES, livestream: STORED_LIVESTREAM },
+            untouched.changes,
+          ).livestream
+        : undefined,
+      STORED_LIVESTREAM,
     );
   });
 });

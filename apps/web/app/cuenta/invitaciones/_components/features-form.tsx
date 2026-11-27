@@ -161,6 +161,34 @@ function LodgingSummary({ view }: { view: FeatureSettingsView }) {
   );
 }
 
+/** The stored livestream as a plain pair of lines, which is what a read-only page can show (F9; L12.4). */
+function LivestreamSummary({ view }: { view: FeatureSettingsView }) {
+  if (!view.showLivestream) {
+    return null;
+  }
+
+  const { url, note } = view.livestream;
+
+  return (
+    <div>
+      <p className={fieldLabel}>{FEATURE_COPY.livestreamTitle}</p>
+      {url === "" ? (
+        <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.livestreamUrlHint}</p>
+      ) : (
+        <p className="mt-2 text-sm leading-6 text-ink">
+          {FEATURE_COPY.livestreamUrlLabel}: {url}
+        </p>
+      )}
+      {note === "" ? null : (
+        <p className="mt-2 text-sm leading-6 text-ink">
+          {FEATURE_COPY.livestreamNoteLabel}: {note}
+        </p>
+      )}
+      <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.livestreamArchivedNote}</p>
+    </div>
+  );
+}
+
 /** The stored reminder switches as a read-only pair, which is what an archived invitation shows (F6; L9.5). */
 function RemindersSummary({ view }: { view: FeatureSettingsView }) {
   if (!view.showReminders) {
@@ -210,6 +238,7 @@ export function FeaturesSummary({ view }: { view: FeatureSettingsView }) {
         <ItinerarySummary view={view} />
         <GiftRegistrySummary view={view} />
         <LodgingSummary view={view} />
+        <LivestreamSummary view={view} />
         <RemindersSummary view={view} />
         <p className="text-sm leading-6 text-muted">{FEATURE_COPY.archivedNote}</p>
         <AutomaticFeatures view={view} />

@@ -5,6 +5,10 @@ import {
   parseGiftRegistryPayload,
 } from "../invitation-features/gift-registry.ts";
 import { type ItineraryPayload, parseItineraryPayload } from "../invitation-features/itinerary.ts";
+import {
+  type LivestreamPayload,
+  parseLivestreamPayload,
+} from "../invitation-features/livestream.ts";
 import { type LodgingPayload, parseLodgingPayload } from "../invitation-features/lodging.ts";
 import { type RemindersPayload, parseRemindersPayload } from "../invitation-features/reminders.ts";
 import {
@@ -110,6 +114,12 @@ export interface OwnedInvitation extends InvitationSummary {
      */
     lodging?: LodgingPayload | null;
     /**
+     * The stored livestream as the API's validated payload `{ version: 1, url, note? }`, or null when the invitation has
+     * none (F9; L12.1). It is absent from a body written before the field existed, and a reader treats that as "no
+     * livestream" exactly like null.
+     */
+    livestream?: LivestreamPayload | null;
+    /**
      * The stored reminder switches as the API's validated payload `{ version: 1, pendingRsvp, eventEve }`, or null while
      * the owner switched nothing on (F6; L9.1). It is absent from a body written before the switches existed, and a
      * reader treats that as "no settings" exactly like null.
@@ -154,6 +164,12 @@ export interface InvitationFeatureInput {
    * the PUT replaces the whole feature data.
    */
   lodging?: LodgingPayload | null;
+  /**
+   * The livestream the owner stored, or null to clear it (F9; L12.1). The API validates the payload and accepts an omitted
+   * value as "keep the stored one"; a field the editor does not change still travels as the stored link, because the PUT
+   * replaces the whole feature data.
+   */
+  livestream?: LivestreamPayload | null;
   /**
    * The reminder switches the owner stored, or null to clear them (F6; L9.1). The API validates the payload and accepts an
    * omitted value as "keep the stored one"; a field the editor does not change still travels as the stored pair, because
@@ -638,6 +654,14 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     return undefined;
   }
 
+  // The livestream follows the same rule (F9; L12.1): an absent value reads as no livestream, and any other shape refuses
+  // the whole body instead of reaching the editor.
+  const livestream = parseLivestreamPayload(settings.livestream);
+
+  if (livestream === undefined) {
+    return undefined;
+  }
+
   // The reminder switches follow the same rule (F6; L9.1): an absent value reads as no settings, and any other shape
   // refuses the whole body instead of reaching the editor.
   const reminders = parseRemindersPayload(settings.reminders);
@@ -661,6 +685,7 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     itinerary,
     giftRegistry,
     lodging,
+    livestream,
     reminders,
   };
 }

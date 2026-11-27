@@ -57,6 +57,13 @@ import {
   itineraryDirectionsUrl,
 } from "../../../lib/invitation-features/itinerary.ts";
 import {
+  LIVESTREAM_OPEN_LABEL,
+  LIVESTREAM_SECTION_TITLE,
+  type Livestream,
+  livestreamEmbedUrl,
+  livestreamHasContent,
+} from "../../../lib/invitation-features/livestream.ts";
+import {
   LODGING_BOOK_LABEL,
   LODGING_DIRECTIONS_LABEL,
   LODGING_GROUP_CODE_LABEL,
@@ -95,6 +102,7 @@ import { guestPassDataUrl } from "../../../lib/server/guest-pass-qr.ts";
 import { DISPLAY_FONT } from "../renderers/themed/theme.ts";
 import { CompanionRowsIsland } from "./companion-rows-island.ts";
 import { CopyClabeIsland } from "./copy-clabe-island.ts";
+import { LivestreamPlayerIsland } from "./livestream-player-island.ts";
 import { CountdownIsland } from "./countdown-island.ts";
 import { type MapMarker, PlaceMapIsland } from "./place-map-island.ts";
 
@@ -861,6 +869,50 @@ function lodgingHotelCard(hotel: LodgingHotel, index: number): ReactElement {
 }
 
 /**
+ * The livestream (F9; L12.3, L12.5): «Míralo en vivo» with the artboard's player. A YouTube link is embedded through the
+ * click-to-load facade, so nothing reaches the provider until the guest taps it and the fallback link always works; any
+ * other link shows only the action that opens the transmission in a new tab. The owner's note sits under the player, and
+ * every text is React's own text node, so nothing the owner typed can become markup.
+ */
+function livestreamSection(livestream: Livestream): ReactElement {
+  const embedUrl = livestreamEmbedUrl(livestream.videoId);
+
+  return h(
+    "div",
+    { key: "livestream", "data-feature": "livestream", className: SURFACE_CARD },
+    h(
+      "h3",
+      { className: "text-center text-2xl font-medium text-(color:--inv-ink)" },
+      LIVESTREAM_SECTION_TITLE,
+    ),
+    embedUrl === null
+      ? h(
+          "div",
+          { className: ACTIONS },
+          h(
+            "a",
+            {
+              href: livestream.url,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              "aria-label": `${LIVESTREAM_OPEN_LABEL} en una pestaña nueva`,
+              className: ACTION,
+            },
+            LIVESTREAM_OPEN_LABEL,
+          ),
+        )
+      : h(LivestreamPlayerIsland, {
+          url: livestream.url,
+          embedUrl,
+          note: livestream.note,
+        }),
+    embedUrl === null && livestream.note !== null
+      ? h("p", { className: HINT }, livestream.note)
+      : null,
+  );
+}
+
+/**
  * The plan of the day (F1; L3.5): one row per moment, in the order the owner stored, with the first moment's dot filled
  * so the timeline has a start. A moment with an address offers «Cómo llegar» as a Google Maps search of that address;
  * a moment without one offers no link, because a title is not a destination anyone can navigate to.
@@ -1328,6 +1380,11 @@ export function InvitationFeaturesBlock({
   // The lodging follows the gifts: where to sleep and how to move, once a guest knows the day and the presents (F4).
   if (features.lodging !== undefined && lodgingHasContent(features.lodging)) {
     sections.push(lodgingSection(features.lodging));
+  }
+
+  // The livestream follows: the one part of the day a guest who cannot attend still joins (F9; L12.5).
+  if (features.livestream !== undefined && livestreamHasContent(features.livestream)) {
+    sections.push(livestreamSection(features.livestream));
   }
 
   if (features.map) {

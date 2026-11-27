@@ -60,6 +60,12 @@ const PUBLIC: PublicInvitation = {
       ],
       transport: "Habrá camión del hotel al salón a las 19:00.",
     },
+    // The livestream is read with the video id the API resolved, so the block can frame only that id (F9; L12.3).
+    livestream: {
+      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      videoId: "dQw4w9WgXcQ",
+      note: "Inicia a las 17:00 h",
+    },
     itinerary: {
       items: [
         { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
@@ -450,6 +456,7 @@ describe("parsePublicInvitation", () => {
           giftRegistry: false,
           giftRegistryDetails: null,
           lodging: null,
+          livestream: null,
           // The itinerary is null while the package grants no `ITINERARY` or the invitation stores none (F1; L3.3).
           itinerary: null,
           // The gallery is always a list, empty when the package grants no `GALLERY` (M8 S4).
@@ -470,6 +477,7 @@ describe("parsePublicInvitation", () => {
           giftRegistry: false,
           giftRegistryDetails: null,
           lodging: null,
+          livestream: null,
           itinerary: null,
           guestbook: null,
           guestAlbum: null,
@@ -541,6 +549,77 @@ describe("the lodging of the public read (F4; L7.3, L7.5)", () => {
         parsePublicInvitation({
           ...PUBLIC,
           features: { ...PUBLIC.features, lodging: broken },
+        }),
+        undefined,
+        JSON.stringify(broken),
+      );
+    }
+  });
+});
+
+describe("the livestream of the public read (F9; L12.3)", () => {
+  it("reads the link, the resolved video id, and the note the API answers", () => {
+    const parsed = parsePublicInvitation(PUBLIC);
+
+    assert.deepEqual(parsed?.features.livestream, {
+      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      videoId: "dQw4w9WgXcQ",
+      note: "Inicia a las 17:00 h",
+    });
+  });
+
+  it("reads a link this deployment does not embed with no video id, so the guest only opens it", () => {
+    const parsed = parsePublicInvitation({
+      ...PUBLIC,
+      features: {
+        ...PUBLIC.features,
+        livestream: {
+          url: "https://us02web.zoom.us/j/123456789",
+          videoId: null,
+          note: null,
+        },
+      },
+    });
+
+    assert.deepEqual(parsed?.features.livestream, {
+      url: "https://us02web.zoom.us/j/123456789",
+      videoId: null,
+      note: null,
+    });
+  });
+
+  it("reads an absent livestream as none, so an older API body still renders the page (L20)", () => {
+    const { livestream: _omitted, ...features } = PUBLIC.features;
+    const parsed = parsePublicInvitation({ ...PUBLIC, features });
+
+    assert.equal(parsed?.features.livestream, null);
+  });
+
+  it("reads the API's null as none", () => {
+    const parsed = parsePublicInvitation({
+      ...PUBLIC,
+      features: { ...PUBLIC.features, livestream: null },
+    });
+
+    assert.equal(parsed?.features.livestream, null);
+  });
+
+  it("refuses a livestream that is not this contract, so no value written around the API reaches a guest", () => {
+    for (const broken of [
+      "https://youtu.be/dQw4w9WgXcQ",
+      { url: "https://youtu.be/dQw4w9WgXcQ" },
+      { url: "http://youtu.be/dQw4w9WgXcQ", videoId: null, note: null },
+      { url: PUBLIC.features.livestream?.url, videoId: "short", note: null },
+      // An embeddable link paired with another stream's id never reaches the player.
+      { url: "https://youtu.be/dQw4w9WgXcQ", videoId: "AbCdEf12345", note: null },
+      { url: "https://youtu.be/dQw4w9WgXcQ", videoId: null, note: null },
+      { url: "https://youtu.be/dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ", note: 7 },
+      { url: "https://youtu.be/dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ", note: null, extra: true },
+    ]) {
+      assert.equal(
+        parsePublicInvitation({
+          ...PUBLIC,
+          features: { ...PUBLIC.features, livestream: broken },
         }),
         undefined,
         JSON.stringify(broken),

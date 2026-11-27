@@ -16,6 +16,7 @@ import type { GalleryPhoto } from "./gallery.ts";
 import type { GiftRegistry } from "./gift-registry.ts";
 import type { GuestAlbumPhotoValue } from "./guest-album.ts";
 import type { ItineraryMoment } from "./itinerary.ts";
+import { type Livestream, livestreamHasContent } from "./livestream.ts";
 import { type Lodging, lodgingHasContent } from "./lodging.ts";
 import type { MusicLink } from "./music.ts";
 import type { StoredPlaces } from "./place-point.ts";
@@ -197,6 +198,12 @@ export interface InvitationFeatures {
    */
   readonly lodging?: Lodging;
   /**
+   * The livestream link the shared block draws (F9; L12.5): the stored link, the video id the API resolved when it is an
+   * embeddable YouTube one, and the note. Absent when the package does not grant `LIVESTREAM`, or when the invitation
+   * stores no link.
+   */
+  readonly livestream?: Livestream;
+  /**
    * The guestbook wall the shared block draws (F7; L10.5), or absent when the package does not grant `GUESTBOOK`. An
    * empty list is a wall waiting for its first message, so it still renders its form.
    */
@@ -242,6 +249,7 @@ export const INVITATION_FEATURE_KEYS = [
   "LODGING",
   "GUESTBOOK",
   "GUEST_ALBUM",
+  "LIVESTREAM",
   "RSVP",
   "GUEST_LIST",
   "QR_PASS",
@@ -274,6 +282,7 @@ export function hasAnyFeature(features: InvitationFeatures): boolean {
     (features.gallery !== undefined && features.gallery.length > 0) ||
     (features.itinerary !== undefined && features.itinerary.length > 0) ||
     (features.lodging !== undefined && lodgingHasContent(features.lodging)) ||
+    (features.livestream !== undefined && livestreamHasContent(features.livestream)) ||
     features.guestbook !== undefined ||
     features.guestAlbum !== undefined ||
     features.giftRegistryDetails !== undefined ||

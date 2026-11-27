@@ -246,6 +246,52 @@ describe("featureSettingsView", () => {
     assert.deepEqual(featureSettingsView(OWNED, [LODGING_PACKAGE]).lodging.hotels, []);
   });
 
+  it("offers the livestream block only while the package grants LIVESTREAM, and opens it from the stored link (F9; L12.1, L12.4)", () => {
+    const livestreamPackage = creatorPackage(PACKAGE_ID, ["LIVESTREAM"], "premium", "Premium");
+    const stored: OwnedInvitation = {
+      ...OWNED,
+      featureSettings: {
+        ...OWNED.featureSettings,
+        livestream: {
+          version: 1 as const,
+          url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          note: "Inicia a las 17:00 h",
+        },
+      },
+    };
+
+    const granted = featureSettingsView(stored, [livestreamPackage]);
+
+    assert.equal(granted.showLivestream, true);
+    assert.deepEqual(granted.livestream, {
+      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      note: "Inicia a las 17:00 h",
+    });
+
+    // A package without the key, and a catalog that could not be read, offer no editor for the link.
+    assert.equal(featureSettingsView(stored, [BASIC]).showLivestream, false);
+    assert.equal(featureSettingsView(stored, undefined).showLivestream, false);
+    // An invitation without a livestream opens an empty block, which is where the owner pastes the link.
+    assert.deepEqual(featureSettingsView(OWNED, [livestreamPackage]).livestream, {
+      url: "",
+      note: "",
+    });
+  });
+
+  it("names the livestream sentence of a refusal (F9; L12.1)", () => {
+    assert.deepEqual(
+      featureIssueCodes([
+        "livestream.version must be 1",
+        "livestream.url must be an https link of at most 500 characters",
+        "livestream.note must be a string of at most 120 characters",
+      ]),
+      ["livestream"],
+    );
+    assert.equal(FEATURE_ISSUE_COPY.livestream.length > 0, true);
+    assert.equal(featureIssueMessages("livestream")[0], FEATURE_ISSUE_COPY.livestream);
+    assert.equal(FEATURE_COPY.livestreamTitle, "Transmisión en vivo");
+  });
+
   it("offers the reminder block only to a granting package, with its stored switches and the capability (F6; L9.1, L9.2, L9.5)", () => {
     const remindersPackage = creatorPackage(PACKAGE_ID, ["WHATSAPP_REMINDERS"], "deluxe", "Deluxe");
     const stored: OwnedInvitation = {

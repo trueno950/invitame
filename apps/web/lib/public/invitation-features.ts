@@ -16,6 +16,7 @@ import {
   type WhatsAppContact,
 } from "../invitation-features/invitation-features.ts";
 import type { ItineraryMoment } from "../invitation-features/itinerary.ts";
+import type { Livestream } from "../invitation-features/livestream.ts";
 import type { Lodging } from "../invitation-features/lodging.ts";
 import type { MusicLink } from "../invitation-features/music.ts";
 import { confirmedPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
@@ -124,6 +125,12 @@ export interface GatedFeatures {
    * read. Null when the invitation stores nothing to draw.
    */
   readonly lodging: Lodging | null;
+  /**
+   * The livestream link and its resolved video id (F9; L12.3), already gated by the page that built this source: the
+   * public read answers it only while the package grants `LIVESTREAM`, and the preview applies the same rule from the
+   * owner's read. Null when the invitation stores nothing to draw.
+   */
+  readonly livestream: Livestream | null;
 }
 
 /** Everything one page renders the shared features block from. */
@@ -197,6 +204,7 @@ export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts
     gallery: source.gated.gallery,
     ...(source.gated.itinerary.length === 0 ? {} : { itinerary: source.gated.itinerary }),
     ...(source.gated.lodging === null ? {} : { lodging: source.gated.lodging }),
+    ...(source.gated.livestream === null ? {} : { livestream: source.gated.livestream }),
     ...(Object.keys(places).length === 0 ? {} : { places }),
     ...(source.rsvp === undefined ? {} : { rsvp: source.rsvp }),
     ...(source.guestbook === undefined ? {} : { guestbook: source.guestbook }),
@@ -236,6 +244,7 @@ export function publicFeatureBlock(
       gallery: invitation.features.gallery,
       itinerary: invitation.features.itinerary?.items ?? [],
       lodging: invitation.features.lodging,
+      livestream: invitation.features.livestream,
     },
     places: invitation.places,
     ...(rsvp === undefined ? {} : { rsvp }),

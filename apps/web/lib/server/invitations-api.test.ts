@@ -67,6 +67,8 @@ const OWNED = {
     itinerary: null,
     giftRegistry: null,
     lodging: null,
+    // The livestream the owner stored (F9; L12.1); null while the invitation has none.
+    livestream: null,
     // The reminder switches (F6; L9.1): null while the owner switched nothing on.
     reminders: null,
   },
@@ -89,6 +91,7 @@ const FEATURED = {
     itinerary: null,
     giftRegistry: null,
     lodging: null,
+    livestream: null,
     reminders: null,
   },
   remindersConfigured: false,
@@ -1172,6 +1175,7 @@ describe("validators", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     };
     const parse = (featureSettings: unknown) =>

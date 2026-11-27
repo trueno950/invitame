@@ -44,6 +44,12 @@ import {
   setLodgingTransport,
   updateLodgingHotel,
 } from "../../../../../lib/customer/lodging.ts";
+import {
+  type LivestreamDraft,
+  livestreamUrlIssue,
+  setLivestreamNote,
+  setLivestreamUrl,
+} from "../../../../../lib/customer/livestream.ts";
 import type { RemindersDraft } from "../../../../../lib/customer/reminders.ts";
 import {
   activeOptionId,
@@ -547,6 +553,8 @@ export interface FeatureValues {
   readonly giftRegistry: GiftRegistryDraft;
   /** The lodging as the browser holds it: the hotels in the owner's order and the transport note (F4; L7.4). */
   readonly lodging: LodgingDraft;
+  /** The livestream as the browser holds it: the link and its note (F9; L12.1). */
+  readonly livestream: LivestreamDraft;
   /** The WhatsApp reminder switches as the browser holds them (F6; L9.1). */
   readonly reminders: RemindersDraft;
 }
@@ -1306,6 +1314,93 @@ function LodgingFields({
   );
 }
 
+/**
+ * The «Transmisión en vivo» block of «Funciones» (F9; L12.1, L12.4): the link of the stream and one optional note. The
+ * field names its own rule while the address is being written — the API's own sentence, never a guess — so an unfinished
+ * link is a hint and not an error, and the note is bounded by its control. Everything is a labelled control, so the block
+ * is usable with a screen reader and with no client script.
+ */
+function LivestreamFields({
+  values,
+  issue,
+  onChange,
+  onFlush,
+}: {
+  values: FeatureValues;
+  issue: string | undefined;
+  onChange: (next: Partial<FeatureValues>) => void;
+  onFlush: () => void;
+}) {
+  const drafts = values.livestream;
+  const urlId = "livestream-url";
+  const noteId = "livestream-note";
+  // The link's own hint is the API's refusal sentence while it cannot be stored, and the neutral hint otherwise.
+  const urlHint = livestreamUrlIssue(drafts);
+
+  return (
+    <div className="border-t border-rose-100 pt-6">
+      <p className={fieldLabel}>{FEATURE_COPY.livestreamTitle}</p>
+      <p className={fieldHint}>{FEATURE_COPY.livestreamHint}</p>
+
+      <div className="mt-3 flex flex-col gap-3">
+        <div>
+          <label className={fieldLabel} htmlFor={urlId}>
+            {FEATURE_COPY.livestreamUrlLabel}
+          </label>
+          <input
+            aria-describedby={urlHint === "" ? `${urlId}-hint` : `${urlId}-issue`}
+            aria-invalid={urlHint === "" ? undefined : true}
+            autoComplete="url"
+            className={textField}
+            id={urlId}
+            inputMode="url"
+            maxLength={500}
+            name={urlId}
+            onBlur={onFlush}
+            onChange={(event) =>
+              onChange({ livestream: setLivestreamUrl(drafts, event.target.value) })
+            }
+            placeholder={FEATURE_COPY.livestreamUrlPlaceholder}
+            type="url"
+            value={drafts.url}
+          />
+          {urlHint === "" ? (
+            <p className={fieldHint} id={`${urlId}-hint`}>
+              {FEATURE_COPY.livestreamUrlHint}
+            </p>
+          ) : (
+            <p className={fieldHint} id={`${urlId}-issue`}>
+              {urlHint}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className={fieldLabel} htmlFor={noteId}>
+            {FEATURE_COPY.livestreamNoteLabel}
+          </label>
+          <input
+            className={textField}
+            id={noteId}
+            maxLength={120}
+            name={noteId}
+            onBlur={onFlush}
+            onChange={(event) =>
+              onChange({ livestream: setLivestreamNote(drafts, event.target.value) })
+            }
+            placeholder={FEATURE_COPY.livestreamNotePlaceholder}
+            type="text"
+            value={drafts.note}
+          />
+          <p className={fieldHint}>{FEATURE_COPY.livestreamNoteHint}</p>
+        </div>
+
+        <FieldRefusal id="livestream-error" message={issue} />
+      </div>
+    </div>
+  );
+}
+
 /** The automatic features a guest sees, as a plain list of what the package turns on (S4). */
 function AutomaticFeatures({ view }: { view: FeatureSettingsView }) {
   return (
@@ -1440,6 +1535,15 @@ export function FeatureFields({
       {view.showLodging ? (
         <LodgingFields
           issue={issues?.lodging}
+          onChange={onChange}
+          onFlush={onFlush}
+          values={values}
+        />
+      ) : null}
+
+      {view.showLivestream ? (
+        <LivestreamFields
+          issue={issues?.livestream}
           onChange={onChange}
           onFlush={onFlush}
           values={values}

@@ -3,6 +3,7 @@ import type { CreatorPackage, OwnedInvitation } from "../server/invitations-api.
 import { FEATURE_COPY, INVITATION_TIME_ZONE_LABELS } from "./copy.ts";
 import { type GiftRegistryDraft, giftRegistryDraftOf } from "./gift-registry.ts";
 import { type ItineraryDraftMoment, itineraryDraftsOf } from "./itinerary.ts";
+import { type LivestreamDraft, livestreamDraftOf } from "./livestream.ts";
 import { type LodgingDraft, lodgingDraftOf } from "./lodging.ts";
 import { type RemindersDraft, remindersDraftOf } from "./reminders.ts";
 
@@ -47,6 +48,8 @@ const RSVP_FEATURE_KEY = "RSVP";
 const GIFT_REGISTRY_FEATURE_KEY = "GIFT_REGISTRY";
 const ITINERARY_FEATURE_KEY = "ITINERARY";
 const LODGING_FEATURE_KEY = "LODGING";
+/** The catalog key that grants the livestream (F9; L12.2), granted by Premium and Deluxe. */
+const LIVESTREAM_FEATURE_KEY = "LIVESTREAM";
 /** The catalog key that grants WhatsApp reminders (F6; L9.2), granted by Deluxe. */
 const WHATSAPP_REMINDERS_FEATURE_KEY = "WHATSAPP_REMINDERS";
 /** The catalog key that grants the guestbook (F7; L10.2), granted by Premium and Deluxe. */
@@ -94,6 +97,14 @@ export interface FeatureSettingsView {
   readonly showLodging: boolean;
   /** The stored lodging as the editor holds it: six texts per hotel, and the transport note (F4). */
   readonly lodging: LodgingDraft;
+  /**
+   * Whether the package includes LIVESTREAM, which is the only reason the «Transmisión en vivo» block is shown (F9;
+   * L12.2, L12.4). A package without the key keeps a stored link private instead of offering an editor nobody can
+   * publish.
+   */
+  readonly showLivestream: boolean;
+  /** The stored livestream as the editor holds it: the link and its note (F9). */
+  readonly livestream: LivestreamDraft;
   /**
    * Whether the package includes WHATSAPP_REMINDERS, which is the only reason the «Recordatorios por WhatsApp» block
    * is shown (F6; L9.2, L9.5). A package without the key keeps stored switches private instead of offering an editor
@@ -209,6 +220,8 @@ export function featureSettingsView(
     giftRegistry: giftRegistryDraftOf(invitation.featureSettings.giftRegistry),
     showLodging: included.has(LODGING_FEATURE_KEY),
     lodging: lodgingDraftOf(invitation.featureSettings.lodging),
+    showLivestream: included.has(LIVESTREAM_FEATURE_KEY),
+    livestream: livestreamDraftOf(invitation.featureSettings.livestream),
     showReminders: included.has(WHATSAPP_REMINDERS_FEATURE_KEY),
     reminders: remindersDraftOf(invitation.featureSettings.reminders),
     remindersConfigured: invitation.remindersConfigured === true,

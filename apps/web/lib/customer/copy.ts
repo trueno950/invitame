@@ -706,6 +706,20 @@ export const FEATURE_COPY = {
     "Una o dos líneas sobre el camión, el estacionamiento o cómo moverse el día del evento.",
   lodgingArchivedNote:
     "El hospedaje se guarda con la invitación, así que puedes consultarlo aquí aunque ya no se pueda editar.",
+  /** The livestream block of «Funciones» (F9; L12.1, L12.4). */
+  livestreamTitle: "Transmisión en vivo",
+  livestreamHint:
+    "Pega el enlace de tu transmisión. Si es de YouTube, tus invitados podrán verla dentro de la invitación; cualquier otro enlace se abre en otra pestaña.",
+  livestreamUrlLabel: "Enlace de la transmisión",
+  livestreamUrlPlaceholder: "https://www.youtube.com/watch?v=…",
+  livestreamUrlHint:
+    "Acepta un enlace que empiece con https. Solo YouTube se reproduce dentro de la invitación.",
+  livestreamNoteLabel: "Nota (opcional)",
+  livestreamNotePlaceholder: "Inicia a las 17:00 h",
+  livestreamNoteHint:
+    "Una línea que tus invitados verán bajo el reproductor, por ejemplo la hora de inicio.",
+  livestreamArchivedNote:
+    "La transmisión se guarda con la invitación, así que puedes consultarla aquí aunque ya no se pueda editar.",
   archivedNote:
     "Esta invitación está archivada: puedes consultar sus funcionalidades, pero ya no editarlas.",
 } as const;
@@ -799,6 +813,8 @@ export const FEATURE_ISSUE_COPY = {
     "Revisa el hospedaje: cada hotel necesita un nombre de 1 a 60 caracteres y un enlace de reserva https de hasta 500; la distancia, el precio y el código de grupo admiten hasta 40, 60 y 40, y el transporte hasta 400.",
   reminders:
     "Revisa los recordatorios: cada opción debe estar activada o desactivada. Vuelve a intentarlo.",
+  livestream:
+    "Revisa la transmisión en vivo: el enlace debe empezar con https y medir hasta 500 caracteres, y la nota hasta 120.",
   other:
     "Hay un dato de las funcionalidades que no pudimos guardar. Revísalo y vuelve a intentarlo.",
 } as const;

@@ -11,6 +11,7 @@ import {
   type GuestbookEntryValue,
 } from "../invitation-features/invitation-features.ts";
 import { type Itinerary, parseItinerary } from "../invitation-features/itinerary.ts";
+import { type Livestream, parseLivestream } from "../invitation-features/livestream.ts";
 import { type Lodging, parseLodging } from "../invitation-features/lodging.ts";
 import { type MusicLink, musicServiceOf } from "../invitation-features/music.ts";
 import { parseStoredPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
@@ -100,6 +101,8 @@ export interface PublicInvitationFeatures {
    * null, so a page deployed earlier keeps rendering (L20).
    */
   readonly lodging: Lodging | null;
+  /** The livestream link and its resolved video id, or null when the feature is not granted or nothing is stored (F9). */
+  readonly livestream: Livestream | null;
   /**
    * The guestbook wall (F7; L10.4): the visible entries newest first, at most 50, or null when the pinned package does
    * not grant `GUESTBOOK`. An empty list is a granted wall waiting for its first message, so the page still offers the
@@ -455,6 +458,10 @@ function parsePublicFeatures(
   // The same rule for the lodging (F4; L7.3): an absent field (a body written before F4) reads as none, and another
   // shape refuses the body instead of reaching a guest.
   const lodging = features.lodging === undefined ? null : parseLodging(features.lodging);
+  // The same rule for the livestream (F9; L20): an absent field (a body written before F9) reads as none, and another
+  // shape refuses the body instead of reaching a guest.
+  const livestream =
+    features.livestream === undefined ? null : parseLivestream(features.livestream);
   // The wall follows the same rule (F7; L20): an absent field (a body written before F7) reads as none, and another
   // shape refuses the body instead of reaching a guest.
   const guestbook = parsePublicGuestbook(features.guestbook);
@@ -472,7 +479,8 @@ function parsePublicFeatures(
     itinerary === undefined ||
     giftRegistry === undefined ||
     giftRegistryGranted === undefined ||
-    lodging === undefined
+    lodging === undefined ||
+    livestream === undefined
   ) {
     return undefined;
   }
@@ -485,6 +493,7 @@ function parsePublicFeatures(
     giftRegistry: giftRegistryGranted,
     giftRegistryDetails: giftRegistry,
     lodging,
+    livestream,
     guestbook,
     guestAlbum,
     music,

@@ -8,10 +8,35 @@ import type { NextConfig } from "next";
 // proxied route still requires a session, and the API remains the guard that refuses an oversized photo.
 export const WEB_REQUEST_BODY_LIMIT = "16mb";
 
+/**
+ * The only origin a guest invitation frames (F9; L12.3, L12.4): YouTube's privacy-enhanced embed host. A player is drawn
+ * inside the invitation, so the page states it in `frame-src` instead of leaving the framing unrestricted, and no other
+ * origin is added.
+ */
+export const INVITATION_FRAME_SRC = "https://www.youtube-nocookie.com";
+
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: WEB_REQUEST_BODY_LIMIT },
     proxyClientMaxBodySize: WEB_REQUEST_BODY_LIMIT,
+  },
+  /**
+   * The guest pages' Content Security Policy: additive and scoped, so only `/i/...` gains a `frame-src` restriction and
+   * the owner's preview (a same-origin frame under `/cuenta`) keeps the framing it always had. Nothing else is restricted,
+   * because the web server sets no other directive anywhere.
+   */
+  async headers() {
+    return [
+      {
+        source: "/i/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: `frame-src ${INVITATION_FRAME_SRC}`,
+          },
+        ],
+      },
+    ];
   },
 };
 

@@ -23,6 +23,7 @@ export const FEATURE_ISSUE_CODES = [
   "itinerary",
   "gift-registry",
   "lodging",
+  "livestream",
   "reminders",
   "other",
 ] as const;
@@ -67,6 +68,9 @@ const GIFT_REGISTRY_ISSUE_PREFIX = /^giftRegistry(?:\.|\s|$)/;
 /** The lodging's issues name the hotel or the transport field that refused them, so they share one prefix (F4; L7.1). */
 const LODGING_ISSUE_PREFIX = /^lodging(?:\.|\s|$)/;
 
+/** The livestream's issues name the version, the link, or the note that refused them (F9; L12.1). */
+const LIVESTREAM_ISSUE_PREFIX = /^livestream(?:\.|\s|$)/;
+
 /** The reminder switches' issues name the version or the switch that refused them, so they share one prefix (F6; L9.1). */
 const REMINDERS_ISSUE_PREFIX = /^reminders(?:\.|\s|$)/;
 
@@ -83,9 +87,11 @@ export function featureIssueCodes(issues: readonly string[]): FeatureIssueCode[]
           ? "gift-registry"
           : LODGING_ISSUE_PREFIX.test(issue)
             ? "lodging"
-            : REMINDERS_ISSUE_PREFIX.test(issue)
-              ? "reminders"
-              : "other";
+            : LIVESTREAM_ISSUE_PREFIX.test(issue)
+              ? "livestream"
+              : REMINDERS_ISSUE_PREFIX.test(issue)
+                ? "reminders"
+                : "other";
 
     if (!codes.includes(code)) {
       codes.push(code);
@@ -100,7 +106,7 @@ export function featureIssuesTarget(path: string, codes: readonly FeatureIssueCo
 }
 
 const ISSUE_CODE =
-  /^(?:timezone|phone|phone-type|playlist|itinerary|gift-registry|lodging|reminders|other)$/;
+  /^(?:timezone|phone|phone-type|playlist|itinerary|gift-registry|lodging|livestream|reminders|other)$/;
 
 /** The Spanish sentence of one code; nothing at all for a code this page does not know. */
 function issueMessage(code: string): string | undefined {

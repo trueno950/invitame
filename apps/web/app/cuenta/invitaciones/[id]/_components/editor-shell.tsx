@@ -59,6 +59,7 @@ import {
   lodgingNeedsSave,
   lodgingPayloadOf,
 } from "../../../../../lib/customer/lodging.ts";
+import { livestreamNeedsSave } from "../../../../../lib/customer/livestream.ts";
 import {
   OMITTED_SECTIONS_PROPERTY,
   type OmittableSections,
@@ -497,6 +498,7 @@ export function EditorShell({
     itinerary: featureView.itinerary,
     giftRegistry: featureView.giftRegistry,
     lodging: featureView.lodging,
+    livestream: featureView.livestream,
     reminders: featureView.reminders,
   }));
   const [rsvp, setRsvp] = useState<RsvpValues>(() => ({
@@ -697,6 +699,13 @@ export function EditorShell({
     if (
       next.lodging !== undefined &&
       !lodgingNeedsSave(features.lodging, next.lodging, storedLodging.current)
+    ) {
+      return;
+    }
+    // And the livestream (F9; L12.1): a link still being typed stays in the browser, and clearing it is a save.
+    if (
+      next.livestream !== undefined &&
+      !livestreamNeedsSave(features.livestream, next.livestream)
     ) {
       return;
     }

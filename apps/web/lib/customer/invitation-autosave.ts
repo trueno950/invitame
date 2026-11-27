@@ -25,6 +25,7 @@ import {
   giftRegistryPayloadOf,
 } from "./gift-registry.ts";
 import { type ItineraryDraftMoment, itineraryPayloadOf } from "./itinerary.ts";
+import { type LivestreamDraft, livestreamPayloadOf } from "./livestream.ts";
 import {
   type LodgingDraft,
   type LodgingDraftHotel,
@@ -277,6 +278,7 @@ export const FEATURE_CHANGE_FIELDS = [
   "itinerary",
   "giftRegistry",
   "lodging",
+  "livestream",
 ] as const;
 
 /** The feature data one autosave asks to change; a key left out is a field the creator did not touch. */
@@ -290,6 +292,8 @@ export interface FeatureChanges {
   readonly giftRegistry?: GiftRegistryDraft | null;
   /** The lodging as the editor holds it, or null when the owner cleared it (F4; L7.4). */
   readonly lodging?: LodgingDraft | null;
+  /** The livestream as the editor holds it, or null when the owner cleared it (F9; L12.1). */
+  readonly livestream?: LivestreamDraft | null;
   /** The reminder switches as the editor holds them (F6; L9.1). */
   readonly reminders?: RemindersDraft;
 }
@@ -466,6 +470,30 @@ function readLodgingDraft(value: unknown): LodgingDraft | null | undefined {
 }
 
 /**
+ * The livestream the editor sent, read from an untrusted payload (F9; L12.1): the link and the note; `null` for a link
+ * the owner cleared, or `undefined` when the body is not this shape or a value is outside its bounds. A link still being
+ * written never reaches here: `livestreamNeedsSave` keeps it in the browser.
+ */
+function readLivestreamDraft(value: unknown): LivestreamDraft | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  if (Object.keys(value).some((key) => key !== "url" && key !== "note")) {
+    return undefined;
+  }
+  if (typeof value.url !== "string" || typeof value.note !== "string") {
+    return undefined;
+  }
+
+  const draft: LivestreamDraft = { url: value.url, note: value.note };
+
+  return livestreamPayloadOf(draft) === undefined ? undefined : draft;
+}
+
+/**
  * The reminder switches the editor sent, read from an untrusted payload (F6; L9.1): the pair of booleans, or `undefined`
  * when the body is not this shape. There is no half-written switch — a control is on or off — so a value that is not one
  * of the two states refuses the payload instead of being guessed at.
@@ -529,6 +557,7 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
     itinerary?: readonly ItineraryDraftMoment[] | null;
     giftRegistry?: GiftRegistryDraft | null;
     lodging?: LodgingDraft | null;
+    livestream?: LivestreamDraft | null;
     reminders?: RemindersDraft;
   } = {};
 
@@ -586,6 +615,15 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
       changes.lodging = lodging;
       continue;
     }
+    if (name === "livestream") {
+      const livestream = readLivestreamDraft(value);
+      if (livestream === undefined) {
+        issues.push({ field: name, message: FEATURE_ISSUE_COPY.livestream });
+        continue;
+      }
+      changes.livestream = livestream;
+      continue;
+    }
     if (name === "reminders") {
       const reminders = readRemindersDraft(value);
       if (reminders === undefined) {
@@ -615,7 +653,17 @@ export function mergeFeatureChanges(
   let itinerary = stored.itinerary;
   let giftRegistry = stored.giftRegistry;
   let lodging = stored.lodging;
+  let livestream = stored.livestream;
   let reminders = stored.reminders ?? null;
+
+  if (Object.hasOwn(changes, "livestream")) {
+    // A livestream the contract refuses is left out of the change instead of clearing what is stored (F9; L12.1).
+    const payload = livestreamPayloadOf(changes.livestream ?? { url: "", note: "" });
+
+    if (payload !== undefined) {
+      livestream = payload;
+    }
+  }
 
   if (Object.hasOwn(changes, "lodging")) {
     // A lodging the contract refuses is left out of the change instead of clearing what is stored, and a hotel the
@@ -665,6 +713,7 @@ export function mergeFeatureChanges(
     itinerary,
     giftRegistry,
     ...(lodging === undefined ? {} : { lodging }),
+    ...(livestream === undefined ? {} : { livestream }),
     reminders,
   };
 }
@@ -797,6 +846,7 @@ function fieldIssuesOf(channel: AutosaveChannel, issues: readonly string[]): Aut
       itinerary: "itinerary",
       "gift-registry": "giftRegistry",
       lodging: "lodging",
+      livestream: "livestream",
       reminders: "reminders",
     };
     for (const code of featureIssueCodes(issues)) {
