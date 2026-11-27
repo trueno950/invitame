@@ -488,6 +488,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "GIFT_REGISTRY",
     "LODGING",
     "GUESTBOOK",
+    "GUEST_ALBUM",
     "GUEST_LIST",
     "QR_PASS",
   ],
@@ -2188,6 +2189,7 @@ describe("GetPublicInvitationUseCase", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -2393,6 +2395,8 @@ describe("GetPublicInvitationUseCase", () => {
           lodging: null,
           // Premium and Deluxe grant the guestbook, so their wall is an empty list; Basic answers no wall (F7; L10.2).
           guestbook: packageKey === "basic" ? null : [],
+          // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
+          guestAlbum: packageKey === "deluxe" ? { photos: [], count: 0 } : null,
           gallery: [],
           // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form (M6 S4).
           rsvp: {
@@ -2438,6 +2442,8 @@ describe("GetPublicInvitationUseCase", () => {
           lodging: null,
           // Premium and Deluxe grant the guestbook, so their wall is an empty list; Basic answers no wall (F7; L10.2).
           guestbook: packageKey === "basic" ? null : [],
+          // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
+          guestAlbum: packageKey === "deluxe" ? { photos: [], count: 0 } : null,
           gallery: [],
           rsvp: {
             mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
@@ -2456,6 +2462,7 @@ describe("GetPublicInvitationUseCase", () => {
         "gallery",
         "giftRegistry",
         "giftRegistryDetails",
+        "guestAlbum",
         "guestbook",
         "itinerary",
         "lodging",
@@ -2497,6 +2504,7 @@ describe("GetPublicInvitationUseCase", () => {
       giftRegistryDetails: null,
       lodging: null,
       guestbook: null,
+      guestAlbum: null,
       gallery: [],
       rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
     });

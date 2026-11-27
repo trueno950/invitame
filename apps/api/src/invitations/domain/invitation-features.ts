@@ -85,7 +85,8 @@ export function isInvitationTimeZone(value: unknown): value is InvitationTimeZon
  * `QR_PASS` is the guest list's access pass for the door, also M6 G2, and `GALLERY` is the invitation's photo
  * gallery (M8 S3, S4). `ITINERARY` is the plan of the day (F1; S2.1, L3.2) and comes first because it is the first
  * capability of the owner's list; `LODGING` is the lodging and transport block (F4; S2.4, L7.2). The order is the
- * order the owner's feature list follows; `GUESTBOOK` is the guest's wall of messages (F7; S2.7, L10.2).
+ * order the owner's feature list follows; `GUESTBOOK` is the guest's wall of messages (F7; S2.7, L10.2), and
+ * `GUEST_ALBUM` is the album of photos the guests upload for the owner to approve (F8; S2.8, L11.2).
  */
 export const IMPLEMENTED_INVITATION_FEATURES = [
   "ITINERARY",
@@ -97,6 +98,7 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   "GIFT_REGISTRY",
   "LODGING",
   "GUESTBOOK",
+  "GUEST_ALBUM",
   "GUEST_LIST",
   "QR_PASS",
   "GALLERY",
@@ -145,6 +147,14 @@ export const LODGING_FEATURE_KEY = "LODGING";
 export const GUESTBOOK_FEATURE_KEY = "GUESTBOOK";
 
 /**
+ * The catalog key that grants the album of the guests' photos (F8; S2.8, L11.2), granted by Deluxe. Like the guestbook,
+ * the key stays on with no stored photo at all, because the album exists to receive the first one: the public read
+ * answers `features.guestAlbum` — an empty list and a zero count while nobody uploaded — only when the package grants
+ * it.
+ */
+export const GUEST_ALBUM_FEATURE_KEY = "GUEST_ALBUM";
+
+/**
  * The public shape of one itinerary moment (F1; L3.1, L3.3): the wall clock, the title, and the place and address
  * when they say something. The projection carries the validated moments and no version.
  */
@@ -161,6 +171,29 @@ export interface PublicGalleryPhoto {
   height: number;
   alt: string | null;
 }
+
+/**
+ * One photo of the guests' album as a guest renders it (F8; L11.4): the absolute API URL of the published image and the
+ * name its uploader typed, or null when they chose to stay anonymous. It carries no storage key, no status, no row id,
+ * and no invitation: a guest sees a published photo and nothing about the ones waiting for the owner.
+ */
+export interface PublicGuestAlbumPhoto {
+  url: string;
+  uploaderName: string | null;
+}
+
+/**
+ * The album of one invitation as a guest renders it (F8; L11.4): the newest published photos — at most 60 — and how
+ * many published photos the invitation holds in total, which is the count the artboard's line states. Pending and
+ * hidden photos are never here, so the read cannot leak one even by accident.
+ */
+export interface PublicGuestAlbum {
+  readonly photos: readonly PublicGuestAlbumPhoto[];
+  readonly count: number;
+}
+
+/** The album of an invitation that published no photo: what a granted package answers before the first approval. */
+export const EMPTY_PUBLIC_GUEST_ALBUM: PublicGuestAlbum = { photos: [], count: 0 };
 
 /**
  * How an invitation accepts attendance answers (M6 S4): the open form when the package grants `RSVP` and no guest
@@ -729,6 +762,13 @@ export interface PublicInvitationFeatures {
    */
   readonly guestbook: readonly PublicGuestbookEntry[] | null;
   /**
+   * The album of the guests' photos a guest may see (F8; L11.4): the newest published photos — at most 60 — and the
+   * total number of published photos. It is the album itself rather than a switch — an empty list is an album waiting
+   * for its first photo — and it is null only when the pinned package does not grant `GUEST_ALBUM`, so a photo the
+   * package does not grant stays private.
+   */
+  readonly guestAlbum: PublicGuestAlbum | null;
+  /**
    * The gallery photos the page renders, ordered by position (M8 S4). Empty when the package does not grant
    * `GALLERY`, so the shape is stable and a layout can always read an array; an empty array and an absent gallery
    * look the same to the guest, which is exactly right: there is nothing to render either way.
@@ -767,6 +807,7 @@ export function publicInvitationFeatures(
   gate: InvitationFeatureGate,
   galleryPhotos: readonly PublicGalleryPhoto[] = [],
   guestbookEntries: readonly PublicGuestbookEntry[] = [],
+  guestAlbum: PublicGuestAlbum = EMPTY_PUBLIC_GUEST_ALBUM,
 ): PublicInvitationFeatures {
   const keys = new Set(availableFeatureKeys(gate));
   // A row written around the API reads as no itinerary at all, exactly like a title or a cover it refuses (S2, F1).
@@ -802,6 +843,11 @@ export function publicInvitationFeatures(
       keys.has(LODGING_FEATURE_KEY) && lodgingHasContent(lodging) ? publicLodging(lodging) : null,
     // The wall is the feature, not its data: a granted package answers its visible entries even while there are none.
     guestbook: keys.has(GUESTBOOK_FEATURE_KEY) ? [...guestbookEntries] : null,
+    // The album follows the same rule (F8; L11.4): the grant carries the published photos the read collected, and a
+    // package without the key answers null even when a caller passes photos.
+    guestAlbum: keys.has(GUEST_ALBUM_FEATURE_KEY)
+      ? { photos: [...guestAlbum.photos], count: guestAlbum.count }
+      : null,
     // Only a package that grants GALLERY renders photos; the read passes none otherwise, and this repeats the gate.
     gallery: keys.has(GALLERY_FEATURE_KEY) ? galleryPhotos : [],
     rsvp: {

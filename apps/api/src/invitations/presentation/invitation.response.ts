@@ -234,6 +234,17 @@ export interface PublicInvitationResponse {
      */
     guestbook: Array<{ authorName: string; message: string }> | null;
     /**
+     * The album of the guests' photos (F8; L11.4): the newest published photos — at most 60 — and how many published
+     * photos the invitation holds in total, each photo an absolute API URL and the optional name its uploader typed. It
+     * is the album itself — an empty list is an album waiting for its first photo — and null only when the pinned
+     * package does not grant `GUEST_ALBUM`. Pending and hidden photos are never answered. It is added beside the fields
+     * the body already carried and changes none of them, so a page deployed before it reads the body it always read.
+     */
+    guestAlbum: {
+      photos: Array<{ url: string; uploaderName: string | null }>;
+      count: number;
+    } | null;
+    /**
      * How the guest page accepts attendance answers (M6 G1, G2; S4): `open`, `guest-list`, or `null`, with the
      * creator's deadline as an ISO instant (or null) and the party limit, and whether a confirmed guest's personal
      * page may show the access QR.
@@ -445,6 +456,16 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
               authorName: entry.authorName,
               message: entry.message,
             })),
+      guestAlbum:
+        stored.features.guestAlbum === null
+          ? null
+          : {
+              photos: stored.features.guestAlbum.photos.map((photo) => ({
+                url: photo.url,
+                uploaderName: photo.uploaderName,
+              })),
+              count: stored.features.guestAlbum.count,
+            },
       rsvp: {
         mode: stored.features.rsvp.mode,
         deadline: stored.features.rsvp.deadline?.toISOString() ?? null,

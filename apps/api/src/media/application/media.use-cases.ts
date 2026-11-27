@@ -3,6 +3,7 @@ import type { Readable } from "node:stream";
 import type { PublicGalleryPhoto } from "../../invitations/domain/invitation-features";
 import { GALLERY_FEATURE_KEY } from "../../invitations/domain/invitation-features";
 import { assertEditable } from "../../invitations/domain/invitation-lifecycle";
+import { guestPhotoRetentionCutoff } from "../domain/guest-photo";
 import {
   MEDIA_FORMAT_ISSUE,
   MEDIA_MIME,
@@ -20,6 +21,7 @@ import {
 } from "../../settings/application/operational-settings";
 import { megabytesInBytes } from "../../settings/domain/operational-settings";
 import type { ImageProcessor } from "./image-processing";
+import type { GuestAlbumCleanup, GuestAlbumRepository } from "./guest-album.repository";
 import { MediaProcessingError } from "./image-processing";
 import {
   GalleryNotAvailableError,
@@ -449,6 +451,12 @@ export class ServeMediaUseCase {
   constructor(
     private readonly invitations: MediaRepository,
     private readonly storage: MediaStorage,
+    /**
+     * The album of the guests' photos (F8; L11.3). Both kinds of image answer the same `/media/<id>` route, so one URL
+     * space, one set of headers, and one cache rule serve them; the default answers nothing, so a test that composes
+     * serving without the album still serves the owner's media.
+     */
+    private readonly guestAlbum: Pick<GuestAlbumRepository, "findForServing"> | null = null,
   ) {}
 
   async execute(assetId: string, requester: MediaRequester): Promise<ServedMedia | null> {
@@ -457,27 +465,66 @@ export class ServeMediaUseCase {
     }
 
     const serving = await this.invitations.findForServing(assetId);
-    if (serving === null || serving.asset.status !== "stored") {
+    if (serving !== null && serving.asset.status === "stored") {
+      let cache: "public" | "private";
+      if (serving.invitation.status === "PUBLISHED") {
+        cache = "public";
+      } else {
+        const ownerId = await requester.ownerId();
+        if (ownerId === null || ownerId !== serving.invitation.ownerId) {
+          return null;
+        }
+        cache = "private";
+      }
+
+      const object = await this.storage.get(serving.asset.storageKey);
+      if (object === null) {
+        return null;
+      }
+
+      return { stream: object.stream, byteSize: object.byteSize, cache };
+    }
+
+    return this.serveGuestPhoto(assetId, requester);
+  }
+
+  /**
+   * One guest photo (F8; L11.3, L11.6): it is public only while the photo is PUBLISHED and its invitation is PUBLISHED,
+   * and the owner sees it in any state with an uncached answer. Every other case — a pending or hidden photo for anyone
+   * but its owner, a foreign photo, an unpublished invitation, an object that is gone — is the one indistinguishable 404,
+   * so a public media URL never confirms that an unreviewed photo exists.
+   */
+  private async serveGuestPhoto(
+    photoId: string,
+    requester: MediaRequester,
+  ): Promise<ServedMedia | null> {
+    if (this.guestAlbum === null) {
+      return null;
+    }
+    const serving = await this.guestAlbum.findForServing(photoId);
+    if (serving === null) {
       return null;
     }
 
-    let cache: "public" | "private";
-    if (serving.invitation.status === "PUBLISHED") {
-      cache = "public";
-    } else {
+    const published =
+      serving.photo.status === "PUBLISHED" && serving.invitation.status === "PUBLISHED";
+    if (!published) {
       const ownerId = await requester.ownerId();
       if (ownerId === null || ownerId !== serving.invitation.ownerId) {
         return null;
       }
-      cache = "private";
     }
 
-    const object = await this.storage.get(serving.asset.storageKey);
+    const object = await this.storage.get(serving.photo.storageKey);
     if (object === null) {
       return null;
     }
 
-    return { stream: object.stream, byteSize: object.byteSize, cache };
+    return {
+      stream: object.stream,
+      byteSize: object.byteSize,
+      cache: published ? "public" : "private",
+    };
   }
 }
 
@@ -512,6 +559,11 @@ export interface MediaCleanupResult {
   skippedRecentObjects: number;
   deletedRows: number;
   failedObjects: number;
+  /**
+   * Guest photos the run retired because the owner never published them or took them down again (F8; L11.6): the object
+   * and the row are both removed once the photo has been in that state for `GUEST_PHOTO_RETENTION_DAYS`.
+   */
+  retiredGuestPhotos: number;
 }
 
 /**
@@ -531,12 +583,16 @@ export class CleanupMediaUseCase {
     private readonly invitations: MediaRepository,
     private readonly storage: MediaStorage,
     private readonly log: MediaLog = () => {},
-    options: { now?: () => Date } = {},
+    options: { now?: () => Date; guestAlbum?: GuestAlbumCleanup | null } = {},
   ) {
     this.now = options.now ?? (() => new Date());
+    this.guestAlbum = options.guestAlbum ?? null;
   }
 
+  private readonly guestAlbum: GuestAlbumCleanup | null;
+
   async execute(options: { dryRun: boolean }): Promise<MediaCleanupResult> {
+    const now = this.now();
     const deletedRows = await this.invitations.listDeleted();
     const result: MediaCleanupResult = {
       deletedObjects: deletedRows.length,
@@ -544,9 +600,16 @@ export class CleanupMediaUseCase {
       skippedRecentObjects: 0,
       deletedRows: deletedRows.length,
       failedObjects: 0,
+      // A pending or hidden photo is retired once it has been in that state for the whole retention window (F8; L11.6).
+      retiredGuestPhotos: 0,
     };
     // Objects written inside this window may belong to an upload that has not inserted its row yet.
-    const cutoff = this.now().getTime() - MEDIA_ORPHAN_GRACE_MS;
+    const cutoff = now.getTime() - MEDIA_ORPHAN_GRACE_MS;
+    const retired =
+      this.guestAlbum === null
+        ? []
+        : await this.guestAlbum.listRetired(guestPhotoRetentionCutoff(now));
+    result.retiredGuestPhotos = retired.length;
 
     if (options.dryRun) {
       const scan = await this.scanOrphans(cutoff);
@@ -566,6 +629,21 @@ export class CleanupMediaUseCase {
       }
     }
     await this.invitations.remove(removed);
+
+    // A retired photo's row is removed only once its object is gone, so a failed delete leaves the row for the next run,
+    // exactly like a `deleted` media row (F8; L11.6).
+    const retiredIds: string[] = [];
+    for (const photo of retired) {
+      try {
+        await this.storage.delete(photo.storageKey);
+        retiredIds.push(photo.id);
+      } catch {
+        result.failedObjects += 1;
+      }
+    }
+    if (retiredIds.length > 0) {
+      await this.guestAlbum?.remove(retiredIds);
+    }
 
     const scan = await this.scanOrphans(cutoff);
     result.orphanObjects = scan.orphans.length;
@@ -592,7 +670,11 @@ export class CleanupMediaUseCase {
   private async scanOrphans(
     cutoff: number,
   ): Promise<{ orphans: MediaStorageObject[]; recent: number }> {
-    const known = new Set(await this.invitations.listStorageKeys());
+    // Both kinds of image live under the same prefix, so a guest photo's object is never called an orphan (F8; L11.6).
+    const known = new Set([
+      ...(await this.invitations.listStorageKeys()),
+      ...(this.guestAlbum === null ? [] : await this.guestAlbum.listStorageKeys()),
+    ]);
     const objects = await this.storage.listObjects(MEDIA_STORAGE_PREFIX);
     const orphans: MediaStorageObject[] = [];
     let recent = 0;

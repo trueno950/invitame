@@ -90,6 +90,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "GIFT_REGISTRY",
     "LODGING",
     "GUESTBOOK",
+    "GUEST_ALBUM",
     "GUEST_LIST",
     "QR_PASS",
   ],
@@ -1034,6 +1035,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
             lodging: null,
             // Premium and Deluxe grant the guestbook, so their wall is an empty list (F7; L10.2, L10.4).
             guestbook: packageKey === "basic" ? null : [],
+            // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
+            guestAlbum: packageKey === "deluxe" ? { photos: [], count: 0 } : null,
             gallery: [],
             // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form.
             rsvp: {
@@ -1094,6 +1097,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: [],
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -1119,6 +1123,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: [],
+        guestAlbum: { photos: [], count: 0 },
         gallery: [],
         rsvp: { mode: "guest-list", deadline: null, partyLimit: 4, qrPass: true },
       });
@@ -1151,6 +1156,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -1176,6 +1182,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "gallery",
         "giftRegistry",
         "giftRegistryDetails",
+        "guestAlbum",
         "guestbook",
         "itinerary",
         "lodging",

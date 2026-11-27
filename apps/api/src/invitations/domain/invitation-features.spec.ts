@@ -33,7 +33,17 @@ import type { InvitationLodging } from "./invitation-lodging";
 /** The stored feature keys of every seeded package (prisma/catalog-seed.ts), by package key. */
 const SEEDED_PACKAGE_FEATURES = {
   basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
-  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP", "LODGING"],
+  premium: [
+    "ITINERARY",
+    "COUNTDOWN",
+    "MUSIC",
+    "GALLERY",
+    "MAP",
+    "RSVP",
+    "WHATSAPP",
+    "LODGING",
+    "GUESTBOOK",
+  ],
   deluxe: [
     "ITINERARY",
     "COUNTDOWN",
@@ -44,6 +54,9 @@ const SEEDED_PACKAGE_FEATURES = {
     "WHATSAPP",
     "GIFT_REGISTRY",
     "LODGING",
+    "GUESTBOOK",
+    "GUEST_ALBUM",
+    "WHATSAPP_REMINDERS",
     "GUEST_LIST",
     "QR_PASS",
   ],
@@ -576,7 +589,38 @@ describe("feature gating (S4, F1)", () => {
     );
   });
 
-  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_LIST, QR_PASS, and GALLERY, with CALENDAR always added", () => {
+  it("answers the album with its published photos and its count only while the package grants it (F8; L11.4)", () => {
+    const photos = [{ url: "https://api.example.test/media/photo", uploaderName: "Tía Rosa" }];
+    const GATE = {
+      includedFeatureKeys: ["GUEST_ALBUM"],
+      whatsappPhone: null,
+      playlistUrl: null,
+      playlistTitle: null,
+      playlistCoverUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+      lodging: null,
+      rsvpDeadline: null,
+      rsvpPartyLimit: 4,
+    };
+
+    assert.deepEqual(publicInvitationFeatures(GATE, [], [], { photos, count: 12 }).guestAlbum, {
+      photos,
+      count: 12,
+    });
+    // An album with no published photo is still an album: it is what receives the first one.
+    assert.deepEqual(publicInvitationFeatures(GATE).guestAlbum, { photos: [], count: 0 });
+    // A package without the key keeps every photo private, whatever the read collected.
+    assert.equal(
+      publicInvitationFeatures({ ...GATE, includedFeatureKeys: ["COUNTDOWN"] }, [], [], {
+        photos,
+        count: 12,
+      }).guestAlbum,
+      null,
+    );
+  });
+
+  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_ALBUM, GUEST_LIST, QR_PASS, and GALLERY, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
       "ITINERARY",
       "COUNTDOWN",
@@ -587,6 +631,7 @@ describe("feature gating (S4, F1)", () => {
       "GIFT_REGISTRY",
       "LODGING",
       "GUESTBOOK",
+      "GUEST_ALBUM",
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
@@ -603,6 +648,8 @@ describe("feature gating (S4, F1)", () => {
     // The guestbook is the wall itself (F7; L10.2): the key is offered while no entry is stored, because the wall is
     // what receives the first one.
     assert.deepEqual(gated(["GUESTBOOK"]), ["GUESTBOOK", "CALENDAR"]);
+    // The album follows the same rule (F8; L11.4): the key is granted and the read answers no photo yet.
+    assert.deepEqual(gated(["GUEST_ALBUM"]), ["GUEST_ALBUM", "CALENDAR"]);
   });
 
   it("shows the features each seeded package includes, plus CALENDAR", () => {
@@ -621,9 +668,13 @@ describe("feature gating (S4, F1)", () => {
       "RSVP",
       "WHATSAPP",
       "MUSIC",
+      "GUESTBOOK",
       "GALLERY",
       "CALENDAR",
     ]);
+    // Deluxe adds the guest album (F8; L11.2); the reminders key is granted but not implemented by this deployment, so
+    // gating drops it instead of letting a key select a component.
+    assert.deepEqual(gated(["WHATSAPP_REMINDERS"]), ["CALENDAR"]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe), [
       "ITINERARY",
       "COUNTDOWN",
@@ -632,6 +683,8 @@ describe("feature gating (S4, F1)", () => {
       "WHATSAPP",
       "MUSIC",
       "GIFT_REGISTRY",
+      "GUESTBOOK",
+      "GUEST_ALBUM",
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
@@ -651,7 +704,7 @@ describe("feature gating (S4, F1)", () => {
         version: 1,
         items: [],
       }),
-      ["COUNTDOWN", "MAP", "RSVP", "WHATSAPP", "MUSIC", "GALLERY", "CALENDAR"],
+      ["COUNTDOWN", "MAP", "RSVP", "WHATSAPP", "MUSIC", "GUESTBOOK", "GALLERY", "CALENDAR"],
     );
     // A package that does not grant the key shows no itinerary even while one is stored.
     assert.deepEqual(gated(["COUNTDOWN"], PHONE, PLAYLIST), ["COUNTDOWN", "CALENDAR"]);
@@ -670,6 +723,7 @@ describe("feature gating (S4, F1)", () => {
       "MAP",
       "RSVP",
       "MUSIC",
+      "GUESTBOOK",
       "GALLERY",
       "CALENDAR",
     ]);
@@ -680,6 +734,8 @@ describe("feature gating (S4, F1)", () => {
       "RSVP",
       "MUSIC",
       "GIFT_REGISTRY",
+      "GUESTBOOK",
+      "GUEST_ALBUM",
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
@@ -694,6 +750,7 @@ describe("feature gating (S4, F1)", () => {
       "MAP",
       "RSVP",
       "WHATSAPP",
+      "GUESTBOOK",
       "GALLERY",
       "CALENDAR",
     ]);
@@ -704,6 +761,8 @@ describe("feature gating (S4, F1)", () => {
       "RSVP",
       "WHATSAPP",
       "GIFT_REGISTRY",
+      "GUESTBOOK",
+      "GUEST_ALBUM",
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
@@ -730,6 +789,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -877,6 +937,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -898,6 +959,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -919,6 +981,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },

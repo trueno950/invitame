@@ -846,6 +846,7 @@ describe("cleanup command", () => {
       skippedRecentObjects: 0,
       deletedRows: 1,
       failedObjects: 0,
+      retiredGuestPhotos: 0,
     });
     assert.deepEqual(
       calls.filter((call) => call.startsWith("delete:")),
@@ -861,6 +862,7 @@ describe("cleanup command", () => {
         skippedRecentObjects: 0,
         deletedRows: 1,
         failedObjects: 0,
+        retiredGuestPhotos: 0,
       },
     ]);
   });
@@ -880,6 +882,7 @@ describe("cleanup command", () => {
       skippedRecentObjects: 0,
       deletedRows: 1,
       failedObjects: 0,
+      retiredGuestPhotos: 0,
     });
     assert.deepEqual(
       calls.filter((call) => call.startsWith("delete:")),
@@ -896,6 +899,7 @@ describe("cleanup command", () => {
       skippedRecentObjects: 0,
       deletedRows: 0,
       failedObjects: 0,
+      retiredGuestPhotos: 0,
     });
   });
 
@@ -916,6 +920,7 @@ describe("cleanup command", () => {
       skippedRecentObjects: 1,
       deletedRows: 0,
       failedObjects: 0,
+      retiredGuestPhotos: 0,
     });
 
     const applied = await cleanup.execute({ dryRun: false });
@@ -925,6 +930,7 @@ describe("cleanup command", () => {
       skippedRecentObjects: 1,
       deletedRows: 0,
       failedObjects: 0,
+      retiredGuestPhotos: 0,
     });
     assert.equal(storage.objects.has(inFlight), true, "the in-flight object survives the scan");
     assert.deepEqual(
@@ -986,6 +992,7 @@ describe("cleanup command", () => {
       skippedRecentObjects: 0,
       deletedRows: 0,
       failedObjects: 0,
+      retiredGuestPhotos: 0,
     });
     assert.equal(
       storage.objects.has(stored.storageKey),

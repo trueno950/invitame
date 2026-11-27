@@ -78,6 +78,7 @@ import {
   type GuestbookRepository,
   type InvitationGuestbookReader,
 } from "../application/guestbook.repository";
+import { INVITATION_GUEST_ALBUM_READER } from "../application/invitation-guest-album";
 import {
   GUESTBOOK_RATE_LIMITER,
   type GuestbookRateLimiter,
@@ -153,6 +154,8 @@ const ITINERARY_PACKAGE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const LODGING_PACKAGE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 /** An ACTIVE package that grants `GUESTBOOK` and no other implemented key: the wall of messages (F7; L10.2). */
 const GUESTBOOK_PACKAGE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+/** An ACTIVE package that grants `GUEST_ALBUM` and no other implemented key: the guests' photos (F8; L11.2). */
+const GUEST_ALBUM_PACKAGE_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 /** A PUBLISHED version whose schema declares the address fields a place may belong to (S2). */
 const PLACE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 /** A PUBLISHED version whose schema declares the legacy gift registry text field (F2; L4.3). */
@@ -495,6 +498,11 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     [
       GUESTBOOK_PACKAGE_ID,
       { status: "ACTIVE", includedFeatureKeys: ["GUESTBOOK"], durationDays: 90 },
+    ],
+    // The album key alone (F8; L11.2).
+    [
+      GUEST_ALBUM_PACKAGE_ID,
+      { status: "ACTIVE", includedFeatureKeys: ["GUEST_ALBUM"], durationDays: 90 },
     ],
   ]);
 
@@ -1151,6 +1159,51 @@ class MemoryRateLimiter implements RsvpRateLimiter {
   }
 }
 
+/**
+ * The album source of the public read (F8; L11.4) in memory: it repeats the adapter's rule that only published photos are
+ * answered, newest first and capped at 60, so a projection that leaked a pending one would be caught here.
+ */
+class MemoryGuestAlbumReader {
+  readonly photos: Array<{
+    invitationId: string;
+    url: string;
+    uploaderName: string | null;
+    status: "PENDING" | "PUBLISHED" | "HIDDEN";
+    createdAt: Date;
+  }> = [];
+
+  seedPhoto(
+    invitationId: string,
+    overrides: {
+      url?: string;
+      uploaderName?: string | null;
+      status?: "PENDING" | "PUBLISHED" | "HIDDEN";
+      createdAt?: Date;
+    } = {},
+  ): void {
+    this.photos.push({
+      invitationId,
+      url: overrides.url ?? `https://api.example.test/media/${randomUUID()}`,
+      uploaderName: overrides.uploaderName ?? null,
+      status: overrides.status ?? "PUBLISHED",
+      createdAt: overrides.createdAt ?? new Date(Date.UTC(2026, 11, 1, 10, 0, 0)),
+    });
+  }
+
+  async readPublishedPhotos(invitationId: string) {
+    const published = this.photos
+      .filter((photo) => photo.invitationId === invitationId && photo.status === "PUBLISHED")
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+
+    return {
+      photos: published
+        .slice(0, 60)
+        .map((photo) => ({ url: photo.url, uploaderName: photo.uploaderName })),
+      count: published.length,
+    };
+  }
+}
+
 describe("invitations routes: /invitations", () => {
   const database: Record<string, Row[]> = {
     user: [],
@@ -1183,6 +1236,7 @@ describe("invitations routes: /invitations", () => {
   const guestRepository = new MemoryGuestRepository(repository);
   const rateLimiter = new MemoryRateLimiter();
   const guestbookRepository = new MemoryGuestbookRepository(repository);
+  const guestAlbumReader = new MemoryGuestAlbumReader();
   const guestbookRateLimiter = new MemoryGuestbookRateLimiter();
   const viewRepository = new MemoryInvitationViewRepository();
   const placeSearch = new MemoryPlaceSearch();
@@ -1221,6 +1275,8 @@ describe("invitations routes: /invitations", () => {
         // The public projection reads the wall through its own port, as the module's one adapter serves both (F7).
         { provide: INVITATION_GUESTBOOK_READER, useValue: guestbookRepository },
         { provide: GUESTBOOK_RATE_LIMITER, useValue: guestbookRateLimiter },
+        // The public projection reads the album through its own port (F8; L11.4).
+        { provide: INVITATION_GUEST_ALBUM_READER, useValue: guestAlbumReader },
         // The public reads count one opening each through this port (M9 T11; S2, S7).
         { provide: INVITATION_VIEW_REPOSITORY, useValue: viewRepository },
         { provide: PLACE_SEARCH, useValue: placeSearch },
@@ -3177,6 +3233,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -3348,6 +3405,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -3383,6 +3441,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -3667,6 +3726,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -4492,6 +4552,65 @@ describe("invitations routes: /invitations", () => {
     /** The entries the shared memory port holds for one invitation. */
     const entriesOf = (invitationId: string) =>
       guestbookRepository.entries.filter((entry) => entry.invitationId === invitationId);
+
+    describe("the public album read (L11.4)", () => {
+      it("answers features.guestAlbum with the published photos and the count, and never a pending one", async () => {
+        const { created } = await published(GUEST_ALBUM_PACKAGE_ID);
+        guestAlbumReader.seedPhoto(created.id, {
+          url: "https://api.example.test/media/photo-1",
+          uploaderName: "Tía Rosa",
+          createdAt: new Date(Date.UTC(2026, 11, 1, 10, 0, 0)),
+        });
+        guestAlbumReader.seedPhoto(created.id, {
+          url: "https://api.example.test/media/photo-2",
+          uploaderName: null,
+          createdAt: new Date(Date.UTC(2026, 11, 1, 11, 0, 0)),
+        });
+        // A photo the owner has not published is invisible to a guest, and one the owner hid is too.
+        guestAlbumReader.seedPhoto(created.id, {
+          url: "https://api.example.test/media/photo-pending",
+          status: "PENDING",
+        });
+        guestAlbumReader.seedPhoto(created.id, {
+          url: "https://api.example.test/media/photo-hidden",
+          status: "HIDDEN",
+        });
+
+        const response = await send("GET", `/public/invitations/${created.slug}`);
+        const body = (await response.json()) as Row & {
+          features: { guestAlbum: { photos: Array<Row>; count: number } | null };
+        };
+
+        assert.equal(response.status, 200);
+        assert.deepEqual(body.features.guestAlbum, {
+          photos: [
+            { url: "https://api.example.test/media/photo-2", uploaderName: null },
+            { url: "https://api.example.test/media/photo-1", uploaderName: "Tía Rosa" },
+          ],
+          count: 2,
+        });
+        // Nothing about the review state, the storage key, or an unapproved photo reaches a guest.
+        const text = JSON.stringify(body.features.guestAlbum);
+        assert.equal(text.includes("PENDING"), false);
+        assert.equal(text.includes("HIDDEN"), false);
+        assert.equal(text.includes("photo-pending"), false);
+      });
+
+      it("answers an empty album for a granted package with no photo, and null when the package does not grant it", async () => {
+        const granted = await published(GUEST_ALBUM_PACKAGE_ID);
+        const basic = await published(ACTIVE_PACKAGE_ID);
+
+        const grantedBody = (await (
+          await send("GET", `/public/invitations/${granted.created.slug}`)
+        ).json()) as Row & { features: { guestAlbum: unknown } };
+        const basicBody = (await (
+          await send("GET", `/public/invitations/${basic.created.slug}`)
+        ).json()) as Row & { features: { guestAlbum: unknown } };
+
+        assert.deepEqual(grantedBody.features.guestAlbum, { photos: [], count: 0 });
+        assert.equal(basicBody.features.guestAlbum, null);
+      });
+    });
 
     describe("the public read (L10.4)", () => {
       it("answers features.guestbook with the visible entries newest first and keeps the hidden ones private", async () => {
