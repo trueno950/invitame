@@ -91,6 +91,6 @@ describe("the livestream card of the guest page (L12.3, L12.4)", () => {
   });
 
   it("draws no card at all without a livestream", () => {
-    assert.equal(render(null), "");
+    assert.equal(render(undefined), "");
   });
 });
