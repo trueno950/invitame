@@ -320,6 +320,27 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   owner's «Mesa» column and summary and of a confirmed guest's pass («Mesa 7», «Personas 1», venue hint). The evidence
   commit adds the verifier's two regression tests (numeric table order; the open read never carries the table) and
   drops the unused `passTitle` copy. Deployment note (as L21): the API deploys before the web.
+- L24 — F6 evidence: commits `dcfeb33` (switch validation, schedule, message), `8dfad2c` (settings, migration
+  `20261207120000_add_whatsapp_reminders`, key `WHATSAPP_REMINDERS` for deluxe, not-configured sender), `6c9baff`
+  (`reminders:send`, once per attempt) and `244e21c` (web). Parent decision: the event-eve reminder skips a guest who
+  answered no. Independent verification: every S2.6, S6 and L9 item met, 77 probes with no failure; the guest public
+  and personal reads are byte-identical to the base. Browser check of the editor block («Aún no está activo», switches
+  saved across a reload). The React «unique key» warning in the editor predates F6 (reproduced on the base) and is a
+  separate follow-up. Native review: after the owner fixed the stalled
+  reviewer provider, `review-68a1d655dc2620ee` found R3-001 (the `ReminderDelivery.guestId` RESTRICT key would keep the
+  owner from removing a guest once a run recorded an attempt); corrected by `c7ccd53` (new migration
+  `20261208120000_cascade_reminder_delivery_guest`, guest key ON DELETE CASCADE, db-spec through the guest removal use
+  case, RED then GREEN). The correction added paths, so the provider asked for a scope-changed recovery the facade
+  could not submit (its `input` is always parsed as an object); the same range was reviewed anew as
+  `review-b348e3db9dcc0c86` (`dcfeb33..c7ccd53`, approved) and the command as `review-72c37a9a3892dfad` (approved;
+  resilience findings refuted). Activation checklist for when a provider is paid for (advisories, not defects while
+  nothing is sent): the command builds `NotConfiguredReminderSender` directly and must resolve the configured sender;
+  a claim left `pending` by a crash is not retried that day; the message is built before the send `try`; the command's
+  argument and exit-code paths have no direct test; a db-spec with stored switches. Pending regression tests from the
+  verifier: catalog INSERT replay and due day in the invitation zone. Correction of earlier evidence: the disposable
+  database was never actually dropped by `prisma db execute` (it runs the script in a transaction), so the runs called
+  «fresh» for F2-F5 used an accumulated database; CI's fresh database passed each of them, and F6 was rerun on a truly
+  fresh database (dropped through the client): db-specs 495/495.
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
