@@ -56,6 +56,8 @@ const WHATSAPP_REMINDERS_FEATURE_KEY = "WHATSAPP_REMINDERS";
 const GUESTBOOK_FEATURE_KEY = "GUESTBOOK";
 /** The catalog key that grants the album of the guests' photos (F8; L11.2), granted by Deluxe. */
 const GUEST_ALBUM_FEATURE_KEY = "GUEST_ALBUM";
+/** The catalog key that grants the opening animation (F10; L14.4), granted by every seeded package. */
+const OPENING_ANIMATION_FEATURE_KEY = "OPENING_ANIMATION";
 
 /** Everything the section renders for one draft. */
 export interface FeatureSettingsView {
@@ -119,6 +121,17 @@ export interface FeatureSettingsView {
    * the moment a sender is configured.
    */
   readonly remindersConfigured: boolean;
+  /**
+   * Whether the package includes OPENING_ANIMATION, which is the only reason the «Animación de apertura» switch is shown
+   * (F10; L14.3, L14.4). A package without the key keeps a stored switch private instead of offering a control whose
+   * effect a guest would never see.
+   */
+  readonly showOpeningAnimation: boolean;
+  /**
+   * The stored opening animation switch (F10; L14.3), on unless the owner turned it off. A body written before the column
+   * existed carries no switch, and the column's own default is what the switch then shows.
+   */
+  readonly openingAnimation: boolean;
   /**
    * Whether the package includes GUESTBOOK, which is the only reason the «Funciones» tab links to the invitation's
    * «Libro de firmas» screen (F7; L10.2, L10.6). A package without the key keeps a stored book private instead of
@@ -225,6 +238,8 @@ export function featureSettingsView(
     showReminders: included.has(WHATSAPP_REMINDERS_FEATURE_KEY),
     reminders: remindersDraftOf(invitation.featureSettings.reminders),
     remindersConfigured: invitation.remindersConfigured === true,
+    showOpeningAnimation: included.has(OPENING_ANIMATION_FEATURE_KEY),
+    openingAnimation: invitation.featureSettings.openingAnimation ?? true,
     showGuestbook: included.has(GUESTBOOK_FEATURE_KEY),
     showGuestAlbum: included.has(GUEST_ALBUM_FEATURE_KEY),
     showRsvp: included.has(RSVP_FEATURE_KEY),

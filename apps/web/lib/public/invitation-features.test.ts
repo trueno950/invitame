@@ -7,6 +7,7 @@ import {
   invitationCalendar,
   invitationCalendarFile,
   invitationCalendarPath,
+  openingAnimationBlock,
   publicFeatureBlock,
 } from "./invitation-features.ts";
 import type { GuestAlbumBlockView } from "../invitation-features/invitation-features.ts";
@@ -43,6 +44,7 @@ const PUBLIC: PublicInvitation = {
     giftRegistryDetails: null,
     lodging: null,
     livestream: null,
+    openingAnimation: false,
     guestbook: null,
     guestAlbum: null,
     itinerary: null,
@@ -148,6 +150,7 @@ describe("publicFeatureBlock", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -185,6 +188,7 @@ describe("publicFeatureBlock", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         itinerary: null,
@@ -275,6 +279,7 @@ describe("publicFeatureBlock", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         itinerary: null,
@@ -293,6 +298,79 @@ describe("publicFeatureBlock", () => {
       giftRegistry: false,
       gallery: [],
     });
+  });
+});
+
+describe("the opening animation of a guest page (F10; L14.1, L14.2)", () => {
+  it("draws the envelope with the invitation's own theme and the celebration's own card", () => {
+    const block = openingAnimationBlock({
+      componentKey: PUBLIC.componentKey,
+      configuration: PUBLIC.configuration,
+      content: PUBLIC.content,
+      hiddenFields: PUBLIC.hiddenFields,
+      plays: true,
+    });
+
+    assert.ok(block);
+    // The occasion and the celebrant come from the content the page already renders, never from a new field.
+    assert.deepEqual(block.card, {
+      occasion: "Cumpleaños",
+      name: "Ana",
+      initials: "A",
+    });
+    // The envelope wears the invitation's theme: the birthday «dinosaurs» board of this snapshot.
+    assert.equal(block.theme.displayName.length > 0, true);
+    assert.match(block.theme.colors.accent, /^#[0-9a-f]{6}$/);
+  });
+
+  it("draws nothing when the API did not say it plays, so the owner's switch and the package decide (L14.4)", () => {
+    assert.equal(
+      openingAnimationBlock({
+        componentKey: PUBLIC.componentKey,
+        configuration: PUBLIC.configuration,
+        content: PUBLIC.content,
+        plays: false,
+      }),
+      undefined,
+    );
+  });
+
+  it("draws nothing for a layout or a theme this deployment does not know, or content it cannot read", () => {
+    const unknownLayout = openingAnimationBlock({
+      componentKey: "birthday-unknown-01",
+      configuration: PUBLIC.configuration,
+      content: PUBLIC.content,
+      plays: true,
+    });
+    const unknownTheme = openingAnimationBlock({
+      componentKey: PUBLIC.componentKey,
+      configuration: { componentKey: PUBLIC.componentKey, theme: "unknown" },
+      content: PUBLIC.content,
+      plays: true,
+    });
+    const unreadable = openingAnimationBlock({
+      componentKey: PUBLIC.componentKey,
+      configuration: PUBLIC.configuration,
+      content: { celebrantName: "" },
+      plays: true,
+    });
+
+    assert.equal(unknownLayout, undefined);
+    assert.equal(unknownTheme, undefined);
+    assert.equal(unreadable, undefined);
+  });
+
+  it("honors an omitted section: a hidden location still answers the card, which names the celebration", () => {
+    const block = openingAnimationBlock({
+      componentKey: PUBLIC.componentKey,
+      configuration: PUBLIC.configuration,
+      content: PUBLIC.content,
+      hiddenFields: ["location"],
+      plays: true,
+    });
+
+    assert.ok(block);
+    assert.deepEqual(block.card, { occasion: "Cumpleaños", name: "Ana", initials: "A" });
   });
 });
 
@@ -433,6 +511,7 @@ describe("the album of a guest page (F8; L11.4, L11.5)", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         itinerary: null,

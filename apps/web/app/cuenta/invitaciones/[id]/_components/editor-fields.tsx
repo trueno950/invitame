@@ -555,6 +555,8 @@ export interface FeatureValues {
   readonly lodging: LodgingDraft;
   /** The livestream as the browser holds it: the link and its note (F9; L12.1). */
   readonly livestream: LivestreamDraft;
+  /** The opening animation switch as the browser holds it, on by default (F10; L14.3). */
+  readonly openingAnimation: boolean;
   /** The WhatsApp reminder switches as the browser holds them (F6; L9.1). */
   readonly reminders: RemindersDraft;
 }
@@ -1401,6 +1403,63 @@ function LivestreamFields({
   );
 }
 
+/**
+ * The «Animación de apertura» switch of «Funciones» (F10; S2.10, L14.2, L14.3), following
+ * `design/opening-animation/01-sobre-con-sello.html` with the app's own tokens: one row that says what the guest sees and
+ * one switch that keeps it on or turns it off. It matches the reminder switches — a track, a knob, and the word of its
+ * state — so the state is never colour alone, and a press is one deliberate action that is saved at once.
+ */
+function OpeningAnimationField({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const labelId = "opening-animation-label";
+  const hintId = "opening-animation-hint";
+
+  return (
+    <div className="border-t border-rose-100 pt-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-ink" id={labelId}>
+            {FEATURE_COPY.openingAnimationLabel}
+          </p>
+          <p className="mt-1 text-sm leading-6 text-muted" id={hintId}>
+            {FEATURE_COPY.openingAnimationHint}
+          </p>
+        </div>
+        <button
+          aria-checked={checked}
+          aria-describedby={hintId}
+          aria-labelledby={`${labelId} ${labelId}-state`}
+          className={`${reminderSwitchBase} ${checked ? "text-primary" : "text-muted"}`}
+          onClick={() => onChange(!checked)}
+          role="switch"
+          type="button"
+        >
+          <span
+            aria-hidden="true"
+            className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors motion-reduce:transition-none ${
+              checked ? "bg-primary" : "bg-field-border"
+            }`}
+          >
+            <span
+              className={`absolute left-0.5 size-5 rounded-full bg-surface shadow-soft transition-transform motion-reduce:transition-none ${
+                checked ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </span>
+          <span id={`${labelId}-state`}>
+            {checked ? FEATURE_COPY.openingAnimationOn : FEATURE_COPY.openingAnimationOff}
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** The automatic features a guest sees, as a plain list of what the package turns on (S4). */
 function AutomaticFeatures({ view }: { view: FeatureSettingsView }) {
   return (
@@ -1547,6 +1606,17 @@ export function FeatureFields({
           onChange={onChange}
           onFlush={onFlush}
           values={values}
+        />
+      ) : null}
+
+      {view.showOpeningAnimation ? (
+        <OpeningAnimationField
+          checked={values.openingAnimation}
+          onChange={(next) => {
+            onChange({ openingAnimation: next });
+            // A switch is one deliberate action: it is sent at once instead of waiting for the debounce.
+            onFlush();
+          }}
         />
       ) : null}
 

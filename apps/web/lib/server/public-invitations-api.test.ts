@@ -60,6 +60,8 @@ const PUBLIC: PublicInvitation = {
       ],
       transport: "Habrá camión del hotel al salón a las 19:00.",
     },
+    // The opening animation is the read's own decision: granted and switched on (F10; L14.4).
+    openingAnimation: true,
     // The livestream is read with the video id the API resolved, so the block can frame only that id (F9; L12.3).
     livestream: {
       url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -457,6 +459,7 @@ describe("parsePublicInvitation", () => {
           giftRegistryDetails: null,
           lodging: null,
           livestream: null,
+          openingAnimation: false,
           // The itinerary is null while the package grants no `ITINERARY` or the invitation stores none (F1; L3.3).
           itinerary: null,
           // The gallery is always a list, empty when the package grants no `GALLERY` (M8 S4).
@@ -478,6 +481,7 @@ describe("parsePublicInvitation", () => {
           giftRegistryDetails: null,
           lodging: null,
           livestream: null,
+          openingAnimation: false,
           itinerary: null,
           guestbook: null,
           guestAlbum: null,
@@ -553,6 +557,39 @@ describe("the lodging of the public read (F4; L7.3, L7.5)", () => {
         undefined,
         JSON.stringify(broken),
       );
+    }
+  });
+});
+
+describe("the opening animation of the public read (F10; L14.4, L20)", () => {
+  it("reads the API's decision, never the stored switch, so the page draws the overlay only when it plays", () => {
+    assert.equal(parsePublicInvitation(PUBLIC)?.features.openingAnimation, true);
+    assert.equal(
+      parsePublicInvitation({
+        ...PUBLIC,
+        features: { ...PUBLIC.features, openingAnimation: false },
+      })?.features.openingAnimation,
+      false,
+    );
+  });
+
+  it("reads an absent field as off, so a page deployed before the API never covers the invitation (L20)", () => {
+    const { openingAnimation: _omitted, ...features } = PUBLIC.features;
+    const parsed = parsePublicInvitation({ ...PUBLIC, features });
+
+    assert.ok(parsed);
+    assert.equal(parsed.features.openingAnimation, false);
+  });
+
+  it("reads a value that is not a boolean as off instead of refusing a whole invitation over decoration", () => {
+    for (const value of ["true", 1, null, {}, []]) {
+      const parsed = parsePublicInvitation({
+        ...PUBLIC,
+        features: { ...PUBLIC.features, openingAnimation: value },
+      });
+
+      assert.ok(parsed, JSON.stringify(value));
+      assert.equal(parsed.features.openingAnimation, false, JSON.stringify(value));
     }
   });
 });

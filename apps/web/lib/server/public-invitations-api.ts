@@ -14,6 +14,7 @@ import { type Itinerary, parseItinerary } from "../invitation-features/itinerary
 import { type Livestream, parseLivestream } from "../invitation-features/livestream.ts";
 import { type Lodging, parseLodging } from "../invitation-features/lodging.ts";
 import { type MusicLink, musicServiceOf } from "../invitation-features/music.ts";
+import { parseOpeningAnimations } from "../invitation-features/opening-animation.ts";
 import { parseStoredPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
 import {
@@ -103,6 +104,12 @@ export interface PublicInvitationFeatures {
   readonly lodging: Lodging | null;
   /** The livestream link and its resolved video id, or null when the feature is not granted or nothing is stored (F9). */
   readonly livestream: Livestream | null;
+  /**
+   * Whether the guest page draws the opening animation (F10; L14.4): the API's own decision — the pinned package grants
+   * `OPENING_ANIMATION` and the owner's switch is on. An API body written before F10 answers no field and reads as off,
+   * so a page deployed earlier keeps rendering and never covers the invitation (L20).
+   */
+  readonly openingAnimation: boolean;
   /**
    * The guestbook wall (F7; L10.4): the visible entries newest first, at most 50, or null when the pinned package does
    * not grant `GUESTBOOK`. An empty list is a granted wall waiting for its first message, so the page still offers the
@@ -462,6 +469,10 @@ function parsePublicFeatures(
   // shape refuses the body instead of reaching a guest.
   const livestream =
     features.livestream === undefined ? null : parseLivestream(features.livestream);
+  // The opening animation is the one field read leniently (F10; L20): an absent field is an API written before it and
+  // reads as off, and any value that is not the documented boolean reads as off too, because refusing a whole invitation
+  // over a decoration would be worse than showing it directly.
+  const openingAnimation = parseOpeningAnimations(features.openingAnimation);
   // The wall follows the same rule (F7; L20): an absent field (a body written before F7) reads as none, and another
   // shape refuses the body instead of reaching a guest.
   const guestbook = parsePublicGuestbook(features.guestbook);
@@ -494,6 +505,7 @@ function parsePublicFeatures(
     giftRegistryDetails: giftRegistry,
     lodging,
     livestream,
+    openingAnimation,
     guestbook,
     guestAlbum,
     music,

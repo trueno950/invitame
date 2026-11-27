@@ -50,6 +50,7 @@ const GUEST_PAGE: PublicGuestInvitation = {
     giftRegistryDetails: null,
     lodging: null,
     livestream: null,
+    openingAnimation: false,
     itinerary: null,
     guestbook: null,
     guestAlbum: null,

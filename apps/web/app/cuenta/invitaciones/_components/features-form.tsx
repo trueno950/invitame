@@ -189,6 +189,22 @@ function LivestreamSummary({ view }: { view: FeatureSettingsView }) {
   );
 }
 
+/** The stored opening animation switch as one line, which is what an archived invitation shows (F10; L14.3). */
+function OpeningAnimationSummary({ view }: { view: FeatureSettingsView }) {
+  if (!view.showOpeningAnimation) {
+    return null;
+  }
+
+  return (
+    <p className={fieldLabel}>
+      {FEATURE_COPY.openingAnimationLabel}:{" "}
+      <span className="font-normal text-ink">
+        {view.openingAnimation ? FEATURE_COPY.openingAnimationOn : FEATURE_COPY.openingAnimationOff}
+      </span>
+    </p>
+  );
+}
+
 /** The stored reminder switches as a read-only pair, which is what an archived invitation shows (F6; L9.5). */
 function RemindersSummary({ view }: { view: FeatureSettingsView }) {
   if (!view.showReminders) {
@@ -239,6 +255,7 @@ export function FeaturesSummary({ view }: { view: FeatureSettingsView }) {
         <GiftRegistrySummary view={view} />
         <LodgingSummary view={view} />
         <LivestreamSummary view={view} />
+        <OpeningAnimationSummary view={view} />
         <RemindersSummary view={view} />
         <p className="text-sm leading-6 text-muted">{FEATURE_COPY.archivedNote}</p>
         <AutomaticFeatures view={view} />

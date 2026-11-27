@@ -120,6 +120,12 @@ export interface OwnedInvitation extends InvitationSummary {
      */
     livestream?: LivestreamPayload | null;
     /**
+     * The owner's opening animation switch (F10; L14.3), true while the guest page plays the envelope. It is absent from
+     * a body written before the column existed: the editor then shows the column's default, true, because an API that
+     * predates the switch has no stored false to report.
+     */
+    openingAnimation?: boolean;
+    /**
      * The stored reminder switches as the API's validated payload `{ version: 1, pendingRsvp, eventEve }`, or null while
      * the owner switched nothing on (F6; L9.1). It is absent from a body written before the switches existed, and a
      * reader treats that as "no settings" exactly like null.
@@ -170,6 +176,12 @@ export interface InvitationFeatureInput {
    * replaces the whole feature data.
    */
   livestream?: LivestreamPayload | null;
+  /**
+   * The opening animation switch the owner stored (F10; L14.3). The API accepts an omitted value as "keep the stored
+   * one", and a field the editor does not change still travels as the stored switch, because the PUT replaces the whole
+   * feature data.
+   */
+  openingAnimation?: boolean;
   /**
    * The reminder switches the owner stored, or null to clear them (F6; L9.1). The API validates the payload and accepts an
    * omitted value as "keep the stored one"; a field the editor does not change still travels as the stored pair, because
@@ -662,6 +674,15 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     return undefined;
   }
 
+  // The opening animation switch is a boolean (F10; L14.3). An absent value (a body written before the column existed)
+  // stays absent so the editor can default it to the column's true, and any other shape refuses the whole body instead of
+  // reaching the editor.
+  const openingAnimation = settings.openingAnimation;
+
+  if (openingAnimation !== undefined && typeof openingAnimation !== "boolean") {
+    return undefined;
+  }
+
   // The reminder switches follow the same rule (F6; L9.1): an absent value reads as no settings, and any other shape
   // refuses the whole body instead of reaching the editor.
   const reminders = parseRemindersPayload(settings.reminders);
@@ -686,6 +707,7 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     giftRegistry,
     lodging,
     livestream,
+    ...(openingAnimation === undefined ? {} : { openingAnimation }),
     reminders,
   };
 }

@@ -322,6 +322,35 @@ describe("featureSettingsView", () => {
     assert.equal(featureSettingsView(OWNED, [remindersPackage]).remindersConfigured, false);
   });
 
+  it("offers the opening animation switch to a granting package, on unless the owner stored it off (F10; L14.2, L14.3)", () => {
+    const animationPackage = creatorPackage(PACKAGE_ID, ["OPENING_ANIMATION"]);
+    const off: OwnedInvitation = {
+      ...OWNED,
+      featureSettings: { ...OWNED.featureSettings, openingAnimation: false },
+    };
+
+    const granted = featureSettingsView(OWNED, [animationPackage]);
+
+    assert.equal(granted.showOpeningAnimation, true);
+    // The column's default is true, so an invitation that never touched the switch plays the animation.
+    assert.equal(granted.openingAnimation, true);
+    assert.equal(featureSettingsView(off, [animationPackage]).openingAnimation, false);
+
+    // A package without the key, and a catalog that could not be read, offer no switch at all.
+    assert.equal(featureSettingsView(OWNED, [BASIC]).showOpeningAnimation, false);
+    assert.equal(featureSettingsView(OWNED, undefined).showOpeningAnimation, false);
+
+    // A body written before the column existed carries no switch, and the editor shows the column's default.
+    const legacy: OwnedInvitation = {
+      ...OWNED,
+      featureSettings: { whatsappPhone: "+525512345678", playlistUrl: null },
+    };
+    assert.equal(featureSettingsView(legacy, [animationPackage]).openingAnimation, true);
+
+    assert.equal(FEATURE_COPY.openingAnimationLabel, "Animación de apertura");
+    assert.match(FEATURE_COPY.openingAnimationHint, /sobre/);
+  });
+
   it("names the reminder copy in Spanish (F6; L9.5, L9.6)", () => {
     assert.equal(FEATURE_COPY.remindersTitle, "Recordatorios por WhatsApp");
     assert.equal(FEATURE_COPY.remindersInactiveTitle, "Aún no está activo");

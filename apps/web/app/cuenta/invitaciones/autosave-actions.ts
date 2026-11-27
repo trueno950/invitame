@@ -128,6 +128,11 @@ export async function autosaveFeaturesAction(
           // The livestream is part of the same whole, so a save of another field carries the stored link through (F9;
           // L12.1).
           livestream: read.value.featureSettings.livestream ?? null,
+          // The opening animation switch is part of it too (F10; L14.3): saving the zone or the phone never switches off
+          // an animation the owner kept on, and a body written before the column existed keeps it out of the write.
+          ...(read.value.featureSettings.openingAnimation === undefined
+            ? {}
+            : { openingAnimation: read.value.featureSettings.openingAnimation }),
           // The reminder switches are part of it too (F6; L9.1): saving the zone or the phone never switches a reminder
           // off that the owner stored.
           reminders: read.value.featureSettings.reminders ?? null,

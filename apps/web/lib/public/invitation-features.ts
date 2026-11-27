@@ -17,10 +17,16 @@ import {
 } from "../invitation-features/invitation-features.ts";
 import type { ItineraryMoment } from "../invitation-features/itinerary.ts";
 import type { Livestream } from "../invitation-features/livestream.ts";
+import {
+  type OpeningAnimationCard,
+  openingAnimationCard,
+  openingAnimationTheme,
+} from "../invitation-features/opening-animation.ts";
 import type { Lodging } from "../invitation-features/lodging.ts";
 import type { MusicLink } from "../invitation-features/music.ts";
 import { confirmedPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isSupportedTimeZone, startInstant } from "../invitation-features/start-instant.ts";
+import type { InvitationTheme } from "../renderers/theme-tokens.ts";
 import type { PublicInvitation } from "../server/public-invitations-api.ts";
 import { publicInvitationPath } from "./invitation-page.ts";
 
@@ -256,6 +262,45 @@ export function publicFeatureBlock(
   return parts === undefined
     ? undefined
     : { ...parts, calendarHref: invitationCalendarPath(invitation.slug) };
+}
+
+/**
+ * The envelope the guest page draws before showing a published invitation (F10; S2.10, L14.2): the card's two lines, the
+ * theme of the invitation's own design, and whether the API said it plays. It is undefined unless all of them are there
+ * — the read said it plays, the layout's theme is one this deployment knows, and the celebration has a title — so a page
+ * this deployment cannot draw an envelope for shows the invitation directly.
+ */
+export interface OpeningAnimationBlock {
+  readonly card: OpeningAnimationCard;
+  readonly theme: InvitationTheme;
+}
+
+/** The envelope of one published invitation, or undefined when it must not or cannot be drawn (F10; L14.2). */
+export function openingAnimationBlock(invitation: {
+  readonly componentKey: string;
+  readonly configuration: unknown;
+  readonly content: unknown;
+  readonly hiddenFields?: readonly string[];
+  readonly plays: boolean;
+}): OpeningAnimationBlock | undefined {
+  if (!invitation.plays) {
+    return undefined;
+  }
+
+  const theme = openingAnimationTheme(invitation.componentKey, invitation.configuration);
+
+  if (theme === undefined) {
+    return undefined;
+  }
+
+  const facts = factsOf({
+    componentKey: invitation.componentKey,
+    content: invitation.content,
+    ...(invitation.hiddenFields === undefined ? {} : { hiddenFields: invitation.hiddenFields }),
+  });
+  const card = openingAnimationCard(facts?.title);
+
+  return card === undefined ? undefined : { card, theme };
 }
 
 /**

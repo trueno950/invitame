@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { InvitationFeaturesBlock } from "../../app/_components/invitation-features/invitation-features-block.ts";
 import type { EventFacts } from "./event-facts.ts";
 import { LIVESTREAM_IFRAME_SANDBOX, LIVESTREAM_IFRAME_TITLE } from "./livestream.ts";
+import { OPENING_ANIMATION_DURATION_MS } from "./opening-animation.ts";
 import type {
   GuestPassBlockView,
   InvitationFeatures,
@@ -742,6 +743,111 @@ describe("«Míralo en vivo» in the features block (F9; L12.3, L12.4, L12.5)", 
   });
 });
 
+describe("the envelope of the opening animation (F10; L14.2, L14.5)", () => {
+  /** The island source, which is the only place the envelope's layers and their moves live. */
+  function islandSource(): string {
+    const island = featuresSources().find(({ file }) =>
+      file.endsWith("opening-animation-island.ts"),
+    );
+
+    assert.ok(island !== undefined, "the island source is readable");
+    return island.source;
+  }
+
+  /** The opening animation's keyframes, which are global because they are shared by the envelope's layers. */
+  function openingKeyframes(): string {
+    return readFileSync(fileURLToPath(new URL("../../app/globals.css", import.meta.url)), "utf8");
+  }
+
+  /** One millisecond timing of an animation the island starts, as `duration + delay`. */
+  function animationEnd(source: string, name: string): number {
+    const timing = new RegExp(`inv-opening-${name} (\\d+)ms .+? (\\d+)ms`).exec(source);
+
+    assert.ok(timing !== null, `${name} has a timing`);
+    return Number(timing[1]) + Number(timing[2]);
+  }
+
+  it("centers the envelope on both axes of the viewport", () => {
+    const island = islandSource();
+    const stage = /const STAGE = "([^"]+)"/.exec(island)?.[1] ?? "";
+
+    assert.ok(stage.includes("items-center"), "the stage centers the envelope vertically");
+    assert.ok(stage.includes("justify-center"), "the stage centers the envelope horizontally");
+    // Nothing pins the body to the bottom edge, which is what left it under the vertical center before.
+    assert.doesNotMatch(island, /bottom-1\/4|inset-x-4 bottom/);
+  });
+
+  it("hinges the flap on the envelope's top edge, facing away, so it opens upward", () => {
+    const island = islandSource();
+    const css = openingKeyframes();
+
+    assert.match(island, /transformOrigin: "top center"/);
+    assert.match(island, /backfaceVisibility: "hidden"/);
+    assert.match(
+      css,
+      /@keyframes inv-opening-flap-open \{\s*from \{\s*transform: rotateX\(0deg\);\s*\}\s*to \{\s*transform: rotateX\(-180deg\);/,
+    );
+  });
+
+  it("paints the layers in order: back, flap, card, front pocket, seal", () => {
+    const island = islandSource();
+    const order = ["back", "flap", "card", "front", "seal"].map((part) => {
+      const index = island.indexOf(`"data-opening-animation-part": "${part}"`);
+
+      assert.notEqual(index, -1, `${part} is drawn`);
+      return index;
+    });
+
+    assert.deepEqual(
+      [...order].sort((left, right) => left - right),
+      order,
+    );
+  });
+
+  it("starts the card below the mouth, so the closed flap hides it and it rises from inside", () => {
+    const island = islandSource();
+    const mouth = /const FRONT_MOUTH = "polygon\(0 0, 50% (\d+)%, 100% 0/.exec(island)?.[1] ?? "";
+    const cardTop =
+      /top: "(\d+)%",\s*bottom: "[^"]+",\s*borderRadius: "12px"/.exec(island)?.[1] ?? "";
+
+    assert.ok(Number(cardTop) > Number(mouth), `card top ${cardTop}% below mouth ${mouth}%`);
+    assert.match(
+      openingKeyframes(),
+      /@keyframes inv-opening-card-rise \{\s*from \{\s*transform: translateY\(0\);\s*\}/,
+    );
+  });
+
+  it("fades the seal out and only then opens the flap, so the seal never travels with it", () => {
+    const island = islandSource();
+    const css = openingKeyframes();
+
+    assert.match(
+      css,
+      /@keyframes inv-opening-seal-fade \{\s*from \{\s*opacity: 1;\s*\}\s*to \{\s*opacity: 0;/,
+    );
+    assert.ok(animationEnd(island, "seal-fade") <= animationEnd(island, "flap-open"));
+    assert.ok(animationEnd(island, "flap-open") <= animationEnd(island, "card-rise"));
+    assert.ok(animationEnd(island, "card-rise") <= animationEnd(island, "envelope-drop"));
+    assert.ok(animationEnd(island, "envelope-drop") <= OPENING_ANIMATION_DURATION_MS);
+  });
+
+  it("drops the back, the flap and the front pocket on one shared animation, leaving no body behind", () => {
+    const island = islandSource();
+
+    assert.match(island, /const ENVELOPE_DROP = "inv-opening-envelope-drop [^"]+";/);
+    assert.equal(island.match(/animation: ENVELOPE_DROP/g)?.length, 3);
+  });
+
+  it("draws every part with the theme's variables and nothing else", () => {
+    const island = islandSource();
+    const withoutComments = island.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+    assert.doesNotMatch(withoutComments, /#[0-9a-fA-F]{3,8}\b/);
+    assert.doesNotMatch(withoutComments, /\b(?:rgb|rgba|hsl|hsla)\(/);
+    assert.match(island, /const FLAP = `var\(\$\{THEME_VARIABLES\.decorationTwo\}\)`/);
+  });
+});
+
 describe("features block rendering rules", () => {
   const ALL_ON = featuresOf({
     countdown: true,
@@ -831,7 +937,7 @@ describe("features block rendering rules", () => {
     assert.doesNotMatch(island.source, /\banimate-|\btransition-|animation:/);
   });
 
-  it("keeps the invitation's client components to the five deliberate islands", () => {
+  it("keeps the invitation's client components to the six deliberate islands", () => {
     const clientComponents = [...featuresSources(), ...rendererSources()].filter(({ source }) =>
       /^\s*["']use client["'];?/m.test(source),
     );
@@ -849,6 +955,9 @@ describe("features block rendering rules", () => {
         // The livestream player is the fifth deliberate island (F9; L12.4): it inserts the frame only after the guest
         // taps the facade, which is a real link to the stream when no script runs.
         "_components/invitation-features/livestream-player-island.ts",
+        // The opening animation is the sixth deliberate island (F10; L14.2): it draws nothing on the server, decides once
+        // in the browser, and covers the invitation for about three seconds or not at all.
+        "_components/invitation-features/opening-animation-island.ts",
         // The map is the second deliberate island (S1, S2): it loads only when a guest scrolls it into view.
         "_components/invitation-features/place-map-island.ts",
       ],

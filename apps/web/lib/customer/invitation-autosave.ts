@@ -279,6 +279,7 @@ export const FEATURE_CHANGE_FIELDS = [
   "giftRegistry",
   "lodging",
   "livestream",
+  "openingAnimation",
 ] as const;
 
 /** The feature data one autosave asks to change; a key left out is a field the creator did not touch. */
@@ -294,6 +295,8 @@ export interface FeatureChanges {
   readonly lodging?: LodgingDraft | null;
   /** The livestream as the editor holds it, or null when the owner cleared it (F9; L12.1). */
   readonly livestream?: LivestreamDraft | null;
+  /** The opening animation switch the owner flipped (F10; L14.3). */
+  readonly openingAnimation?: boolean;
   /** The reminder switches as the editor holds them (F6; L9.1). */
   readonly reminders?: RemindersDraft;
 }
@@ -558,6 +561,7 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
     giftRegistry?: GiftRegistryDraft | null;
     lodging?: LodgingDraft | null;
     livestream?: LivestreamDraft | null;
+    openingAnimation?: boolean;
     reminders?: RemindersDraft;
   } = {};
 
@@ -624,6 +628,16 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
       changes.livestream = livestream;
       continue;
     }
+    if (name === "openingAnimation") {
+      // A switch only holds a boolean, so a value no switch could have written is refused with the generic sentence
+      // instead of guessing a state (F10; L14.3).
+      if (typeof value !== "boolean") {
+        issues.push({ field: name, message: FEATURE_ISSUE_COPY.other });
+        continue;
+      }
+      changes.openingAnimation = value;
+      continue;
+    }
     if (name === "reminders") {
       const reminders = readRemindersDraft(value);
       if (reminders === undefined) {
@@ -655,6 +669,10 @@ export function mergeFeatureChanges(
   let lodging = stored.lodging;
   let livestream = stored.livestream;
   let reminders = stored.reminders ?? null;
+  // The opening animation switch follows the same rule (F10; L14.3): a save of another field carries the stored one, and a
+  // body that never carried it — an API written before the column existed — keeps it out of the write, which the API
+  // reads as "keep the stored one".
+  const openingAnimation = changes.openingAnimation ?? stored.openingAnimation;
 
   if (Object.hasOwn(changes, "livestream")) {
     // A livestream the contract refuses is left out of the change instead of clearing what is stored (F9; L12.1).
@@ -714,6 +732,7 @@ export function mergeFeatureChanges(
     giftRegistry,
     ...(lodging === undefined ? {} : { lodging }),
     ...(livestream === undefined ? {} : { livestream }),
+    ...(openingAnimation === undefined ? {} : { openingAnimation }),
     reminders,
   };
 }

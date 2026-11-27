@@ -499,6 +499,8 @@ export function EditorShell({
     giftRegistry: featureView.giftRegistry,
     lodging: featureView.lodging,
     livestream: featureView.livestream,
+    // The opening animation switch starts from what the invitation stores, on by default (F10; L14.3).
+    openingAnimation: featureView.openingAnimation,
     reminders: featureView.reminders,
   }));
   const [rsvp, setRsvp] = useState<RsvpValues>(() => ({

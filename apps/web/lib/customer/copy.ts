@@ -720,6 +720,15 @@ export const FEATURE_COPY = {
     "Una línea que tus invitados verán bajo el reproductor, por ejemplo la hora de inicio.",
   livestreamArchivedNote:
     "La transmisión se guarda con la invitación, así que puedes consultarla aquí aunque ya no se pueda editar.",
+  /** The opening animation switch of «Funciones» (F10; L14.3). */
+  openingAnimationTitle: "Animación de apertura",
+  openingAnimationLabel: "Animación de apertura",
+  openingAnimationHint:
+    "Tus invitados ven un sobre con sello que se abre y descubre la invitación. Se ve una sola vez por sesión y se puede saltar con un toque.",
+  openingAnimationOn: "Activada",
+  openingAnimationOff: "Desactivada",
+  openingAnimationArchivedNote:
+    "La animación se guarda con la invitación, así que puedes consultarla aquí aunque ya no se pueda editar.",
   archivedNote:
     "Esta invitación está archivada: puedes consultar sus funcionalidades, pero ya no editarlas.",
 } as const;

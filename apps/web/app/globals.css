@@ -185,3 +185,62 @@
     scroll-behavior: auto;
   }
 }
+
+/*
+ * The opening animation of a guest invitation (F10; S2.10, L14.2): the moves of
+ * `design/opening-animation/01-sobre-con-sello.html`, brought together in about three seconds and split into the parts
+ * that each layer can animate. They are `transform` and `opacity` only, so the browser composites them; the guest who
+ * asks for reduced motion never receives the overlay at all (the island decides that in the browser), and the global
+ * reduced-motion rule above is the second half of that promise. The colors and the faces come from the invitation's own
+ * theme, set as `--inv-*` on the overlay.
+ *
+ * The envelope is centered; the seal fades first; the flap lifts away from the envelope's top edge with its back face
+ * hidden; the card rises from inside the mouth while the front pocket keeps covering its lower part; the back, the flap,
+ * and the front pocket drop together as one envelope; and the overlay fades to the invitation it covers.
+ */
+@keyframes inv-opening-seal-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes inv-opening-flap-open {
+  from {
+    transform: rotateX(0deg);
+  }
+  to {
+    transform: rotateX(-180deg);
+  }
+}
+
+@keyframes inv-opening-card-rise {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-160%);
+  }
+}
+
+@keyframes inv-opening-envelope-drop {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(60vh);
+  }
+}
+
+@keyframes inv-opening-overlay-fade {
+  to {
+    opacity: 0;
+  }
+}

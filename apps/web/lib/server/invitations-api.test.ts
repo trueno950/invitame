@@ -69,6 +69,8 @@ const OWNED = {
     lodging: null,
     // The livestream the owner stored (F9; L12.1); null while the invitation has none.
     livestream: null,
+    // The opening animation switch (F10; L14.3): true by default, so a new invitation plays the envelope.
+    openingAnimation: true,
     // The reminder switches (F6; L9.1): null while the owner switched nothing on.
     reminders: null,
   },
@@ -92,6 +94,7 @@ const FEATURED = {
     giftRegistry: null,
     lodging: null,
     livestream: null,
+    openingAnimation: true,
     reminders: null,
   },
   remindersConfigured: false,
@@ -1164,6 +1167,30 @@ describe("validators", () => {
         undefined,
         JSON.stringify(broken),
       );
+    }
+  });
+
+  it("reads the stored opening animation switch, keeps an absent one absent, and refuses another shape (F10; L14.3, L20)", () => {
+    const parse = (featureSettings: unknown) =>
+      parseOwnedInvitation({ ...OWNED, featureSettings })?.featureSettings;
+    const base = {
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+      lodging: null,
+      livestream: null,
+      reminders: null,
+    };
+
+    // The switch the owner stored reaches the editor, so it shows the state the guest page will use.
+    assert.equal(parse({ ...base, openingAnimation: true })?.openingAnimation, true);
+    assert.equal(parse({ ...base, openingAnimation: false })?.openingAnimation, false);
+    // A body written before the column existed carries no switch, and the editor then shows the column's default.
+    assert.equal(Object.hasOwn(parse(base) ?? {}, "openingAnimation"), false);
+    // A switch that is not a boolean is not this contract, so the read refuses instead of guessing a state.
+    for (const broken of ["sí", 1, null, {}]) {
+      assert.equal(parse({ ...base, openingAnimation: broken }), undefined, JSON.stringify(broken));
     }
   });
 

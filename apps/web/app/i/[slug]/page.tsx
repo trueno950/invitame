@@ -5,11 +5,15 @@ import { connection } from "next/server";
 import { PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
 import { guestAlbumNotice, publicGuestAlbumBlock } from "../../../lib/public/guest-album.ts";
 import { guestbookNotice, publicGuestbookBlock } from "../../../lib/public/guestbook.ts";
-import { publicFeatureBlock } from "../../../lib/public/invitation-features.ts";
+import {
+  openingAnimationBlock,
+  publicFeatureBlock,
+} from "../../../lib/public/invitation-features.ts";
 import { invitationMetadata } from "../../../lib/public/invitation-page.ts";
 import { rendererAcceptsProps } from "../../../lib/public/invitation-render.ts";
 import { publicRsvpBlock, rsvpNotice } from "../../../lib/public/invitation-rsvp.ts";
 import { findRenderer } from "../../../lib/renderers/registry.ts";
+import { OpeningAnimationIsland } from "../../_components/invitation-features/opening-animation-island.ts";
 import { GuestInvitation } from "./_components/guest-invitation.tsx";
 import { InvitationMessage } from "./_components/invitation-message.tsx";
 import {
@@ -137,23 +141,43 @@ export default async function PublicInvitationPage({
   const signatureNotice = guestbookNotice(parameters);
   const photoNotice = guestAlbumNotice(parameters);
 
+  // The envelope of the opening animation (F10; L14.1, L14.2): a client-only overlay that the server never draws, so a
+  // guest without script reads the invitation directly. It is absent when the API did not say it plays.
+  const opening = openingAnimationBlock({
+    componentKey: invitation.componentKey,
+    configuration: invitation.configuration,
+    content: invitation.content,
+    hiddenFields: invitation.hiddenFields,
+    plays: invitation.features.openingAnimation,
+  });
+
   // The invitation itself is the guest view the owner's preview renders too (T2b), with the notice of this page.
   return (
-    <GuestInvitation
-      componentKey={invitation.componentKey}
-      configuration={invitation.configuration}
-      content={invitation.content}
-      hiddenFields={invitation.hiddenFields}
-      {...(block === undefined
-        ? {}
-        : { features: block.features, calendarHref: block.calendarHref })}
-      {...(notice === undefined ? {} : { notice: <RsvpNoticeNote notice={notice} /> })}
-      {...(signatureNotice === undefined
-        ? {}
-        : { signatureNotice: <GuestbookNoticeNote notice={signatureNotice} /> })}
-      {...(photoNotice === undefined
-        ? {}
-        : { photoNotice: <GuestAlbumNoticeNote notice={photoNotice} /> })}
-    />
+    <>
+      {opening === undefined ? null : (
+        <OpeningAnimationIsland
+          card={opening.card}
+          invitationSlug={invitation.slug}
+          plays
+          theme={opening.theme}
+        />
+      )}
+      <GuestInvitation
+        componentKey={invitation.componentKey}
+        configuration={invitation.configuration}
+        content={invitation.content}
+        hiddenFields={invitation.hiddenFields}
+        {...(block === undefined
+          ? {}
+          : { features: block.features, calendarHref: block.calendarHref })}
+        {...(notice === undefined ? {} : { notice: <RsvpNoticeNote notice={notice} /> })}
+        {...(signatureNotice === undefined
+          ? {}
+          : { signatureNotice: <GuestbookNoticeNote notice={signatureNotice} /> })}
+        {...(photoNotice === undefined
+          ? {}
+          : { photoNotice: <GuestAlbumNoticeNote notice={photoNotice} /> })}
+      />
+    </>
   );
 }

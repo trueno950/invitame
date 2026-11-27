@@ -9,7 +9,10 @@ import type { GuestPageBlockView } from "../../../../../lib/invitation-features/
 import { checkInUrl } from "../../../../../lib/public/guest-pass.ts";
 import { guestAlbumNotice, publicGuestAlbumBlock } from "../../../../../lib/public/guest-album.ts";
 import { guestbookNotice, publicGuestbookBlock } from "../../../../../lib/public/guestbook.ts";
-import { publicFeatureBlock } from "../../../../../lib/public/invitation-features.ts";
+import {
+  openingAnimationBlock,
+  publicFeatureBlock,
+} from "../../../../../lib/public/invitation-features.ts";
 import {
   guestGreeting,
   guestPassView,
@@ -20,6 +23,7 @@ import { rendererAcceptsProps } from "../../../../../lib/public/invitation-rende
 import { rsvpNotice } from "../../../../../lib/public/invitation-rsvp.ts";
 import { findRenderer } from "../../../../../lib/renderers/registry.ts";
 import { requestOrigin } from "../../../../../lib/server/request-origin.ts";
+import { OpeningAnimationIsland } from "../../../../_components/invitation-features/opening-animation-island.ts";
 import { textButton } from "../../../../_components/ui.ts";
 import { InvitationMessage } from "../../_components/invitation-message.tsx";
 import {
@@ -159,8 +163,26 @@ export default async function GuestInvitationPage({
   const signatureNotice = guestbookNotice(parameters);
   const photoNotice = guestAlbumNotice(parameters);
 
+  // The envelope of the opening animation (F10; L14.1, L14.2), the same overlay the public page draws: this page is the
+  // guest's own link to the same published invitation, so it opens the same way.
+  const opening = openingAnimationBlock({
+    componentKey: invitation.componentKey,
+    configuration: invitation.configuration,
+    content: invitation.content,
+    hiddenFields: invitation.hiddenFields,
+    plays: invitation.features.openingAnimation,
+  });
+
   return (
     <main className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10">
+      {opening === undefined ? null : (
+        <OpeningAnimationIsland
+          card={opening.card}
+          invitationSlug={invitation.slug}
+          plays
+          theme={opening.theme}
+        />
+      )}
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
         {notice === undefined ? null : <RsvpNoticeNote notice={notice} />}
         {signatureNotice === undefined ? null : <GuestbookNoticeNote notice={signatureNotice} />}

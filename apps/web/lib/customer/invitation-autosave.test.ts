@@ -763,6 +763,60 @@ describe("a livestream autosave (F9; L12.1)", () => {
   });
 });
 
+describe("an opening animation autosave (F10; L14.3)", () => {
+  it("sends the switch the owner flipped, and carries the stored one through a save of another field", () => {
+    const stored = { ...STORED_FEATURES, openingAnimation: true };
+    const off = parseFeatureChanges({ openingAnimation: false });
+
+    assert.equal(off.ok, true);
+    assert.deepEqual(off.ok ? mergeFeatureChanges(stored, off.changes) : undefined, {
+      timeZone: "America/Mexico_City",
+      whatsappPhone: "+525512345678",
+      playlistUrl: STORED_FEATURES.playlistUrl,
+      itinerary: STORED_FEATURES.itinerary,
+      giftRegistry: null,
+      lodging: null,
+      livestream: null,
+      openingAnimation: false,
+      reminders: null,
+    });
+
+    // A save of another field carries the stored switch instead of clearing it: the PUT replaces everything (L14.3).
+    const kept = parseFeatureChanges({ timeZone: "America/Tijuana" });
+    assert.deepEqual(kept.ok ? mergeFeatureChanges(stored, kept.changes) : undefined, {
+      timeZone: "America/Tijuana",
+      whatsappPhone: "+525512345678",
+      playlistUrl: STORED_FEATURES.playlistUrl,
+      itinerary: STORED_FEATURES.itinerary,
+      giftRegistry: null,
+      lodging: null,
+      livestream: null,
+      openingAnimation: true,
+      reminders: null,
+    });
+
+    // A body that never carried the switch keeps it out of the write, so the API keeps what it stores.
+    const legacy = parseFeatureChanges({ timeZone: "America/Cancun" });
+
+    assert.equal(
+      Object.hasOwn(
+        mergeFeatureChanges(STORED_FEATURES, legacy.ok ? legacy.changes : {}),
+        "openingAnimation",
+      ),
+      false,
+    );
+  });
+
+  it("refuses a switch value no control could have written (F10; L14.3)", () => {
+    for (const openingAnimation of ["true", 1, null, {}]) {
+      assert.deepEqual(parseFeatureChanges({ openingAnimation }), {
+        ok: false,
+        fieldIssues: [{ field: "openingAnimation", message: FEATURE_ISSUE_COPY.other }],
+      });
+    }
+  });
+});
+
 describe("an RSVP autosave merges only the changed fields (S2, S4)", () => {
   it("keeps the stored deadline when only the party limit changes", () => {
     const parsed = parseRsvpChanges({ partyLimit: 6 });
