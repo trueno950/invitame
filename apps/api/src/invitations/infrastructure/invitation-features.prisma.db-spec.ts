@@ -11,6 +11,7 @@ import { InvitationNotEditableError } from "../domain/invitation.errors";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationLodging } from "../domain/invitation-lodging";
+import type { InvitationLivestream } from "../domain/invitation-livestream";
 import type { InvitationReminders } from "../domain/invitation-reminders";
 import { CatalogInvitationReader } from "./catalog-invitation-reader";
 import { PrismaInvitationRepository } from "./prisma-invitation.repository";
@@ -63,6 +64,13 @@ const LODGING: InvitationLodging = {
     { name: "City Express", address: "Blvd. Bernardo Quintana 45" },
   ],
   transport: "Habrá camión del hotel al salón a las 19:00 y de regreso a la 1:00.",
+};
+
+/** One livestream with the note the card draws under the player (F9; L12.1). */
+const LIVESTREAM: InvitationLivestream = {
+  version: 1,
+  url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  note: "Inicia a las 17:00 h",
 };
 
 /** The feature keys of every seeded package (prisma/catalog-seed.ts), which is what gating intersects with S4. */
@@ -492,6 +500,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       assert.equal(stored?.playlistTitle, PLAYLIST_TITLE);
@@ -513,6 +522,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       assert.equal(cleared?.playlistTitle, null);
@@ -610,6 +620,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -646,6 +657,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -658,6 +670,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -681,6 +694,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -717,6 +731,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       assert.equal(cleared?.itinerary, null);
@@ -761,6 +776,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: GIFT_REGISTRY,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -802,6 +818,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       assert.equal(cleared?.giftRegistry, null);
@@ -837,6 +854,29 @@ describe("invitation feature data (real PostgreSQL)", () => {
       assert.equal(granted.includes("basic"), false, "basic does not grant LODGING");
     });
 
+    it("adds a nullable livestream JSONB column and grants LIVESTREAM to Premium and Deluxe only (F9; L12.1, L12.2)", async () => {
+      const columns = await prisma.$queryRaw<Array<{ is_nullable: string; data_type: string }>>`
+        SELECT is_nullable, data_type
+        FROM information_schema.columns
+        WHERE table_name = 'InvitationFeatureSettings' AND column_name = 'livestream'
+      `;
+
+      // Additive and nullable: every row written before the migration reads NULL and renders today's page.
+      assert.deepEqual(columns, [{ is_nullable: "YES", data_type: "jsonb" }]);
+
+      const rows = await prisma.packageFeature.findMany({
+        where: { feature: { key: "LIVESTREAM" } },
+        select: { package: { select: { key: true } } },
+      });
+      // Premium and Deluxe grant it; the seeded Basic does not. Other rows of a shared database may grant it too, so
+      // the assertion names the two seeded links instead of the whole list.
+      const granted = rows.map((row) => row.package.key);
+
+      assert.ok(granted.includes("premium"), "premium grants LIVESTREAM");
+      assert.ok(granted.includes("deluxe"), "deluxe grants LIVESTREAM");
+      assert.equal(granted.includes("basic"), false, "basic does not grant LIVESTREAM");
+    });
+
     it("stores the lodging payload and reads it back, and shows none for a row written around the API (F4; L7.1)", async () => {
       const { invitation } = await newDraft(SEEDED_PACKAGE_FEATURES.premium);
       const written = await repository.updateFeatures(invitation.ownerId, invitation.id, {
@@ -848,6 +888,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: LODGING,
+        livestream: null,
         reminders: null,
       });
 
@@ -883,6 +924,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       assert.equal(cleared?.lodging, null);
@@ -892,6 +934,68 @@ describe("invitation feature data (real PostgreSQL)", () => {
           select: { lodging: true },
         }),
         { lodging: null },
+      );
+    });
+
+    it("stores the livestream payload and reads it back, and shows none for a row written around the API (F9; L12.1)", async () => {
+      const { invitation } = await newDraft(SEEDED_PACKAGE_FEATURES.premium);
+      const written = await repository.updateFeatures(invitation.ownerId, invitation.id, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: LIVESTREAM,
+        reminders: null,
+      });
+
+      assert.deepEqual(written?.livestream, LIVESTREAM);
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { livestream: true },
+        }),
+        { livestream: LIVESTREAM },
+      );
+
+      // A row written around the API — a link that is not https — reads as no livestream instead of reaching a guest.
+      await prisma.invitationFeatureSettings.update({
+        where: { invitationId: invitation.id },
+        data: {
+          livestream: {
+            version: 1,
+            url: "http://youtu.be/dQw4w9WgXcQ",
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      assert.equal(
+        (await repository.findOwned(invitation.ownerId, invitation.id))?.livestream,
+        null,
+      );
+
+      // Clearing writes SQL NULL, which is what "no livestream" is.
+      const cleared = await repository.updateFeatures(invitation.ownerId, invitation.id, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: null,
+        reminders: null,
+      });
+      assert.equal(cleared?.livestream, null);
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { livestream: true },
+        }),
+        { livestream: null },
       );
     });
 
@@ -906,6 +1010,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       await repository.archive(invitation.ownerId, invitation.id);
@@ -920,6 +1025,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         }),
         InvitationNotEditableError,
@@ -950,6 +1056,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            livestream: null,
             reminders: null,
           }),
           null,
@@ -979,6 +1086,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary?: InvitationItinerary | null;
         giftRegistry?: InvitationGiftRegistry | null;
         lodging?: InvitationLodging | null;
+        livestream?: InvitationLivestream | null;
         reminders?: InvitationReminders | null;
       } | null,
     ) {
@@ -990,6 +1098,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
           ...features,
         });
@@ -1012,6 +1121,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           itinerary: ITINERARY,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         });
 
@@ -1035,6 +1145,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
             giftRegistry: packageKey === "deluxe",
             giftRegistryDetails: null,
             lodging: null,
+            livestream: null,
             // Premium and Deluxe grant the guestbook, so their wall is an empty list (F7; L10.2, L10.4).
             guestbook: packageKey === "basic" ? null : [],
             // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
@@ -1098,6 +1209,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        livestream: null,
         guestbook: [],
         guestAlbum: null,
         gallery: [],
@@ -1124,6 +1236,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: true,
         giftRegistryDetails: null,
         lodging: null,
+        livestream: null,
         guestbook: [],
         guestAlbum: { photos: [], count: 0 },
         gallery: [],
@@ -1141,6 +1254,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1157,6 +1271,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        livestream: null,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1187,6 +1302,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "guestAlbum",
         "guestbook",
         "itinerary",
+        "livestream",
         "lodging",
         "map",
         "music",

@@ -408,6 +408,8 @@ model Invitation {
 // inserts the `LODGING` catalog feature row and its links to the premium and deluxe packages.
 // Migration 20261207120000_add_whatsapp_reminders adds the nullable `reminders` JSONB column, the `ReminderDelivery`
 // table, and the `WHATSAPP_REMINDERS` catalog feature row with its link to the deluxe package.
+// Migration 20261211120000_add_invitation_livestream adds the nullable `livestream` JSONB column, and the same
+// migration inserts the `LIVESTREAM` catalog feature row and its links to the premium and deluxe packages.
 model InvitationFeatureSettings {
   invitationId     String   @id @db.Uuid
   // E.164: `+` and eight to fifteen digits. Null while the owner has not set one (S4).
@@ -448,6 +450,13 @@ model InvitationFeatureSettings {
   // provider, no credential, and no delivery state. The domain (`domain/invitation-reminders.ts`) is the authority on
   // the shape, the column stores it as JSONB, and every attempt lives in `ReminderDelivery` instead.
   reminders        Json?    @db.JsonB
+  // The livestream of the celebration (F9; S2.9, L12.1): the versioned presentation payload
+  // `{ "version": 1, "url": "https://…", "note"? }` with an `https` link of at most 500 characters and an optional note
+  // of at most 120, or NULL while the owner has not pasted one. Bounded, versioned, presentation data only: no embed
+  // markup, no provider payload, no query-critical field. The domain (`domain/invitation-livestream.ts`) is the authority
+  // on the shape and on which link may be embedded; the column stores it as JSONB and nothing else, and no CHECK can
+  // state it.
+  livestream       Json?    @db.JsonB
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 

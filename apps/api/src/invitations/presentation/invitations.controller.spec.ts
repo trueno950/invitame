@@ -108,6 +108,7 @@ import type { PlaylistMetadata } from "../domain/invitation-features";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationLodging } from "../domain/invitation-lodging";
+import type { InvitationLivestream } from "../domain/invitation-livestream";
 import type { InvitationReminders } from "../domain/invitation-reminders";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
@@ -152,6 +153,8 @@ const QR_PASS_PACKAGE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ITINERARY_PACKAGE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 /** An ACTIVE package that grants `LODGING` and no other implemented key: hotels and transport (F4; L7.2). */
 const LODGING_PACKAGE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+/** An ACTIVE package that grants `LIVESTREAM` and no other implemented key: the transmission (F9; L12.2). */
+const LIVESTREAM_PACKAGE_ID = "abababab-abab-4bab-8bab-abababababab";
 /** An ACTIVE package that grants `GUESTBOOK` and no other implemented key: the wall of messages (F7; L10.2). */
 const GUESTBOOK_PACKAGE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 /** An ACTIVE package that grants `GUEST_ALBUM` and no other implemented key: the guests' photos (F8; L11.2). */
@@ -182,6 +185,17 @@ const ITINERARY: InvitationItinerary = {
     { time: "17:00", title: "Misa", place: "Parroquia de San Juan", address: "Av. Juárez 45" },
     { time: "19:30", title: "Recepción y cóctel" },
   ],
+};
+/** One livestream with the note the artboard draws under the player (F9; L12.1). */
+const LIVESTREAM: InvitationLivestream = {
+  version: 1,
+  url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  note: "Inicia a las 17:00 h",
+};
+/** A livestream that is no YouTube link, so the guest may only open it in a new tab (F9; L12.3). */
+const LIVESTREAM_EXTERNAL: InvitationLivestream = {
+  version: 1,
+  url: "https://us02web.zoom.us/j/123456789",
 };
 const LODGING: InvitationLodging = {
   version: 1,
@@ -260,6 +274,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
@@ -367,6 +382,7 @@ class MemoryInvitationRepository implements InvitationRepository {
     row.itinerary = features.itinerary;
     row.giftRegistry = features.giftRegistry;
     row.lodging = features.lodging;
+    row.livestream = features.livestream;
     row.reminders = features.reminders;
     return structuredClone(row);
   }
@@ -494,6 +510,11 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     ],
     // The lodging key alone (F4; L7.2).
     [LODGING_PACKAGE_ID, { status: "ACTIVE", includedFeatureKeys: ["LODGING"], durationDays: 30 }],
+    // The livestream key alone (F9; L12.2).
+    [
+      LIVESTREAM_PACKAGE_ID,
+      { status: "ACTIVE", includedFeatureKeys: ["LIVESTREAM"], durationDays: 90 },
+    ],
     // The guestbook key alone (F7; L10.2).
     [
       GUESTBOOK_PACKAGE_ID,
@@ -1473,6 +1494,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
@@ -1649,6 +1671,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -1809,6 +1832,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1824,6 +1848,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
@@ -1846,6 +1871,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1858,6 +1884,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         });
 
@@ -1870,6 +1897,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.whatsappPhone, null);
@@ -1893,6 +1921,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1908,6 +1937,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       assert.deepEqual(musicMetadata.asked, [{ playlistUrl: PLAYLIST, provider: "spotify" }]);
@@ -1922,6 +1952,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1936,6 +1967,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1950,6 +1982,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
     });
@@ -1967,6 +2000,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1978,6 +2012,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1990,6 +2025,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       assert.equal(musicMetadata.asked.length, 1);
@@ -2006,6 +2042,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -2035,6 +2072,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -2192,6 +2230,109 @@ describe("invitations routes: /invitations", () => {
         ((await older.json()) as { featureSettings: Row }).featureSettings.lodging,
         LODGING,
       );
+    });
+
+    it("stores the livestream, answers it in the owner read, and keeps it when a body omits it (F9; L12.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        livestream: LIVESTREAM,
+      });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), OWNED_KEYS);
+      assert.deepEqual((body.featureSettings as Row).livestream, LIVESTREAM);
+      assert.deepEqual(repository.rows.find((row) => row.id === draft.id)?.livestream, LIVESTREAM);
+
+      // The owner read answers the same payload the write stored, so the editor can round-trip it.
+      const read = await send("GET", `${PATH}/${draft.id}`, cookie);
+      assert.equal(read.status, 200);
+      assert.deepEqual(
+        ((await read.json()) as { featureSettings: Row }).featureSettings.livestream,
+        LIVESTREAM,
+      );
+
+      // A client built before F9 omits the field, and the stored link stays (L20).
+      const older = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Tijuana",
+        whatsappPhone: null,
+        playlistUrl: null,
+      });
+
+      assert.equal(older.status, 200);
+      assert.deepEqual(
+        ((await older.json()) as { featureSettings: Row }).featureSettings.livestream,
+        LIVESTREAM,
+      );
+
+      // Null and a payload without a link both clear it.
+      for (const cleared of [null, { version: 1, url: "" }]) {
+        await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+          timeZone: "America/Mexico_City",
+          whatsappPhone: null,
+          playlistUrl: null,
+          livestream: LIVESTREAM,
+        });
+
+        const clearing = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+          timeZone: "America/Mexico_City",
+          whatsappPhone: null,
+          playlistUrl: null,
+          livestream: cleared,
+        });
+
+        assert.equal(clearing.status, 200, JSON.stringify(cleared));
+        assert.equal(
+          ((await clearing.json()) as { featureSettings: Row }).featureSettings.livestream,
+          null,
+          JSON.stringify(cleared),
+        );
+        assert.equal(repository.rows.find((row) => row.id === draft.id)?.livestream, null);
+      }
+    });
+
+    it("refuses a livestream the contract does not allow and stores nothing (F9; L12.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: "+525512345678",
+        playlistUrl: null,
+        livestream: LIVESTREAM,
+      });
+      const before = structuredClone<InvitationRecordWithMusic | undefined>(
+        repository.rows.find((row) => row.id === draft.id),
+      );
+
+      for (const refused of [
+        { version: 2, url: LIVESTREAM.url },
+        { version: 1, url: "http://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+        { version: 1, url: LIVESTREAM.url, note: "n".repeat(121) },
+        { version: 1, url: 42 },
+        "https://youtu.be/dQw4w9WgXcQ",
+      ]) {
+        const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+          timeZone: "America/Tijuana",
+          whatsappPhone: "+525587654321",
+          playlistUrl: null,
+          livestream: refused,
+        });
+
+        assert.equal(response.status, 400, JSON.stringify(refused));
+        const body = (await response.json()) as { code: string; issues: string[] };
+        assert.equal(body.code, "INVALID_INVITATION_FEATURES");
+
+        // A refused request stores nothing: the link, the phone, and the zone are the ones already stored.
+        const stored = repository.rows.find((row) => row.id === draft.id);
+        assert.deepEqual(stored?.livestream, before?.livestream);
+        assert.equal(stored?.whatsappPhone, before?.whatsappPhone);
+        assert.equal(stored?.timeZone, before?.timeZone);
+      }
     });
 
     it("stores the reminder switches, answers them on the owner read, and reports the capability (F6; L9.1, L9.5)", async () => {
@@ -2394,6 +2535,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -2405,6 +2547,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         });
 
@@ -2417,6 +2560,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.playlistUrl, null);
@@ -2443,6 +2587,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            livestream: null,
             reminders: null,
           },
           [
@@ -2458,6 +2603,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            livestream: null,
             reminders: null,
           },
           ["whatsappPhone must be a string or null"],
@@ -2471,6 +2617,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            livestream: null,
             reminders: null,
           },
           ["playlistUrl must be an https link"],
@@ -2484,6 +2631,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            livestream: null,
             reminders: null,
           },
           ["playlistUrl must link to Spotify, Apple Music, YouTube, Deezer, or SoundCloud"],
@@ -2497,6 +2645,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            livestream: null,
             reminders: null,
           },
           ["playlistUrl must be a string or null"],
@@ -2510,6 +2659,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: { version: 2, items: [{ time: "17:00", title: "Misa" }] },
             giftRegistry: null,
             lodging: null,
+            livestream: null,
             reminders: null,
           },
           ["itinerary.version must be 1"],
@@ -2542,6 +2692,7 @@ describe("invitations routes: /invitations", () => {
             itinerary: null,
             giftRegistry: null,
             lodging: null,
+            livestream: null,
             reminders: null,
           },
           [
@@ -2622,6 +2773,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -2648,6 +2800,7 @@ describe("invitations routes: /invitations", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         });
 
@@ -3164,6 +3317,7 @@ describe("invitations routes: /invitations", () => {
       itinerary?: InvitationItinerary | null;
       giftRegistry?: InvitationGiftRegistry | null;
       lodging?: InvitationLodging | null;
+      livestream?: InvitationLivestream | null;
       reminders?: InvitationReminders | null;
       rsvpDeadline?: Date | null;
       rsvpPartyLimit?: number;
@@ -3190,6 +3344,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: overrides.itinerary ?? null,
         giftRegistry: overrides.giftRegistry ?? null,
         lodging: overrides.lodging ?? null,
+        livestream: overrides.livestream ?? null,
         reminders: overrides.reminders ?? null,
         rsvpDeadline: overrides.rsvpDeadline ?? null,
         rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
@@ -3232,6 +3387,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        livestream: null,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -3404,6 +3560,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        livestream: null,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -3440,6 +3597,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: true,
         giftRegistryDetails: null,
         lodging: null,
+        livestream: null,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -3456,6 +3614,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       const grantedResponse = await send("GET", `${PUBLIC_PATH}/${granted.slug}`);
@@ -3473,6 +3632,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: ITINERARY,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       const withheldBody = (await (
@@ -3527,11 +3687,73 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
       const emptyBody = (await (await send("GET", `${PUBLIC_PATH}/${empty.slug}`)).json()) as Row;
 
       assert.equal((emptyBody.features as Row).lodging, null);
+    });
+
+    it("answers the livestream with its video id only for a package that grants LIVESTREAM (F9; L12.2, L12.3, L22)", async () => {
+      const granted = seed({
+        slug: "invitacion-envi01",
+        status: "PUBLISHED",
+        packageId: LIVESTREAM_PACKAGE_ID,
+        livestream: LIVESTREAM,
+      });
+      const grantedResponse = await send("GET", `${PUBLIC_PATH}/${granted.slug}`);
+
+      assert.equal(grantedResponse.status, 200);
+      const grantedBody = (await grantedResponse.json()) as Row;
+      assert.deepEqual(Object.keys(grantedBody).sort(), PUBLIC_KEYS);
+      // The API resolves the id and the version stays in the API: the web builds the only embed origin it renders.
+      assert.deepEqual((grantedBody.features as Row).livestream, {
+        url: LIVESTREAM.url,
+        videoId: "dQw4w9WgXcQ",
+        note: "Inicia a las 17:00 h",
+      });
+
+      // A link this API does not embed is answered with no video id, so the guest only opens it (L12.3).
+      const external = seed({
+        slug: "invitacion-envi02",
+        status: "PUBLISHED",
+        packageId: LIVESTREAM_PACKAGE_ID,
+        livestream: LIVESTREAM_EXTERNAL,
+      });
+      const externalBody = (await (
+        await send("GET", `${PUBLIC_PATH}/${external.slug}`)
+      ).json()) as Row;
+
+      assert.deepEqual((externalBody.features as Row).livestream, {
+        url: LIVESTREAM_EXTERNAL.url,
+        videoId: null,
+        note: null,
+      });
+
+      // A package without the key keeps a stored link private, and a link the API does not store draws nothing.
+      const withheld = seed({
+        slug: "invitacion-envi03",
+        status: "PUBLISHED",
+        packageId: FEATURE_PACKAGE_ID,
+        livestream: LIVESTREAM,
+      });
+      const withheldBody = (await (
+        await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
+      ).json()) as Row;
+
+      assert.equal((withheldBody.features as Row).livestream, null);
+      assert.equal(JSON.stringify(withheldBody).includes("Inicia a las 17:00 h"), false);
+
+      const empty = seed({
+        slug: "invitacion-envi04",
+        status: "PUBLISHED",
+        packageId: LIVESTREAM_PACKAGE_ID,
+        livestream: null,
+      });
+      const emptyBody = (await (await send("GET", `${PUBLIC_PATH}/${empty.slug}`)).json()) as Row;
+
+      assert.equal((emptyBody.features as Row).livestream, null);
     });
 
     it("answers the gift registry only for a package that grants it and only while it shows something (F2; L4.3)", async () => {
@@ -3725,6 +3947,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        livestream: null,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -5952,6 +6175,7 @@ describe("invitations routes: /invitations", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
         rsvpDeadline: null,
         rsvpPartyLimit: 4,

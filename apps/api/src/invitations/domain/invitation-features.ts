@@ -52,6 +52,14 @@ import {
   storedLodging,
   validateLodging,
 } from "./invitation-lodging";
+import {
+  type InvitationLivestream,
+  livestreamHasContent,
+  type PublicLivestream,
+  publicLivestream,
+  storedLivestream,
+  validateLivestream,
+} from "./invitation-livestream";
 import { type InvitationReminders, validateReminders } from "./invitation-reminders";
 
 export const INVITATION_TIME_ZONES = [
@@ -85,8 +93,9 @@ export function isInvitationTimeZone(value: unknown): value is InvitationTimeZon
  * `QR_PASS` is the guest list's access pass for the door, also M6 G2, and `GALLERY` is the invitation's photo
  * gallery (M8 S3, S4). `ITINERARY` is the plan of the day (F1; S2.1, L3.2) and comes first because it is the first
  * capability of the owner's list; `LODGING` is the lodging and transport block (F4; S2.4, L7.2). The order is the
- * order the owner's feature list follows; `GUESTBOOK` is the guest's wall of messages (F7; S2.7, L10.2), and
- * `GUEST_ALBUM` is the album of photos the guests upload for the owner to approve (F8; S2.8, L11.2).
+ * order the owner's feature list follows; `GUESTBOOK` is the guest's wall of messages (F7; S2.7, L10.2),
+ * `GUEST_ALBUM` is the album of photos the guests upload for the owner to approve (F8; S2.8, L11.2), and `LIVESTREAM` is
+ * the link of the transmission with its player (F9; S2.9, L12.2).
  */
 export const IMPLEMENTED_INVITATION_FEATURES = [
   "ITINERARY",
@@ -99,6 +108,7 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   "LODGING",
   "GUESTBOOK",
   "GUEST_ALBUM",
+  "LIVESTREAM",
   "GUEST_LIST",
   "QR_PASS",
   "GALLERY",
@@ -153,6 +163,13 @@ export const GUESTBOOK_FEATURE_KEY = "GUESTBOOK";
  * it.
  */
 export const GUEST_ALBUM_FEATURE_KEY = "GUEST_ALBUM";
+
+/**
+ * The catalog key that grants the livestream (F9; S2.9, L12.2), granted by Premium and Deluxe. Like the itinerary and
+ * the lodging, the key is offered only while the invitation stores a link, because the card exists to draw that link;
+ * a package's key with nothing stored keeps the editor closed on a feature nobody could publish.
+ */
+export const LIVESTREAM_FEATURE_KEY = "LIVESTREAM";
 
 /**
  * The public shape of one itinerary moment (F1; L3.1, L3.3): the wall clock, the title, and the place and address
@@ -562,6 +579,8 @@ export interface InvitationFeatureSettingsValue {
   readonly giftRegistry: InvitationGiftRegistry | null;
   /** The validated lodging, or null when the invitation has none or it would show nothing (F4; L7.1). */
   readonly lodging: InvitationLodging | null;
+  /** The validated livestream, or null when the invitation has none (F9; L12.1). */
+  readonly livestream: InvitationLivestream | null;
   /**
    * The validated WhatsApp reminder switches, or null while the owner switched nothing on (F6; L9.1). They decide
    * whether the command sends a reminder and never what a guest sees, so they take no part in the feature gate.
@@ -578,10 +597,11 @@ export type InvitationFeatureSettingsValidation =
  * Validates a feature-settings request (S4, S7, F1, F2, F4, F6): the zone must be an allow-list member, the phone must
  * normalize, the playlist link must be an `https` link on an allow-listed host, the itinerary must be the versioned
  * payload of L3.1 or absent, the gift registry the versioned payload of L4.1 or absent, the lodging the versioned
- * payload of L7.1 or absent, and the reminders the versioned pair of switches of L9.1 or absent. Every issue is
- * reported, the zone, then the phone, then the playlist, then the itinerary, then the gift registry, then the lodging,
- * then the reminders, and nothing is transformed except the phone, the link, and the texts of the moments and the
- * registry. A refused request stores nothing.
+ * payload of L7.1 or absent, the reminders the versioned pair of switches of L9.1 or absent, and the livestream the
+ * versioned payload of L12.1 or absent. Every issue is reported, the zone, then the phone, then the playlist, then the
+ * itinerary, then the gift registry, then the lodging, then the reminders, then the livestream, and nothing is
+ * transformed except the phone, the link, and the texts of the moments, the registry, and the livestream. A refused
+ * request stores nothing.
  */
 export function validateInvitationFeatureSettings(input: {
   readonly timeZone: unknown;
@@ -591,6 +611,7 @@ export function validateInvitationFeatureSettings(input: {
   readonly giftRegistry: unknown;
   readonly lodging: unknown;
   readonly reminders: unknown;
+  readonly livestream: unknown;
 }): InvitationFeatureSettingsValidation {
   const issues: string[] = [];
 
@@ -628,6 +649,11 @@ export function validateInvitationFeatureSettings(input: {
     issues.push(...reminders.issues);
   }
 
+  const livestream = validateLivestream(input.livestream);
+  if (!livestream.ok) {
+    issues.push(...livestream.issues);
+  }
+
   if (
     issues.length > 0 ||
     !phone.ok ||
@@ -636,6 +662,7 @@ export function validateInvitationFeatureSettings(input: {
     !giftRegistry.ok ||
     !lodging.ok ||
     !reminders.ok ||
+    !livestream.ok ||
     !isInvitationTimeZone(input.timeZone)
   ) {
     return { ok: false, issues };
@@ -651,6 +678,7 @@ export function validateInvitationFeatureSettings(input: {
       giftRegistry: giftRegistry.value,
       lodging: lodging.value,
       reminders: reminders.value,
+      livestream: livestream.value,
     },
   };
 }
@@ -671,6 +699,8 @@ export interface InvitationFeatureGate {
   readonly giftRegistry: InvitationGiftRegistry | null;
   /** The stored lodging, or null when there is none (F4; L7.1). */
   readonly lodging: InvitationLodging | null;
+  /** The stored livestream, or null when there is none (F9; L12.1). */
+  readonly livestream: InvitationLivestream | null;
   /** The owner's RSVP deadline, or null for one that never closes (M6 S4). */
   readonly rsvpDeadline: Date | null;
   /** The owner's party limit, 1 to 10 (M6 S4). */
@@ -705,6 +735,10 @@ export function availableFeatureKeys(gate: InvitationFeatureGate): string[] {
     // The lodging follows the same rule as the itinerary: the key is offered only while there is something to draw
     // (F4; L7.2, L7.3).
     if (featureKey === LODGING_FEATURE_KEY && !lodgingHasContent(gate.lodging)) {
+      continue;
+    }
+    // And the livestream too (F9; L12.2): the key is offered only while there is a link to draw.
+    if (featureKey === LIVESTREAM_FEATURE_KEY && !livestreamHasContent(gate.livestream)) {
       continue;
     }
     keys.push(featureKey);
@@ -755,6 +789,12 @@ export interface PublicInvitationFeatures {
    */
   readonly lodging: PublicLodging | null;
   /**
+   * The livestream link a guest's block draws, the video id the API resolved when that link is an embeddable YouTube
+   * one, and the note — or null when the package does not grant `LIVESTREAM` or the invitation stores no link (F9;
+   * L12.3). The video id is answered instead of an embed URL, so the web builds the only origin it renders.
+   */
+  readonly livestream: PublicLivestream | null;
+  /**
    * The guestbook a guest's wall draws (F7; L10.4): the visible entries newest first, at most 50, each one the
    * signature and the message a guest signed. It is the list itself rather than a switch — an empty array is a wall
    * waiting for its first message — and it is null only when the pinned package does not grant `GUESTBOOK`, so a
@@ -799,9 +839,9 @@ export interface PublicInvitationFeatures {
  * includes WHATSAPP, and music answers the stored link only while the package includes MUSIC and the link names an
  * allow-listed service; a stored value the package does not grant stays private. The structured gift registry is
  * answered only to a package that grants `GIFT_REGISTRY` and only while it would show something (F2; L4.3), together
- * with the grant itself, which the layouts keep reading for an older invitation's content text field. The RSVP mode is
- * decided from the package's keys directly, together with the deadline, the party limit, and whether the guest-list
- * access pass is granted (M6 G2).
+ * with the grant itself, which the layouts keep reading for an older invitation's content text field. The livestream is
+ * answered the same way (F9; L12.3). The RSVP mode is decided from the package's keys directly, together with the
+ * deadline, the party limit, and whether the guest-list access pass is granted (M6 G2).
  */
 export function publicInvitationFeatures(
   gate: InvitationFeatureGate,
@@ -821,6 +861,8 @@ export function publicInvitationFeatures(
   const registry = storedGiftRegistry(gate.giftRegistry);
   // The same rule for the lodging: a row no rule validated draws nothing (F4; L7.1).
   const lodging = storedLodging(gate.lodging);
+  // The same rule for the livestream (F9; L12.1): a row no rule validated draws nothing.
+  const livestream = storedLivestream(gate.livestream);
 
   return {
     countdown: keys.has("COUNTDOWN"),
@@ -841,6 +883,10 @@ export function publicInvitationFeatures(
         : null,
     lodging:
       keys.has(LODGING_FEATURE_KEY) && lodgingHasContent(lodging) ? publicLodging(lodging) : null,
+    livestream:
+      keys.has(LIVESTREAM_FEATURE_KEY) && livestreamHasContent(livestream)
+        ? publicLivestream(livestream)
+        : null,
     // The wall is the feature, not its data: a granted package answers its visible entries even while there are none.
     guestbook: keys.has(GUESTBOOK_FEATURE_KEY) ? [...guestbookEntries] : null,
     // The album follows the same rule (F8; L11.4): the grant carries the published photos the read collected, and a

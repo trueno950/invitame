@@ -200,6 +200,7 @@ describe("WhatsApp reminders on real PostgreSQL (F6)", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: { version: 1, pendingRsvp: true, eventEve: false },
     });
     await prisma.invitation.update({

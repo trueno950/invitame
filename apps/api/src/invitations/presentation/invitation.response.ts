@@ -127,6 +127,11 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
       transport?: string;
     } | null;
     /**
+     * The stored livestream as the validated payload `{ version: 1, url, note? }`, or null when the invitation has none
+     * (F9; L12.1). The owner's read answers the version so the editor can send the same payload back.
+     */
+    livestream: { version: 1; url: string; note?: string } | null;
+    /**
      * The stored reminder switches as the validated payload `{ version: 1, pendingRsvp, eventEve }`, or null while the
      * owner switched nothing on (F6; L9.1). The owner's read answers the version so the editor can send the same payload
      * back, and the switches work as soon as a sender is configured.
@@ -226,6 +231,14 @@ export interface PublicInvitationResponse {
      * one is an absolute API URL with the dimensions the layout reserves and the creator's alt text.
      */
     gallery: Array<{ url: string; width: number; height: number; alt: string | null }>;
+    /**
+     * The livestream a guest's block draws (F9; L12.3): the stored link, the video id the API resolved when it is an
+     * embeddable YouTube one, or null when the guest may only open the link, and the note as null when the owner wrote
+     * none. It is null when the pinned package does not grant `LIVESTREAM` or the invitation stores no link. It is added
+     * beside the fields the body already carried and changes none of them, so a page deployed before it reads the body
+     * it always read.
+     */
+    livestream: { url: string; videoId: string | null; note: string | null } | null;
     /**
      * The guestbook wall (F7; L10.4): the visible entries newest first, at most 50, each one the signature and the
      * message a guest signed, as plain text. It is the list itself — an empty array is a wall waiting for its first
@@ -357,6 +370,16 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
                 ? {}
                 : { transport: stored.featureSettings.lodging.transport }),
             },
+      livestream:
+        stored.featureSettings.livestream === null
+          ? null
+          : {
+              version: 1,
+              url: stored.featureSettings.livestream.url,
+              ...(stored.featureSettings.livestream.note === undefined
+                ? {}
+                : { note: stored.featureSettings.livestream.note }),
+            },
       reminders:
         stored.featureSettings.reminders === null
           ? null
@@ -448,6 +471,14 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
                 ...(hotel.address === undefined ? {} : { address: hotel.address }),
               })),
               transport: stored.features.lodging.transport,
+            },
+      livestream:
+        stored.features.livestream === null
+          ? null
+          : {
+              url: stored.features.livestream.url,
+              videoId: stored.features.livestream.videoId,
+              note: stored.features.livestream.note,
             },
       guestbook:
         stored.features.guestbook === null

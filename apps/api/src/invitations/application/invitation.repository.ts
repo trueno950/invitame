@@ -2,6 +2,7 @@ import type { JsonObject } from "../domain/invitation-content";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationLodging } from "../domain/invitation-lodging";
+import type { InvitationLivestream } from "../domain/invitation-livestream";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { InvitationReminders } from "../domain/invitation-reminders";
 import type { PlacePoint } from "../domain/invitation-place";
@@ -84,6 +85,8 @@ export interface InvitationFeatureSettingsWrite {
   giftRegistry: InvitationGiftRegistry | null;
   /** The validated lodging payload, or null when the invitation has none (F4; L7.1). */
   lodging: InvitationLodging | null;
+  /** The validated livestream payload, or null when the invitation has none (F9; L12.1). */
+  livestream: InvitationLivestream | null;
   /** The validated reminder switches, or null while the owner switched nothing on (F6; L9.1). */
   reminders: InvitationReminders | null;
 }
@@ -145,6 +148,11 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
    */
   lodging: InvitationLodging | null;
   /**
+   * The validated livestream, or null when the invitation has none (F9; L12.1). A row written around the API reads null
+   * instead of a value no rule validated, so a guest never draws one.
+   */
+  livestream: InvitationLivestream | null;
+  /**
    * The validated reminder switches, or null while the owner switched nothing on (F6; L9.1). It decides whether the
    * command sends a reminder and never what a guest sees, so it takes no part in the public read. A row written around
    * the API reads null instead of a value no rule validated.
@@ -203,7 +211,8 @@ export interface InvitationRepository {
 
   /**
    * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone, the
-   * playlist link, the itinerary, the gift registry, and the lodging in its one-to-one settings row — in one transaction whose
+   * playlist link, the itinerary, the gift registry, the lodging, the livestream, and the reminder switches in its
+   * one-to-one settings row — in one transaction whose
    * `WHERE` names the owner and both
    * editable statuses, so a published invitation changes live (S7), an archived one is refused with
    * `InvitationNotEditableError` even by a concurrent archive (A2), and another owner's id answers null,

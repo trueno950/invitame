@@ -100,7 +100,7 @@ nothing is deleted. Future analytics design is documented separately in
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, the bounded companions `[{ name, child }]` of the party (one per extra person while attending, or `NULL` for an older answer), optional `dietaryNotes` (up to 300 characters), an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), the optional `tableLabel` the owner assigned (1-12 characters, printed on that guest's access pass), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
-| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary`, `giftRegistry`, and `lodging` (or `NULL`), the WhatsApp reminder switches `reminders` (or `NULL`), and timestamps |
+| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary`, `giftRegistry`, `lodging`, and `livestream` (or `NULL`), the WhatsApp reminder switches `reminders` (or `NULL`), and timestamps |
 | `ReminderDelivery` | One attempt to deliver one WhatsApp reminder: the invitation and guest references, the `kind` (`PENDING_RSVP_7D`, `PENDING_RSVP_2D`, `EVENT_EVE`), the calendar `dueDate` of the invitation's own zone, the `status` (`pending`, `sent`, `skipped`, `failed`), a stable `reason` (up to 40 characters, `not_configured` while no provider exists), `attemptedAt`, and timestamps. The unique key `(invitationId, guestId, kind, dueDate)` is what makes a second run of the same day send nothing twice. No phone, name, or message body is stored |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
@@ -299,6 +299,17 @@ normalization, the playlist link allow-list, and the gating — lives in
   rule that a column could enforce, so the API domain (`apps/api/src/invitations/domain/invitation-lodging.ts`) is the
   only authority on the shape and a value written around it reads as no lodging instead of reaching a guest. The gate is
   the new `LODGING` key, granted to Premium and Deluxe (L7.2).
+- `InvitationFeatureSettings.livestream` is JSONB and nullable, and holds one bounded, versioned presentation payload
+  (F9; L12.1): `{ "version": 1, "url": "https://…", "note"?: string }`. `url` is an `https` link of at most 500
+  characters with no whitespace or control character, and the optional `note` is at most 120 trimmed characters;
+  `NULL` is "no livestream", and so is a payload without a link, which the API normalizes to `NULL` before writing. It
+  is presentation data only — no embed markup, no provider payload, no query-critical field — and no rule a column could
+  enforce, so the API domain (`apps/api/src/invitations/domain/invitation-livestream.ts`) is the only authority on the
+  shape and a value written around it reads as no livestream instead of reaching a guest. The same module owns the
+  provider allow-list: only a YouTube link (`youtube.com/watch?v=`, `youtube.com/live/`, `youtu.be/`) whose id is exactly
+  eleven characters is embedded, and the public read answers that id rather than an address, so the web frames
+  `https://www.youtube-nocookie.com/embed/<id>` and nothing else. The gate is the new `LIVESTREAM` key, granted to
+  Premium and Deluxe (L12.2).
 - `InvitationFeatureSettings.reminders` is JSONB and nullable, and holds the two WhatsApp reminder switches as one
   versioned payload (F6; L9.1): `{ "version": 1, "pendingRsvp": boolean, "eventEve": boolean }`. `NULL` is "no reminder
   settings", and so is a pair with nothing switched on, which the API normalizes to `NULL` before writing. It is
@@ -352,6 +363,11 @@ normalization, the playlist link allow-list, and the gating — lives in
   migration set, or by hand deleting the two `PackageFeature` links and the `LODGING` `Feature` row by key and then
   `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "lodging";`. Only the stored lodgings and the catalog key are
   lost; invitations, their content, and every other feature setting stay. Never edit the applied migration file.
+- Rollback / recovery of `20261211120000_add_invitation_livestream`: additive, so recovery is redeploying the previous
+  migration set, or by hand deleting every `PackageFeature` link of the `LIVESTREAM` feature (not only the premium and
+  deluxe ones), then the `LIVESTREAM` `Feature` row by key, then
+  `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "livestream";`. Only the stored livestreams and the catalog key
+  are lost; invitations, their content, and every other feature setting stay. Never edit the applied migration file.
 - Rollback / recovery of `20261207120000_add_whatsapp_reminders`: additive, so recovery is redeploying the previous
   migration set, or by hand `DELETE FROM "ReminderDelivery";`, then deleting the `WHATSAPP_REMINDERS` `PackageFeature`
   links and the `WHATSAPP_REMINDERS` `Feature` row by key, then
@@ -834,13 +850,15 @@ Prisma. The database suites (`pnpm --filter @invitame/api test:db`) exercise the
 ## JSONB boundary
 
 Prisma `Json` maps `TemplateVersion.schema`, `TemplateVersion.configuration`, `Invitation.content`,
-`InvitationFeatureSettings.itinerary`, `InvitationFeatureSettings.giftRegistry`, and
-`InvitationFeatureSettings.lodging` to PostgreSQL JSONB. The template
+`InvitationFeatureSettings.itinerary`, `InvitationFeatureSettings.giftRegistry`,
+`InvitationFeatureSettings.lodging`, and `InvitationFeatureSettings.livestream` to PostgreSQL JSONB. The template
 schema is a validated form contract and configuration is a validated presentation contract; an invitation's content is
 the bounded form data validated against its pinned version; the itinerary is a versioned, bounded presentation payload
 (1 to 15 moments of four short texts); the gift registry is a versioned, bounded presentation payload (0 to 8 stores, an
 optional transfer of three short texts, a flag, and a note); the lodging is a versioned, bounded presentation payload
-(0 to 6 hotels of a name and five optional short texts, one of them an `https` booking link, plus one transport note). Renderer identity, relationships,
+(0 to 6 hotels of a name and five optional short texts, one of them an `https` booking link, plus one transport note);
+the livestream is a versioned, bounded presentation payload (one `https` link of at most 500 characters and one optional
+note of at most 120, which the API resolves to a video id only for the allow-listed YouTube shapes). Renderer identity, relationships,
 catalog keys, lifecycle statuses, and fields used for querying remain normalized columns.
 
 ## Analytics data

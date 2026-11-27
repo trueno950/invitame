@@ -21,6 +21,7 @@ import type { JsonObject } from "../domain/invitation-content";
 import { storedGiftRegistry } from "../domain/invitation-gift-registry";
 import { storedItinerary } from "../domain/invitation-itinerary";
 import { storedLodging } from "../domain/invitation-lodging";
+import { storedLivestream } from "../domain/invitation-livestream";
 import { storedReminders } from "../domain/invitation-reminders";
 import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
 import {
@@ -53,11 +54,12 @@ const INVITATION_SELECT = {
       playlistUrl: true,
       playlistTitle: true,
       playlistCoverUrl: true,
-      // The stored plan of the day, gift registry, lodging, and reminder switches travel with the row too (F1, F2, F4,
-      // F6); the domain decides whether they read as one.
+      // The stored plan of the day, gift registry, lodging, livestream, and reminder switches travel with the row too
+      // (F1, F2, F4, F9, F6); the domain decides whether they read as one.
       itinerary: true,
       giftRegistry: true,
       lodging: true,
+      livestream: true,
       reminders: true,
     },
   },
@@ -118,6 +120,8 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     giftRegistry: storedGiftRegistry(row.featureSettings?.giftRegistry),
     // And the lodging too (F4; L7.1).
     lodging: storedLodging(row.featureSettings?.lodging),
+    // And the livestream (F9; L12.1).
+    livestream: storedLivestream(row.featureSettings?.livestream),
     // The reminder switches read as none when a row written around the API does not satisfy their rules (F6; L9.1).
     reminders: storedReminders(row.featureSettings?.reminders),
     rsvpDeadline: row.rsvpDeadline,
@@ -285,6 +289,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
           itinerary: jsonPayloadColumn(features.itinerary),
           giftRegistry: jsonPayloadColumn(features.giftRegistry),
           lodging: jsonPayloadColumn(features.lodging),
+          livestream: jsonPayloadColumn(features.livestream),
           reminders: jsonPayloadColumn(features.reminders),
         },
         update: {
@@ -294,11 +299,12 @@ export class PrismaInvitationRepository implements InvitationRepository {
           // never survives a change (S2).
           playlistTitle: features.playlistTitle,
           playlistCoverUrl: features.playlistCoverUrl,
-          // A cleared itinerary, gift registry, or lodging is SQL NULL, never the JSON value `null`, so the column
-          // reads as absent (F1, F2, F4).
+          // A cleared itinerary, gift registry, lodging, or livestream is SQL NULL, never the JSON value `null`, so the
+          // column reads as absent (F1, F2, F4, F9).
           itinerary: jsonPayloadColumn(features.itinerary),
           giftRegistry: jsonPayloadColumn(features.giftRegistry),
           lodging: jsonPayloadColumn(features.lodging),
+          livestream: jsonPayloadColumn(features.livestream),
           reminders: jsonPayloadColumn(features.reminders),
         },
       });

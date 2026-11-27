@@ -25,6 +25,7 @@ import {
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
 import type { InvitationLodging } from "../domain/invitation-lodging";
+import type { InvitationLivestream } from "../domain/invitation-livestream";
 import type { InvitationReminders } from "../domain/invitation-reminders";
 import {
   archive,
@@ -134,6 +135,12 @@ export interface UpdateFeaturesInput {
    */
   lodging?: unknown;
   /**
+   * The livestream as the request carried it, or `undefined` when the body omitted it (F9; L12.1): an omitted value
+   * keeps the stored livestream, which is what lets a client built before F9 save the other fields without clearing a
+   * link it never knew about.
+   */
+  livestream?: unknown;
+  /**
    * The reminder switches as the request carried them, or `undefined` when the body omitted them (F6; L9.1): an omitted
    * value keeps the stored switches, which is what lets a client built before F6 save the other fields without
    * switching a reminder off that it never knew about.
@@ -197,6 +204,8 @@ export interface OwnedInvitation extends InvitationSummary {
     giftRegistry: InvitationGiftRegistry | null;
     /** The stored lodging, or null when the invitation has none (F4; L7.1). */
     lodging: InvitationLodging | null;
+    /** The stored livestream, or null when the invitation has none (F9; L12.1). */
+    livestream: InvitationLivestream | null;
     /** The stored reminder switches, or null while the owner switched nothing on (F6; L9.1). */
     reminders: InvitationReminders | null;
   };
@@ -263,6 +272,7 @@ export function toOwnedInvitation(
       itinerary: record.itinerary,
       giftRegistry: record.giftRegistry,
       lodging: record.lodging,
+      livestream: record.livestream,
       reminders: record.reminders,
     },
     remindersConfigured,
@@ -275,6 +285,7 @@ export function toOwnedInvitation(
       itinerary: record.itinerary,
       giftRegistry: record.giftRegistry,
       lodging: record.lodging,
+      livestream: record.livestream,
       rsvpDeadline: record.rsvpDeadline,
       rsvpPartyLimit: record.rsvpPartyLimit,
     }),
@@ -577,6 +588,9 @@ export class UpdateInvitationFeaturesUseCase {
       // The lodging follows the same rule (F4; L7.3): an omitted value keeps the stored lodging, and only `null` or a
       // payload with no hotel and no transport line clears it.
       lodging: input.lodging === undefined ? stored.lodging : input.lodging,
+      // The livestream follows the same rule (F9; L12.1): an omitted value keeps the stored link, and only `null` or a
+      // payload without a link clears it.
+      livestream: input.livestream === undefined ? stored.livestream : input.livestream,
       // And the reminder switches too (F6; L9.1): an omitted value keeps them, and only `null` or a pair with nothing
       // switched on clears them.
       reminders: input.reminders === undefined ? stored.reminders : input.reminders,
@@ -873,6 +887,7 @@ export class GetPublicInvitationUseCase {
         itinerary: published.itinerary,
         giftRegistry: published.giftRegistry,
         lodging: published.lodging,
+        livestream: published.livestream,
         rsvpDeadline: published.rsvpDeadline,
         rsvpPartyLimit: published.rsvpPartyLimit,
       },

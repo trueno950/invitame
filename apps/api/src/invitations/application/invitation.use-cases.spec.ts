@@ -124,6 +124,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
       rsvpDeadline: null,
       places: {},
@@ -888,6 +889,7 @@ describe("GetOwnInvitationUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
     // WhatsApp needs a stored phone, and no catalog feature outside the implemented list appears (S4).
@@ -1055,6 +1057,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
 
@@ -1067,6 +1070,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
     assert.deepEqual(updated?.availableFeatures, [
@@ -1099,6 +1103,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
 
@@ -1112,6 +1117,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1125,6 +1131,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         },
         String(cleared),
@@ -1147,6 +1154,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
 
@@ -1160,6 +1168,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1189,6 +1198,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: ITINERARY,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
 
@@ -1419,6 +1429,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     };
     await useCase.execute({ ...base, lodging: LODGING });
@@ -1471,6 +1482,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       }),
       (error: unknown) => {
@@ -1502,6 +1514,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         }),
         (error: unknown) => {
@@ -1532,6 +1545,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       }),
       InvitationNotEditableError,
@@ -1556,6 +1570,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       }),
       null,
@@ -1571,6 +1586,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           itinerary: null,
           giftRegistry: null,
           lodging: null,
+          livestream: null,
           reminders: null,
         }),
         null,
@@ -1593,6 +1609,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
 
@@ -1624,6 +1641,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
 
@@ -1645,6 +1663,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
     // The metadata is stored with the link, so a later or public read answers it without a provider.
@@ -1669,6 +1688,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
 
@@ -1693,6 +1713,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -1722,6 +1743,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
     assert.equal(fixture.repository.rows[0]?.playlistUrl, PLAYLIST);
@@ -1781,6 +1803,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
     await publisher(fixture).useCase.execute(fixture.ownerId, created.id);
@@ -2196,6 +2219,7 @@ describe("GetPublicInvitationUseCase", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        livestream: null,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -2401,6 +2425,7 @@ describe("GetPublicInvitationUseCase", () => {
           giftRegistry: packageKey === "deluxe",
           giftRegistryDetails: null,
           lodging: null,
+          livestream: null,
           // Premium and Deluxe grant the guestbook, so their wall is an empty list; Basic answers no wall (F7; L10.2).
           guestbook: packageKey === "basic" ? null : [],
           // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
@@ -2427,6 +2452,7 @@ describe("GetPublicInvitationUseCase", () => {
         itinerary: null,
         giftRegistry: null,
         lodging: null,
+        livestream: null,
         reminders: null,
       });
 
@@ -2448,6 +2474,7 @@ describe("GetPublicInvitationUseCase", () => {
           giftRegistry: packageKey === "deluxe",
           giftRegistryDetails: null,
           lodging: null,
+          livestream: null,
           // Premium and Deluxe grant the guestbook, so their wall is an empty list; Basic answers no wall (F7; L10.2).
           guestbook: packageKey === "basic" ? null : [],
           // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
@@ -2473,6 +2500,7 @@ describe("GetPublicInvitationUseCase", () => {
         "guestAlbum",
         "guestbook",
         "itinerary",
+        "livestream",
         "lodging",
         "map",
         "music",
@@ -2495,6 +2523,7 @@ describe("GetPublicInvitationUseCase", () => {
       itinerary: null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
 
@@ -2511,6 +2540,7 @@ describe("GetPublicInvitationUseCase", () => {
       giftRegistry: false,
       giftRegistryDetails: null,
       lodging: null,
+      livestream: null,
       guestbook: null,
       guestAlbum: null,
       gallery: [],
@@ -2606,6 +2636,7 @@ describe("GetPublicInvitationUseCase", () => {
       itinerary: ITINERARY,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
     });
     const page = await publicReader(fixture).execute(created.slug);

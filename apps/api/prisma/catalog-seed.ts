@@ -116,6 +116,11 @@ const FEATURE_SEEDS = [
     description: "Un muro de mensajes para que tus invitados te dejen sus mejores deseos.",
   },
   {
+    key: "LIVESTREAM",
+    name: "Transmisión en vivo",
+    description: "El enlace de tu transmisión, con un reproductor para verla desde la invitación.",
+  },
+  {
     key: "GUEST_ALBUM",
     name: "Álbum de fotos de invitados",
     description: "Tus invitados suben sus fotos y tú decides cuáles aparecen en la invitación.",
@@ -163,6 +168,7 @@ const PACKAGE_SEEDS = [
       "WHATSAPP",
       "LODGING",
       "GUESTBOOK",
+      "LIVESTREAM",
     ],
   },
   {
@@ -183,6 +189,7 @@ const PACKAGE_SEEDS = [
       "LODGING",
       "GUESTBOOK",
       "GUEST_ALBUM",
+      "LIVESTREAM",
       "WHATSAPP_REMINDERS",
       "GUEST_LIST",
       "QR_PASS",

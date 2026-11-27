@@ -165,6 +165,7 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       itinerary: settings?.itinerary ?? null,
       giftRegistry: null,
       lodging: null,
+      livestream: null,
       reminders: null,
       // No place row yet means no stored point, which is the empty object the port answers (S2).
       places: {},
