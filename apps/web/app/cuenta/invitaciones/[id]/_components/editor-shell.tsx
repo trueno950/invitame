@@ -408,6 +408,8 @@ export interface EditorShellProps {
   readonly attendance: AttendanceTab;
   /** The guest list page of a package that grants it instead, for the note of a package with neither. */
   readonly guestListHref: string | undefined;
+  /** The «Libro de firmas» screen of a package that grants the guestbook (F7; L10.6). */
+  readonly guestbookHref: string | undefined;
   /** The owner's preview route, framed at phone width (T2b). */
   readonly previewSrc: string;
   readonly status: InvitationStatus;
@@ -461,6 +463,7 @@ export function EditorShell({
   rsvpView,
   attendance,
   guestListHref,
+  guestbookHref,
   previewSrc,
   status,
   statusLabel,
@@ -747,6 +750,14 @@ export function EditorShell({
               values={features}
               view={featureView}
             />
+            {/* The guestbook's messages are signed by the guests, so the tab links to their own screen (F7; L10.6). */}
+            {guestbookHref === undefined ? null : (
+              <p className="mt-4">
+                <GuardedLink className={textButton} href={guestbookHref}>
+                  {EDITOR_COPY.funcionesGuestbookOpen}
+                </GuardedLink>
+              </p>
+            )}
           </Panel>
         );
       case "asistencia":

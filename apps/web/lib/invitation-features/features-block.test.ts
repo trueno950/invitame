@@ -1449,3 +1449,85 @@ describe("the access pass of a guest page (F5; L8.4)", () => {
     assert.match(html, /&lt;b&gt;7&lt;\/b&gt;/);
   });
 });
+
+describe("the guestbook wall of the features block (F7; S2.7, L10.5)", () => {
+  const ENTRIES = [
+    { authorName: "Tía Rosa", message: "¡Que este día sea tan hermoso como tú!" },
+    { authorName: "Sofía y Jorge", message: "Nos vemos en la pista." },
+  ];
+
+  it("draws the wall and its form, with «Firmar el libro» below the messages", () => {
+    const html = render(
+      featuresOf({ guestbook: { slug: SLUG_FOR_GUEST, entries: ENTRIES, closed: false } }),
+    );
+
+    assert.match(html, /data-feature="guestbook"/);
+    assert.match(html, /Libro de firmas/);
+    for (const entry of ENTRIES) {
+      assert.match(html, new RegExp(entry.message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      assert.match(html, new RegExp(entry.authorName));
+    }
+    // The form of the wall: the name, the message, the hidden honeypot, and its one action (L10.5).
+    assert.match(html, /<form[^>]*data-guestbook-form/);
+    assert.match(html, /name="slug" value="invitacion-k7m2qx"/);
+    assert.match(html, /name="authorName"/);
+    assert.match(html, /<textarea[^>]*name="message"/);
+    assert.match(html, /name="honeypot"/);
+    assert.match(html, />Firmar el libro</);
+  });
+
+  it("keeps the wall and closes the form when the invitation expired", () => {
+    const html = render(
+      featuresOf({ guestbook: { slug: SLUG_FOR_GUEST, entries: ENTRIES, closed: true } }),
+    );
+
+    assert.match(html, /data-feature="guestbook"/);
+    assert.match(html, /El libro de firmas se cerró cuando terminó la invitación\./);
+    assert.doesNotMatch(html, /data-guestbook-form/);
+    assert.doesNotMatch(html, /Firmar el libro/);
+  });
+
+  it("invites the first signature of a granted wall with no message", () => {
+    const html = render(
+      featuresOf({ guestbook: { slug: SLUG_FOR_GUEST, entries: [], closed: false } }),
+    );
+
+    assert.match(html, /Todavía no hay mensajes/);
+    assert.match(html, /data-guestbook-form/);
+  });
+
+  it("renders every message as text: markup and links stay characters", () => {
+    const html = render(
+      featuresOf({
+        guestbook: {
+          slug: SLUG_FOR_GUEST,
+          entries: [
+            {
+              authorName: "<b>Rosa</b>",
+              message: "<script>alert(1)</script> https://spam.example",
+            },
+          ],
+          closed: false,
+        },
+      }),
+    );
+
+    assert.doesNotMatch(html, /<script>/);
+    assert.doesNotMatch(html, /<b>Rosa<\/b>/);
+    assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt; https:\/\/spam\.example/);
+    // The only link of a wall is none: a URL a guest typed never becomes clickable (L10.3).
+    assert.deepEqual(linksOf(html), []);
+  });
+
+  it("comes after the invitation's other cards, so the wall closes the features block", () => {
+    const html = render(
+      featuresOf({
+        calendar: true,
+        guestbook: { slug: SLUG_FOR_GUEST, entries: ENTRIES, closed: false },
+      }),
+    );
+    const sections = [...html.matchAll(/data-feature="([^"]+)"/g)].map((match) => match[1]);
+
+    assert.deepEqual(sections, ["calendar", "guestbook"]);
+  });
+});

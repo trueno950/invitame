@@ -209,6 +209,23 @@ export interface RsvpRead {
   readonly totals: RsvpTotals;
 }
 
+/** One guestbook entry as the owner's moderation screen reads it (F7; L10.6). */
+export interface GuestbookEntry {
+  readonly id: string;
+  readonly authorName: string;
+  readonly message: string;
+  /** Whether the entry is hidden from the wall. False is published at once. */
+  readonly hidden: boolean;
+  readonly createdAt: string;
+}
+
+/** The owner's read of one invitation's guestbook: every entry and the counts of the two tabs (F7; L10.6). */
+export interface GuestbookRead {
+  readonly entries: GuestbookEntry[];
+  readonly visibleCount: number;
+  readonly hiddenCount: number;
+}
+
 /** The owner's CSV download: the file and the headers the API sent it with (S1, S4). */
 export interface RsvpCsv {
   readonly body: string;
@@ -316,6 +333,7 @@ export type InvitationFailure =
   | "guest-list-unavailable"
   | "guest-not-found"
   | "guest-not-confirmed"
+  | "guestbook-entry-not-found"
   | "guest-seats-below-response"
   | "qr-pass-unavailable"
   | "validation"
@@ -1038,6 +1056,71 @@ export function parseRsvpRead(value: unknown): RsvpRead | undefined {
   return { settings, responses, totals };
 }
 
+// The guestbook routes of the owner (F7; L10.6). The read is every entry with its state and the two counts; the write
+// answers the entry it changed. A guest's signature and message are plain text the page renders as text, and the entry
+// id is an opaque row id the screen only echoes back, never a value the owner types.
+
+/** The widest signature and message the API stores, mirrored so a body that says more is refused whole (F7; L10.1). */
+const GUESTBOOK_AUTHOR_NAME_MAX_LENGTH = 60;
+const GUESTBOOK_MESSAGE_MAX_LENGTH = 500;
+
+/** One stored entry, or undefined when a field breaks the documented contract. */
+export function parseGuestbookEntry(value: unknown): GuestbookEntry | undefined {
+  const entry = record(value);
+
+  if (entry === undefined) {
+    return undefined;
+  }
+
+  const { id, authorName, message, hidden, createdAt } = entry;
+  const nameWidth = typeof authorName === "string" ? [...authorName].length : 0;
+  const messageWidth = typeof message === "string" ? [...message].length : 0;
+
+  if (
+    !isInvitationId(id) ||
+    typeof authorName !== "string" ||
+    nameWidth < 1 ||
+    nameWidth > GUESTBOOK_AUTHOR_NAME_MAX_LENGTH ||
+    typeof message !== "string" ||
+    messageWidth < 1 ||
+    messageWidth > GUESTBOOK_MESSAGE_MAX_LENGTH ||
+    typeof hidden !== "boolean" ||
+    !isTimestamp(createdAt)
+  ) {
+    return undefined;
+  }
+
+  return { id, authorName, message, hidden, createdAt };
+}
+
+/** A whole count of the guestbook read, never negative. */
+function isGuestbookCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** The owner's read of the guestbook, or undefined when the body breaks the contract (F7; L10.6). */
+export function parseGuestbookRead(value: unknown): GuestbookRead | undefined {
+  const read = record(value);
+
+  if (read === undefined) {
+    return undefined;
+  }
+
+  const entries = mapAll(read.entries, parseGuestbookEntry);
+  const { visibleCount, hiddenCount } = read;
+
+  if (entries === undefined || !isGuestbookCount(visibleCount) || !isGuestbookCount(hiddenCount)) {
+    return undefined;
+  }
+  // The counts the screen's tabs show are the entries themselves, so a body that disagrees is not this contract.
+  const hidden = entries.filter((entry) => entry.hidden).length;
+  if (visibleCount !== entries.length - hidden || hiddenCount !== hidden) {
+    return undefined;
+  }
+
+  return { entries, visibleCount, hiddenCount };
+}
+
 // The guest-list routes of the owner (M6 G4; S1, S4). The list is the guests with the answer each one gave and
 // their check-in state, never a personal token or a digest; a creation and a rotation answer the plain personal
 // token exactly once, so only the server action that redirects reads it, and the check-in answers the guest, the
@@ -1412,6 +1495,7 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   GUEST_LIST_NOT_AVAILABLE: "guest-list-unavailable",
   GUEST_NOT_FOUND: "guest-not-found",
   GUEST_NOT_CONFIRMED: "guest-not-confirmed",
+  GUESTBOOK_ENTRY_NOT_FOUND: "guestbook-entry-not-found",
   GUEST_SEATS_BELOW_RESPONSE: "guest-seats-below-response",
   QR_PASS_NOT_AVAILABLE: "qr-pass-unavailable",
   INVITATION_TEMPLATE_VERSION_NOT_PUBLISHED: "version-not-published",
@@ -1627,6 +1711,13 @@ export function createInvitationsClient(
     return isInvitationId(guestId) ? `${INVITATIONS}/${id}/guests/${guestId}${suffix}` : undefined;
   }
 
+  /** The path of one guestbook entry of one invitation, or undefined when either id cannot be one (F7; L10.6). */
+  function guestbookEntryPath(id: string, entryId: string): string | undefined {
+    return isInvitationId(id) && isInvitationId(entryId)
+      ? `${INVITATIONS}/${id}/guestbook/${entryId}`
+      : undefined;
+  }
+
   async function onGuest<T>(
     id: string,
     guestId: string,
@@ -1772,6 +1863,24 @@ export function createInvitationsClient(
       settings: RsvpSettings,
     ): Promise<InvitationResult<RsvpSettings>> =>
       onDraft(id, "/rsvp-settings", (path) => call("PUT", path, settings, parseRsvpSettings)),
+    /** `GET /invitations/:id/guestbook`: every entry with its state and the two counts (F7; L10.6). */
+    guestbook: (id: string): Promise<InvitationResult<GuestbookRead>> =>
+      onDraft(id, "/guestbook", (path) => call("GET", path, undefined, parseGuestbookRead)),
+    /**
+     * `PUT /invitations/:id/guestbook/:entryId`: hides one entry or shows it again, and answers the stored entry
+     * (F7; L10.6). Called from a server action, because a browser cannot send `PUT`.
+     */
+    setGuestbookEntryHidden: (
+      id: string,
+      entryId: string,
+      hidden: boolean,
+    ): Promise<InvitationResult<GuestbookEntry>> => {
+      const path = guestbookEntryPath(id, entryId);
+
+      return path === undefined
+        ? Promise.resolve({ ok: false, failure: "guestbook-entry-not-found" })
+        : call("PUT", path, { hidden }, parseGuestbookEntry);
+    },
     /**
      * `GET /invitations/:id/guests`: the guests with their answers, their check-in state, and the totals (M6 G4;
      * S1, S4). Owner-only; a package without the guest list is `guest-list-unavailable`.

@@ -330,6 +330,11 @@ export function invitationPreviewView(input: InvitationPreviewInput): Invitation
   );
   const content = previewContent(pinned.template, invitation.content, input.origin, hiddenFields);
   const rsvp = previewRsvp(invitation, input.rsvp, input.now ?? new Date());
+  // The wall of messages is previewed empty: the stored entries belong to the guest page's own read, and the owner
+  // sees them on the «Libro de firmas» screen. The block shows the form the guest will find (F7; L10.5).
+  const guestbook = invitation.availableFeatures.includes("GUESTBOOK")
+    ? { slug: invitation.slug, entries: [], closed: false }
+    : undefined;
   const parts = featureBlockParts({
     componentKey: version.componentKey,
     content,
@@ -340,6 +345,7 @@ export function invitationPreviewView(input: InvitationPreviewInput): Invitation
     // grants MAP shows a map at all.
     places: invitation.availableFeatures.includes("MAP") ? invitation.places : {},
     ...(rsvp === undefined ? {} : { rsvp }),
+    ...(guestbook === undefined ? {} : { guestbook }),
   });
 
   // The renderer's own parsers decide, exactly as they do on the guest page: a snapshot they refuse is a preview

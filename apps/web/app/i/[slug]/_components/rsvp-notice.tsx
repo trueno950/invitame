@@ -1,3 +1,4 @@
+import type { GuestbookNotice } from "../../../../lib/public/guestbook.ts";
 import type { RsvpNotice } from "../../../../lib/public/invitation-rsvp.ts";
 import { errorNote, statusNote } from "../../../_components/ui.ts";
 
@@ -8,6 +9,23 @@ import { errorNote, statusNote } from "../../../_components/ui.ts";
  */
 export function RsvpNoticeNote({ notice }: { notice: RsvpNotice }) {
   return notice.code === "received" ? (
+    <p className={statusNote} role="status">
+      {notice.message}
+    </p>
+  ) : (
+    <p className={errorNote} role="alert">
+      {notice.message}
+    </p>
+  );
+}
+
+/**
+ * The notice of a signature, read from the page's own query and rendered on the server (F7; L10.3). A signed wall is a
+ * confirmation and a refusal is an alert, so the news never relies on color alone, and the copy is one of the page's
+ * own Spanish sentences — no API text ever reaches a guest.
+ */
+export function GuestbookNoticeNote({ notice }: { notice: GuestbookNotice }) {
+  return notice.code === "signed" ? (
     <p className={statusNote} role="status">
       {notice.message}
     </p>

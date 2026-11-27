@@ -66,6 +66,7 @@ const PUBLIC: PublicInvitation = {
         { time: "19:30", title: "Recepción y cóctel" },
       ],
     },
+    guestbook: null,
     gallery: [],
     rsvp: { mode: "open", deadline: "2026-12-01T18:00:00.000Z", partyLimit: 4, qrPass: false },
   },
@@ -450,6 +451,7 @@ describe("parsePublicInvitation", () => {
           // The itinerary is null while the package grants no `ITINERARY` or the invitation stores none (F1; L3.3).
           itinerary: null,
           // The gallery is always a list, empty when the package grants no `GALLERY` (M8 S4).
+          guestbook: null,
           gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
         },
@@ -466,6 +468,7 @@ describe("parsePublicInvitation", () => {
           giftRegistryDetails: null,
           lodging: null,
           itinerary: null,
+          guestbook: null,
           gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
         },
@@ -671,6 +674,153 @@ describe("public RSVP submission (M6 G3; S4)", () => {
 
     answer(202, { status: "stored", name: "Ana Pérez" });
     await assert.rejects(client().submitRsvp(PUBLIC.slug, SUBMISSION), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "invalid-response");
+      return true;
+    });
+  });
+});
+
+// The guestbook of the public read and the signature on it (F7; L10.3, L10.4): the API answers the wall only while the
+// package grants the key, and a signature is a POST the page's server action makes with the guest's address.
+const GUESTBOOK_ENTRIES = [
+  { authorName: "Sofía y Jorge", message: "Nos vemos en la pista." },
+  { authorName: "Tía Rosa", message: "<b>¡Felicidades!</b> https://spam.example" },
+];
+
+const SIGNATURE = {
+  authorName: "Tía Rosa",
+  message: "¡Que sea un día hermoso!",
+  honeypot: "",
+};
+
+describe("the guestbook of the public read (F7; L10.4, L20)", () => {
+  it("reads the visible entries the API answers, in its order, as plain text", () => {
+    const page = parsePublicInvitation({
+      ...PUBLIC,
+      features: { ...PUBLIC.features, guestbook: GUESTBOOK_ENTRIES },
+    });
+
+    assert.deepEqual(page?.features.guestbook, GUESTBOOK_ENTRIES);
+    // The markup a guest typed stays characters: nothing here turns it into a link or an element.
+    assert.equal(
+      page?.features.guestbook?.[1]?.message,
+      "<b>¡Felicidades!</b> https://spam.example",
+    );
+  });
+
+  it("reads the API's null as no wall, and an empty list as a granted wall with no message", () => {
+    assert.equal(
+      parsePublicInvitation({ ...PUBLIC, features: { ...PUBLIC.features, guestbook: null } })
+        ?.features.guestbook,
+      null,
+    );
+    assert.deepEqual(
+      parsePublicInvitation({ ...PUBLIC, features: { ...PUBLIC.features, guestbook: [] } })
+        ?.features.guestbook,
+      [],
+    );
+  });
+
+  it("reads an absent guestbook as no wall, so an older API body keeps rendering (L20)", () => {
+    const { guestbook: _guestbook, ...features } = PUBLIC.features;
+    const page = parsePublicInvitation({ ...PUBLIC, features });
+
+    assert.equal(page?.features.guestbook, null);
+  });
+
+  it("refuses a wall past the API's own bound or an entry that is not this contract", () => {
+    for (const guestbook of [
+      Array.from({ length: 51 }, () => ({ authorName: "Rosa", message: "Hola" })),
+      [{ authorName: "x".repeat(61), message: "Hola" }],
+      [{ authorName: "Rosa", message: "x".repeat(501) }],
+      [{ authorName: "", message: "Hola" }],
+      [{ authorName: "Rosa" }],
+      "not-a-list",
+    ]) {
+      assert.equal(
+        parsePublicInvitation({ ...PUBLIC, features: { ...PUBLIC.features, guestbook } }),
+        undefined,
+        JSON.stringify(guestbook).slice(0, 60),
+      );
+    }
+    // A field the wall does not define is dropped instead of reaching a guest: the projection keeps the two texts.
+    assert.deepEqual(
+      parsePublicInvitation({
+        ...PUBLIC,
+        features: {
+          ...PUBLIC.features,
+          guestbook: [{ authorName: "Rosa", message: "Hola", hidden: true, id: "x" }],
+        },
+      })?.features.guestbook,
+      [{ authorName: "Rosa", message: "Hola" }],
+    );
+  });
+});
+
+describe("public guestbook submission (F7; L10.3)", () => {
+  it("posts the signature to the slug with the address the web forwarded and no cookie", async () => {
+    answer(202, { status: "received" });
+
+    const result = await client().submitGuestbook(PUBLIC.slug, SIGNATURE, {
+      clientAddress: "203.0.113.11",
+    });
+
+    assert.deepEqual(result, { ok: true });
+    const request = received[0];
+    assert.equal(request?.method, "POST");
+    assert.equal(request?.url, `/public/invitations/${PUBLIC.slug}/guestbook`);
+    assert.equal(request?.headers.cookie, undefined);
+    assert.equal(request?.headers["x-invitame-proxy-secret"], PROXY_SECRET);
+    assert.equal(request?.headers["x-invitame-client-ip"], "203.0.113.11");
+    assert.deepEqual(JSON.parse(request?.body ?? "null"), SIGNATURE);
+  });
+
+  it("makes no request for a slug that cannot be one", async () => {
+    for (const slug of ["", "Invitacion", "invitacion--doble", "../cuenta"]) {
+      assert.deepEqual(await client().submitGuestbook(slug, SIGNATURE), {
+        ok: false,
+        failure: "not-found",
+      });
+    }
+    assert.deepEqual(received, []);
+  });
+
+  it("maps each documented refusal to its own outcome", async () => {
+    const refusals: Array<[number, unknown, string]> = [
+      [404, { code: "PUBLIC_INVITATION_NOT_FOUND" }, "not-found"],
+      [409, { code: "GUESTBOOK_CLOSED" }, "closed"],
+      [429, { code: "GUESTBOOK_RATE_LIMITED" }, "rate-limited"],
+      [
+        400,
+        {
+          code: "INVALID_GUESTBOOK_ENTRY",
+          issues: ["message must be between 1 and 500 characters"],
+        },
+        "invalid",
+      ],
+    ];
+
+    for (const [status, body, failure] of refusals) {
+      answer(status, body);
+      assert.deepEqual(
+        await client().submitGuestbook(PUBLIC.slug, SIGNATURE),
+        { ok: false, failure },
+        `${status}`,
+      );
+    }
+  });
+
+  it("fails closed on a refusal this deployment does not implement and on an accepted body that breaks the contract", async () => {
+    answer(409, { code: "RSVP_NOT_OPEN" });
+    await assert.rejects(client().submitGuestbook(PUBLIC.slug, SIGNATURE), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "rejected");
+      return true;
+    });
+
+    answer(202, { status: "stored" });
+    await assert.rejects(client().submitGuestbook(PUBLIC.slug, SIGNATURE), (error: unknown) => {
       assert.ok(error instanceof ApiClientError);
       assert.equal(error.kind, "invalid-response");
       return true;

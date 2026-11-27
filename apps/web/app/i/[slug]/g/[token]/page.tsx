@@ -7,6 +7,7 @@ import { connection } from "next/server";
 import { GUEST_PAGE_COPY, PUBLIC_INVITATION_COPY } from "../../../../../lib/customer/copy.ts";
 import type { GuestPageBlockView } from "../../../../../lib/invitation-features/invitation-features.ts";
 import { checkInUrl } from "../../../../../lib/public/guest-pass.ts";
+import { guestbookNotice, publicGuestbookBlock } from "../../../../../lib/public/guestbook.ts";
 import { publicFeatureBlock } from "../../../../../lib/public/invitation-features.ts";
 import {
   guestGreeting,
@@ -20,9 +21,10 @@ import { findRenderer } from "../../../../../lib/renderers/registry.ts";
 import { requestOrigin } from "../../../../../lib/server/request-origin.ts";
 import { textButton } from "../../../../_components/ui.ts";
 import { InvitationMessage } from "../../_components/invitation-message.tsx";
-import { RsvpNoticeNote } from "../../_components/rsvp-notice.tsx";
+import { GuestbookNoticeNote, RsvpNoticeNote } from "../../_components/rsvp-notice.tsx";
 import { logPublicInvitation, PUBLIC_INVITATION_LOG_EVENT } from "../../_lib/public-api.ts";
 import { loadGuestInvitation } from "./_lib/load.ts";
+import { signGuestbookAction } from "../../actions.ts";
 import { submitGuestRsvpAction } from "./actions.ts";
 
 /**
@@ -125,18 +127,28 @@ export default async function GuestInvitationPage({
     ...(pass === undefined ? {} : { pass }),
   };
 
-  const block = publicFeatureBlock(invitation, undefined, guest);
+  // The wall of messages is the same card of the public page (F7; L10.5): the personal page shows it too, so a guest
+  // who arrived through their own link signs the same book.
+  const guestbook = publicGuestbookBlock(
+    invitation.features.guestbook,
+    invitation.slug,
+    signGuestbookAction,
+    invitation.expired,
+  );
+  const block = publicFeatureBlock(invitation, undefined, guest, guestbook);
   const rendererProps =
     block === undefined
       ? props
       : { ...props, features: block.features, calendarHref: block.calendarHref };
-  // The answer's notice, read from this page's own query and rendered on the server (S4).
+  // The notices of this page's own query, rendered on the server: the answer's (S4) and the signature's (F7).
   const notice = rsvpNotice(parameters);
+  const signatureNotice = guestbookNotice(parameters);
 
   return (
     <main className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
         {notice === undefined ? null : <RsvpNoticeNote notice={notice} />}
+        {signatureNotice === undefined ? null : <GuestbookNoticeNote notice={signatureNotice} />}
         <Renderer {...rendererProps} />
         <footer className="flex justify-center">
           <Link className={textButton} href="/">

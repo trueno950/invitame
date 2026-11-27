@@ -29,6 +29,8 @@ export interface GuestInvitationProps {
   readonly calendarHref?: string;
   /** The answer's notice, drawn above the invitation; the owner's preview has none (G3; S4). */
   readonly notice?: ReactNode;
+  /** The signature's notice, drawn above the invitation for the same reason (F7; L10.3). */
+  readonly signatureNotice?: ReactNode;
 }
 
 export function GuestInvitation({
@@ -39,6 +41,7 @@ export function GuestInvitation({
   features,
   calendarHref,
   notice,
+  signatureNotice,
 }: GuestInvitationProps) {
   const Renderer = findRenderer(componentKey);
 
@@ -59,6 +62,7 @@ export function GuestInvitation({
     <main className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
         {notice ?? null}
+        {signatureNotice ?? null}
         <Renderer {...props} />
         <footer className="flex justify-center">
           <Link className={textButton} href="/">

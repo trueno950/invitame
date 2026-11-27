@@ -7,6 +7,7 @@ import { type EventFacts, eventFactsFor } from "../invitation-features/event-fac
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import type { GiftRegistry } from "../invitation-features/gift-registry.ts";
 import {
+  type GuestbookBlockView,
   type GuestPageBlockView,
   hasAnyFeature,
   type InvitationFeatures,
@@ -145,6 +146,11 @@ export interface FeatureBlockSource {
   readonly places?: StoredPlaces;
   /** The open attendance card, when this page shows one (G3; S4). */
   readonly rsvp?: RsvpBlockView;
+  /**
+   * The guestbook wall, when this page shows one (F7; L10.5). The page that owns the slug and the server action builds
+   * it (`publicGuestbookBlock`), exactly like the attendance card, so this module never invents either.
+   */
+  readonly guestbook?: GuestbookBlockView;
   /** The personal block of one guest (G4), absent on every page that is not theirs. */
   readonly guest?: GuestPageBlockView;
 }
@@ -186,6 +192,7 @@ export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts
     ...(source.gated.lodging === null ? {} : { lodging: source.gated.lodging }),
     ...(Object.keys(places).length === 0 ? {} : { places }),
     ...(source.rsvp === undefined ? {} : { rsvp: source.rsvp }),
+    ...(source.guestbook === undefined ? {} : { guestbook: source.guestbook }),
     ...(source.guest === undefined ? {} : { guest: source.guest }),
   };
 
@@ -202,6 +209,7 @@ export function publicFeatureBlock(
   invitation: PublicInvitation,
   rsvp?: RsvpBlockView,
   guest?: GuestPageBlockView,
+  guestbook?: GuestbookBlockView,
 ): PublicFeatureBlock | undefined {
   const parts = featureBlockParts({
     componentKey: invitation.componentKey,
@@ -223,6 +231,7 @@ export function publicFeatureBlock(
     places: invitation.places,
     ...(rsvp === undefined ? {} : { rsvp }),
     ...(guest === undefined ? {} : { guest }),
+    ...(guestbook === undefined ? {} : { guestbook }),
   });
 
   return parts === undefined

@@ -94,6 +94,28 @@ export interface GuestPassBlockView {
   readonly people: number;
 }
 
+/** One message of the guestbook wall (F7; L10.1): the signature and the message, both plain text. */
+export interface GuestbookEntryValue {
+  readonly authorName: string;
+  readonly message: string;
+}
+
+/**
+ * The guestbook wall of one guest page (F7; S2.7, L10.5), as the shared features block renders it. The API owns the
+ * gate: the page builds this view only while the package grants `GUESTBOOK`. The wall lists the visible messages newest
+ * first and serves the form below them; an expired invitation keeps the wall and closes the form with a note. `action`
+ * is the server action the form posts to, so the block works with no client script at all.
+ */
+export interface GuestbookBlockView {
+  /** The invitation's public slug, the only value that names it to the API. */
+  readonly slug: string;
+  /** The visible entries, already newest first and at most 50, as the API answered them. */
+  readonly entries: readonly GuestbookEntryValue[];
+  /** Whether the invitation expired, so the wall shows the closing note instead of the form. */
+  readonly closed: boolean;
+  readonly action?: RsvpFormAction;
+}
+
 /**
  * The guest's own block of their personal page: the greeting, the seats they hold, their answer card, and their pass
  * when the API offers one. It is absent on the public page, which is why a public render keeps exactly the markup it
@@ -152,6 +174,11 @@ export interface InvitationFeatures {
    */
   readonly lodging?: Lodging;
   /**
+   * The guestbook wall the shared block draws (F7; L10.5), or absent when the package does not grant `GUESTBOOK`. An
+   * empty list is a wall waiting for its first message, so it still renders its form.
+   */
+  readonly guestbook?: GuestbookBlockView;
+  /**
    * The confirmed points of this invitation, keyed by the address field each one belongs to (S1, S2). Only a point
    * whose stored label still equals the text the field holds is here, so the block attaches a coordinate to exactly
    * the places a guest may be sent to. Absent or empty renders the map links of every layout unchanged.
@@ -185,6 +212,7 @@ export const INVITATION_FEATURE_KEYS = [
   "MUSIC",
   "GIFT_REGISTRY",
   "LODGING",
+  "GUESTBOOK",
   "RSVP",
   "GUEST_LIST",
   "QR_PASS",
@@ -217,6 +245,7 @@ export function hasAnyFeature(features: InvitationFeatures): boolean {
     (features.gallery !== undefined && features.gallery.length > 0) ||
     (features.itinerary !== undefined && features.itinerary.length > 0) ||
     (features.lodging !== undefined && lodgingHasContent(features.lodging)) ||
+    features.guestbook !== undefined ||
     features.giftRegistryDetails !== undefined ||
     features.rsvp !== undefined ||
     features.guest !== undefined

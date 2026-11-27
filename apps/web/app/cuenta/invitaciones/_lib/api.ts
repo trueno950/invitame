@@ -87,6 +87,9 @@ export const invitations = {
     settings: Parameters<InvitationsClient["updateRsvpSettings"]>[1],
   ) => logged((api) => api.updateRsvpSettings(id, settings)),
   rsvpCsv: (id: string) => logged((api) => api.rsvpCsv(id)),
+  guestbook: (id: string) => logged((api) => api.guestbook(id)),
+  setGuestbookEntryHidden: (id: string, entryId: string, hidden: boolean) =>
+    logged((api) => api.setGuestbookEntryHidden(id, entryId, hidden)),
   guests: (id: string) => logged((api) => api.guests(id)),
   createGuest: (id: string, guest: Parameters<InvitationsClient["createGuest"]>[1]) =>
     logged((api) => api.createGuest(id, guest)),

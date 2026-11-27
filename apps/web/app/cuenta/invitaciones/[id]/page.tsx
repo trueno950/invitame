@@ -20,6 +20,7 @@ import {
   editorSnapshotKey,
   parseEditorSection,
 } from "../../../../lib/customer/editor-sections.ts";
+import { GUESTBOOK_OWNER_PATHS } from "../../../../lib/customer/guestbook.ts";
 import { featureSettingsView } from "../../../../lib/customer/invitation-features.ts";
 import {
   type MediaSectionView,
@@ -426,6 +427,9 @@ export default async function InvitationDetailPage({
             featureView={features}
             gallery={<GallerySectionBlock state={mediaState} />}
             guestListHref={RSVP_PATHS.responses(invitation.id)}
+            guestbookHref={
+              features.showGuestbook ? GUESTBOOK_OWNER_PATHS.page(invitation.id) : undefined
+            }
             initialSection={section}
             initialField={focusField}
             invitationId={invitation.id}

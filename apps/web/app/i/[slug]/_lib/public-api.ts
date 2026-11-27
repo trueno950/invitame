@@ -4,6 +4,8 @@ import { ApiClientError } from "../../../../lib/server/api-client.ts";
 import { getWebServerConfig } from "../../../../lib/server/config.ts";
 import {
   createPublicInvitationsClient,
+  type PublicGuestbookSubmission,
+  type PublicGuestbookSubmitResult,
   type PublicGuestResult,
   type PublicGuestRsvpSubmission,
   type PublicGuestRsvpSubmitResult,
@@ -32,6 +34,7 @@ export const PUBLIC_INVITATION_LOG_EVENT = {
   RENDERER_UNKNOWN: "public_invitation_renderer_unknown",
   RENDERER_PROPS_REFUSED: "public_invitation_renderer_props_refused",
   RSVP_SUBMIT_FAILED: "public_rsvp_submit_failed",
+  GUESTBOOK_SUBMIT_FAILED: "public_guestbook_submit_failed",
   GUEST_READ_FAILED: "public_guest_read_failed",
   GUEST_RSVP_SUBMIT_FAILED: "public_guest_rsvp_submit_failed",
 } as const;
@@ -102,6 +105,24 @@ export async function submitPublicRsvp(
     return await publicInvitationsClient().submitRsvp(slug, submission, options);
   } catch (error) {
     logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.RSVP_SUBMIT_FAILED, { error });
+    throw error;
+  }
+}
+
+/**
+ * One guest's signature on the invitation's wall through the anonymous client (F7; L10.3). A failure this deployment
+ * could not map is logged once as its class and kind and rethrown, so the action can answer the guest one sentence
+ * instead of an error page. Nothing logged names a guest, a message, or the invitation's content.
+ */
+export async function submitPublicGuestbook(
+  slug: string,
+  submission: PublicGuestbookSubmission,
+  options?: { clientAddress?: string },
+): Promise<PublicGuestbookSubmitResult> {
+  try {
+    return await publicInvitationsClient().submitGuestbook(slug, submission, options);
+  } catch (error) {
+    logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.GUESTBOOK_SUBMIT_FAILED, { error });
     throw error;
   }
 }

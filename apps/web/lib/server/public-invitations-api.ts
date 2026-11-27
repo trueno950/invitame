@@ -1,6 +1,9 @@
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import { type GiftRegistry, parseGiftRegistry } from "../invitation-features/gift-registry.ts";
-import { isE164Phone } from "../invitation-features/invitation-features.ts";
+import {
+  isE164Phone,
+  type GuestbookEntryValue,
+} from "../invitation-features/invitation-features.ts";
 import { type Itinerary, parseItinerary } from "../invitation-features/itinerary.ts";
 import { type Lodging, parseLodging } from "../invitation-features/lodging.ts";
 import { type MusicLink, musicServiceOf } from "../invitation-features/music.ts";
@@ -91,6 +94,13 @@ export interface PublicInvitationFeatures {
    * null, so a page deployed earlier keeps rendering (L20).
    */
   readonly lodging: Lodging | null;
+  /**
+   * The guestbook wall (F7; L10.4): the visible entries newest first, at most 50, or null when the pinned package does
+   * not grant `GUESTBOOK`. An empty list is a granted wall waiting for its first message, so the page still offers the
+   * form. An API body written before F7 answers no field and reads as null, so a page deployed earlier keeps rendering
+   * and a body of this generation reads the same way (L20).
+   */
+  readonly guestbook: readonly GuestbookEntryValue[] | null;
   /**
    * The gallery photos in the creator's order (M8 S3, S4), an empty array when the package does not grant `GALLERY`
    * and always a list, so a layout can read it without a guard.
@@ -223,6 +233,50 @@ function parsePublicRsvp(value: unknown): PublicRsvpFeature | undefined {
   return { mode, deadline, partyLimit, qrPass };
 }
 
+/** The widest signature and message the API stores, mirrored so a body that says more is refused whole (F7; L10.1). */
+const GUESTBOOK_AUTHOR_NAME_MAX_LENGTH = 60;
+const GUESTBOOK_MESSAGE_MAX_LENGTH = 500;
+/** How many visible entries the wall may hold, mirrored from the API's own bound (F7; L10.4). */
+const MAX_GUESTBOOK_ENTRIES = 50;
+
+/**
+ * The guestbook wall of a guest page, or null when the pinned package does not grant it (F7; L10.4). An absent field is
+ * an API written before F7 and reads as null, so a rolling deploy keeps both generations working; a list past the
+ * API's own bound, an entry of another shape, or text wider than the column is not this contract, so the whole body is
+ * refused instead of being shown.
+ */
+function parsePublicGuestbook(value: unknown): readonly GuestbookEntryValue[] | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (!Array.isArray(value) || value.length > MAX_GUESTBOOK_ENTRIES) {
+    return undefined;
+  }
+
+  const entries: GuestbookEntryValue[] = [];
+  for (const item of value) {
+    const entry = record(item);
+
+    if (entry === undefined) {
+      return undefined;
+    }
+    const { authorName, message } = entry;
+
+    if (
+      typeof authorName !== "string" ||
+      [...authorName].length < 1 ||
+      [...authorName].length > GUESTBOOK_AUTHOR_NAME_MAX_LENGTH ||
+      typeof message !== "string" ||
+      [...message].length < 1 ||
+      [...message].length > GUESTBOOK_MESSAGE_MAX_LENGTH
+    ) {
+      return undefined;
+    }
+    entries.push({ authorName, message });
+  }
+  return entries;
+}
+
 /** The alt texts the API stores, mirrored so a body that says more is refused whole (M8 S4). */
 const MEDIA_ALT_MAX_LENGTH = 120;
 /** How many photos one gallery may hold, mirrored from the API's own limit (M8 S4). */
@@ -318,8 +372,12 @@ function parsePublicFeatures(
   // The same rule for the lodging (F4; L7.3): an absent field (a body written before F4) reads as none, and another
   // shape refuses the body instead of reaching a guest.
   const lodging = features.lodging === undefined ? null : parseLodging(features.lodging);
+  // The wall follows the same rule (F7; L20): an absent field (a body written before F7) reads as none, and another
+  // shape refuses the body instead of reaching a guest.
+  const guestbook = parsePublicGuestbook(features.guestbook);
 
   if (
+    guestbook === undefined ||
     music === undefined ||
     rsvp === undefined ||
     gallery === undefined ||
@@ -339,6 +397,7 @@ function parsePublicFeatures(
     giftRegistry: giftRegistryGranted,
     giftRegistryDetails: giftRegistry,
     lodging,
+    guestbook,
     music,
     itinerary,
     gallery,
@@ -642,12 +701,37 @@ export type PublicRsvpSubmitResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly failure: "not-found" | "not-open" | "rate-limited" | "invalid" };
 
+/** One signature on the guestbook wall, as the form submits it (F7; L10.1, L10.3). */
+export interface PublicGuestbookSubmission {
+  readonly authorName: string;
+  readonly message: string;
+  /** The hidden field a bot fills; any value makes the API answer success without storing anything. */
+  readonly honeypot: string;
+}
+
+/**
+ * The outcomes of one signature the page handles. Every accepted attempt — stored or dropped by the honeypot — is
+ * `{ ok: true }`, so the page says thank you without learning which one it was. `closed` is the wall of a package that
+ * does not grant the key or of an expired invitation.
+ */
+export type PublicGuestbookSubmitResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly failure: "not-found" | "closed" | "rate-limited" | "invalid" };
+
 /** The status and code pairing each refusal this deployment implements; anything else fails closed. */
 const RSVP_REFUSALS: Readonly<Record<string, { status: number; failure: string }>> = {
   PUBLIC_INVITATION_NOT_FOUND: { status: 404, failure: "not-found" },
   RSVP_NOT_OPEN: { status: 409, failure: "not-open" },
   RSVP_RATE_LIMITED: { status: 429, failure: "rate-limited" },
   INVALID_RSVP: { status: 400, failure: "invalid" },
+};
+
+/** The status and code pairing each guestbook refusal this deployment implements; anything else fails closed. */
+const GUESTBOOK_REFUSALS: Readonly<Record<string, { status: number; failure: string }>> = {
+  PUBLIC_INVITATION_NOT_FOUND: { status: 404, failure: "not-found" },
+  GUESTBOOK_CLOSED: { status: 409, failure: "closed" },
+  GUESTBOOK_RATE_LIMITED: { status: 429, failure: "rate-limited" },
+  INVALID_GUESTBOOK_ENTRY: { status: 400, failure: "invalid" },
 };
 
 /** The `code` of a refusal body, if the body is one this client can read at all. */
@@ -694,6 +778,15 @@ export interface PublicInvitationsClient {
     submission: PublicRsvpSubmission,
     options?: { clientAddress?: string },
   ): Promise<PublicRsvpSubmitResult>;
+  /**
+   * `POST /public/invitations/:slug/guestbook`: one guest's signature on the wall (F7; L10.3). The address the web
+   * forwarded travels in the API's client-IP header and is what the API's rate limit counts against.
+   */
+  submitGuestbook(
+    slug: string,
+    submission: PublicGuestbookSubmission,
+    options?: { clientAddress?: string },
+  ): Promise<PublicGuestbookSubmitResult>;
 }
 
 /**
@@ -854,6 +947,49 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
 
       const code = refusalCode(text);
       const refusal = code === undefined ? undefined : RSVP_REFUSALS[code];
+
+      if (refusal !== undefined && refusal.status === status) {
+        return { ok: false, failure: refusal.failure as "not-found" };
+      }
+
+      throw new ApiClientError(status >= 500 ? "unavailable" : "rejected", status);
+    },
+
+    async submitGuestbook(
+      slug: string,
+      submission: PublicGuestbookSubmission,
+      request: { clientAddress?: string } = {},
+    ): Promise<PublicGuestbookSubmitResult> {
+      if (!isInvitationSlug(slug)) {
+        return { ok: false, failure: "not-found" };
+      }
+
+      const { status, text } = await sendApiRequest(
+        options,
+        {
+          method: "POST",
+          path: `/public/invitations/${encodeURIComponent(slug)}/guestbook`,
+          body: submission,
+          ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+        },
+        (answer): boolean => readsRsvpBody(answer),
+      );
+
+      if (status >= 200 && status < 300) {
+        let payload: unknown;
+        try {
+          payload = JSON.parse(text ?? "");
+        } catch {
+          payload = undefined;
+        }
+        if (!isAccepted(payload)) {
+          throw new ApiClientError("invalid-response", status);
+        }
+        return { ok: true };
+      }
+
+      const code = refusalCode(text);
+      const refusal = code === undefined ? undefined : GUESTBOOK_REFUSALS[code];
 
       if (refusal !== undefined && refusal.status === status) {
         return { ok: false, failure: refusal.failure as "not-found" };

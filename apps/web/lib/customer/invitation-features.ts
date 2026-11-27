@@ -49,6 +49,8 @@ const ITINERARY_FEATURE_KEY = "ITINERARY";
 const LODGING_FEATURE_KEY = "LODGING";
 /** The catalog key that grants WhatsApp reminders (F6; L9.2), granted by Deluxe. */
 const WHATSAPP_REMINDERS_FEATURE_KEY = "WHATSAPP_REMINDERS";
+/** The catalog key that grants the guestbook (F7; L10.2), granted by Premium and Deluxe. */
+const GUESTBOOK_FEATURE_KEY = "GUESTBOOK";
 
 /** Everything the section renders for one draft. */
 export interface FeatureSettingsView {
@@ -104,6 +106,12 @@ export interface FeatureSettingsView {
    * the moment a sender is configured.
    */
   readonly remindersConfigured: boolean;
+  /**
+   * Whether the package includes GUESTBOOK, which is the only reason the «Funciones» tab links to the invitation's
+   * «Libro de firmas» screen (F7; L10.2, L10.6). A package without the key keeps a stored book private instead of
+   * offering a moderation screen nobody can publish.
+   */
+  readonly showGuestbook: boolean;
   /**
    * Whether the package includes RSVP, which is the only reason the draft offers its «Asistencia» section
    * (M6 G3; S4). A package with the guest list instead keeps that section for the guest-list tools (G4).
@@ -196,6 +204,7 @@ export function featureSettingsView(
     showReminders: included.has(WHATSAPP_REMINDERS_FEATURE_KEY),
     reminders: remindersDraftOf(invitation.featureSettings.reminders),
     remindersConfigured: invitation.remindersConfigured === true,
+    showGuestbook: included.has(GUESTBOOK_FEATURE_KEY),
     showRsvp: included.has(RSVP_FEATURE_KEY),
     giftRegistryNote: giftRegistryNote(packages, included),
     automaticFeatures: AUTOMATIC_FEATURES.filter(

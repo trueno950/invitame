@@ -1,6 +1,10 @@
 import { createElement, type ReactElement, useId } from "react";
 
-import { GUEST_PAGE_COPY, RSVP_FORM_COPY } from "../../../lib/customer/copy.ts";
+import {
+  GUEST_PAGE_COPY,
+  GUESTBOOK_FORM_COPY,
+  RSVP_FORM_COPY,
+} from "../../../lib/customer/copy.ts";
 import { calendarEventFor, googleCalendarUrl } from "../../../lib/invitation-features/calendar.ts";
 import {
   GIFT_REGISTRY_ENVELOPES_LINE,
@@ -21,6 +25,7 @@ import {
   galleryPhotoAlt,
 } from "../../../lib/invitation-features/gallery.ts";
 import {
+  type GuestbookBlockView,
   type GuestPassBlockView,
   type GuestRsvpBlockView,
   hasAnyFeature,
@@ -194,6 +199,15 @@ const TEXT_AREA = `${FIELD} min-h-24 resize-y`;
 /** A field a person never fills: off the screen, out of the tab order, and never autofilled. */
 const HONEYPOT = "absolute -left-[9999px] h-px w-px overflow-hidden";
 const SUBMIT = `${ACTION} self-start border-0`;
+
+// The wall of messages (F7; L10.5): one card per signature on the theme's soft surface, the guest's words in the ink,
+// and the signature in the theme's own display face on the accent — the artboard's script line, drawn with the only font
+// the invitation owns. The form below the notes is the same field pair as the RSVP card, so it needs no client script.
+const GUESTBOOK_NOTE_LIST = "mt-3 flex flex-col gap-2.5";
+const GUESTBOOK_NOTE = "rounded-xl bg-(--inv-soft) px-4 py-3.5";
+const GUESTBOOK_MESSAGE =
+  "text-sm leading-6 whitespace-pre-line break-words text-(color:--inv-ink)";
+const GUESTBOOK_SIGNATURE = "mt-1 text-xl leading-tight text-(color:--inv-accent)";
 
 // The companion rows of F3 (L6.3): one row per extra person, the name on the theme's surface and the «Niño» mark on its
 // own line, so a phone never has to fit both in one line. The rows the party does not cover are hidden and disabled by
@@ -892,6 +906,112 @@ function itinerarySection(moments: readonly ItineraryMoment[]): ReactElement {
 }
 
 /**
+ * The guestbook wall of one invitation (F7; S2.7, L10.5): the title and its invitation to sign, then one note per
+ * visible message with the signature in the theme's display face, then the form of «Firmar el libro». The form is the
+ * page's own field pair plus the hidden honeypot, so the wall works with no client script; an expired invitation keeps
+ * the notes and replaces the form with the closing note (S2). Every message is React's own text node, so a guest's words
+ * are escaped and a URL they typed is never made clickable (L10.3).
+ */
+function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): ReactElement {
+  const notes =
+    guestbook.entries.length === 0
+      ? null
+      : h(
+          "ul",
+          { "data-guestbook-notes": "", className: GUESTBOOK_NOTE_LIST },
+          guestbook.entries.map((entry, index) =>
+            h(
+              "li",
+              {
+                key: `${index}-${entry.authorName}`,
+                "data-guestbook-note": "",
+                className: GUESTBOOK_NOTE,
+              },
+              h("p", { className: GUESTBOOK_MESSAGE }, entry.message),
+              h("p", { className: GUESTBOOK_SIGNATURE, style: DISPLAY_FONT }, entry.authorName),
+            ),
+          ),
+        );
+
+  return h(
+    "div",
+    { key: "guestbook", "data-feature": "guestbook", className: SURFACE_CARD },
+    h("h3", { className: FEATURE_TITLE }, GUESTBOOK_FORM_COPY.title),
+    h("p", { className: HINT }, GUESTBOOK_FORM_COPY.hint),
+    notes ?? h("p", { className: HINT }, GUESTBOOK_FORM_COPY.emptyNote),
+    ...(guestbook.closed
+      ? [h("p", { key: "closed", className: HINT }, GUESTBOOK_FORM_COPY.closedNote)]
+      : [
+          h(
+            "form",
+            { key: "form", "data-guestbook-form": "", action: guestbook.action, className: FORM },
+            h("input", { type: "hidden", name: "slug", value: guestbook.slug }),
+            h(
+              "div",
+              { "aria-hidden": "true", className: HONEYPOT },
+              h(
+                "label",
+                { htmlFor: `${idPrefix}-guestbook-honeypot` },
+                GUESTBOOK_FORM_COPY.honeypotLabel,
+              ),
+              h("input", {
+                id: `${idPrefix}-guestbook-honeypot`,
+                name: "honeypot",
+                type: "text",
+                tabIndex: -1,
+                autoComplete: "off",
+                "aria-hidden": "true",
+              }),
+            ),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-guestbook-name` },
+                GUESTBOOK_FORM_COPY.nameLabel,
+              ),
+              h("input", {
+                id: `${idPrefix}-guestbook-name`,
+                name: "authorName",
+                type: "text",
+                required: true,
+                maxLength: 60,
+                autoComplete: "name",
+                placeholder: GUESTBOOK_FORM_COPY.namePlaceholder,
+                className: FIELD,
+              }),
+            ),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-guestbook-message` },
+                GUESTBOOK_FORM_COPY.messageLabel,
+              ),
+              h("textarea", {
+                id: `${idPrefix}-guestbook-message`,
+                name: "message",
+                required: true,
+                maxLength: 500,
+                rows: 3,
+                placeholder: GUESTBOOK_FORM_COPY.messagePlaceholder,
+                className: TEXT_AREA,
+              }),
+              h("p", { className: HINT }, GUESTBOOK_FORM_COPY.messageHint),
+            ),
+            h(
+              "div",
+              { className: ACTIONS },
+              h("button", { type: "submit", className: SUBMIT }, GUESTBOOK_FORM_COPY.submit),
+            ),
+          ),
+        ]),
+  );
+}
+
+/**
  * The gift registry (F2; L4.5): one row per store, in the order the owner stored, with its reference and the «Ver mesa →»
  * link that opens it in a new tab without handing the opener over; then the transfer block with the bank, the holder,
  * and the CLABE grouped for reading next to its «Copiar CLABE» button; the envelopes line when the owner switched it
@@ -1229,7 +1349,8 @@ export function InvitationFeaturesBlock({
     );
   }
 
-  // Last, after everything a guest might need to decide: the one action of the page (M6 G3; S4).
+  // The guest's own cards come last, after everything they might need to decide: the answer first (M6 G3; S4), and the
+  // wall of messages after it (F7; L10.5).
   if (features.rsvp !== undefined) {
     sections.push(rsvpSection(features.rsvp, features.timeZone, idPrefix));
   }
@@ -1243,6 +1364,11 @@ export function InvitationFeaturesBlock({
     if (pass !== null) {
       sections.push(pass);
     }
+  }
+
+  // Last of all: the wall of messages, which closes the block with its notes and its form (F7; L10.5).
+  if (features.guestbook !== undefined) {
+    sections.push(guestbookSection(features.guestbook, idPrefix));
   }
 
   return h(

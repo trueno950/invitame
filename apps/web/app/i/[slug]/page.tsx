@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
+import { guestbookNotice, publicGuestbookBlock } from "../../../lib/public/guestbook.ts";
 import { publicFeatureBlock } from "../../../lib/public/invitation-features.ts";
 import { invitationMetadata } from "../../../lib/public/invitation-page.ts";
 import { rendererAcceptsProps } from "../../../lib/public/invitation-render.ts";
@@ -10,10 +11,10 @@ import { publicRsvpBlock, rsvpNotice } from "../../../lib/public/invitation-rsvp
 import { findRenderer } from "../../../lib/renderers/registry.ts";
 import { GuestInvitation } from "./_components/guest-invitation.tsx";
 import { InvitationMessage } from "./_components/invitation-message.tsx";
-import { RsvpNoticeNote } from "./_components/rsvp-notice.tsx";
+import { GuestbookNoticeNote, RsvpNoticeNote } from "./_components/rsvp-notice.tsx";
 import { loadPublicInvitation } from "./_lib/load.ts";
 import { logPublicInvitation, PUBLIC_INVITATION_LOG_EVENT } from "./_lib/public-api.ts";
-import { submitRsvpAction } from "./actions.ts";
+import { signGuestbookAction, submitRsvpAction } from "./actions.ts";
 
 /**
  * `/i/[slug]` (M5 T5; S1, S5, A3, A5, A6, A7, A8): the guest's page of a published invitation. A server
@@ -108,9 +109,18 @@ export default async function PublicInvitationPage({
     new Date(),
     invitation.expired,
   );
-  const block = publicFeatureBlock(invitation, rsvp);
-  // The answer's notice, read from this page's own query and rendered on the server (G3; S4).
+  // The wall of messages follows the same rule (F7; L10.5): the API answers it only while the package grants
+  // `GUESTBOOK`, and an expired invitation keeps the wall and closes its form instead.
+  const guestbook = publicGuestbookBlock(
+    invitation.features.guestbook,
+    invitation.slug,
+    signGuestbookAction,
+    invitation.expired,
+  );
+  const block = publicFeatureBlock(invitation, rsvp, undefined, guestbook);
+  // The notices of this page's own query, rendered on the server: the answer's (G3; S4) and the signature's (F7).
   const notice = rsvpNotice(parameters);
+  const signatureNotice = guestbookNotice(parameters);
 
   // The invitation itself is the guest view the owner's preview renders too (T2b), with the notice of this page.
   return (
@@ -123,6 +133,9 @@ export default async function PublicInvitationPage({
         ? {}
         : { features: block.features, calendarHref: block.calendarHref })}
       {...(notice === undefined ? {} : { notice: <RsvpNoticeNote notice={notice} /> })}
+      {...(signatureNotice === undefined
+        ? {}
+        : { signatureNotice: <GuestbookNoticeNote notice={signatureNotice} /> })}
     />
   );
 }

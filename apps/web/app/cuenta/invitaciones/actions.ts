@@ -25,6 +25,7 @@ import {
   publishInvitation,
   unpublishInvitation,
 } from "../../../lib/customer/invitations.ts";
+import { hideGuestbookEntry, showGuestbookEntry } from "../../../lib/customer/guestbook.ts";
 import { guestShareUrl } from "../../../lib/public/guest-pass.ts";
 import { requestOrigin } from "../../../lib/server/request-origin.ts";
 import { guestLinkCookie, guestLinks } from "../../../lib/server/single-use-flash.ts";
@@ -175,4 +176,18 @@ export async function removeGuestAction(formData: FormData): Promise<void> {
 /** Replaces one guest's personal link and answers the new one once (M6 G4; S4). */
 export async function rotateGuestLinkAction(formData: FormData): Promise<void> {
   await finishGuestWrite(await rotateGuestLink(invitations, formData));
+}
+
+/**
+ * Hides one guestbook entry (F7; L10.6): the owner's only moderation. The message stays stored, and the hidden tab is
+ * where the owner finds it again; a form outside the screen carries the invitation it belongs to, so the action always
+ * comes back to that invitation's book.
+ */
+export async function hideGuestbookEntryAction(formData: FormData): Promise<void> {
+  redirect(await hideGuestbookEntry(invitations, formData));
+}
+
+/** Shows one hidden guestbook entry again, coming back to the visible tab (F7; L10.6). */
+export async function showGuestbookEntryAction(formData: FormData): Promise<void> {
+  redirect(await showGuestbookEntry(invitations, formData));
 }

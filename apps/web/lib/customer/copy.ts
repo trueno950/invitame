@@ -392,6 +392,7 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "guest-list-unavailable":
     "Esta invitación no incluye la lista de invitados. Se muestra con el paquete Deluxe.",
   "guest-not-found": "No encontramos ese invitado en esta invitación.",
+  "guestbook-entry-not-found": "No encontramos ese mensaje en esta invitación.",
   "guest-not-confirmed":
     "Ese invitado todavía no confirma que asistirá, así que no podemos registrar su entrada.",
   "guest-seats-below-response":
@@ -912,6 +913,8 @@ export const EDITOR_COPY = {
   attendanceGuestListNote:
     "Tu paquete incluye la lista de invitados: cada invitado responde desde su enlace personal.",
   attendanceGuestListOpen: "Abrir la lista de invitados",
+  /** The link from «Funciones» to the invitation's own guestbook screen (F7; L10.6). */
+  funcionesGuestbookOpen: "Abrir el libro de firmas",
   /** The «Publicar» tab: the state of the draft, its public link, and the one action that changes it. */
   publishMeta: {
     unpaid: "sin pagar",
@@ -1210,6 +1213,68 @@ export const RSVP_FORM_COPY = {
   closedNote: (deadline: string) => `La confirmación de asistencia cerró el ${deadline}.`,
   /** The same news when the stored deadline cannot be read on this runtime's clock. */
   closedGeneric: "La confirmación de asistencia ya cerró.",
+} as const;
+
+/**
+ * The guestbook wall of one guest page (F7; S2.7, L10.5): its title, the two fields and their submit, the note of a
+ * closed wall, and the empty state. The design's wall is the whole card, so the copy names the book and invites the
+ * guest to sign; the message is plain text and the page renders it as such.
+ */
+export const GUESTBOOK_FORM_COPY = {
+  title: "Libro de firmas",
+  hint: "Déjale tus mejores deseos a quien celebra.",
+  nameLabel: "Tu nombre",
+  namePlaceholder: "Nombre y apellido",
+  messageLabel: "Tu mensaje",
+  messagePlaceholder: "Escribe tu mensaje",
+  messageHint: "Puedes escribir hasta 500 caracteres.",
+  submit: "Firmar el libro",
+  /** The wall a guest finds before its first message (F7; L10.5). */
+  emptyNote: "Todavía no hay mensajes. ¡Sé la primera persona en firmar!",
+  /** The note of a wall closed by the invitation's expiry (F7; L10.5; S2). */
+  closedNote: "El libro de firmas se cerró cuando terminó la invitación.",
+  /** The one field no person sees: a bot fills it, and the API then answers success without storing anything. */
+  honeypotLabel: "No llenes este campo",
+} as const;
+
+/**
+ * What the guest page says after signing the wall, read from its own query (F7; L10.3). Each code is one Spanish
+ * sentence, so no API text ever reaches a guest; a code the page does not know shows nothing.
+ */
+export const GUESTBOOK_NOTICE_COPY = {
+  signed: "¡Gracias! Tu mensaje ya está en el libro de firmas.",
+  invalid: "Revisa tu nombre y tu mensaje e inténtalo de nuevo.",
+  closed: "El libro de firmas ya cerró.",
+  limited: "Recibimos muchos intentos desde tu conexión. Espera unos minutos e inténtalo de nuevo.",
+  unavailable: "No pudimos guardar tu mensaje. Inténtalo de nuevo en unos minutos.",
+} as const;
+
+/**
+ * The owner's «Libro de firmas» screen (F7; L10.6): the two tabs with their counts, the one action of each message,
+ * and the note that hiding never deletes. The copy says the messages are published at once, exactly as the API
+ * behaves, so the owner is never surprised by one appearing on the wall.
+ */
+export const GUESTBOOK_OWNER_COPY = {
+  pageTitle: "Libro de firmas | InvitaMe",
+  eyebrow: "Tu invitación",
+  heading: "Libro de firmas",
+  intro: "Los mensajes se publican al momento; puedes ocultar cualquiera que no quieras mostrar.",
+  visibleTab: (count: number) => `Visibles · ${count}`,
+  hiddenTab: (count: number) => `Ocultos · ${count}`,
+  showActions: "Mostrar",
+  hideAction: "Ocultar",
+  emptyVisible: "Todavía no hay mensajes visibles en tu libro de firmas.",
+  emptyHidden: "No has ocultado ningún mensaje.",
+  note: "Ocultar un mensaje no lo borra: puedes mostrarlo otra vez cuando quieras.",
+  backToInvitation: "← Volver a la invitación",
+  unavailable: "No pudimos leer el libro de firmas. Inténtalo de nuevo en unos minutos.",
+  /** The relative date of one signature, as the screen shows it next to the name. */
+  signedNow: "hace unos minutos",
+  signedHours: (hours: number) => `hace ${hours} ${hours === 1 ? "hora" : "horas"}`,
+  signedYesterday: "ayer",
+  signedDays: (days: number) => `hace ${days} días`,
+  /** Which tab the page renders, from its own query. */
+  tabLabel: "Qué mensajes ves",
 } as const;
 
 /**

@@ -985,6 +985,14 @@ function stub(answers: Answers = {}): Stub {
       calls.push("emitSimulatedPayment");
       return unexpected("emitSimulatedPayment");
     },
+    guestbook: () => {
+      calls.push("guestbook");
+      return unexpected("guestbook");
+    },
+    setGuestbookEntryHidden: () => {
+      calls.push("setGuestbookEntryHidden");
+      return unexpected("setGuestbookEntryHidden");
+    },
   };
   return { api, calls };
 }
