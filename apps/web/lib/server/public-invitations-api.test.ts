@@ -1067,6 +1067,7 @@ describe("the guest's photo upload (F8; L11.3, L11.5)", () => {
       [404, { code: "PUBLIC_INVITATION_NOT_FOUND" }, "not-found"],
       [409, { code: "GUEST_ALBUM_CLOSED" }, "closed"],
       [409, { code: "GUEST_ALBUM_FULL" }, "full"],
+      [409, { code: "GUEST_ALBUM_PENDING_FULL" }, "pending-full"],
       [429, { code: "GUEST_ALBUM_RATE_LIMITED" }, "rate-limited"],
       [
         400,

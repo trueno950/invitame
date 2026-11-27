@@ -35,6 +35,7 @@ export const GUEST_ALBUM_NOTICE_CODES = [
   "invalid",
   "closed",
   "full",
+  "pending-full",
   "limited",
   "unavailable",
 ] as const;
@@ -184,13 +185,17 @@ export function guestAlbumNoticeMessage(
 /** The client call this module needs, so a test can hand it a fake and see exactly what it sent. */
 export type PublicGuestAlbumClient = Pick<PublicInvitationsClient, "uploadGuestPhoto">;
 
-/** Each refusal of the API, as the notice the guest page shows (L11.5). */
+/** Each refusal of the API, as the notice the guest page shows (L11.5, L26). */
 const RESULT_CODES: Readonly<
-  Record<"invalid" | "closed" | "full" | "rate-limited" | "not-found", GuestAlbumNoticeCode>
+  Record<
+    "invalid" | "closed" | "full" | "pending-full" | "rate-limited" | "not-found",
+    GuestAlbumNoticeCode
+  >
 > = {
   invalid: "invalid",
   closed: "closed",
   full: "full",
+  "pending-full": "pending-full",
   "rate-limited": "limited",
   // The page itself answers 404 for a slug that no longer resolves, so the notice says nothing new.
   "not-found": "unavailable",

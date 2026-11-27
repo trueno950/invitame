@@ -1261,6 +1261,7 @@ export const GUEST_ALBUM_NOTICE_COPY = {
   invalid: "Revisa tu foto: debe ser un archivo JPG, PNG o WebP y pesar menos de lo permitido.",
   closed: "El álbum de fotos ya cerró.",
   full: "El álbum de fotos de esta invitación ya está lleno.",
+  "pending-full": "Hay muchas fotos esperando revisión. Inténtalo de nuevo más tarde.",
   limited: "Recibimos muchas fotos desde tu conexión. Espera unos minutos e inténtalo de nuevo.",
   unavailable: "No pudimos subir tu foto. Inténtalo de nuevo en unos minutos.",
 } as const;

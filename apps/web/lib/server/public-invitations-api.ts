@@ -820,14 +820,21 @@ export interface PublicGuestPhotoUpload {
 /**
  * The outcomes of one upload the page handles. A success means the photo is stored PENDING, never published: the page
  * says it will appear once the owner approves it (L11.5). `closed` is the album of an expired invitation or of a
- * package that does not grant the key, `full` the invitation that already stores its cap, and `invalid` a file the
- * domain refused — its type, its size, or its dimensions.
+ * package that does not grant the key, `full` the invitation whose album already holds its cap of pending and published
+ * photos, `pending-full` the invitation whose queue of photos waiting for review is over its own cap (L26), and
+ * `invalid` a file the domain refused — its type, its size, or its dimensions.
  */
 export type PublicGuestPhotoUploadResult =
   | { readonly ok: true }
   | {
       readonly ok: false;
-      readonly failure: "not-found" | "closed" | "full" | "rate-limited" | "invalid";
+      readonly failure:
+        | "not-found"
+        | "closed"
+        | "full"
+        | "pending-full"
+        | "rate-limited"
+        | "invalid";
     };
 
 /** The status and code pairing each refusal this deployment implements; anything else fails closed. */
@@ -855,6 +862,7 @@ const GUEST_ALBUM_REFUSALS: Readonly<Record<string, { status: number; failure: s
   PUBLIC_INVITATION_NOT_FOUND: { status: 404, failure: "not-found" },
   GUEST_ALBUM_CLOSED: { status: 409, failure: "closed" },
   GUEST_ALBUM_FULL: { status: 409, failure: "full" },
+  GUEST_ALBUM_PENDING_FULL: { status: 409, failure: "pending-full" },
   GUEST_ALBUM_RATE_LIMITED: { status: 429, failure: "rate-limited" },
   INVALID_GUEST_PHOTO: { status: 400, failure: "invalid" },
   INVALID_MEDIA_UPLOAD: { status: 400, failure: "invalid" },

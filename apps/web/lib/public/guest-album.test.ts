@@ -162,12 +162,17 @@ describe("the notice of an upload (F8; L11.5)", () => {
     );
   });
 
+  it("tells the waiting queue apart from a full album, in its own sentence (L26)", () => {
+    assert.notEqual(GUEST_ALBUM_NOTICE_COPY["pending-full"], GUEST_ALBUM_NOTICE_COPY.full);
+  });
+
   it("states every refusal the API documents in its own Spanish sentence", () => {
     const codes: GuestAlbumNoticeCode[] = [
       "uploaded",
       "invalid",
       "closed",
       "full",
+      "pending-full",
       "limited",
       "unavailable",
     ];
@@ -216,6 +221,7 @@ describe("the upload one guest's form sends (F8; L11.5)", () => {
     const refusals = [
       ["closed", "closed"],
       ["full", "full"],
+      ["pending-full", "pending-full"],
       ["rate-limited", "limited"],
       ["invalid", "invalid"],
       ["not-found", "unavailable"],
