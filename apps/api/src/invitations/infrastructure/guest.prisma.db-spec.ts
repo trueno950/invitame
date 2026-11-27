@@ -395,6 +395,27 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
           error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003",
       );
     });
+
+    it("removes a guest whose reminders were already recorded, and their attempts with it (F6; review R3-001)", async () => {
+      const { invitation, ownerId } = await newInvitation(["RSVP", "GUEST_LIST"]);
+      const guest = await newGuest(invitation, { phone: "+525512345678" });
+      await prisma.reminderDelivery.create({
+        data: {
+          invitationId: invitation.id,
+          guestId: guest.guest.id,
+          kind: "PENDING_RSVP_7D",
+          dueDate: new Date("2026-12-03T00:00:00.000Z"),
+          status: "skipped",
+          reason: "not_configured",
+          attemptedAt: AT,
+        },
+      });
+
+      // A reminder run only records an operational attempt: it never keeps the owner from removing the guest.
+      assert.equal(await remove.execute(ownerId, invitation.id, guest.guest.id), true);
+      assert.equal(await prisma.guest.count({ where: { id: guest.guest.id } }), 0);
+      assert.equal(await prisma.reminderDelivery.count({ where: { guestId: guest.guest.id } }), 0);
+    });
   });
 
   describe("the guarded creator writes", () => {

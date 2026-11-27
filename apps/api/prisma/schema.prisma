@@ -487,7 +487,8 @@ model ReminderDelivery {
   updatedAt    DateTime               @updatedAt @db.Timestamptz(6)
 
   invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
-  guest      Guest      @relation(fields: [guestId], references: [id], onDelete: Restrict)
+  // Removing a guest removes its recorded attempts (F6; review R3-001); the invitation stays RESTRICT.
+  guest      Guest      @relation(fields: [guestId], references: [id], onDelete: Cascade)
 
   @@unique([invitationId, guestId, kind, dueDate])
   // The owner's own page and any later report read the attempts of one invitation newest first, and the command

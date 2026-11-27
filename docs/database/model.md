@@ -311,8 +311,10 @@ normalization, the playlist link allow-list, and the gating — lives in
   start at. A run claims the row as `pending` before the message leaves and then records the outcome — `sent`,
   `skipped` with a stable reason (`not_configured` while no provider exists, S6), or `failed` — so a repeated run finds
   the attempt and sends nothing twice, and a run interrupted after the claim leaves one attempt recorded instead of a
-  duplicate. The row carries no phone, name, or message body: the guest's own data stays in `Guest`. Both references are
-  `ON DELETE RESTRICT`, like every other reference here.
+  duplicate. The row carries no phone, name, or message body: the guest's own data stays in `Guest`. The invitation
+  reference is `ON DELETE RESTRICT`; the guest reference is `ON DELETE CASCADE` (migration
+  `20261208120000_cascade_reminder_delivery_guest`, review R3-001), so removing a guest removes its recorded attempts and
+  a reminder run never keeps the owner from removing a guest.
 - The legacy `Invitation.content.giftRegistry` text field stays for existing invitations (F2; L4.3): the public read
   withholds it — and names it in `hiddenFields` — while the structured registry has a store, a transfer, or the
   envelopes line, so a guest never sees the old text and the new card at the same time. An invitation with only the old
