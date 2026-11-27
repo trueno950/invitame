@@ -18,6 +18,21 @@ import {
   type InvitationGalleryReader,
 } from "../invitations/application/invitation-gallery";
 import { INVITATION_MEDIA_COUNT_READER } from "../invitations/application/invitation-media-counts";
+import { INVITATION_GUEST_ALBUM_READER } from "../invitations/application/invitation-guest-album";
+import {
+  GetGuestAlbumUseCase,
+  ReadPublicGuestAlbumUseCase,
+  ReviewGuestPhotoUseCase,
+  UploadGuestPhotoUseCase,
+} from "./application/guest-album.use-cases";
+import {
+  GUEST_ALBUM_REPOSITORY,
+  type GuestAlbumRepository,
+} from "./application/guest-album.repository";
+import {
+  GUEST_ALBUM_RATE_LIMITER,
+  type GuestAlbumRateLimiter,
+} from "./application/guest-album-rate-limiter";
 import { IMAGE_PROCESSOR } from "./application/image-processing";
 import { MEDIA_REPOSITORY, type MediaRepository } from "./application/media.repository";
 import {
@@ -36,9 +51,13 @@ import { MEDIA_STORAGE, type MediaStorage } from "./application/media-storage";
 import { type AssetUrl, mediaUrl } from "./application/media-url";
 import { createMediaStorage } from "./infrastructure/create-media-storage";
 import { PrismaInvitationMediaCountReader } from "./infrastructure/prisma-invitation-media-count-reader";
+import { PrismaGuestAlbumRateLimiter } from "./infrastructure/prisma-guest-album-rate-limiter";
+import { PrismaGuestAlbumRepository } from "./infrastructure/prisma-guest-album.repository";
 import { PrismaMediaRepository } from "./infrastructure/prisma-media.repository";
 import { SharpImageProcessor } from "./infrastructure/sharp-image-processor";
+import { InvitationsGuestAlbumController } from "./presentation/invitations-guest-album.controller";
 import { InvitationsMediaController } from "./presentation/invitations-media.controller";
+import { PublicGuestAlbumController } from "./presentation/public-guest-album.controller";
 import { MediaController } from "./presentation/media.controller";
 
 /** The log sink of media events: one structured line per event, never a key, an id, an owner, or image data. */
@@ -70,7 +89,12 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
  */
 @Module({
   imports: [CatalogModule, SettingsModule],
-  controllers: [InvitationsMediaController, MediaController],
+  controllers: [
+    InvitationsMediaController,
+    MediaController,
+    PublicGuestAlbumController,
+    InvitationsGuestAlbumController,
+  ],
   providers: [
     {
       provide: MEDIA_LOG,
@@ -152,10 +176,80 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
         new DeleteMediaUseCase(invitations, storage, { log }),
     },
     {
+      // One adapter serves the album's persistence port, the public read the projection consumes, and the cleanup's
+      // retired-photo scan (F8; L11.1, L11.4, L11.6).
+      provide: PrismaGuestAlbumRepository,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PrismaGuestAlbumRepository(prisma),
+    },
+    { provide: GUEST_ALBUM_REPOSITORY, useExisting: PrismaGuestAlbumRepository },
+    {
+      provide: GUEST_ALBUM_RATE_LIMITER,
+      // The same `RateLimit` table Better Auth and the other public forms use; only the prefix and the window are the
+      // album's (F8; L11.3).
+      useFactory: (prisma: PrismaService) => new PrismaGuestAlbumRateLimiter(prisma),
+      inject: [PrismaService],
+    },
+    {
+      provide: UploadGuestPhotoUseCase,
+      inject: [
+        GUEST_ALBUM_REPOSITORY,
+        MEDIA_CATALOG,
+        MEDIA_STORAGE,
+        IMAGE_PROCESSOR,
+        GUEST_ALBUM_RATE_LIMITER,
+        MEDIA_LOG,
+        ConfigService,
+        OPERATIONAL_SETTINGS_READER,
+      ],
+      useFactory: (
+        invitations: GuestAlbumRepository,
+        catalog: MediaCatalog,
+        storage: MediaStorage,
+        processor: SharpImageProcessor,
+        rateLimiter: GuestAlbumRateLimiter,
+        log: MediaLog,
+        config: ConfigService<RuntimeEnvironment, true>,
+        settings: OperationalSettingsReader,
+      ) =>
+        new UploadGuestPhotoUseCase(invitations, catalog, storage, processor, rateLimiter, {
+          assetUrl: assetUrlFrom(config),
+          log,
+          settings,
+        }),
+    },
+    {
+      provide: GetGuestAlbumUseCase,
+      inject: [GUEST_ALBUM_REPOSITORY, ConfigService],
+      useFactory: (
+        invitations: GuestAlbumRepository,
+        config: ConfigService<RuntimeEnvironment, true>,
+      ) => new GetGuestAlbumUseCase(invitations, { assetUrl: assetUrlFrom(config) }),
+    },
+    {
+      provide: ReviewGuestPhotoUseCase,
+      inject: [GUEST_ALBUM_REPOSITORY, ConfigService],
+      useFactory: (
+        invitations: GuestAlbumRepository,
+        config: ConfigService<RuntimeEnvironment, true>,
+      ) => new ReviewGuestPhotoUseCase(invitations, { assetUrl: assetUrlFrom(config) }),
+    },
+    {
+      provide: INVITATION_GUEST_ALBUM_READER,
+      inject: [GUEST_ALBUM_REPOSITORY, ConfigService],
+      useFactory: (
+        invitations: GuestAlbumRepository,
+        config: ConfigService<RuntimeEnvironment, true>,
+      ) => new ReadPublicGuestAlbumUseCase(invitations, { assetUrl: assetUrlFrom(config) }),
+    },
+    {
       provide: ServeMediaUseCase,
-      inject: [MEDIA_REPOSITORY, MEDIA_STORAGE],
-      useFactory: (invitations: MediaRepository, storage: MediaStorage) =>
-        new ServeMediaUseCase(invitations, storage),
+      inject: [MEDIA_REPOSITORY, MEDIA_STORAGE, GUEST_ALBUM_REPOSITORY],
+      useFactory: (
+        invitations: MediaRepository,
+        storage: MediaStorage,
+        guestAlbum: GuestAlbumRepository,
+      ) => new ServeMediaUseCase(invitations, storage, guestAlbum),
     },
     {
       provide: INVITATION_GALLERY_READER,
@@ -175,11 +269,19 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
     },
     {
       provide: CleanupMediaUseCase,
-      inject: [MEDIA_REPOSITORY, MEDIA_STORAGE, MEDIA_LOG],
-      useFactory: (invitations: MediaRepository, storage: MediaStorage, log: MediaLog) =>
-        new CleanupMediaUseCase(invitations, storage, log),
+      inject: [MEDIA_REPOSITORY, MEDIA_STORAGE, MEDIA_LOG, GUEST_ALBUM_REPOSITORY],
+      useFactory: (
+        invitations: MediaRepository,
+        storage: MediaStorage,
+        log: MediaLog,
+        guestAlbum: GuestAlbumRepository,
+      ) => new CleanupMediaUseCase(invitations, storage, log, { guestAlbum }),
     },
   ],
-  exports: [INVITATION_GALLERY_READER, INVITATION_MEDIA_COUNT_READER],
+  exports: [
+    INVITATION_GALLERY_READER,
+    INVITATION_GUEST_ALBUM_READER,
+    INVITATION_MEDIA_COUNT_READER,
+  ],
 })
 export class MediaModule {}

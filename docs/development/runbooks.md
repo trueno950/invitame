@@ -375,8 +375,8 @@ pnpm media:cleanup -- --dry-run
 pnpm media:cleanup
 ```
 
-The dry run reports `deletedObjects`, `orphanObjects`, `skippedRecentObjects`, `deletedRows`, and `failedObjects`
-without touching anything (`apps/api/scripts/media-cleanup.ts:37-39`; the apply run prints the same object with
+The dry run reports `deletedObjects`, `orphanObjects`, `skippedRecentObjects`, `deletedRows`, `failedObjects`, and
+`retiredGuestPhotos` without touching anything (`apps/api/scripts/media-cleanup.ts:37-39`; the apply run prints the same object with
 `"mode":"apply"` from `apps/api/src/media/application/media.use-cases.ts:582`). It is the right first step after a
 failed upload or delete, and the routine step before trusting it as a periodic job. Two reasons it is safe at any
 time: an object with no row is only treated as an orphan once it is older than the **one-hour** grace period
@@ -419,7 +419,10 @@ pnpm media:cleanup
 
 Prints the counts described in [§4](#when-to-run-pnpm-mediacleanup---dry-run-first), deletes the objects of rows
 marked `deleted`, the objects under `invitations/` that no row names and that are older than the one-hour grace
-period, and then the rows whose object is gone. Idempotent for the same reason: a second run finds nothing that the
+period, and then the rows whose object is gone. It also retires the guests' photos an owner never published or took
+down again (F8; L11.6): once such a photo has been in that state for 30 days (`GUEST_PHOTO_RETENTION_DAYS`), the run
+deletes its object and then its row and counts it in `retiredGuestPhotos`. A published photo, and a pending or hidden
+one younger than that, keeps both, and its object is never treated as an orphan. Idempotent for the same reason: a second run finds nothing that the
 first did not already remove, and a failed object keeps its row for the next run. It needs `NODE_ENV`, the
 database URL, and the media variables, but no auth, web, or payment secret.
 

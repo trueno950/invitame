@@ -7,9 +7,11 @@ import { MAX_ALT_LENGTH } from "../domain/media-asset";
 // named fields are accepted (any other field is a 400), exactly one file part is accepted, and a repeated field is
 // refused rather than silently overwritten. Nothing is written before the whole body is validated.
 
-/** The fields the upload route accepts, next to the file part. */
-const ALLOWED_FIELDS = ["kind", "alt"] as const;
-/** One file plus its two fields; more parts than this are refused before they are parsed. */
+/** The fields the owner's upload route accepts, next to the file part. */
+const UPLOAD_FIELDS = ["kind", "alt"] as const;
+/** The fields the guests' album route accepts, next to the file part (F8; L11.1, L11.3). */
+export const GUEST_PHOTO_FIELDS = ["uploaderName"] as const;
+/** One file plus its fields; more parts than this are refused before they are parsed. */
 const MAX_PARTS = 5;
 
 /** A multipart refusal, with the status the route answers and a stable code. */
@@ -37,14 +39,25 @@ export interface MultipartUpload {
   fields: Map<string, string>;
 }
 
+/** What one route accepts next to the file: its size bound and its own allow-list of text fields. */
+export interface MultipartUploadOptions {
+  readonly maxBytes: number;
+  /**
+   * The text-field names the route accepts. Every route states its own, so a field one route accepts is refused on the
+   * other instead of reaching a use case that would ignore it (F8; L11.3).
+   */
+  readonly fields?: readonly string[];
+}
+
 /**
  * Reads and validates one multipart upload. The client's `Content-Type` of the file part and its filename are
  * recorded but never trusted: the application decides the format from the bytes.
  */
 export async function readMultipartUpload(
   request: IncomingMessage,
-  options: { maxBytes: number },
+  options: MultipartUploadOptions,
 ): Promise<MultipartUpload> {
+  const allowedFields: readonly string[] = options.fields ?? UPLOAD_FIELDS;
   const boundary = boundaryOf(request.headers["content-type"]);
   const body = await readBody(request, options.maxBytes);
   const parts = splitParts(body, boundary);
@@ -75,7 +88,7 @@ export async function readMultipartUpload(
       continue;
     }
 
-    if (!(ALLOWED_FIELDS as readonly string[]).includes(disposition.name)) {
+    if (!allowedFields.includes(disposition.name)) {
       throw invalid("The form has an unexpected field.");
     }
     if (fields.has(disposition.name)) {
