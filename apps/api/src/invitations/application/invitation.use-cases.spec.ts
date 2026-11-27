@@ -466,7 +466,17 @@ function features(
 /** The feature keys of every seeded package (prisma/catalog-seed.ts), by package key (S4). */
 const SEEDED_PACKAGE_FEATURES = {
   basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
-  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP", "LODGING"],
+  premium: [
+    "ITINERARY",
+    "COUNTDOWN",
+    "MUSIC",
+    "GALLERY",
+    "MAP",
+    "RSVP",
+    "WHATSAPP",
+    "LODGING",
+    "GUESTBOOK",
+  ],
   deluxe: [
     "ITINERARY",
     "COUNTDOWN",
@@ -477,6 +487,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "WHATSAPP",
     "GIFT_REGISTRY",
     "LODGING",
+    "GUESTBOOK",
     "GUEST_LIST",
     "QR_PASS",
   ],
@@ -1055,6 +1066,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       "RSVP",
       "WHATSAPP",
       "MUSIC",
+      "GUESTBOOK",
       "GALLERY",
       "CALENDAR",
     ]);
@@ -1147,6 +1159,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         "COUNTDOWN",
         "MAP",
         "RSVP",
+        "GUESTBOOK",
         "GALLERY",
         "CALENDAR",
       ]);
@@ -1258,6 +1271,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       "MAP",
       "RSVP",
       "LODGING",
+      "GUESTBOOK",
       "GALLERY",
       "CALENDAR",
     ]);
@@ -1302,6 +1316,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
         "COUNTDOWN",
         "MAP",
         "RSVP",
+        "GUESTBOOK",
         "GALLERY",
         "CALENDAR",
       ]);
@@ -2172,6 +2187,7 @@ describe("GetPublicInvitationUseCase", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -2375,6 +2391,8 @@ describe("GetPublicInvitationUseCase", () => {
           giftRegistry: packageKey === "deluxe",
           giftRegistryDetails: null,
           lodging: null,
+          // Premium and Deluxe grant the guestbook, so their wall is an empty list; Basic answers no wall (F7; L10.2).
+          guestbook: packageKey === "basic" ? null : [],
           gallery: [],
           // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form (M6 S4).
           rsvp: {
@@ -2418,6 +2436,8 @@ describe("GetPublicInvitationUseCase", () => {
           giftRegistry: packageKey === "deluxe",
           giftRegistryDetails: null,
           lodging: null,
+          // Premium and Deluxe grant the guestbook, so their wall is an empty list; Basic answers no wall (F7; L10.2).
+          guestbook: packageKey === "basic" ? null : [],
           gallery: [],
           rsvp: {
             mode: packageKey === "deluxe" ? "guest-list" : packageKey === "premium" ? "open" : null,
@@ -2436,6 +2456,7 @@ describe("GetPublicInvitationUseCase", () => {
         "gallery",
         "giftRegistry",
         "giftRegistryDetails",
+        "guestbook",
         "itinerary",
         "lodging",
         "map",
@@ -2475,6 +2496,7 @@ describe("GetPublicInvitationUseCase", () => {
       giftRegistry: false,
       giftRegistryDetails: null,
       lodging: null,
+      guestbook: null,
       gallery: [],
       rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
     });

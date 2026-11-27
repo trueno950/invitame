@@ -366,6 +366,7 @@ model Invitation {
   adminActions    AdminAction[]
   views           InvitationView[]
   reminderDeliveries ReminderDelivery[]
+  guestbookEntries GuestbookEntry[]
 
   @@index([ownerId])
   // The administrator's status view (M9 T2; S1) reads a page newest first, optionally filtered by one status, so
@@ -642,6 +643,33 @@ model Guest {
   reminderDeliveries ReminderDelivery[]
 
   @@index([invitationId])
+}
+
+// One message a guest signed in one invitation's guestbook (F7; S2.7, L10.1). The name and the message are plain text
+// the guest typed, trimmed and bounded by the API domain (`domain/invitation-guestbook.ts`); the page renders them as
+// text, so nothing becomes markup and no URL becomes a link. `hidden` is the owner's only moderation: false is
+// published at once, true keeps the entry stored and takes it off the guest's wall, and either can be set again, so
+// nothing a guest wrote is ever deleted by the guest. The reference to the invitation is ON DELETE RESTRICT like every
+// other invitation reference, because an invitation is archived and never hard-deleted here; the guestbook therefore
+// never keeps the owner from an existing operation (L24). Migration 20261209120000_add_guestbook adds the table, the
+// length CHECK constraints Prisma cannot express, its read index, and the `GUESTBOOK` catalog key with its links to the
+// premium and deluxe packages.
+model GuestbookEntry {
+  id           String   @id @default(uuid()) @db.Uuid
+  invitationId String   @db.Uuid
+  // The signature: 1 to 60 trimmed characters, checked by "GuestbookEntry_authorName_length".
+  authorName   String   @db.VarChar(60)
+  // The message: 1 to 500 trimmed characters, checked by "GuestbookEntry_message_length".
+  message      String   @db.VarChar(500)
+  // False publishes the entry at once; true hides it from the wall and keeps it for the owner (L10.6).
+  hidden       Boolean  @default(false)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+
+  // The guest wall reads one invitation's visible entries newest first; the owner's screen reads them all in the same
+  // order, so one index serves both reads.
+  @@index([invitationId, hidden, createdAt])
 }
 
 // One checkout intent for one invitation (M7 S1, S4). `amountMinor` and `currency` are the snapshot of the

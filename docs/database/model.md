@@ -239,8 +239,8 @@ its name, and its message (`Invitation pinned fields are immutable`) are unchang
 
 ## Invitation feature data
 
-Current status: the `Invitation.timeZone` column and the `InvitationFeatureSettings` table exist and the API reads
-and writes them (F1, F6, F7; S3, S4, S7). The conditional shape of the feature rules — the zone allow-list, the phone
+Current status: the `Invitation.timeZone` column, the `InvitationFeatureSettings` table, and the guestbook's own
+`GuestbookEntry` table exist and the API reads and writes them (F1, F6, F7; S3, S4, S7). The conditional shape of the feature rules — the zone allow-list, the phone
 normalization, the playlist link allow-list, and the gating — lives in
 `apps/api/src/invitations/domain/invitation-features.ts`.
 
@@ -358,6 +358,51 @@ normalization, the playlist link allow-list, and the gating — lives in
   `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "reminders";`, and finally `DROP TABLE "ReminderDelivery";` with
   its two enum types. Only the stored switches, the attempts, and the catalog key are lost; invitations, their content,
   the guests, and every other feature setting stay. Never edit the applied migration file.
+
+## Guestbook data
+
+Current status: the `GuestbookEntry` table exists and the API reads and writes it (F7; S2.7, L10.1, L10.3, L10.4,
+L10.6). The rules — the signature's and the message's bounds, the visible-only projection, and the bound of the wall —
+live in `apps/api/src/invitations/domain/invitation-guestbook.ts`.
+
+- `GuestbookEntry` stores one message a guest signed: `invitationId`, `authorName` (`VARCHAR(60)`), `message`
+  (`VARCHAR(500)`), `hidden` (`BOOLEAN NOT NULL DEFAULT false`), and `createdAt` (`TIMESTAMPTZ(6)`). Both texts are
+  plain text, trimmed and bounded by the API domain, and the two CHECK constraints `GuestbookEntry_authorName_length`
+  and `GuestbookEntry_message_length` repeat the bounds for a reader that does not go through the API: 1 to 60 and 1
+  to 500 characters, so a stored blank is impossible. Nothing else is stored — no IP address, session, token, or guest
+  id — because an entry is the guest's public words and the rate limit keeps its own hashed key in `RateLimit`.
+- The pages never render a stored value as markup: the guest wall draws each signature and message as React's own text
+  node, so a `<script>` a guest typed stays visible characters and a URL in a message is never made clickable (L10.3).
+  That is a rule of the renderer, not of a column: the database cannot state it, and the text is kept exactly as the
+  guest wrote it (after trimming).
+- `GuestbookEntry.invitationId` references `Invitation` with `ON DELETE RESTRICT`, the convention every reference to an
+  invitation follows here: an invitation is archived, never hard-deleted, so the reference never keeps the owner from
+  an operation they have (L24). There is no reference to `Guest`, so the guestbook can never keep the owner from
+  removing a guest either.
+- `hidden` is the owner's only moderation (L10.6): `false` publishes the entry at once, `true` takes it off the wall and
+  keeps it stored. The owner's write only changes that column, and it is idempotent, so hiding a hidden entry or showing
+  a visible one changes nothing. Nothing a guest signed is ever deleted — by the guest or by the owner — so a hidden
+  message can always be shown again.
+- The wall reads one invitation's entries where `hidden = false`, newest first (`createdAt DESC, id DESC`) and at most
+  50 (L10.4), through the index `GuestbookEntry_invitationId_hidden_createdAt_idx`; the owner's screen reads every entry
+  of the invitation in the same order through the same index. The public projection drops the entry id and the hidden
+  flag, so nothing about the moderation reaches a guest.
+- The public submission is one statement: `INSERT … SELECT` from the invitation guarded by `status = 'PUBLISHED'` and
+  `expiresAt IS NULL OR expiresAt >= <instant>`, so a signature that races an unpublish or an expiry is refused by the
+  database rather than by an earlier read. The route itself refuses an unpublished, archived, not-granted, or expired
+  invitation before the rate limit, and a filled honeypot answers success while storing nothing.
+- The per-address rate limit uses the existing `RateLimit` table under the key
+  `guestbook|<invitationId>|<sha256(client address)>` — 10 signatures per hour per address per invitation, the same
+  window semantics as the open RSVP form and a prefix of its own, so the two forms never share a budget. The client
+  address itself is never stored.
+- The capability is the new `GUESTBOOK` key, granted to Premium and Deluxe by the migration (`ON CONFLICT DO NOTHING`)
+  and declared in the seed (`apps/api/prisma/catalog-seed.ts`), so the panel may grant or withdraw it without a
+  deployment. The key is the wall itself: a granted invitation shows an empty wall — and its form — before the first
+  message, and a package without the key answers `features.guestbook: null`.
+- Rollback / recovery of `20261209120000_add_guestbook`: additive, so recovery is redeploying the previous migration
+  set, or by hand deleting the `GUESTBOOK` `PackageFeature` links and the `GUESTBOOK` `Feature` row by key and then
+  `DROP TABLE "GuestbookEntry";`. Only the signed messages and the catalog key are lost; invitations, their content, and
+  every other feature setting stay. Never edit the applied migration file.
 
 ## Invitation places
 

@@ -68,7 +68,17 @@ const LODGING: InvitationLodging = {
 /** The feature keys of every seeded package (prisma/catalog-seed.ts), which is what gating intersects with S4. */
 const SEEDED_PACKAGE_FEATURES = {
   basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
-  premium: ["ITINERARY", "COUNTDOWN", "MUSIC", "GALLERY", "MAP", "RSVP", "WHATSAPP", "LODGING"],
+  premium: [
+    "ITINERARY",
+    "COUNTDOWN",
+    "MUSIC",
+    "GALLERY",
+    "MAP",
+    "RSVP",
+    "WHATSAPP",
+    "LODGING",
+    "GUESTBOOK",
+  ],
   deluxe: [
     "ITINERARY",
     "COUNTDOWN",
@@ -79,6 +89,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "WHATSAPP",
     "GIFT_REGISTRY",
     "LODGING",
+    "GUESTBOOK",
     "GUEST_LIST",
     "QR_PASS",
   ],
@@ -1021,6 +1032,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
             giftRegistry: packageKey === "deluxe",
             giftRegistryDetails: null,
             lodging: null,
+            // Premium and Deluxe grant the guestbook, so their wall is an empty list (F7; L10.2, L10.4).
+            guestbook: packageKey === "basic" ? null : [],
             gallery: [],
             // Premium grants RSVP and no guest list; Deluxe grants the guest list, which replaces the form.
             rsvp: {
@@ -1080,6 +1093,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: [],
         gallery: [],
         rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -1104,6 +1118,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: true,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: [],
         gallery: [],
         rsvp: { mode: "guest-list", deadline: null, partyLimit: 4, qrPass: true },
       });
@@ -1135,6 +1150,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -1160,6 +1176,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "gallery",
         "giftRegistry",
         "giftRegistryDetails",
+        "guestbook",
         "itinerary",
         "lodging",
         "map",

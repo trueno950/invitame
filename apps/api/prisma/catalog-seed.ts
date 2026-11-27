@@ -111,6 +111,11 @@ const FEATURE_SEEDS = [
     description: "Hoteles con tarifa especial para tus invitados y cómo moverse el día del evento.",
   },
   {
+    key: "GUESTBOOK",
+    name: "Libro de firmas",
+    description: "Un muro de mensajes para que tus invitados te dejen sus mejores deseos.",
+  },
+  {
     key: "WHATSAPP_REMINDERS",
     name: "Recordatorios por WhatsApp",
     description:
@@ -152,6 +157,7 @@ const PACKAGE_SEEDS = [
       "RSVP",
       "WHATSAPP",
       "LODGING",
+      "GUESTBOOK",
     ],
   },
   {
@@ -170,6 +176,7 @@ const PACKAGE_SEEDS = [
       "WHATSAPP",
       "GIFT_REGISTRY",
       "LODGING",
+      "GUESTBOOK",
       "WHATSAPP_REMINDERS",
       "GUEST_LIST",
       "QR_PASS",

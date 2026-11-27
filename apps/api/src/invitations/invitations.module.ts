@@ -107,6 +107,11 @@ import {
   SubmitPublicRsvpUseCase,
   UpdateRsvpSettingsUseCase,
 } from "./application/invitation-rsvp.use-cases";
+import {
+  GetGuestbookEntriesUseCase,
+  SetGuestbookEntryHiddenUseCase,
+  SubmitPublicGuestbookEntryUseCase,
+} from "./application/invitation-guestbook.use-cases";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "./application/music-metadata";
 import { PLACE_SEARCH, type PlaceSearch } from "./application/place-search";
 import { InMemoryPlaceSearchCache } from "./application/place-search-cache";
@@ -114,6 +119,16 @@ import {
   PLACE_SEARCH_RATE_LIMITER,
   type PlaceSearchRateLimiter,
 } from "./application/place-search-rate-limiter";
+import {
+  GUESTBOOK_REPOSITORY,
+  type GuestbookRepository,
+  INVITATION_GUESTBOOK_READER,
+  type InvitationGuestbookReader,
+} from "./application/guestbook.repository";
+import {
+  GUESTBOOK_RATE_LIMITER,
+  type GuestbookRateLimiter,
+} from "./application/guestbook-rate-limiter";
 import { RSVP_REPOSITORY, type RsvpRepository } from "./application/rsvp.repository";
 import { RSVP_RATE_LIMITER, type RsvpRateLimiter } from "./application/rsvp-rate-limiter";
 import { CatalogInvitationReader } from "./infrastructure/catalog-invitation-reader";
@@ -127,6 +142,8 @@ import { PrismaInvitationRepository } from "./infrastructure/prisma-invitation.r
 import { PrismaPlaceSearchRateLimiter } from "./infrastructure/prisma-place-search-rate-limiter";
 import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
+import { PrismaGuestbookRepository } from "./infrastructure/prisma-guestbook.repository";
+import { PrismaGuestbookRateLimiter } from "./infrastructure/prisma-guestbook-rate-limiter";
 import { InvitationsController } from "./presentation/invitations.controller";
 import { AdminAnalyticsController } from "./presentation/admin-analytics.controller";
 import { AdminInvitationsController } from "./presentation/admin-invitations.controller";
@@ -322,13 +339,16 @@ export const INVITATION_USE_CASES: Provider[] = [
       invitations: InvitationRepository,
       catalog: InvitationCatalog,
       gallery: InvitationGalleryReader | undefined,
-    ) => new GetPublicInvitationUseCase(invitations, catalog, gallery),
+      guestbook: InvitationGuestbookReader | undefined,
+    ) => new GetPublicInvitationUseCase(invitations, catalog, gallery, undefined, guestbook),
     // The media module implements the gallery port (M8 S4), so the public projection never queries media tables.
-    // Optional, so a test module that composes the invitations read alone still projects a published invitation.
+    // The guestbook port (F7; L10.4) is this module's own adapter, bound below. Both are optional, so a test module
+    // that composes the invitations read alone still projects a published invitation.
     inject: [
       INVITATION_REPOSITORY,
       INVITATION_CATALOG,
       { token: INVITATION_GALLERY_READER, optional: true },
+      { token: INVITATION_GUESTBOOK_READER, optional: true },
     ],
   },
   {
@@ -381,6 +401,34 @@ export const INVITATION_USE_CASES: Provider[] = [
       RSVP_RATE_LIMITER,
       OPERATIONAL_SETTINGS_READER,
     ],
+  },
+  // The guestbook (F7; S2.7, L10): the guest's signature, and the owner's read and one moderation write.
+  {
+    provide: SubmitPublicGuestbookEntryUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      guestbook: GuestbookRepository,
+      rateLimiter: GuestbookRateLimiter,
+    ) => new SubmitPublicGuestbookEntryUseCase(invitations, catalog, guestbook, rateLimiter),
+    inject: [
+      INVITATION_REPOSITORY,
+      INVITATION_CATALOG,
+      GUESTBOOK_REPOSITORY,
+      GUESTBOOK_RATE_LIMITER,
+    ],
+  },
+  {
+    provide: GetGuestbookEntriesUseCase,
+    useFactory: (invitations: InvitationRepository, guestbook: GuestbookRepository) =>
+      new GetGuestbookEntriesUseCase(invitations, guestbook),
+    inject: [INVITATION_REPOSITORY, GUESTBOOK_REPOSITORY],
+  },
+  {
+    provide: SetGuestbookEntryHiddenUseCase,
+    useFactory: (invitations: InvitationRepository, guestbook: GuestbookRepository) =>
+      new SetGuestbookEntryHiddenUseCase(invitations, guestbook),
+    inject: [INVITATION_REPOSITORY, GUESTBOOK_REPOSITORY],
   },
   // The guest list (M6 G2): every use case needs the invitation port, the catalog gate, and the guest port.
   {
@@ -585,6 +633,21 @@ export const INVITATION_USE_CASES: Provider[] = [
     {
       provide: RSVP_REPOSITORY,
       useFactory: (prisma: PrismaService) => new PrismaRsvpRepository(prisma),
+      inject: [PrismaService],
+    },
+    {
+      // One adapter serves the guestbook's write/read port and the public read the projection consumes (F7; L10.4).
+      provide: PrismaGuestbookRepository,
+      useFactory: (prisma: PrismaService) => new PrismaGuestbookRepository(prisma),
+      inject: [PrismaService],
+    },
+    { provide: GUESTBOOK_REPOSITORY, useExisting: PrismaGuestbookRepository },
+    { provide: INVITATION_GUESTBOOK_READER, useExisting: PrismaGuestbookRepository },
+    {
+      provide: GUESTBOOK_RATE_LIMITER,
+      // The same `RateLimit` table Better Auth and the RSVP form use; only the key prefix and the window are the
+      // guestbook's (F7; L10.3).
+      useFactory: (prisma: PrismaService) => new PrismaGuestbookRateLimiter(prisma),
       inject: [PrismaService],
     },
     {

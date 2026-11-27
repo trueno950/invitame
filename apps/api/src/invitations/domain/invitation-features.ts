@@ -30,6 +30,7 @@
  * `America/Ojinaga` matches `America/Matamoros` on the United States daylight-saving rule — but they are
  * distinct places with distinct historical rules, so the owner still picks the one that names their location.
  */
+import type { PublicGuestbookEntry } from "./invitation-guestbook";
 import {
   giftRegistryHasContent,
   type InvitationGiftRegistry,
@@ -84,7 +85,7 @@ export function isInvitationTimeZone(value: unknown): value is InvitationTimeZon
  * `QR_PASS` is the guest list's access pass for the door, also M6 G2, and `GALLERY` is the invitation's photo
  * gallery (M8 S3, S4). `ITINERARY` is the plan of the day (F1; S2.1, L3.2) and comes first because it is the first
  * capability of the owner's list; `LODGING` is the lodging and transport block (F4; S2.4, L7.2). The order is the
- * order the owner's feature list follows.
+ * order the owner's feature list follows; `GUESTBOOK` is the guest's wall of messages (F7; S2.7, L10.2).
  */
 export const IMPLEMENTED_INVITATION_FEATURES = [
   "ITINERARY",
@@ -95,6 +96,7 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   "MUSIC",
   "GIFT_REGISTRY",
   "LODGING",
+  "GUESTBOOK",
   "GUEST_LIST",
   "QR_PASS",
   "GALLERY",
@@ -133,6 +135,14 @@ export const GIFT_REGISTRY_FEATURE_KEY = "GIFT_REGISTRY";
  * exists; the public read answers the block itself only when there is something to draw.
  */
 export const LODGING_FEATURE_KEY = "LODGING";
+
+/**
+ * The catalog key that grants the guestbook (F7; S2.7, L10.2), granted by Premium and Deluxe. Unlike the itinerary and
+ * the lodging the key stays on with no stored data at all, because the wall exists to receive the first message: the
+ * public read answers `features.guestbook` with the visible entries — an empty list while there are none — only when
+ * the package grants it.
+ */
+export const GUESTBOOK_FEATURE_KEY = "GUESTBOOK";
 
 /**
  * The public shape of one itinerary moment (F1; L3.1, L3.3): the wall clock, the title, and the place and address
@@ -712,6 +722,13 @@ export interface PublicInvitationFeatures {
    */
   readonly lodging: PublicLodging | null;
   /**
+   * The guestbook a guest's wall draws (F7; L10.4): the visible entries newest first, at most 50, each one the
+   * signature and the message a guest signed. It is the list itself rather than a switch — an empty array is a wall
+   * waiting for its first message — and it is null only when the pinned package does not grant `GUESTBOOK`, so a
+   * stored message the package does not grant stays private.
+   */
+  readonly guestbook: readonly PublicGuestbookEntry[] | null;
+  /**
    * The gallery photos the page renders, ordered by position (M8 S4). Empty when the package does not grant
    * `GALLERY`, so the shape is stable and a layout can always read an array; an empty array and an absent gallery
    * look the same to the guest, which is exactly right: there is nothing to render either way.
@@ -749,6 +766,7 @@ export interface PublicInvitationFeatures {
 export function publicInvitationFeatures(
   gate: InvitationFeatureGate,
   galleryPhotos: readonly PublicGalleryPhoto[] = [],
+  guestbookEntries: readonly PublicGuestbookEntry[] = [],
 ): PublicInvitationFeatures {
   const keys = new Set(availableFeatureKeys(gate));
   // A row written around the API reads as no itinerary at all, exactly like a title or a cover it refuses (S2, F1).
@@ -782,6 +800,8 @@ export function publicInvitationFeatures(
         : null,
     lodging:
       keys.has(LODGING_FEATURE_KEY) && lodgingHasContent(lodging) ? publicLodging(lodging) : null,
+    // The wall is the feature, not its data: a granted package answers its visible entries even while there are none.
+    guestbook: keys.has(GUESTBOOK_FEATURE_KEY) ? [...guestbookEntries] : null,
     // Only a package that grants GALLERY renders photos; the read passes none otherwise, and this repeats the gate.
     gallery: keys.has(GALLERY_FEATURE_KEY) ? galleryPhotos : [],
     rsvp: {

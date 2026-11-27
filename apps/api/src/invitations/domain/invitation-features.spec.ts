@@ -546,7 +546,37 @@ describe("feature gating (S4, F1)", () => {
       ...gate,
     });
 
-  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, GUEST_LIST, QR_PASS, and GALLERY, with CALENDAR always added", () => {
+  it("answers the guestbook with its visible entries only while the package grants it (F7; L10.4)", () => {
+    const entries = [
+      { authorName: "Tía Rosa", message: "¡Que sea un día hermoso!" },
+      { authorName: "Sofía y Jorge", message: "Nos vemos en la pista." },
+    ];
+
+    const GATE = {
+      includedFeatureKeys: ["GUESTBOOK"],
+      whatsappPhone: null,
+      playlistUrl: null,
+      playlistTitle: null,
+      playlistCoverUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+      lodging: null,
+      rsvpDeadline: null,
+      rsvpPartyLimit: 4,
+    };
+
+    assert.deepEqual(publicInvitationFeatures(GATE, [], entries).guestbook, entries);
+    // A wall with no message is still a wall: the key is granted and the list is empty, never null.
+    assert.deepEqual(publicInvitationFeatures(GATE).guestbook, []);
+    // A package without the key keeps the stored messages private.
+    assert.equal(
+      publicInvitationFeatures({ ...GATE, includedFeatureKeys: ["COUNTDOWN"] }, [], entries)
+        .guestbook,
+      null,
+    );
+  });
+
+  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_LIST, QR_PASS, and GALLERY, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
       "ITINERARY",
       "COUNTDOWN",
@@ -556,6 +586,7 @@ describe("feature gating (S4, F1)", () => {
       "MUSIC",
       "GIFT_REGISTRY",
       "LODGING",
+      "GUESTBOOK",
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
@@ -569,6 +600,9 @@ describe("feature gating (S4, F1)", () => {
     assert.deepEqual(gated(["VIDEO"]), ["CALENDAR"]);
     // The guest list and its QR pass are implemented by M6 G2 (S3, S4).
     assert.deepEqual(gated(["GUEST_LIST", "QR_PASS"]), ["GUEST_LIST", "QR_PASS", "CALENDAR"]);
+    // The guestbook is the wall itself (F7; L10.2): the key is offered while no entry is stored, because the wall is
+    // what receives the first one.
+    assert.deepEqual(gated(["GUESTBOOK"]), ["GUESTBOOK", "CALENDAR"]);
   });
 
   it("shows the features each seeded package includes, plus CALENDAR", () => {
@@ -695,6 +729,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -841,6 +876,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -861,6 +897,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },
@@ -881,6 +918,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistry: true,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       },

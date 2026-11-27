@@ -12,6 +12,7 @@ import { invitationExpiresAt, isInvitationExpired } from "../domain/invitation-e
 import {
   availableFeatureKeys,
   GALLERY_FEATURE_KEY,
+  GUESTBOOK_FEATURE_KEY,
   isMusicCoverUrl,
   MAP_FEATURE_KEY,
   musicProviderOf,
@@ -57,6 +58,7 @@ import type {
 } from "./invitation.repository";
 import type { CatalogVersionRenderData, InvitationCatalog } from "./invitation-catalog";
 import type { InvitationGalleryReader } from "./invitation-gallery";
+import type { InvitationGuestbookReader } from "./guestbook.repository";
 import type { InvitationPaymentGate } from "./invitation-payment-gate";
 import {
   legacyGiftRegistryHiddenFields,
@@ -805,6 +807,11 @@ export class GetPublicInvitationUseCase {
     private readonly gallery: InvitationGalleryReader = { readGallery: async () => [] },
     /** The instant the expiry is judged at (S2); injectable so a test observes the boundary exactly. */
     private readonly now: () => Date = () => new Date(),
+    /**
+     * The guestbook source (F7; L10.4). The default answers no entry, so a test that composes this read without the
+     * guestbook still projects a published invitation; the real adapter is bound in the module.
+     */
+    private readonly guestbook: InvitationGuestbookReader = { readVisibleEntries: async () => [] },
   ) {}
 
   async execute(slug: string): Promise<PublicInvitation | null> {
@@ -836,6 +843,11 @@ export class GetPublicInvitationUseCase {
     const gallery = includedFeatureKeys.includes(GALLERY_FEATURE_KEY)
       ? await this.gallery.readGallery(published.id)
       : [];
+    // The same rule for the wall of messages (F7; L10.4): a package without `GUESTBOOK` costs no extra query, and the
+    // projection answers no entries for it.
+    const guestbook = includedFeatureKeys.includes(GUESTBOOK_FEATURE_KEY)
+      ? await this.guestbook.readVisibleEntries(published.id)
+      : [];
 
     const features = publicInvitationFeatures(
       {
@@ -851,6 +863,7 @@ export class GetPublicInvitationUseCase {
         rsvpPartyLimit: published.rsvpPartyLimit,
       },
       gallery,
+      guestbook,
     );
     // The fields the omitted sections cover (S8.3), computed once from the pinned schema and the stored list: the
     // guest page draws no block for them, and their values are withheld from the projection below. A structured gift
