@@ -383,6 +383,18 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   2308/2308, db-specs 529/529 on a recreated database; browser check of the scriptless upload, the pending state, and
   owner publishing. The evidence commit adds the verifier's uploader-name escaping test; the cleanup command end-to-end
   test remains a follow-up.
+- L28 — F9 evidence: commits `bc0d212` (API, migration `20261211120000_add_invitation_livestream`, key `LIVESTREAM`
+  for premium and deluxe), `beb87dc` (review correction: control characters refused in the note; the gated-keys
+  assertion spelled out — the reviewer's arity claim was wrong, the helper takes nine arguments) and `32a5a74` (web:
+  click-to-load YouTube player, `frame-src https://www.youtube-nocookie.com` on `/i/*` only). Native review:
+  `review-e22451ed0a65b9e2` (API, approved after the correction) and `review-133d100deffdcd3c` (web, approved; its
+  only finding, that a link could not be typed, was refuted and also disproved in the browser). Independent
+  verification: every S2.9 and L12 item met except one case the parent rules out of scope: `www.youtu.be` and
+  `m.youtu.be` are not embedded because L12.3 lists only `youtu.be/` for the short form; they stay an open link (pinned
+  by a test). The embed address appears in the page payload as the island's prop, but no request reaches the provider
+  before the tap. Gates: API 2364/2364, web 2339/2339, db-specs 531/531 on a recreated database; browser check of the
+  facade, the tap, the sandboxed iframe, and typing the link in the editor. The evidence commit adds the verifier's
+  host allow-list spec and livestream card test. Advisory: a partially typed link may autosave (harmless).
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
