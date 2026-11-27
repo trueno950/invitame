@@ -125,6 +125,19 @@ describe("the uploader name a guest may type (F8; L11.1, L11.3)", () => {
     }
   });
 
+  it("accepts the joiners a valid emoji sequence and a script join need (L26)", () => {
+    const check = (uploaderName: string) =>
+      validateGuestPhotoUpload({ bytes: JPEG, uploaderName, maxBytes: MAX_BYTES });
+
+    for (const name of ["👨\u200D👩\u200D👧", "می\u200Cخواهم"] as const) {
+      const checked = check(name);
+      assert.equal(checked.ok && checked.value.uploaderName, name);
+    }
+    // The invisible characters that hide part of a name are still refused.
+    assert.equal(check("Rosa\u202ELópez").ok, false);
+    assert.equal(check("Ro\u200Bsa").ok, false);
+  });
+
   it("keeps the name as plain text, accents, emoji, and spaces included", () => {
     const validation = validateGuestPhotoUpload({
       bytes: JPEG,

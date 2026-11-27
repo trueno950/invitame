@@ -421,9 +421,10 @@ Prints the counts described in [§4](#when-to-run-pnpm-mediacleanup---dry-run-fi
 marked `deleted`, the objects under `invitations/` that no row names and that are older than the one-hour grace
 period, and then the rows whose object is gone. It also retires the guests' photos an owner never published or took
 down again (F8; L11.6): once such a photo has been in that state for 30 days (`GUEST_PHOTO_RETENTION_DAYS`), the run
-deletes its object and then its row and counts it in `retiredGuestPhotos`. A published photo, and a pending or hidden
+deletes its row first and then its object, and counts it in `retiredGuestPhotos`; a row goes before its object so a
+failed delete leaves an orphan object for the next run's scan, never a row without one. A published photo, and a pending or hidden
 one younger than that, keeps both, and its object is never treated as an orphan. Idempotent for the same reason: a second run finds nothing that the
-first did not already remove, and a failed object keeps its row for the next run. It needs `NODE_ENV`, the
+first did not already remove. It needs `NODE_ENV`, the
 database URL, and the media variables, but no auth, web, or payment secret.
 
 ## 6. WhatsApp reminders (built, switched off)

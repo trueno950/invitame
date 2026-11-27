@@ -94,9 +94,13 @@ export const GUEST_PHOTO_REVIEW_STATE_ISSUE = "status must be PUBLISHED or HIDDE
 
 /**
  * The characters (`Cc`, `Cf`) a guest's name must not carry: U+0000 is the one PostgreSQL refuses outright, and a bidi
- * override or a zero-width character would make the name read as something the guest never typed.
+ * override or a zero-width character would make the name read as something the guest never typed. The joiners
+ * U+200C and U+200D a valid name spells with are the one exception (L26).
  */
 const CONTROL_CHARACTER = /[\p{Cc}\p{Cf}]/u;
+
+/** The zero-width non-joiner and joiner, which a family emoji or a joined script spells with, and which hide nothing. */
+const JOINER_CHARACTER = /[\u200C\u200D]/u;
 
 /** Whether a value is one stored state, compared whole and case-sensitively. */
 export function isGuestPhotoStatus(value: unknown): value is GuestPhotoStatus {
@@ -191,7 +195,7 @@ export type GuestPhotoUploaderNameNormalization =
  * trimmed and counted in characters, so an accented or emoji value cannot overflow the column. A name is plain text and
  * stays exactly as the guest typed it — accents, emoji, and inner spaces included — except for the control and format
  * characters, which a text column cannot store (U+0000), or which would hide part of the name (a bidi override, a
- * zero-width character).
+ * zero-width space).
  */
 export function normalizeGuestPhotoUploaderName(
   value: unknown,
@@ -207,7 +211,11 @@ export function normalizeGuestPhotoUploaderName(
   if (trimmed === "") {
     return { ok: true, uploaderName: null };
   }
-  if ([...trimmed].some((character) => CONTROL_CHARACTER.test(character))) {
+  if (
+    [...trimmed].some(
+      (character) => CONTROL_CHARACTER.test(character) && !JOINER_CHARACTER.test(character),
+    )
+  ) {
     return { ok: false, issues: [GUEST_PHOTO_UPLOADER_NAME_CONTROL_ISSUE] };
   }
   if ([...trimmed].length > GUEST_PHOTO_UPLOADER_NAME_MAX_LENGTH) {

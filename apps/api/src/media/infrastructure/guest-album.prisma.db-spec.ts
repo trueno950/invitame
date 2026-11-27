@@ -519,7 +519,7 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
 
     // Hiding one photo takes it out of the count, so the next upload takes the freed place.
     assert.ok(first !== undefined);
-    assert.notEqual(await album.review(ownerId, id, first, "HIDDEN", new Date()), null);
+    assert.equal((await album.review(ownerId, id, first, "HIDDEN", new Date())).status, "reviewed");
     const acceptedId = randomUUID();
     assert.equal(
       await album.insert(
@@ -552,7 +552,10 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
     // Publishing one photo empties a pending place, and the next upload is stored PENDING again.
     const first = pending[0];
     assert.ok(first !== undefined);
-    assert.notEqual(await album.review(ownerId, id, first, "PUBLISHED", new Date()), null);
+    assert.equal(
+      (await album.review(ownerId, id, first, "PUBLISHED", new Date())).status,
+      "reviewed",
+    );
     const acceptedId = randomUUID();
     assert.equal(
       await album.insert(
@@ -566,6 +569,41 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
       await prisma.guestPhoto.count({ where: { invitationId: id, status: "PENDING" } }),
       GUEST_PHOTO_MAX_PENDING,
     );
+  });
+
+  it("re-checks the album cap when a hidden photo is shown again (L26)", async () => {
+    const { id, ownerId } = await newPublished();
+    const now = new Date("2026-12-10T12:00:00.000Z");
+    const [first] = await seedPhotos(id, "PUBLISHED", GUEST_PHOTO_MAX_STORED - 1);
+    const pending = await seedPhoto(id, { status: "PENDING" });
+    const hidden = await seedPhoto(id, { status: "HIDDEN" });
+    assert.ok(first !== undefined);
+
+    // Showing a hidden one again makes it count again, and the album holds its cap: refused, nothing written.
+    assert.equal((await album.review(ownerId, id, hidden.id, "PUBLISHED", now)).status, "full");
+    const unchanged = await prisma.guestPhoto.findUniqueOrThrow({ where: { id: hidden.id } });
+    assert.equal(unchanged.status, "HIDDEN");
+    assert.equal(unchanged.reviewedAt?.toISOString(), "2026-12-02T10:00:00.000Z");
+
+    // Publishing a PENDING photo leaves the counted total where it was, so it stays allowed at the cap; hiding one
+    // takes it out of the count, so the same show again now fits.
+    const queued = await album.review(ownerId, id, pending.id, "PUBLISHED", now);
+    assert.equal(queued.status, "reviewed");
+    assert.equal((await album.review(ownerId, id, first, "HIDDEN", now)).status, "reviewed");
+    assert.equal((await album.review(ownerId, id, hidden.id, "PUBLISHED", now)).status, "reviewed");
+  });
+
+  it("serializes two show-again writes on the invitation row, so one takes the last place (L26)", async () => {
+    const { id, ownerId } = await newPublished();
+    await seedPhotos(id, "PUBLISHED", GUEST_PHOTO_MAX_STORED - 1);
+    const first = await seedPhoto(id, { status: "HIDDEN" });
+    const second = await seedPhoto(id, { status: "HIDDEN" });
+
+    const outcomes = await Promise.all([
+      album.review(ownerId, id, first.id, "PUBLISHED", new Date()),
+      album.review(ownerId, id, second.id, "PUBLISHED", new Date()),
+    ]);
+    assert.deepEqual(outcomes.map((outcome) => outcome.status).sort(), ["full", "reviewed"]);
   });
 
   it("returns an expired published invitation from the slug read, which the upload's expiry refusal relies on (L26)", async () => {

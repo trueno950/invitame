@@ -306,6 +306,9 @@ export class GetGuestAlbumUseCase {
  * owner never published is removed by the media retention cleanup instead. Owner-only: another customer's invitation
  * answers `invitation-not-found`, and a photo that belongs to another invitation answers `photo-not-found`, which is
  * the same 404 a missing one answers (A4).
+ *
+ * Throws `GuestAlbumFullError` when showing a hidden photo again would pass the album's cap (L26), writing nothing;
+ * publishing a PENDING photo leaves the counted total where it was, so it stays allowed at the cap.
  */
 export class ReviewGuestPhotoUseCase {
   private readonly now: () => Date;
@@ -342,9 +345,14 @@ export class ReviewGuestPhotoUseCase {
       this.now(),
     );
 
-    return reviewed === null
+    if (reviewed.status === "full") {
+      // The guest's own refusal: the owner's route maps it to 409 `GUEST_ALBUM_FULL` (L26).
+      throw new GuestAlbumFullError();
+    }
+
+    return reviewed.status === "not-found"
       ? { status: "photo-not-found" }
-      : { status: "ok", photo: toView(reviewed, this.options.assetUrl) };
+      : { status: "ok", photo: toView(reviewed.photo, this.options.assetUrl) };
   }
 }
 

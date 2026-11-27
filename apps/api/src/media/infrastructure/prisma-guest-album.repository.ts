@@ -17,6 +17,7 @@ import type {
   InsertGuestPhotoResult,
   NewGuestPhoto,
   RetiredGuestPhoto,
+  ReviewedGuestPhoto,
   ServingGuestPhoto,
 } from "../application/guest-album.repository";
 
@@ -204,15 +205,46 @@ export class PrismaGuestAlbumRepository implements GuestAlbumRepository {
     photoId: string,
     status: GuestPhotoReviewState,
     at: Date,
-  ): Promise<GuestPhotoRecord | null> {
+  ): Promise<ReviewedGuestPhoto> {
     return this.prisma.$transaction(async (transaction) => {
+      // The lock `insert` takes, on the same row (L26): showing a hidden photo again makes it count, so the cap is
+      // re-checked in the write's own transaction and two concurrent show-agains cannot both take the last place.
+      // Ownership is part of the lock, so a foreign invitation answers the same 404 as a missing one (A4).
+      const locked = await transaction.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "Invitation"
+        WHERE "id" = ${invitationId}::uuid AND "ownerId" = ${ownerId}::uuid
+        FOR UPDATE
+      `;
+      const current = await transaction.guestPhoto.findFirst({
+        where: { id: photoId, invitationId },
+        select: { status: true },
+      });
+      if (locked[0] === undefined || current === null) {
+        return { status: "not-found" } as const;
+      }
+
+      // Hiding one, and publishing a PENDING one, leave the counted total where it was; showing a HIDDEN one again adds
+      // it, so an album already at its cap refuses the write (L26).
+      if (status === "PUBLISHED" && current.status === "HIDDEN") {
+        const counts = await transaction.$queryRaw<Array<{ stored: bigint }>>`
+          SELECT count(*) FILTER (WHERE "status"::text = ANY(${[
+            ...GUEST_PHOTO_COUNTED_STATUSES,
+          ]}::text[])) AS "stored"
+          FROM "GuestPhoto"
+          WHERE "invitationId" = ${invitationId}::uuid
+        `;
+        if (Number(counts[0]?.stored ?? 0) >= GUEST_PHOTO_MAX_STORED) {
+          return { status: "full" } as const;
+        }
+      }
+
       // Ownership is stated in the write itself, so a concurrent owner change cannot slip a moderation through.
       const changed = await transaction.guestPhoto.updateMany({
         where: { id: photoId, invitationId, invitation: { ownerId } },
         data: { status, reviewedAt: at },
       });
       if (changed.count !== 1) {
-        return null;
+        return { status: "not-found" } as const;
       }
 
       const stored = await transaction.guestPhoto.findUniqueOrThrow({
@@ -220,7 +252,7 @@ export class PrismaGuestAlbumRepository implements GuestAlbumRepository {
         select: PHOTO_SELECT,
       });
 
-      return toRecord(stored);
+      return { status: "reviewed", photo: toRecord(stored) } as const;
     });
   }
 

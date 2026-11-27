@@ -50,7 +50,8 @@ export class InvitationsGuestAlbumController {
   /**
    * Publishes one photo, or hides it again (L11.6): 200 with the photo. Owner-only and reversible — nothing is deleted
    * here — with the same two 404s for a foreign invitation (A4) and for a photo that is not this invitation's. A state
-   * the owner may not set is 400 `INVALID_GUEST_PHOTO_REVIEW` with its issue.
+   * the owner may not set is 400 `INVALID_GUEST_PHOTO_REVIEW` with its issue, and a show again past the album's cap is
+   * 409 `GUEST_ALBUM_FULL` (L26).
    */
   @Patch(":photoId")
   async review(

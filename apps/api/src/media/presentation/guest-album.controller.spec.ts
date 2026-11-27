@@ -16,6 +16,7 @@ import type {
   InsertGuestPhotoResult,
   NewGuestPhoto,
   RetiredGuestPhoto,
+  ReviewedGuestPhoto,
   ServingGuestPhoto,
 } from "../application/guest-album.repository";
 import type { GuestAlbumRateLimiter } from "../application/guest-album-rate-limiter";
@@ -164,6 +165,8 @@ class FakeAlbumRepository implements GuestAlbumRepository {
     expiresAt: null,
   };
   insertResult: InsertGuestPhotoResult = "stored";
+  /** Set to answer the album's cap instead of changing the row, as a real album at its cap does (L26). */
+  reviewFull = false;
 
   async findPublishedBySlug(): Promise<GuestAlbumInvitation | null> {
     return this.published;
@@ -207,17 +210,20 @@ class FakeAlbumRepository implements GuestAlbumRepository {
     photoId: string,
     status: GuestPhotoReviewState,
     at: Date,
-  ): Promise<GuestPhotoRecord | null> {
+  ): Promise<ReviewedGuestPhoto> {
     const photo = this.photos.find(
       (row) => row.id === photoId && row.invitationId === invitationId,
     );
     if (photo === undefined) {
-      return null;
+      return { status: "not-found" };
+    }
+    if (this.reviewFull) {
+      return { status: "full" };
     }
     photo.status = status;
     photo.reviewedAt = at;
 
-    return photo;
+    return { status: "reviewed", photo };
   }
 
   async findForServing(): Promise<ServingGuestPhoto | null> {
@@ -765,6 +771,22 @@ describe("the owner's album screen (F8; L11.6)", () => {
     );
     assert.equal(denied.status, 404);
     assert.deepEqual(denied.body, { code: "INVITATION_NOT_FOUND" });
+  });
+
+  it("answers 409 GUEST_ALBUM_FULL when showing a hidden photo again would pass the cap (L26)", async () => {
+    const album = storedAlbum();
+    album.reviewFull = true;
+    const { controller } = ownerController(album);
+    const shown = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3";
+
+    assert.deepEqual(
+      await refusal(controller.review(OWNER, INVITATION, shown, { status: "PUBLISHED" })),
+      { status: 409, body: { code: "GUEST_ALBUM_FULL" } },
+    );
+    // A refused write changes nothing: the photo keeps the state and the instant it was hidden at.
+    const stored = album.photos.find((photo) => photo.id === shown);
+    assert.equal(stored?.status, "HIDDEN");
+    assert.equal(stored?.reviewedAt?.toISOString(), "2026-12-08T11:00:00.000Z");
   });
 
   it("answers an empty album with zero counts instead of an empty body", async () => {

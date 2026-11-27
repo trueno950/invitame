@@ -53,6 +53,12 @@ export interface RetiredGuestPhoto {
   readonly storageKey: string;
 }
 
+/** What one moderation write answered (L26): the stored photo, a photo outside this invitation, or a full album. */
+export type ReviewedGuestPhoto =
+  | { readonly status: "reviewed"; readonly photo: GuestPhotoRecord }
+  | { readonly status: "not-found" }
+  | { readonly status: "full" };
+
 /**
  * Persistence port of the album (F8; L11.1, L11.3, L11.4, L11.6, L26). `insert` enforces the per-invitation cap and the
  * pending cap in the same transaction that writes the row, serialized on the invitation row, so two concurrent uploads
@@ -95,9 +101,9 @@ export interface GuestAlbumRepository {
   findOwnedPhotos(ownerId: string, invitationId: string): Promise<GuestPhotoRecord[] | null>;
 
   /**
-   * Publishes or hides one photo of one owned invitation, stamping `reviewedAt`. Answers the stored photo, or null when
-   * the photo does not belong to that invitation — a photo of another invitation, a photo of another owner, and a
-   * missing one are the same answer (A4).
+   * Publishes or hides one photo of one owned invitation, stamping `reviewedAt`, in the transaction that locks the
+   * invitation row as `insert` does (L26). Answers the stored photo, `not-found` for a photo of another invitation, of
+   * another owner, or a missing one — one answer (A4) — or `full` when the write would pass the album's cap.
    */
   review(
     ownerId: string,
@@ -105,7 +111,7 @@ export interface GuestAlbumRepository {
     photoId: string,
     status: GuestPhotoReviewState,
     at: Date,
-  ): Promise<GuestPhotoRecord | null>;
+  ): Promise<ReviewedGuestPhoto>;
 
   /** One photo with its invitation's owner and status, without any owner scoping: used to decide serving. */
   findForServing(photoId: string): Promise<ServingGuestPhoto | null>;
