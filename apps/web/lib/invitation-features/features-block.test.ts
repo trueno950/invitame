@@ -1579,6 +1579,22 @@ describe("the album of the guests' photos in the features block (F8; S2.8, L11.5
     assert.match(html, /Nuestras fotos/);
   });
 
+  it("escapes an uploader name so it can never add markup to the guest page (F8; L11 approval)", () => {
+    const html = render(
+      featuresOf({
+        guestAlbum: {
+          slug: SLUG_FOR_GUEST,
+          photos: [{ ...ALBUM_PHOTO, uploaderName: '<img src=x onerror="alert(1)">' }],
+          count: 1,
+          closed: false,
+        },
+      }),
+    );
+
+    assert.doesNotMatch(html, /<img src=x/);
+    assert.match(html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
+  });
+
   it("offers «Subir mis fotos» as a multipart form that works with no client script", () => {
     const html = render(
       featuresOf({

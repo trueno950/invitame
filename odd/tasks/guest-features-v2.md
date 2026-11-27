@@ -182,6 +182,12 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   6. Owner: the `03` screen per invitation with «Por revisar», «Publicadas», «Ocultas», publish/hide/show-again;
      owner-only (404 for anyone else); hidden and never-published photos fall under the existing media retention
      cleanup. Queued after F7.
+  Owner approval of the security design, verbatim choice: «Sí, apruebo» (the six-point summary: published and
+  unexpired only; the existing photo validation — JPEG/PNG/WebP, configured size, dimension bounds, re-encoding that
+  strips metadata such as GPS location; at most 300 photos per invitation and an hourly per-person limit; every photo
+  PENDING and invisible to guests until the owner publishes it; hidden and never-published photos removed by the
+  existing media cleanup; owner-only moderation, 404 for anyone else). The metadata stripping must be proven by a
+  test, not assumed.
 - L12 — F9: owner picked `design/livestream/02-reproductor-incrustado.html` («Reproductor dentro de la
   invitación»); the other two are alternatives. Parent decisions for F9 (binding):
   1. Data: a new nullable `livestream` JSONB on `InvitationFeatureSettings` (`{ version: 1, url, note? }`: `url`
@@ -353,6 +359,30 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   Independent verification: every S2.7 and L10 item met, 66 probes with no failure, differential with only the added
   `features.guestbook`, no guest text in logs; db-specs 509/509 on a truly recreated database; browser check of the
   wall without client script and of owner hide and show.
+- L26 — F8 owner decision after review (anonymous uploads could fill the 300-photo cap and lock the album for 30
+  days): verbatim choice «Ocultar libera espacio + tope de pendientes (recomendado)» — only PENDING and PUBLISHED photos
+  count toward the 300 cap, hiding a photo frees its place, and at most 100 photos may be PENDING at once (refused with
+  its own code and a Spanish notice). Parent decisions from the same reviews: the album dependencies of the public read,
+  the media serving, and the media cleanup become required (missing wiring must fail at startup, never silently serve
+  an empty album, answer 404 for every photo, or let the orphan sweep delete live photos); the retention delete
+  re-checks the state and the cutoff in the same statement; the uploader name also refuses Unicode format characters
+  (`\p{Cf}`, bidi overrides and zero-width characters); the port contract of `findPublishedBySlug` matches its behavior.
+- L27 — F8 evidence: commits `086ea80` (table, migration
+  `20261210120000_add_guest_album`, key `GUEST_ALBUM` for deluxe, persistence), `ab75a4e` (use cases, serving,
+  retention, public read), `b97928e` (routes and wiring), `b2737d7` (L26 hardening), `7fc79a7` (review correction:
+  showing a hidden photo again re-checks the 300 cap under the invitation lock; joiners U+200C/U+200D allowed in
+  uploader names; runbook cleanup order), `044e5c6` and `96968e9` (web). Native review: `review-24ce346be9c383fa`
+  approved `086ea80`; `review-f4b093edfc89f4af` reviewed `ab75a4e` alone and its blockers were the wiring that lives in
+  `b97928e` (open, closing needs an operator disposition); `review-80e0334030e28f6d` reviewed `ab75a4e..b2737d7`, found
+  the republish cap hole, took the 169-line correction plan, and approved it after the owner fixed the stalled validator
+  provider. Advisories for later: the anonymous
+  upload reads the whole body (up to 16 MB) before the rate limit. Independent verification: every S2.8, L11, approval,
+  and L26 item met (76 probes, served WebP carries no EXIF GPS, pending and hidden photos 404 to anyone but the owner,
+  caps and 429, retention keeps published photos, differential only `features.guestAlbum`, no names in logs); the
+  personal-read baseline differential was not executed (no code path changed there). Gates: API 2347/2347, web
+  2308/2308, db-specs 529/529 on a recreated database; browser check of the scriptless upload, the pending state, and
+  owner publishing. The evidence commit adds the verifier's uploader-name escaping test; the cleanup command end-to-end
+  test remains a follow-up.
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
