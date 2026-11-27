@@ -103,6 +103,11 @@ describe("the livestream payload bounds (L12.1)", () => {
       [issue],
     );
     assert.deepEqual(resultOf({ version: 1, url: WATCH, note: 12 }), [issue]);
+    // PostgreSQL refuses a NUL inside JSONB, so a control character is a refusal here rather than a failed write.
+    assert.deepEqual(resultOf({ version: 1, url: WATCH, note: "Inicia\u0000 a las 17:00" }), [
+      issue,
+    ]);
+    assert.deepEqual(resultOf({ version: 1, url: WATCH, note: "Inicia\u0007" }), [issue]);
     assert.equal(
       payloadOf({ version: 1, url: WATCH, note: "n".repeat(LIVESTREAM_NOTE_MAX_LENGTH) })?.note,
       "n".repeat(LIVESTREAM_NOTE_MAX_LENGTH),

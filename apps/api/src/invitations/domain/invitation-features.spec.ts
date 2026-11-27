@@ -1077,10 +1077,22 @@ describe("feature gating (S4, F1)", () => {
       null,
     );
     // The key enters the gated list only while the invitation stores a link.
-    assert.deepEqual(gated(["LIVESTREAM"], PHONE, PLAYLIST, null, null, null, null, null, LIVE), [
-      "LIVESTREAM",
-      "CALENDAR",
-    ]);
+    assert.deepEqual(
+      availableFeatureKeys({
+        includedFeatureKeys: ["LIVESTREAM"],
+        whatsappPhone: PHONE,
+        playlistUrl: PLAYLIST,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: LIVE,
+        rsvpDeadline: null,
+        rsvpPartyLimit: 4,
+      }),
+      ["LIVESTREAM", "CALENDAR"],
+    );
     assert.deepEqual(gated(["LIVESTREAM"], PHONE, PLAYLIST), ["CALENDAR"]);
   });
 

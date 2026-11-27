@@ -202,7 +202,8 @@ export function validateLivestream(value: unknown): LivestreamValidation {
     } else {
       const trimmed = value.note.trim();
 
-      if ([...trimmed].length > LIVESTREAM_NOTE_MAX_LENGTH) {
+      // A control character is refused rather than stored: PostgreSQL refuses a NUL inside JSONB (review R1-001).
+      if ([...trimmed].length > LIVESTREAM_NOTE_MAX_LENGTH || /\p{Cc}/u.test(trimmed)) {
         issues.push(LIVESTREAM_NOTE_ISSUE);
       } else if (trimmed !== "") {
         note = trimmed;
