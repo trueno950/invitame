@@ -42,6 +42,10 @@ import {
   GetRsvpResponsesUseCase,
   UpdateRsvpSettingsUseCase,
 } from "../application/invitation-rsvp.use-cases";
+import {
+  GetGuestbookEntriesUseCase,
+  SetGuestbookEntryHiddenUseCase,
+} from "../application/invitation-guestbook.use-cases";
 import type { PlacePoint } from "../domain/invitation-place";
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import {
@@ -55,6 +59,8 @@ import { CheckInGuestDto, CreateGuestDto, UpdateGuestDto } from "./dto/invitatio
 // The global ValidationPipe reads these classes from emitted metadata, so they are value imports.
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import { UpdateRsvpSettingsDto } from "./dto/invitation-rsvp.dtos";
+// biome-ignore lint/style/useImportType: the pipe needs the class at runtime.
+import { UpdateGuestbookEntryDto } from "./dto/invitation-guestbook.dtos";
 import {
   type InvitationListItemResponse,
   type InvitationSummaryResponse,
@@ -79,6 +85,13 @@ import {
   orGuestResponseItem,
   orGuestWithTokenResponse,
 } from "./invitation-guest.response";
+import {
+  type GuestbookEntryResponse,
+  type GuestbookReadResponse,
+  mapGuestbookError,
+  orGuestbookEntry,
+  orGuestbookReadNotFound,
+} from "./invitation-guestbook.response";
 import {
   mapRsvpError,
   orRsvpReadNotFound,
@@ -125,6 +138,10 @@ export class InvitationsController {
     private readonly updateRsvpSettings: UpdateRsvpSettingsUseCase,
     @Inject(GetRsvpResponsesUseCase)
     private readonly getRsvpResponses: GetRsvpResponsesUseCase,
+    @Inject(GetGuestbookEntriesUseCase)
+    private readonly getGuestbookEntries: GetGuestbookEntriesUseCase,
+    @Inject(SetGuestbookEntryHiddenUseCase)
+    private readonly setGuestbookEntryHidden: SetGuestbookEntryHiddenUseCase,
     @Inject(ListGuestsUseCase) private readonly listGuests: ListGuestsUseCase,
     @Inject(CreateGuestUseCase) private readonly createGuest: CreateGuestUseCase,
     @Inject(UpdateGuestUseCase) private readonly updateGuest: UpdateGuestUseCase,
@@ -403,6 +420,46 @@ export class InvitationsController {
     @Param("id", INVITATION_ID) id: string,
   ): Promise<RsvpReadResponse> {
     return orRsvpReadNotFound(await this.getRsvpResponses.execute(userId, id));
+  }
+
+  /**
+   * Every guestbook entry of one owned invitation, visible and hidden together, with the two counts the moderation
+   * screen's tabs show (F7; L10.6). Owner-only; another customer's id answers 404 `INVITATION_NOT_FOUND` like an unknown
+   * one (A4). An archived invitation stays readable: archiving is read-only, never erased (A2). A package that does not
+   * grant `GUESTBOOK` still answers what the invitation already received, because the owner's own moderation must never
+   * become unreachable after a catalog change.
+   */
+  @Get(":id/guestbook")
+  async readGuestbook(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+  ): Promise<GuestbookReadResponse> {
+    return orGuestbookReadNotFound(await this.getGuestbookEntries.execute(userId, id));
+  }
+
+  /**
+   * Hides one entry, or shows it again (F7; L10.6): the owner's only moderation, and nothing is deleted. Owner-only,
+   * idempotent, and the same two 404s for a foreign invitation (A4) and for an entry that is not this invitation's.
+   */
+  @Put(":id/guestbook/:entryId")
+  async updateGuestbookEntry(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Param("entryId", INVITATION_ID) entryId: string,
+    @Body() body: UpdateGuestbookEntryDto,
+  ): Promise<GuestbookEntryResponse> {
+    try {
+      return orGuestbookEntry(
+        await this.setGuestbookEntryHidden.execute({
+          ownerId: userId,
+          id,
+          entryId,
+          hidden: body.hidden,
+        }),
+      );
+    } catch (error) {
+      return mapGuestbookError(error);
+    }
   }
 
   /**

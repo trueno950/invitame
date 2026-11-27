@@ -73,6 +73,21 @@ import {
   type PlaceSearchRateLimiter,
 } from "../application/place-search-rate-limiter";
 import {
+  GUESTBOOK_REPOSITORY,
+  INVITATION_GUESTBOOK_READER,
+  type GuestbookRepository,
+  type InvitationGuestbookReader,
+} from "../application/guestbook.repository";
+import {
+  GUESTBOOK_RATE_LIMITER,
+  type GuestbookRateLimiter,
+} from "../application/guestbook-rate-limiter";
+import {
+  type GuestbookEntryRecord,
+  type GuestbookEntryValues,
+  publicGuestbookEntries,
+} from "../domain/invitation-guestbook";
+import {
   RSVP_REPOSITORY,
   type RsvpReadModel,
   type RsvpRepository,
@@ -113,6 +128,8 @@ const AUTH_BASE_URL = "http://localhost:3000";
 const SESSION_COOKIE = "better-auth.session_token";
 const PATH = "/invitations";
 const UNKNOWN_ID = "00000000-0000-4000-8000-000000000000";
+/** A row of a memory store this suite mutates, as the read-only records it answers are written. */
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 const PUBLISHED_VERSION_ID = "11111111-1111-4111-8111-111111111111";
 const ACTIVE_PACKAGE_ID = "22222222-2222-4222-8222-222222222222";
 const DRAFT_PACKAGE_ID = "33333333-3333-4333-8333-333333333333";
@@ -133,6 +150,8 @@ const QR_PASS_PACKAGE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ITINERARY_PACKAGE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 /** An ACTIVE package that grants `LODGING` and no other implemented key: hotels and transport (F4; L7.2). */
 const LODGING_PACKAGE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+/** An ACTIVE package that grants `GUESTBOOK` and no other implemented key: the wall of messages (F7; L10.2). */
+const GUESTBOOK_PACKAGE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 /** A PUBLISHED version whose schema declares the address fields a place may belong to (S2). */
 const PLACE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 /** A PUBLISHED version whose schema declares the legacy gift registry text field (F2; L4.3). */
@@ -471,6 +490,11 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     ],
     // The lodging key alone (F4; L7.2).
     [LODGING_PACKAGE_ID, { status: "ACTIVE", includedFeatureKeys: ["LODGING"], durationDays: 30 }],
+    // The guestbook key alone (F7; L10.2).
+    [
+      GUESTBOOK_PACKAGE_ID,
+      { status: "ACTIVE", includedFeatureKeys: ["GUESTBOOK"], durationDays: 90 },
+    ],
   ]);
 
   /** Every version renders with the allow-listed component unless it says otherwise. */
@@ -691,6 +715,117 @@ class MemoryRsvpRepository implements RsvpRepository {
     };
     this.responses.push(stored);
     return stored;
+  }
+}
+
+/**
+ * The guestbook port in memory (F7; S2.7, L10). It repeats the adapter's own rules — the owner scope, the published and
+ * not-expired invitation an insert needs, the visible-only wall, and the invisible null of an entry that belongs to
+ * another invitation — so a route that skipped one would be caught here.
+ */
+class MemoryGuestbookRepository implements GuestbookRepository, InvitationGuestbookReader {
+  readonly entries: Array<Mutable<GuestbookEntryRecord> & { invitationId: string }> = [];
+  private sequence = 0;
+
+  constructor(private readonly invitations: MemoryInvitationRepository) {}
+
+  async findVisible(invitationId: string): Promise<GuestbookEntryRecord[]> {
+    return this.sorted(invitationId)
+      .filter((entry) => !entry.hidden)
+      .slice(0, 50);
+  }
+
+  async readVisibleEntries(invitationId: string) {
+    return publicGuestbookEntries(await this.findVisible(invitationId));
+  }
+
+  async findOwnedEntries(
+    ownerId: string,
+    invitationId: string,
+  ): Promise<GuestbookEntryRecord[] | null> {
+    const owned = this.invitations.rows.some(
+      (row) => row.id === invitationId && row.ownerId === ownerId,
+    );
+
+    return owned ? this.sorted(invitationId) : null;
+  }
+
+  async insert(invitationId: string, entry: GuestbookEntryValues, at: Date): Promise<boolean> {
+    const invitation = this.invitations.rows.find((row) => row.id === invitationId);
+    if (
+      invitation?.status !== "PUBLISHED" ||
+      (invitation.expiresAt !== null && invitation.expiresAt.getTime() < at.getTime())
+    ) {
+      return false;
+    }
+    this.sequence += 1;
+    this.entries.push({
+      id: randomUUID(),
+      invitationId,
+      ...entry,
+      hidden: false,
+      createdAt: new Date(at.getTime() + this.sequence),
+    });
+    return true;
+  }
+
+  async setHidden(
+    ownerId: string,
+    invitationId: string,
+    entryId: string,
+    hidden: boolean,
+  ): Promise<GuestbookEntryRecord | null> {
+    const owned = this.invitations.rows.some(
+      (row) => row.id === invitationId && row.ownerId === ownerId,
+    );
+    const entry = owned
+      ? this.entries.find((stored) => stored.id === entryId && stored.invitationId === invitationId)
+      : undefined;
+    if (entry === undefined) {
+      return null;
+    }
+    entry.hidden = hidden;
+    return entry;
+  }
+
+  /** The entries of one invitation newest first, as the adapter's own read orders them. */
+  private sorted(invitationId: string): GuestbookEntryRecord[] {
+    return this.entries
+      .filter((entry) => entry.invitationId === invitationId)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+  }
+
+  /** An entry stored directly, for the wall and the moderation reads under test. */
+  seedEntry(
+    invitationId: string,
+    overrides: Partial<GuestbookEntryValues> & { hidden?: boolean; createdAt?: Date } = {},
+  ): Mutable<GuestbookEntryRecord> & { invitationId: string } {
+    this.sequence += 1;
+    const stored = {
+      id: randomUUID(),
+      invitationId,
+      authorName: overrides.authorName ?? "Tía Rosa",
+      message: overrides.message ?? "¡Que este día sea tan hermoso como tú!",
+      hidden: overrides.hidden ?? false,
+      createdAt:
+        overrides.createdAt ?? new Date(Date.UTC(2026, 11, 1, 10, 0, 0) + this.sequence * 1_000),
+    };
+    this.entries.push(stored);
+    return stored;
+  }
+}
+
+/**
+ * The guestbook rate limiter in memory (F7; L10.3): records what it counted and answers whatever a test chose, so the
+ * 429 outcome is observable without a database.
+ */
+class MemoryGuestbookRateLimiter implements GuestbookRateLimiter {
+  allow = true;
+  readonly consumed: Array<{ invitationId: string; clientAddress: string }> = [];
+
+  async consume(invitationId: string, clientAddress: string): Promise<boolean> {
+    this.consumed.push({ invitationId, clientAddress });
+    return this.allow;
   }
 }
 
@@ -1045,6 +1180,8 @@ describe("invitations routes: /invitations", () => {
   const rsvpRepository = new MemoryRsvpRepository(repository);
   const guestRepository = new MemoryGuestRepository(repository);
   const rateLimiter = new MemoryRateLimiter();
+  const guestbookRepository = new MemoryGuestbookRepository(repository);
+  const guestbookRateLimiter = new MemoryGuestbookRateLimiter();
   const viewRepository = new MemoryInvitationViewRepository();
   const placeSearch = new MemoryPlaceSearch();
   const placeSearchLimiter = new MemoryPlaceSearchLimiter();
@@ -1078,6 +1215,10 @@ describe("invitations routes: /invitations", () => {
         { provide: RSVP_REPOSITORY, useValue: rsvpRepository },
         { provide: GUEST_REPOSITORY, useValue: guestRepository },
         { provide: RSVP_RATE_LIMITER, useValue: rateLimiter },
+        { provide: GUESTBOOK_REPOSITORY, useValue: guestbookRepository },
+        // The public projection reads the wall through its own port, as the module's one adapter serves both (F7).
+        { provide: INVITATION_GUESTBOOK_READER, useValue: guestbookRepository },
+        { provide: GUESTBOOK_RATE_LIMITER, useValue: guestbookRateLimiter },
         // The public reads count one opening each through this port (M9 T11; S2, S7).
         { provide: INVITATION_VIEW_REPOSITORY, useValue: viewRepository },
         { provide: PLACE_SEARCH, useValue: placeSearch },
@@ -3033,6 +3174,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -3203,6 +3345,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -3237,6 +3380,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: true,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -3520,6 +3664,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: false,
         giftRegistryDetails: null,
         lodging: null,
+        guestbook: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
       });
@@ -4315,6 +4460,475 @@ describe("invitations routes: /invitations", () => {
       ]) {
         assert.equal(text.includes(leaked), false, leaked);
       }
+    });
+  });
+
+  describe("guestbook routes (F7; S2.7, L10.3, L10.4, L10.6)", () => {
+    const SIGNATURE = {
+      authorName: "  Tía   Rosa ",
+      message: "  ¡Que este día sea tan hermoso como tú!\nTe queremos.  ",
+      honeypot: "",
+    };
+
+    /** A published invitation of the given package, created through the owner routes. */
+    async function published(packageId: string = GUESTBOOK_PACKAGE_ID) {
+      const { cookie } = await signedInCustomer();
+      const created = (await (
+        await send("POST", PATH, cookie, {
+          templateVersionId: PUBLISHED_VERSION_ID,
+          packageId,
+        })
+      ).json()) as Row & { id: string; slug: string };
+      await send("PUT", `${PATH}/${created.id}/content`, cookie, { content: { title: "Ana" } });
+      assert.equal((await send("POST", `${PATH}/${created.id}/publish`, cookie)).status, 200);
+      return { cookie, created };
+    }
+
+    const sign = (slug: string, body: unknown, headers: Record<string, string> = {}) =>
+      send("POST", `/public/invitations/${slug}/guestbook`, undefined, body, headers);
+
+    /** The entries the shared memory port holds for one invitation. */
+    const entriesOf = (invitationId: string) =>
+      guestbookRepository.entries.filter((entry) => entry.invitationId === invitationId);
+
+    describe("the public read (L10.4)", () => {
+      it("answers features.guestbook with the visible entries newest first and keeps the hidden ones private", async () => {
+        const { created } = await published();
+        const older = guestbookRepository.seedEntry(created.id, {
+          authorName: "Tía Rosa",
+          message: "¡Que este día sea tan hermoso como tú!",
+          createdAt: new Date(Date.UTC(2026, 11, 1, 9, 0, 0)),
+        });
+        guestbookRepository.seedEntry(created.id, {
+          authorName: "Sofía y Jorge",
+          message: "Nos vemos en la pista \u{1F483}",
+          createdAt: new Date(Date.UTC(2026, 11, 1, 10, 0, 0)),
+        });
+        guestbookRepository.seedEntry(created.id, {
+          authorName: "Anónimo",
+          message: "Mensaje oculto",
+          hidden: true,
+          createdAt: new Date(Date.UTC(2026, 11, 1, 11, 0, 0)),
+        });
+
+        const response = await send("GET", `/public/invitations/${created.slug}`);
+        const body = (await response.json()) as Row & {
+          features: { guestbook: Array<Row> | null };
+        };
+
+        assert.equal(response.status, 200);
+        assert.deepEqual(body.features.guestbook, [
+          { authorName: "Sofía y Jorge", message: "Nos vemos en la pista \u{1F483}" },
+          { authorName: "Tía Rosa", message: "¡Que este día sea tan hermoso como tú!" },
+        ]);
+        // The wall is plain text: no id and no moderation state travels to a guest.
+        const text = JSON.stringify(body.features.guestbook);
+        assert.equal(text.includes(older.id), false);
+        assert.equal(text.includes("hidden"), false);
+      });
+
+      it("answers an empty list for a granted package with no entry, and null when the package does not grant it", async () => {
+        const granted = await published();
+        const basic = await published(ACTIVE_PACKAGE_ID);
+
+        const grantedBody = (await (
+          await send("GET", `/public/invitations/${granted.created.slug}`)
+        ).json()) as Row & { features: { guestbook: unknown } };
+        const basicBody = (await (
+          await send("GET", `/public/invitations/${basic.created.slug}`)
+        ).json()) as Row & { features: { guestbook: unknown } };
+
+        assert.deepEqual(grantedBody.features.guestbook, []);
+        assert.equal(basicBody.features.guestbook, null);
+      });
+
+      it("answers at most the newest 50 visible entries", async () => {
+        const { created } = await published();
+        for (let index = 0; index < 52; index += 1) {
+          guestbookRepository.seedEntry(created.id, {
+            authorName: `Invitado ${index}`,
+            message: `Mensaje ${index}`,
+            createdAt: new Date(Date.UTC(2026, 11, 1, 10, index)),
+          });
+        }
+
+        const body = (await (
+          await send("GET", `/public/invitations/${created.slug}`)
+        ).json()) as Row & {
+          features: { guestbook: Array<{ authorName: string }> };
+        };
+
+        assert.equal(body.features.guestbook.length, 50);
+        assert.equal(body.features.guestbook[0]?.authorName, "Invitado 51");
+        assert.equal(body.features.guestbook[49]?.authorName, "Invitado 2");
+      });
+    });
+
+    describe("POST /public/invitations/:slug/guestbook", () => {
+      it("stores the trimmed signature and answers the same minimal 202", async () => {
+        const { created } = await published();
+
+        const response = await sign(created.slug, SIGNATURE);
+
+        assert.equal(response.status, 202);
+        assert.deepEqual(await response.json(), { status: "received" });
+        assert.equal(response.headers.get("cache-control"), "no-store");
+        const stored = entriesOf(created.id);
+        assert.equal(stored.length, 1);
+        assert.equal(stored[0]?.authorName, "Tía   Rosa");
+        assert.equal(stored[0]?.message, "¡Que este día sea tan hermoso como tú!\nTe queremos.");
+        assert.equal(stored[0]?.hidden, false);
+      });
+
+      it("keeps markup as text and answers the guest page with it escaped", async () => {
+        const { created } = await published();
+        const html = "<script>alert(1)</script> https://spam.example";
+
+        assert.equal((await sign(created.slug, { ...SIGNATURE, message: html })).status, 202);
+        assert.equal(entriesOf(created.id)[0]?.message, html);
+      });
+
+      it("answers the same 202 without storing when the honeypot is filled", async () => {
+        const { created } = await published();
+
+        const response = await sign(created.slug, {
+          ...SIGNATURE,
+          honeypot: "https://spam.example",
+        });
+
+        assert.equal(response.status, 202);
+        assert.deepEqual(await response.json(), { status: "received" });
+        assert.equal(entriesOf(created.id).length, 0);
+      });
+
+      it("answers 400 INVALID_GUESTBOOK_ENTRY with the domain issues and stores nothing", async () => {
+        const { created } = await published();
+        guestbookRateLimiter.consumed.length = 0;
+        const refused: Array<[string, Record<string, unknown>, string[]]> = [
+          [
+            "a blank name",
+            { ...SIGNATURE, authorName: "   " },
+            ["authorName must be between 1 and 60 characters"],
+          ],
+          [
+            "a blank message",
+            { ...SIGNATURE, message: " \n " },
+            ["message must be between 1 and 500 characters"],
+          ],
+          [
+            "a name above its bound",
+            { ...SIGNATURE, authorName: "x".repeat(61) },
+            ["authorName must be between 1 and 60 characters"],
+          ],
+          [
+            "a message above its bound",
+            { ...SIGNATURE, message: "x".repeat(501) },
+            ["message must be between 1 and 500 characters"],
+          ],
+        ];
+
+        for (const [label, body, issues] of refused) {
+          const response = await sign(created.slug, body);
+
+          assert.equal(response.status, 400, label);
+          assert.deepEqual(await response.json(), { code: "INVALID_GUESTBOOK_ENTRY", issues });
+        }
+        // A refused signature never spends the guest's budget either.
+        assert.equal(guestbookRateLimiter.consumed.length, refused.length);
+        assert.equal(entriesOf(created.id).length, 0);
+      });
+
+      it("answers 400 for an unknown field or a value the DTO refuses, and stores nothing", async () => {
+        const { created } = await published();
+
+        for (const body of [
+          { ...SIGNATURE, hidden: true },
+          { ...SIGNATURE, invitationId: UNKNOWN_ID },
+          { ...SIGNATURE, authorName: 42 },
+          { authorName: "Rosa" },
+          "not-json",
+        ]) {
+          const response = await sign(created.slug, body);
+          assert.equal(response.status, 400, JSON.stringify(body));
+        }
+        assert.equal(entriesOf(created.id).length, 0);
+      });
+
+      it("answers the public 404 for a malformed, unknown, draft, or archived slug, without a session", async () => {
+        const { cookie } = await signedInCustomer();
+        const draft = (await (
+          await send("POST", PATH, cookie, {
+            templateVersionId: PUBLISHED_VERSION_ID,
+            packageId: GUESTBOOK_PACKAGE_ID,
+          })
+        ).json()) as Row & { id: string; slug: string };
+        const archived = await published();
+        assert.equal(
+          (await send("POST", `${PATH}/${archived.created.id}/archive`, archived.cookie)).status,
+          200,
+        );
+
+        for (const slug of [
+          "Invitacion-Malformed",
+          "invitacion-never0",
+          draft.slug,
+          archived.created.slug,
+        ]) {
+          const response = await sign(slug, SIGNATURE);
+
+          assert.equal(response.status, 404, slug);
+          assert.deepEqual(await response.json(), { code: "PUBLIC_INVITATION_NOT_FOUND" });
+        }
+        assert.equal(entriesOf(archived.created.id).length, 0);
+      });
+
+      it("answers 409 GUESTBOOK_CLOSED for a package without the key and for an expired invitation", async () => {
+        const basic = await published(ACTIVE_PACKAGE_ID);
+        const expired = await published();
+        const stored = repository.rows.find((row) => row.id === expired.created.id);
+        assert.ok(stored);
+        stored.expiresAt = new Date(Date.now() - 1_000);
+        guestbookRateLimiter.consumed.length = 0;
+
+        for (const invitation of [basic, expired]) {
+          const response = await sign(invitation.created.slug, SIGNATURE);
+
+          assert.equal(response.status, 409);
+          assert.deepEqual(await response.json(), { code: "GUESTBOOK_CLOSED" });
+          assert.equal(entriesOf(invitation.created.id).length, 0);
+        }
+        // A closed wall never spends the guest's budget, and an expired invitation still renders read-only.
+        assert.equal(guestbookRateLimiter.consumed.length, 0);
+        assert.equal(
+          (await send("GET", `/public/invitations/${expired.created.slug}`)).status,
+          200,
+        );
+      });
+
+      it("answers 429 GUESTBOOK_RATE_LIMITED when the address is over the cap, and stores nothing", async () => {
+        const { created } = await published();
+        guestbookRateLimiter.allow = false;
+
+        try {
+          const response = await sign(created.slug, SIGNATURE);
+
+          assert.equal(response.status, 429);
+          assert.deepEqual(await response.json(), { code: "GUESTBOOK_RATE_LIMITED" });
+          assert.equal(entriesOf(created.id).length, 0);
+        } finally {
+          guestbookRateLimiter.allow = true;
+        }
+      });
+
+      it("counts each client address separately, from the configured header", async () => {
+        const { created } = await published();
+        guestbookRateLimiter.consumed.length = 0;
+
+        await sign(created.slug, SIGNATURE, { "x-forwarded-for": "198.18.0.31" });
+        await sign(
+          created.slug,
+          { ...SIGNATURE, authorName: "Otra" },
+          {
+            "x-forwarded-for": "198.18.0.31, 10.0.0.1",
+          },
+        );
+        await sign(
+          created.slug,
+          { ...SIGNATURE, authorName: "Tercera" },
+          {
+            "x-forwarded-for": "198.18.0.32",
+          },
+        );
+
+        assert.deepEqual(
+          guestbookRateLimiter.consumed.map((item) => item.clientAddress),
+          ["198.18.0.31", "198.18.0.31", "198.18.0.32"],
+        );
+        for (const item of guestbookRateLimiter.consumed) {
+          assert.equal(item.invitationId, created.id);
+        }
+      });
+
+      it("serves the same answer with a forged cookie, never reading a session", async () => {
+        const { created } = await published();
+
+        const response = await send(
+          "POST",
+          `/public/invitations/${created.slug}/guestbook`,
+          `${SESSION_COOKIE}=forged.value`,
+          { ...SIGNATURE, authorName: "Con cookie" },
+        );
+
+        assert.equal(response.status, 202);
+        assert.deepEqual(await response.json(), { status: "received" });
+      });
+    });
+
+    describe("the owner's moderation routes (L10.6)", () => {
+      it("reads every entry with its state and the two counts, and hides and shows one again", async () => {
+        const { cookie, created } = await published();
+        const visible = guestbookRepository.seedEntry(created.id, { authorName: "Tía Rosa" });
+        const hidden = guestbookRepository.seedEntry(created.id, {
+          authorName: "Anónimo",
+          message: "Mensaje oculto",
+          hidden: true,
+        });
+
+        const read = await send("GET", `${PATH}/${created.id}/guestbook`, cookie);
+        assert.equal(read.status, 200);
+        assert.deepEqual(await read.json(), {
+          entries: [
+            {
+              id: hidden.id,
+              authorName: "Anónimo",
+              message: "Mensaje oculto",
+              hidden: true,
+              createdAt: hidden.createdAt.toISOString(),
+            },
+            {
+              id: visible.id,
+              authorName: "Tía Rosa",
+              message: "¡Que este día sea tan hermoso como tú!",
+              hidden: false,
+              createdAt: visible.createdAt.toISOString(),
+            },
+          ],
+          visibleCount: 1,
+          hiddenCount: 1,
+        });
+
+        const hiddenWrite = await send(
+          "PUT",
+          `${PATH}/${created.id}/guestbook/${visible.id}`,
+          cookie,
+          {
+            hidden: true,
+          },
+        );
+        assert.equal(hiddenWrite.status, 200);
+        assert.equal(((await hiddenWrite.json()) as Row).hidden, true);
+        // The wall stops showing it at once, and the entry is still stored for the owner.
+        const afterHide = (await (
+          await send("GET", `/public/invitations/${created.slug}`)
+        ).json()) as Row & { features: { guestbook: Array<Row> } };
+        assert.deepEqual(afterHide.features.guestbook, []);
+        assert.equal(entriesOf(created.id).length, 2);
+
+        const shown = await send("PUT", `${PATH}/${created.id}/guestbook/${visible.id}`, cookie, {
+          hidden: false,
+        });
+        assert.equal(shown.status, 200);
+        assert.equal(((await shown.json()) as Row).hidden, false);
+        const afterShow = (await (
+          await send("GET", `/public/invitations/${created.slug}`)
+        ).json()) as Row & { features: { guestbook: Array<{ authorName: string }> } };
+        assert.deepEqual(
+          afterShow.features.guestbook.map((entry) => entry.authorName),
+          ["Tía Rosa"],
+        );
+      });
+
+      it("answers 404 for another owner's invitation and 404 for an entry of another invitation", async () => {
+        const mine = await published();
+        const theirs = await published();
+        const foreignEntry = guestbookRepository.seedEntry(theirs.created.id);
+        const otherCustomer = await signedInCustomer();
+
+        for (const [label, response] of [
+          [
+            "the read",
+            await send("GET", `${PATH}/${mine.created.id}/guestbook`, otherCustomer.cookie),
+          ],
+          [
+            "the write",
+            await send(
+              "PUT",
+              `${PATH}/${mine.created.id}/guestbook/${foreignEntry.id}`,
+              otherCustomer.cookie,
+              {
+                hidden: true,
+              },
+            ),
+          ],
+        ] as const) {
+          assert.equal(response.status, 404, label);
+          assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+        }
+        assert.equal(foreignEntry.hidden, false);
+
+        // An entry id that belongs to another invitation of the same owner is the entry's own 404.
+        const stored = guestbookRepository.seedEntry(mine.created.id);
+        const crossed = await send(
+          "PUT",
+          `${PATH}/${mine.created.id}/guestbook/${stored.id}`,
+          theirs.cookie,
+          { hidden: true },
+        );
+        assert.equal(crossed.status, 404);
+        assert.deepEqual(await crossed.json(), { code: "INVITATION_NOT_FOUND" });
+
+        const ownInteresting = guestbookRepository.seedEntry(theirs.created.id);
+        const wrongEntry = await send(
+          "PUT",
+          `${PATH}/${theirs.created.id}/guestbook/${ownInteresting.id}`,
+          theirs.cookie,
+          { hidden: "yes" },
+        );
+        assert.equal(wrongEntry.status, 400);
+      });
+
+      it("answers 404 for an entry id that names nothing of this invitation", async () => {
+        const { cookie, created } = await published();
+        const other = await published();
+
+        const response = await send(
+          "PUT",
+          `${PATH}/${created.id}/guestbook/${UNKNOWN_ID}`,
+          cookie,
+          { hidden: true },
+        );
+
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), { code: "GUESTBOOK_ENTRY_NOT_FOUND" });
+
+        // An entry of another invitation never changes, whatever the route names.
+        const foreign = guestbookRepository.seedEntry(other.created.id);
+        const crossed = await send("PUT", `${PATH}/${created.id}/guestbook/${foreign.id}`, cookie, {
+          hidden: true,
+        });
+        assert.equal(crossed.status, 404);
+        assert.deepEqual(await crossed.json(), { code: "GUESTBOOK_ENTRY_NOT_FOUND" });
+        assert.equal(foreign.hidden, false);
+      });
+
+      it("keeps an archived invitation's entries readable and moderable", async () => {
+        const { cookie, created } = await published();
+        const entry = guestbookRepository.seedEntry(created.id);
+        assert.equal((await send("POST", `${PATH}/${created.id}/archive`, cookie)).status, 200);
+
+        const read = await send("GET", `${PATH}/${created.id}/guestbook`, cookie);
+        assert.equal(read.status, 200);
+        const written = await send("PUT", `${PATH}/${created.id}/guestbook/${entry.id}`, cookie, {
+          hidden: true,
+        });
+        assert.equal(written.status, 200);
+        assert.equal(entriesOf(created.id)[0]?.hidden, true);
+      });
+
+      it("refuses a malformed invitation or entry id before it reaches a port", async () => {
+        const { cookie, created } = await published();
+
+        const malformedInvitation = await send("GET", `${PATH}/not-an-id/guestbook`, cookie);
+        assert.equal(malformedInvitation.status, 400);
+
+        const malformedEntry = await send(
+          "PUT",
+          `${PATH}/${created.id}/guestbook/not-an-entry`,
+          cookie,
+          { hidden: true },
+        );
+        assert.equal(malformedEntry.status, 400);
+      });
     });
   });
 

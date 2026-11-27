@@ -227,6 +227,13 @@ export interface PublicInvitationResponse {
      */
     gallery: Array<{ url: string; width: number; height: number; alt: string | null }>;
     /**
+     * The guestbook wall (F7; L10.4): the visible entries newest first, at most 50, each one the signature and the
+     * message a guest signed, as plain text. It is the list itself — an empty array is a wall waiting for its first
+     * message — and null only when the pinned package does not grant `GUESTBOOK`. It is added beside the fields the
+     * body already carried and changes none of them, so a page deployed before it reads the body it always read.
+     */
+    guestbook: Array<{ authorName: string; message: string }> | null;
+    /**
      * How the guest page accepts attendance answers (M6 G1, G2; S4): `open`, `guest-list`, or `null`, with the
      * creator's deadline as an ISO instant (or null) and the party limit, and whether a confirmed guest's personal
      * page may show the access QR.
@@ -431,6 +438,13 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
               })),
               transport: stored.features.lodging.transport,
             },
+      guestbook:
+        stored.features.guestbook === null
+          ? null
+          : stored.features.guestbook.map((entry) => ({
+              authorName: entry.authorName,
+              message: entry.message,
+            })),
       rsvp: {
         mode: stored.features.rsvp.mode,
         deadline: stored.features.rsvp.deadline?.toISOString() ?? null,

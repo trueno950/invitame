@@ -30,9 +30,12 @@ import {
   SubmitGuestRsvpUseCase,
 } from "../application/invitation-guest.use-cases";
 import { SubmitPublicRsvpUseCase } from "../application/invitation-rsvp.use-cases";
+import { SubmitPublicGuestbookEntryUseCase } from "../application/invitation-guestbook.use-cases";
 import { type ClientAddressRequest, clientAddressOf } from "./client-address";
 // biome-ignore lint/style/useImportType: the pipe needs the class at runtime.
 import { SubmitGuestRsvpDto } from "./dto/invitation-guest.dtos";
+// biome-ignore lint/style/useImportType: the pipe needs the class at runtime.
+import { SubmitGuestbookEntryDto } from "./dto/invitation-guestbook.dtos";
 // biome-ignore lint/style/useImportType: the pipe needs the class at runtime.
 import { SubmitRsvpDto } from "./dto/invitation-rsvp.dtos";
 import {
@@ -50,6 +53,11 @@ import {
   RSVP_ACCEPTED_RESPONSE,
   type RsvpAcceptedResponse,
 } from "./invitation-rsvp.response";
+import {
+  GUESTBOOK_ACCEPTED_RESPONSE,
+  type GuestbookAcceptedResponse,
+  mapGuestbookError,
+} from "./invitation-guestbook.response";
 
 /**
  * Marks every answer of the public page as uncacheable (A6). The page is rendered per request, so nothing may
@@ -100,6 +108,8 @@ export class PublicInvitationsController {
     private readonly getPublicGuest: GetPublicGuestUseCase,
     @Inject(SubmitGuestRsvpUseCase)
     private readonly submitGuestRsvp: SubmitGuestRsvpUseCase,
+    @Inject(SubmitPublicGuestbookEntryUseCase)
+    private readonly submitGuestbookEntry: SubmitPublicGuestbookEntryUseCase,
     @Inject(RecordInvitationViewUseCase)
     private readonly recordView: RecordInvitationViewUseCase,
     @Inject(ConfigService)
@@ -250,6 +260,38 @@ export class PublicInvitationsController {
       return answered ? RSVP_ACCEPTED_RESPONSE : publicInvitationNotFound();
     } catch (error) {
       return mapRsvpError(error);
+    }
+  }
+
+  /**
+   * One guest's signature on the invitation's wall (F7; S2.7, L10.3). `@Public()` for the same reason the other guest
+   * routes are: a guest has no session, so the guard never reads one. The slug is the only input that names the
+   * invitation. Every accepted attempt — stored or dropped because the honeypot was filled — answers the same 202 with
+   * the same minimal body, so a bot cannot tell a recorded signature from a discarded one. A slug the page itself would
+   * not render is the same 404 as the read; a visible invitation whose wall takes no signature (the package does not
+   * grant `GUESTBOOK`, or the invitation expired) is 409 `GUESTBOOK_CLOSED`; an address over its cap is 429
+   * `GUESTBOOK_RATE_LIMITED`; and a signature the domain refuses is 400 `INVALID_GUESTBOOK_ENTRY` with its issues.
+   */
+  @Post(":slug/guestbook")
+  @HttpCode(202)
+  async signGuestbook(
+    @Param("slug") slug: string,
+    @Body() body: SubmitGuestbookEntryDto,
+    @Req() request: ClientAddressRequest,
+  ): Promise<GuestbookAcceptedResponse> {
+    try {
+      const signed = await this.submitGuestbookEntry.execute({
+        slug,
+        authorName: body.authorName,
+        message: body.message,
+        honeypot: body.honeypot,
+        clientAddress: clientAddressOf(request, this.clientIpHeader()),
+      });
+
+      // An invisible slug is the same 404 the read above answers.
+      return signed ? GUESTBOOK_ACCEPTED_RESPONSE : publicInvitationNotFound();
+    } catch (error) {
+      return mapGuestbookError(error);
     }
   }
 
