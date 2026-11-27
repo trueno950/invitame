@@ -58,6 +58,15 @@ enum MediaAssetStatus {
   DELETED @map("deleted")
 }
 
+// The state of one photo a guest uploaded (F8; L11.1, L11.3, L11.6). Every upload is `PENDING` and invisible to guests
+// until the owner publishes it; `HIDDEN` is a published photo the owner took down again, which may be shown again. A
+// photo never returns to `PENDING`, and a pending or hidden one is removed by the media retention cleanup after 30 days.
+enum GuestPhotoStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+}
+
 // The lifecycle of one payment (M7 S1, S4). `pending` is what a checkout writes; a verified provider event moves it
 // to `paid`, `failed`, or `expired`, and only `paid` becomes `refunded`. The domain state machine
 // (`src/payments/domain/payment.ts`) is the rule; this enum is the guard that makes any other value unstorable.
@@ -110,10 +119,10 @@ model User {
   createdAt        DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime   @updatedAt @db.Timestamptz(6)
 
-  sessions    Session[]
-  accounts    Account[]
-  twoFactor   TwoFactor?
-  invitations Invitation[]
+  sessions            Session[]
+  accounts            Account[]
+  twoFactor           TwoFactor?
+  invitations         Invitation[]
   // The audit rows this account took as an administrator, and the ones that changed it (M9 T6; S6).
   adminActionsTaken   AdminAction[] @relation("AdminActionActor")
   adminActionsAgainst AdminAction[] @relation("AdminActionTarget")
@@ -297,12 +306,12 @@ model TemplateVersion {
 
   template Template @relation(fields: [templateId], references: [id], onDelete: Restrict)
 
+  invitations Invitation[]
+
   // Migration 20261109120000 adds what Prisma cannot express: the partial unique index
   // "TemplateVersion_templateId_published_key" (one PUBLISHED version per template) and the
   // "TemplateVersion_status_transition" trigger (only DRAFT -> PUBLISHED and PUBLISHED -> RETIRED).
   @@unique([templateId, version])
-
-  invitations Invitation[]
 }
 
 // A creator's invitation draft (M4 T1; S2, S3, S5, S10, A3). It is pinned at creation to the published
@@ -327,7 +336,7 @@ model Invitation {
   packageId         String           @db.Uuid
   slug              String           @unique @db.VarChar(60)
   status            InvitationStatus @default(DRAFT)
-  content           Json             @db.JsonB @default("{}")
+  content           Json             @default("{}") @db.JsonB
   // The IANA zone the guest's countdown and calendar links use. The allow-list lives in the API domain
   // (`domain/invitation-features.ts`, S4); the database checks the shape and the default.
   timeZone          String           @default("America/Mexico_City") @db.VarChar(64)
@@ -354,19 +363,20 @@ model Invitation {
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
 
-  owner           User                      @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  templateVersion TemplateVersion           @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
-  package         Package                   @relation(fields: [packageId], references: [id], onDelete: Restrict)
-  featureSettings InvitationFeatureSettings?
-  places          InvitationPlace[]
-  rsvpResponses   RsvpResponse[]
-  guests          Guest[]
-  mediaAssets     MediaAsset[]
-  payments        Payment[]
-  adminActions    AdminAction[]
-  views           InvitationView[]
+  owner              User                       @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  templateVersion    TemplateVersion            @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  package            Package                    @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  featureSettings    InvitationFeatureSettings?
+  places             InvitationPlace[]
+  rsvpResponses      RsvpResponse[]
+  guests             Guest[]
+  mediaAssets        MediaAsset[]
+  payments           Payment[]
+  adminActions       AdminAction[]
+  views              InvitationView[]
   reminderDeliveries ReminderDelivery[]
-  guestbookEntries GuestbookEntry[]
+  guestbookEntries   GuestbookEntry[]
+  guestPhotos        GuestPhoto[]
 
   @@index([ownerId])
   // The administrator's status view (M9 T2; S1) reads a page newest first, optionally filtered by one status, so
@@ -637,8 +647,8 @@ model Guest {
   createdAt     DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
 
-  invitation   Invitation    @relation(fields: [invitationId], references: [id], onDelete: Restrict)
-  rsvpResponse RsvpResponse?
+  invitation         Invitation         @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  rsvpResponse       RsvpResponse?
   // The reminders this guest already received, one row per kind and day (F6; L9.4).
   reminderDeliveries ReminderDelivery[]
 
@@ -670,6 +680,33 @@ model GuestbookEntry {
   // The guest wall reads one invitation's visible entries newest first; the owner's screen reads them all in the same
   // order, so one index serves both reads.
   @@index([invitationId, hidden, createdAt])
+}
+
+// One photo a guest uploaded to an invitation's album (F8; S2.8, L11.1). The binary never lives here: the row names its
+// object by `storageKey` under the same `invitations/<invitationId>/<photoId>.webp` key space as the owner's own media,
+// so one storage adapter, one serving route, and one cleanup scan serve both. `status` is PENDING until the owner
+// reviews the photo; `reviewedAt` is the instant they published or hid it and stays NULL while it is pending. The
+// uploader name is optional plain text of 1 to 60 trimmed characters, so a guest may stay anonymous.
+// Migration 20261210120000_add_guest_album adds what Prisma cannot express: the CHECK constraints
+// "GuestPhoto_storageKey_format", "GuestPhoto_uploaderName_length", and
+// "GuestPhoto_reviewedAt_matches_status" (PENDING if and only if `reviewedAt` is NULL), plus the index the retention
+// scan and the owner's read use.
+model GuestPhoto {
+  id           String           @id @default(uuid()) @db.Uuid
+  invitationId String           @db.Uuid
+  // The object of this photo: `invitations/<invitationId>/<photoId>.webp`, built from validated ids only.
+  storageKey   String           @unique @db.VarChar(200)
+  status       GuestPhotoStatus @default(PENDING)
+  uploaderName String?          @db.VarChar(60)
+  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+  reviewedAt   DateTime?        @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+
+  // The public read and the owner's screen both read one invitation's photos newest first, filtered by status or not,
+  // so one index serves both; the retention scan filters by status and the state instant.
+  @@index([invitationId, status, createdAt])
+  @@index([status, createdAt])
 }
 
 // One checkout intent for one invitation (M7 S1, S4). `amountMinor` and `currency` are the snapshot of the

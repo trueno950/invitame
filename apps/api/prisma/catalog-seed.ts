@@ -116,6 +116,11 @@ const FEATURE_SEEDS = [
     description: "Un muro de mensajes para que tus invitados te dejen sus mejores deseos.",
   },
   {
+    key: "GUEST_ALBUM",
+    name: "Álbum de fotos de invitados",
+    description: "Tus invitados suben sus fotos y tú decides cuáles aparecen en la invitación.",
+  },
+  {
     key: "WHATSAPP_REMINDERS",
     name: "Recordatorios por WhatsApp",
     description:
@@ -177,6 +182,7 @@ const PACKAGE_SEEDS = [
       "GIFT_REGISTRY",
       "LODGING",
       "GUESTBOOK",
+      "GUEST_ALBUM",
       "WHATSAPP_REMINDERS",
       "GUEST_LIST",
       "QR_PASS",

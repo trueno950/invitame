@@ -411,6 +411,53 @@ live in `apps/api/src/invitations/domain/invitation-guestbook.ts`.
   `DROP TABLE "GuestbookEntry";`. Only the signed messages and the catalog key are lost; invitations, their content, and
   every other feature setting stay. Never edit the applied migration file.
 
+## Guests' photo album
+
+Current status: the `GuestPhoto` table exists and the API uploads, reads, and moderates it (F8; S2.8, L11.1, L11.3,
+L11.4, L11.6). The rules — the three states, the per-invitation cap, the uploader name's bounds, and the retention of a
+photo the owner never published — live in `apps/api/src/media/domain/guest-photo.ts`; the bytes go through the existing
+media pipeline (`apps/api/src/media/domain/media-asset.ts`, `infrastructure/sharp-image-processor.ts`).
+
+- `GuestPhoto` stores one photo a guest uploaded: `invitationId`, `storageKey` (`VARCHAR(200)`, unique),
+  `status` (`GuestPhotoStatus`: `PENDING` | `PUBLISHED` | `HIDDEN`, default `PENDING`), `uploaderName` (`VARCHAR(60)`,
+  nullable), `createdAt` and `reviewedAt` (`TIMESTAMPTZ(6)`, the second nullable). The binary never lives in PostgreSQL:
+  the row names its object under the same `invitations/<invitationId>/<photoId>.webp` key space as the owner's own
+  media, so one storage adapter, one serving route (`GET /media/<id>`), and one cleanup scan serve both.
+- The three CHECK constraints repeat the API's rules for a reader that does not go through it:
+  `GuestPhoto_storageKey_format` (the object is this API's own key), `GuestPhoto_uploaderName_length` (NULL or 1 to 60
+  characters), and `GuestPhoto_reviewedAt_matches_status` (a photo is `PENDING` if and only if `reviewedAt` is NULL), so
+  a row written around the API cannot claim a review instant it never had.
+- `GuestPhoto.invitationId` references `Invitation` with `ON DELETE RESTRICT`, the convention every invitation reference
+  follows here: an invitation is archived, never hard-deleted, so the reference never keeps the owner from an operation
+  they have (L24). The album has no reference to `Guest`, `User`, or `MediaAsset`, so it also cannot keep the owner from
+  removing a guest.
+- `status` is the moderation state: every upload is `PENDING` and invisible to guests; the owner publishing it makes it
+  `PUBLISHED`, and hiding a published photo makes it `HIDDEN`, which may be published again. A photo never returns to
+  `PENDING`, and the owner's write is the only one that changes the state; nothing is deleted in the request.
+- The public read answers the invitation's `PUBLISHED` photos, newest first (`createdAt DESC, id DESC`) and at most 60
+  (`GUEST_PHOTO_PUBLIC_MAX`), with the total published count, through `GuestPhoto_invitationId_status_createdAt_idx`. The
+  owner's moderation read answers the newest 500 photos of the invitation, every state, with one count per state. The
+  public projection carries only the photo's URL and its optional uploader name: no row id, no state, no key.
+- The insert is one transaction: it locks the invitation row (`SELECT … FOR UPDATE`), re-states `status = 'PUBLISHED'`
+  and `expiresAt IS NULL OR expiresAt >= now()` against the database's own clock, and refuses the invitation that
+  already stores `GUEST_PHOTO_MAX_STORED` (300) photos, pending and hidden included. Two concurrent uploads therefore
+  cannot both take the last slot, and an upload that races an unpublish or an expiry is refused by the database.
+- The per-address limit uses the existing `RateLimit` table under the key
+  `guest-album|<invitationId>|<sha256(client address)>` — 30 photos per hour per address per invitation, the same window
+  semantics as the open RSVP and the guestbook, with a prefix of its own. The client address itself is never stored.
+- The media retention cleanup (`pnpm media:cleanup`) retires the photos the owner never published or took down again
+  once they have been in that state for 30 days (`GUEST_PHOTO_RETENTION_DAYS`): it deletes the object and then the row,
+  and the objects of the rows that stay are never treated as orphans. A published photo is never retired.
+- The capability is the new `GUEST_ALBUM` key, granted to Deluxe by the migration (`ON CONFLICT DO NOTHING`) and
+  declared in the seed (`apps/api/prisma/catalog-seed.ts`), so the panel may grant or withdraw it without a deployment.
+  A granted invitation shows an empty album — and its upload form — before the first photo, and a package without the
+  key answers `features.guestAlbum: null`.
+- Rollback / recovery of `20261210120000_add_guest_album`: additive, so recovery is redeploying the previous migration
+  set, or by hand deleting the `GUEST_ALBUM` `PackageFeature` links and the `GUEST_ALBUM` `Feature` row by key, then
+  `DROP TABLE "GuestPhoto";` and `DROP TYPE "GuestPhotoStatus";`. The album's objects become orphans that the next
+  `pnpm media:cleanup` removes once they are older than its grace period. Only the uploaded photos and the catalog key
+  are lost; invitations, their content, and every other feature setting stay. Never edit the applied migration file.
+
 ## Invitation places
 
 Current status: the `InvitationPlace` table exists, the API writes and clears a point through
