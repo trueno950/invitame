@@ -25,6 +25,11 @@ import {
   publishInvitation,
   unpublishInvitation,
 } from "../../../lib/customer/invitations.ts";
+import {
+  hideGuestPhoto,
+  publishGuestPhoto,
+  showGuestPhoto,
+} from "../../../lib/customer/guest-album.ts";
 import { hideGuestbookEntry, showGuestbookEntry } from "../../../lib/customer/guestbook.ts";
 import { guestShareUrl } from "../../../lib/public/guest-pass.ts";
 import { requestOrigin } from "../../../lib/server/request-origin.ts";
@@ -190,4 +195,23 @@ export async function hideGuestbookEntryAction(formData: FormData): Promise<void
 /** Shows one hidden guestbook entry again, coming back to the visible tab (F7; L10.6). */
 export async function showGuestbookEntryAction(formData: FormData): Promise<void> {
   redirect(await showGuestbookEntry(invitations, formData));
+}
+
+/**
+ * Publishes one guest photo (F8; L11.6): it becomes visible on the invitation, and nothing is deleted. The owner comes
+ * only from the session, so another owner's invitation or photo answers the API's own 404 and the form comes back to
+ * this invitation's screen with that error.
+ */
+export async function publishGuestPhotoAction(formData: FormData): Promise<void> {
+  redirect(await publishGuestPhoto(invitations, formData));
+}
+
+/** Hides one published guest photo, coming back to the hidden tab (F8; L11.6). */
+export async function hideGuestPhotoAction(formData: FormData): Promise<void> {
+  redirect(await hideGuestPhoto(invitations, formData));
+}
+
+/** Publishes one hidden guest photo again, coming back to the published tab (F8; L11.6). */
+export async function showGuestPhotoAction(formData: FormData): Promise<void> {
+  redirect(await showGuestPhoto(invitations, formData));
 }

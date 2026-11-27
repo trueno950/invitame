@@ -25,6 +25,23 @@ import {
   galleryPhotoAlt,
 } from "../../../lib/invitation-features/gallery.ts";
 import {
+  GUEST_ALBUM_ACCEPT,
+  GUEST_ALBUM_CLOSED_NOTE,
+  GUEST_ALBUM_EMPTY_NOTE,
+  GUEST_ALBUM_FILE_HINT,
+  GUEST_ALBUM_FILE_LABEL,
+  GUEST_ALBUM_SECTION_HINT,
+  GUEST_ALBUM_SECTION_TITLE,
+  GUEST_ALBUM_UPLOADER_HINT,
+  GUEST_ALBUM_UPLOADER_LABEL,
+  GUEST_ALBUM_UPLOADER_NAME_MAX_LENGTH,
+  GUEST_ALBUM_UPLOADER_PLACEHOLDER,
+  GUEST_ALBUM_UPLOAD_LABEL,
+  guestAlbumCount,
+  guestAlbumPhotoAlt,
+} from "../../../lib/invitation-features/guest-album.ts";
+import {
+  type GuestAlbumBlockView,
   type GuestbookBlockView,
   type GuestPassBlockView,
   type GuestRsvpBlockView,
@@ -1012,6 +1029,123 @@ function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): Reac
 }
 
 /**
+ * The album of the guests' photos (F8; S2.8, L11.5): the artboard's «Nuestras fotos» card. «Subir mis fotos» is a plain
+ * multipart form posting to the page's server action, so it works with no client script; below it the grid of the
+ * photos the owner published, each announced by the name its uploader left; and the count line states the album's total.
+ * An album the invitation's expiry closed keeps its photos and replaces the form with a note (S2), and an album with
+ * nothing published invites its first photo instead of drawing an empty grid. Every text is React's own text node, so a
+ * name that looks like markup stays the characters the guest typed.
+ */
+function guestAlbumSection(album: GuestAlbumBlockView, idPrefix: string): ReactElement {
+  const grid =
+    album.photos.length === 0
+      ? h("p", { className: HINT }, GUEST_ALBUM_EMPTY_NOTE)
+      : h(
+          "ul",
+          {
+            "data-guest-album-grid": "",
+            className: "mt-3 grid grid-cols-3 gap-1.5",
+          },
+          album.photos.map((photo, index) =>
+            h(
+              "li",
+              { key: `${index}-${photo.url}`, className: "overflow-hidden rounded-lg" },
+              h(
+                "a",
+                {
+                  href: photo.url,
+                  target: "_blank",
+                  rel: "noopener noreferrer",
+                  className: "block",
+                },
+                h("img", {
+                  src: photo.url,
+                  alt: guestAlbumPhotoAlt(photo.uploaderName),
+                  width: 320,
+                  height: 320,
+                  loading: "lazy",
+                  decoding: "async",
+                  className:
+                    "aspect-square w-full object-cover ring-1 ring-(--inv-soft) rounded-lg",
+                }),
+              ),
+            ),
+          ),
+        );
+
+  return h(
+    "div",
+    { key: "guestAlbum", "data-feature": "guestAlbum", className: SURFACE_CARD },
+    h("h3", { className: FEATURE_TITLE }, GUEST_ALBUM_SECTION_TITLE),
+    h("p", { className: HINT }, GUEST_ALBUM_SECTION_HINT),
+    ...(album.closed
+      ? [h("p", { key: "closed", className: HINT }, GUEST_ALBUM_CLOSED_NOTE)]
+      : [
+          h(
+            "form",
+            {
+              key: "form",
+              "data-guest-album-form": "",
+              action: album.action,
+              method: "post",
+              encType: "multipart/form-data",
+              className: FORM,
+            },
+            h("input", { type: "hidden", name: "slug", value: album.slug }),
+            // A guest's own page gets its upload back on that page, so the token travels with the form (F8; L11.5).
+            album.guestToken === undefined
+              ? null
+              : h("input", { type: "hidden", name: "guestToken", value: album.guestToken }),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-guest-album-file` },
+                GUEST_ALBUM_FILE_LABEL,
+              ),
+              h("input", {
+                id: `${idPrefix}-guest-album-file`,
+                name: "file",
+                type: "file",
+                required: true,
+                accept: GUEST_ALBUM_ACCEPT,
+                className: FIELD,
+              }),
+              h("p", { className: HINT }, GUEST_ALBUM_FILE_HINT),
+            ),
+            h(
+              "div",
+              null,
+              h(
+                "label",
+                { className: FIELD_LABEL, htmlFor: `${idPrefix}-guest-album-name` },
+                GUEST_ALBUM_UPLOADER_LABEL,
+              ),
+              h("input", {
+                id: `${idPrefix}-guest-album-name`,
+                name: "uploaderName",
+                type: "text",
+                maxLength: GUEST_ALBUM_UPLOADER_NAME_MAX_LENGTH,
+                autoComplete: "name",
+                placeholder: GUEST_ALBUM_UPLOADER_PLACEHOLDER,
+                className: FIELD,
+              }),
+              h("p", { className: HINT }, GUEST_ALBUM_UPLOADER_HINT),
+            ),
+            h(
+              "div",
+              { className: ACTIONS },
+              h("button", { type: "submit", className: SUBMIT }, GUEST_ALBUM_UPLOAD_LABEL),
+            ),
+          ),
+        ]),
+    grid,
+    h("p", { "data-guest-album-count": "", className: HINT }, guestAlbumCount(album.count)),
+  );
+}
+
+/**
  * The gift registry (F2; L4.5): one row per store, in the order the owner stored, with its reference and the «Ver mesa →»
  * link that opens it in a new tab without handing the opener over; then the transfer block with the bank, the holder,
  * and the CLABE grouped for reading next to its «Copiar CLABE» button; the envelopes line when the owner switched it
@@ -1364,6 +1498,11 @@ export function InvitationFeaturesBlock({
     if (pass !== null) {
       sections.push(pass);
     }
+  }
+
+  // The guests' own photos come next: the grid and its upload form, before the wall that closes the block (F8; L11.5).
+  if (features.guestAlbum !== undefined) {
+    sections.push(guestAlbumSection(features.guestAlbum, idPrefix));
   }
 
   // Last of all: the wall of messages, which closes the block with its notes and its form (F7; L10.5).

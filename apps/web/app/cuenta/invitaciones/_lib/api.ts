@@ -88,6 +88,12 @@ export const invitations = {
   ) => logged((api) => api.updateRsvpSettings(id, settings)),
   rsvpCsv: (id: string) => logged((api) => api.rsvpCsv(id)),
   guestbook: (id: string) => logged((api) => api.guestbook(id)),
+  album: (id: string) => logged((api) => api.album(id)),
+  reviewGuestPhoto: (
+    id: string,
+    photoId: string,
+    status: Parameters<InvitationsClient["reviewGuestPhoto"]>[2],
+  ) => logged((api) => api.reviewGuestPhoto(id, photoId, status)),
   setGuestbookEntryHidden: (id: string, entryId: string, hidden: boolean) =>
     logged((api) => api.setGuestbookEntryHidden(id, entryId, hidden)),
   guests: (id: string) => logged((api) => api.guests(id)),

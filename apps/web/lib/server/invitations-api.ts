@@ -35,6 +35,7 @@ import {
   sendApiRequest,
   sessionCookieHeader,
 } from "./api-client.ts";
+import { isApiMediaUrl } from "./media-api.ts";
 
 /**
  * The web server's client of the invitation API and of the creator catalog (M4 T5; S1, S6, S7, S8). CORS
@@ -226,6 +227,30 @@ export interface GuestbookRead {
   readonly hiddenCount: number;
 }
 
+/** The three states of one guest photo (F8; L11.1): pending the owner's review, published, or hidden again. */
+export type GuestPhotoStatus = "PENDING" | "PUBLISHED" | "HIDDEN";
+
+/** One photo as the owner's album screen reads it (F8; L11.6). */
+export interface GuestPhotoItem {
+  readonly id: string;
+  /** The absolute API URL of the image; never a storage provider, a bucket, or a key. */
+  readonly url: string;
+  /** The name its uploader typed, or null when they left it empty. */
+  readonly uploaderName: string | null;
+  readonly status: GuestPhotoStatus;
+  readonly createdAt: string;
+  /** When the owner published or hid it; null while it is pending. */
+  readonly reviewedAt: string | null;
+}
+
+/** The owner's album read: every photo newest first and one count per state (F8; L11.6). */
+export interface GuestAlbumRead {
+  readonly photos: GuestPhotoItem[];
+  readonly pendingCount: number;
+  readonly publishedCount: number;
+  readonly hiddenCount: number;
+}
+
 /** The owner's CSV download: the file and the headers the API sent it with (S1, S4). */
 export interface RsvpCsv {
   readonly body: string;
@@ -334,6 +359,7 @@ export type InvitationFailure =
   | "guest-not-found"
   | "guest-not-confirmed"
   | "guestbook-entry-not-found"
+  | "guest-photo-not-found"
   | "guest-seats-below-response"
   | "qr-pass-unavailable"
   | "validation"
@@ -1121,8 +1147,95 @@ export function parseGuestbookRead(value: unknown): GuestbookRead | undefined {
   return { entries, visibleCount, hiddenCount };
 }
 
-// The guest-list routes of the owner (M6 G4; S1, S4). The list is the guests with the answer each one gave and
-// their check-in state, never a personal token or a digest; a creation and a rotation answer the plain personal
+// The album routes of the owner (F8; L11.6). The read is every photo with its state and one count per state; the write
+// answers the photo it changed. A photo's URL is served by the API's own media route, so a body that names another host
+// is refused whole (A5), and a state outside the three the API stores is no photo of this contract.
+
+/** The widest uploader name the API stores, mirrored so a body that says more is refused whole (F8; L11.1). */
+const GUEST_PHOTO_UPLOADER_NAME_MAX_LENGTH = 60;
+/** How many photos the owner's read answers, mirrored from the API's own bound (F8; L11.6). */
+const GUEST_PHOTO_OWNER_MAX = 500;
+
+/** Whether a value is one stored photo state, compared whole and case-sensitively. */
+function isGuestPhotoStatus(value: unknown): value is GuestPhotoStatus {
+  return value === "PENDING" || value === "PUBLISHED" || value === "HIDDEN";
+}
+
+/** One stored photo, or undefined when a field breaks the documented contract (F8; L11.6). */
+export function parseGuestPhoto(value: unknown, apiOrigin: string): GuestPhotoItem | undefined {
+  const photo = record(value);
+
+  if (photo === undefined) {
+    return undefined;
+  }
+
+  const { id, url, uploaderName, status, createdAt, reviewedAt } = photo;
+
+  if (
+    !isInvitationId(id) ||
+    typeof url !== "string" ||
+    !isApiMediaUrl(url, apiOrigin) ||
+    !(
+      uploaderName === null ||
+      (typeof uploaderName === "string" &&
+        uploaderName.trim().length > 0 &&
+        [...uploaderName].length <= GUEST_PHOTO_UPLOADER_NAME_MAX_LENGTH)
+    ) ||
+    !isGuestPhotoStatus(status) ||
+    !isTimestamp(createdAt) ||
+    !(reviewedAt === null || isTimestamp(reviewedAt))
+  ) {
+    return undefined;
+  }
+
+  return { id, url, uploaderName, status, createdAt, reviewedAt };
+}
+
+/**
+ * The owner's album read, or undefined when the body breaks the contract (F8; L11.6). The counts the screen's tabs show
+ * are the photos themselves, so a body that disagrees with them is refused instead of drawing a tab nobody can trust.
+ */
+export function parseGuestAlbumRead(value: unknown, apiOrigin: string): GuestAlbumRead | undefined {
+  const read = record(value);
+
+  if (read === undefined || !Array.isArray(read.photos)) {
+    return undefined;
+  }
+  if (read.photos.length > GUEST_PHOTO_OWNER_MAX) {
+    return undefined;
+  }
+
+  const photos: GuestPhotoItem[] = [];
+  for (const item of read.photos) {
+    const photo = parseGuestPhoto(item, apiOrigin);
+
+    if (photo === undefined) {
+      return undefined;
+    }
+    photos.push(photo);
+  }
+
+  const { pendingCount, publishedCount, hiddenCount } = read;
+
+  if (
+    !isGuestbookCount(pendingCount) ||
+    !isGuestbookCount(publishedCount) ||
+    !isGuestbookCount(hiddenCount)
+  ) {
+    return undefined;
+  }
+  const pending = photos.filter((photo) => photo.status === "PENDING").length;
+  const published = photos.filter((photo) => photo.status === "PUBLISHED").length;
+  const hidden = photos.filter((photo) => photo.status === "HIDDEN").length;
+
+  if (pendingCount !== pending || publishedCount !== published || hiddenCount !== hidden) {
+    return undefined;
+  }
+
+  return { photos, pendingCount, publishedCount, hiddenCount };
+}
+
+// The guest-list routes of the owner (M6 G4; S1, S4). The list is the guests with the answer each one gave and// their check-in state, never a personal token or a digest; a creation and a rotation answer the plain personal
 // token exactly once, so only the server action that redirects reads it, and the check-in answers the guest, the
 // seats, the confirmed party, and the first check-in instant. A token is 128 bits as 22 base64url characters, the
 // only shape the API mints, so a value that cannot have been minted names no guest and no request is sent.
@@ -1496,6 +1609,7 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   GUEST_NOT_FOUND: "guest-not-found",
   GUEST_NOT_CONFIRMED: "guest-not-confirmed",
   GUESTBOOK_ENTRY_NOT_FOUND: "guestbook-entry-not-found",
+  GUEST_PHOTO_NOT_FOUND: "guest-photo-not-found",
   GUEST_SEATS_BELOW_RESPONSE: "guest-seats-below-response",
   QR_PASS_NOT_AVAILABLE: "qr-pass-unavailable",
   INVITATION_TEMPLATE_VERSION_NOT_PUBLISHED: "version-not-published",
@@ -1620,7 +1734,7 @@ export function createInvitationsClient(
   readCookieHeader: () => Promise<string | null | undefined>,
 ) {
   async function call<T>(
-    method: "DELETE" | "GET" | "POST" | "PUT",
+    method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT",
     path: string,
     body: unknown,
     parse: (value: unknown) => T | undefined,
@@ -1709,6 +1823,16 @@ export function createInvitationsClient(
       return `${INVITATIONS}/${id}/guests${suffix}`;
     }
     return isInvitationId(guestId) ? `${INVITATIONS}/${id}/guests/${guestId}${suffix}` : undefined;
+  }
+
+  /**
+   * The path of one guest photo of one invitation, or undefined when either id cannot be one (F8; L11.6): a photo id
+   * that is not a UUID names nothing, so no request is made and the value never becomes a path segment.
+   */
+  function guestPhotoPath(id: string, photoId: string): string | undefined {
+    return isInvitationId(id) && isInvitationId(photoId)
+      ? `${INVITATIONS}/${id}/guest-photos/${photoId}`
+      : undefined;
   }
 
   /** The path of one guestbook entry of one invitation, or undefined when either id cannot be one (F7; L10.6). */
@@ -1880,6 +2004,37 @@ export function createInvitationsClient(
       return path === undefined
         ? Promise.resolve({ ok: false, failure: "guestbook-entry-not-found" })
         : call("PUT", path, { hidden }, parseGuestbookEntry);
+    },
+    /**
+     * `GET /invitations/:id/guest-photos`: every photo of the album with its state and one count per state (F8;
+     * L11.6). Owner-only, and never gated by the catalog: a package that stopped granting the key still answers what
+     * the invitation already received, so the owner's screen never disappears.
+     */
+    album: (id: string): Promise<InvitationResult<GuestAlbumRead>> =>
+      onDraft(id, "/guest-photos", (path) =>
+        call("GET", path, undefined, (value) =>
+          parseGuestAlbumRead(value, options.config.apiOrigin),
+        ),
+      ),
+    /**
+     * `PATCH /invitations/:id/guest-photos/:photoId`: publishes one photo, or hides it again (F8; L11.6). Called from a
+     * server action, because a browser cannot send `PATCH`; nothing is deleted, so hiding is always reversible.
+     */
+    reviewGuestPhoto: (
+      id: string,
+      photoId: string,
+      status: "PUBLISHED" | "HIDDEN",
+    ): Promise<InvitationResult<GuestPhotoItem>> => {
+      const path = guestPhotoPath(id, photoId);
+
+      return path === undefined
+        ? Promise.resolve<InvitationResult<GuestPhotoItem>>({
+            ok: false,
+            failure: "guest-photo-not-found",
+          })
+        : call("PATCH", path, { status }, (value) =>
+            parseGuestPhoto(value, options.config.apiOrigin),
+          );
     },
     /**
      * `GET /invitations/:id/guests`: the guests with their answers, their check-in state, and the totals (M6 G4;

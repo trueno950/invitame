@@ -51,6 +51,8 @@ const LODGING_FEATURE_KEY = "LODGING";
 const WHATSAPP_REMINDERS_FEATURE_KEY = "WHATSAPP_REMINDERS";
 /** The catalog key that grants the guestbook (F7; L10.2), granted by Premium and Deluxe. */
 const GUESTBOOK_FEATURE_KEY = "GUESTBOOK";
+/** The catalog key that grants the album of the guests' photos (F8; L11.2), granted by Deluxe. */
+const GUEST_ALBUM_FEATURE_KEY = "GUEST_ALBUM";
 
 /** Everything the section renders for one draft. */
 export interface FeatureSettingsView {
@@ -112,6 +114,12 @@ export interface FeatureSettingsView {
    * offering a moderation screen nobody can publish.
    */
   readonly showGuestbook: boolean;
+  /**
+   * Whether the package includes GUEST_ALBUM, which is the only reason the «Funciones» tab links to the invitation's
+   * album screen (F8; L11.2, L11.6). A package without the key keeps the photos a guest uploaded private instead of
+   * offering a moderation screen nobody can publish.
+   */
+  readonly showGuestAlbum: boolean;
   /**
    * Whether the package includes RSVP, which is the only reason the draft offers its «Asistencia» section
    * (M6 G3; S4). A package with the guest list instead keeps that section for the guest-list tools (G4).
@@ -205,6 +213,7 @@ export function featureSettingsView(
     reminders: remindersDraftOf(invitation.featureSettings.reminders),
     remindersConfigured: invitation.remindersConfigured === true,
     showGuestbook: included.has(GUESTBOOK_FEATURE_KEY),
+    showGuestAlbum: included.has(GUEST_ALBUM_FEATURE_KEY),
     showRsvp: included.has(RSVP_FEATURE_KEY),
     giftRegistryNote: giftRegistryNote(packages, included),
     automaticFeatures: AUTOMATIC_FEATURES.filter(

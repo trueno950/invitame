@@ -393,6 +393,7 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
     "Esta invitación no incluye la lista de invitados. Se muestra con el paquete Deluxe.",
   "guest-not-found": "No encontramos ese invitado en esta invitación.",
   "guestbook-entry-not-found": "No encontramos ese mensaje en esta invitación.",
+  "guest-photo-not-found": "No encontramos esa foto en el álbum de esta invitación.",
   "guest-not-confirmed":
     "Ese invitado todavía no confirma que asistirá, así que no podemos registrar su entrada.",
   "guest-seats-below-response":
@@ -915,6 +916,8 @@ export const EDITOR_COPY = {
   attendanceGuestListOpen: "Abrir la lista de invitados",
   /** The link from «Funciones» to the invitation's own guestbook screen (F7; L10.6). */
   funcionesGuestbookOpen: "Abrir el libro de firmas",
+  /** The link from «Funciones» to the invitation's own album screen (F8; L11.6). */
+  funcionesGuestAlbumOpen: "Abrir el álbum de fotos",
   /** The «Publicar» tab: the state of the draft, its public link, and the one action that changes it. */
   publishMeta: {
     unpaid: "sin pagar",
@@ -1247,6 +1250,52 @@ export const GUESTBOOK_NOTICE_COPY = {
   closed: "El libro de firmas ya cerró.",
   limited: "Recibimos muchos intentos desde tu conexión. Espera unos minutos e inténtalo de nuevo.",
   unavailable: "No pudimos guardar tu mensaje. Inténtalo de nuevo en unos minutos.",
+} as const;
+
+/**
+ * What the guest page says after uploading a photo, read from its own query (F8; L11.5). Each code is one Spanish
+ * sentence, so no API text ever reaches a guest; a code the page does not know shows nothing.
+ */
+export const GUEST_ALBUM_NOTICE_COPY = {
+  uploaded: "Gracias, tu foto aparecerá cuando la aprueben.",
+  invalid: "Revisa tu foto: debe ser un archivo JPG, PNG o WebP y pesar menos de lo permitido.",
+  closed: "El álbum de fotos ya cerró.",
+  full: "El álbum de fotos de esta invitación ya está lleno.",
+  limited: "Recibimos muchas fotos desde tu conexión. Espera unos minutos e inténtalo de nuevo.",
+  unavailable: "No pudimos subir tu foto. Inténtalo de nuevo en unos minutos.",
+} as const;
+
+/**
+ * The owner's album screen (F8; L11.6): the three tabs with their counts, the one action of each photo, and the note
+ * that states the retention of the photos nobody published or the owner took down again. The copy says the truth the
+ * media cleanup enforces — thirty days — so the owner is never surprised by a photo disappearing.
+ */
+export const GUEST_ALBUM_OWNER_COPY = {
+  pageTitle: "Álbum de fotos | InvitaMe",
+  eyebrow: "Tu invitación",
+  heading: "Fotos de tus invitados",
+  intro: "Revisa las fotos antes de que aparezcan en tu invitación.",
+  reviewTab: (count: number) => `Por revisar · ${count}`,
+  publishedTab: (count: number) => `Publicadas · ${count}`,
+  hiddenTab: (count: number) => `Ocultas · ${count}`,
+  publishAction: "Publicar",
+  hideAction: "Ocultar",
+  showAction: "Volver a mostrar",
+  /** The name a photo whose uploader left no name shows, as the artboard's card does. */
+  anonymous: "Anónimo",
+  emptyReview: "No hay fotos por revisar.",
+  emptyPublished: "Todavía no has publicado ninguna foto.",
+  emptyHidden: "No has ocultado ninguna foto.",
+  retentionNote:
+    "Las fotos ocultas y las que nunca publiques se borran 30 días después de que llegaron o de que las ocultaste.",
+  backToInvitation: "← Volver a la invitación",
+  unavailable: "No pudimos leer el álbum de fotos. Inténtalo de nuevo en unos minutos.",
+  tabLabel: "Qué fotos ves",
+  /** The relative date of one uploaded photo, as the card shows it under the name. */
+  receivedNow: "hace unos minutos",
+  receivedHours: (hours: number) => `hace ${hours} ${hours === 1 ? "hora" : "horas"}`,
+  receivedYesterday: "ayer",
+  receivedDays: (days: number) => `hace ${days} días`,
 } as const;
 
 /**

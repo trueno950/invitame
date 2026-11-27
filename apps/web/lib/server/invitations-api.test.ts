@@ -16,6 +16,8 @@ import {
   parseInvitationSummaries,
   parseOwnedInvitation,
   parsePlaceSuggestions,
+  parseGuestAlbumRead,
+  parseGuestPhoto,
   parseRsvpRead,
   parseRsvpSettings,
 } from "./invitations-api.ts";
@@ -1504,5 +1506,163 @@ describe("parsePlaceSuggestions (S1, S2)", () => {
     );
     assert.equal(parsePlaceSuggestions([{ label: "Sin punto" }]), undefined);
     assert.equal(parsePlaceSuggestions({ places: [PARROQUIA] }), undefined);
+  });
+});
+
+// The album routes of the owner (F8; L11.6): the read is every photo with its state and one count per state, the write
+// answers the photo it changed, and both are owner-only — a foreign or unknown invitation is the same 404 (A4), and so
+// is a photo that is not this invitation's.
+/** The origin this deployment's API builds its `/media/<id>` URLs from, which the owner read is checked against (A5). */
+const MEDIA_ORIGIN = "http://localhost:3001";
+const PHOTO_ID = "6b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e16";
+const PHOTO = {
+  id: PHOTO_ID,
+  url: `${MEDIA_ORIGIN}/media/${PHOTO_ID}`,
+  uploaderName: "Tía Rosa",
+  status: "PENDING",
+  createdAt: AT,
+  reviewedAt: null,
+};
+const ALBUM_READ = {
+  photos: [PHOTO],
+  pendingCount: 1,
+  publishedCount: 0,
+  hiddenCount: 0,
+};
+
+/** One photo as the client's own origin serves it: the local test server stands in for the API (A5). */
+const photoAt = (origin: string) => ({ ...PHOTO, url: `${origin}/media/${PHOTO_ID}` });
+const albumAt = (origin: string) => ({ ...ALBUM_READ, photos: [photoAt(origin)] });
+
+const parseAlbum = (value: unknown): unknown => parseGuestAlbumRead(value, MEDIA_ORIGIN);
+const parsePhoto = (value: unknown): unknown => parseGuestPhoto(value, MEDIA_ORIGIN);
+
+describe("the owner's album read (F8; L11.6)", () => {
+  it("reads every photo with its state and the three counts", async () => {
+    answer(200, albumAt(apiOrigin));
+
+    const read = await client().album(ID);
+
+    assert.deepEqual(read, { ok: true, value: albumAt(apiOrigin) });
+    assert.equal(received[0]?.method, "GET");
+    assert.equal(received[0]?.url, `/invitations/${ID}/guest-photos`);
+    assert.equal(received[0]?.headers.cookie, SESSION_COOKIE);
+    assert.deepEqual(parsePhoto(PHOTO), PHOTO);
+  });
+
+  it("refuses a body whose counts disagree with the photos, or a photo that is not this contract", () => {
+    for (const value of [
+      { ...ALBUM_READ, pendingCount: 2 },
+      { ...ALBUM_READ, publishedCount: 1 },
+      { ...ALBUM_READ, hiddenCount: -1 },
+      { ...ALBUM_READ, pendingCount: 1.5 },
+      {
+        photos: [{ ...PHOTO, status: "APPROVED" }],
+        pendingCount: 0,
+        publishedCount: 0,
+        hiddenCount: 0,
+      },
+      {
+        photos: [{ ...PHOTO, url: "https://evil.example/media/x" }],
+        pendingCount: 1,
+        publishedCount: 0,
+        hiddenCount: 0,
+      },
+      {
+        photos: [{ ...PHOTO, uploaderName: "x".repeat(61) }],
+        pendingCount: 1,
+        publishedCount: 0,
+        hiddenCount: 0,
+      },
+      { photos: {}, pendingCount: 0, publishedCount: 0, hiddenCount: 0 },
+      null,
+    ]) {
+      assert.equal(parseAlbum(value), undefined, JSON.stringify(value).slice(0, 80));
+    }
+  });
+
+  it("keeps the album of a package that stopped granting the key, so the owner's screen never disappears", async () => {
+    // Moderation is never gated by the catalog: the API still answers what the invitation already received.
+    answer(200, { photos: [], pendingCount: 0, publishedCount: 0, hiddenCount: 0 });
+
+    assert.deepEqual(await client().album(ID), {
+      ok: true,
+      value: { photos: [], pendingCount: 0, publishedCount: 0, hiddenCount: 0 },
+    });
+  });
+
+  it("answers not-found for another owner's invitation and sends no request for an id that is not one", async () => {
+    answer(404, { code: "INVITATION_NOT_FOUND" });
+
+    assert.deepEqual(await client().album(ID), { ok: false, failure: "not-found" });
+    assert.deepEqual(await client().album("not-an-id"), { ok: false, failure: "not-found" });
+    assert.equal(received.length, 1);
+  });
+});
+
+describe("the owner's moderation writes (F8; L11.6)", () => {
+  it("publishes a photo with PATCH and answers the stored photo", async () => {
+    answer(200, { ...photoAt(apiOrigin), status: "PUBLISHED", reviewedAt: AT });
+
+    const written = await client().reviewGuestPhoto(ID, PHOTO_ID, "PUBLISHED");
+
+    assert.deepEqual(written, {
+      ok: true,
+      value: { ...photoAt(apiOrigin), status: "PUBLISHED", reviewedAt: AT },
+    });
+    assert.equal(received[0]?.method, "PATCH");
+    assert.equal(received[0]?.url, `/invitations/${ID}/guest-photos/${PHOTO_ID}`);
+    assert.deepEqual(JSON.parse(received[0]?.body ?? "null"), { status: "PUBLISHED" });
+  });
+
+  it("hides a photo with the same route and answers not-found for one that is not this invitation's", async () => {
+    answer(404, { code: "GUEST_PHOTO_NOT_FOUND" });
+
+    assert.deepEqual(await client().reviewGuestPhoto(ID, PHOTO_ID, "HIDDEN"), {
+      ok: false,
+      failure: "guest-photo-not-found",
+    });
+    assert.deepEqual(JSON.parse(received[0]?.body ?? "null"), { status: "HIDDEN" });
+    // A photo id that cannot be one names nothing, so no request is made.
+    assert.deepEqual(await client().reviewGuestPhoto(ID, "not-an-id", "HIDDEN"), {
+      ok: false,
+      failure: "guest-photo-not-found",
+    });
+    assert.equal(received.length, 1);
+  });
+
+  it("maps a state the API refuses to the page's own validation error, and fails closed on anything else", async () => {
+    answer(400, {
+      code: "INVALID_GUEST_PHOTO_REVIEW",
+      issues: ["status must be PUBLISHED or HIDDEN"],
+    });
+    assert.deepEqual(await client().reviewGuestPhoto(ID, PHOTO_ID, "PUBLISHED"), {
+      ok: false,
+      failure: "validation",
+    });
+
+    answer(409, { code: "SOMETHING_UNKNOWN" });
+    await assert.rejects(client().reviewGuestPhoto(ID, PHOTO_ID, "PUBLISHED"), (error: unknown) => {
+      assert.equal((error as ApiClientError).kind, "rejected");
+      return true;
+    });
+  });
+});
+
+// The gated keys the owner read answers (F8; L11.2): a key the API gates but the web mirror lacks would refuse the whole
+// body, so a Deluxe invitation — whose package grants `GUEST_ALBUM` — must keep its read parseable.
+describe("the guest album key of the owner read (F8; L11.2)", () => {
+  it("reads a Deluxe invitation that answers GUEST_ALBUM among its available features", async () => {
+    answer(200, { ...OWNED, availableFeatures: [...OWNED.availableFeatures, "GUEST_ALBUM"] });
+
+    const read = await client().get(ID);
+
+    assert.equal(read.ok, true);
+    assert.deepEqual(read.ok && read.value.availableFeatures, [
+      "COUNTDOWN",
+      "MAP",
+      "CALENDAR",
+      "GUEST_ALBUM",
+    ]);
   });
 });

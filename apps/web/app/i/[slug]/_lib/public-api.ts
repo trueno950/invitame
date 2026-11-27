@@ -6,6 +6,8 @@ import {
   createPublicInvitationsClient,
   type PublicGuestbookSubmission,
   type PublicGuestbookSubmitResult,
+  type PublicGuestPhotoUpload,
+  type PublicGuestPhotoUploadResult,
   type PublicGuestResult,
   type PublicGuestRsvpSubmission,
   type PublicGuestRsvpSubmitResult,
@@ -37,6 +39,7 @@ export const PUBLIC_INVITATION_LOG_EVENT = {
   GUESTBOOK_SUBMIT_FAILED: "public_guestbook_submit_failed",
   GUEST_READ_FAILED: "public_guest_read_failed",
   GUEST_RSVP_SUBMIT_FAILED: "public_guest_rsvp_submit_failed",
+  PHOTO_UPLOAD_FAILED: "public_guest_photo_upload_failed",
 } as const;
 
 export type PublicInvitationLogEvent =
@@ -123,6 +126,24 @@ export async function submitPublicGuestbook(
     return await publicInvitationsClient().submitGuestbook(slug, submission, options);
   } catch (error) {
     logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.GUESTBOOK_SUBMIT_FAILED, { error });
+    throw error;
+  }
+}
+
+/**
+ * One guest's photo through the anonymous client (F8; L11.3, L11.5). A failure this deployment could not map is logged
+ * once as its class and kind and rethrown, so the action can answer the guest one sentence instead of an error page.
+ * Nothing logged names a guest, a file, a name, or the invitation's content.
+ */
+export async function uploadPublicGuestPhoto(
+  slug: string,
+  upload: PublicGuestPhotoUpload,
+  options?: { clientAddress?: string },
+): Promise<PublicGuestPhotoUploadResult> {
+  try {
+    return await publicInvitationsClient().uploadGuestPhoto(slug, upload, options);
+  } catch (error) {
+    logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.PHOTO_UPLOAD_FAILED, { error });
     throw error;
   }
 }

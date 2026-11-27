@@ -5,6 +5,8 @@ import type { PlacePoint } from "../invitation-features/place-point.ts";
 import type {
   CreatorPackage,
   CreatorTemplate,
+  GuestAlbumRead,
+  GuestPhotoItem,
   InvitationListItem,
   InvitationResult,
   InvitationSummary,
@@ -863,6 +865,8 @@ interface Answers {
   clearPlace?: () => Promise<InvitationResult<OwnedInvitation>>;
   list?: () => Promise<InvitationResult<InvitationListItem[]>>;
   get?: () => Promise<InvitationResult<OwnedInvitation>>;
+  album?: () => Promise<InvitationResult<GuestAlbumRead>>;
+  reviewGuestPhoto?: () => Promise<InvitationResult<GuestPhotoItem>>;
   create?: () => Promise<InvitationResult<OwnedInvitation>>;
   replaceContent?: () => Promise<InvitationResult<OwnedInvitation>>;
   archive?: () => Promise<InvitationResult<InvitationSummary>>;
@@ -892,6 +896,14 @@ function stub(answers: Answers = {}): Stub {
     get: (id) => {
       calls.push(`get:${id}`);
       return answers.get?.() ?? unexpected("get");
+    },
+    album: (id) => {
+      calls.push(`album:${id}`);
+      return answers.album?.() ?? unexpected("album");
+    },
+    reviewGuestPhoto: (id, photoId, status) => {
+      calls.push(`reviewGuestPhoto:${id}:${photoId}:${status}`);
+      return answers.reviewGuestPhoto?.() ?? unexpected("reviewGuestPhoto");
     },
     searchPlaces: (id, query) => {
       calls.push(`searchPlaces:${id}:${query}`);

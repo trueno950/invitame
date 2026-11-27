@@ -7,6 +7,7 @@ import { connection } from "next/server";
 import { GUEST_PAGE_COPY, PUBLIC_INVITATION_COPY } from "../../../../../lib/customer/copy.ts";
 import type { GuestPageBlockView } from "../../../../../lib/invitation-features/invitation-features.ts";
 import { checkInUrl } from "../../../../../lib/public/guest-pass.ts";
+import { guestAlbumNotice, publicGuestAlbumBlock } from "../../../../../lib/public/guest-album.ts";
 import { guestbookNotice, publicGuestbookBlock } from "../../../../../lib/public/guestbook.ts";
 import { publicFeatureBlock } from "../../../../../lib/public/invitation-features.ts";
 import {
@@ -21,10 +22,14 @@ import { findRenderer } from "../../../../../lib/renderers/registry.ts";
 import { requestOrigin } from "../../../../../lib/server/request-origin.ts";
 import { textButton } from "../../../../_components/ui.ts";
 import { InvitationMessage } from "../../_components/invitation-message.tsx";
-import { GuestbookNoticeNote, RsvpNoticeNote } from "../../_components/rsvp-notice.tsx";
+import {
+  GuestAlbumNoticeNote,
+  GuestbookNoticeNote,
+  RsvpNoticeNote,
+} from "../../_components/rsvp-notice.tsx";
 import { logPublicInvitation, PUBLIC_INVITATION_LOG_EVENT } from "../../_lib/public-api.ts";
 import { loadGuestInvitation } from "./_lib/load.ts";
-import { signGuestbookAction } from "../../actions.ts";
+import { signGuestbookAction, uploadGuestPhotoAction } from "../../actions.ts";
 import { submitGuestRsvpAction } from "./actions.ts";
 
 /**
@@ -135,7 +140,16 @@ export default async function GuestInvitationPage({
     signGuestbookAction,
     invitation.expired,
   );
-  const block = publicFeatureBlock(invitation, undefined, guest, guestbook);
+  // The album of the guests' photos is the same card of the public page (F8; L11.5): the personal page shows it too, and
+  // the guest's own token brings an upload back to this page instead of the public one.
+  const album = publicGuestAlbumBlock(
+    invitation.features.guestAlbum,
+    invitation.slug,
+    uploadGuestPhotoAction,
+    invitation.expired,
+    token,
+  );
+  const block = publicFeatureBlock(invitation, undefined, guest, guestbook, album);
   const rendererProps =
     block === undefined
       ? props
@@ -143,12 +157,14 @@ export default async function GuestInvitationPage({
   // The notices of this page's own query, rendered on the server: the answer's (S4) and the signature's (F7).
   const notice = rsvpNotice(parameters);
   const signatureNotice = guestbookNotice(parameters);
+  const photoNotice = guestAlbumNotice(parameters);
 
   return (
     <main className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
         {notice === undefined ? null : <RsvpNoticeNote notice={notice} />}
         {signatureNotice === undefined ? null : <GuestbookNoticeNote notice={signatureNotice} />}
+        {photoNotice === undefined ? null : <GuestAlbumNoticeNote notice={photoNotice} />}
         <Renderer {...rendererProps} />
         <footer className="flex justify-center">
           <Link className={textButton} href="/">

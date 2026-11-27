@@ -410,6 +410,8 @@ export interface EditorShellProps {
   readonly guestListHref: string | undefined;
   /** The «Libro de firmas» screen of a package that grants the guestbook (F7; L10.6). */
   readonly guestbookHref: string | undefined;
+  /** The album screen of a package that grants the guests' photos (F8; L11.6). */
+  readonly guestAlbumHref: string | undefined;
   /** The owner's preview route, framed at phone width (T2b). */
   readonly previewSrc: string;
   readonly status: InvitationStatus;
@@ -464,6 +466,7 @@ export function EditorShell({
   attendance,
   guestListHref,
   guestbookHref,
+  guestAlbumHref,
   previewSrc,
   status,
   statusLabel,
@@ -755,6 +758,14 @@ export function EditorShell({
               <p className="mt-4">
                 <GuardedLink className={textButton} href={guestbookHref}>
                   {EDITOR_COPY.funcionesGuestbookOpen}
+                </GuardedLink>
+              </p>
+            )}
+            {/* The guests' photos wait for the owner's review, so the tab links to their own screen (F8; L11.6). */}
+            {guestAlbumHref === undefined ? null : (
+              <p className="mt-4">
+                <GuardedLink className={textButton} href={guestAlbumHref}>
+                  {EDITOR_COPY.funcionesGuestAlbumOpen}
                 </GuardedLink>
               </p>
             )}

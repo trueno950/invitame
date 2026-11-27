@@ -1531,3 +1531,129 @@ describe("the guestbook wall of the features block (F7; S2.7, L10.5)", () => {
     assert.deepEqual(sections, ["calendar", "guestbook"]);
   });
 });
+
+// The album of the guests' photos (F8; S2.8, L11.5): the artboard's «Nuestras fotos» card — the count line, «Subir mis
+// fotos» as a plain multipart form that works with no client script, and the grid of the photos the owner published.
+const ALBUM_PHOTO = {
+  url: `http://localhost:3001/media/${SLUG_FOR_GUEST}-1`,
+  uploaderName: "Tía Rosa",
+};
+const ALBUM_PHOTO_ANONYMOUS = {
+  url: `http://localhost:3001/media/${SLUG_FOR_GUEST}-2`,
+  uploaderName: null,
+};
+
+/** The links one rendered block carries, which is what tells a refreshable image from a link a guest typed. */
+function imageSourcesOf(html: string): string[] {
+  return [...html.matchAll(/<img[^>]*src="([^"]+)"/g)].map((match) => decodeHtml(match[1] ?? ""));
+}
+
+/** React escapes attribute values; a source is compared as the URL the block received. */
+function decodeHtml(value: string): string {
+  return value
+    .replaceAll("&amp;", "&")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#x27;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">");
+}
+
+describe("the album of the guests' photos in the features block (F8; S2.8, L11.5)", () => {
+  it("draws the published photos with their served URLs and their alt text, and the count line", () => {
+    const html = render(
+      featuresOf({
+        guestAlbum: {
+          slug: SLUG_FOR_GUEST,
+          photos: [ALBUM_PHOTO, ALBUM_PHOTO_ANONYMOUS],
+          count: 12,
+          closed: false,
+        },
+      }),
+    );
+
+    assert.match(html, /data-feature="guestAlbum"/);
+    assert.deepEqual(imageSourcesOf(html), [ALBUM_PHOTO.url, ALBUM_PHOTO_ANONYMOUS.url]);
+    assert.match(html, /alt="Foto que subió Tía Rosa"/);
+    assert.match(html, /alt="Foto del álbum de invitados"/);
+    assert.match(html, /12 fotos publicadas/);
+    assert.match(html, /Nuestras fotos/);
+  });
+
+  it("offers «Subir mis fotos» as a multipart form that works with no client script", () => {
+    const html = render(
+      featuresOf({
+        guestAlbum: { slug: SLUG_FOR_GUEST, photos: [], count: 0, closed: false },
+      }),
+    );
+
+    assert.match(html, /<form[^>]*data-guest-album-form/);
+    assert.match(html, /<form[^>]*encType="multipart\/form-data"/i);
+    assert.match(html, /method="post"/);
+    assert.match(html, /type="hidden" name="slug" value="invitacion-k7m2qx"/);
+    assert.match(html, /type="file"/);
+    assert.match(html, /name="file"/);
+    assert.match(html, /name="uploaderName"/);
+    assert.match(html, /maxlength="60"/i);
+    assert.match(html, />Subir mis fotos</);
+    // No script of its own: the block is server-rendered and the form posts to a server action (L11.5).
+    assert.doesNotMatch(html, /<script/);
+    assert.match(html, /Todavía no hay fotos publicadas/);
+  });
+
+  it("keeps the photos and closes the form when the invitation expired", () => {
+    const html = render(
+      featuresOf({
+        guestAlbum: {
+          slug: SLUG_FOR_GUEST,
+          photos: [ALBUM_PHOTO],
+          count: 1,
+          closed: true,
+        },
+      }),
+    );
+
+    assert.match(html, /data-feature="guestAlbum"/);
+    assert.match(html, /1 foto publicada/);
+    assert.match(html, /El álbum de fotos se cerró cuando terminó la invitación\./);
+    assert.doesNotMatch(html, /encType="multipart\/form-data"/i);
+    assert.doesNotMatch(html, /Subir mis fotos/);
+  });
+
+  it("renders every uploader name as text: markup and links stay characters", () => {
+    const html = render(
+      featuresOf({
+        guestAlbum: {
+          slug: SLUG_FOR_GUEST,
+          photos: [{ url: `${ALBUM_PHOTO.url}?x=1`, uploaderName: "<b>Rosa</b>" }],
+          count: 1,
+          closed: false,
+        },
+      }),
+    );
+
+    assert.doesNotMatch(html, /<b>Rosa<\/b>/);
+    assert.match(html, /alt="Foto que subió &lt;b&gt;Rosa&lt;\/b&gt;"/);
+  });
+
+  it("comes after the other cards a guest reads and before the wall that closes the block", () => {
+    const html = render(
+      featuresOf({
+        calendar: true,
+        guestAlbum: {
+          slug: SLUG_FOR_GUEST,
+          photos: [ALBUM_PHOTO],
+          count: 1,
+          closed: false,
+        },
+        guestbook: {
+          slug: SLUG_FOR_GUEST,
+          entries: [{ authorName: "Rosa", message: "Felicidades" }],
+          closed: false,
+        },
+      }),
+    );
+    const sections = [...html.matchAll(/data-feature="([^"]+)"/g)].map((match) => match[1]);
+
+    assert.deepEqual(sections, ["calendar", "guestAlbum", "guestbook"]);
+  });
+});

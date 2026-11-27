@@ -67,6 +67,8 @@ const PUBLIC: PublicInvitation = {
       ],
     },
     guestbook: null,
+    // The album answers null while the package grants no `GUEST_ALBUM` (F8; L11.4).
+    guestAlbum: null,
     gallery: [],
     rsvp: { mode: "open", deadline: "2026-12-01T18:00:00.000Z", partyLimit: 4, qrPass: false },
   },
@@ -452,6 +454,7 @@ describe("parsePublicInvitation", () => {
           itinerary: null,
           // The gallery is always a list, empty when the package grants no `GALLERY` (M8 S4).
           guestbook: null,
+          guestAlbum: null,
           gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
         },
@@ -469,6 +472,7 @@ describe("parsePublicInvitation", () => {
           lodging: null,
           itinerary: null,
           guestbook: null,
+          guestAlbum: null,
           gallery: [],
           rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
         },
@@ -941,5 +945,162 @@ describe("the places of the public read (S1, S2)", () => {
     const unconfirmed = parsePublicInvitation({ ...PUBLIC, places: {} });
 
     assert.deepEqual(unconfirmed?.places, {});
+  });
+});
+
+// The album of the guests' photos (F8; S2.8, L11.4, L11.5): the public read answers the published photos newest first,
+// at most 60, with the name each uploader typed, and null while the package grants no `GUEST_ALBUM`. The guest's upload
+// is multipart to the slug's own route, and every refusal the API documents has its own outcome here.
+const ALBUM_PHOTO = {
+  url: `${MEDIA_ORIGIN}/media/9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19`,
+  uploaderName: "Tía Rosa",
+};
+
+/** The public read of one invitation, with its album replaced. */
+function withAlbum(guestAlbum: unknown): unknown {
+  return { ...PUBLIC, features: { ...PUBLIC.features, guestAlbum } };
+}
+
+describe("the album of the public read (F8; L11.4)", () => {
+  it("keeps the published photos in the API's order, with the album's own count", () => {
+    const page = parsePublicInvitation(withAlbum({ photos: [ALBUM_PHOTO], count: 12 }));
+
+    assert.deepEqual(page?.features.guestAlbum, { photos: [ALBUM_PHOTO], count: 12 });
+    // An album nobody has published to is still granted: an empty list, so the page offers its form (L11.5).
+    assert.deepEqual(
+      parsePublicInvitation(withAlbum({ photos: [], count: 0 }))?.features.guestAlbum,
+      { photos: [], count: 0 },
+    );
+  });
+
+  it("reads an absent album as none, so a page deployed before F8 keeps rendering (L20)", () => {
+    const { guestAlbum: _guestAlbum, ...features } = PUBLIC.features;
+
+    assert.equal(parsePublicInvitation({ ...PUBLIC, features })?.features.guestAlbum, null);
+    assert.equal(parsePublicInvitation(withAlbum(null))?.features.guestAlbum, null);
+  });
+
+  it("refuses an album past the API's own bounds or a photo that is not this contract", () => {
+    for (const guestAlbum of [
+      { photos: Array.from({ length: 61 }, () => ALBUM_PHOTO), count: 61 },
+      { photos: [ALBUM_PHOTO], count: -1 },
+      { photos: [ALBUM_PHOTO], count: 1.5 },
+      { photos: [ALBUM_PHOTO] },
+      { photos: "none", count: 0 },
+      { photos: [{ ...ALBUM_PHOTO, url: "https://evil.example/media/x" }], count: 1 },
+      { photos: [{ ...ALBUM_PHOTO, url: "/media/relative" }], count: 1 },
+      { photos: [{ ...ALBUM_PHOTO, uploaderName: "x".repeat(61) }], count: 1 },
+      { photos: [{ ...ALBUM_PHOTO, uploaderName: "" }], count: 1 },
+      { photos: [{ ...ALBUM_PHOTO, uploaderName: 7 }], count: 1 },
+      { photos: [null], count: 1 },
+      "album",
+    ]) {
+      assert.equal(
+        parsePublicInvitation(withAlbum(guestAlbum)),
+        undefined,
+        JSON.stringify(guestAlbum).slice(0, 80),
+      );
+    }
+  });
+
+  it("drops a field the album does not define, so nothing else reaches a guest", () => {
+    const page = parsePublicInvitation(
+      withAlbum({
+        photos: [{ ...ALBUM_PHOTO, id: "leak", storageKey: "invitations/x/y.webp" }],
+        count: 1,
+        pendingCount: 3,
+      }),
+    );
+
+    assert.deepEqual(page?.features.guestAlbum, { photos: [ALBUM_PHOTO], count: 1 });
+  });
+});
+
+describe("the guest's photo upload (F8; L11.3, L11.5)", () => {
+  const UPLOAD = {
+    bytes: new Uint8Array([0xff, 0xd8, 0xff, 0x01, 0x02]),
+    uploaderName: "Tía Rosa",
+  };
+
+  it("posts one multipart file to the slug's own route with the address the web forwarded and no cookie", async () => {
+    answer(202, { status: "received" });
+
+    const result = await client().uploadGuestPhoto(PUBLIC.slug, UPLOAD, {
+      clientAddress: "203.0.113.11",
+    });
+
+    assert.deepEqual(result, { ok: true });
+    const request = received[0];
+    assert.equal(request?.method, "POST");
+    assert.equal(request?.url, `/public/invitations/${PUBLIC.slug}/photos`);
+    assert.equal(request?.headers.cookie, undefined);
+    assert.equal(request?.headers["x-invitame-proxy-secret"], PROXY_SECRET);
+    assert.equal(request?.headers["x-invitame-client-ip"], "203.0.113.11");
+    // The browser's own file name and MIME type never travel: the API decides the format from the bytes (L11.3).
+    assert.match(request?.headers["content-type"] ?? "", /^multipart\/form-data; boundary=/);
+    assert.match(request?.body ?? "", /name="file"; filename="photo"/);
+    assert.match(request?.body ?? "", /name="uploaderName"/);
+    assert.match(request?.body ?? "", /Tía Rosa/);
+  });
+
+  it("sends no name when the guest left it empty, which the API stores as none", async () => {
+    answer(202, { status: "received" });
+
+    await client().uploadGuestPhoto(PUBLIC.slug, { bytes: UPLOAD.bytes, uploaderName: null });
+
+    assert.doesNotMatch(received[0]?.body ?? "", /name="uploaderName"/);
+    assert.equal(received[0]?.headers["x-invitame-client-ip"], undefined);
+  });
+
+  it("makes no request for a slug that cannot be one", async () => {
+    for (const slug of ["", "Invitacion", "invitacion--doble", "../cuenta"]) {
+      assert.deepEqual(await client().uploadGuestPhoto(slug, UPLOAD), {
+        ok: false,
+        failure: "not-found",
+      });
+    }
+    assert.deepEqual(received, []);
+  });
+
+  it("maps each documented refusal to its own outcome", async () => {
+    const refusals: Array<[number, unknown, string]> = [
+      [404, { code: "PUBLIC_INVITATION_NOT_FOUND" }, "not-found"],
+      [409, { code: "GUEST_ALBUM_CLOSED" }, "closed"],
+      [409, { code: "GUEST_ALBUM_FULL" }, "full"],
+      [429, { code: "GUEST_ALBUM_RATE_LIMITED" }, "rate-limited"],
+      [
+        400,
+        { code: "INVALID_GUEST_PHOTO", issues: ["file must be a JPEG, PNG, or WebP image"] },
+        "invalid",
+      ],
+      [400, { code: "INVALID_MEDIA_UPLOAD" }, "invalid"],
+      [413, { code: "PAYLOAD_TOO_LARGE" }, "invalid"],
+      [415, { code: "UNSUPPORTED_MEDIA_TYPE" }, "invalid"],
+    ];
+
+    for (const [status, body, failure] of refusals) {
+      answer(status, body);
+      assert.deepEqual(
+        await client().uploadGuestPhoto(PUBLIC.slug, UPLOAD),
+        { ok: false, failure },
+        `${status}`,
+      );
+    }
+  });
+
+  it("fails closed on a refusal this deployment does not implement and on an accepted body that breaks the contract", async () => {
+    answer(409, { code: "RSVP_NOT_OPEN" });
+    await assert.rejects(client().uploadGuestPhoto(PUBLIC.slug, UPLOAD), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "rejected");
+      return true;
+    });
+
+    answer(202, { status: "stored" });
+    await assert.rejects(client().uploadGuestPhoto(PUBLIC.slug, UPLOAD), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "invalid-response");
+      return true;
+    });
   });
 });

@@ -1,4 +1,10 @@
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
+import {
+  GUEST_ALBUM_MAX_PHOTOS,
+  GUEST_ALBUM_UPLOADER_NAME_MAX_LENGTH,
+  type GuestAlbumPhotoValue,
+  type GuestAlbumValue,
+} from "../invitation-features/guest-album.ts";
 import { type GiftRegistry, parseGiftRegistry } from "../invitation-features/gift-registry.ts";
 import {
   isE164Phone,
@@ -101,6 +107,13 @@ export interface PublicInvitationFeatures {
    * and a body of this generation reads the same way (L20).
    */
   readonly guestbook: readonly GuestbookEntryValue[] | null;
+  /**
+   * The album of the guests' photos (F8; L11.4): the published photos newest first, at most 60, and how many published
+   * photos the invitation holds in total, or null when the pinned package does not grant `GUEST_ALBUM`. An empty album
+   * is a granted album waiting for its first photo, so the page still offers its form. An API body written before F8
+   * answers no field and reads as null, so a page deployed earlier keeps rendering (L20).
+   */
+  readonly guestAlbum: GuestAlbumValue | null;
   /**
    * The gallery photos in the creator's order (M8 S3, S4), an empty array when the package does not grant `GALLERY`
    * and always a list, so a layout can read it without a guard.
@@ -277,6 +290,76 @@ function parsePublicGuestbook(value: unknown): readonly GuestbookEntryValue[] | 
   return entries;
 }
 
+/** One published photo of the album, or undefined when a field breaks the documented contract (F8; L11.4). */
+function parseGuestAlbumPhoto(value: unknown, apiOrigin: string): GuestAlbumPhotoValue | undefined {
+  const photo = record(value);
+
+  if (photo === undefined) {
+    return undefined;
+  }
+
+  const { url, uploaderName } = photo;
+
+  if (typeof url !== "string" || !isApiMediaUrl(url, apiOrigin)) {
+    return undefined;
+  }
+  // The name is plain text the API already trimmed and bounded: an empty one is no name, never an empty label.
+  if (
+    !(
+      uploaderName === null ||
+      (typeof uploaderName === "string" &&
+        uploaderName.trim().length > 0 &&
+        [...uploaderName].length <= GUEST_ALBUM_UPLOADER_NAME_MAX_LENGTH)
+    )
+  ) {
+    return undefined;
+  }
+
+  return { url, uploaderName };
+}
+
+/**
+ * The album of a guest page, or null when the pinned package does not grant it (F8; L11.4). An absent field is an API
+ * written before F8 and reads as null, so a rolling deploy keeps both generations working; a list past the API's own
+ * bound, a photo of another shape, a photo on any host but the configured API origin (A5), or a count that is not a
+ * whole number is not this contract, so the whole body is refused instead of being shown.
+ */
+function parsePublicGuestAlbum(
+  value: unknown,
+  apiOrigin: string,
+): GuestAlbumValue | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const album = record(value);
+
+  if (album === undefined || !Array.isArray(album.photos)) {
+    return undefined;
+  }
+  if (album.photos.length > GUEST_ALBUM_MAX_PHOTOS) {
+    return undefined;
+  }
+
+  const photos: GuestAlbumPhotoValue[] = [];
+  for (const item of album.photos) {
+    const photo = parseGuestAlbumPhoto(item, apiOrigin);
+
+    if (photo === undefined) {
+      return undefined;
+    }
+    photos.push(photo);
+  }
+
+  const count = album.count;
+
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) {
+    return undefined;
+  }
+
+  return { photos, count };
+}
+
 /** The alt texts the API stores, mirrored so a body that says more is refused whole (M8 S4). */
 const MEDIA_ALT_MAX_LENGTH = 120;
 /** How many photos one gallery may hold, mirrored from the API's own limit (M8 S4). */
@@ -376,8 +459,13 @@ function parsePublicFeatures(
   // shape refuses the body instead of reaching a guest.
   const guestbook = parsePublicGuestbook(features.guestbook);
 
+  // The album follows the same rule (F8; L20): an absent field (a body written before F8) reads as no album, and another
+  // shape refuses the body instead of reaching a guest.
+  const guestAlbum = parsePublicGuestAlbum(features.guestAlbum, apiOrigin);
+
   if (
     guestbook === undefined ||
+    guestAlbum === undefined ||
     music === undefined ||
     rsvp === undefined ||
     gallery === undefined ||
@@ -398,6 +486,7 @@ function parsePublicFeatures(
     giftRegistryDetails: giftRegistry,
     lodging,
     guestbook,
+    guestAlbum,
     music,
     itinerary,
     gallery,
@@ -678,6 +767,10 @@ const readsRsvpBody = (status: number): boolean =>
   status === 409 ||
   status === 429;
 
+/** The statuses of an upload whose body the page reads: its success and every refusal the album maps (L11.3). */
+const readsUploadBody = (status: number): boolean =>
+  readsRsvpBody(status) || status === 413 || status === 415;
+
 /** One guest's open RSVP answer, as the form submits it (M6 G3; S4). */
 export interface PublicRsvpSubmission {
   readonly name: string;
@@ -701,7 +794,7 @@ export type PublicRsvpSubmitResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly failure: "not-found" | "not-open" | "rate-limited" | "invalid" };
 
-/** One signature on the guestbook wall, as the form submits it (F7; L10.1, L10.3). */
+/** The one signature on the guestbook wall, as the form submits it (F7; L10.1, L10.3). */
 export interface PublicGuestbookSubmission {
   readonly authorName: string;
   readonly message: string;
@@ -718,6 +811,25 @@ export type PublicGuestbookSubmitResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly failure: "not-found" | "closed" | "rate-limited" | "invalid" };
 
+/** One photo a guest uploads (F8; L11.3, L11.5): the bytes this server read and the optional name they typed. */
+export interface PublicGuestPhotoUpload {
+  readonly bytes: Uint8Array;
+  readonly uploaderName: string | null;
+}
+
+/**
+ * The outcomes of one upload the page handles. A success means the photo is stored PENDING, never published: the page
+ * says it will appear once the owner approves it (L11.5). `closed` is the album of an expired invitation or of a
+ * package that does not grant the key, `full` the invitation that already stores its cap, and `invalid` a file the
+ * domain refused — its type, its size, or its dimensions.
+ */
+export type PublicGuestPhotoUploadResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly failure: "not-found" | "closed" | "full" | "rate-limited" | "invalid";
+    };
+
 /** The status and code pairing each refusal this deployment implements; anything else fails closed. */
 const RSVP_REFUSALS: Readonly<Record<string, { status: number; failure: string }>> = {
   PUBLIC_INVITATION_NOT_FOUND: { status: 404, failure: "not-found" },
@@ -733,6 +845,48 @@ const GUESTBOOK_REFUSALS: Readonly<Record<string, { status: number; failure: str
   GUESTBOOK_RATE_LIMITED: { status: 429, failure: "rate-limited" },
   INVALID_GUESTBOOK_ENTRY: { status: 400, failure: "invalid" },
 };
+
+/**
+ * The status and code pairing each album refusal this deployment implements; anything else fails closed. The album
+ * shares the media module's multipart refusals, because the upload is the same multipart reader: a body over the
+ * route's bound, a request that is not multipart, and a field the route does not accept are all one `invalid`.
+ */
+const GUEST_ALBUM_REFUSALS: Readonly<Record<string, { status: number; failure: string }>> = {
+  PUBLIC_INVITATION_NOT_FOUND: { status: 404, failure: "not-found" },
+  GUEST_ALBUM_CLOSED: { status: 409, failure: "closed" },
+  GUEST_ALBUM_FULL: { status: 409, failure: "full" },
+  GUEST_ALBUM_RATE_LIMITED: { status: 429, failure: "rate-limited" },
+  INVALID_GUEST_PHOTO: { status: 400, failure: "invalid" },
+  INVALID_MEDIA_UPLOAD: { status: 400, failure: "invalid" },
+  PAYLOAD_TOO_LARGE: { status: 413, failure: "invalid" },
+  UNSUPPORTED_MEDIA_TYPE: { status: 415, failure: "invalid" },
+};
+
+/**
+ * The deadline of one guest upload: a photo of the widest configured size over a slow mobile link needs more than the
+ * shared 10 seconds, and the invitation page never waits on it because the guest's form posts to its own action.
+ */
+const GUEST_PHOTO_UPLOAD_TIMEOUT_MS = 60_000;
+
+/**
+ * Builds the multipart body of one guest upload (L11.3): the file part is named `file` and declared
+ * `application/octet-stream`, so the API decides the format from the bytes alone; the browser's own file name and MIME
+ * type never travel, and the name the guest typed goes only when they typed one.
+ */
+export function guestPhotoUploadForm(upload: PublicGuestPhotoUpload): FormData {
+  const form = new FormData();
+
+  if (upload.uploaderName !== null) {
+    form.set("uploaderName", upload.uploaderName);
+  }
+  form.set(
+    "file",
+    new Blob([upload.bytes as BlobPart], { type: "application/octet-stream" }),
+    "photo",
+  );
+
+  return form;
+}
 
 /** The `code` of a refusal body, if the body is one this client can read at all. */
 function refusalCode(text: string | undefined): string | undefined {
@@ -787,6 +941,16 @@ export interface PublicInvitationsClient {
     submission: PublicGuestbookSubmission,
     options?: { clientAddress?: string },
   ): Promise<PublicGuestbookSubmitResult>;
+  /**
+   * `POST /public/invitations/:slug/photos`: one guest's photo, as multipart (F8; L11.3). A photo is PENDING until the
+   * owner publishes it, so a successful upload says nothing about when it will appear. The address the web forwarded
+   * travels in the API's client-IP header and is what the API's rate limit counts against.
+   */
+  uploadGuestPhoto(
+    slug: string,
+    upload: PublicGuestPhotoUpload,
+    options?: { clientAddress?: string },
+  ): Promise<PublicGuestPhotoUploadResult>;
 }
 
 /**
@@ -990,6 +1154,50 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
 
       const code = refusalCode(text);
       const refusal = code === undefined ? undefined : GUESTBOOK_REFUSALS[code];
+
+      if (refusal !== undefined && refusal.status === status) {
+        return { ok: false, failure: refusal.failure as "not-found" };
+      }
+
+      throw new ApiClientError(status >= 500 ? "unavailable" : "rejected", status);
+    },
+
+    async uploadGuestPhoto(
+      slug: string,
+      upload: PublicGuestPhotoUpload,
+      request: { clientAddress?: string } = {},
+    ): Promise<PublicGuestPhotoUploadResult> {
+      if (!isInvitationSlug(slug)) {
+        return { ok: false, failure: "not-found" };
+      }
+
+      const { status, text } = await sendApiRequest(
+        options,
+        {
+          method: "POST",
+          path: `/public/invitations/${encodeURIComponent(slug)}/photos`,
+          multipart: guestPhotoUploadForm(upload),
+          timeoutMs: GUEST_PHOTO_UPLOAD_TIMEOUT_MS,
+          ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+        },
+        readsUploadBody,
+      );
+
+      if (status >= 200 && status < 300) {
+        let payload: unknown;
+        try {
+          payload = JSON.parse(text ?? "");
+        } catch {
+          payload = undefined;
+        }
+        if (!isAccepted(payload)) {
+          throw new ApiClientError("invalid-response", status);
+        }
+        return { ok: true };
+      }
+
+      const code = refusalCode(text);
+      const refusal = code === undefined ? undefined : GUEST_ALBUM_REFUSALS[code];
 
       if (refusal !== undefined && refusal.status === status) {
         return { ok: false, failure: refusal.failure as "not-found" };

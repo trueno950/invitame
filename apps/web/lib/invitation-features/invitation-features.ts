@@ -14,6 +14,7 @@
 import type { RsvpCompanionValue } from "../public/rsvp-companions.ts";
 import type { GalleryPhoto } from "./gallery.ts";
 import type { GiftRegistry } from "./gift-registry.ts";
+import type { GuestAlbumPhotoValue } from "./guest-album.ts";
 import type { ItineraryMoment } from "./itinerary.ts";
 import { type Lodging, lodgingHasContent } from "./lodging.ts";
 import type { MusicLink } from "./music.ts";
@@ -117,11 +118,33 @@ export interface GuestbookBlockView {
 }
 
 /**
+ * The album of the guests' photos on one guest page (F8; S2.8, L11.5), as the shared features block draws it. The API
+ * owns the gate: the page builds this view only while the package grants `GUEST_ALBUM`, and it hands over the published
+ * photos and their count exactly as the read answered them. `action` is the server action the upload form posts to, so
+ * the card works with no client script at all.
+ */
+export interface GuestAlbumBlockView {
+  /** The invitation's public slug, the only value that names it to the API. */
+  readonly slug: string;
+  /** The published photos, already newest first and at most 60, as the API answered them. */
+  readonly photos: readonly GuestAlbumPhotoValue[];
+  /** How many published photos the invitation holds in total, which is the count line the card states. */
+  readonly count: number;
+  /** Whether the invitation expired, so the album keeps its photos and closes the form with a note. */
+  readonly closed: boolean;
+  /**
+   * The guest's opaque personal token, only when this album is drawn on their own page: the upload then comes back to
+   * that page instead of the public one. Absent on the public page, which needs no token.
+   */
+  readonly guestToken?: string;
+  readonly action?: RsvpFormAction;
+}
+
+/**
  * The guest's own block of their personal page: the greeting, the seats they hold, their answer card, and their pass
  * when the API offers one. It is absent on the public page, which is why a public render keeps exactly the markup it
  * had before a guest's name was known.
- */
-export interface GuestPageBlockView {
+ */ export interface GuestPageBlockView {
   /** «Hola, Ana», from the first name the guest was registered with. */
   readonly greeting: string;
   /** «Tienes 4 lugares reservados a tu nombre.», with the singular when it is one. */
@@ -179,6 +202,11 @@ export interface InvitationFeatures {
    */
   readonly guestbook?: GuestbookBlockView;
   /**
+   * The album of the guests' photos the shared block draws (F8; L11.5), or absent when the package does not grant
+   * `GUEST_ALBUM`. An empty album is a granted album waiting for its first photo, so it still renders its form.
+   */
+  readonly guestAlbum?: GuestAlbumBlockView;
+  /**
    * The confirmed points of this invitation, keyed by the address field each one belongs to (S1, S2). Only a point
    * whose stored label still equals the text the field holds is here, so the block attaches a coordinate to exactly
    * the places a guest may be sent to. Absent or empty renders the map links of every layout unchanged.
@@ -213,6 +241,7 @@ export const INVITATION_FEATURE_KEYS = [
   "GIFT_REGISTRY",
   "LODGING",
   "GUESTBOOK",
+  "GUEST_ALBUM",
   "RSVP",
   "GUEST_LIST",
   "QR_PASS",
@@ -246,6 +275,7 @@ export function hasAnyFeature(features: InvitationFeatures): boolean {
     (features.itinerary !== undefined && features.itinerary.length > 0) ||
     (features.lodging !== undefined && lodgingHasContent(features.lodging)) ||
     features.guestbook !== undefined ||
+    features.guestAlbum !== undefined ||
     features.giftRegistryDetails !== undefined ||
     features.rsvp !== undefined ||
     features.guest !== undefined

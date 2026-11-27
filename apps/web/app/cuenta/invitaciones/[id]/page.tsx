@@ -20,6 +20,7 @@ import {
   editorSnapshotKey,
   parseEditorSection,
 } from "../../../../lib/customer/editor-sections.ts";
+import { GUEST_ALBUM_OWNER_PATHS } from "../../../../lib/customer/guest-album.ts";
 import { GUESTBOOK_OWNER_PATHS } from "../../../../lib/customer/guestbook.ts";
 import { featureSettingsView } from "../../../../lib/customer/invitation-features.ts";
 import {
@@ -429,6 +430,9 @@ export default async function InvitationDetailPage({
             guestListHref={RSVP_PATHS.responses(invitation.id)}
             guestbookHref={
               features.showGuestbook ? GUESTBOOK_OWNER_PATHS.page(invitation.id) : undefined
+            }
+            guestAlbumHref={
+              features.showGuestAlbum ? GUEST_ALBUM_OWNER_PATHS.page(invitation.id) : undefined
             }
             initialSection={section}
             initialField={focusField}

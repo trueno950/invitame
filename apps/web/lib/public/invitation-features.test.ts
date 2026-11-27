@@ -9,6 +9,7 @@ import {
   invitationCalendarPath,
   publicFeatureBlock,
 } from "./invitation-features.ts";
+import type { GuestAlbumBlockView } from "../invitation-features/invitation-features.ts";
 
 // The guest page's wiring (F3; S4): the public read becomes the features block's props, the `.ics` download
 // path, and the file the route handler answers. An unsupported zone or a snapshot whose facts cannot be read
@@ -42,6 +43,7 @@ const PUBLIC: PublicInvitation = {
     giftRegistryDetails: null,
     lodging: null,
     guestbook: null,
+    guestAlbum: null,
     itinerary: null,
     gallery: [],
     rsvp: { mode: "open", deadline: null, partyLimit: 4, qrPass: false },
@@ -181,6 +183,7 @@ describe("publicFeatureBlock", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         itinerary: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -269,6 +272,7 @@ describe("publicFeatureBlock", () => {
         giftRegistryDetails: null,
         lodging: null,
         guestbook: null,
+        guestAlbum: null,
         itinerary: null,
         gallery: [],
         rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
@@ -382,5 +386,66 @@ describe("the places of a guest page (S1, S2)", () => {
     });
 
     assert.deepEqual(block?.features.places, undefined);
+  });
+});
+
+// The album of the guests' photos (F8; S2.8, L11.4, L11.5): the public read answers it only while the package grants
+// `GUEST_ALBUM`, and the page hands the block exactly the photos and the count the API answered.
+const ALBUM: GuestAlbumBlockView = {
+  slug: "invitacion-k7m2qx",
+  photos: [
+    {
+      url: "http://localhost:3001/media/9b6f3e0e-8c1e-4b8e-9a51-2f7d1c3a9e19",
+      uploaderName: "Rosa",
+    },
+  ],
+  count: 3,
+  closed: false,
+};
+
+describe("the album of a guest page (F8; L11.4, L11.5)", () => {
+  it("carries the album view the page built to the shared features block", () => {
+    const block = publicFeatureBlock(PUBLIC, undefined, undefined, undefined, ALBUM);
+
+    assert.deepEqual(block?.features.guestAlbum, ALBUM);
+  });
+
+  it("renders no album while the package does not grant it, so the block keeps its markup", () => {
+    const block = publicFeatureBlock(PUBLIC);
+
+    assert.equal(block === undefined ? "none" : Object.hasOwn(block.features, "guestAlbum"), false);
+  });
+
+  it("gives the block a reason to render when the album is the only granted feature", () => {
+    const onlyAlbum = {
+      ...PUBLIC,
+      features: {
+        countdown: false,
+        map: false,
+        calendar: false,
+        whatsapp: null,
+        music: null,
+        giftRegistry: false,
+        giftRegistryDetails: null,
+        lodging: null,
+        guestbook: null,
+        guestAlbum: null,
+        itinerary: null,
+        gallery: [],
+        rsvp: { mode: null, deadline: null, partyLimit: 4, qrPass: false },
+      },
+    };
+
+    assert.equal(publicFeatureBlock(onlyAlbum as unknown as PublicInvitation), undefined);
+    assert.deepEqual(
+      publicFeatureBlock(
+        onlyAlbum as unknown as PublicInvitation,
+        undefined,
+        undefined,
+        undefined,
+        ALBUM,
+      )?.features.guestAlbum,
+      ALBUM,
+    );
   });
 });

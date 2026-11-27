@@ -7,6 +7,7 @@ import { type EventFacts, eventFactsFor } from "../invitation-features/event-fac
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import type { GiftRegistry } from "../invitation-features/gift-registry.ts";
 import {
+  type GuestAlbumBlockView,
   type GuestbookBlockView,
   type GuestPageBlockView,
   hasAnyFeature,
@@ -151,6 +152,12 @@ export interface FeatureBlockSource {
    * it (`publicGuestbookBlock`), exactly like the attendance card, so this module never invents either.
    */
   readonly guestbook?: GuestbookBlockView;
+  /**
+   * The album of the guests' photos, when this page shows one (F8; L11.5). The page that owns the slug and the server
+   * action builds it (`publicGuestAlbumBlock`), exactly like the wall and the attendance card, so this module never
+   * invents either.
+   */
+  readonly guestAlbum?: GuestAlbumBlockView;
   /** The personal block of one guest (G4), absent on every page that is not theirs. */
   readonly guest?: GuestPageBlockView;
 }
@@ -193,6 +200,7 @@ export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts
     ...(Object.keys(places).length === 0 ? {} : { places }),
     ...(source.rsvp === undefined ? {} : { rsvp: source.rsvp }),
     ...(source.guestbook === undefined ? {} : { guestbook: source.guestbook }),
+    ...(source.guestAlbum === undefined ? {} : { guestAlbum: source.guestAlbum }),
     ...(source.guest === undefined ? {} : { guest: source.guest }),
   };
 
@@ -210,6 +218,7 @@ export function publicFeatureBlock(
   rsvp?: RsvpBlockView,
   guest?: GuestPageBlockView,
   guestbook?: GuestbookBlockView,
+  guestAlbum?: GuestAlbumBlockView,
 ): PublicFeatureBlock | undefined {
   const parts = featureBlockParts({
     componentKey: invitation.componentKey,
@@ -232,6 +241,7 @@ export function publicFeatureBlock(
     ...(rsvp === undefined ? {} : { rsvp }),
     ...(guest === undefined ? {} : { guest }),
     ...(guestbook === undefined ? {} : { guestbook }),
+    ...(guestAlbum === undefined ? {} : { guestAlbum }),
   });
 
   return parts === undefined

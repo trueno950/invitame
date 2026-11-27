@@ -31,6 +31,8 @@ export interface GuestInvitationProps {
   readonly notice?: ReactNode;
   /** The signature's notice, drawn above the invitation for the same reason (F7; L10.3). */
   readonly signatureNotice?: ReactNode;
+  /** The uploaded photo's notice, drawn above the invitation for the same reason (F8; L11.5). */
+  readonly photoNotice?: ReactNode;
 }
 
 export function GuestInvitation({
@@ -42,6 +44,7 @@ export function GuestInvitation({
   calendarHref,
   notice,
   signatureNotice,
+  photoNotice,
 }: GuestInvitationProps) {
   const Renderer = findRenderer(componentKey);
 
@@ -63,6 +66,7 @@ export function GuestInvitation({
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
         {notice ?? null}
         {signatureNotice ?? null}
+        {photoNotice ?? null}
         <Renderer {...props} />
         <footer className="flex justify-center">
           <Link className={textButton} href="/">
