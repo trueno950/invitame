@@ -395,6 +395,16 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   before the tap. Gates: API 2364/2364, web 2339/2339, db-specs 531/531 on a recreated database; browser check of the
   facade, the tap, the sandboxed iframe, and typing the link in the editor. The evidence commit adds the verifier's
   host allow-list spec and livestream card test. Advisory: a partially typed link may autosave (harmless).
+- L29 — F10 evidence: commits `f70624f` (API, migration `20261212120000_add_invitation_opening_animation`, key
+  `OPENING_ANIMATION` for every package) and `ffa6345` (web). The first web version passed every test but looked wrong
+  frame by frame (envelope below center, flap opening downward, card detached, a leftover block); it was rebuilt and the
+  parent checked the new frames on phone and desktop before committing. Parent decision: the seal fades out before the
+  flap opens (L14.2 wording), although the artboard's seal reads as a fade-in. Native review `review-a538d079e0d95d95`
+  (API) approved with no finding; the web commit is client-only animation and was covered by the verifier.
+  Independent verification: every L14 item met, live Playwright behavior (skips, 3 s, once per session, reduced motion,
+  no extra requests, aria-hidden, no focus) and frames matching the artboard; the guest-token page, the owner preview,
+  and the authenticated PUT were checked in code only. Gates: API 2372/2372, web 2377/2377, db-specs 533/533 on a
+  recreated database. Pending regression tests from the verifier (truth tables, catalog replay, e2e).
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
