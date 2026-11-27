@@ -75,7 +75,7 @@ const LIVESTREAM: InvitationLivestream = {
 
 /** The feature keys of every seeded package (prisma/catalog-seed.ts), which is what gating intersects with S4. */
 const SEEDED_PACKAGE_FEATURES = {
-  basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
+  basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP", "OPENING_ANIMATION"],
   premium: [
     "ITINERARY",
     "COUNTDOWN",
@@ -86,6 +86,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "WHATSAPP",
     "LODGING",
     "GUESTBOOK",
+    "OPENING_ANIMATION",
   ],
   deluxe: [
     "ITINERARY",
@@ -101,6 +102,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "GUEST_ALBUM",
     "GUEST_LIST",
     "QR_PASS",
+    "OPENING_ANIMATION",
   ],
 } as const;
 
@@ -501,6 +503,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       assert.equal(stored?.playlistTitle, PLAYLIST_TITLE);
@@ -523,6 +526,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       assert.equal(cleared?.playlistTitle, null);
@@ -621,6 +625,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -658,6 +663,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -671,6 +677,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -695,6 +702,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -732,6 +740,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       assert.equal(cleared?.itinerary, null);
@@ -777,6 +786,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: GIFT_REGISTRY,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -819,6 +829,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       assert.equal(cleared?.giftRegistry, null);
@@ -877,6 +888,105 @@ describe("invitation feature data (real PostgreSQL)", () => {
       assert.equal(granted.includes("basic"), false, "basic does not grant LIVESTREAM");
     });
 
+    it("adds a NOT NULL opening animation boolean column with a true default, and grants OPENING_ANIMATION to every seeded package (F10; L14.3, L14.4)", async () => {
+      const columns = await prisma.$queryRaw<
+        Array<{ is_nullable: string; column_default: string | null; data_type: string }>
+      >`
+        SELECT is_nullable, column_default, data_type
+        FROM information_schema.columns
+        WHERE table_name = 'InvitationFeatureSettings' AND column_name = 'openingAnimation'
+      `;
+
+      // Additive and on by default: every row written before the migration plays the animation without being rewritten.
+      assert.deepEqual(columns, [
+        { is_nullable: "NO", column_default: "true", data_type: "boolean" },
+      ]);
+
+      const rows = await prisma.packageFeature.findMany({
+        where: { feature: { key: "OPENING_ANIMATION" } },
+        select: { package: { select: { key: true } } },
+      });
+      // Every seeded package grants it, so the catalog can withdraw it later without a code change (L14.4).
+      const granted = rows.map((row) => row.package.key);
+
+      assert.ok(granted.includes("basic"), "basic grants OPENING_ANIMATION");
+      assert.ok(granted.includes("premium"), "premium grants OPENING_ANIMATION");
+      assert.ok(granted.includes("deluxe"), "deluxe grants OPENING_ANIMATION");
+    });
+
+    it("stores the opening animation switch, and an omitted switch keeps the stored one (F10; L14.3)", async () => {
+      const { invitation } = await newDraft(SEEDED_PACKAGE_FEATURES.basic);
+
+      // An invitation without a settings row reads the column's default, which is what the first write would store.
+      assert.equal(
+        (await repository.findOwned(invitation.ownerId, invitation.id))?.openingAnimation,
+        true,
+      );
+
+      const off = await repository.updateFeatures(invitation.ownerId, invitation.id, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: null,
+        openingAnimation: false,
+        reminders: null,
+      });
+
+      assert.equal(off?.openingAnimation, false);
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { openingAnimation: true },
+        }),
+        { openingAnimation: false },
+      );
+
+      // A write that never names the switch — a client built before F10 — keeps what the owner chose.
+      const kept = await repository.updateFeatures(invitation.ownerId, invitation.id, {
+        timeZone: "America/Cancun",
+        whatsappPhone: PHONE,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: null,
+        reminders: null,
+      });
+
+      assert.equal(kept?.openingAnimation, false);
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { openingAnimation: true },
+        }),
+        { openingAnimation: false },
+      );
+
+      // And it turns back on when a write names it.
+      const on = await repository.updateFeatures(invitation.ownerId, invitation.id, {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: null,
+        openingAnimation: true,
+        reminders: null,
+      });
+
+      assert.equal(on?.openingAnimation, true);
+    });
+
     it("stores the lodging payload and reads it back, and shows none for a row written around the API (F4; L7.1)", async () => {
       const { invitation } = await newDraft(SEEDED_PACKAGE_FEATURES.premium);
       const written = await repository.updateFeatures(invitation.ownerId, invitation.id, {
@@ -889,6 +999,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: LODGING,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -925,6 +1036,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       assert.equal(cleared?.lodging, null);
@@ -949,6 +1061,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: LIVESTREAM,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -966,6 +1079,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         where: { invitationId: invitation.id },
         data: {
           livestream: {
+            openingAnimation: true,
             version: 1,
             url: "http://youtu.be/dQw4w9WgXcQ",
           } as unknown as Prisma.InputJsonValue,
@@ -987,6 +1101,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       assert.equal(cleared?.livestream, null);
@@ -1011,6 +1126,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       await repository.archive(invitation.ownerId, invitation.id);
@@ -1026,6 +1142,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           giftRegistry: null,
           lodging: null,
           livestream: null,
+          openingAnimation: true,
           reminders: null,
         }),
         InvitationNotEditableError,
@@ -1057,6 +1174,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
             giftRegistry: null,
             lodging: null,
             livestream: null,
+            openingAnimation: true,
             reminders: null,
           }),
           null,
@@ -1087,6 +1205,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry?: InvitationGiftRegistry | null;
         lodging?: InvitationLodging | null;
         livestream?: InvitationLivestream | null;
+        openingAnimation?: boolean;
         reminders?: InvitationReminders | null;
       } | null,
     ) {
@@ -1099,6 +1218,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           giftRegistry: null,
           lodging: null,
           livestream: null,
+          openingAnimation: true,
           reminders: null,
           ...features,
         });
@@ -1122,6 +1242,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
           giftRegistry: null,
           lodging: null,
           livestream: null,
+          openingAnimation: true,
           reminders: null,
         });
 
@@ -1146,6 +1267,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
             giftRegistryDetails: null,
             lodging: null,
             livestream: null,
+            openingAnimation: true,
             // Premium and Deluxe grant the guestbook, so their wall is an empty list (F7; L10.2, L10.4).
             guestbook: packageKey === "basic" ? null : [],
             // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
@@ -1210,6 +1332,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         guestbook: [],
         guestAlbum: null,
         gallery: [],
@@ -1237,6 +1360,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         guestbook: [],
         guestAlbum: { photos: [], count: 0 },
         gallery: [],
@@ -1255,6 +1379,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -1272,6 +1397,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1306,6 +1432,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "lodging",
         "map",
         "music",
+        "openingAnimation",
         "rsvp",
         "whatsapp",
       ]);

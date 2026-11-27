@@ -159,6 +159,8 @@ const LIVESTREAM_PACKAGE_ID = "abababab-abab-4bab-8bab-abababababab";
 const GUESTBOOK_PACKAGE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 /** An ACTIVE package that grants `GUEST_ALBUM` and no other implemented key: the guests' photos (F8; L11.2). */
 const GUEST_ALBUM_PACKAGE_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+/** An ACTIVE package that grants `OPENING_ANIMATION` and no other implemented key: the envelope (F10; L14.4). */
+const OPENING_ANIMATION_PACKAGE_ID = "acacacac-acac-4cac-8cac-acacacacacac";
 /** A PUBLISHED version whose schema declares the address fields a place may belong to (S2). */
 const PLACE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 /** A PUBLISHED version whose schema declares the legacy gift registry text field (F2; L4.3). */
@@ -275,6 +277,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       giftRegistry: null,
       lodging: null,
       livestream: null,
+      openingAnimation: true,
       reminders: null,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
@@ -383,6 +386,10 @@ class MemoryInvitationRepository implements InvitationRepository {
     row.giftRegistry = features.giftRegistry;
     row.lodging = features.lodging;
     row.livestream = features.livestream;
+    // An omitted switch keeps the stored one, exactly like the Prisma adapter (F10; L14.3).
+    if (features.openingAnimation !== undefined) {
+      row.openingAnimation = features.openingAnimation;
+    }
     row.reminders = features.reminders;
     return structuredClone(row);
   }
@@ -524,6 +531,11 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     [
       GUEST_ALBUM_PACKAGE_ID,
       { status: "ACTIVE", includedFeatureKeys: ["GUEST_ALBUM"], durationDays: 90 },
+    ],
+    // The opening animation key alone (F10; L14.4), so the switch is the only thing that decides.
+    [
+      OPENING_ANIMATION_PACKAGE_ID,
+      { status: "ACTIVE", includedFeatureKeys: ["OPENING_ANIMATION"], durationDays: 30 },
     ],
   ]);
 
@@ -1495,6 +1507,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
@@ -1672,6 +1685,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -1833,6 +1847,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -1849,6 +1864,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
@@ -1872,6 +1888,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -1885,6 +1902,7 @@ describe("invitations routes: /invitations", () => {
           giftRegistry: null,
           lodging: null,
           livestream: null,
+          openingAnimation: true,
           reminders: null,
         });
 
@@ -1898,6 +1916,7 @@ describe("invitations routes: /invitations", () => {
           giftRegistry: null,
           lodging: null,
           livestream: null,
+          openingAnimation: true,
           reminders: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.whatsappPhone, null);
@@ -1922,6 +1941,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -1938,6 +1958,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       assert.deepEqual(musicMetadata.asked, [{ playlistUrl: PLAYLIST, provider: "spotify" }]);
@@ -1953,6 +1974,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -1968,6 +1990,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -1983,6 +2006,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
     });
@@ -2001,6 +2025,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -2013,6 +2038,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -2026,6 +2052,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       assert.equal(musicMetadata.asked.length, 1);
@@ -2043,6 +2070,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -2073,6 +2101,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -2241,6 +2270,7 @@ describe("invitations routes: /invitations", () => {
         whatsappPhone: null,
         playlistUrl: null,
         livestream: LIVESTREAM,
+        openingAnimation: true,
       });
 
       assert.equal(response.status, 200);
@@ -2277,6 +2307,7 @@ describe("invitations routes: /invitations", () => {
           whatsappPhone: null,
           playlistUrl: null,
           livestream: LIVESTREAM,
+          openingAnimation: true,
         });
 
         const clearing = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
@@ -2284,6 +2315,7 @@ describe("invitations routes: /invitations", () => {
           whatsappPhone: null,
           playlistUrl: null,
           livestream: cleared,
+          openingAnimation: true,
         });
 
         assert.equal(clearing.status, 200, JSON.stringify(cleared));
@@ -2304,6 +2336,7 @@ describe("invitations routes: /invitations", () => {
         whatsappPhone: "+525512345678",
         playlistUrl: null,
         livestream: LIVESTREAM,
+        openingAnimation: true,
       });
       const before = structuredClone<InvitationRecordWithMusic | undefined>(
         repository.rows.find((row) => row.id === draft.id),
@@ -2321,6 +2354,7 @@ describe("invitations routes: /invitations", () => {
           whatsappPhone: "+525587654321",
           playlistUrl: null,
           livestream: refused,
+          openingAnimation: true,
         });
 
         assert.equal(response.status, 400, JSON.stringify(refused));
@@ -2446,6 +2480,80 @@ describe("invitations routes: /invitations", () => {
       }
     });
 
+    it("stores the opening animation switch, keeps it when a body omits it, and answers it on the owner read (F10; L14.3)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      const body = (openingAnimation?: unknown) => ({
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        ...(openingAnimation === undefined ? {} : { openingAnimation }),
+      });
+
+      // A new invitation plays the animation: the column's default is true (L14.3).
+      const created = await send("GET", `${PATH}/${draft.id}`, cookie);
+      assert.equal(created.status, 200);
+      assert.equal(
+        ((await created.json()) as { featureSettings: Row }).featureSettings.openingAnimation,
+        true,
+      );
+
+      // The owner's switch off is stored and answered.
+      const off = await send("PUT", `${PATH}/${draft.id}/features`, cookie, body(false));
+      assert.equal(off.status, 200);
+      assert.equal(
+        ((await off.json()) as { featureSettings: Row }).featureSettings.openingAnimation,
+        false,
+      );
+      assert.equal(repository.rows.find((row) => row.id === draft.id)?.openingAnimation, false);
+
+      // A body that omits the switch keeps the stored one, so a client built before F10 never turns it on or off.
+      const kept = await send("PUT", `${PATH}/${draft.id}/features`, cookie, body());
+      assert.equal(kept.status, 200);
+      assert.equal(
+        ((await kept.json()) as { featureSettings: Row }).featureSettings.openingAnimation,
+        false,
+      );
+      assert.equal(repository.rows.find((row) => row.id === draft.id)?.openingAnimation, false);
+
+      // And the switch turns back on when the owner says so.
+      const on = await send("PUT", `${PATH}/${draft.id}/features`, cookie, body(true));
+      assert.equal(on.status, 200);
+      assert.equal(
+        ((await on.json()) as { featureSettings: Row }).featureSettings.openingAnimation,
+        true,
+      );
+      assert.equal(repository.rows.find((row) => row.id === draft.id)?.openingAnimation, true);
+    });
+
+    it("refuses an opening animation switch that is not a boolean and stores nothing (F10; L14.3)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      const before = structuredClone<InvitationRecordWithMusic | undefined>(
+        repository.rows.find((row) => row.id === draft.id),
+      );
+
+      for (const refused of ["sí", 1, null]) {
+        const response = await send("PUT", `${PATH}/${draft.id}/features`, cookie, {
+          timeZone: "America/Tijuana",
+          whatsappPhone: "+525587654321",
+          playlistUrl: null,
+          openingAnimation: refused,
+        });
+
+        assert.equal(response.status, 400, JSON.stringify(refused));
+        assert.deepEqual(await response.json(), {
+          code: "INVALID_INVITATION_FEATURES",
+          issues: ["openingAnimation must be true or false"],
+        });
+        // A refused request stores nothing: the switch, the phone, and the zone are the ones already stored.
+        const stored = repository.rows.find((row) => row.id === draft.id);
+        assert.equal(stored?.openingAnimation, before?.openingAnimation);
+        assert.equal(stored?.whatsappPhone, before?.whatsappPhone);
+        assert.equal(stored?.timeZone, before?.timeZone);
+      }
+    });
+
     it("refuses a lodging the contract does not allow and stores nothing (F4; L7.1)", async () => {
       const { cookie } = await signedInCustomer();
       const draft = await createDraft(cookie);
@@ -2536,6 +2644,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -2548,6 +2657,7 @@ describe("invitations routes: /invitations", () => {
           giftRegistry: null,
           lodging: null,
           livestream: null,
+          openingAnimation: true,
           reminders: null,
         });
 
@@ -2561,6 +2671,7 @@ describe("invitations routes: /invitations", () => {
           giftRegistry: null,
           lodging: null,
           livestream: null,
+          openingAnimation: true,
           reminders: null,
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.playlistUrl, null);
@@ -2588,6 +2699,7 @@ describe("invitations routes: /invitations", () => {
             giftRegistry: null,
             lodging: null,
             livestream: null,
+            openingAnimation: true,
             reminders: null,
           },
           [
@@ -2604,6 +2716,7 @@ describe("invitations routes: /invitations", () => {
             giftRegistry: null,
             lodging: null,
             livestream: null,
+            openingAnimation: true,
             reminders: null,
           },
           ["whatsappPhone must be a string or null"],
@@ -2618,6 +2731,7 @@ describe("invitations routes: /invitations", () => {
             giftRegistry: null,
             lodging: null,
             livestream: null,
+            openingAnimation: true,
             reminders: null,
           },
           ["playlistUrl must be an https link"],
@@ -2632,6 +2746,7 @@ describe("invitations routes: /invitations", () => {
             giftRegistry: null,
             lodging: null,
             livestream: null,
+            openingAnimation: true,
             reminders: null,
           },
           ["playlistUrl must link to Spotify, Apple Music, YouTube, Deezer, or SoundCloud"],
@@ -2646,6 +2761,7 @@ describe("invitations routes: /invitations", () => {
             giftRegistry: null,
             lodging: null,
             livestream: null,
+            openingAnimation: true,
             reminders: null,
           },
           ["playlistUrl must be a string or null"],
@@ -2660,6 +2776,7 @@ describe("invitations routes: /invitations", () => {
             giftRegistry: null,
             lodging: null,
             livestream: null,
+            openingAnimation: true,
             reminders: null,
           },
           ["itinerary.version must be 1"],
@@ -2693,6 +2810,7 @@ describe("invitations routes: /invitations", () => {
             giftRegistry: null,
             lodging: null,
             livestream: null,
+            openingAnimation: true,
             reminders: null,
           },
           [
@@ -2774,6 +2892,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
 
@@ -2801,6 +2920,7 @@ describe("invitations routes: /invitations", () => {
           giftRegistry: null,
           lodging: null,
           livestream: null,
+          openingAnimation: true,
           reminders: null,
         });
 
@@ -3318,6 +3438,7 @@ describe("invitations routes: /invitations", () => {
       giftRegistry?: InvitationGiftRegistry | null;
       lodging?: InvitationLodging | null;
       livestream?: InvitationLivestream | null;
+      openingAnimation?: boolean;
       reminders?: InvitationReminders | null;
       rsvpDeadline?: Date | null;
       rsvpPartyLimit?: number;
@@ -3345,6 +3466,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: overrides.giftRegistry ?? null,
         lodging: overrides.lodging ?? null,
         livestream: overrides.livestream ?? null,
+        openingAnimation: overrides.openingAnimation ?? true,
         reminders: overrides.reminders ?? null,
         rsvpDeadline: overrides.rsvpDeadline ?? null,
         rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
@@ -3388,6 +3510,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -3561,6 +3684,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -3598,6 +3722,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -3615,6 +3740,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       const grantedResponse = await send("GET", `${PUBLIC_PATH}/${granted.slug}`);
@@ -3633,6 +3759,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       const withheldBody = (await (
@@ -3688,6 +3815,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
       });
       const emptyBody = (await (await send("GET", `${PUBLIC_PATH}/${empty.slug}`)).json()) as Row;
@@ -3701,6 +3829,7 @@ describe("invitations routes: /invitations", () => {
         status: "PUBLISHED",
         packageId: LIVESTREAM_PACKAGE_ID,
         livestream: LIVESTREAM,
+        openingAnimation: true,
       });
       const grantedResponse = await send("GET", `${PUBLIC_PATH}/${granted.slug}`);
 
@@ -3720,6 +3849,7 @@ describe("invitations routes: /invitations", () => {
         status: "PUBLISHED",
         packageId: LIVESTREAM_PACKAGE_ID,
         livestream: LIVESTREAM_EXTERNAL,
+        openingAnimation: true,
       });
       const externalBody = (await (
         await send("GET", `${PUBLIC_PATH}/${external.slug}`)
@@ -3737,6 +3867,7 @@ describe("invitations routes: /invitations", () => {
         status: "PUBLISHED",
         packageId: FEATURE_PACKAGE_ID,
         livestream: LIVESTREAM,
+        openingAnimation: true,
       });
       const withheldBody = (await (
         await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
@@ -3750,10 +3881,53 @@ describe("invitations routes: /invitations", () => {
         status: "PUBLISHED",
         packageId: LIVESTREAM_PACKAGE_ID,
         livestream: null,
+        openingAnimation: true,
       });
       const emptyBody = (await (await send("GET", `${PUBLIC_PATH}/${empty.slug}`)).json()) as Row;
 
       assert.equal((emptyBody.features as Row).livestream, null);
+    });
+
+    it("answers the opening animation with the grant and the owner's switch, so the page plays it only when both say so (F10; L14.4, L22)", async () => {
+      // The package grants the key and the owner left the switch on: the page draws the envelope.
+      const playing = seed({
+        slug: "invitacion-abre01",
+        status: "PUBLISHED",
+        packageId: OPENING_ANIMATION_PACKAGE_ID,
+        openingAnimation: true,
+      });
+      const playingResponse = await send("GET", `${PUBLIC_PATH}/${playing.slug}`);
+
+      assert.equal(playingResponse.status, 200);
+      const playingBody = (await playingResponse.json()) as Row;
+      assert.deepEqual(Object.keys(playingBody).sort(), PUBLIC_KEYS);
+      assert.equal((playingBody.features as Row).openingAnimation, true);
+
+      // The same granted package with the owner's switch off shows the invitation directly.
+      const off = seed({
+        slug: "invitacion-abre02",
+        status: "PUBLISHED",
+        packageId: OPENING_ANIMATION_PACKAGE_ID,
+        openingAnimation: false,
+      });
+      const offBody = (await (await send("GET", `${PUBLIC_PATH}/${off.slug}`)).json()) as Row;
+
+      assert.equal((offBody.features as Row).openingAnimation, false);
+
+      // A package that does not grant the key plays nothing, even for an invitation whose switch is on.
+      const withheld = seed({
+        slug: "invitacion-abre03",
+        status: "PUBLISHED",
+        packageId: FEATURE_PACKAGE_ID,
+        openingAnimation: true,
+      });
+      const withheldBody = (await (
+        await send("GET", `${PUBLIC_PATH}/${withheld.slug}`)
+      ).json()) as Row;
+
+      assert.equal((withheldBody.features as Row).openingAnimation, false);
+      // The switch itself is never answered: a guest reads whether the page plays, never the owner's stored boolean.
+      assert.equal(Object.hasOwn(offBody.features as Row, "featureSettings"), false);
     });
 
     it("answers the gift registry only for a package that grants it and only while it shows something (F2; L4.3)", async () => {
@@ -3948,6 +4122,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -6176,6 +6351,7 @@ describe("invitations routes: /invitations", () => {
         giftRegistry: null,
         lodging: null,
         livestream: null,
+        openingAnimation: true,
         reminders: null,
         rsvpDeadline: null,
         rsvpPartyLimit: 4,

@@ -147,6 +147,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       giftRegistry: null,
       lodging: null,
       livestream: null,
+      openingAnimation: true,
       reminders: null,
       rsvpDeadline: overrides.rsvpDeadline ?? null,
       rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,

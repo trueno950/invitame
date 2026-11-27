@@ -121,6 +121,11 @@ const FEATURE_SEEDS = [
     description: "El enlace de tu transmisión, con un reproductor para verla desde la invitación.",
   },
   {
+    key: "OPENING_ANIMATION",
+    name: "Animación de apertura",
+    description: "Un sobre con sello que tus invitados abren antes de ver la invitación.",
+  },
+  {
     key: "GUEST_ALBUM",
     name: "Álbum de fotos de invitados",
     description: "Tus invitados suben sus fotos y tú decides cuáles aparecen en la invitación.",
@@ -150,7 +155,7 @@ const PACKAGE_SEEDS = [
     description: "Una selección inicial para empezar a planificar.",
     // S1: «Básico 30 días». Each package states its own lifetime, counted from the publication instant.
     durationDays: 30,
-    featureKeys: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
+    featureKeys: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP", "OPENING_ANIMATION"],
   },
   {
     key: "premium",
@@ -169,6 +174,7 @@ const PACKAGE_SEEDS = [
       "LODGING",
       "GUESTBOOK",
       "LIVESTREAM",
+      "OPENING_ANIMATION",
     ],
   },
   {
@@ -193,6 +199,7 @@ const PACKAGE_SEEDS = [
       "WHATSAPP_REMINDERS",
       "GUEST_LIST",
       "QR_PASS",
+      "OPENING_ANIMATION",
     ],
   },
 ] as const;

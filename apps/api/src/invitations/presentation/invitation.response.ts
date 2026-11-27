@@ -132,6 +132,11 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
      */
     livestream: { version: 1; url: string; note?: string } | null;
     /**
+     * The stored opening animation switch (F10; L14.3), true by default. The owner's read answers the switch itself so the
+     * editor shows the state the guest page will use; the public read answers the decision instead.
+     */
+    openingAnimation: boolean;
+    /**
      * The stored reminder switches as the validated payload `{ version: 1, pendingRsvp, eventEve }`, or null while the
      * owner switched nothing on (F6; L9.1). The owner's read answers the version so the editor can send the same payload
      * back, and the switches work as soon as a sender is configured.
@@ -239,6 +244,13 @@ export interface PublicInvitationResponse {
      * it always read.
      */
     livestream: { url: string; videoId: string | null; note: string | null } | null;
+    /**
+     * Whether the guest page draws the opening animation (F10; L14.4): true only while the pinned package grants
+     * `OPENING_ANIMATION` and the owner's switch is on. It is added beside the fields the body already carried and
+     * changes none of them, so a page deployed before it reads the body it always read, and a page that reads an absent
+     * field plays no animation (L20).
+     */
+    openingAnimation: boolean;
     /**
      * The guestbook wall (F7; L10.4): the visible entries newest first, at most 50, each one the signature and the
      * message a guest signed, as plain text. It is the list itself — an empty array is a wall waiting for its first
@@ -388,6 +400,7 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
               pendingRsvp: stored.featureSettings.reminders.pendingRsvp,
               eventEve: stored.featureSettings.reminders.eventEve,
             },
+      openingAnimation: stored.featureSettings.openingAnimation,
     },
     remindersConfigured: stored.remindersConfigured,
     availableFeatures: [...stored.availableFeatures],
@@ -480,6 +493,7 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
               videoId: stored.features.livestream.videoId,
               note: stored.features.livestream.note,
             },
+      openingAnimation: stored.features.openingAnimation,
       guestbook:
         stored.features.guestbook === null
           ? null

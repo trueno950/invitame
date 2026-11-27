@@ -15,6 +15,7 @@ import {
   normalizePlaylistTitle,
   normalizePlaylistUrl,
   normalizeWhatsAppPhone,
+  OPENING_ANIMATION_FEATURE_KEY,
   PLAYLIST_COVER_URL_MAX_LENGTH,
   PLAYLIST_TITLE_MAX_LENGTH,
   PLAYLIST_URL_LENGTH_ISSUE,
@@ -33,7 +34,7 @@ import type { InvitationLivestream } from "./invitation-livestream";
 
 /** The stored feature keys of every seeded package (prisma/catalog-seed.ts), by package key. */
 const SEEDED_PACKAGE_FEATURES = {
-  basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP"],
+  basic: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP", "OPENING_ANIMATION"],
   premium: [
     "ITINERARY",
     "COUNTDOWN",
@@ -44,6 +45,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "WHATSAPP",
     "LODGING",
     "GUESTBOOK",
+    "OPENING_ANIMATION",
   ],
   deluxe: [
     "ITINERARY",
@@ -60,6 +62,7 @@ const SEEDED_PACKAGE_FEATURES = {
     "WHATSAPP_REMINDERS",
     "GUEST_LIST",
     "QR_PASS",
+    "OPENING_ANIMATION",
   ],
 } as const;
 
@@ -334,6 +337,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         lodging: null,
         livestream: null,
         reminders: null,
+        openingAnimation: true,
       }),
       {
         ok: true,
@@ -346,6 +350,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           lodging: null,
           livestream: null,
           reminders: null,
+          openingAnimation: true,
         },
       },
     );
@@ -362,6 +367,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         lodging: null,
         livestream: null,
         reminders: null,
+        openingAnimation: true,
       }),
       {
         ok: true,
@@ -374,6 +380,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           lodging: null,
           livestream: null,
           reminders: null,
+          openingAnimation: true,
         },
       },
     );
@@ -387,6 +394,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         lodging: null,
         livestream: null,
         reminders: null,
+        openingAnimation: true,
       }),
       {
         ok: true,
@@ -399,6 +407,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           lodging: null,
           livestream: null,
           reminders: null,
+          openingAnimation: true,
         },
       },
     );
@@ -415,6 +424,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         lodging: null,
         livestream: null,
         reminders: null,
+        openingAnimation: true,
       }),
       {
         ok: false,
@@ -440,6 +450,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         lodging: null,
         livestream: null,
         reminders: { version: 1, pendingRsvp: true, eventEve: true },
+        openingAnimation: true,
       }),
       {
         ok: true,
@@ -452,6 +463,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           lodging: null,
           livestream: null,
           reminders: { version: 1, pendingRsvp: true, eventEve: true },
+          openingAnimation: true,
         },
       },
     );
@@ -466,6 +478,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         giftRegistry: null,
         lodging: { version: 1, hotels: [{ name: "" }] },
         reminders: { version: 1, pendingRsvp: "sí", eventEve: true },
+        openingAnimation: true,
         livestream: null,
       }),
       {
@@ -488,6 +501,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         lodging: null,
         livestream: null,
         reminders: { version: 1, pendingRsvp: false, eventEve: false },
+        openingAnimation: true,
       }),
       {
         ok: true,
@@ -500,6 +514,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           lodging: null,
           livestream: null,
           reminders: null,
+          openingAnimation: true,
         },
       },
     );
@@ -515,6 +530,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         giftRegistry: null,
         lodging: null,
         reminders: null,
+        openingAnimation: true,
         livestream: {
           version: 1,
           url: " https://www.youtube.com/watch?v=dQw4w9WgXcQ ",
@@ -531,6 +547,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
           giftRegistry: null,
           lodging: null,
           reminders: null,
+          openingAnimation: true,
           livestream: {
             version: 1,
             url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -550,6 +567,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         giftRegistry: null,
         lodging: null,
         reminders: { version: 1, pendingRsvp: "sí", eventEve: true },
+        openingAnimation: true,
         livestream: { version: 1, url: "http://youtu.be/dQw4w9WgXcQ" },
       }),
       {
@@ -570,6 +588,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         giftRegistry: null,
         lodging: null,
         reminders: null,
+        openingAnimation: true,
         livestream: null,
       }),
       {
@@ -582,9 +601,81 @@ describe("feature settings validation (S4, S7, F1)", () => {
           giftRegistry: null,
           lodging: null,
           reminders: null,
+          openingAnimation: true,
           livestream: null,
         },
       },
+    );
+  });
+
+  it("stores the opening animation switch, and reports its issue after the livestream's (F10; L14.3)", () => {
+    // The switch is part of the same feature-settings write, so one request saves it with the rest.
+    for (const openingAnimation of [true, false]) {
+      assert.deepEqual(
+        validateInvitationFeatureSettings({
+          timeZone: "America/Mexico_City",
+          whatsappPhone: null,
+          playlistUrl: null,
+          itinerary: null,
+          giftRegistry: null,
+          lodging: null,
+          livestream: null,
+          reminders: null,
+          openingAnimation,
+        }),
+        {
+          ok: true,
+          value: {
+            timeZone: "America/Mexico_City",
+            whatsappPhone: null,
+            playlistUrl: null,
+            itinerary: null,
+            giftRegistry: null,
+            lodging: null,
+            livestream: null,
+            reminders: null,
+            openingAnimation,
+          },
+        },
+      );
+    }
+
+    // A switch of another type is refused with its own issue, after every value the write validates before it, so a
+    // client never has to guess which field went wrong.
+    assert.deepEqual(
+      validateInvitationFeatureSettings({
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: { version: 1, url: "http://youtu.be/dQw4w9WgXcQ" },
+        reminders: null,
+        openingAnimation: "sí",
+      }),
+      {
+        ok: false,
+        issues: [
+          "livestream.url must be an https link of at most 500 characters",
+          "openingAnimation must be true or false",
+        ],
+      },
+    );
+    // An absent switch is no answer at all: the use case resolves it from the stored one before validating.
+    assert.deepEqual(
+      validateInvitationFeatureSettings({
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: null,
+        reminders: null,
+        openingAnimation: undefined,
+      }),
+      { ok: false, issues: ["openingAnimation must be true or false"] },
     );
   });
 
@@ -599,6 +690,7 @@ describe("feature settings validation (S4, S7, F1)", () => {
         lodging: null,
         livestream: null,
         reminders: null,
+        openingAnimation: true,
       });
 
       assert.equal(result.ok, false);
@@ -620,6 +712,7 @@ describe("feature gating (S4, F1)", () => {
     giftRegistry: InvitationGiftRegistry | null = null,
     lodging: InvitationLodging | null = null,
     livestream: InvitationLivestream | null = null,
+    openingAnimation = true,
   ) =>
     availableFeatureKeys({
       includedFeatureKeys,
@@ -631,6 +724,7 @@ describe("feature gating (S4, F1)", () => {
       giftRegistry,
       lodging,
       livestream,
+      openingAnimation,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     });
@@ -645,6 +739,7 @@ describe("feature gating (S4, F1)", () => {
     giftRegistry?: InvitationGiftRegistry | null;
     lodging?: InvitationLodging | null;
     livestream?: InvitationLivestream | null;
+    openingAnimation?: boolean;
     rsvpDeadline?: Date | null;
     rsvpPartyLimit?: number;
   }) =>
@@ -655,6 +750,7 @@ describe("feature gating (S4, F1)", () => {
       giftRegistry: null,
       lodging: null,
       livestream: null,
+      openingAnimation: true,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       ...gate,
@@ -676,6 +772,7 @@ describe("feature gating (S4, F1)", () => {
       giftRegistry: null,
       lodging: null,
       livestream: null,
+      openingAnimation: true,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     };
@@ -703,6 +800,7 @@ describe("feature gating (S4, F1)", () => {
       giftRegistry: null,
       lodging: null,
       livestream: null,
+      openingAnimation: true,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     };
@@ -723,7 +821,7 @@ describe("feature gating (S4, F1)", () => {
     );
   });
 
-  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_ALBUM, LIVESTREAM, GUEST_LIST, QR_PASS, and GALLERY, with CALENDAR always added", () => {
+  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_ALBUM, LIVESTREAM, GUEST_LIST, QR_PASS, GALLERY, and OPENING_ANIMATION, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
       "ITINERARY",
       "COUNTDOWN",
@@ -739,9 +837,11 @@ describe("feature gating (S4, F1)", () => {
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
+      "OPENING_ANIMATION",
     ]);
     assert.equal(CALENDAR_FEATURE_KEY, "CALENDAR");
     assert.equal(ITINERARY_FEATURE_KEY, "ITINERARY");
+    assert.equal(OPENING_ANIMATION_FEATURE_KEY, "OPENING_ANIMATION");
     // The itinerary arrived with F1 and is granted to every package; a key this batch does not implement never
     // becomes a feature.
     assert.deepEqual(gated(["ITINERARY"]), ["ITINERARY", "CALENDAR"]);
@@ -754,6 +854,9 @@ describe("feature gating (S4, F1)", () => {
     assert.deepEqual(gated(["GUESTBOOK"]), ["GUESTBOOK", "CALENDAR"]);
     // The album follows the same rule (F8; L11.4): the key is granted and the read answers no photo yet.
     assert.deepEqual(gated(["GUEST_ALBUM"]), ["GUEST_ALBUM", "CALENDAR"]);
+    // The opening animation is granted the same way, whether the owner switched it on or off (F10; L14.3, L14.4):
+    // the key is the gate and the switch is the data.
+    assert.deepEqual(gated(["OPENING_ANIMATION"]), ["OPENING_ANIMATION", "CALENDAR"]);
   });
 
   it("shows the features each seeded package includes, plus CALENDAR", () => {
@@ -763,6 +866,7 @@ describe("feature gating (S4, F1)", () => {
       "COUNTDOWN",
       "MAP",
       "WHATSAPP",
+      "OPENING_ANIMATION",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.premium), [
@@ -774,6 +878,7 @@ describe("feature gating (S4, F1)", () => {
       "MUSIC",
       "GUESTBOOK",
       "GALLERY",
+      "OPENING_ANIMATION",
       "CALENDAR",
     ]);
     // Deluxe adds the guest album (F8; L11.2); the reminders key is granted but not implemented by this deployment, so
@@ -792,6 +897,7 @@ describe("feature gating (S4, F1)", () => {
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
+      "OPENING_ANIMATION",
       "CALENDAR",
     ]);
   });
@@ -801,6 +907,7 @@ describe("feature gating (S4, F1)", () => {
       "COUNTDOWN",
       "MAP",
       "WHATSAPP",
+      "OPENING_ANIMATION",
       "CALENDAR",
     ]);
     assert.deepEqual(
@@ -808,7 +915,17 @@ describe("feature gating (S4, F1)", () => {
         version: 1,
         items: [],
       }),
-      ["COUNTDOWN", "MAP", "RSVP", "WHATSAPP", "MUSIC", "GUESTBOOK", "GALLERY", "CALENDAR"],
+      [
+        "COUNTDOWN",
+        "MAP",
+        "RSVP",
+        "WHATSAPP",
+        "MUSIC",
+        "GUESTBOOK",
+        "GALLERY",
+        "OPENING_ANIMATION",
+        "CALENDAR",
+      ],
     );
     // A package that does not grant the key shows no itinerary even while one is stored.
     assert.deepEqual(gated(["COUNTDOWN"], PHONE, PLAYLIST), ["COUNTDOWN", "CALENDAR"]);
@@ -819,6 +936,7 @@ describe("feature gating (S4, F1)", () => {
       "ITINERARY",
       "COUNTDOWN",
       "MAP",
+      "OPENING_ANIMATION",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.premium, null), [
@@ -829,6 +947,7 @@ describe("feature gating (S4, F1)", () => {
       "MUSIC",
       "GUESTBOOK",
       "GALLERY",
+      "OPENING_ANIMATION",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe, null), [
@@ -843,6 +962,7 @@ describe("feature gating (S4, F1)", () => {
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
+      "OPENING_ANIMATION",
       "CALENDAR",
     ]);
   });
@@ -856,6 +976,7 @@ describe("feature gating (S4, F1)", () => {
       "WHATSAPP",
       "GUESTBOOK",
       "GALLERY",
+      "OPENING_ANIMATION",
       "CALENDAR",
     ]);
     assert.deepEqual(gated(SEEDED_PACKAGE_FEATURES.deluxe, PHONE, null), [
@@ -870,6 +991,7 @@ describe("feature gating (S4, F1)", () => {
       "GUEST_LIST",
       "QR_PASS",
       "GALLERY",
+      "OPENING_ANIMATION",
       "CALENDAR",
     ]);
   });
@@ -893,6 +1015,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1088,6 +1211,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistry: null,
         lodging: null,
         livestream: LIVE,
+        openingAnimation: true,
         rsvpDeadline: null,
         rsvpPartyLimit: 4,
       }),
@@ -1101,6 +1225,44 @@ describe("feature gating (S4, F1)", () => {
       "GIFT_REGISTRY",
       "CALENDAR",
     ]);
+  });
+
+  it("answers the opening animation only while the package grants it and the owner switched it on (F10; L14.4)", () => {
+    // The public read answers the decision itself, never the switch: the web page draws the overlay only when this is
+    // true, and it never reads a package, a key, or a stored boolean of its own.
+    assert.equal(
+      featuresOf({
+        includedFeatureKeys: ["OPENING_ANIMATION"],
+        whatsappPhone: null,
+        playlistUrl: null,
+      }).openingAnimation,
+      true,
+    );
+    // An owner who switched it off keeps the granted key and stops the overlay.
+    assert.equal(
+      featuresOf({
+        includedFeatureKeys: ["OPENING_ANIMATION"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        openingAnimation: false,
+      }).openingAnimation,
+      false,
+    );
+    // A package that does not grant the key plays nothing, whatever the stored switch says.
+    assert.equal(
+      featuresOf({ includedFeatureKeys: ["COUNTDOWN"], whatsappPhone: null, playlistUrl: null })
+        .openingAnimation,
+      false,
+    );
+    assert.equal(
+      featuresOf({
+        includedFeatureKeys: ["COUNTDOWN"],
+        whatsappPhone: null,
+        playlistUrl: null,
+        openingAnimation: true,
+      }).openingAnimation,
+      false,
+    );
   });
 
   it("maps the gated keys to the guest booleans, the phone, the music link, and the gift registry", () => {
@@ -1121,6 +1283,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1144,6 +1307,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1167,6 +1331,7 @@ describe("feature gating (S4, F1)", () => {
         giftRegistryDetails: null,
         lodging: null,
         livestream: null,
+        openingAnimation: false,
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1316,6 +1481,7 @@ describe("the playlist metadata bounds (S2)", () => {
       giftRegistry: null,
       lodging: null,
       livestream: null,
+      openingAnimation: true,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
     };

@@ -40,6 +40,7 @@ const gateOf = (overrides: Partial<InvitationFeatureGate> = {}): InvitationFeatu
   giftRegistry: null,
   lodging: null,
   livestream: null,
+  openingAnimation: true,
   rsvpDeadline: null,
   rsvpPartyLimit: 4,
   ...overrides,

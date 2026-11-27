@@ -218,7 +218,8 @@ export class InvitationsController {
 
   /**
    * Replaces the feature data of a DRAFT or a PUBLISHED invitation (F1, F2, F4, F6; S4, S7): the time zone, the
-   * WhatsApp phone, the playlist link, the itinerary, the gift registry, the lodging, the livestream, and the WhatsApp
+   * WhatsApp phone, the playlist link, the itinerary, the gift registry, the lodging, the livestream, the opening
+   * animation switch, and the WhatsApp
    * reminder switches. Creator-owned and refused for an archived invitation exactly like a content save; `null` or an empty
    * `whatsappPhone` clears the stored phone, `null` or an empty `playlistUrl` clears the stored link, `null` or an empty
    * list clears the stored itinerary, `null` or an empty registry clears the stored registry, `null` or a payload with
@@ -245,6 +246,7 @@ export class InvitationsController {
           lodging: body.lodging,
           livestream: body.livestream,
           reminders: body.reminders,
+          openingAnimation: body.openingAnimation,
         }),
       );
     } catch (error) {

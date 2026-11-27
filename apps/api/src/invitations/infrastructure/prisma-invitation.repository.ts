@@ -54,12 +54,13 @@ const INVITATION_SELECT = {
       playlistUrl: true,
       playlistTitle: true,
       playlistCoverUrl: true,
-      // The stored plan of the day, gift registry, lodging, livestream, and reminder switches travel with the row too
-      // (F1, F2, F4, F9, F6); the domain decides whether they read as one.
+      // The stored plan of the day, gift registry, lodging, livestream, opening animation switch, and reminder switches
+      // travel with the row too (F1, F2, F4, F9, F10, F6); the domain decides whether they read as one.
       itinerary: true,
       giftRegistry: true,
       lodging: true,
       livestream: true,
+      openingAnimation: true,
       reminders: true,
     },
   },
@@ -122,6 +123,9 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     lodging: storedLodging(row.featureSettings?.lodging),
     // And the livestream (F9; L12.1).
     livestream: storedLivestream(row.featureSettings?.livestream),
+    // The opening animation switch (F10; L14.3): a row with no settings row reads the column's default, which is what the
+    // first write stores, so an invitation that never saved feature data still plays the animation.
+    openingAnimation: row.featureSettings?.openingAnimation ?? true,
     // The reminder switches read as none when a row written around the API does not satisfy their rules (F6; L9.1).
     reminders: storedReminders(row.featureSettings?.reminders),
     rsvpDeadline: row.rsvpDeadline,
@@ -290,6 +294,11 @@ export class PrismaInvitationRepository implements InvitationRepository {
           giftRegistry: jsonPayloadColumn(features.giftRegistry),
           lodging: jsonPayloadColumn(features.lodging),
           livestream: jsonPayloadColumn(features.livestream),
+          // The switch is a column of its own (F10; L14.3): a write that names it stores it, and one that omits it keeps
+          // the column's default, true, which is the state a granted package starts in.
+          ...(features.openingAnimation === undefined
+            ? {}
+            : { openingAnimation: features.openingAnimation }),
           reminders: jsonPayloadColumn(features.reminders),
         },
         update: {
@@ -305,6 +314,10 @@ export class PrismaInvitationRepository implements InvitationRepository {
           giftRegistry: jsonPayloadColumn(features.giftRegistry),
           lodging: jsonPayloadColumn(features.lodging),
           livestream: jsonPayloadColumn(features.livestream),
+          // An omitted switch keeps the stored one, so a write that predates F10 never flips it (F10; L14.3).
+          ...(features.openingAnimation === undefined
+            ? {}
+            : { openingAnimation: features.openingAnimation }),
           reminders: jsonPayloadColumn(features.reminders),
         },
       });

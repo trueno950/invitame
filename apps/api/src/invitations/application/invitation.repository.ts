@@ -87,6 +87,12 @@ export interface InvitationFeatureSettingsWrite {
   lodging: InvitationLodging | null;
   /** The validated livestream payload, or null when the invitation has none (F9; L12.1). */
   livestream: InvitationLivestream | null;
+  /**
+   * The owner's opening animation switch (F10; L14.3). A write that names it stores it; an absent value keeps the stored
+   * switch, and a first write that never names it stores the column's own default (true), which is what an invitation
+   * that never saved feature data reads.
+   */
+  openingAnimation?: boolean;
   /** The validated reminder switches, or null while the owner switched nothing on (F6; L9.1). */
   reminders: InvitationReminders | null;
 }
@@ -153,6 +159,11 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
    */
   livestream: InvitationLivestream | null;
   /**
+   * The owner's opening animation switch (F10; L14.3), true while the invitation plays the animation. An invitation with
+   * no feature-settings row reads the column's default, true, because that is what the first write would store.
+   */
+  openingAnimation: boolean;
+  /**
    * The validated reminder switches, or null while the owner switched nothing on (F6; L9.1). It decides whether the
    * command sends a reminder and never what a guest sees, so it takes no part in the public read. A row written around
    * the API reads null instead of a value no rule validated.
@@ -211,8 +222,8 @@ export interface InvitationRepository {
 
   /**
    * Stores the feature data of a DRAFT or a PUBLISHED invitation — the zone on the invitation and the phone, the
-   * playlist link, the itinerary, the gift registry, the lodging, the livestream, and the reminder switches in its
-   * one-to-one settings row — in one transaction whose
+   * playlist link, the itinerary, the gift registry, the lodging, the livestream, the opening animation switch, and the
+   * reminder switches in its one-to-one settings row — in one transaction whose
    * `WHERE` names the owner and both
    * editable statuses, so a published invitation changes live (S7), an archived one is refused with
    * `InvitationNotEditableError` even by a concurrent archive (A2), and another owner's id answers null,

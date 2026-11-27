@@ -95,7 +95,8 @@ export function isInvitationTimeZone(value: unknown): value is InvitationTimeZon
  * capability of the owner's list; `LODGING` is the lodging and transport block (F4; S2.4, L7.2). The order is the
  * order the owner's feature list follows; `GUESTBOOK` is the guest's wall of messages (F7; S2.7, L10.2),
  * `GUEST_ALBUM` is the album of photos the guests upload for the owner to approve (F8; S2.8, L11.2), and `LIVESTREAM` is
- * the link of the transmission with its player (F9; S2.9, L12.2).
+ * the link of the transmission with its player (F9; S2.9, L12.2), and `OPENING_ANIMATION` is the envelope the guest opens
+ * over a published invitation (F10; S2.10, L14.4).
  */
 export const IMPLEMENTED_INVITATION_FEATURES = [
   "ITINERARY",
@@ -112,6 +113,7 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   "GUEST_LIST",
   "QR_PASS",
   "GALLERY",
+  "OPENING_ANIMATION",
 ] as const;
 
 export type ImplementedInvitationFeature = (typeof IMPLEMENTED_INVITATION_FEATURES)[number];
@@ -170,6 +172,20 @@ export const GUEST_ALBUM_FEATURE_KEY = "GUEST_ALBUM";
  * a package's key with nothing stored keeps the editor closed on a feature nobody could publish.
  */
 export const LIVESTREAM_FEATURE_KEY = "LIVESTREAM";
+
+/**
+ * The catalog key that grants the opening animation (F10; S2.10, L14.4), granted to every seeded package so the catalogue
+ * can withdraw it later without a code change. Unlike the itinerary, the lodging, and the livestream the key is not
+ * about stored data: the switch `openingAnimation` on the same settings row decides whether the guest page draws the
+ * envelope, so the key stays granted while the owner switches it off.
+ */
+export const OPENING_ANIMATION_FEATURE_KEY = "OPENING_ANIMATION";
+
+/**
+ * The message a value that is not a boolean is refused with (F10; L14.3). The switch has no other shape: `null` and an
+ * absent value are no switch at all, exactly like a string that spells a state, so a client always sends a boolean.
+ */
+export const OPENING_ANIMATION_ISSUE = "openingAnimation must be true or false";
 
 /**
  * The public shape of one itinerary moment (F1; L3.1, L3.3): the wall clock, the title, and the place and address
@@ -582,6 +598,11 @@ export interface InvitationFeatureSettingsValue {
   /** The validated livestream, or null when the invitation has none (F9; L12.1). */
   readonly livestream: InvitationLivestream | null;
   /**
+   * The owner's opening animation switch (F10; L14.3), on by default. It is stored whether or not the pinned package
+   * grants the key; only the public read decides whether the page draws the overlay.
+   */
+  readonly openingAnimation: boolean;
+  /**
    * The validated WhatsApp reminder switches, or null while the owner switched nothing on (F6; L9.1). They decide
    * whether the command sends a reminder and never what a guest sees, so they take no part in the feature gate.
    */
@@ -597,9 +618,11 @@ export type InvitationFeatureSettingsValidation =
  * Validates a feature-settings request (S4, S7, F1, F2, F4, F6): the zone must be an allow-list member, the phone must
  * normalize, the playlist link must be an `https` link on an allow-listed host, the itinerary must be the versioned
  * payload of L3.1 or absent, the gift registry the versioned payload of L4.1 or absent, the lodging the versioned
- * payload of L7.1 or absent, the reminders the versioned pair of switches of L9.1 or absent, and the livestream the
- * versioned payload of L12.1 or absent. Every issue is reported, the zone, then the phone, then the playlist, then the
- * itinerary, then the gift registry, then the lodging, then the reminders, then the livestream, and nothing is
+ * payload of L7.1 or absent, the reminders the versioned pair of switches of L9.1 or absent, the livestream the
+ * versioned payload of L12.1 or absent, and the opening animation switch a boolean (F10; L14.3). Every issue is
+ * reported, the zone, then the phone, then the playlist, then the
+ * itinerary, then the gift registry, then the lodging, then the reminders, then the livestream, then the opening
+ * animation, and nothing is
  * transformed except the phone, the link, and the texts of the moments, the registry, and the livestream. A refused
  * request stores nothing.
  */
@@ -612,6 +635,7 @@ export function validateInvitationFeatureSettings(input: {
   readonly lodging: unknown;
   readonly reminders: unknown;
   readonly livestream: unknown;
+  readonly openingAnimation: unknown;
 }): InvitationFeatureSettingsValidation {
   const issues: string[] = [];
 
@@ -654,6 +678,12 @@ export function validateInvitationFeatureSettings(input: {
     issues.push(...livestream.issues);
   }
 
+  // The opening animation switch is the last value the write validates (F10; L14.3): it is a boolean and nothing else,
+  // so a client that sends a word, a number, or nothing at all reads its own issue instead of a stored guess.
+  if (typeof input.openingAnimation !== "boolean") {
+    issues.push(OPENING_ANIMATION_ISSUE);
+  }
+
   if (
     issues.length > 0 ||
     !phone.ok ||
@@ -663,6 +693,7 @@ export function validateInvitationFeatureSettings(input: {
     !lodging.ok ||
     !reminders.ok ||
     !livestream.ok ||
+    typeof input.openingAnimation !== "boolean" ||
     !isInvitationTimeZone(input.timeZone)
   ) {
     return { ok: false, issues };
@@ -679,6 +710,7 @@ export function validateInvitationFeatureSettings(input: {
       lodging: lodging.value,
       reminders: reminders.value,
       livestream: livestream.value,
+      openingAnimation: input.openingAnimation,
     },
   };
 }
@@ -701,6 +733,12 @@ export interface InvitationFeatureGate {
   readonly lodging: InvitationLodging | null;
   /** The stored livestream, or null when there is none (F9; L12.1). */
   readonly livestream: InvitationLivestream | null;
+  /**
+   * The owner's opening animation switch (F10; L14.3, L14.4). The public read plays the overlay only while the pinned
+   * package grants `OPENING_ANIMATION` and this is true, so a package that withdraws the key stops it even for an
+   * invitation whose switch is on.
+   */
+  readonly openingAnimation: boolean;
   /** The owner's RSVP deadline, or null for one that never closes (M6 S4). */
   readonly rsvpDeadline: Date | null;
   /** The owner's party limit, 1 to 10 (M6 S4). */
@@ -795,6 +833,13 @@ export interface PublicInvitationFeatures {
    */
   readonly livestream: PublicLivestream | null;
   /**
+   * Whether the guest page draws the opening animation (F10; L14.4): true only while the pinned package grants
+   * `OPENING_ANIMATION` and the owner's switch is on. It is the decision itself, never the stored switch, so the page
+   * draws no overlay for a package that withdrew the key. A body written before F10 answers no field at all, and the
+   * web reads that as off, so a page deployed before the API never hides the invitation behind an overlay (L20).
+   */
+  readonly openingAnimation: boolean;
+  /**
    * The guestbook a guest's wall draws (F7; L10.4): the visible entries newest first, at most 50, each one the
    * signature and the message a guest signed. It is the list itself rather than a switch — an empty array is a wall
    * waiting for its first message — and it is null only when the pinned package does not grant `GUESTBOOK`, so a
@@ -887,6 +932,9 @@ export function publicInvitationFeatures(
       keys.has(LIVESTREAM_FEATURE_KEY) && livestreamHasContent(livestream)
         ? publicLivestream(livestream)
         : null,
+    // The animation is the one feature whose data is a switch rather than a payload: the grant decides whether the
+    // owner's choice counts at all, and the switch decides whether the page draws the envelope (F10; L14.4).
+    openingAnimation: keys.has(OPENING_ANIMATION_FEATURE_KEY) && gate.openingAnimation,
     // The wall is the feature, not its data: a granted package answers its visible entries even while there are none.
     guestbook: keys.has(GUESTBOOK_FEATURE_KEY) ? [...guestbookEntries] : null,
     // The album follows the same rule (F8; L11.4): the grant carries the published photos the read collected, and a

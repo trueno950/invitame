@@ -141,6 +141,12 @@ export interface UpdateFeaturesInput {
    */
   livestream?: unknown;
   /**
+   * The opening animation switch as the request carried it, or `undefined` when the body omitted it (F10; L14.3): an
+   * omitted value keeps the stored switch, which is what lets a client built before F10 save the other fields without
+   * switching an animation off that it never knew about.
+   */
+  openingAnimation?: unknown;
+  /**
    * The reminder switches as the request carried them, or `undefined` when the body omitted them (F6; L9.1): an omitted
    * value keeps the stored switches, which is what lets a client built before F6 save the other fields without
    * switching a reminder off that it never knew about.
@@ -206,6 +212,8 @@ export interface OwnedInvitation extends InvitationSummary {
     lodging: InvitationLodging | null;
     /** The stored livestream, or null when the invitation has none (F9; L12.1). */
     livestream: InvitationLivestream | null;
+    /** The stored opening animation switch (F10; L14.3), true by default. */
+    openingAnimation: boolean;
     /** The stored reminder switches, or null while the owner switched nothing on (F6; L9.1). */
     reminders: InvitationReminders | null;
   };
@@ -273,6 +281,7 @@ export function toOwnedInvitation(
       giftRegistry: record.giftRegistry,
       lodging: record.lodging,
       livestream: record.livestream,
+      openingAnimation: record.openingAnimation,
       reminders: record.reminders,
     },
     remindersConfigured,
@@ -286,6 +295,7 @@ export function toOwnedInvitation(
       giftRegistry: record.giftRegistry,
       lodging: record.lodging,
       livestream: record.livestream,
+      openingAnimation: record.openingAnimation,
       rsvpDeadline: record.rsvpDeadline,
       rsvpPartyLimit: record.rsvpPartyLimit,
     }),
@@ -591,6 +601,10 @@ export class UpdateInvitationFeaturesUseCase {
       // The livestream follows the same rule (F9; L12.1): an omitted value keeps the stored link, and only `null` or a
       // payload without a link clears it.
       livestream: input.livestream === undefined ? stored.livestream : input.livestream,
+      // The opening animation switch follows the same rule (F10; L14.3): an omitted value keeps the stored one, and only
+      // a boolean clears or turns on what the owner chose.
+      openingAnimation:
+        input.openingAnimation === undefined ? stored.openingAnimation : input.openingAnimation,
       // And the reminder switches too (F6; L9.1): an omitted value keeps them, and only `null` or a pair with nothing
       // switched on clears them.
       reminders: input.reminders === undefined ? stored.reminders : input.reminders,
@@ -888,6 +902,7 @@ export class GetPublicInvitationUseCase {
         giftRegistry: published.giftRegistry,
         lodging: published.lodging,
         livestream: published.livestream,
+        openingAnimation: published.openingAnimation,
         rsvpDeadline: published.rsvpDeadline,
         rsvpPartyLimit: published.rsvpPartyLimit,
       },

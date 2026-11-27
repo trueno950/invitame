@@ -410,6 +410,9 @@ model Invitation {
 // table, and the `WHATSAPP_REMINDERS` catalog feature row with its link to the deluxe package.
 // Migration 20261211120000_add_invitation_livestream adds the nullable `livestream` JSONB column, and the same
 // migration inserts the `LIVESTREAM` catalog feature row and its links to the premium and deluxe packages.
+// Migration 20261212120000_add_invitation_opening_animation adds the `openingAnimation` boolean column (NOT NULL,
+// default true), and the same migration inserts the `OPENING_ANIMATION` catalog feature row and its links to every
+// seeded package.
 model InvitationFeatureSettings {
   invitationId     String   @id @db.Uuid
   // E.164: `+` and eight to fifteen digits. Null while the owner has not set one (S4).
@@ -457,6 +460,12 @@ model InvitationFeatureSettings {
   // on the shape and on which link may be embedded; the column stores it as JSONB and nothing else, and no CHECK can
   // state it.
   livestream       Json?    @db.JsonB
+  // The opening animation switch (F10; S2.10, L14.3): whether the guest page of this published invitation draws the
+  // envelope with the seal before showing it. It defaults to true, so every feature-settings row written before the
+  // switch existed, and every invitation that never saved one, plays it; an owner who switched it off stores false and
+  // the page shows the invitation directly. The pinned package's `OPENING_ANIMATION` key is the other half of the gate:
+  // the public read answers the animation only while the catalog grants the key and this column is true.
+  openingAnimation Boolean  @default(true)
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 
