@@ -341,6 +341,18 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   database was never actually dropped by `prisma db execute` (it runs the script in a transaction), so the runs called
   «fresh» for F2-F5 used an accumulated database; CI's fresh database passed each of them, and F6 was rerun on a truly
   fresh database (dropped through the client): db-specs 495/495.
+- L25 — F7 evidence: commits `83bc18a` (table, migration `20261209120000_add_guestbook`, key `GUESTBOOK` for premium
+  and deluxe, public wall read), `7435f3a` (public write and owner moderation routes), `ee47695` (review hardening:
+  control characters refused, expiry judged by the database clock, owner read bounded to the newest 500, malformed entry
+  id answers the entry's 404, honeypot pinned) and `9b290c1` (web). Native review: `review-022b93dde409d033` reviewed
+  `83bc18a` alone and its only blocker was that the routes were not wired, an artifact of the commit split (they are in
+  `7435f3a`); it stays open because closing it needs an operator disposition. `review-9dc6877fd9b6cc93` reviewed
+  `83bc18a..ee47695` (routes plus hardening) and approved. Follow-ups (advisories): a per-invitation total cap on
+  entries; a truncation notice or pagination past 500 in the owner read; the honeypot DTO refuses a non-string value
+  with 400; an owner-moderation test for a package that no longer grants the key; the verifier's catalog replay test.
+  Independent verification: every S2.7 and L10 item met, 66 probes with no failure, differential with only the added
+  `features.guestbook`, no guest text in logs; db-specs 509/509 on a truly recreated database; browser check of the
+  wall without client script and of owner hide and show.
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
