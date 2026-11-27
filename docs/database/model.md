@@ -414,9 +414,10 @@ live in `apps/api/src/invitations/domain/invitation-guestbook.ts`.
 ## Guests' photo album
 
 Current status: the `GuestPhoto` table exists and the API uploads, reads, and moderates it (F8; S2.8, L11.1, L11.3,
-L11.4, L11.6). The rules — the three states, the per-invitation cap, the uploader name's bounds, and the retention of a
-photo the owner never published — live in `apps/api/src/media/domain/guest-photo.ts`; the bytes go through the existing
-media pipeline (`apps/api/src/media/domain/media-asset.ts`, `infrastructure/sharp-image-processor.ts`).
+L11.4, L11.6, L26). The rules — the three states, the two caps of an invitation's album and its pending queue, the
+uploader name's bounds, and the retention of a photo the owner never published — live in
+`apps/api/src/media/domain/guest-photo.ts`; the bytes go through the existing media pipeline
+(`apps/api/src/media/domain/media-asset.ts`, `infrastructure/sharp-image-processor.ts`).
 
 - `GuestPhoto` stores one photo a guest uploaded: `invitationId`, `storageKey` (`VARCHAR(200)`, unique),
   `status` (`GuestPhotoStatus`: `PENDING` | `PUBLISHED` | `HIDDEN`, default `PENDING`), `uploaderName` (`VARCHAR(60)`,
@@ -433,20 +434,25 @@ media pipeline (`apps/api/src/media/domain/media-asset.ts`, `infrastructure/shar
   removing a guest.
 - `status` is the moderation state: every upload is `PENDING` and invisible to guests; the owner publishing it makes it
   `PUBLISHED`, and hiding a published photo makes it `HIDDEN`, which may be published again. A photo never returns to
-  `PENDING`, and the owner's write is the only one that changes the state; nothing is deleted in the request.
+  `PENDING`, and the owner's write is the only one that changes the state; nothing is deleted in the request. Only
+  `PENDING` and `PUBLISHED` photos count toward the album's cap, so hiding one frees its place without deleting it.
 - The public read answers the invitation's `PUBLISHED` photos, newest first (`createdAt DESC, id DESC`) and at most 60
   (`GUEST_PHOTO_PUBLIC_MAX`), with the total published count, through `GuestPhoto_invitationId_status_createdAt_idx`. The
   owner's moderation read answers the newest 500 photos of the invitation, every state, with one count per state. The
   public projection carries only the photo's URL and its optional uploader name: no row id, no state, no key.
 - The insert is one transaction: it locks the invitation row (`SELECT … FOR UPDATE`), re-states `status = 'PUBLISHED'`
-  and `expiresAt IS NULL OR expiresAt >= now()` against the database's own clock, and refuses the invitation that
-  already stores `GUEST_PHOTO_MAX_STORED` (300) photos, pending and hidden included. Two concurrent uploads therefore
-  cannot both take the last slot, and an upload that races an unpublish or an expiry is refused by the database.
+  and `expiresAt IS NULL OR expiresAt >= now()` against the database's own clock, and counts both caps in that same
+  statement — the photos that count toward the album, `PENDING` and `PUBLISHED`, against `GUEST_PHOTO_MAX_STORED` (300)
+  so a hidden photo frees its place, and the `PENDING` ones against `GUEST_PHOTO_MAX_PENDING` (100) — answering `full`
+  and `pending-full` respectively. Two concurrent uploads therefore cannot both take the last slot, and an upload that
+  races an unpublish or an expiry is refused by the database.
 - The per-address limit uses the existing `RateLimit` table under the key
   `guest-album|<invitationId>|<sha256(client address)>` — 30 photos per hour per address per invitation, the same window
   semantics as the open RSVP and the guestbook, with a prefix of its own. The client address itself is never stored.
 - The media retention cleanup (`pnpm media:cleanup`) retires the photos the owner never published or took down again
-  once they have been in that state for 30 days (`GUEST_PHOTO_RETENTION_DAYS`): it deletes the object and then the row,
+  once they have been in that state for 30 days (`GUEST_PHOTO_RETENTION_DAYS`): its delete statement re-checks that the
+  photo is still `PENDING` or `HIDDEN` and past its cutoff, so a photo the owner publishes again between the listing and
+  the delete keeps its row and its object; the object of each row it removed is deleted next,
   and the objects of the rows that stay are never treated as orphans. A published photo is never retired.
 - The capability is the new `GUEST_ALBUM` key, granted to Deluxe by the migration (`ON CONFLICT DO NOTHING`) and
   declared in the seed (`apps/api/prisma/catalog-seed.ts`), so the panel may grant or withdraw it without a deployment.

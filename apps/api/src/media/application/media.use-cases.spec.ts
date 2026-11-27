@@ -217,6 +217,19 @@ class FakeStorage implements MediaStorage {
   }
 }
 
+/**
+ * The album of the guests' photos, which this suite does not exercise: serving it would answer no photo and the cleanup
+ * would retire none. The album's own rules are proved in `guest-album.prisma.db-spec.ts` and in the album suites.
+ */
+function noGuestAlbum() {
+  return {
+    findForServing: async () => null,
+    listStorageKeys: async () => [],
+    listRetired: async () => [],
+    retire: async () => [],
+  };
+}
+
 class FakeProcessor implements ImageProcessor {
   metadata_: ImageMetadata = { format: "jpeg", width: 4000, height: 3000, orientation: null };
   failure: Error | null = null;
@@ -729,7 +742,7 @@ describe("serving media", () => {
     const { repository, storage, calls } = setup();
     repository.serving = serving({ invitation: { ownerId: OWNER, status: "PUBLISHED" } } as never);
     storage.objects.set(key, Buffer.from("image"));
-    const serve = new ServeMediaUseCase(repository, storage);
+    const serve = new ServeMediaUseCase(repository, storage, noGuestAlbum());
     let requested = false;
 
     const served = await serve.execute(asset.id, {
@@ -749,7 +762,7 @@ describe("serving media", () => {
     const { repository, storage } = setup();
     repository.serving = serving();
     storage.objects.set(key, Buffer.from("image"));
-    const serve = new ServeMediaUseCase(repository, storage);
+    const serve = new ServeMediaUseCase(repository, storage, noGuestAlbum());
 
     const own = await serve.execute(asset.id, { ownerId: async () => OWNER });
     assert.equal(own?.cache, "private");
@@ -764,7 +777,7 @@ describe("serving media", () => {
 
   it("answers null for a missing, deleted, or unpublished foreign asset, and for a missing object", async () => {
     const { repository, storage } = setup();
-    const serve = new ServeMediaUseCase(repository, storage);
+    const serve = new ServeMediaUseCase(repository, storage, noGuestAlbum());
 
     repository.serving = null;
     assert.equal(await serve.execute(asset.id, { ownerId: async () => OWNER }), null);
@@ -820,7 +833,10 @@ describe("cleanup command", () => {
   const JUST_WRITTEN = new Date(NOW.getTime() - 1000);
 
   function cleanupOf(storage: MediaStorage, repository: MediaRepository) {
-    return new CleanupMediaUseCase(repository, storage, () => {}, { now: () => NOW });
+    return new CleanupMediaUseCase(repository, storage, () => {}, {
+      now: () => NOW,
+      guestAlbum: noGuestAlbum(),
+    });
   }
 
   it("deletes the objects of deleted rows and the orphan objects, and reports counts only", async () => {
@@ -836,6 +852,7 @@ describe("cleanup command", () => {
     const events: Array<Record<string, unknown>> = [];
     const cleanup = new CleanupMediaUseCase(repository, storage, (event) => events.push(event), {
       now: () => NOW,
+      guestAlbum: noGuestAlbum(),
     });
 
     const result = await cleanup.execute({ dryRun: false });
@@ -865,6 +882,33 @@ describe("cleanup command", () => {
         retiredGuestPhotos: 0,
       },
     ]);
+  });
+
+  it("never treats a live guest photo object as an orphan (F8; L11.6, L26)", async () => {
+    const calls: string[] = [];
+    const storage = new FakeStorage(calls);
+    const repository = new CleanupRepository(calls);
+    const liveKey = storageKeyFor(INVITATION, "88888888-8888-4888-8888-888888888888");
+    storage.seed(liveKey, ANCIENT);
+    const guestAlbum = {
+      listStorageKeys: async () => [liveKey],
+      listRetired: async () => [],
+      retire: async () => [],
+    };
+    const cleanup = new CleanupMediaUseCase(repository, storage, () => {}, {
+      now: () => NOW,
+      guestAlbum,
+    });
+
+    const result = await cleanup.execute({ dryRun: false });
+
+    // The object names a live guest photo, so the sweep leaves it alone even though it is old enough to be abandoned.
+    assert.equal(result.orphanObjects, 0);
+    assert.equal(
+      calls.some((call) => call === `delete:${liveKey}`),
+      false,
+    );
+    assert.equal(storage.objects.has(liveKey), true);
   });
 
   it("deletes nothing in a dry run and is idempotent", async () => {

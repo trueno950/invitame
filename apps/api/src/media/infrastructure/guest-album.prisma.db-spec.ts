@@ -22,10 +22,13 @@ import type { MediaRepository } from "../application/media.repository";
 import { PrismaGuestAlbumRateLimiter } from "./prisma-guest-album-rate-limiter";
 import { PrismaGuestAlbumRepository } from "./prisma-guest-album.repository";
 import { GUEST_ALBUM_RATE_LIMIT } from "../application/guest-album-rate-limiter";
+import { GuestAlbumClosedError } from "../application/guest-album.errors";
 import {
+  GUEST_PHOTO_MAX_PENDING,
   GUEST_PHOTO_MAX_STORED,
   GUEST_PHOTO_PUBLIC_MAX,
   GUEST_PHOTO_RETENTION_MS,
+  guestPhotoRetentionCutoff,
 } from "../domain/guest-photo";
 
 // The album on real PostgreSQL (F8; S2.8, L11.1, L11.3, L11.4, L11.6): the additive enum and table with their CHECK
@@ -42,8 +45,11 @@ const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 
 /** An in-memory storage adapter, so the cleanup and the upload write nothing outside the test. */
 class MemoryStorage implements MediaStorage {
   readonly objects = new Map<string, { bytes: Uint8Array; lastModified: Date }>();
+  /** How many objects the album wrote, so a refused upload can prove it stored nothing. */
+  puts = 0;
 
   async put(key: string, bytes: Uint8Array): Promise<void> {
+    this.puts += 1;
     this.objects.set(key, { bytes, lastModified: new Date() });
   }
 
@@ -235,6 +241,27 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
     }
 
     return { ownerId, id: created.id, slug: created.slug };
+  }
+
+  /** `count` photos of one state, written directly as the album's own rows; the caps count them. */
+  async function seedPhotos(
+    invitationId: string,
+    status: "PENDING" | "PUBLISHED",
+    count: number,
+  ): Promise<string[]> {
+    const ids = Array.from({ length: count }, () => randomUUID());
+    await prisma.guestPhoto.createMany({
+      data: ids.map((photoId, index) => ({
+        id: photoId,
+        invitationId,
+        storageKey: `invitations/${invitationId}/${photoId}.webp`,
+        status,
+        createdAt: new Date(Date.UTC(2026, 11, 1, 10, 0, index % 60)),
+        ...(status === "PUBLISHED" ? { reviewedAt: new Date("2026-12-02T10:00:00.000Z") } : {}),
+      })),
+    });
+
+    return ids;
   }
 
   /** One stored photo, written directly as the upload's insert writes it. */
@@ -474,32 +501,90 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
     );
   });
 
-  it("refuses the photo over the per-invitation cap, pending ones included (L11.3)", async () => {
-    const { id } = await newPublished();
-    await prisma.guestPhoto.createMany({
-      data: Array.from({ length: GUEST_PHOTO_MAX_STORED }, () => {
-        const photoId = randomUUID();
+  it("counts pending and published photos toward the 300 cap, so a hidden one frees its place (L26)", async () => {
+    const { id, ownerId } = await newPublished();
+    const [first] = await seedPhotos(id, "PUBLISHED", GUEST_PHOTO_MAX_STORED);
 
-        return {
-          id: photoId,
-          invitationId: id,
-          storageKey: `invitations/${id}/${photoId}.webp`,
-          status: "PENDING" as const,
-        };
-      }),
-    });
-
-    const photoId = randomUUID();
     assert.equal(GUEST_PHOTO_MAX_STORED, 300);
+    const refusedId = randomUUID();
     assert.equal(
       await album.insert(
         id,
-        { id: photoId, storageKey: `invitations/${id}/${photoId}.webp`, uploaderName: null },
+        { id: refusedId, storageKey: `invitations/${id}/${refusedId}.webp`, uploaderName: null },
         new Date(),
       ),
       "full",
     );
     assert.equal(await prisma.guestPhoto.count({ where: { invitationId: id } }), 300);
+
+    // Hiding one photo takes it out of the count, so the next upload takes the freed place.
+    assert.ok(first !== undefined);
+    assert.notEqual(await album.review(ownerId, id, first, "HIDDEN", new Date()), null);
+    const acceptedId = randomUUID();
+    assert.equal(
+      await album.insert(
+        id,
+        { id: acceptedId, storageKey: `invitations/${id}/${acceptedId}.webp`, uploaderName: null },
+        new Date(),
+      ),
+      "stored",
+    );
+    // Nothing was deleted: the hidden row still names its object, it just no longer counts.
+    assert.equal(await prisma.guestPhoto.count({ where: { invitationId: id } }), 301);
+  });
+
+  it("refuses the pending queue over its own cap, with a code apart from the full album (L26)", async () => {
+    const { id, ownerId } = await newPublished();
+    const pending = await seedPhotos(id, "PENDING", GUEST_PHOTO_MAX_PENDING);
+
+    const refusedId = randomUUID();
+    assert.equal(
+      await album.insert(
+        id,
+        { id: refusedId, storageKey: `invitations/${id}/${refusedId}.webp`, uploaderName: null },
+        new Date(),
+      ),
+      "pending-full",
+    );
+    // The album itself is far from its total cap, so the two refusals cannot be confused.
+    assert.equal(await prisma.guestPhoto.count({ where: { invitationId: id } }), 100);
+
+    // Publishing one photo empties a pending place, and the next upload is stored PENDING again.
+    const first = pending[0];
+    assert.ok(first !== undefined);
+    assert.notEqual(await album.review(ownerId, id, first, "PUBLISHED", new Date()), null);
+    const acceptedId = randomUUID();
+    assert.equal(
+      await album.insert(
+        id,
+        { id: acceptedId, storageKey: `invitations/${id}/${acceptedId}.webp`, uploaderName: null },
+        new Date(),
+      ),
+      "stored",
+    );
+    assert.equal(
+      await prisma.guestPhoto.count({ where: { invitationId: id, status: "PENDING" } }),
+      GUEST_PHOTO_MAX_PENDING,
+    );
+  });
+
+  it("returns an expired published invitation from the slug read, which the upload's expiry refusal relies on (L26)", async () => {
+    const expired = await newPublished(undefined, {
+      expiresAt: new Date(Date.now() - 86_400_000),
+    });
+    const draft = await newPublished(undefined, { publish: false });
+    const archived = await newPublished();
+    await invitations.archive(archived.ownerId, archived.id);
+
+    // The port's contract: a draft, an archived, and an unknown slug answer null, and an expired one is still the
+    // live published row of its slug, so the upload's own check can answer the closed album instead of a 404.
+    const found = await album.findPublishedBySlug(expired.slug);
+    assert.equal(found?.id, expired.id);
+    assert.ok(found?.expiresAt instanceof Date);
+    assert.ok(found.expiresAt.getTime() < Date.now());
+    assert.equal(await album.findPublishedBySlug(draft.slug), null);
+    assert.equal(await album.findPublishedBySlug(archived.slug), null);
+    assert.equal(await album.findPublishedBySlug("no-existe"), null);
   });
 
   it("serves a photo only while it and its invitation are published, and shows it to its owner in any state (L11.3)", async () => {
@@ -545,10 +630,10 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
     const getPublic = new GetPublicInvitationUseCase(
       invitations,
       catalog,
+      publicRead,
       { readGallery: async () => [] },
       undefined,
       { readVisibleEntries: async () => [] },
-      publicRead,
     );
 
     const read = await getPublic.execute(granted.slug);
@@ -620,6 +705,98 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
     assert.equal(again.orphanObjects, 0);
   });
 
+  it("deletes only the rows still retired at the cutoff, in the delete statement itself (L26)", async () => {
+    const { id, ownerId } = await newPublished();
+    const now = new Date("2026-12-10T12:00:00.000Z");
+    const longAgo = new Date(now.getTime() - GUEST_PHOTO_RETENTION_MS - 60_000);
+    const fresh = new Date(now.getTime() - GUEST_PHOTO_RETENTION_MS + 60_000);
+    const retiredPending = await seedPhoto(id, { status: "PENDING", createdAt: longAgo });
+    const retiredHidden = await seedPhoto(id, {
+      status: "HIDDEN",
+      createdAt: longAgo,
+      reviewedAt: longAgo,
+    });
+    const freshPending = await seedPhoto(id, { status: "PENDING", createdAt: fresh });
+    const publishedOld = await seedPhoto(id, {
+      status: "PUBLISHED",
+      createdAt: longAgo,
+      reviewedAt: longAgo,
+    });
+    const cutoff = guestPhotoRetentionCutoff(now);
+
+    const removed = await album.retire(
+      [retiredPending.id, retiredHidden.id, freshPending.id, publishedOld.id],
+      cutoff,
+    );
+
+    // Only the two that were still PENDING or HIDDEN and past the cutoff: a fresh pending photo and a published one
+    // keep their row, and the caller never deletes their object.
+    assert.deepEqual(
+      removed.map((photo) => photo.id).sort(),
+      [retiredPending.id, retiredHidden.id].sort(),
+    );
+    assert.deepEqual(
+      removed.map((photo) => photo.storageKey).sort(),
+      [retiredPending.storageKey, retiredHidden.storageKey].sort(),
+    );
+    for (const kept of [freshPending, publishedOld]) {
+      assert.notEqual(await prisma.guestPhoto.findUnique({ where: { id: kept.id } }), null);
+    }
+
+    // A photo published again after it was listed as retired is kept, row and object, by the same statement.
+    const reShown = await seedPhoto(id, { status: "PENDING", createdAt: longAgo });
+    assert.deepEqual(
+      (await album.listRetired(cutoff)).map((photo) => photo.id).includes(reShown.id),
+      true,
+    );
+    await album.review(ownerId, id, reShown.id, "PUBLISHED", now);
+    assert.deepEqual(await album.retire([reShown.id], cutoff), []);
+    const stored = await prisma.guestPhoto.findUniqueOrThrow({ where: { id: reShown.id } });
+    assert.equal(stored.status, "PUBLISHED");
+  });
+
+  it("keeps a photo the owner published again between the retention listing and the delete (L26)", async () => {
+    const storage = new MemoryStorage();
+    const { id, ownerId } = await newPublished();
+    const now = new Date("2026-12-10T12:00:00.000Z");
+    const longAgo = new Date(now.getTime() - GUEST_PHOTO_RETENTION_MS - 60_000);
+    const photo = await seedPhoto(id, { status: "PENDING", createdAt: longAgo });
+    storage.seed(photo.storageKey, longAgo);
+
+    // The race: the sweep lists the photo as retired, and the owner publishes it before the delete runs. The delete
+    // re-checks the state in its own statement, so the photo keeps its row and its object.
+    const racing = {
+      listStorageKeys: () => album.listStorageKeys(),
+      listRetired: async (before: Date) => {
+        const listed = await album.listRetired(before);
+        assert.deepEqual(
+          listed.map((row) => row.id),
+          [photo.id],
+        );
+        await review.execute({
+          ownerId,
+          invitationId: id,
+          photoId: photo.id,
+          status: "PUBLISHED",
+        });
+        return listed;
+      },
+      retire: (ids: readonly string[], before: Date) => album.retire(ids, before),
+    };
+    const cleanup = new CleanupMediaUseCase(NO_MEDIA_ROWS, storage, () => {}, {
+      now: () => now,
+      guestAlbum: racing,
+    });
+
+    const result = await cleanup.execute({ dryRun: false });
+
+    assert.equal(result.retiredGuestPhotos, 0);
+    assert.equal(storage.objects.has(photo.storageKey), true);
+    assert.equal(result.orphanObjects, 0);
+    const kept = await prisma.guestPhoto.findUniqueOrThrow({ where: { id: photo.id } });
+    assert.equal(kept.status, "PUBLISHED");
+  });
+
   it("counts one client address's uploads per hour on the shared RateLimit table (L11.3)", async () => {
     const limiter = new PrismaGuestAlbumRateLimiter(prisma);
     const { id } = await newPublished();
@@ -645,8 +822,8 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
     assert.equal(rows[0]?.key.toLowerCase().includes(address), false);
   });
 
-  it("uploads a guest's photo through the use case, PENDING and invisible until the owner publishes it", async () => {
-    const storage = new MemoryStorage();
+  /** The guest upload wired to the album, an in-memory storage, and the settings row the seed writes. */
+  function guestUpload(storage: MemoryStorage): UploadGuestPhotoUseCase {
     const settings = {
       current: async () => ({
         maxUploadMegabytes: 10,
@@ -664,7 +841,8 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
       }),
       toWebp: async () => ({ bytes: Buffer.from("webp"), width: 1600, height: 1200 }),
     };
-    const upload = new UploadGuestPhotoUseCase(
+
+    return new UploadGuestPhotoUseCase(
       album,
       catalog,
       storage,
@@ -672,6 +850,11 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
       { consume: async () => true },
       { assetUrl, settings: settings as never, now: () => new Date("2026-12-10T10:00:00.000Z") },
     );
+  }
+
+  it("uploads a guest's photo through the use case, PENDING and invisible until the owner publishes it", async () => {
+    const storage = new MemoryStorage();
+    const upload = guestUpload(storage);
     const { id, slug, ownerId } = await newPublished();
 
     assert.equal(
@@ -704,6 +887,29 @@ describe("the guests' album on real PostgreSQL (F8; S2.8)", () => {
       false,
     );
     assert.equal(storage.objects.size, 1);
+  });
+
+  it("refuses the upload of an expired invitation as a closed album, leaving nothing stored (L26)", async () => {
+    const storage = new MemoryStorage();
+    const upload = guestUpload(storage);
+    const expired = await newPublished(undefined, {
+      expiresAt: new Date(Date.now() - 86_400_000),
+    });
+
+    // The slug read answers the expired published row (the port's contract), so the refusal is the guest-facing closed
+    // album — a 409 — and never confirms or hides that the invitation exists.
+    await assert.rejects(
+      upload.execute({
+        slug: expired.slug,
+        uploaderName: null,
+        bytes: JPEG,
+        clientAddress: "198.18.9.10",
+      }),
+      GuestAlbumClosedError,
+    );
+    assert.equal(await prisma.guestPhoto.count({ where: { invitationId: expired.id } }), 0);
+    assert.equal(storage.objects.size, 0);
+    assert.equal(storage.puts, 0);
   });
 
   it("names the album feature key in the database the seed and the migration maintain (L16)", async () => {

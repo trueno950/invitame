@@ -678,9 +678,9 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
         true,
       );
 
-      const page = await new GetPublicInvitationUseCase(invitations, catalog).execute(
-        open.invitation.slug,
-      );
+      const page = await new GetPublicInvitationUseCase(invitations, catalog, {
+        readPublishedPhotos: async () => ({ photos: [], count: 0 }),
+      }).execute(open.invitation.slug);
 
       assert.deepEqual(page?.features.rsvp, {
         mode: "open",
@@ -704,9 +704,9 @@ describe("RSVP on real PostgreSQL (M6 G1)", () => {
       const guestList = await newPublished(["RSVP", "GUEST_LIST"]);
       const submit = new SubmitPublicRsvpUseCase(invitations, catalog, rsvp, rateLimiter);
 
-      const page = await new GetPublicInvitationUseCase(invitations, catalog).execute(
-        guestList.invitation.slug,
-      );
+      const page = await new GetPublicInvitationUseCase(invitations, catalog, {
+        readPublishedPhotos: async () => ({ photos: [], count: 0 }),
+      }).execute(guestList.invitation.slug);
       assert.equal(page?.features.rsvp.mode, "guest-list");
       // The open form refuses the submission for this invitation.
       await assert.rejects(

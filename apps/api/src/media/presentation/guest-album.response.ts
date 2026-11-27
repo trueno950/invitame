@@ -10,6 +10,7 @@ import type { GuestAlbumRead, GuestPhotoView } from "../application/guest-album.
 import {
   GuestAlbumClosedError,
   GuestAlbumFullError,
+  GuestAlbumPendingFullError,
   GuestAlbumRateLimitedError,
   InvalidGuestPhotoError,
 } from "../application/guest-album.errors";
@@ -22,10 +23,11 @@ import { mapMediaError } from "./media.response";
 // the owner publishes it.
 //
 // Error codes: `INVALID_GUEST_PHOTO` carries the domain's issues (400), `GUEST_ALBUM_CLOSED` is 409 because the
-// invitation is visible but its album takes no photo, `GUEST_ALBUM_FULL` is 409 because the invitation already stores
-// its cap, `GUEST_ALBUM_RATE_LIMITED` is 429, and a photo that names nothing of this invitation is
-// `GUEST_PHOTO_NOT_FOUND` (404). An error this module does not own is mapped by the media error mapper, so a storage
-// failure keeps its 503 and a foreign invitation keeps its own 404 (A4).
+// invitation is visible but its album takes no photo, `GUEST_ALBUM_FULL` is 409 because the invitation already holds its
+// cap of pending and published photos, `GUEST_ALBUM_PENDING_FULL` is 409 because too many photos are waiting for review
+// (L26), `GUEST_ALBUM_RATE_LIMITED` is 429, and a photo that names nothing of this invitation is `GUEST_PHOTO_NOT_FOUND`
+// (404). An error this module does not own is mapped by the media error mapper, so a storage failure keeps its 503 and a
+// foreign invitation keeps its own 404 (A4).
 
 /** One photo as the owner's screen reads it: its row, its object's URL, its state, and its dates. */
 export interface GuestPhotoResponse {
@@ -136,6 +138,9 @@ export function mapGuestAlbumError(error: unknown): never {
   }
   if (error instanceof GuestAlbumFullError) {
     throw new ConflictException({ code: "GUEST_ALBUM_FULL" });
+  }
+  if (error instanceof GuestAlbumPendingFullError) {
+    throw new ConflictException({ code: "GUEST_ALBUM_PENDING_FULL" });
   }
   if (error instanceof GuestAlbumRateLimitedError) {
     throw new HttpException({ code: "GUEST_ALBUM_RATE_LIMITED" }, HttpStatus.TOO_MANY_REQUESTS);

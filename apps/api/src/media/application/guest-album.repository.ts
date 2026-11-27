@@ -29,11 +29,17 @@ export interface NewGuestPhoto {
 
 /**
  * What one insert answered. `stored` wrote the row; `invitation-not-found` means no row has this id; `closed` means the
- * invitation is no longer published or has expired; `full` means the album already stores
- * `GUEST_PHOTO_MAX_STORED` photos. Nothing is written in the last three cases, so the caller deletes the object it may
- * already have written.
+ * invitation is no longer published or has expired; `full` means the album already holds `GUEST_PHOTO_MAX_STORED`
+ * photos that count toward its cap; and `pending-full` means it already holds `GUEST_PHOTO_MAX_PENDING` photos waiting
+ * for review (L26). Nothing is written in the last four cases, so the caller deletes the object it may already have
+ * written.
  */
-export type InsertGuestPhotoResult = "stored" | "invitation-not-found" | "closed" | "full";
+export type InsertGuestPhotoResult =
+  | "stored"
+  | "invitation-not-found"
+  | "closed"
+  | "full"
+  | "pending-full";
 
 /** What serving one photo needs: the row and the invitation state that decides whether it may be shown. */
 export interface ServingGuestPhoto {
@@ -48,12 +54,17 @@ export interface RetiredGuestPhoto {
 }
 
 /**
- * Persistence port of the album (F8; L11.1, L11.3, L11.4, L11.6). `insert` enforces the per-invitation cap in the same
- * transaction that writes the row, serialized on the invitation row, so two concurrent uploads cannot both take the
- * last slot.
+ * Persistence port of the album (F8; L11.1, L11.3, L11.4, L11.6, L26). `insert` enforces the per-invitation cap and the
+ * pending cap in the same transaction that writes the row, serialized on the invitation row, so two concurrent uploads
+ * cannot both take the last slot.
  */
 export interface GuestAlbumRepository {
-  /** The live PUBLISHED invitation of one slug; null for a draft, an archived, an expired, and an unknown slug (A3). */
+  /**
+   * The PUBLISHED invitation of one slug — expired included — and null for a draft, an archived, and an unknown slug
+   * (A3, L26). An expired published invitation is still returned on purpose: the upload's own expiry check is what
+   * answers the guest-facing closed album (409) for it, so a caller that filtered expiry here would turn a closed album
+   * into the invisible 404. `UploadGuestPhotoUseCase` is the caller that relies on it; no public read uses this port.
+   */
   findPublishedBySlug(slug: string): Promise<GuestAlbumInvitation | null>;
 
   /** The invitation while this owner has it; null when no row has this id or another owner has it (A4). */
@@ -61,8 +72,9 @@ export interface GuestAlbumRepository {
 
   /**
    * Stores one PENDING photo in one statement that re-states the invitation is PUBLISHED and unexpired at the
-   * database's own clock, and refuses an album that already stores the cap. `at` is the API's instant, used for the
-   * row; the publication and expiry rules are the database's.
+   * database's own clock, and refuses an album that already holds its cap of PENDING and PUBLISHED photos, or its own
+   * cap of PENDING ones (L26). Both caps are counted in the same locked transaction, so neither can be raced. `at` is
+   * the API's instant, used for the row; the publication and expiry rules are the database's.
    */
   insert(invitationId: string, photo: NewGuestPhoto, at: Date): Promise<InsertGuestPhotoResult>;
 
@@ -104,23 +116,27 @@ export interface GuestAlbumRepository {
   /**
    * The photos the media retention cleanup retires: those still PENDING, or already HIDDEN, whose state instant —
    * `createdAt` while pending, `reviewedAt` once hidden — is older than `before` (L11.6). Newest last, so a run removes
-   * the oldest first.
+   * the oldest first. It is a listing of candidates only: `retire` re-checks each one before anything is deleted.
    */
   listRetired(before: Date): Promise<RetiredGuestPhoto[]>;
 
-  /** Removes the rows of photos whose object is gone; only the retention cleanup calls this (L11.6). */
-  remove(ids: readonly string[]): Promise<void>;
+  /**
+   * Removes the rows of photos still retired at `before`, in one statement that re-checks each photo's state and state
+   * instant, and answers the rows it removed (L26). A photo the owner published or hid again between the listing and
+   * this call keeps its row, so its object is never deleted; only the retention cleanup calls this (L11.6).
+   */
+  retire(ids: readonly string[], before: Date): Promise<RetiredGuestPhoto[]>;
 }
 
 export const GUEST_ALBUM_REPOSITORY = Symbol("GuestAlbumRepository");
 
 /**
- * The part of the album port the media retention cleanup reads (F8; L11.6): the storage keys the whole table names, the
- * photos retired by age, and the removal of the rows whose object is gone. It is narrower than `GuestAlbumRepository` so
- * the cleanup command cannot moderate, insert, or serve a photo.
+ * The part of the album port the media retention cleanup reads (F8; L11.6, L26): the storage keys the whole table names,
+ * the photos retired by age, and the conditional removal that keeps a photo published again mid-run. It is narrower than
+ * `GuestAlbumRepository` so the cleanup command cannot moderate, insert, or serve a photo.
  */
 export interface GuestAlbumCleanup {
   listStorageKeys(): Promise<string[]>;
   listRetired(before: Date): Promise<RetiredGuestPhoto[]>;
-  remove(ids: readonly string[]): Promise<void>;
+  retire(ids: readonly string[], before: Date): Promise<RetiredGuestPhoto[]>;
 }

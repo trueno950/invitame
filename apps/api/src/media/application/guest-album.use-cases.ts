@@ -33,6 +33,7 @@ import type { AssetUrl } from "./media-url";
 import {
   GuestAlbumClosedError,
   GuestAlbumFullError,
+  GuestAlbumPendingFullError,
   GuestAlbumRateLimitedError,
   InvalidGuestPhotoError,
 } from "./guest-album.errors";
@@ -134,7 +135,8 @@ function toView(record: GuestPhotoRecord, assetUrl: AssetUrl): GuestPhotoView {
  * invisible cases the public page answers with its 404; true means the photo was stored PENDING.
  *
  * Throws `GuestAlbumClosedError` when the invitation is visible but its album takes no photo, `GuestAlbumRateLimitedError`
- * when this address is over the cap, `GuestAlbumFullError` when the invitation already stores 300 photos, and
+ * when this address is over the cap, `GuestAlbumFullError` when the invitation's album already holds its cap of pending
+ * and published photos, `GuestAlbumPendingFullError` when the pending queue is over its own cap (L26), and
  * `InvalidGuestPhotoError` with the domain's issues when the file is refused. A refused upload stores nothing.
  */
 export class UploadGuestPhotoUseCase {
@@ -220,6 +222,9 @@ export class UploadGuestPhotoUseCase {
     await this.deleteObject(storageKey, "guest_photo_upload_recovery");
     if (inserted === "full") {
       throw new GuestAlbumFullError();
+    }
+    if (inserted === "pending-full") {
+      throw new GuestAlbumPendingFullError();
     }
     if (inserted === "closed") {
       throw new GuestAlbumClosedError();

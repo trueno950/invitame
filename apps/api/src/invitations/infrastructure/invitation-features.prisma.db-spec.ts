@@ -964,7 +964,9 @@ describe("invitation feature data (real PostgreSQL)", () => {
   });
 
   describe("the gated public read", () => {
-    const useCase = new GetPublicInvitationUseCase(repository, catalog);
+    const useCase = new GetPublicInvitationUseCase(repository, catalog, {
+      readPublishedPhotos: async () => ({ photos: [], count: 0 }),
+    });
 
     async function publish(
       featureKeys: readonly string[],
@@ -1226,6 +1228,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
         const page = await new GetPublicInvitationUseCase(
           new PrismaInvitationRepository(counted),
           new CatalogInvitationReader(new PrismaCatalogPublicReader(counted)),
+          // A package that grants `GUEST_ALBUM` would read it: the album answers no photo without a query of its own.
+          { readPublishedPhotos: async () => ({ photos: [], count: 0 }) },
         ).execute(slug);
 
         assert.equal(page?.slug, slug);

@@ -452,7 +452,15 @@ function publisher(
  * observes the expiration boundary exactly (S2).
  */
 function publicReader(fixture: ReturnType<typeof seeded>, now = () => PUBLISHED_AT) {
-  return new GetPublicInvitationUseCase(fixture.repository, fixture.catalog, undefined, now);
+  return new GetPublicInvitationUseCase(
+    fixture.repository,
+    fixture.catalog,
+    // The album is a required dependency of the public read (F8; L26): this suite exercises other features, so it holds
+    // one that answers no photo.
+    { readPublishedPhotos: async () => ({ photos: [], count: 0 }) },
+    undefined,
+    now,
+  );
 }
 
 /** The feature update wired to the same in-memory ports (F1; S4, S2). */

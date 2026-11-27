@@ -342,28 +342,28 @@ export const INVITATION_USE_CASES: Provider[] = [
     useFactory: (
       invitations: InvitationRepository,
       catalog: InvitationCatalog,
+      guestAlbum: InvitationGuestAlbumReader,
       gallery: InvitationGalleryReader | undefined,
       guestbook: InvitationGuestbookReader | undefined,
-      guestAlbum: InvitationGuestAlbumReader | undefined,
     ) =>
       new GetPublicInvitationUseCase(
         invitations,
         catalog,
+        guestAlbum,
         gallery,
         undefined,
         guestbook,
-        guestAlbum,
       ),
-    // The media module implements the gallery port (M8 S4), so the public projection never queries media tables.
-    // The guestbook port (F7; L10.4) is this module's own adapter, bound below. Both are optional, so a test module
-    // that composes the invitations read alone still projects a published invitation.
+    // The media module implements the album port (F8; L11.4, L26) and it is REQUIRED: a deployment that forgot it would
+    // show every guest an empty album, so the module fails at startup instead. The gallery (M8 S4) and the guestbook
+    // (F7; L10.4) stay optional, so a test module that composes the invitations read alone still projects a published
+    // invitation.
     inject: [
       INVITATION_REPOSITORY,
       INVITATION_CATALOG,
+      INVITATION_GUEST_ALBUM_READER,
       { token: INVITATION_GALLERY_READER, optional: true },
       { token: INVITATION_GUESTBOOK_READER, optional: true },
-      // The media module implements the album port (F8; L11.4), exactly like the gallery's.
-      { token: INVITATION_GUEST_ALBUM_READER, optional: true },
     ],
   },
   {

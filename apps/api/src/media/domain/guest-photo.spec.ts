@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  GUEST_PHOTO_COUNTED_STATUSES,
+  GUEST_PHOTO_MAX_PENDING,
   GUEST_PHOTO_MAX_STORED,
   GUEST_PHOTO_PUBLIC_MAX,
   GUEST_PHOTO_RETENTION_MS,
@@ -33,6 +35,11 @@ describe("the album's caps (F8; L11.3, L11.4)", () => {
   it("stores at most 300 photos per invitation, pending ones included, and reads at most 60 published ones", () => {
     assert.equal(GUEST_PHOTO_MAX_STORED, 300);
     assert.equal(GUEST_PHOTO_PUBLIC_MAX, 60);
+  });
+
+  it("counts only pending and published photos toward the 300, and bounds the pending queue (L26)", () => {
+    assert.equal(GUEST_PHOTO_MAX_PENDING, 100);
+    assert.deepEqual([...GUEST_PHOTO_COUNTED_STATUSES], ["PENDING", "PUBLISHED"]);
   });
 
   it("retires a photo 30 days after it entered its current state (L11.6)", () => {
@@ -106,6 +113,16 @@ describe("the uploader name a guest may type (F8; L11.1, L11.3)", () => {
       }),
       { ok: false, issues: [GUEST_PHOTO_UPLOADER_NAME_CONTROL_ISSUE] },
     );
+  });
+
+  it("refuses a bidi override and a zero-width character, which would hide part of the name (L26)", () => {
+    for (const name of ["Rosa\u202ELópez", "Ro\u200Bsa", "Rosa\u200E"] as const) {
+      assert.deepEqual(
+        validateGuestPhotoUpload({ bytes: JPEG, uploaderName: name, maxBytes: MAX_BYTES }),
+        { ok: false, issues: [GUEST_PHOTO_UPLOADER_NAME_CONTROL_ISSUE] },
+        JSON.stringify(name),
+      );
+    }
   });
 
   it("keeps the name as plain text, accents, emoji, and spaces included", () => {

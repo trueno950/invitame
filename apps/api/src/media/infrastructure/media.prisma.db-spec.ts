@@ -19,7 +19,6 @@ import {
   storageKeyFor,
 } from "../domain/media-asset";
 import { PrismaMediaRepository } from "./prisma-media.repository";
-
 // Invitation media on real PostgreSQL (M8 S4): the additive migration's table, checks, indexes, and RESTRICT
 // reference; the two limits and the one-main-photo rule under concurrent uploads; owner isolation; the archived
 // refusal; the gallery position assignment and reorder; the serving rules; and the cleanup that removes a deleted
@@ -562,12 +561,20 @@ describe("media assets on real PostgreSQL (M8 S4)", () => {
   });
 
   describe("serving and cleanup", () => {
+    /** The album of the guests' photos: this suite exercises the owner's media, so the album holds no row. */
+    const noGuestAlbum = {
+      findForServing: async () => null,
+      listStorageKeys: async () => [],
+      listRetired: async () => [],
+      retire: async () => [],
+    };
+
     it("serves a published asset publicly and a draft only to its owner", async () => {
       const { invitation, ownerId } = await newInvitation();
       const created = await upload(invitation);
       const storage = new MapStorage();
       await storage.put(created.asset.storageKey, Buffer.from("image"));
-      const serve = new ServeMediaUseCase(media, storage);
+      const serve = new ServeMediaUseCase(media, storage, noGuestAlbum);
 
       const published = await serve.execute(created.asset.id, { ownerId: async () => null });
       assert.equal(published?.cache, "public");
@@ -586,7 +593,7 @@ describe("media assets on real PostgreSQL (M8 S4)", () => {
       const { invitation, ownerId } = await newInvitation();
       const created = await upload(invitation);
       const storage = new MapStorage();
-      const serve = new ServeMediaUseCase(media, storage);
+      const serve = new ServeMediaUseCase(media, storage, noGuestAlbum);
 
       assert.equal(await serve.execute(created.asset.id, { ownerId: async () => ownerId }), null);
       await storage.put(created.asset.storageKey, Buffer.from("image"));
@@ -610,7 +617,9 @@ describe("media assets on real PostgreSQL (M8 S4)", () => {
       // An object with no row is only an orphan once it is past the grace period: younger ones may be in flight.
       storage.age(orphan, 2 * MEDIA_ORPHAN_GRACE_MS);
       await storage.put(inFlight, Buffer.from("image"));
-      const cleanup = new CleanupMediaUseCase(media, storage, () => {});
+      const cleanup = new CleanupMediaUseCase(media, storage, () => {}, {
+        guestAlbum: noGuestAlbum,
+      });
 
       // The command is global by design, so this suite's earlier deleted rows are part of its answer too.
       const dryRun = await cleanup.execute({ dryRun: true });
@@ -645,7 +654,9 @@ describe("media assets on real PostgreSQL (M8 S4)", () => {
       const storage = new MapStorage();
       await storage.put(created.asset.storageKey, Buffer.from("image"));
       storage.failDelete = true;
-      const cleanup = new CleanupMediaUseCase(media, storage, () => {});
+      const cleanup = new CleanupMediaUseCase(media, storage, () => {}, {
+        guestAlbum: noGuestAlbum,
+      });
 
       const failed = await cleanup.execute({ dryRun: false });
       assert.ok(failed.failedObjects >= 1, "the deleted row's object could not be deleted");

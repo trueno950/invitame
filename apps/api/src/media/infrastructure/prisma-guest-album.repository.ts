@@ -2,6 +2,8 @@ import type { PrismaClient } from "@prisma/client";
 
 import type { InvitationStatus } from "../../invitations/domain/invitation-lifecycle";
 import {
+  GUEST_PHOTO_COUNTED_STATUSES,
+  GUEST_PHOTO_MAX_PENDING,
   GUEST_PHOTO_MAX_STORED,
   GUEST_PHOTO_OWNER_MAX,
   GUEST_PHOTO_PUBLIC_MAX,
@@ -18,12 +20,13 @@ import type {
   ServingGuestPhoto,
 } from "../application/guest-album.repository";
 
-// The album port on PostgreSQL (F8; S2.8, L11.1, L11.3, L11.4, L11.6). Owner-scoped reads and writes carry the owner in
-// their own statement, so another customer's id is indistinguishable from a missing one (A4). The per-invitation cap is
-// enforced inside the transaction that writes the row, serialized on the invitation row (`SELECT ... FOR UPDATE`), so
-// two simultaneous uploads cannot both take the last slot; the same transaction re-states that the invitation is still
-// PUBLISHED and unexpired at the database's own `now()`, so a photo that races an unpublish or an expiry is refused by
-// the database rather than by an earlier read.
+// The album port on PostgreSQL (F8; S2.8, L11.1, L11.3, L11.4, L11.6, L26). Owner-scoped reads and writes carry the owner
+// in their own statement, so another customer's id is indistinguishable from a missing one (A4). The per-invitation cap
+// and the cap of the pending queue are enforced inside the transaction that writes the row, serialized on the invitation
+// row (`SELECT ... FOR UPDATE`), so two simultaneous uploads cannot both take the last slot; the same transaction
+// re-states that the invitation is still PUBLISHED and unexpired at the database's own `now()`, so a photo that races an
+// unpublish or an expiry is refused by the database rather than by an earlier read. Only PENDING and PUBLISHED photos
+// count toward the album's cap, so hiding a photo frees its place without deleting anything.
 //
 // The public read answers PUBLISHED photos only, newest first and bounded; a PENDING or HIDDEN photo is never in its
 // projection, so the guest page cannot show one even by accident. No adapter ever answers a storage key to a caller.
@@ -66,6 +69,9 @@ export class PrismaGuestAlbumRepository implements GuestAlbumRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async findPublishedBySlug(slug: string): Promise<GuestAlbumInvitation | null> {
+    // Expiry is deliberately not filtered here (L26): the upload's own check answers the guest-facing closed album for
+    // an expired invitation, and a filter here would turn it into the invisible 404. A draft and an archived row are not
+    // a published page, so they answer null like an unknown slug.
     const invitation = await this.prisma.invitation.findFirst({
       where: { slug, status: "PUBLISHED" },
       select: { id: true, status: true, packageId: true, expiresAt: true },
@@ -126,11 +132,21 @@ export class PrismaGuestAlbumRepository implements GuestAlbumRepository {
         return "closed";
       }
 
-      const counts = await transaction.$queryRaw<Array<{ stored: bigint }>>`
-        SELECT count(*) AS "stored" FROM "GuestPhoto" WHERE "invitationId" = ${invitationId}::uuid
+      // Both caps are counted here, inside the same locked transaction: the photos that count toward the album's cap
+      // (PENDING and PUBLISHED, so a hidden one frees its place) and the pending queue on its own (L26).
+      const counts = await transaction.$queryRaw<Array<{ stored: bigint; pending: bigint }>>`
+        SELECT count(*) FILTER (WHERE "status"::text = ANY(${[
+          ...GUEST_PHOTO_COUNTED_STATUSES,
+        ]}::text[])) AS "stored",
+               count(*) FILTER (WHERE "status"::text = 'PENDING') AS "pending"
+        FROM "GuestPhoto"
+        WHERE "invitationId" = ${invitationId}::uuid
       `;
       if (Number(counts[0]?.stored ?? 0) >= GUEST_PHOTO_MAX_STORED) {
         return "full";
+      }
+      if (Number(counts[0]?.pending ?? 0) >= GUEST_PHOTO_MAX_PENDING) {
+        return "pending-full";
       }
 
       await transaction.$executeRaw`
@@ -252,11 +268,24 @@ export class PrismaGuestAlbumRepository implements GuestAlbumRepository {
     return rows;
   }
 
-  async remove(ids: readonly string[]): Promise<void> {
+  async retire(ids: readonly string[], before: Date): Promise<RetiredGuestPhoto[]> {
     if (ids.length === 0) {
-      return;
+      return [];
     }
 
-    await this.prisma.guestPhoto.deleteMany({ where: { id: { in: [...ids] } } });
+    // The delete re-checks the state and the state instant in its own statement (L26): a photo the owner published or
+    // hid again between the listing and this call is past neither condition any more, so it keeps its row — and its
+    // object is never deleted for a row that survived.
+    const removed = await this.prisma.$queryRaw<Array<{ id: string; storageKey: string }>>`
+      DELETE FROM "GuestPhoto"
+      WHERE "id" = ANY(${[...ids]}::uuid[])
+        AND (
+          ("status" = 'PENDING' AND "createdAt" < ${before})
+          OR ("status" = 'HIDDEN' AND "reviewedAt" < ${before})
+        )
+      RETURNING "id", "storageKey"
+    `;
+
+    return removed.map((row) => ({ id: row.id, storageKey: row.storageKey }));
   }
 }

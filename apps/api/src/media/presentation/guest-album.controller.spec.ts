@@ -33,6 +33,7 @@ import {
 } from "../application/guest-album.use-cases";
 import type { OperationalSettingsReader } from "../../settings/application/operational-settings";
 import {
+  GUEST_PHOTO_MAX_PENDING,
   GUEST_PHOTO_MAX_STORED,
   type GuestPhotoRecord,
   type GuestPhotoReviewState,
@@ -231,7 +232,9 @@ class FakeAlbumRepository implements GuestAlbumRepository {
     return [];
   }
 
-  async remove(): Promise<void> {}
+  async retire(): Promise<RetiredGuestPhoto[]> {
+    return [];
+  }
 }
 
 const PROCESSED = Buffer.from("webp-bytes");
@@ -448,6 +451,27 @@ describe("the public album upload (F8; L11.3)", () => {
     assert.equal(album.inserted.length, 0);
   });
 
+  it("refuses a pending queue over its own cap with a code of its own, storing nothing (L26)", async () => {
+    const album = new FakeAlbumRepository();
+    album.insertResult = "pending-full";
+    const { controller, storage } = publicController({ album });
+    const form = uploadForm();
+
+    const denied = await refusal(
+      controller.uploadPhoto(SLUG, request(form.body, form.contentType)),
+    );
+
+    assert.equal(GUEST_PHOTO_MAX_PENDING, 100);
+    assert.equal(denied.status, 409);
+    assert.deepEqual(denied.body, { code: "GUEST_ALBUM_PENDING_FULL" });
+    // It is not the full album's code: the guest reads why the photo was refused.
+    assert.notDeepEqual(denied.body, { code: "GUEST_ALBUM_FULL" });
+    assert.equal(storage.puts.length, 1);
+    assert.equal(storage.deletes.length, 1);
+    assert.equal(storage.objects.size, 0);
+    assert.equal(album.inserted.length, 0);
+  });
+
   it("refuses a file that is not a JPEG, PNG, or WebP with 400 and its issues, storing nothing", async () => {
     const processor = fakeProcessor();
     const { controller, storage } = publicController({ processor });
@@ -479,6 +503,24 @@ describe("the public album upload (F8; L11.3)", () => {
       code: "INVALID_GUEST_PHOTO",
       issues: ["uploaderName must be between 1 and 60 characters"],
     });
+  });
+
+  it("refuses a name carrying a format character, which would hide part of it (L26)", async () => {
+    const { controller, storage } = publicController();
+
+    for (const uploaderName of ["Rosa\u202ELópez", "Ro\u200Bsa"] as const) {
+      const form = uploadForm(JPEG, uploaderName);
+      const denied = await refusal(
+        controller.uploadPhoto(SLUG, request(form.body, form.contentType)),
+      );
+
+      assert.equal(denied.status, 400, uploaderName);
+      assert.deepEqual(denied.body, {
+        code: "INVALID_GUEST_PHOTO",
+        issues: ["uploaderName must not contain control characters"],
+      });
+    }
+    assert.equal(storage.puts.length, 0);
   });
 
   it("refuses a field the album route does not accept, so no other route's field reaches it", async () => {

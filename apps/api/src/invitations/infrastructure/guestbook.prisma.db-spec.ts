@@ -412,6 +412,7 @@ describe("the guestbook on real PostgreSQL (F7; S2.7)", () => {
       const publicRead = new GetPublicInvitationUseCase(
         invitations,
         catalog,
+        { readPublishedPhotos: async () => ({ photos: [], count: 0 }) },
         undefined,
         undefined,
         guestbook,

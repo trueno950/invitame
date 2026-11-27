@@ -501,7 +501,9 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
   const catalog = new MemoryCatalog();
   const rateLimiter = new MemoryRateLimiter();
   const rsvp = new MemoryRsvpRepository();
-  const publicInvitations = new GetPublicInvitationUseCase(invitations, catalog);
+  const publicInvitations = new GetPublicInvitationUseCase(invitations, catalog, {
+    readPublishedPhotos: async () => ({ photos: [], count: 0 }),
+  });
 
   const list = new ListGuestsUseCase(invitations, catalog, guests);
   const create = new CreateGuestUseCase(invitations, catalog, guests, () => NOW);

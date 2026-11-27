@@ -804,6 +804,12 @@ export class GetPublicInvitationUseCase {
     private readonly invitations: InvitationRepository,
     private readonly catalog: InvitationCatalog,
     /**
+     * The album of the guests' photos (F8; L11.4, L26). Required: the public projection shows an album whenever the
+     * package grants `GUEST_ALBUM`, so a read composed without it would tell every guest that nothing was uploaded. The
+     * media module binds it, and a module that forgets it fails while compiling or at startup.
+     */
+    private readonly guestAlbum: InvitationGuestAlbumReader,
+    /**
      * The gallery source (M8 S4). The media module provides it; the default answers no photos so a test that
      * composes this read without media still projects a published invitation.
      */
@@ -815,13 +821,6 @@ export class GetPublicInvitationUseCase {
      * guestbook still projects a published invitation; the real adapter is bound in the module.
      */
     private readonly guestbook: InvitationGuestbookReader = { readVisibleEntries: async () => [] },
-    /**
-     * The album of the guests' photos (F8; L11.4). The default answers no published photo, so a test that composes this
-     * read without the media module still projects a published invitation; the real adapter is bound in the module.
-     */
-    private readonly guestAlbum: InvitationGuestAlbumReader = {
-      readPublishedPhotos: async () => EMPTY_PUBLIC_GUEST_ALBUM,
-    },
   ) {}
 
   async execute(slug: string): Promise<PublicInvitation | null> {

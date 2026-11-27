@@ -47,7 +47,9 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
   const guests = new PrismaGuestRepository(prisma);
   const rateLimiter = new PrismaRsvpRateLimiter(prisma);
   const catalog = new CatalogInvitationReader(new PrismaCatalogPublicReader(prisma));
-  const publicInvitations = new GetPublicInvitationUseCase(invitations, catalog);
+  const publicInvitations = new GetPublicInvitationUseCase(invitations, catalog, {
+    readPublishedPhotos: async () => ({ photos: [], count: 0 }),
+  });
   const runId = randomUUID().replaceAll("-", "").slice(0, 12);
   const userIds: string[] = [];
   const categoryIds: string[] = [];

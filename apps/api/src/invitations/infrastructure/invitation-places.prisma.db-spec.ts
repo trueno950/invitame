@@ -328,7 +328,9 @@ describe("invitation places (real PostgreSQL)", () => {
 
   describe("the public read (S2)", () => {
     const readPublic = (slug: string) =>
-      new GetPublicInvitationUseCase(repository, catalog).execute(slug);
+      new GetPublicInvitationUseCase(repository, catalog, {
+        readPublishedPhotos: async () => ({ photos: [], count: 0 }),
+      }).execute(slug);
 
     /** A published invitation whose content is `address`, which the point's stored label may or may not match. */
     async function published(

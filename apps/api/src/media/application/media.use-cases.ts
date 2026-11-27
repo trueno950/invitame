@@ -452,11 +452,11 @@ export class ServeMediaUseCase {
     private readonly invitations: MediaRepository,
     private readonly storage: MediaStorage,
     /**
-     * The album of the guests' photos (F8; L11.3). Both kinds of image answer the same `/media/<id>` route, so one URL
-     * space, one set of headers, and one cache rule serve them; the default answers nothing, so a test that composes
-     * serving without the album still serves the owner's media.
+     * The album of the guests' photos (F8; L11.3, L26). Both kinds of image answer the same `/media/<id>` route, so one
+     * URL space, one set of headers, and one cache rule serve them. It is required: a route composed without the album
+     * would answer the indistinguishable 404 for every guest photo, so the module must bind it.
      */
-    private readonly guestAlbum: Pick<GuestAlbumRepository, "findForServing"> | null = null,
+    private readonly guestAlbum: Pick<GuestAlbumRepository, "findForServing">,
   ) {}
 
   async execute(assetId: string, requester: MediaRequester): Promise<ServedMedia | null> {
@@ -498,9 +498,6 @@ export class ServeMediaUseCase {
     photoId: string,
     requester: MediaRequester,
   ): Promise<ServedMedia | null> {
-    if (this.guestAlbum === null) {
-      return null;
-    }
     const serving = await this.guestAlbum.findForServing(photoId);
     if (serving === null) {
       return null;
@@ -582,14 +579,19 @@ export class CleanupMediaUseCase {
   constructor(
     private readonly invitations: MediaRepository,
     private readonly storage: MediaStorage,
-    private readonly log: MediaLog = () => {},
-    options: { now?: () => Date; guestAlbum?: GuestAlbumCleanup | null } = {},
+    private readonly log: MediaLog,
+    /**
+     * The album of the guests' photos (F8; L11.6, L26), required: it supplies the storage keys of the live photos the
+     * orphan scan must never delete, and the conditional retirement of the photos past their retention window. A sweep
+     * composed without it would delete every live guest photo as an abandoned object.
+     */
+    options: { now?: () => Date; guestAlbum: GuestAlbumCleanup },
   ) {
     this.now = options.now ?? (() => new Date());
-    this.guestAlbum = options.guestAlbum ?? null;
+    this.guestAlbum = options.guestAlbum;
   }
 
-  private readonly guestAlbum: GuestAlbumCleanup | null;
+  private readonly guestAlbum: GuestAlbumCleanup;
 
   async execute(options: { dryRun: boolean }): Promise<MediaCleanupResult> {
     const now = this.now();
@@ -605,10 +607,9 @@ export class CleanupMediaUseCase {
     };
     // Objects written inside this window may belong to an upload that has not inserted its row yet.
     const cutoff = now.getTime() - MEDIA_ORPHAN_GRACE_MS;
-    const retired =
-      this.guestAlbum === null
-        ? []
-        : await this.guestAlbum.listRetired(guestPhotoRetentionCutoff(now));
+    // A pending or hidden photo is retired once it has been in that state for the whole retention window (F8; L11.6).
+    const guestPhotoCutoff = guestPhotoRetentionCutoff(now);
+    const retired = await this.guestAlbum.listRetired(guestPhotoCutoff);
     result.retiredGuestPhotos = retired.length;
 
     if (options.dryRun) {
@@ -630,19 +631,21 @@ export class CleanupMediaUseCase {
     }
     await this.invitations.remove(removed);
 
-    // A retired photo's row is removed only once its object is gone, so a failed delete leaves the row for the next run,
-    // exactly like a `deleted` media row (F8; L11.6).
-    const retiredIds: string[] = [];
-    for (const photo of retired) {
+    // A retired photo's row is removed only while it is still PENDING or HIDDEN and past the cutoff: the delete statement
+    // itself re-checks both (L26), so a photo the owner published between the listing and this call keeps its row, and
+    // its object is never deleted for a row that survived. An object that fails to delete here becomes an orphan the
+    // orphan scan below removes in the same run, so no object of a removed row is left behind.
+    const removedPhotos = await this.guestAlbum.retire(
+      retired.map((photo) => photo.id),
+      guestPhotoCutoff,
+    );
+    result.retiredGuestPhotos = removedPhotos.length;
+    for (const photo of removedPhotos) {
       try {
         await this.storage.delete(photo.storageKey);
-        retiredIds.push(photo.id);
       } catch {
         result.failedObjects += 1;
       }
-    }
-    if (retiredIds.length > 0) {
-      await this.guestAlbum?.remove(retiredIds);
     }
 
     const scan = await this.scanOrphans(cutoff);
@@ -673,7 +676,7 @@ export class CleanupMediaUseCase {
     // Both kinds of image live under the same prefix, so a guest photo's object is never called an orphan (F8; L11.6).
     const known = new Set([
       ...(await this.invitations.listStorageKeys()),
-      ...(this.guestAlbum === null ? [] : await this.guestAlbum.listStorageKeys()),
+      ...(await this.guestAlbum.listStorageKeys()),
     ]);
     const objects = await this.storage.listObjects(MEDIA_STORAGE_PREFIX);
     const orphans: MediaStorageObject[] = [];

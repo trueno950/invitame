@@ -45,9 +45,10 @@ export class PublicGuestAlbumController {
    * Stores one guest's photo, PENDING until the owner publishes it (L11.3): 202 with the one minimal body. A slug the
    * page itself would not render is the same 404 as the read; a visible invitation whose album takes no photo (the
    * package does not grant `GUEST_ALBUM`, or the invitation expired) is 409 `GUEST_ALBUM_CLOSED`; an address over its
-   * hourly cap is 429 `GUEST_ALBUM_RATE_LIMITED`; an invitation that already stores its 300 photos is 409
-   * `GUEST_ALBUM_FULL`; and a file the domain refuses is 400 `INVALID_GUEST_PHOTO` with its issues. A refused upload
-   * stores nothing, its object included.
+   * hourly cap is 429 `GUEST_ALBUM_RATE_LIMITED`; an invitation whose album already holds its 300 counted photos is 409
+   * `GUEST_ALBUM_FULL`; one whose pending queue already holds its 100 photos is 409 `GUEST_ALBUM_PENDING_FULL` (L26); and
+   * a file the domain refuses is 400 `INVALID_GUEST_PHOTO` with its issues. A refused upload stores nothing, its object
+   * included.
    */
   @Post(":slug/photos")
   @HttpCode(202)

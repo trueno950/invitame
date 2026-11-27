@@ -77,6 +77,8 @@ it("withholds the stored point of an omitted place from the public read (S8.3)",
         durationDays: 365,
       }),
     } as never,
+    // The album is a required dependency of the public read (F8; L26); this package does not grant it.
+    { readPublishedPhotos: async () => ({ photos: [], count: 0 }) },
   );
 
   const published = await useCase.execute("invitacion-k7m2qx");
