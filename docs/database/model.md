@@ -369,7 +369,10 @@ live in `apps/api/src/invitations/domain/invitation-guestbook.ts`.
   (`VARCHAR(500)`), `hidden` (`BOOLEAN NOT NULL DEFAULT false`), and `createdAt` (`TIMESTAMPTZ(6)`). Both texts are
   plain text, trimmed and bounded by the API domain, and the two CHECK constraints `GuestbookEntry_authorName_length`
   and `GuestbookEntry_message_length` repeat the bounds for a reader that does not go through the API: 1 to 60 and 1
-  to 500 characters, so a stored blank is impossible. Nothing else is stored — no IP address, session, token, or guest
+  to 500 characters, so a stored blank is impossible. The domain also refuses U+0000 — PostgreSQL rejects it in a text
+  column, so the write would otherwise fail as a server fault — and every other control character (`Cc`, C1
+  included) of a signature, keeping the line feed and the tab of a message; that rule is not repeatable as a constraint without changing the
+  columns, so it lives in `apps/api/src/invitations/domain/invitation-guestbook.ts` alone. Nothing else is stored — no IP address, session, token, or guest
   id — because an entry is the guest's public words and the rate limit keeps its own hashed key in `RateLimit`.
 - The pages never render a stored value as markup: the guest wall draws each signature and message as React's own text
   node, so a `<script>` a guest typed stays visible characters and a URL in a message is never made clickable (L10.3).
@@ -384,13 +387,17 @@ live in `apps/api/src/invitations/domain/invitation-guestbook.ts`.
   a visible one changes nothing. Nothing a guest signed is ever deleted — by the guest or by the owner — so a hidden
   message can always be shown again.
 - The wall reads one invitation's entries where `hidden = false`, newest first (`createdAt DESC, id DESC`) and at most
-  50 (L10.4), through the index `GuestbookEntry_invitationId_hidden_createdAt_idx`; the owner's screen reads every entry
-  of the invitation in the same order through the same index. The public projection drops the entry id and the hidden
-  flag, so nothing about the moderation reaches a guest.
+  50 (L10.4), through the index `GuestbookEntry_invitationId_hidden_createdAt_idx`; the owner's moderation read answers
+  the newest 500 entries of the invitation (`GUESTBOOK_OWNER_ENTRIES_MAX`) in the same order through the same index, so
+  one screen never answers an unbounded list and the two counts it carries describe that page. The public projection
+  drops the entry id and the hidden flag, so nothing about the moderation reaches a guest.
 - The public submission is one statement: `INSERT … SELECT` from the invitation guarded by `status = 'PUBLISHED'` and
-  `expiresAt IS NULL OR expiresAt >= <instant>`, so a signature that races an unpublish or an expiry is refused by the
-  database rather than by an earlier read. The route itself refuses an unpublished, archived, not-granted, or expired
-  invitation before the rate limit, and a filled honeypot answers success while storing nothing.
+  `expiresAt IS NULL OR expiresAt >= now()`, so a signature that races an unpublish or an expiry is refused by the
+  database rather than by an earlier read, and the expiry is judged by the database's clock at the statement instead of
+  an instant the use case captured before reading and validating the signature (which a slow request could make stale).
+  The route itself refuses an unpublished, archived, not-granted, or expired invitation before the rate limit, and a
+  filled honeypot answers success while storing nothing — after the rate limit, so a dropped signature still spends a
+  slot.
 - The per-address rate limit uses the existing `RateLimit` table under the key
   `guestbook|<invitationId>|<sha256(client address)>` — 10 signatures per hour per address per invitation, the same
   window semantics as the open RSVP form and a prefix of its own, so the two forms never share a budget. The client

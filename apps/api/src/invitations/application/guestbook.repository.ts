@@ -23,17 +23,20 @@ export interface GuestbookRepository {
   findVisible(invitationId: string): Promise<GuestbookEntryRecord[]>;
 
   /**
-   * Every entry of one owned invitation, visible and hidden together, newest first; null when no row has this id or
-   * another owner has it (A4). The owner is the only reader of the hidden ones, so this is the moderation read.
+   * Every entry of one owned invitation, visible and hidden together, newest first and at most
+   * `GUESTBOOK_OWNER_ENTRIES_MAX`; null when no row has this id or another owner has it (A4). The owner is the only
+   * reader of the hidden ones, so this is the moderation read. The bound keeps one screen from answering an unbounded
+   * list however many signatures an invitation collected.
    */
   findOwnedEntries(ownerId: string, invitationId: string): Promise<GuestbookEntryRecord[] | null>;
 
   /**
    * Inserts one entry in one statement whose `SELECT` re-states that the invitation is still PUBLISHED and has not
-   * expired at the given instant; answers false, storing nothing, when it is not. The caller must already have
-   * validated the entry.
+   * expired, both judged by the database's own clock inside the statement — never by an instant the caller captured
+   * before reading and validating the signature, which a slow request could make stale; answers false, storing nothing,
+   * when the invitation no longer accepts it. The caller must already have validated the entry.
    */
-  insert(invitationId: string, entry: GuestbookEntryValues, at: Date): Promise<boolean>;
+  insert(invitationId: string, entry: GuestbookEntryValues): Promise<boolean>;
 
   /**
    * Sets `hidden` on one entry of one owned invitation. Answers the stored entry, or null when the entry does not

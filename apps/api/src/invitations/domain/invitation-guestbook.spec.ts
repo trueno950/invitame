@@ -60,6 +60,41 @@ describe("the guestbook entry (F7; S2.7, L10.1)", () => {
     assert.deepEqual(resultOf({ authorName: "Rosa" }), ["message must be a string"]);
   });
 
+  it("refuses a NUL and every other control character of a signature or a message", () => {
+    // PostgreSQL refuses U+0000 in a text column, so an entry carrying one would fail the write as a server fault
+    // after the rate limit was spent; the other C0 characters are refused with it.
+    assert.deepEqual(resultOf({ authorName: "Rosa\u0000", message: "Hola" }), [
+      "authorName must not contain control characters",
+    ]);
+    assert.deepEqual(resultOf({ authorName: "Rosa", message: "Ho\u0000la" }), [
+      "message must not contain control characters",
+    ]);
+
+    for (const control of ["\u0001", "\u0007", "\u000b", "\u000c", "\u001b", "\u001f"]) {
+      assert.deepEqual(resultOf({ authorName: `Ro${control}sa`, message: "Hola" }), [
+        "authorName must not contain control characters",
+      ]);
+      assert.deepEqual(resultOf({ authorName: "Rosa", message: `Ho${control}la` }), [
+        "message must not contain control characters",
+      ]);
+    }
+
+    // A name is one line: a tab or a line break in it is refused like the rest.
+    assert.deepEqual(resultOf({ authorName: "Rosa\tPérez", message: "Hola" }), [
+      "authorName must not contain control characters",
+    ]);
+    assert.deepEqual(resultOf({ authorName: "Rosa\nPérez", message: "Hola" }), [
+      "authorName must not contain control characters",
+    ]);
+  });
+
+  it("keeps the line feed and the tab of a message, the two the RSVP message allows", () => {
+    assert.deepEqual(resultOf({ authorName: "Rosa", message: "¡Felicidades!\n\tNos vemos." }), {
+      authorName: "Rosa",
+      message: "¡Felicidades!\n\tNos vemos.",
+    });
+  });
+
   it("keeps markup as text: nothing here turns a guest's words into a link or into HTML", () => {
     const message = '<a href="https://spam.example">https://spam.example</a>';
 

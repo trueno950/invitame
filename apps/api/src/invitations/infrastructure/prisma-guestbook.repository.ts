@@ -5,6 +5,7 @@ import type {
   InvitationGuestbookReader,
 } from "../application/guestbook.repository";
 import {
+  GUESTBOOK_OWNER_ENTRIES_MAX,
   GUESTBOOK_VISIBLE_ENTRIES_MAX,
   type GuestbookEntryRecord,
   type GuestbookEntryValues,
@@ -24,10 +25,11 @@ const ENTRY_SELECT = {
 /**
  * The guestbook port on PostgreSQL (F7; S2.7, L10.1, L10.4, L10.6). The guest's wall reads only visible entries, newest
  * first and bounded, so the projection never has to filter; the owner's read and write carry the owner id in their own
- * `WHERE`, so another customer's invitation is indistinguishable from a missing one (A4). The public insert is one
- * statement: the `SELECT` that feeds it checks in the same statement that the invitation is still PUBLISHED and has not
- * expired at the signature's instant, so an entry that races an unpublish or an expiry is refused by the database rather
- * than by an earlier read (S2).
+ * `WHERE`, so another customer's invitation is indistinguishable from a missing one (A4), and the owner's read is bounded
+ * to the newest `GUESTBOOK_OWNER_ENTRIES_MAX`. The public insert is one statement: the `SELECT` that feeds it checks in
+ * the same statement that the invitation is still PUBLISHED and has not expired at the database's own `now()`, so an
+ * entry that races an unpublish or an expiry is refused by the database rather than by an earlier read, and a stale
+ * instant captured before the request cannot let an expired invitation store one (S2).
  *
  * One adapter implements both the write/read port and the public read the invitation projection consumes, so the
  * guestbook table has exactly one reader in this module.
@@ -65,19 +67,20 @@ export class PrismaGuestbookRepository implements GuestbookRepository, Invitatio
       where: { invitationId },
       select: ENTRY_SELECT,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: GUESTBOOK_OWNER_ENTRIES_MAX,
     });
   }
 
-  async insert(invitationId: string, entry: GuestbookEntryValues, at: Date): Promise<boolean> {
+  async insert(invitationId: string, entry: GuestbookEntryValues): Promise<boolean> {
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       INSERT INTO "GuestbookEntry" ("id", "invitationId", "authorName", "message", "hidden", "createdAt")
-      SELECT gen_random_uuid(), invitation."id", ${entry.authorName}, ${entry.message}, false, ${at}
+      SELECT gen_random_uuid(), invitation."id", ${entry.authorName}, ${entry.message}, false, now()
       FROM "Invitation" AS invitation
       WHERE invitation."id" = ${invitationId}::uuid
         AND invitation."status" = 'PUBLISHED'
-        -- The expiry is re-stated here, so an invitation that expired between the read and the write refuses the entry
-        -- in the database too (S2).
-        AND (invitation."expiresAt" IS NULL OR invitation."expiresAt" >= ${at})
+        -- The expiry is re-stated here with the database's own clock, so an invitation that expired before this
+        -- statement refuses the entry even when the caller's instant is stale (S2).
+        AND (invitation."expiresAt" IS NULL OR invitation."expiresAt" >= now())
       RETURNING "id"
     `;
 

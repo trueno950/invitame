@@ -12,6 +12,8 @@ import {
   SetGuestbookEntryHiddenUseCase,
   SubmitPublicGuestbookEntryUseCase,
 } from "../application/invitation-guestbook.use-cases";
+import { InvalidGuestbookEntryError } from "../application/invitation-guestbook.errors";
+import { GUESTBOOK_OWNER_ENTRIES_MAX } from "../domain/invitation-guestbook";
 import { CatalogInvitationReader } from "./catalog-invitation-reader";
 import { PrismaGuestbookRepository } from "./prisma-guestbook.repository";
 import { PrismaGuestbookRateLimiter } from "./prisma-guestbook-rate-limiter";
@@ -287,10 +289,7 @@ describe("the guestbook on real PostgreSQL (F7; S2.7)", () => {
       });
 
       for (const invitation of [draft.invitation, expired.invitation]) {
-        assert.equal(
-          await guestbook.insert(invitation.id, ENTRY, new Date("2026-12-01T10:00:00.000Z")),
-          false,
-        );
+        assert.equal(await guestbook.insert(invitation.id, ENTRY), false);
         assert.equal(
           await prisma.guestbookEntry.count({ where: { invitationId: invitation.id } }),
           0,
@@ -299,18 +298,106 @@ describe("the guestbook on real PostgreSQL (F7; S2.7)", () => {
 
       // The published one writes at the same instant.
       const published = await newPublished();
-      assert.equal(
-        await guestbook.insert(
-          published.invitation.id,
-          ENTRY,
-          new Date("2026-12-01T10:00:00.000Z"),
-        ),
-        true,
-      );
+      assert.equal(await guestbook.insert(published.invitation.id, ENTRY), true);
       assert.equal(
         await prisma.guestbookEntry.count({ where: { invitationId: published.invitation.id } }),
         1,
       );
+    });
+
+    it("judges the expiry of an entry at the insert's own instant, never at a stale one", async () => {
+      // The invitation expired a second ago, while the use case's injected clock is a minute old: the pre-check reads
+      // the stale instant and lets the signature through, so only the write itself can refuse it (L10.3).
+      const expired = await newPublished(["GUESTBOOK"], {
+        expiresAt: new Date(Date.now() - 1_000),
+      });
+      const staleClock = () => new Date(Date.now() - 60_000);
+      const submit = new SubmitPublicGuestbookEntryUseCase(
+        invitations,
+        catalog,
+        guestbook,
+        rateLimiter,
+        staleClock,
+      );
+
+      await assert.rejects(
+        submit.execute({
+          slug: expired.invitation.slug,
+          authorName: "Tía Rosa",
+          message: "Llegué tarde",
+          honeypot: "",
+          clientAddress: "198.18.0.42",
+        }),
+        /not accepting guestbook entries/,
+      );
+      assert.equal(
+        await prisma.guestbookEntry.count({ where: { invitationId: expired.invitation.id } }),
+        0,
+      );
+    });
+
+    it("refuses a signature or a message with a control character before the write, storing nothing", async () => {
+      const { invitation } = await newPublished();
+      const submit = new SubmitPublicGuestbookEntryUseCase(
+        invitations,
+        catalog,
+        guestbook,
+        rateLimiter,
+      );
+
+      // PostgreSQL refuses U+0000 in a text column, so this used to fail as a server fault after the rate limit.
+      for (const entry of [
+        { authorName: "Tía\u0000Rosa", message: "¡Felicidades!" },
+        { authorName: "Tía Rosa", message: "¡Felicidades!\u0000" },
+      ]) {
+        await assert.rejects(
+          submit.execute({
+            slug: invitation.slug,
+            ...entry,
+            honeypot: "",
+            clientAddress: "198.18.0.43",
+          }),
+          InvalidGuestbookEntryError,
+          JSON.stringify(entry),
+        );
+      }
+      assert.equal(
+        await prisma.guestbookEntry.count({ where: { invitationId: invitation.id } }),
+        0,
+      );
+    });
+
+    it("answers a filled honeypot like a stored signature while storing nothing, and counts the attempt", async () => {
+      const { invitation } = await newPublished();
+      const submit = new SubmitPublicGuestbookEntryUseCase(
+        invitations,
+        catalog,
+        guestbook,
+        rateLimiter,
+      );
+      const counted = () =>
+        prisma.rateLimit.count({
+          where: { key: { startsWith: `guestbook|${invitation.id}|` } },
+        });
+      assert.equal(await counted(), 0);
+
+      assert.equal(
+        await submit.execute({
+          slug: invitation.slug,
+          authorName: "Bot",
+          message: "https://spam.example",
+          honeypot: "https://spam.example",
+          clientAddress: "198.18.0.44",
+        }),
+        true,
+      );
+
+      assert.equal(
+        await prisma.guestbookEntry.count({ where: { invitationId: invitation.id } }),
+        0,
+      );
+      // The honeypot is answered after the rate limit, so a bot's dropped signature still spends the address's slot.
+      assert.equal(await counted(), 1);
     });
 
     it("signs through the use case, and answers the public read with the wall only while the package grants it", async () => {
@@ -361,6 +448,62 @@ describe("the guestbook on real PostgreSQL (F7; S2.7)", () => {
       assert.equal(
         await prisma.guestbookEntry.count({ where: { invitationId: basic.invitation.id } }),
         0,
+      );
+    });
+
+    it("bounds the owner's read to the newest 500 entries (L10.6)", async () => {
+      const { invitation, ownerId } = await newPublished();
+      await prisma.guestbookEntry.createMany({
+        data: Array.from({ length: GUESTBOOK_OWNER_ENTRIES_MAX + 2 }, (_unused, index) => ({
+          invitationId: invitation.id,
+          authorName: `Invitado ${index}`,
+          message: `Mensaje ${index}`,
+          hidden: index === 0,
+          createdAt: new Date(Date.UTC(2026, 11, 1, 10, 0, 0) + index * 1_000),
+        })),
+      });
+
+      const read = await new GetGuestbookEntriesUseCase(invitations, guestbook).execute(
+        ownerId,
+        invitation.id,
+      );
+
+      assert.equal(read?.entries.length, GUESTBOOK_OWNER_ENTRIES_MAX);
+      // Newest first, so the bound drops the oldest entries and never the newest ones.
+      assert.equal(read?.entries[0]?.authorName, `Invitado ${GUESTBOOK_OWNER_ENTRIES_MAX + 1}`);
+      assert.equal(read?.entries.at(-1)?.authorName, "Invitado 2");
+      assert.equal(read?.hiddenCount, 0);
+      assert.equal(read?.visibleCount, GUESTBOOK_OWNER_ENTRIES_MAX);
+    });
+
+    it("answers an entry id that is not a uuid as the entry's own 404, keeping a bad invitation id apart", async () => {
+      const { invitation, ownerId } = await newPublished();
+      const setHidden = new SetGuestbookEntryHiddenUseCase(invitations, guestbook);
+
+      // A malformed entry id names nothing of a valid invitation, so it is the entry's 404 rather than the
+      // invitation's (A4, L10.6).
+      assert.equal(
+        (
+          await setHidden.execute({
+            ownerId,
+            id: invitation.id,
+            entryId: "not-an-entry",
+            hidden: true,
+          })
+        ).status,
+        "entry-not-found",
+      );
+      // A malformed invitation id is still the invitation's own 404.
+      assert.equal(
+        (
+          await setHidden.execute({
+            ownerId,
+            id: "not-an-id",
+            entryId: "not-an-entry",
+            hidden: true,
+          })
+        ).status,
+        "invitation-not-found",
       );
     });
 

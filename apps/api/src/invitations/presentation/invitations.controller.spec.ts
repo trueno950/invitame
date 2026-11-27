@@ -83,6 +83,7 @@ import {
   type GuestbookRateLimiter,
 } from "../application/guestbook-rate-limiter";
 import {
+  GUESTBOOK_OWNER_ENTRIES_MAX,
   type GuestbookEntryRecord,
   type GuestbookEntryValues,
   publicGuestbookEntries,
@@ -747,15 +748,16 @@ class MemoryGuestbookRepository implements GuestbookRepository, InvitationGuestb
       (row) => row.id === invitationId && row.ownerId === ownerId,
     );
 
-    return owned ? this.sorted(invitationId) : null;
+    return owned ? this.sorted(invitationId).slice(0, GUESTBOOK_OWNER_ENTRIES_MAX) : null;
   }
 
-  async insert(invitationId: string, entry: GuestbookEntryValues, at: Date): Promise<boolean> {
+  async insert(invitationId: string, entry: GuestbookEntryValues): Promise<boolean> {
     const invitation = this.invitations.rows.find((row) => row.id === invitationId);
-    if (
-      invitation?.status !== "PUBLISHED" ||
-      (invitation.expiresAt !== null && invitation.expiresAt.getTime() < at.getTime())
-    ) {
+    if (invitation?.status !== "PUBLISHED") {
+      return false;
+    }
+    const at = new Date();
+    if (invitation.expiresAt !== null && invitation.expiresAt.getTime() < at.getTime()) {
       return false;
     }
     this.sequence += 1;
@@ -4588,12 +4590,30 @@ describe("invitations routes: /invitations", () => {
         assert.equal(entriesOf(created.id)[0]?.message, html);
       });
 
-      it("answers the same 202 without storing when the honeypot is filled", async () => {
+      it("answers the same 202 without storing when the honeypot is filled, and still counts the attempt", async () => {
         const { created } = await published();
+        guestbookRateLimiter.consumed.length = 0;
 
         const response = await sign(created.slug, {
           ...SIGNATURE,
           honeypot: "https://spam.example",
+        });
+
+        assert.equal(response.status, 202);
+        assert.deepEqual(await response.json(), { status: "received" });
+        assert.equal(entriesOf(created.id).length, 0);
+        // The honeypot is answered after the rate limit on purpose, so a bot's dropped signature spends its slot (L10.3).
+        assert.equal(guestbookRateLimiter.consumed.length, 1);
+        assert.equal(guestbookRateLimiter.consumed[0]?.invitationId, created.id);
+      });
+
+      it("answers the same 202 without storing when the honeypot is filled even with a body the domain refuses", async () => {
+        const { created } = await published();
+
+        const response = await sign(created.slug, {
+          authorName: "   ",
+          message: "\u0000",
+          honeypot: "filled",
         });
 
         assert.equal(response.status, 202);
@@ -4625,6 +4645,21 @@ describe("invitations routes: /invitations", () => {
             { ...SIGNATURE, message: "x".repeat(501) },
             ["message must be between 1 and 500 characters"],
           ],
+          [
+            "a NUL in the name",
+            { ...SIGNATURE, authorName: "Tía\u0000Rosa" },
+            ["authorName must not contain control characters"],
+          ],
+          [
+            "a NUL in the message",
+            { ...SIGNATURE, message: "¡Felicidades!\u0000" },
+            ["message must not contain control characters"],
+          ],
+          [
+            "a control character in the message",
+            { ...SIGNATURE, message: "Hola\u0007" },
+            ["message must not contain control characters"],
+          ],
         ];
 
         for (const [label, body, issues] of refused) {
@@ -4633,7 +4668,8 @@ describe("invitations routes: /invitations", () => {
           assert.equal(response.status, 400, label);
           assert.deepEqual(await response.json(), { code: "INVALID_GUESTBOOK_ENTRY", issues });
         }
-        // A refused signature never spends the guest's budget either.
+        // The rate limit runs before the domain validation, so one refused signature spends one of the address's ten
+        // slots; what it never does is reach the store (L10.3).
         assert.equal(guestbookRateLimiter.consumed.length, refused.length);
         assert.equal(entriesOf(created.id).length, 0);
       });
@@ -4828,6 +4864,31 @@ describe("invitations routes: /invitations", () => {
         );
       });
 
+      it("bounds the owner's read to the newest 500 entries (L10.6)", async () => {
+        const { cookie, created } = await published();
+        for (let index = 0; index < 502; index += 1) {
+          guestbookRepository.seedEntry(created.id, {
+            authorName: `Invitado ${index}`,
+            message: `Mensaje ${index}`,
+            createdAt: new Date(Date.UTC(2026, 11, 1, 10, 0, 0) + index * 1_000),
+          });
+        }
+
+        const response = await send("GET", `${PATH}/${created.id}/guestbook`, cookie);
+
+        assert.equal(response.status, 200);
+        const body = (await response.json()) as Row & {
+          entries: Array<{ authorName: string }>;
+          visibleCount: number;
+          hiddenCount: number;
+        };
+        assert.equal(body.entries.length, 500);
+        assert.equal(body.entries[0]?.authorName, "Invitado 501");
+        assert.equal(body.entries[499]?.authorName, "Invitado 2");
+        assert.equal(body.visibleCount, 500);
+        assert.equal(body.hiddenCount, 0);
+      });
+
       it("answers 404 for another owner's invitation and 404 for an entry of another invitation", async () => {
         const mine = await published();
         const theirs = await published();
@@ -4915,19 +4976,22 @@ describe("invitations routes: /invitations", () => {
         assert.equal(entriesOf(created.id)[0]?.hidden, true);
       });
 
-      it("refuses a malformed invitation or entry id before it reaches a port", async () => {
+      it("refuses a malformed invitation id before it reaches a port, and answers a malformed entry id as the entry's 404", async () => {
         const { cookie, created } = await published();
 
         const malformedInvitation = await send("GET", `${PATH}/not-an-id/guestbook`, cookie);
         assert.equal(malformedInvitation.status, 400);
 
+        // A valid invitation with an entry id that names no row is the entry's own 404, never the invitation's.
         const malformedEntry = await send(
           "PUT",
           `${PATH}/${created.id}/guestbook/not-an-entry`,
           cookie,
           { hidden: true },
         );
-        assert.equal(malformedEntry.status, 400);
+        assert.equal(malformedEntry.status, 404);
+        assert.deepEqual(await malformedEntry.json(), { code: "GUESTBOOK_ENTRY_NOT_FOUND" });
+        assert.equal(entriesOf(created.id).length, 0);
       });
     });
   });

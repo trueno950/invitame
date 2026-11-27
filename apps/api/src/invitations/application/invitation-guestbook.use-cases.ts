@@ -24,9 +24,13 @@ import type { InvitationRepository } from "./invitation.repository";
 // 4. the rate limit, which bounds every remaining step;
 // 5. the honeypot, before any validation: a filled field answers exactly like a stored signature, so a bot learns
 //    nothing from a 400 it would otherwise provoke;
-// 6. the domain validation;
-// 7. the insert, whose statement repeats the publication and expiry rules so a concurrent unpublish or an expiry that
-//    just passed is refused by the database too.
+// 6. the domain validation, which refuses a blank, an over-wide, or a control character before the signature can reach
+//    a column that would refuse it as a server fault;
+// 7. the insert, whose statement repeats the publication and expiry rules against the database's own clock, so a
+//    concurrent unpublish or an expiry that just passed is refused by the database too.
+//
+// The rate limit deliberately precedes the validation and the honeypot: a script cannot probe the validator for free, so
+// one refused or dropped signature spends one of the address's slots. What a refusal never does is store anything.
 
 /** The values of one signature; every value is untrusted and the address comes from the request. */
 export interface SubmitPublicGuestbookEntryInput {
@@ -130,7 +134,7 @@ export class SubmitPublicGuestbookEntryUseCase {
       throw new InvalidGuestbookEntryError(validation.issues);
     }
 
-    const written = await this.guestbook.insert(published.id, validation.value, at);
+    const written = await this.guestbook.insert(published.id, validation.value);
     if (!written) {
       // The invitation stopped accepting between the read and the write.
       throw new GuestbookClosedError();
@@ -153,7 +157,8 @@ export class SubmitPublicGuestbookEntryUseCase {
  * Every entry of one owned invitation, visible and hidden together, with the two counts the moderation screen's tabs
  * show (L10.6). Only the owner reads it: another customer's id, an unknown id, and a malformed id answer null, so a
  * foreign invitation is indistinguishable from a missing one (A4). An archived invitation stays readable: archiving is
- * read-only, not erased, and the owner may still hide what they no longer want shown.
+ * read-only, not erased, and the owner may still hide what they no longer want shown. The list is bounded to the newest
+ * `GUESTBOOK_OWNER_ENTRIES_MAX` entries, so the two counts describe that page.
  */
 export class GetGuestbookEntriesUseCase {
   constructor(
@@ -183,7 +188,9 @@ export class GetGuestbookEntriesUseCase {
  * Hides one entry, or shows it again (F7; L10.6): the owner's only moderation. Nothing is deleted — the guest never
  * deletes, and the owner does not either — so the same write can always be reversed. Owner-only: another customer's
  * invitation answers `invitation-not-found`, and an entry that belongs to another invitation answers `entry-not-found`,
- * which is the same 404 a missing one answers (A4).
+ * which is the same 404 a missing one answers (A4). A malformed entry id names no row of the invitation either, so it
+ * answers `entry-not-found` once the invitation itself is valid; only a malformed invitation id is the invitation's own
+ * 404.
  */
 export class SetGuestbookEntryHiddenUseCase {
   constructor(
@@ -192,12 +199,16 @@ export class SetGuestbookEntryHiddenUseCase {
   ) {}
 
   async execute(input: SetGuestbookEntryHiddenInput): Promise<SetGuestbookEntryHiddenResult> {
-    if (!isUuid(input.id) || !isUuid(input.entryId)) {
+    if (!isUuid(input.id)) {
       return { status: "invitation-not-found" };
     }
     const stored = await this.invitations.findOwned(input.ownerId, input.id);
     if (stored === null) {
       return { status: "invitation-not-found" };
+    }
+    // A malformed entry id cannot name a row, so it is the entry's own 404 rather than the invitation's.
+    if (!isUuid(input.entryId)) {
+      return { status: "entry-not-found" };
     }
     const entry = await this.guestbook.setHidden(
       input.ownerId,

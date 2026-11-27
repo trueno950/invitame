@@ -439,13 +439,15 @@ export class InvitationsController {
 
   /**
    * Hides one entry, or shows it again (F7; L10.6): the owner's only moderation, and nothing is deleted. Owner-only,
-   * idempotent, and the same two 404s for a foreign invitation (A4) and for an entry that is not this invitation's.
+   * idempotent, and the same two 404s for a foreign invitation (A4) and for an entry that is not this invitation's —
+   * an `:entryId` that is not even a uuid included, so the use case decides it rather than the pipe answering a 400
+   * the screen could not tell apart from a malformed body.
    */
   @Put(":id/guestbook/:entryId")
   async updateGuestbookEntry(
     @SessionUserId() userId: string,
     @Param("id", INVITATION_ID) id: string,
-    @Param("entryId", INVITATION_ID) entryId: string,
+    @Param("entryId") entryId: string,
     @Body() body: UpdateGuestbookEntryDto,
   ): Promise<GuestbookEntryResponse> {
     try {
