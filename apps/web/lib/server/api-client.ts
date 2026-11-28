@@ -8,6 +8,12 @@ import { AUTH_PROXY_SECRET_HEADER } from "./proxy-headers.ts";
 const SESSION_COOKIE_PREFIXES = ["better-auth.", "__Host-better-auth."] as const;
 export const API_CLIENT_TIMEOUT_MS = 10_000;
 
+/**
+ * The header a public request presents the access token of a password-protected invitation in (F13; S2.13, L18.2). The
+ * API's gate reads this name and nothing else, and the web sets it from its own `HttpOnly` cookie.
+ */
+export const INVITATION_ACCESS_HEADER = "x-invitation-access";
+
 /** The signed-in user's own profile, as `GET /me` and `PATCH /me` return it. */
 export interface OwnProfile {
   id: string;
@@ -115,6 +121,12 @@ export interface ApiRequest {
    * replace it, and it is never logged or stored here.
    */
   clientAddress?: string;
+  /**
+   * The access token of one password-protected invitation (F13; S2.13, L18.2), which the API's gate reads from this
+   * header. It is the value of the web's own `HttpOnly` cookie, so no script and no client ever holds it; it never
+   * becomes part of a path or a query, and nothing here logs it.
+   */
+  accessToken?: string;
 }
 
 /** The status, the body text only when the caller asked to read it for that status, and the headers. */
@@ -150,6 +162,12 @@ async function sendApiRequestRaw(
   // Set last, so a forwarded address is never a value another caller could add by accident.
   if (request.clientAddress !== undefined) {
     headers.set(config.clientIpHeader, request.clientAddress);
+  }
+
+  // The one credential a guest's device holds for a locked invitation (F13; L18.2): a header, never a cookie this client
+  // adds, and never a value of a path the API could read differently.
+  if (request.accessToken !== undefined) {
+    headers.set(INVITATION_ACCESS_HEADER, request.accessToken);
   }
 
   if (request.body !== undefined && request.multipart === undefined) {

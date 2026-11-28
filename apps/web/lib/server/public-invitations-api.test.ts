@@ -25,6 +25,9 @@ const MEDIA_ORIGIN = "http://localhost:3001";
 const parsePublicInvitation = (value: unknown) =>
   parsePublicInvitationContract(value, MEDIA_ORIGIN);
 
+/** One access token of the shape the API mints (F13; L18.2), so the client's own check accepts it. */
+const ACCESS_TOKEN = `invaccess1.2.1893456000.${"c".repeat(43)}`;
+
 const PUBLIC: PublicInvitation = {
   slug: "invitacion-k7m2qx",
   componentKey: "birthday-poster-01",
@@ -1252,5 +1255,212 @@ describe("the current address of a previous link (F11; L15.3)", () => {
         String(value),
       );
     }
+  });
+});
+
+// The access code's two answers on the web's public client (F13; S2.13, L18.2). A locked read carries the lock state and
+// the one display name, a read that presents a token proves it in the header the API's gate reads, and the unlock
+// answers the token the web stores in its own cookie — or the one neutral refusal, never a reason.
+describe("the locked answer of a public read (F13; L18.2, L18.3)", () => {
+  it("maps 423 to the lock state with the display name the API answered", async () => {
+    answer(423, { code: "INVITATION_LOCKED", displayName: "Ana y Luis", redirectTo: null });
+
+    assert.deepEqual(await client().getBySlug(PUBLIC.slug), {
+      ok: false,
+      failure: "locked",
+      displayName: "Ana y Luis",
+      redirectTo: null,
+    });
+    assert.equal(received[0]?.url, `/public/invitations/${PUBLIC.slug}`);
+  });
+
+  it("keeps a locked invitation that names nobody locked, with no name at all", async () => {
+    answer(423, { code: "INVITATION_LOCKED", displayName: null, redirectTo: null });
+
+    assert.deepEqual(await client().getBySlug(PUBLIC.slug), {
+      ok: false,
+      failure: "locked",
+      displayName: null,
+      redirectTo: null,
+    });
+  });
+
+  // A locked guest who followed a previous address gets the current one with the lock state, so the page moves there
+  // before drawing the lock screen and the cookie it sets lives at the address the invitation is served from (L18.2).
+  it("carries the current address a previous link must move to", async () => {
+    answer(423, {
+      code: "INVITATION_LOCKED",
+      displayName: "Ana y Luis",
+      redirectTo: "valentina-xv",
+    });
+
+    assert.deepEqual(await client().getBySlug(PUBLIC.slug), {
+      ok: false,
+      failure: "locked",
+      displayName: "Ana y Luis",
+      redirectTo: "valentina-xv",
+    });
+  });
+
+  it("reads an absent redirect target as none, for an API written before it (L20)", async () => {
+    answer(423, { code: "INVITATION_LOCKED", displayName: null });
+
+    assert.deepEqual(await client().getBySlug(PUBLIC.slug), {
+      ok: false,
+      failure: "locked",
+      displayName: null,
+      redirectTo: null,
+    });
+  });
+
+  it("fails closed on a locked body whose redirect target is not a slug", async () => {
+    for (const redirectTo of [7, "", "Valentina", "boda/2027", "x".repeat(61), []]) {
+      answer(423, { code: "INVITATION_LOCKED", displayName: null, redirectTo });
+      await assert.rejects(client().getBySlug(PUBLIC.slug), (error: unknown) => {
+        assert.ok(error instanceof ApiClientError);
+        assert.equal(error.kind, "invalid-response");
+        assert.equal(error.status, 423);
+        return true;
+      });
+    }
+  });
+
+  it("fails closed on a 423 whose body is not the documented lock answer", async () => {
+    answer(423, { code: "SOMETHING_ELSE" });
+
+    await assert.rejects(client().getBySlug(PUBLIC.slug), (error: unknown) => {
+      assert.ok(error instanceof ApiClientError);
+      assert.equal(error.kind, "invalid-response");
+      assert.equal(error.status, 423);
+      return true;
+    });
+  });
+
+  it("presents the access token in the header the gate reads, and sends none when there is no token", async () => {
+    await client().getBySlug(PUBLIC.slug, { accessToken: ACCESS_TOKEN });
+    assert.equal(received[0]?.headers["x-invitation-access"], ACCESS_TOKEN);
+    assert.equal(received[0]?.headers.cookie, undefined);
+
+    await client().getBySlug(PUBLIC.slug);
+    assert.equal(received[1]?.headers["x-invitation-access"], undefined);
+  });
+
+  it("forwards the token in every public write, so a locked invitation accepts a guest who unlocked it", async () => {
+    answer(202, { status: "received" });
+
+    await client().submitRsvp(PUBLIC.slug, SUBMISSION, {
+      clientAddress: "203.0.113.7",
+      accessToken: ACCESS_TOKEN,
+    });
+
+    assert.equal(received[0]?.headers["x-invitation-access"], ACCESS_TOKEN);
+    assert.equal(received[0]?.headers["x-invitame-client-ip"], "203.0.113.7");
+  });
+
+  it("never puts the token in the path or the query", async () => {
+    await client().getBySlug(PUBLIC.slug, { accessToken: ACCESS_TOKEN });
+
+    assert.equal(received[0]?.url.includes(ACCESS_TOKEN), false);
+  });
+
+  // A public write on a locked invitation is refused before the route runs (F13; L18.2), so the guest's action answers its
+  // own password notice instead of the generic failure one.
+  it("maps a 423 on every public write to its own locked failure", async () => {
+    const locked = { code: "INVITATION_LOCKED", displayName: null, redirectTo: null };
+
+    answer(423, locked);
+    assert.deepEqual(await client().submitRsvp(PUBLIC.slug, SUBMISSION), {
+      ok: false,
+      failure: "locked",
+    });
+
+    answer(423, locked);
+    assert.deepEqual(
+      await client().submitGuestbook(PUBLIC.slug, {
+        authorName: "Rosa",
+        message: "Hola",
+        honeypot: "",
+      }),
+      { ok: false, failure: "locked" },
+    );
+
+    answer(423, locked);
+    assert.deepEqual(
+      await client().uploadGuestPhoto(PUBLIC.slug, {
+        bytes: new Uint8Array([0xff, 0xd8, 0xff, 0x01]),
+        uploaderName: null,
+      }),
+      { ok: false, failure: "locked" },
+    );
+    assert.deepEqual(
+      received.map((entry) => entry.url),
+      [
+        `/public/invitations/${PUBLIC.slug}/rsvp`,
+        `/public/invitations/${PUBLIC.slug}/guestbook`,
+        `/public/invitations/${PUBLIC.slug}/photos`,
+      ],
+    );
+  });
+});
+
+describe("one unlock attempt (F13; L18.2, L18.3)", () => {
+  it("exchanges the code for the token and its expiry", async () => {
+    answer(200, { accessToken: ACCESS_TOKEN, expiresAt: "2027-01-01T00:00:00.000Z" });
+
+    const unlocked = await client().unlock(PUBLIC.slug, "rosas2026", {
+      clientAddress: "203.0.113.7",
+    });
+
+    assert.deepEqual(unlocked, {
+      ok: true,
+      accessToken: ACCESS_TOKEN,
+      expiresAt: "2027-01-01T00:00:00.000Z",
+    });
+    assert.equal(received[0]?.method, "POST");
+    assert.equal(received[0]?.url, `/public/invitations/${PUBLIC.slug}/unlock`);
+    assert.deepEqual(JSON.parse(received[0]?.body ?? ""), { password: "rosas2026" });
+    assert.equal(received[0]?.headers["x-invitame-client-ip"], "203.0.113.7");
+    assert.equal(received[0]?.headers["x-invitation-access"], undefined);
+    assert.equal(received[0]?.headers.cookie, undefined);
+  });
+
+  it("answers the one neutral refusal for 401 and the other for 429, and reads no reason from either body", async () => {
+    answer(401, { code: "INVITATION_PASSWORD_REJECTED" });
+    assert.deepEqual(await client().unlock(PUBLIC.slug, "otra"), {
+      ok: false,
+      failure: "rejected",
+    });
+
+    answer(429, { code: "INVITATION_PASSWORD_REJECTED" });
+    assert.deepEqual(await client().unlock(PUBLIC.slug, "otra"), {
+      ok: false,
+      failure: "rate-limited",
+    });
+
+    answer(400, { code: "validation" });
+    assert.deepEqual(await client().unlock(PUBLIC.slug, "otra"), { ok: false, failure: "invalid" });
+  });
+
+  it("fails closed on a success body that is not a token this deployment could store", async () => {
+    for (const body of [
+      { accessToken: "invaccess1.x.1.2", expiresAt: "2027-01-01T00:00:00.000Z" },
+      { accessToken: ACCESS_TOKEN },
+      { accessToken: ACCESS_TOKEN, expiresAt: "no-es-fecha" },
+    ]) {
+      answer(200, body);
+      await assert.rejects(client().unlock(PUBLIC.slug, "rosas2026"), (error: unknown) => {
+        assert.ok(error instanceof ApiClientError);
+        assert.equal(error.kind, "invalid-response");
+        return true;
+      });
+    }
+  });
+
+  it("sends nothing for a slug that cannot be one, and answers the same refusal", async () => {
+    assert.deepEqual(await client().unlock("Ana y Luis", "rosas2026"), {
+      ok: false,
+      failure: "rejected",
+    });
+    assert.equal(received.length, 0);
   });
 });

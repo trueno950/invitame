@@ -84,6 +84,8 @@ const OWNED = {
   },
   // This deployment has no WhatsApp provider, so the capability the read answers is false (F6; S6, L9.5).
   remindersConfigured: false,
+  // The access code the invitation stores (F13; L18.1): none, so the block offers the field.
+  passwordProtected: false,
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
   // The precise-locations slice (S2): every stored point, keyed by the address field it belongs to.
   places: {},
@@ -1993,6 +1995,105 @@ describe("the owner's collaborator reads and writes (F12; L17.3)", () => {
     }
     assert.deepEqual(await client(null).collaborators(ID), { ok: false, failure: "signed-out" });
     assert.deepEqual(await client(null).acceptCollaboration(COLLABORATOR_TOKEN), {
+      ok: false,
+      failure: "signed-out",
+    });
+    assert.equal(received.length, 0);
+  });
+});
+
+// The owner's access code (F13; S2.13, L18.1, L18.5). The read states only whether a code is set, and the two writes
+// answer the same shape, so the block never sees the code and never sees a hash.
+describe("the access code of one invitation (F13; L18.1, L18.5)", () => {
+  it("reads `passwordProtected` from the owner's read", async () => {
+    answer(200, { ...OWNED, passwordProtected: true });
+
+    const read = await client().get(ID);
+
+    assert.equal(read.ok && read.value.passwordProtected, true);
+    assert.equal(received[0]?.method, "GET");
+    assert.equal(received[0]?.url, `/invitations/${ID}`);
+  });
+
+  it("reads a body written before F13 as unprotected, which is what an older API meant (L20)", async () => {
+    const { passwordProtected, ...older } = { ...OWNED, passwordProtected: true };
+
+    assert.equal(passwordProtected, true);
+    assert.equal(parseOwnedInvitation(older)?.passwordProtected, false);
+    assert.equal(
+      parseOwnedInvitation({ ...OWNED, passwordProtected: true })?.passwordProtected,
+      true,
+    );
+    // An explicit value of another shape is refused instead of read as a capability.
+    for (const value of ["true", 1, null]) {
+      assert.equal(
+        parseOwnedInvitation({ ...OWNED, passwordProtected: value }),
+        undefined,
+        JSON.stringify(value),
+      );
+    }
+  });
+
+  it("sets the code with PUT /invitations/:id/password and answers only the state", async () => {
+    answer(200, { passwordProtected: true, passwordVersion: 2 });
+
+    const saved = await client().setPassword(ID, "rosas2026");
+
+    assert.deepEqual(saved, { ok: true, value: { passwordProtected: true } });
+    assert.equal(received[0]?.method, "PUT");
+    assert.equal(received[0]?.url, `/invitations/${ID}/password`);
+    assert.deepEqual(JSON.parse(received[0]?.body ?? ""), { password: "rosas2026" });
+  });
+
+  it("removes the code with DELETE /invitations/:id/password", async () => {
+    answer(200, { passwordProtected: false, passwordVersion: 3 });
+
+    const removed = await client().clearPassword(ID);
+
+    assert.deepEqual(removed, { ok: true, value: { passwordProtected: false } });
+    assert.equal(received[0]?.method, "DELETE");
+    assert.equal(received[0]?.url, `/invitations/${ID}/password`);
+  });
+
+  it("maps each documented refusal, and asks nothing for an id that cannot be one", async () => {
+    answer(400, {
+      code: "INVALID_INVITATION_PASSWORD",
+      issues: ["password must be at least 4 characters long"],
+    });
+    assert.deepEqual(await client().setPassword(ID, "abc"), {
+      ok: false,
+      failure: "password-invalid",
+    });
+
+    answer(409, { code: "PASSWORD_PROTECTION_NOT_AVAILABLE" });
+    assert.deepEqual(await client().setPassword(ID, "rosas2026"), {
+      ok: false,
+      failure: "password-protection-unavailable",
+    });
+
+    answer(409, { code: "INVITATION_NOT_EDITABLE" });
+    assert.deepEqual(await client().clearPassword(ID), { ok: false, failure: "not-editable" });
+
+    answer(404, { code: "INVITATION_NOT_FOUND" });
+    assert.deepEqual(await client().setPassword(ID, "rosas2026"), {
+      ok: false,
+      failure: "not-found",
+    });
+
+    received = [];
+    assert.deepEqual(await client().setPassword("no-es-uuid", "rosas2026"), {
+      ok: false,
+      failure: "not-found",
+    });
+    assert.deepEqual(await client().clearPassword("no-es-uuid"), {
+      ok: false,
+      failure: "not-found",
+    });
+    assert.equal(received.length, 0);
+  });
+
+  it("does not send the request without a session", async () => {
+    assert.deepEqual(await client(null).setPassword(ID, "rosas2026"), {
       ok: false,
       failure: "signed-out",
     });

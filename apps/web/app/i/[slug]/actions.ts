@@ -1,18 +1,52 @@
 "use server";
 
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { cookies, headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 
 import { submitPublicGuestAlbumForm } from "../../../lib/public/guest-album.ts";
 import { submitPublicGuestbookForm } from "../../../lib/public/guestbook.ts";
+import { unlockInvitationWith } from "../../../lib/public/invitation-lock.ts";
+import { publicInvitationPath } from "../../../lib/public/invitation-page.ts";
 import { submitPublicRsvpForm } from "../../../lib/public/invitation-rsvp.ts";
 import { clientAddressFor } from "../../../lib/server/client-address.ts";
 import { getWebServerConfig } from "../../../lib/server/config.ts";
+import { invitationAccessCookie } from "../../../lib/server/invitation-access-cookie.ts";
+import { requestOrigin } from "../../../lib/server/request-origin.ts";
 import {
   submitPublicGuestbook,
   submitPublicRsvp,
+  unlockPublicInvitation,
   uploadPublicGuestPhoto,
 } from "./_lib/public-api.ts";
+
+/**
+ * The guest's one attempt at an invitation that stores an access code (F13; S2.13, L18.2, L18.3). The lock screen's form
+ * posts here with no client script, so the screen works with the script off.
+ *
+ * On success the token the API minted is stored in the web's own cookie — `HttpOnly`, `SameSite=Lax`, scoped to this
+ * invitation's page, 30 days, and `Secure` over https — and the guest lands on the invitation itself. The token never
+ * becomes part of a URL: the redirect names the page and nothing else. On a refusal the action comes back to the same
+ * lock screen with one neutral notice, and the guest's address is read from the incoming request's headers — never from
+ * the form — because that is what the API's rate limit counts.
+ */
+export async function unlockInvitationAction(formData: FormData): Promise<void> {
+  const requestHeaders = await headers();
+  const outcome = await unlockInvitationWith({ unlock: unlockPublicInvitation }, formData, {
+    clientAddress: clientAddressFor(requestHeaders, getWebServerConfig()),
+  });
+
+  if (outcome.kind === "invalid") {
+    notFound();
+  }
+  if (outcome.kind === "refused") {
+    redirect(outcome.target);
+  }
+
+  const secure = requestOrigin(requestHeaders)?.startsWith("https://") ?? false;
+
+  (await cookies()).set(invitationAccessCookie(outcome.slug, outcome.accessToken, secure));
+  redirect(publicInvitationPath(outcome.slug));
+}
 
 /**
  * The guest's open RSVP answer (M6 G3; S1, S4). CORS allows no cross-origin write from the invitation page, so the

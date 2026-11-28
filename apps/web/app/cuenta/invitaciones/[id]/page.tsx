@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import Link from "next/link";
 import { connection } from "next/server";
 
@@ -53,12 +53,14 @@ import {
   OMITTED_SECTIONS_PROPERTY,
   omittableSectionsOf,
 } from "../../../../lib/customer/omittable-sections.ts";
+import { passwordProtectionView } from "../../../../lib/customer/password-protection.ts";
 import { publishHintFor } from "../../../../lib/customer/publish-copy.ts";
 import { publicInvitationPath } from "../../../../lib/public/invitation-page.ts";
 import type { OwnedInvitation, RsvpRead } from "../../../../lib/server/invitations-api.ts";
 import { isInvitationId } from "../../../../lib/server/invitations-api.ts";
 import type { MediaLimits } from "../../../../lib/server/media-api.ts";
 import { requestOrigin } from "../../../../lib/server/request-origin.ts";
+import { PASSWORD_SHARE_COOKIE, passwordShares } from "../../../../lib/server/single-use-flash.ts";
 import { CustomerWorkspaceShell } from "../../../_components/customer-workspace-shell.tsx";
 import {
   fieldHint,
@@ -99,9 +101,14 @@ import {
   REMINDERS_PREVIEW_GUEST,
   reminderPreviewMessage,
 } from "../../../../lib/customer/reminders.ts";
+import {
+  removeInvitationPasswordAction,
+  saveInvitationPasswordAction,
+} from "../password-actions.ts";
+import { getWebServerConfig } from "../../../../lib/server/config.ts";
 import { EditorShell } from "./_components/editor-shell.tsx";
 import { AddressField } from "./_components/address-field.tsx";
-import { getWebServerConfig } from "../../../../lib/server/config.ts";
+import { PasswordField } from "./_components/password-field.tsx";
 
 export const metadata: Metadata = {
   title: INVITATION_COPY.detailPageTitle,
@@ -381,6 +388,24 @@ export default async function InvitationDetailPage({
    * request's origin otherwise, so the owner reads the real address and the product hard-codes no host (F11; L15.4).
    */
   const addressOrigin = getWebServerConfig().publicWebOrigin ?? origin;
+  /**
+   * The access code's block (F13; S2.13, L18.1): offered only to the invitation's owner, and only while the pinned package
+   * grants `PASSWORD_PROTECTION` or a code is already stored — a stored code stays removable even after the catalog
+   * withdrew the key, because a lock that vanished with a link would publish an invitation its owner closed (L18.5).
+   */
+  const passwordView = passwordProtectionView(invitation);
+  const showPassword = access.owner && (passwordView.show || passwordView.protected);
+  /**
+   * The ready-to-share message of the code that was just saved: read once, as the page renders, so the store deletes it and
+   * a reload cannot show the code again. Nothing else on this page ever holds the value (L18.1).
+   */
+  const passwordShareHandle = showPassword
+    ? (await cookies()).get(PASSWORD_SHARE_COOKIE)?.value
+    : undefined;
+  const passwordShare =
+    passwordShareHandle === undefined
+      ? undefined
+      : passwordShares.take(passwordShareHandle, (entry) => entry.invitationId === invitation.id);
   const missing = missingFieldsMessage(invitation.missingRequiredFields);
   const editable = pinned !== undefined && !archived;
   const rows =
@@ -487,6 +512,17 @@ export default async function InvitationDetailPage({
             initialField={focusField}
             invitationId={invitation.id}
             omittable={omittable}
+            password={
+              showPassword ? (
+                <PasswordField
+                  invitationId={invitation.id}
+                  removeAction={removeInvitationPasswordAction}
+                  saveAction={saveInvitationPasswordAction}
+                  {...(passwordShare === undefined ? {} : { shareMessage: passwordShare.message })}
+                  view={passwordView}
+                />
+              ) : null
+            }
             places={invitation.places}
             detailPath={INVITATION_PATHS.detail(invitation.id)}
             photoCount={photoCount}

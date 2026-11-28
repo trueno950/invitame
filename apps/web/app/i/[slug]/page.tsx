@@ -2,13 +2,20 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { connection } from "next/server";
 
-import { PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
+import { LOCK_SCREEN_COPY, PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
 import { guestAlbumNotice, publicGuestAlbumBlock } from "../../../lib/public/guest-album.ts";
 import { guestbookNotice, publicGuestbookBlock } from "../../../lib/public/guestbook.ts";
 import {
   openingAnimationBlock,
   publicFeatureBlock,
 } from "../../../lib/public/invitation-features.ts";
+import {
+  lockNotice,
+  lockScreenView,
+  type LockScreenView,
+  lockedRedirectSlug,
+} from "../../../lib/public/invitation-lock.ts";
+import { lockWriteNotice } from "../../../lib/public/invitation-lock-write.ts";
 import { invitationMetadata, publicInvitationPath } from "../../../lib/public/invitation-page.ts";
 import { rendererAcceptsProps } from "../../../lib/public/invitation-render.ts";
 import { publicRsvpBlock, rsvpNotice } from "../../../lib/public/invitation-rsvp.ts";
@@ -16,6 +23,7 @@ import { findRenderer } from "../../../lib/renderers/registry.ts";
 import { OpeningAnimationIsland } from "../../_components/invitation-features/opening-animation-island.ts";
 import { GuestInvitation } from "./_components/guest-invitation.tsx";
 import { InvitationMessage } from "./_components/invitation-message.tsx";
+import { InvitationLockScreen } from "./_components/lock-screen.ts";
 import {
   GuestAlbumNoticeNote,
   GuestbookNoticeNote,
@@ -23,7 +31,12 @@ import {
 } from "./_components/rsvp-notice.tsx";
 import { loadPublicInvitation } from "./_lib/load.ts";
 import { logPublicInvitation, PUBLIC_INVITATION_LOG_EVENT } from "./_lib/public-api.ts";
-import { signGuestbookAction, submitRsvpAction, uploadGuestPhotoAction } from "./actions.ts";
+import {
+  signGuestbookAction,
+  submitRsvpAction,
+  unlockInvitationAction,
+  uploadGuestPhotoAction,
+} from "./actions.ts";
 
 /**
  * `/i/[slug]` (M5 T5; S1, S5, A3, A5, A6, A7, A8): the guest's page of a published invitation. A server
@@ -61,7 +74,10 @@ export async function generateMetadata({
     title:
       loaded.status === "unavailable"
         ? PUBLIC_INVITATION_COPY.unavailableTitle
-        : PUBLIC_INVITATION_COPY.notFoundTitle,
+        : loaded.status === "locked"
+          ? // A locked page names nothing of the invitation: its share metadata is the lock screen's own generic line.
+            LOCK_SCREEN_COPY.privateTitle
+          : PUBLIC_INVITATION_COPY.notFoundTitle,
     ...NO_INDEX,
   };
 }
@@ -85,6 +101,30 @@ export default async function PublicInvitationPage({
         heading={PUBLIC_INVITATION_COPY.unavailableTitle}
       />
     );
+  }
+  // The invitation stores an access code this device has not unlocked yet (F13; S2.13, L18.2): a locked guest who followed
+  // a previous address moves to the current one first, exactly as the unlocked alias redirect does, because the cookie the
+  // lock screen sets is scoped to the address the invitation is served from.
+  if (loaded.status === "locked") {
+    const current = lockedRedirectSlug(slug, loaded.redirectTo);
+
+    if (current !== undefined) {
+      permanentRedirect(publicInvitationPath(current));
+    }
+    // The page draws the lock screen with the one fact the answer carried, the notice of a refused attempt, or the one of a
+    // public write the access code refused before it reached its route.
+    const notice = lockNotice(parameters) ?? lockWriteNotice(parameters);
+    const view: LockScreenView | undefined = lockScreenView({
+      slug,
+      displayName: loaded.displayName,
+      ...(notice === undefined ? {} : { notice }),
+    });
+
+    if (view === undefined) {
+      notFound();
+    }
+
+    return <InvitationLockScreen action={unlockInvitationAction} view={view} />;
   }
 
   const invitation = loaded.invitation;

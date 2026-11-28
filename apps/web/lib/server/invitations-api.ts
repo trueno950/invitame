@@ -159,6 +159,12 @@ export interface OwnedInvitation extends InvitationSummary {
    */
   remindersConfigured?: boolean;
   /**
+   * Whether the invitation stores a shared access code (F13; S2.13, L18.1). The code itself is never answered — the
+   * owner sees it once, while setting it — so this boolean is everything the editor's block knows. It is absent from a
+   * body written before F13, and a reader treats that as false (L20).
+   */
+  passwordProtected: boolean;
+  /**
    * The gated feature keys the guest page will show, `CALENDAR` included (S4). The package's other keys are
    * never here, and a key this deployment does not implement is refused by the parser.
    */
@@ -464,6 +470,8 @@ export type InvitationFailure =
   | "collaborator-email-unavailable"
   | "collaborator-not-found"
   | "collaboration-not-found"
+  | "password-invalid"
+  | "password-protection-unavailable"
   | "forbidden";
 
 /**
@@ -473,6 +481,14 @@ export type InvitationFailure =
 export type InvitationResult<T> =
   | { ok: true; value: T }
   | { ok: false; failure: InvitationFailure; issues?: string[] };
+
+/**
+ * The owner's answer of the two access-code writes (F13; S2.13, L18.1): whether a code is set. The code, its hash, and
+ * the version every write raises never leave the API, so this is everything the editor's block reads.
+ */
+export interface PasswordState {
+  readonly passwordProtected: boolean;
+}
 
 /** A draft to create: the published version to pin and the package whose features are checked (S6). */
 export interface InvitationInput {
@@ -851,6 +867,9 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     owned.slugRenamesRemaining === undefined
       ? ADDRESS_RENAMES_MAX
       : parseRenamesRemaining(owned.slugRenamesRemaining);
+  // A body written before F13 carries no code at all, which reads as unprotected: an older API had no way to lock an
+  // invitation, so nothing that page could serve was locked (L20). An explicit value is a boolean or the body is refused.
+  const passwordProtected = owned.passwordProtected === undefined ? false : owned.passwordProtected;
 
   if (
     content === undefined ||
@@ -861,6 +880,7 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     access === undefined ||
     slugRenamesRemaining === undefined ||
     typeof remindersConfigured !== "boolean" ||
+    typeof passwordProtected !== "boolean" ||
     !isInvitationTimeZone(owned.timeZone)
   ) {
     return undefined;
@@ -875,6 +895,7 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     slugRenamesRemaining,
     featureSettings,
     remindersConfigured,
+    passwordProtected,
     availableFeatures,
     places,
   };
@@ -888,6 +909,18 @@ function parseRenamesRemaining(value: unknown): number | undefined {
     value <= ADDRESS_RENAMES_MAX
     ? value
     : undefined;
+}
+
+/**
+ * The state one access-code write answers (F13; L18.1): only whether a code is set. A body that states anything else — no
+ * field, a non-boolean, a version of another shape — is not this contract, so the whole answer is refused.
+ */
+export function parsePasswordState(value: unknown): PasswordState | undefined {
+  const state = record(value);
+
+  return state === undefined || typeof state.passwordProtected !== "boolean"
+    ? undefined
+    : { passwordProtected: state.passwordProtected };
 }
 
 /**
@@ -1900,6 +1933,8 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   COLLABORATOR_EMAIL_UNAVAILABLE: "collaborator-email-unavailable",
   COLLABORATOR_NOT_FOUND: "collaborator-not-found",
   COLLABORATION_NOT_FOUND: "collaboration-not-found",
+  INVALID_INVITATION_PASSWORD: "password-invalid",
+  PASSWORD_PROTECTION_NOT_AVAILABLE: "password-protection-unavailable",
   INVITATION_FORBIDDEN: "forbidden",
 };
 
@@ -2185,6 +2220,20 @@ export function createInvitationsClient(
       onDraft(id, "/slug", (path) =>
         call("PUT", path, { slug: slug.trim() }, parseOwnedInvitation),
       ),
+    /**
+     * `PUT /invitations/:id/password`: sets or replaces the invitation's shared access code (F13; S2.13, L18.1). Called
+     * from a server action, owner-only at the API, and `PUT` because the whole code is replaced; the answer states only
+     * whether a code is set. Every call raises the stored version, so every token minted before it stops opening the
+     * invitation (L18.2).
+     */
+    setPassword: (id: string, password: string): Promise<InvitationResult<PasswordState>> =>
+      onDraft(id, "/password", (path) => call("PUT", path, { password }, parsePasswordState)),
+    /**
+     * `DELETE /invitations/:id/password`: removes the access code (F13; L18.1), so the invitation opens again to whoever
+     * holds its link, and every token minted while it was protected stops opening it. Called from a server action.
+     */
+    clearPassword: (id: string): Promise<InvitationResult<PasswordState>> =>
+      onDraft(id, "/password", (path) => call("DELETE", path, undefined, parsePasswordState)),
     /** `GET /invitations/:id`: one own draft with its content and missing fields (S7). */
     get: (id: string): Promise<InvitationResult<OwnedInvitation>> =>
       onDraft(id, "", (path) => call("GET", path, undefined, parseOwnedInvitation)),

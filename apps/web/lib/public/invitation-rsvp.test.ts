@@ -263,6 +263,7 @@ describe("submitPublicRsvpForm", () => {
       [{ ok: false, failure: "invalid" }, "invalid"],
       [{ ok: false, failure: "not-open" }, "closed"],
       [{ ok: false, failure: "rate-limited" }, "limited"],
+      [{ ok: false, failure: "locked" }, "locked"],
       [{ ok: false, failure: "not-found" }, "unavailable"],
     ];
 
@@ -273,6 +274,21 @@ describe("submitPublicRsvpForm", () => {
         JSON.stringify(result),
       );
     }
+  });
+
+  it("comes back to the invitation with the password notice when the invitation is locked (F13; L18.2)", async () => {
+    const target = await submitPublicRsvpForm(
+      fakeClient({ ok: false, failure: "locked" }),
+      form(ANSWER),
+      { clientAddress: undefined },
+    );
+
+    assert.equal(target, rsvpResultTarget(SLUG, "locked"));
+    assert.equal(target, `/i/${SLUG}?rsvp=locked`);
+    assert.deepEqual(rsvpNotice({ rsvp: "locked" }), {
+      code: "locked",
+      message: "Esta invitación pide contraseña. Vuelve a abrirla para escribirla.",
+    });
   });
 
   it("answers an outage with its own notice instead of failing the guest's page", async () => {

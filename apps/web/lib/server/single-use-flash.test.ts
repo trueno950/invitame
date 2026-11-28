@@ -9,6 +9,9 @@ import {
   GUEST_LINK_COOKIE,
   guestLinkCookie,
   isFlashHandle,
+  PASSWORD_SHARE_COOKIE,
+  passwordShareCookie,
+  passwordShares,
 } from "./single-use-flash.ts";
 
 // The one-time hand-off between a server action and the page it redirects to (M6 G4; S4). A plain cookie cannot be
@@ -155,5 +158,44 @@ describe("flash cookies", () => {
     assert.equal(cookie.value, handle);
     assert.equal(isFlashHandle(cookie.value), true);
     assert.equal(cookie.value.includes("http"), false);
+  });
+});
+
+// The ready-to-share message of the access code (F13; S2.13, L18.1). The owner reads it once, right after saving the
+// code, and the code itself never becomes part of a URL: it stays in this process's store behind an opaque handle, in a
+// cookie scoped to the invitation's own editor.
+describe("the access code's ready-to-share message (F13; L18.1)", () => {
+  it("scopes the cookie to the invitation's editor and keeps the code out of it", () => {
+    const cookie = passwordShareCookie("inv-1", "AbCdEfGhIjKlMnOpQrStUv", true);
+
+    assert.equal(PASSWORD_SHARE_COOKIE, "invitame-contrasena-compartir");
+    assert.deepEqual(cookie, {
+      name: "invitame-contrasena-compartir",
+      value: "AbCdEfGhIjKlMnOpQrStUv",
+      httpOnly: true,
+      sameSite: "strict",
+      path: "/cuenta/invitaciones/inv-1",
+      maxAge: FLASH_COOKIE_MAX_AGE_SECONDS,
+      secure: true,
+    });
+    assert.equal(cookie.value.includes("rosas2026"), false);
+  });
+
+  it("answers the stored message exactly once, and only to the invitation it belongs to", () => {
+    const handle = passwordShares.put({ invitationId: "inv-1", message: "Te invitamos: /i/ana" });
+
+    // Another invitation's page can never read it, and reading it does not delete it.
+    assert.equal(
+      passwordShares.take(handle, (entry) => entry.invitationId === "inv-2"),
+      undefined,
+    );
+    assert.deepEqual(
+      passwordShares.take(handle, (entry) => entry.invitationId === "inv-1"),
+      {
+        invitationId: "inv-1",
+        message: "Te invitamos: /i/ana",
+      },
+    );
+    assert.equal(passwordShares.take(handle), undefined);
   });
 });

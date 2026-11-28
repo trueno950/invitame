@@ -252,6 +252,8 @@ const OWNED: OwnedInvitation = {
   access: OWNER_ACCESS_FIXTURE,
   timeZone: "America/Mexico_City",
   slugRenamesRemaining: 5,
+  // The shared access code the invitation stores (F13; L18.1): none, so the read answers the switch is off.
+  passwordProtected: false,
   featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
   places: {},
@@ -942,6 +944,9 @@ function stub(answers: Answers = {}): Stub {
     checkSlugAvailability: () =>
       Promise.resolve({ ok: false as const, failure: "not-found" as const }),
     renameSlug: () => Promise.resolve({ ok: false as const, failure: "not-found" as const }),
+    // The access code's two writes (F13; L18.1): the pages under test never call them, so they answer as a refusal.
+    setPassword: () => Promise.resolve({ ok: false as const, failure: "not-found" as const }),
+    clearPassword: () => Promise.resolve({ ok: false as const, failure: "not-found" as const }),
     clearPlace: (id, field) => {
       calls.push(`clearPlace:${id}:${field}`);
       return answers.clearPlace?.() ?? unexpected("clearPlace");

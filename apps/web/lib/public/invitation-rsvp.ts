@@ -34,6 +34,8 @@ export const RSVP_NOTICE_CODES = [
   "closed",
   "limited",
   "unavailable",
+  // The invitation asked for its password before the answer reached it (F13; L18.2).
+  "locked",
 ] as const;
 export type RsvpNoticeCode = (typeof RSVP_NOTICE_CODES)[number];
 
@@ -248,11 +250,14 @@ export async function submitPublicRsvpForm(
 
 /** Each refusal of the API, as the notice the guest page shows (S4). */
 const RESULT_CODES: Readonly<
-  Record<"invalid" | "not-open" | "rate-limited" | "not-found", RsvpNoticeCode>
+  Record<"invalid" | "not-open" | "rate-limited" | "not-found" | "locked", RsvpNoticeCode>
 > = {
   invalid: "invalid",
   "not-open": "closed",
   "rate-limited": "limited",
+  // The invitation stores an access code this device has not unlocked: the page draws its lock screen and says so
+  // (F13; L18.2).
+  locked: "locked",
   // The page itself answers 404 for a slug that no longer resolves, so the notice says nothing new.
   "not-found": "unavailable",
 };

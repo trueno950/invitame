@@ -31,6 +31,8 @@ export const GUESTBOOK_NOTICE_CODES = [
   "closed",
   "limited",
   "unavailable",
+  // The invitation asked for its password before the signature reached it (F13; L18.2).
+  "locked",
 ] as const;
 export type GuestbookNoticeCode = (typeof GUESTBOOK_NOTICE_CODES)[number];
 
@@ -143,11 +145,14 @@ export type PublicGuestbookClient = Pick<PublicInvitationsClient, "submitGuestbo
 
 /** Each refusal of the API, as the notice the guest page shows (L10.3). */
 const RESULT_CODES: Readonly<
-  Record<"invalid" | "closed" | "rate-limited" | "not-found", GuestbookNoticeCode>
+  Record<"invalid" | "closed" | "rate-limited" | "not-found" | "locked", GuestbookNoticeCode>
 > = {
   invalid: "invalid",
   closed: "closed",
   "rate-limited": "limited",
+  // The invitation stores an access code this device has not unlocked: the page draws its lock screen and says so
+  // (F13; L18.2).
+  locked: "locked",
   // The page itself answers 404 for a slug that no longer resolves, so the notice says nothing new.
   "not-found": "unavailable",
 };

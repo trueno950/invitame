@@ -256,6 +256,9 @@ export const INVITATION_FEATURE_KEYS = [
   "QR_PASS",
   "GALLERY",
   "CO_HOSTS",
+  // The access code (F13; S2.13, L18.5): a Deluxe invitation's owner read answers it, and it is never rendered as a
+  // guest block — a code is access control, not a feature card.
+  "PASSWORD_PROTECTION",
   "CALENDAR",
 ] as const;
 

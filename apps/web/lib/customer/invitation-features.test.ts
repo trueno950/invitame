@@ -38,6 +38,8 @@ const OWNED: OwnedInvitation = {
   access: OWNER_ACCESS,
   timeZone: "America/Tijuana",
   slugRenamesRemaining: 5,
+  // The shared access code the invitation stores (F13; L18.1): none, so the read answers the switch is off.
+  passwordProtected: false,
   featureSettings: { whatsappPhone: "+525512345678", playlistUrl: PLAYLIST },
   availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "CALENDAR"],
   places: {},

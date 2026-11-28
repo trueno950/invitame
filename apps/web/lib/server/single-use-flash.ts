@@ -40,6 +40,13 @@ export const GUEST_LINK_COOKIE = "invitame-enlace-invitado";
 /** The cookie that carries the page a signed-out visitor asked for, scoped to `/cuenta`. */
 export const AFTER_SIGN_IN_COOKIE = "invitame-despues-de-ingresar";
 
+/**
+ * The cookie that carries the ready-to-share message of one invitation's access code (F13; S2.13, L18.1). The message
+ * quotes the code the owner just typed, so it is never part of a URL, a query, or a stored fact: it lives in this
+ * process's store for one render and the browser carries only an opaque handle.
+ */
+export const PASSWORD_SHARE_COOKIE = "invitame-contrasena-compartir";
+
 /** The options Next.js needs for one flash cookie; `secure` follows the scheme the request arrived on. */
 export interface FlashCookieOptions {
   name: string;
@@ -88,6 +95,18 @@ export function guestLinkCookie(
 /** The cookie that survives a trip through sign-in, scoped to the customer area that reads it. */
 export function afterSignInCookie(handle: string, secure: boolean): FlashCookieOptions {
   return flashCookie(AFTER_SIGN_IN_COOKIE, handle, "/cuenta", secure);
+}
+
+/**
+ * The cookie of the ready-to-share message of one invitation's access code (F13; L18.1): scoped to that invitation's own
+ * editor, so the page of another invitation can never read the message — and the code inside it.
+ */
+export function passwordShareCookie(
+  invitationId: string,
+  handle: string,
+  secure: boolean,
+): FlashCookieOptions {
+  return flashCookie(PASSWORD_SHARE_COOKIE, handle, `/cuenta/invitaciones/${invitationId}`, secure);
 }
 
 /** What one store answers. */
@@ -204,6 +223,21 @@ export interface GuestLinkFlash {
 
 /** The one guest-link store of this process. */
 export const guestLinks = createSingleUseFlash<GuestLinkFlash>();
+
+/**
+ * The ready-to-share message of one invitation's access code (F13; L18.1), handed from the action that saved the code to
+ * the editor that shows it once. It carries the code the owner typed because that is the only moment the value exists
+ * anywhere on the web: the API stores a hash and answers whether a code is set, never the code itself.
+ */
+export interface PasswordShareFlash {
+  /** The invitation the action wrote, so another invitation's editor cannot read the message. */
+  readonly invitationId: string;
+  /** The whole line the owner pastes with her invitation: the public link and the code that was just saved. */
+  readonly message: string;
+}
+
+/** The one ready-to-share store of this process. */
+export const passwordShares = createSingleUseFlash<PasswordShareFlash>();
 
 /** The one after-sign-in store of this process: the customer path to reopen once the visitor is signed in. */
 export const afterSignIn = createSingleUseFlash<string>();

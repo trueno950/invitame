@@ -401,8 +401,66 @@ export const INVITATION_NOTICE_CODES = [
   "collaborator-saved",
   "collaborator-revoked",
   "collaboration-accepted",
+  "password-removed",
 ] as const;
 export type InvitationNoticeCode = (typeof INVITATION_NOTICE_CODES)[number];
+
+/**
+ * The guest's lock screen of a password-protected invitation (F13; S2.13, L18.1), in the words of the artboard
+ * `design/password-invitation/01-pantalla-con-candado.html`: the private line, the field, the action, and the note that
+ * the guest asks whoever invited them. The two refusals are the neutral ones the API's answers can carry, and they say
+ * nothing about which of the two happened. Neutral Spanish, in the second person («tú»).
+ */
+export const LOCK_SCREEN_COPY = {
+  /** What the page says while the invitation stores an access code (L18.1). */
+  privateLine: "Esta invitación es privada. Escribe la contraseña que te compartieron.",
+  /** The label of the one field, and its accessible name. */
+  fieldLabel: "Contraseña",
+  submit: "Ver invitación",
+  hint: "¿No la tienes? Pídesela a quien te invitó.",
+  /** The line a locked invitation that names nobody shows instead of a celebration's name (L18.3). */
+  privateTitle: "Invitación privada",
+  /** The one sentence of a refused code (L18.3): the same for a wrong code and for an exhausted budget. */
+  rejected: "Esa contraseña no es correcta.",
+  /** The one sentence of an attempt over the limit (L18.3). */
+  limited: "Demasiados intentos. Espera unos minutos.",
+  /**
+   * The one sentence of a public write refused because the invitation still asks for its password (L18.2): the guest's
+   * action comes back to the invitation page, which draws the lock screen, so it says what to do instead of pretending the
+   * answer, the signature, or the photo failed.
+   */
+  writeRefused: "Esta invitación pide contraseña. Vuelve a abrirla para escribirla.",
+} as const;
+
+/**
+ * The owner's «Pedir contraseña» block of the «Publicar» tab (F13; S2.13, L18.1), in the words of the artboard
+ * `design/password-invitation/03-ajuste-anfitrion.html`: the switch, the field, the rule, the state once a code is set,
+ * and the ready-to-share message the owner reads once. The value is never shown again, because the API cannot answer it.
+ */
+export const PASSWORD_COPY = {
+  heading: "Invitación privada",
+  lead: "Pide una contraseña para ver tu invitación. Compártela junto con el enlace.",
+  switchLabel: "Pedir contraseña",
+  label: "Contraseña",
+  hint: "De 4 a 40 caracteres. Tus invitados la escriben una vez por dispositivo.",
+  save: "Guardar contraseña",
+  /** The state of an invitation that already stores a code (L18.1): the switch is on. */
+  active: "Contraseña activa",
+  /** The state of an invitation with no code: the switch is off, and the field below is what turns it on. */
+  off: "Sin contraseña",
+  /** Why the value is not on screen: the API answers whether a code is set and never the code (L18.1). */
+  activeNote: "No podemos mostrarla. Guárdala donde la tengas a mano.",
+  change: "Cambiar contraseña",
+  remove: "Quitar contraseña",
+  /** What changing the code costs, stated before the owner does it (L18.2). */
+  changeNote: "Si la cambias, todos tus invitados tendrán que escribir la nueva.",
+  /** The state of a package that no longer grants the capability, with a stored code still protecting the page. */
+  notIncluded:
+    "Tu paquete ya no incluye la invitación con contraseña. Puedes quitar la que está puesta, pero no cambiarla.",
+  shareLead: "Mensaje para compartir",
+  /** The ready-to-share line, built from the value the owner just typed and never stored anywhere else (L18.1). */
+  shareMessage: (url: string, password: string) => `Te invitamos: ${url} · contraseña: ${password}`,
+} as const;
 
 /**
  * The custom address block of the «Publicar» tab (F11; S2.11, L15.4), in the words of the artboard
@@ -470,6 +528,8 @@ export const INVITATION_NOTICE_COPY: Record<InvitationNoticeCode, string> = {
   "collaborator-saved": "Listo, guardamos los permisos.",
   "collaborator-revoked": "Listo, esa persona ya no tiene acceso.",
   "collaboration-accepted": "Listo, ya colaboras en esta invitación.",
+  "password-removed":
+    "Listo, quitamos la contraseña. Tu invitación vuelve a abrirse con el enlace.",
 };
 
 /**
@@ -534,6 +594,10 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "collaborator-email-unavailable":
     "Guardamos la invitación, pero no pudimos enviar el correo. Quita el acceso y vuelve a invitar a la persona.",
   "collaborator-not-found": "Esa persona ya no colabora en esta invitación.",
+  "password-invalid":
+    "Revisa la contraseña: necesita entre 4 y 40 caracteres y ningún carácter de control.",
+  "password-protection-unavailable":
+    "Tu paquete no incluye la invitación con contraseña. Elige un paquete que la incluya para pedir una.",
   "collaboration-not-found": COLLABORATOR_COPY.acceptRefused,
   forbidden: "Esta acción solo la puede hacer el dueño de la invitación.",
   "guestbook-entry-not-found": "No encontramos ese mensaje en esta invitación.",
@@ -1423,6 +1487,8 @@ export const GUESTBOOK_NOTICE_COPY = {
   closed: "El libro de firmas ya cerró.",
   limited: "Recibimos muchos intentos desde tu conexión. Espera unos minutos e inténtalo de nuevo.",
   unavailable: "No pudimos guardar tu mensaje. Inténtalo de nuevo en unos minutos.",
+  /** The invitation asks for its password, so the page comes back to its lock screen (F13; L18.2). */
+  locked: LOCK_SCREEN_COPY.writeRefused,
 } as const;
 
 /**
@@ -1437,6 +1503,8 @@ export const GUEST_ALBUM_NOTICE_COPY = {
   "pending-full": "Hay muchas fotos esperando revisión. Inténtalo de nuevo más tarde.",
   limited: "Recibimos muchas fotos desde tu conexión. Espera unos minutos e inténtalo de nuevo.",
   unavailable: "No pudimos subir tu foto. Inténtalo de nuevo en unos minutos.",
+  /** The invitation asks for its password, so the page comes back to its lock screen (F13; L18.2). */
+  locked: LOCK_SCREEN_COPY.writeRefused,
 } as const;
 
 /**
@@ -1510,4 +1578,6 @@ export const RSVP_NOTICE_COPY = {
   closed: "La confirmación de asistencia ya cerró.",
   limited: "Recibimos muchos intentos desde tu conexión. Espera unos minutos e inténtalo de nuevo.",
   unavailable: "No pudimos guardar tu respuesta. Inténtalo de nuevo en unos minutos.",
+  /** The invitation asks for its password, so the page comes back to its lock screen (F13; L18.2). */
+  locked: LOCK_SCREEN_COPY.writeRefused,
 } as const;

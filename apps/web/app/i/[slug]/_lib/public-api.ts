@@ -14,8 +14,10 @@ import {
   type PublicInvitationsClient,
   type PublicRsvpSubmission,
   type PublicRsvpSubmitResult,
+  type PublicUnlockResult,
 } from "../../../../lib/server/public-invitations-api.ts";
 import { errorClass } from "../../../../lib/server/server-log.ts";
+import { invitationAccessToken } from "./access.ts";
 
 /**
  * The public invitation API for the guest's page under `/i` (M5 T5; S1, S5, A3, A6). One stateless client
@@ -40,6 +42,7 @@ export const PUBLIC_INVITATION_LOG_EVENT = {
   GUEST_READ_FAILED: "public_guest_read_failed",
   GUEST_RSVP_SUBMIT_FAILED: "public_guest_rsvp_submit_failed",
   PHOTO_UPLOAD_FAILED: "public_guest_photo_upload_failed",
+  UNLOCK_FAILED: "public_invitation_unlock_failed",
 } as const;
 
 export type PublicInvitationLogEvent =
@@ -81,14 +84,39 @@ export function logPublicInvitation(
   }
 }
 
-/** The public read, logged once when it fails; the caller decides what the guest then sees. */
+/**
+ * The public read, logged once when it fails; the caller decides what the guest then sees. The access token of an
+ * invitation this device already unlocked travels with it, so the API's gate lets the page through (F13; L18.2).
+ */
 export async function readPublicInvitation(
   slug: string,
 ): Promise<Awaited<ReturnType<PublicInvitationsClient["getBySlug"]>>> {
+  const accessToken = await invitationAccessToken();
+
   try {
-    return await publicInvitationsClient().getBySlug(slug);
+    return await publicInvitationsClient().getBySlug(slug, {
+      ...(accessToken === undefined ? {} : { accessToken }),
+    });
   } catch (error) {
     logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.READ_FAILED, { error });
+    throw error;
+  }
+}
+
+/**
+ * One unlock attempt through the anonymous client (F13; S2.13, L18.2). A failure this deployment could not map is logged
+ * once as its class and kind and rethrown, so the action can answer the guest the lock screen instead of an error page.
+ * Nothing logged names the code, the invitation, or the guest: this is an operational line, not an audit trail.
+ */
+export async function unlockPublicInvitation(
+  slug: string,
+  password: string,
+  options?: { clientAddress?: string },
+): Promise<PublicUnlockResult> {
+  try {
+    return await publicInvitationsClient().unlock(slug, password, options);
+  } catch (error) {
+    logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.UNLOCK_FAILED, { error });
     throw error;
   }
 }
@@ -104,8 +132,15 @@ export async function submitPublicRsvp(
   submission: PublicRsvpSubmission,
   options?: { clientAddress?: string },
 ): Promise<PublicRsvpSubmitResult> {
+  // The token this device holds for the invitation it is answering, so a locked invitation accepts the answer (F13;
+  // L18.2).
+  const accessToken = await invitationAccessToken();
+
   try {
-    return await publicInvitationsClient().submitRsvp(slug, submission, options);
+    return await publicInvitationsClient().submitRsvp(slug, submission, {
+      ...options,
+      ...(accessToken === undefined ? {} : { accessToken }),
+    });
   } catch (error) {
     logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.RSVP_SUBMIT_FAILED, { error });
     throw error;
@@ -122,8 +157,13 @@ export async function submitPublicGuestbook(
   submission: PublicGuestbookSubmission,
   options?: { clientAddress?: string },
 ): Promise<PublicGuestbookSubmitResult> {
+  const accessToken = await invitationAccessToken();
+
   try {
-    return await publicInvitationsClient().submitGuestbook(slug, submission, options);
+    return await publicInvitationsClient().submitGuestbook(slug, submission, {
+      ...options,
+      ...(accessToken === undefined ? {} : { accessToken }),
+    });
   } catch (error) {
     logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.GUESTBOOK_SUBMIT_FAILED, { error });
     throw error;
@@ -140,8 +180,13 @@ export async function uploadPublicGuestPhoto(
   upload: PublicGuestPhotoUpload,
   options?: { clientAddress?: string },
 ): Promise<PublicGuestPhotoUploadResult> {
+  const accessToken = await invitationAccessToken();
+
   try {
-    return await publicInvitationsClient().uploadGuestPhoto(slug, upload, options);
+    return await publicInvitationsClient().uploadGuestPhoto(slug, upload, {
+      ...options,
+      ...(accessToken === undefined ? {} : { accessToken }),
+    });
   } catch (error) {
     logPublicInvitation(PUBLIC_INVITATION_LOG_EVENT.PHOTO_UPLOAD_FAILED, { error });
     throw error;

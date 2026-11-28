@@ -128,6 +128,8 @@ function invitation(overrides: Partial<OwnedInvitation> = {}): OwnedInvitation {
     slug: "valentina-2027",
     // The invitation never renamed, so it keeps every rename it may make (F11; L15.2).
     slugRenamesRemaining: 5,
+    // The shared access code the invitation stores (F13; L18.1): none, so the read answers the switch is off.
+    passwordProtected: false,
     status: "DRAFT",
     publishedAt: null,
     archivedAt: null,

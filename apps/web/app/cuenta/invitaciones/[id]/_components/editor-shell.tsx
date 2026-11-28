@@ -470,6 +470,12 @@ export interface EditorShellProps {
    * configured prefix. A draft whose invitation cannot be renamed offers nothing here.
    */
   readonly address: ReactNode;
+  /**
+   * The «Pedir contraseña» block of the «Publicar» tab (F13; S2.13, L18.1), rendered by the page because it holds the
+   * server actions and the ready-to-share message of the code that was just saved. A caller who is not the invitation's
+   * owner offers nothing here, and neither does a package that grants no code while the invitation stores none.
+   */
+  readonly password: ReactNode;
   /** Shown in «Contenido» instead of the fields when the pinned version left the catalog (the rest stays editable). */
   readonly readOnlyContent?: ReactNode;
   readonly actions: {
@@ -513,6 +519,7 @@ export function EditorShell({
   gallery,
   payment,
   address,
+  password,
   actions,
 }: EditorShellProps) {
   // The tab the page asked for, as long as this caller may open it (F12; L17.5): a shared link that names a tab a
@@ -915,6 +922,10 @@ export function EditorShell({
             {/* The address where the invitation is published, and the one place it changes (F11; L15.4). Renaming it
                 is owner-only (L17.2), so a collaborator sees no field that could only be refused. */}
             {access.showAddress ? address : null}
+
+            {/* The access code of the invitation (F13; L18.1). Owner-only, like the address above: it decides who may
+                see the invitation at all, so it is not a collaborator's to change. */}
+            {password}
 
             {status === "PUBLISHED" ? (
               <>

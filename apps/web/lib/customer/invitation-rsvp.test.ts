@@ -34,6 +34,8 @@ const INVITATION: OwnedInvitation = {
   access: OWNER_ACCESS,
   timeZone: "America/Mexico_City",
   slugRenamesRemaining: 5,
+  // The shared access code the invitation stores (F13; L18.1): none, so the read answers the switch is off.
+  passwordProtected: false,
   featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["COUNTDOWN", "RSVP", "CALENDAR"],
   places: {},

@@ -80,6 +80,8 @@ export const invitations = {
   checkSlugAvailability: (id: string, slug: string) =>
     logged((api) => api.checkSlugAvailability(id, slug)),
   renameSlug: (id: string, slug: string) => logged((api) => api.renameSlug(id, slug)),
+  setPassword: (id: string, password: string) => logged((api) => api.setPassword(id, password)),
+  clearPassword: (id: string) => logged((api) => api.clearPassword(id)),
   updateInvitationFeatures: (
     id: string,
     features: Parameters<InvitationsClient["updateInvitationFeatures"]>[1],

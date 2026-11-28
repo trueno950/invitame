@@ -223,6 +223,7 @@ describe("the upload one guest's form sends (F8; L11.5)", () => {
       ["full", "full"],
       ["pending-full", "pending-full"],
       ["rate-limited", "limited"],
+      ["locked", "locked"],
       ["invalid", "invalid"],
       ["not-found", "unavailable"],
     ] as const;
@@ -236,6 +237,21 @@ describe("the upload one guest's form sends (F8; L11.5)", () => {
 
       assert.equal(target, guestAlbumResultTarget(SLUG, code), failure);
     }
+  });
+
+  it("comes back to the invitation with the password notice when the invitation is locked (F13; L18.2)", async () => {
+    const target = await submitPublicGuestAlbumForm(
+      { uploadGuestPhoto: async () => ({ ok: false as const, failure: "locked" as const }) },
+      formOf({ slug: SLUG }),
+      { clientAddress: undefined },
+    );
+
+    assert.equal(target, guestAlbumResultTarget(SLUG, "locked"));
+    assert.equal(target, `/i/${SLUG}?${GUEST_ALBUM_NOTICE_PARAM}=locked`);
+    assert.deepEqual(guestAlbumNotice({ [GUEST_ALBUM_NOTICE_PARAM]: "locked" }), {
+      code: "locked",
+      message: "Esta invitación pide contraseña. Vuelve a abrirla para escribirla.",
+    });
   });
 
   it("answers the page's own notice for a form it refuses, without asking the API", async () => {

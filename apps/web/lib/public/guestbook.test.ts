@@ -178,6 +178,7 @@ describe("one submitted signature through the server action (F7; L10.3)", () => 
       [refused("invalid"), "invalid"],
       [refused("closed"), "closed"],
       [refused("rate-limited"), "limited"],
+      [refused("locked"), "locked"],
       [refused("not-found"), "unavailable"],
     ];
 
@@ -203,6 +204,21 @@ describe("one submitted signature through the server action (F7; L10.3)", () => 
     assert.equal(outage, `/i/${SLUG}?${GUESTBOOK_NOTICE_PARAM}=unavailable`);
   });
 
+  it("comes back to the invitation with the password notice when the invitation is locked (F13; L18.2)", async () => {
+    const target = await submitPublicGuestbookForm(
+      { submitGuestbook: async () => refused("locked") },
+      formOf({ slug: SLUG, authorName: "Rosa", message: "Hola" }),
+      { clientAddress: address },
+    );
+
+    assert.equal(target, guestbookResultTarget(SLUG, "locked"));
+    assert.equal(target, `/i/${SLUG}?${GUESTBOOK_NOTICE_PARAM}=locked`);
+    assert.deepEqual(guestbookNotice({ [GUESTBOOK_NOTICE_PARAM]: "locked" }), {
+      code: "locked",
+      message: "Esta invitación pide contraseña. Vuelve a abrirla para escribirla.",
+    });
+  });
+
   it("comes back to the home page when nothing in the form names an invitation", async () => {
     const target = await submitPublicGuestbookForm(
       {
@@ -219,6 +235,6 @@ describe("one submitted signature through the server action (F7; L10.3)", () => 
 });
 
 /** A refusal answer, as the client maps one. */
-function refused(failure: "invalid" | "closed" | "rate-limited" | "not-found") {
+function refused(failure: "invalid" | "closed" | "rate-limited" | "locked" | "not-found") {
   return { ok: false as const, failure };
 }

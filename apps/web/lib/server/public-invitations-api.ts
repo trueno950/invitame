@@ -17,6 +17,7 @@ import { type MusicLink, musicServiceOf } from "../invitation-features/music.ts"
 import { parseOpeningAnimations } from "../invitation-features/opening-animation.ts";
 import { parseStoredPlaces, type StoredPlaces } from "../invitation-features/place-point.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
+import { parseInvitationLockedBody } from "../public/invitation-lock.ts";
 import {
   RSVP_COMPANIONS_MAX,
   RSVP_COMPANION_NAME_MAX_LENGTH,
@@ -24,6 +25,7 @@ import {
   type RsvpCompanionValue,
 } from "../public/rsvp-companions.ts";
 import { ApiClientError, type ApiClientOptions, sendApiRequest } from "./api-client.ts";
+import { isInvitationAccessToken } from "./invitation-access-cookie.ts";
 import {
   GUEST_NAME_MAX_LENGTH,
   GUEST_SEATS_MAX,
@@ -174,7 +176,39 @@ export interface PublicInvitation {
 
 export type PublicInvitationResult =
   | { ok: true; value: PublicInvitation }
-  | { ok: false; failure: "not-found" };
+  | { ok: false; failure: "not-found" }
+  /**
+   * The invitation stores an access code and the request presented no valid one (F13; S2.13, L18.2): the page draws its
+   * lock screen and learns nothing else about the invitation but the one display name (L18.3) and, when the request named a
+   * previous address, the current one it must move to before drawing it (L18.2).
+   */
+  | {
+      ok: false;
+      failure: "locked";
+      displayName: string | null;
+      redirectTo: string | null;
+    };
+
+/**
+ * What one public request carries beyond the form itself (F13; L18.2): the guest's address, which the API's rate limits
+ * count, and the access token of a password-protected invitation, which travels in the header the API's gate reads. Both
+ * are values this process read from the request it is serving; neither is ever part of a path, a query, or a log.
+ */
+export interface PublicRequestOptions {
+  readonly clientAddress?: string;
+  readonly accessToken?: string;
+}
+
+/**
+ * The two request fields the calls below add, each only when the caller passed one, so a request with no address and no
+ * token is exactly the request this client made before the access code existed.
+ */
+function requestFields(request: PublicRequestOptions): PublicRequestOptions {
+  return {
+    ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+    ...(request.accessToken === undefined ? {} : { accessToken: request.accessToken }),
+  };
+}
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -795,12 +829,24 @@ export type PublicGuestRsvpSubmitResult =
 
 const readsBody = (status: number): boolean => (status >= 200 && status < 300) || status === 404;
 
+/**
+ * The statuses of a read whose body the page reads: its success, the missing invitation, and the locked answer whose one
+ * display name the lock screen needs (F13; S2.13, L18.2).
+ */
+const readsLockedBody = (status: number): boolean => readsBody(status) || status === 423;
+
+/** The statuses of an unlock whose body the page reads (F13; L18.2, L18.3): its success and the two neutral refusals. */
+const readsUnlockBody = (status: number): boolean =>
+  (status >= 200 && status < 300) || status === 400 || status === 401 || status === 429;
+
 /** The statuses of a submission whose body the page reads: its success, and every refusal it maps (S4). */
 const readsRsvpBody = (status: number): boolean =>
   (status >= 200 && status < 300) ||
   status === 400 ||
   status === 404 ||
   status === 409 ||
+  // The invitation stores an access code this device has not unlocked, so the write never reached its route (F13; L18.2).
+  status === 423 ||
   status === 429;
 
 /** The statuses of an upload whose body the page reads: its success and every refusal the album maps (L11.3). */
@@ -828,7 +874,10 @@ export interface PublicRsvpSubmission {
  */
 export type PublicRsvpSubmitResult =
   | { readonly ok: true }
-  | { readonly ok: false; readonly failure: "not-found" | "not-open" | "rate-limited" | "invalid" };
+  | {
+      readonly ok: false;
+      readonly failure: "not-found" | "not-open" | "rate-limited" | "invalid" | "locked";
+    };
 
 /** The one signature on the guestbook wall, as the form submits it (F7; L10.1, L10.3). */
 export interface PublicGuestbookSubmission {
@@ -845,7 +894,10 @@ export interface PublicGuestbookSubmission {
  */
 export type PublicGuestbookSubmitResult =
   | { readonly ok: true }
-  | { readonly ok: false; readonly failure: "not-found" | "closed" | "rate-limited" | "invalid" };
+  | {
+      readonly ok: false;
+      readonly failure: "not-found" | "closed" | "rate-limited" | "invalid" | "locked";
+    };
 
 /** One photo a guest uploads (F8; L11.3, L11.5): the bytes this server read and the optional name they typed. */
 export interface PublicGuestPhotoUpload {
@@ -870,6 +922,7 @@ export type PublicGuestPhotoUploadResult =
         | "full"
         | "pending-full"
         | "rate-limited"
+        | "locked"
         | "invalid";
     };
 
@@ -879,6 +932,7 @@ const RSVP_REFUSALS: Readonly<Record<string, { status: number; failure: string }
   RSVP_NOT_OPEN: { status: 409, failure: "not-open" },
   RSVP_RATE_LIMITED: { status: 429, failure: "rate-limited" },
   INVALID_RSVP: { status: 400, failure: "invalid" },
+  INVITATION_LOCKED: { status: 423, failure: "locked" },
 };
 
 /** The status and code pairing each guestbook refusal this deployment implements; anything else fails closed. */
@@ -887,6 +941,7 @@ const GUESTBOOK_REFUSALS: Readonly<Record<string, { status: number; failure: str
   GUESTBOOK_CLOSED: { status: 409, failure: "closed" },
   GUESTBOOK_RATE_LIMITED: { status: 429, failure: "rate-limited" },
   INVALID_GUESTBOOK_ENTRY: { status: 400, failure: "invalid" },
+  INVITATION_LOCKED: { status: 423, failure: "locked" },
 };
 
 /**
@@ -904,6 +959,7 @@ const GUEST_ALBUM_REFUSALS: Readonly<Record<string, { status: number; failure: s
   INVALID_MEDIA_UPLOAD: { status: 400, failure: "invalid" },
   PAYLOAD_TOO_LARGE: { status: 413, failure: "invalid" },
   UNSUPPORTED_MEDIA_TYPE: { status: 415, failure: "invalid" },
+  INVITATION_LOCKED: { status: 423, failure: "locked" },
 };
 
 /**
@@ -944,14 +1000,67 @@ function refusalCode(text: string | undefined): string | undefined {
   }
 }
 
+/** One parsed body, or undefined when the answer is not JSON at all. */
+function readJson(text: string | undefined): unknown {
+  try {
+    return JSON.parse(text ?? "");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The answer of one unlock attempt (F13; S2.13, L18.2, L18.3): the token and the expiry it carries, or one refusal. A
+ * refusal never says which of them happened — a wrong code, an address that holds no visible invitation, and an attempt
+ * over the limit differ only in status — and the page turns it into one of two neutral sentences.
+ */
+export type PublicUnlockResult =
+  | { readonly ok: true; readonly accessToken: string; readonly expiresAt: string }
+  | { readonly ok: false; readonly failure: "rejected" | "rate-limited" | "invalid" };
+
+/** The neutral refusal of an address this client will not even ask about (L18.3): it names no invitation. */
+const UNLOCK_REJECTED: PublicUnlockResult = { ok: false, failure: "rejected" };
+
+/**
+ * A successful unlock, or undefined when the body is not the documented pair. The token has to be one this deployment
+ * could have stored — so a broken answer never reaches a cookie — and the expiry an instant the page can read.
+ */
+function parseUnlocked(value: unknown): PublicUnlockResult | undefined {
+  const body = record(value);
+  const accessToken = body?.accessToken;
+  const expiresAt = body?.expiresAt;
+
+  if (!isInvitationAccessToken(accessToken)) {
+    return undefined;
+  }
+  if (typeof expiresAt !== "string" || Number.isNaN(Date.parse(expiresAt))) {
+    return undefined;
+  }
+
+  return { ok: true, accessToken, expiresAt };
+}
+
 /** The fixed success body of `POST /public/invitations/:slug/rsvp` (S4). */
 function isAccepted(value: unknown): boolean {
   return record(value)?.status === "received";
 }
 
 export interface PublicInvitationsClient {
-  /** `GET /public/invitations/:slug`: the guest's page, or `not-found` (A3). */
-  getBySlug(slug: string): Promise<PublicInvitationResult>;
+  /**
+   * `GET /public/invitations/:slug`: the guest's page, `not-found` (A3), or the lock state of an invitation that stores an
+   * access code (F13; L18.2). The token of a guest who already unlocked it travels in the header the gate reads.
+   */
+  getBySlug(slug: string, options?: PublicRequestOptions): Promise<PublicInvitationResult>;
+  /**
+   * `POST /public/invitations/:slug/unlock`: exchanges the shared code for the access token the web stores in its own
+   * `HttpOnly` cookie (F13; L18.2), or answers the one neutral refusal — a wrong code and an exhausted budget are the
+   * same body, and only the status differs (L18.3).
+   */
+  unlock(
+    slug: string,
+    password: string,
+    options?: PublicRequestOptions,
+  ): Promise<PublicUnlockResult>;
   /**
    * `GET /public/invitations/:slug/guests/:token`: one guest's personal page (M6 G4; S4), or `not-found` for every
    * invisible case — an unknown slug, a revoked token, or a token of another invitation. No cookie is sent.
@@ -965,7 +1074,7 @@ export interface PublicInvitationsClient {
     slug: string,
     token: string,
     submission: PublicGuestRsvpSubmission,
-    options?: { clientAddress?: string },
+    options?: PublicRequestOptions,
   ): Promise<PublicGuestRsvpSubmitResult>;
   /**
    * `POST /public/invitations/:slug/rsvp`: one guest's open answer (M6 G3; S4). The address the web forwarded
@@ -974,7 +1083,7 @@ export interface PublicInvitationsClient {
   submitRsvp(
     slug: string,
     submission: PublicRsvpSubmission,
-    options?: { clientAddress?: string },
+    options?: PublicRequestOptions,
   ): Promise<PublicRsvpSubmitResult>;
   /**
    * `POST /public/invitations/:slug/guestbook`: one guest's signature on the wall (F7; L10.3). The address the web
@@ -983,7 +1092,7 @@ export interface PublicInvitationsClient {
   submitGuestbook(
     slug: string,
     submission: PublicGuestbookSubmission,
-    options?: { clientAddress?: string },
+    options?: PublicRequestOptions,
   ): Promise<PublicGuestbookSubmitResult>;
   /**
    * `POST /public/invitations/:slug/photos`: one guest's photo, as multipart (F8; L11.3). A photo is PENDING until the
@@ -993,7 +1102,7 @@ export interface PublicInvitationsClient {
   uploadGuestPhoto(
     slug: string,
     upload: PublicGuestPhotoUpload,
-    options?: { clientAddress?: string },
+    options?: PublicRequestOptions,
   ): Promise<PublicGuestPhotoUploadResult>;
 }
 
@@ -1003,38 +1112,97 @@ export interface PublicInvitationsClient {
  */
 export function createPublicInvitationsClient(options: ApiClientOptions): PublicInvitationsClient {
   return {
-    async getBySlug(slug: string): Promise<PublicInvitationResult> {
+    async getBySlug(
+      slug: string,
+      request: PublicRequestOptions = {},
+    ): Promise<PublicInvitationResult> {
       if (!isInvitationSlug(slug)) {
         return NOT_FOUND;
       }
 
       const { status, text } = await sendApiRequest(
         options,
-        { method: "GET", path: `/public/invitations/${encodeURIComponent(slug)}` },
-        readsBody,
+        {
+          method: "GET",
+          path: `/public/invitations/${encodeURIComponent(slug)}`,
+          ...requestFields(request),
+        },
+        readsLockedBody,
       );
 
       if (status === 404) {
         return NOT_FOUND;
       }
 
+      if (status === 423) {
+        // The locked answer carries the lock state and one display name, and this process keeps only that name: a body
+        // that is not the documented one is refused whole, so no invitation data can ever reach a locked page (L18.3).
+        const lock = parseInvitationLockedBody(readJson(text));
+
+        if (lock === undefined) {
+          throw new ApiClientError("invalid-response", status);
+        }
+        return {
+          ok: false,
+          failure: "locked",
+          displayName: lock.displayName,
+          redirectTo: lock.redirectTo,
+        };
+      }
+
       if (status < 200 || status >= 300) {
         throw new ApiClientError(status >= 500 ? "unavailable" : "rejected", status);
       }
 
-      let payload: unknown;
-      try {
-        payload = JSON.parse(text ?? "");
-      } catch {
-        payload = undefined;
-      }
-
-      const invitation = parsePublicInvitation(payload, options.config.apiOrigin);
+      const invitation = parsePublicInvitation(readJson(text), options.config.apiOrigin);
 
       if (invitation === undefined) {
         throw new ApiClientError("invalid-response", status);
       }
       return { ok: true, value: invitation };
+    },
+
+    async unlock(
+      slug: string,
+      password: string,
+      request: PublicRequestOptions = {},
+    ): Promise<PublicUnlockResult> {
+      // An address that cannot be one names no invitation, so it costs no request and answers the same neutral refusal an
+      // unknown address does (L18.3).
+      if (!isInvitationSlug(slug)) {
+        return UNLOCK_REJECTED;
+      }
+
+      const { status, text } = await sendApiRequest(
+        options,
+        {
+          method: "POST",
+          path: `/public/invitations/${encodeURIComponent(slug)}/unlock`,
+          body: { password },
+          ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+        },
+        readsUnlockBody,
+      );
+
+      if (status >= 200 && status < 300) {
+        const unlocked = parseUnlocked(readJson(text));
+
+        if (unlocked === undefined) {
+          throw new ApiClientError("invalid-response", status);
+        }
+        return unlocked;
+      }
+      if (status === 401) {
+        return UNLOCK_REJECTED;
+      }
+      if (status === 429) {
+        return { ok: false, failure: "rate-limited" };
+      }
+      if (status === 400) {
+        return { ok: false, failure: "invalid" };
+      }
+
+      throw new ApiClientError(status >= 500 ? "unavailable" : "rejected", status);
     },
 
     async getGuest(slug: string, token: string): Promise<PublicGuestResult> {
@@ -1080,7 +1248,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
       slug: string,
       token: string,
       submission: PublicGuestRsvpSubmission,
-      request: { clientAddress?: string } = {},
+      request: PublicRequestOptions = {},
     ): Promise<PublicGuestRsvpSubmitResult> {
       if (!isInvitationSlug(slug) || !isGuestToken(token)) {
         return { ok: false, failure: "not-found" };
@@ -1092,7 +1260,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
           method: "POST",
           path: `/public/invitations/${encodeURIComponent(slug)}/guests/${encodeURIComponent(token)}/rsvp`,
           body: submission,
-          ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+          ...requestFields(request),
         },
         (answer): boolean => readsRsvpBody(answer),
       );
@@ -1123,7 +1291,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
     async submitRsvp(
       slug: string,
       submission: PublicRsvpSubmission,
-      request: { clientAddress?: string } = {},
+      request: PublicRequestOptions = {},
     ): Promise<PublicRsvpSubmitResult> {
       if (!isInvitationSlug(slug)) {
         return { ok: false, failure: "not-found" };
@@ -1135,7 +1303,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
           method: "POST",
           path: `/public/invitations/${encodeURIComponent(slug)}/rsvp`,
           body: submission,
-          ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+          ...requestFields(request),
         },
         (answer): boolean => readsRsvpBody(answer),
       );
@@ -1166,7 +1334,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
     async submitGuestbook(
       slug: string,
       submission: PublicGuestbookSubmission,
-      request: { clientAddress?: string } = {},
+      request: PublicRequestOptions = {},
     ): Promise<PublicGuestbookSubmitResult> {
       if (!isInvitationSlug(slug)) {
         return { ok: false, failure: "not-found" };
@@ -1178,7 +1346,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
           method: "POST",
           path: `/public/invitations/${encodeURIComponent(slug)}/guestbook`,
           body: submission,
-          ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+          ...requestFields(request),
         },
         (answer): boolean => readsRsvpBody(answer),
       );
@@ -1209,7 +1377,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
     async uploadGuestPhoto(
       slug: string,
       upload: PublicGuestPhotoUpload,
-      request: { clientAddress?: string } = {},
+      request: PublicRequestOptions = {},
     ): Promise<PublicGuestPhotoUploadResult> {
       if (!isInvitationSlug(slug)) {
         return { ok: false, failure: "not-found" };
@@ -1222,7 +1390,7 @@ export function createPublicInvitationsClient(options: ApiClientOptions): Public
           path: `/public/invitations/${encodeURIComponent(slug)}/photos`,
           multipart: guestPhotoUploadForm(upload),
           timeoutMs: GUEST_PHOTO_UPLOAD_TIMEOUT_MS,
-          ...(request.clientAddress === undefined ? {} : { clientAddress: request.clientAddress }),
+          ...requestFields(request),
         },
         readsUploadBody,
       );

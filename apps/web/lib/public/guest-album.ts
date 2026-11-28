@@ -38,6 +38,8 @@ export const GUEST_ALBUM_NOTICE_CODES = [
   "pending-full",
   "limited",
   "unavailable",
+  // The invitation asked for its password before the photo reached it (F13; L18.2).
+  "locked",
 ] as const;
 export type GuestAlbumNoticeCode = (typeof GUEST_ALBUM_NOTICE_CODES)[number];
 
@@ -188,7 +190,7 @@ export type PublicGuestAlbumClient = Pick<PublicInvitationsClient, "uploadGuestP
 /** Each refusal of the API, as the notice the guest page shows (L11.5, L26). */
 const RESULT_CODES: Readonly<
   Record<
-    "invalid" | "closed" | "full" | "pending-full" | "rate-limited" | "not-found",
+    "invalid" | "closed" | "full" | "pending-full" | "rate-limited" | "not-found" | "locked",
     GuestAlbumNoticeCode
   >
 > = {
@@ -197,6 +199,9 @@ const RESULT_CODES: Readonly<
   full: "full",
   "pending-full": "pending-full",
   "rate-limited": "limited",
+  // The invitation stores an access code this device has not unlocked: the page draws its lock screen and says so
+  // (F13; L18.2).
+  locked: "locked",
   // The page itself answers 404 for a slug that no longer resolves, so the notice says nothing new.
   "not-found": "unavailable",
 };
