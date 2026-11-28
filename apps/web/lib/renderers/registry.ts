@@ -1,5 +1,7 @@
 import type { ReactElement } from "react";
 
+import type { Locale } from "../i18n/locale.ts";
+
 import { BabyShowerClassicRenderer } from "../../app/_components/renderers/baby-shower-classic-01/baby-shower-classic-renderer.ts";
 import { BaptismArchRenderer } from "../../app/_components/renderers/baptism-arch-01/baptism-arch-renderer.ts";
 import { BaptismClassicRenderer } from "../../app/_components/renderers/baptism-classic-01/baptism-classic-renderer.ts";
@@ -53,6 +55,11 @@ export interface RendererProps {
   readonly features?: InvitationFeatures;
   /** The `.ics` download the public page owns; the features block links to it when it is present. */
   readonly calendarHref?: string;
+  /**
+   * The locale the guest page renders (F14; L19.2). Absent reads as Spanish, so a renderer's Spanish markup is exactly
+   * the markup it produced before the setting existed; only fixed texts follow it, never what the owner wrote.
+   */
+  readonly locale?: Locale;
 }
 
 export type RendererComponent = (props: RendererProps) => ReactElement;

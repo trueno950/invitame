@@ -4,12 +4,18 @@ import {
   type InvitationFeatures,
   showsGiftRegistry,
 } from "../../../../lib/invitation-features/invitation-features.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
+import {
+  rendererClockTime,
+  rendererLongDate,
+  rendererTextsFor,
+} from "../../../../lib/i18n/renderer-texts.ts";
 import {
   parseBaptismClassicConfiguration,
   parseBaptismClassicContent,
 } from "../../../../lib/renderers/baptism-classic-01.ts";
 import { BAPTISM_THEME } from "../../../../lib/renderers/baptism-themes.ts";
-import { formatLongDate, hiddenFieldSet } from "../../../../lib/renderers/invitation-fields.ts";
+import { hiddenFieldSet } from "../../../../lib/renderers/invitation-fields.ts";
 import type { InvitationTheme } from "../../../../lib/renderers/theme-tokens.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { DecorationZone } from "../illustrations/decoration.ts";
@@ -47,6 +53,8 @@ export interface BaptismClassicRendererProps {
   readonly calendarHref?: string;
   /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
   readonly hiddenFields?: readonly string[];
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 const h = createElement;
@@ -73,6 +81,7 @@ function placeCard(
   place: string,
   address: string,
   time: string,
+  locale: Locale | undefined,
 ): ReactElement {
   return h(
     "section",
@@ -90,7 +99,11 @@ function placeCard(
         place,
       ),
       h("p", { className: "mt-1 text-sm text-(color:--inv-ink)" }, address),
-      h("p", null, h("time", { dateTime: time, className: TIME_CHIP }, `${time} h`)),
+      h(
+        "p",
+        null,
+        h("time", { dateTime: time, className: TIME_CHIP }, rendererClockTime(locale, time)),
+      ),
     ),
   );
 }
@@ -101,6 +114,7 @@ export function BaptismClassicRenderer({
   features,
   calendarHref,
   hiddenFields,
+  locale,
 }: BaptismClassicRendererProps): ReactElement {
   const { theme: themeKey } = parseBaptismClassicConfiguration(configuration);
   const data = parseBaptismClassicContent(content, hiddenFields);
@@ -112,6 +126,7 @@ export function BaptismClassicRenderer({
     ? data.giftRegistry
     : undefined;
   const idPrefix = useId();
+  const texts = rendererTextsFor(locale);
 
   // After both place cards and before the photo: the ceremony, the reception, and how to reach them (S4).
   const featuresBlock =
@@ -121,6 +136,7 @@ export function BaptismClassicRenderer({
           features,
           facts: baptismEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
+          ...(locale === undefined ? {} : { locale }),
         });
   // The family card is one row per section, and it disappears when every row it holds is switched off (S8.3).
   const familyRows = [
@@ -130,7 +146,7 @@ export function BaptismClassicRenderer({
           h(
             "div",
             { key: "parents", className: ROW_SOFT },
-            h("span", { className: ROW_LABEL }, "Padres"),
+            h("span", { className: ROW_LABEL }, texts["label.parents"]),
             h("span", { className: ROW_VALUE }, data.parents),
           ),
         ]),
@@ -140,7 +156,7 @@ export function BaptismClassicRenderer({
           h(
             "div",
             { key: "godparents", className: ROW_SOFT },
-            h("span", { className: ROW_LABEL }, "Padrinos"),
+            h("span", { className: ROW_LABEL }, texts["label.godparents"]),
             h("span", { className: ROW_VALUE }, data.godparents),
           ),
         ]),
@@ -150,7 +166,7 @@ export function BaptismClassicRenderer({
           h(
             "div",
             { key: "gift-registry", className: ROW_SOFT },
-            h("span", { className: ROW_LABEL }, "Mesa de regalos"),
+            h("span", { className: ROW_LABEL }, texts["label.giftRegistry"]),
             h("span", { className: `${ROW_VALUE} text-(color:--inv-accent)` }, giftRegistry),
           ),
         ]),
@@ -159,7 +175,7 @@ export function BaptismClassicRenderer({
   return h(
     "article",
     {
-      "aria-label": `Invitación de bautizo de ${data.celebrantName}`,
+      "aria-label": `${texts["baptism.ariaInvitation"]} ${data.celebrantName}`,
       "data-component-key": "baptism-classic-01",
       "data-theme": themeKey,
       className: `${INVITATION_ROOT} gap-6 px-5 py-6`,
@@ -196,7 +212,7 @@ export function BaptismClassicRenderer({
         h(
           "p",
           { className: "text-[0.7rem] font-medium uppercase tracking-[0.18em]" },
-          "Bautizo de",
+          texts["baptism.kicker"],
         ),
         h(
           "h1",
@@ -206,7 +222,7 @@ export function BaptismClassicRenderer({
         h(
           "p",
           { className: "mt-2 text-sm" },
-          h("time", { dateTime: data.date }, formatLongDate(data.date)),
+          h("time", { dateTime: data.date }, rendererLongDate(locale, data.date)),
         ),
       ),
     ),
@@ -215,7 +231,11 @@ export function BaptismClassicRenderer({
       : h(
           "section",
           { "data-section": "details", "aria-labelledby": `${idPrefix}-details` },
-          h("h2", { id: `${idPrefix}-details`, className: SECTION_TITLE }, "La familia"),
+          h(
+            "h2",
+            { id: `${idPrefix}-details`, className: SECTION_TITLE },
+            texts["invitation.family"],
+          ),
           h("div", { className: "mt-3 flex flex-col gap-2" }, familyRows),
         ),
     hidden.has("ceremonyPlace")
@@ -224,10 +244,11 @@ export function BaptismClassicRenderer({
           theme,
           "ceremony",
           idPrefix,
-          "Ceremonia",
+          texts["label.ceremony"],
           data.ceremonyPlace,
           data.ceremonyAddress,
           data.ceremonyTime,
+          locale,
         ),
     hidden.has("receptionPlace")
       ? null
@@ -235,10 +256,11 @@ export function BaptismClassicRenderer({
           theme,
           "reception",
           idPrefix,
-          "Recepción",
+          texts["label.reception"],
           data.receptionPlace,
           data.receptionAddress,
           data.receptionTime,
+          locale,
         ),
     // The torn strip separates the two place cards from what follows, as in the other themed layouts.
     h(DecorationZone, {
@@ -252,13 +274,13 @@ export function BaptismClassicRenderer({
       : h(
           "section",
           { "data-section": "photo", "aria-labelledby": `${idPrefix}-photo` },
-          h("h2", { id: `${idPrefix}-photo`, className: SECTION_TITLE }, "La foto"),
+          h("h2", { id: `${idPrefix}-photo`, className: SECTION_TITLE }, texts["babyShower.photo"]),
           h(
             "figure",
             { className: `${CARD} mt-3` },
             h("img", {
               src: data.mainPhoto,
-              alt: `Foto de ${data.celebrantName}`,
+              alt: `${texts["invitation.photoAlt"]} ${data.celebrantName}`,
               decoding: "async",
               className: "aspect-[4/3] w-full rounded-xl object-cover",
             }),
@@ -267,7 +289,7 @@ export function BaptismClassicRenderer({
               {
                 className: "mt-2 text-center text-sm font-medium text-(color:--inv-accent)",
               },
-              "Un día para recordar",
+              texts["baptism.photoCaption"],
             ),
           ),
         ),
@@ -276,7 +298,11 @@ export function BaptismClassicRenderer({
       : h(
           "section",
           { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
-          h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+          h(
+            "h2",
+            { id: `${idPrefix}-message`, className: SECTION_TITLE },
+            texts["invitation.message"],
+          ),
           h(
             "p",
             {
@@ -291,7 +317,7 @@ export function BaptismClassicRenderer({
       : h(
           "section",
           { "data-section": "rsvp", "aria-labelledby": `${idPrefix}-rsvp` },
-          h("h2", { id: `${idPrefix}-rsvp`, className: SECTION_TITLE }, "Confirma tu asistencia"),
+          h("h2", { id: `${idPrefix}-rsvp`, className: SECTION_TITLE }, texts["invitation.rsvp"]),
           h(
             "p",
             { className: `mt-3 ${CARD} text-center text-lg font-medium text-(color:--inv-ink)` },

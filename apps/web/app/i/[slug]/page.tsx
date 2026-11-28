@@ -3,10 +3,12 @@ import { cookies } from "next/headers";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { connection } from "next/server";
 
-import { LOCK_SCREEN_COPY, PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
+import { PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
+import { guestText } from "../../../lib/i18n/guest-texts.ts";
 import {
   LANGUAGE_COOKIE,
   languageChoicePath,
+  rememberedLocale,
   requestedLocale,
   resolveGuestLocale,
 } from "../../../lib/i18n/guest-locale.ts";
@@ -24,6 +26,7 @@ import {
   type LockScreenView,
   lockedRedirectSlug,
 } from "../../../lib/public/invitation-lock.ts";
+import { DEFAULT_LOCALE } from "../../../lib/i18n/locale.ts";
 import { lockWriteNotice } from "../../../lib/public/invitation-lock-write.ts";
 import { invitationMetadata, publicInvitationPath } from "../../../lib/public/invitation-page.ts";
 import { rendererAcceptsProps } from "../../../lib/public/invitation-render.ts";
@@ -73,11 +76,17 @@ const NO_INDEX: Metadata = { robots: { index: false, follow: false } };
 export async function generateMetadata({
   params,
 }: PublicInvitationPageProperties): Promise<Metadata> {
-  const { slug } = await params;
+  const [{ slug }, cookieJar] = await Promise.all([params, cookies()]);
   const loaded = await loadPublicInvitation(slug);
 
   if (loaded.status === "ok") {
-    return invitationMetadata(loaded.invitation.content);
+    // The share title is built from the celebration's own words in the language this page renders (F14; L19.2).
+    const locale = resolveGuestLocale({
+      language: loaded.invitation.features.language,
+      remembered: cookieJar.get(LANGUAGE_COOKIE)?.value,
+    });
+
+    return invitationMetadata(loaded.invitation.content, locale);
   }
 
   return {
@@ -86,7 +95,7 @@ export async function generateMetadata({
         ? PUBLIC_INVITATION_COPY.unavailableTitle
         : loaded.status === "locked"
           ? // A locked page names nothing of the invitation: its share metadata is the lock screen's own generic line.
-            LOCK_SCREEN_COPY.privateTitle
+            guestText(DEFAULT_LOCALE, "lock.privateTitle")
           : PUBLIC_INVITATION_COPY.notFoundTitle,
     ...NO_INDEX,
   };
@@ -121,12 +130,16 @@ export default async function PublicInvitationPage({
     if (current !== undefined) {
       permanentRedirect(publicInvitationPath(current));
     }
+    // A locked answer carries no invitation data at all — not even its language setting (L18.3) — so the screen is read in
+    // the language this device remembered for this invitation, and in Spanish when it remembers none (F14; L19.2).
+    const locale = rememberedLocale(cookieJar.get(LANGUAGE_COOKIE)?.value) ?? DEFAULT_LOCALE;
     // The page draws the lock screen with the one fact the answer carried, the notice of a refused attempt, or the one of a
     // public write the access code refused before it reached its route.
-    const notice = lockNotice(parameters) ?? lockWriteNotice(parameters);
+    const notice = lockNotice(parameters, locale) ?? lockWriteNotice(parameters, locale);
     const view: LockScreenView | undefined = lockScreenView({
       slug,
       displayName: loaded.displayName,
+      locale,
       ...(notice === undefined ? {} : { notice }),
     });
 
@@ -197,13 +210,14 @@ export default async function PublicInvitationPage({
     uploadGuestPhotoAction,
     invitation.expired,
   );
-  const block = publicFeatureBlock(invitation, rsvp, undefined, guestbook, album);
   // The language this page renders (F14; L19.2, L19.3): the owner's fixed choice, or the guest's own with an invitation
-  // that offers both. Every renderer still draws Spanish until the translation slice; the prop is what it will read.
+  // that offers both. It is decided before the block, because every fixed text the block draws — and the facts it reads the
+  // derived celebration title from — follows it.
   const locale = resolveGuestLocale({
     language: invitation.features.language,
     remembered: cookieJar.get(LANGUAGE_COOKIE)?.value,
   });
+  const block = publicFeatureBlock(invitation, rsvp, undefined, guestbook, album, locale);
   const languageSwitch = languageSwitchView({
     language: invitation.features.language,
     locale,
@@ -212,9 +226,9 @@ export default async function PublicInvitationPage({
   const theme = openingAnimationTheme(invitation.componentKey, invitation.configuration);
   // The notices of this page's own query, rendered on the server: the answer's (G3; S4), the signature's (F7), and the
   // photo's (F8).
-  const notice = rsvpNotice(parameters);
-  const signatureNotice = guestbookNotice(parameters);
-  const photoNotice = guestAlbumNotice(parameters);
+  const notice = rsvpNotice(parameters, locale);
+  const signatureNotice = guestbookNotice(parameters, locale);
+  const photoNotice = guestAlbumNotice(parameters, locale);
 
   // The envelope of the opening animation (F10; L14.1, L14.2): a client-only overlay that the server never draws, so a
   // guest without script reads the invitation directly. It is absent when the API did not say it plays.
@@ -224,6 +238,7 @@ export default async function PublicInvitationPage({
     content: invitation.content,
     hiddenFields: invitation.hiddenFields,
     plays: invitation.features.openingAnimation,
+    locale,
   });
 
   // The invitation itself is the guest view the owner's preview renders too (T2b), with the notice of this page.
@@ -235,6 +250,7 @@ export default async function PublicInvitationPage({
           invitationSlug={invitation.slug}
           plays
           theme={opening.theme}
+          locale={locale}
         />
       )}
       <GuestInvitation

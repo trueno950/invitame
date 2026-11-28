@@ -1,4 +1,5 @@
-import { PUBLIC_INVITATION_COPY } from "../customer/copy.ts";
+import { guestFormats, guestText } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 
 /**
  * The guest's page of a published invitation (M5 T5; S5, A5, A8). The public URL lives under `/i`, which
@@ -65,16 +66,20 @@ export function truncateText(text: string, maxLength: number): string {
  * description is the stored message shortened to about 150 characters, and the page asks no search engine
  * and no share crawler to index or follow it. No image is generated.
  */
-export function invitationMetadata(content: unknown): InvitationPageMetadata {
+export function invitationMetadata(
+  content: unknown,
+  locale: Locale = "es",
+): InvitationPageMetadata {
   const celebrantName = contentText(content, "celebrantName") || contentText(content, "babyName");
   const coupleNameOne = contentText(content, "coupleNameOne");
   const coupleNameTwo = contentText(content, "coupleNameTwo");
+  const formats = guestFormats(locale);
   const title =
     celebrantName !== ""
-      ? PUBLIC_INVITATION_COPY.title(celebrantName)
+      ? formats.invitationTitle(celebrantName)
       : coupleNameOne !== "" && coupleNameTwo !== ""
-        ? PUBLIC_INVITATION_COPY.coupleTitle(coupleNameOne, coupleNameTwo)
-        : PUBLIC_INVITATION_COPY.titleFallback;
+        ? formats.invitationCoupleTitle(coupleNameOne, coupleNameTwo)
+        : guestText(locale, "invitation.titleFallback");
   const message = contentText(content, "message");
   const description =
     message === "" ? undefined : truncateText(message, INVITATION_DESCRIPTION_MAX_LENGTH);

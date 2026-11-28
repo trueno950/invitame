@@ -1,4 +1,5 @@
-import { LOCK_SCREEN_COPY } from "../customer/copy.ts";
+import { guestText } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import { GUEST_ALBUM_NOTICE_PARAM } from "./guest-album.ts";
 import { GUESTBOOK_NOTICE_PARAM } from "./guestbook.ts";
 import type { LockScreenNotice } from "./invitation-lock.ts";
@@ -33,10 +34,11 @@ const WRITE_NOTICE_PARAMS = [RSVP_NOTICE_PARAM, GUESTBOOK_NOTICE_PARAM, GUEST_AL
  */
 export function lockWriteNotice(
   parameters: Record<string, string | string[] | undefined> = {},
+  locale: Locale = "es",
 ): LockScreenNotice | undefined {
   const refused = WRITE_NOTICE_PARAMS.some((name) => parameters[name] === LOCKED_WRITE_NOTICE_CODE);
 
   return refused
-    ? { code: LOCKED_WRITE_NOTICE_CODE, message: LOCK_SCREEN_COPY.writeRefused }
+    ? { code: LOCKED_WRITE_NOTICE_CODE, message: guestText(locale, "lock.writeRefused") }
     : undefined;
 }

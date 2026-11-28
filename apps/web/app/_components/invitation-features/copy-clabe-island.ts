@@ -2,10 +2,8 @@
 
 import { createElement, type ReactElement, useEffect, useRef, useState } from "react";
 
-import {
-  GIFT_REGISTRY_COPIED,
-  GIFT_REGISTRY_COPY_CLABE,
-} from "../../../lib/invitation-features/gift-registry.ts";
+import { guestText } from "../../../lib/i18n/guest-texts.ts";
+import type { Locale } from "../../../lib/i18n/locale.ts";
 
 /**
  * The «Copiar CLABE» button of a guest invitation (F2; L4.5): the second client island of the shared features block,
@@ -26,6 +24,8 @@ export interface CopyClabeIslandProps {
   readonly clabe: string;
   /** The id of the element that shows the grouped CLABE, which the fallback selects. */
   readonly clabeId: string;
+  /** The locale the page renders (F14; L19.2): the button's label and its confirmation follow it. */
+  readonly locale: Locale;
 }
 
 /** Select the CLABE text on screen, so the guest can press the browser's own copy command. */
@@ -53,7 +53,7 @@ function selectClabe(clabeId: string): boolean {
 }
 
 /** The button's visible confirmation, and the status line that repeats it for a reader that cannot see it. */
-export function CopyClabeIsland({ clabe, clabeId }: CopyClabeIslandProps): ReactElement {
+export function CopyClabeIsland({ clabe, clabeId, locale }: CopyClabeIslandProps): ReactElement {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -103,7 +103,9 @@ export function CopyClabeIsland({ clabe, clabeId }: CopyClabeIslandProps): React
         className:
           "mt-3 inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border-[1.5px] border-(--inv-accent) px-5 text-sm font-medium text-(color:--inv-accent)",
       },
-      copied ? GIFT_REGISTRY_COPIED : GIFT_REGISTRY_COPY_CLABE,
+      copied
+        ? guestText(locale, "giftRegistry.copied")
+        : guestText(locale, "giftRegistry.copyClabe"),
     ),
     createElement(
       "p",
@@ -113,7 +115,7 @@ export function CopyClabeIsland({ clabe, clabeId }: CopyClabeIslandProps): React
         "aria-live": "polite",
         className: "mt-2 text-sm text-(color:--inv-ink)",
       },
-      copied ? GIFT_REGISTRY_COPIED : "",
+      copied ? guestText(locale, "giftRegistry.copied") : "",
     ),
   );
 }

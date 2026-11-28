@@ -2,6 +2,9 @@
 
 import { createElement, useEffect, useRef, useState } from "react";
 
+import { guestFormats, guestText } from "../../../lib/i18n/guest-texts.ts";
+import type { Locale } from "../../../lib/i18n/locale.ts";
+
 /**
  * The map of the celebration on a guest page (S1, S2, S3). A guest who never scrolls this far never downloads it:
  * the browser starts observing an empty, fixed-height box, and MapLibre GL and its stylesheet are imported — one
@@ -51,18 +54,27 @@ const BOX =
 /** The attribution both data sources require: the map data and the tiles, always visible (S2). */
 const ATTRIBUTION = "mt-2 text-[0.7rem] leading-4 text-(color:--inv-ink)";
 
-/** What the box says for the guests who cannot see it, in the words of the places it shows. */
-function textAlternative(places: readonly MapMarker[]): string {
+/** What the box says for the guests who cannot see it, in the words of the places it shows (F14; L19.2). */
+function textAlternative(places: readonly MapMarker[], locale: Locale): string {
+  const formats = guestFormats(locale);
+
   return places.length === 1
-    ? `Mapa de ${places[0]?.name ?? "la celebración"}.`
-    : `Mapa de ${places.map((place) => place.label).join(" y ")}.`;
+    ? formats.mapAltOne(places[0]?.name ?? places[0]?.label ?? "")
+    : formats.mapAltSeveral(places.map((place) => place.label));
 }
 
 /**
  * The map box of one invitation. It renders no map on the server and none before the box is seen, so the guest page
  * stays a server component with one deliberate, lazy island.
  */
-export function PlaceMapIsland({ places }: { readonly places: readonly MapMarker[] }) {
+export function PlaceMapIsland({
+  places,
+  locale,
+}: {
+  readonly places: readonly MapMarker[];
+  /** The locale the page renders (F14; L19.2): the box's alternative text follows it, the map itself does not. */
+  readonly locale: Locale;
+}) {
   const canvas = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   // Whether the engine and its tiles could not be loaded: the box then keeps no empty panel a guest cannot use.
@@ -192,11 +204,15 @@ export function PlaceMapIsland({ places }: { readonly places: readonly MapMarker
     ...(unavailable
       ? []
       : [
-          createElement("p", { className: "sr-only", key: "places" }, textAlternative(places)),
+          createElement(
+            "p",
+            { className: "sr-only", key: "places" },
+            textAlternative(places, locale),
+          ),
           createElement(
             "p",
             { className: ATTRIBUTION, key: "attribution" },
-            "© OpenStreetMap contributors · Mapas: OpenFreeMap",
+            guestText(locale, "map.attribution"),
           ),
         ]),
   );

@@ -9,6 +9,9 @@
  * browser loads lazily, never an embed the provider controls.
  */
 
+import { guestFormats } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
+
 /** The music services the contract allow-lists, as the API names them (S7). */
 export const MUSIC_PROVIDERS = [
   "spotify",
@@ -71,9 +74,12 @@ export interface MusicLink {
 /** The heading of the playlist section, which names the celebration as a shared playlist. */
 export const MUSIC_SECTION_TITLE = "Escucha nuestra playlist";
 
-/** The button of the playlist section: «Abrir en Spotify», «Abrir en YouTube», ... (S7). */
-export function musicButtonLabel(provider: MusicProvider): string {
-  return `Abrir en ${MUSIC_PROVIDER_LABELS[provider]}`;
+/**
+ * The button of the playlist section: «Abrir en Spotify», «Abrir en YouTube», ... (S7). The service name is the
+ * product's own, so only the verb follows the locale the page renders (F14; L19.2).
+ */
+export function musicButtonLabel(provider: MusicProvider, locale: Locale = "es"): string {
+  return guestFormats(locale).musicButton(MUSIC_PROVIDER_LABELS[provider]);
 }
 
 /**

@@ -5,6 +5,8 @@ import {
   type InvitationFeatures,
   showsGiftRegistry,
 } from "../../../../lib/invitation-features/invitation-features.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
+import { rendererTextsFor } from "../../../../lib/i18n/renderer-texts.ts";
 import {
   parseBaptismArchConfiguration,
   parseBaptismArchContent,
@@ -33,6 +35,8 @@ export interface BaptismArchRendererProperties {
   readonly calendarHref?: string;
   /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
   readonly hiddenFields?: readonly string[];
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 const h = createElement;
@@ -43,20 +47,34 @@ export function BaptismArchRenderer({
   features,
   calendarHref,
   hiddenFields,
+  locale,
 }: BaptismArchRendererProperties): ReactElement {
   const { theme: themeKey } = parseBaptismArchConfiguration(configuration);
   const data = parseBaptismArchContent(content, hiddenFields);
   const hidden = hiddenFieldSet(hiddenFields);
   const theme = ELEGANT_THEME[themeKey];
+  const texts = rendererTextsFor(locale);
 
   // A section the customer switched off draws nothing, and a row it covered arrives empty (S8.3).
   const family: ArchNameRow[] = [
     ...(hidden.has("parents")
       ? []
-      : [{ key: "parents", label: "Padres", values: nameLines(data.parents) }]),
+      : [
+          {
+            key: "parents",
+            label: texts["label.parents"],
+            values: nameLines(data.parents),
+          },
+        ]),
     ...(hidden.has("godparents")
       ? []
-      : [{ key: "godparents", label: "Padrinos", values: nameLines(data.godparents) }]),
+      : [
+          {
+            key: "godparents",
+            label: texts["label.godparents"],
+            values: nameLines(data.godparents),
+          },
+        ]),
   ];
 
   // The themed baptism schema has no dress code, so the details card only exists when there are gifts — and
@@ -68,23 +86,23 @@ export function BaptismArchRenderer({
   const details: ArchDetail[] =
     giftRegistry === undefined
       ? []
-      : [{ key: "gift-registry", label: "Mesa de regalos", value: giftRegistry }];
+      : [{ key: "gift-registry", label: texts["label.giftRegistry"], value: giftRegistry }];
 
   return h(ArchLayout, {
     componentKey: "baptism-arch-01",
     theme,
     themeKey,
-    ariaLabel: `Invitación de bautizo de ${data.celebrantName}`,
-    kicker: "Bautizo de",
+    ariaLabel: `${texts["baptism.ariaInvitation"]} ${data.celebrantName}`,
+    kicker: texts["baptism.kicker"],
     names: [data.celebrantName],
     date: data.date,
-    photoAlt: `Foto de ${data.celebrantName}`,
+    photoAlt: `${texts["invitation.photoAlt"]} ${data.celebrantName}`,
     ...(hidden.has("ceremonyPlace")
       ? {}
       : {
           ceremony: {
             key: "ceremony",
-            label: "Ceremonia",
+            label: texts["label.ceremony"],
             place: data.ceremonyPlace,
             address: data.ceremonyAddress,
             time: data.ceremonyTime,
@@ -95,7 +113,7 @@ export function BaptismArchRenderer({
       : {
           reception: {
             key: "reception",
-            label: "Recepción",
+            label: texts["label.reception"],
             place: data.receptionPlace,
             address: data.receptionAddress,
             time: data.receptionTime,
@@ -111,5 +129,6 @@ export function BaptismArchRenderer({
     facts: baptismArchEventFacts(data, hiddenFields),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
+    ...(locale === undefined ? {} : { locale }),
   });
 }

@@ -1,7 +1,10 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { languageChoiceOutcome } from "../../../../lib/i18n/guest-locale.ts";
+import {
+  languageChoiceOutcome,
+  languageChoiceParameters,
+} from "../../../../lib/i18n/guest-locale.ts";
 import { requestOrigin } from "../../../../lib/server/request-origin.ts";
 
 /**
@@ -20,13 +23,12 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
   const { slug } = await params;
+  // `getAll` and not `get`: a repeated `idioma` names no single language, exactly like the page's own decision, so a
+  // hand-edited link never chooses for the guest (L19.3).
   const search = new URL(request.url).searchParams;
   const outcome = languageChoiceOutcome({
     slug,
-    parameters: {
-      idioma: search.get("idioma") ?? undefined,
-      invitado: search.get("invitado") ?? undefined,
-    },
+    parameters: languageChoiceParameters(search),
     secure: requestOrigin(await headers())?.startsWith("https://") ?? false,
   });
 

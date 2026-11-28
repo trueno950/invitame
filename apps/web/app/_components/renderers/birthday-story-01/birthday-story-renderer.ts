@@ -1,7 +1,13 @@
 import { createElement, type ReactElement, useId } from "react";
 import { birthdayStoryEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
 import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
-import { formatLongDate } from "../../../../lib/renderers/birthday-content.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
+import {
+  rendererAgeUnit,
+  rendererClockTime,
+  rendererLongDate,
+  rendererTextsFor,
+} from "../../../../lib/i18n/renderer-texts.ts";
 import {
   parseBirthdayStoryConfiguration,
   parseBirthdayStoryContent,
@@ -36,6 +42,8 @@ export interface BirthdayStoryRendererProps {
   readonly calendarHref?: string;
   /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
   readonly hiddenFields?: readonly string[];
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 const h = createElement;
@@ -73,12 +81,14 @@ export function BirthdayStoryRenderer({
   features,
   calendarHref,
   hiddenFields,
+  locale,
 }: BirthdayStoryRendererProps): ReactElement {
   const { theme: themeKey } = parseBirthdayStoryConfiguration(configuration);
   const data = parseBirthdayStoryContent(content, hiddenFields);
   const hidden = hiddenFieldSet(hiddenFields);
   const theme = BIRTHDAY_THEME[themeKey];
   const idPrefix = useId();
+  const texts = rendererTextsFor(locale);
 
   // Chapter 2 ends with the place, so the features follow it as the practical chapter of the story (S4).
   const featuresBlock =
@@ -88,12 +98,13 @@ export function BirthdayStoryRenderer({
           features,
           facts: birthdayStoryEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
+          ...(locale === undefined ? {} : { locale }),
         });
 
   return h(
     "article",
     {
-      "aria-label": `Invitación de cumpleaños de ${data.celebrantName}`,
+      "aria-label": `${texts["birthday.ariaInvitation"]} ${data.celebrantName}`,
       "data-component-key": "birthday-story-01",
       "data-theme": themeKey,
       className: `${INVITATION_ROOT} px-4 py-6`,
@@ -149,7 +160,7 @@ export function BirthdayStoryRenderer({
                 },
                 h("img", {
                   src: data.mainPhoto,
-                  alt: `Foto de ${data.celebrantName}`,
+                  alt: `${texts["invitation.photoAlt"]} ${data.celebrantName}`,
                   decoding: "async",
                   className: "size-full object-cover",
                 }),
@@ -157,7 +168,7 @@ export function BirthdayStoryRenderer({
           h(
             "p",
             { className: "mt-5 text-lg italic text-(color:--inv-ink)" },
-            "Había una vez alguien muy especial llamado",
+            texts["birthday.storyOpener"],
           ),
           h(
             "h1",
@@ -172,17 +183,16 @@ export function BirthdayStoryRenderer({
             "p",
             { className: "mx-auto max-w-[30ch] text-base text-(color:--inv-ink)" },
             ...(data.age === undefined
-              ? [
-                  "y en este capítulo de su historia te esperamos. ¡Queremos que seas parte del cuento!",
-                ]
+              ? [texts["birthday.storyNoAge"]]
               : [
-                  "y en este capítulo de su historia cumple ",
+                  texts["birthday.storyTurns"],
+                  " ",
                   h(
                     "b",
                     { key: "age", className: "text-(color:--inv-accent)" },
-                    `${data.age} años`,
+                    `${data.age} ${rendererAgeUnit(locale, data.age)}`,
                   ),
-                  ". ¡Queremos que seas parte del cuento!",
+                  texts["birthday.storyExclaim"],
                 ]),
           ),
         ),
@@ -191,29 +201,33 @@ export function BirthdayStoryRenderer({
       h(
         "section",
         { "data-section": "details", "aria-labelledby": `${idPrefix}-details` },
-        h("h2", { id: `${idPrefix}-details`, className: CHAPTER }, "Capítulo 1 · Detalles"),
-        h("h3", { className: CHAPTER_TITLE, style: DISPLAY_FONT }, "El gran día"),
+        h(
+          "h2",
+          { id: `${idPrefix}-details`, className: CHAPTER },
+          texts["birthday.chapterDetails"],
+        ),
+        h("h3", { className: CHAPTER_TITLE, style: DISPLAY_FONT }, texts["birthday.bigDay"]),
         h(
           "div",
           { className: "mt-3 flex gap-3" },
           h(
             "div",
             { className: "flex-1 rounded-2xl bg-(--inv-soft) px-4 py-3" },
-            h("small", { className: WHEN_LABEL }, "Fecha"),
+            h("small", { className: WHEN_LABEL }, texts["label.date"]),
             h(
               "b",
               { className: "text-base font-medium leading-snug" },
-              h("time", { dateTime: data.date }, formatLongDate(data.date)),
+              h("time", { dateTime: data.date }, rendererLongDate(locale, data.date)),
             ),
           ),
           h(
             "div",
             { className: "w-28 shrink-0 rounded-2xl bg-(--inv-soft) px-4 py-3" },
-            h("small", { className: WHEN_LABEL }, "Hora"),
+            h("small", { className: WHEN_LABEL }, texts["label.time"]),
             h(
               "b",
               { className: "text-base font-medium leading-snug" },
-              h("time", { dateTime: data.time }, `${data.time} h`),
+              h("time", { dateTime: data.time }, rendererClockTime(locale, data.time)),
             ),
           ),
         ),
@@ -221,7 +235,7 @@ export function BirthdayStoryRenderer({
       h(
         "section",
         { "data-section": "place", "aria-labelledby": `${idPrefix}-place`, className: "mt-7" },
-        h("h2", { id: `${idPrefix}-place`, className: CHAPTER }, "Capítulo 2 · Lugar"),
+        h("h2", { id: `${idPrefix}-place`, className: CHAPTER }, texts["birthday.chapterPlace"]),
         h("h3", { className: CHAPTER_TITLE, style: DISPLAY_FONT }, data.location),
         h("p", { className: "mt-1 text-base text-(color:--inv-ink)" }, data.address),
       ),
@@ -240,7 +254,11 @@ export function BirthdayStoryRenderer({
               "aria-labelledby": `${idPrefix}-message`,
               className: "mt-7",
             },
-            h("h2", { id: `${idPrefix}-message`, className: CHAPTER }, "Capítulo 3 · Mensaje"),
+            h(
+              "h2",
+              { id: `${idPrefix}-message`, className: CHAPTER },
+              texts["birthday.chapterMessage"],
+            ),
             h(
               "p",
               {
@@ -256,7 +274,7 @@ export function BirthdayStoryRenderer({
           className: "mt-8 text-center text-xl italic text-(color:--inv-ink)",
           style: DISPLAY_FONT,
         },
-        "…y la fiesta continúa contigo.",
+        texts["birthday.storyContinues"],
       ),
       // Decoration stays inside the page sheet and below every line of text.
       h(DecorationZone, {

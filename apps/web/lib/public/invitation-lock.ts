@@ -1,4 +1,5 @@
-import { LOCK_SCREEN_COPY } from "../customer/copy.ts";
+import { guestText, type GuestTextKey } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import { isInvitationSlug } from "../server/invitations-api.ts";
 import type { PublicInvitationsClient } from "../server/public-invitations-api.ts";
 import { publicInvitationPath } from "./invitation-page.ts";
@@ -105,9 +106,9 @@ export type LockNoticeCode = (typeof LOCK_NOTICE_CODES)[number];
  * The two refusals of an unlock, as the one sentence the page shows (L18.3): a wrong code and an attempt over the limit
  * say the same small amount — the guest has to try again, or wait — and never which of the two happened.
  */
-const LOCK_NOTICE_MESSAGES: Readonly<Record<LockNoticeCode, string>> = {
-  rejected: LOCK_SCREEN_COPY.rejected,
-  limited: LOCK_SCREEN_COPY.limited,
+const LOCK_NOTICE_KEYS: Readonly<Record<LockNoticeCode, GuestTextKey>> = {
+  rejected: "lock.rejected",
+  limited: "lock.limited",
 };
 
 /** The sentence the page renders, with the code it came from. */
@@ -129,13 +130,16 @@ function isLockNoticeCode(value: unknown): value is LockNoticeCode {
   return typeof value === "string" && (LOCK_NOTICE_CODES as readonly string[]).includes(value);
 }
 
-/** The Spanish sentence of the notice the page's query carries, or undefined for anything the page does not know. */
+/** The sentence of the notice the page's query carries, or undefined for anything the page does not know (L19.2). */
 export function lockNotice(
   parameters: Record<string, string | string[] | undefined> = {},
+  locale: Locale = "es",
 ): LockNotice | undefined {
   const code = parameters[LOCK_NOTICE_PARAM];
 
-  return isLockNoticeCode(code) ? { code, message: LOCK_NOTICE_MESSAGES[code] } : undefined;
+  return isLockNoticeCode(code)
+    ? { code, message: guestText(locale, LOCK_NOTICE_KEYS[code]) }
+    : undefined;
 }
 
 /** The lock screen of one invitation with one notice, which is the page the refused unlock comes back to. */
@@ -165,18 +169,25 @@ export function lockScreenView(input: {
   readonly slug: string;
   readonly displayName: string | null;
   readonly notice?: LockScreenNotice;
+  /**
+   * The locale the screen is read in (F14; L19.2). A locked page carries no invitation data at all — not even its
+   * language setting (L18.3) — so the page resolves the locale the guest chose on this device and draws the screen's
+   * four lines in it; absent reads as Spanish.
+   */
+  readonly locale?: Locale;
 }): LockScreenView | undefined {
   if (!isInvitationSlug(input.slug)) {
     return undefined;
   }
+  const locale = input.locale ?? "es";
 
   return {
     slug: input.slug,
-    subject: input.displayName ?? LOCK_SCREEN_COPY.privateTitle,
-    privateLine: LOCK_SCREEN_COPY.privateLine,
-    fieldLabel: LOCK_SCREEN_COPY.fieldLabel,
-    submit: LOCK_SCREEN_COPY.submit,
-    hint: LOCK_SCREEN_COPY.hint,
+    subject: input.displayName ?? guestText(locale, "lock.privateTitle"),
+    privateLine: guestText(locale, "lock.privateLine"),
+    fieldLabel: guestText(locale, "lock.fieldLabel"),
+    submit: guestText(locale, "lock.submit"),
+    hint: guestText(locale, "lock.hint"),
     ...(input.notice === undefined ? {} : { notice: input.notice }),
   };
 }

@@ -2,11 +2,16 @@ import { type CSSProperties, createElement, type ReactElement, useId } from "rea
 
 import type { EventFacts } from "../../../../lib/invitation-features/event-facts.ts";
 import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
+import {
+  rendererClockTime,
+  rendererLongDate,
+  rendererTextsFor,
+} from "../../../../lib/i18n/renderer-texts.ts";
 import {
   ARCH_SCRIM_INK_PERCENT,
   type ElegantTheme,
 } from "../../../../lib/renderers/elegant-themes.ts";
-import { formatLongDate } from "../../../../lib/renderers/invitation-fields.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { DecorationZone } from "../illustrations/decoration.ts";
 import {
@@ -120,6 +125,8 @@ export interface ArchLayoutProperties {
   readonly features?: InvitationFeatures;
   readonly facts: EventFacts;
   readonly calendarHref?: string;
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 /** The initials of the lockup, as the wax seal shows them: «V», or «A·D» for a couple. */
@@ -130,8 +137,13 @@ function monogramOf(names: readonly string[]): string {
     .join("·");
 }
 
-/** The lockup's names: one line for a celebration, two lines joined by «y» for a couple. */
-function nameLockup(theme: ElegantTheme, id: string, names: readonly string[]): ReactElement {
+/** The lockup's names: one line for a celebration, two lines joined by the locale's own «y»/«and» for a couple. */
+function nameLockup(
+  theme: ElegantTheme,
+  id: string,
+  names: readonly string[],
+  join: string,
+): ReactElement {
   const children: ReactElement[] = [];
 
   names.forEach((name, index) => {
@@ -143,7 +155,7 @@ function nameLockup(theme: ElegantTheme, id: string, names: readonly string[]): 
             key: `join-${index}`,
             className: "my-1 block text-[0.42em] tracking-[0.24em]",
           },
-          "y",
+          join,
         ),
       );
     }
@@ -191,6 +203,7 @@ function placeCard(
   idPrefix: string,
   place: ArchPlace,
   offset: boolean,
+  locale: Locale | undefined,
 ): ReactElement {
   return h(
     "section",
@@ -230,7 +243,7 @@ function placeCard(
           className:
             "mt-3 inline-block rounded-full bg-(--inv-soft) px-3 py-1 text-sm font-medium text-(color:--inv-accent)",
         },
-        h("time", { dateTime: place.time }, `${place.time} h`),
+        h("time", { dateTime: place.time }, rendererClockTime(locale, place.time)),
       ),
     ),
   );
@@ -255,8 +268,10 @@ export function ArchLayout({
   features,
   facts,
   calendarHref,
+  locale,
 }: ArchLayoutProperties): ReactElement {
   const idPrefix = useId();
+  const texts = rendererTextsFor(locale);
   const monogram = monogramOf(names);
   // A row of names the customer switched off arrives empty, and an empty row draws nothing (S8.3).
   const shownFamily = family.filter((row) => row.values.length > 0);
@@ -270,6 +285,7 @@ export function ArchLayout({
           features,
           facts,
           ...(calendarHref === undefined ? {} : { calendarHref }),
+          ...(locale === undefined ? {} : { locale }),
         });
 
   return h(
@@ -352,11 +368,11 @@ export function ArchLayout({
             className: "absolute inset-x-7 bottom-8 text-center text-(color:--inv-on-accent)",
           },
           h("p", { className: KICKER }, kicker),
-          nameLockup(theme, `${idPrefix}-hero`, names),
+          nameLockup(theme, `${idPrefix}-hero`, names, texts["invitation.nameJoin"]),
           h(
             "p",
             { className: `${KICKER} mt-4` },
-            h("time", { dateTime: date }, formatLongDate(date)),
+            h("time", { dateTime: date }, rendererLongDate(locale, date)),
           ),
         ),
       ),
@@ -385,7 +401,11 @@ export function ArchLayout({
       : h(
           "section",
           { "data-section": "family", "aria-labelledby": `${idPrefix}-family` },
-          h("h2", { id: `${idPrefix}-family`, className: SECTION_TITLE }, "La familia"),
+          h(
+            "h2",
+            { id: `${idPrefix}-family`, className: SECTION_TITLE },
+            texts["invitation.family"],
+          ),
           h(
             "div",
             {
@@ -423,14 +443,18 @@ export function ArchLayout({
             ),
           ),
         ),
-    ceremony === undefined ? null : placeCard(theme, idPrefix, ceremony, false),
-    reception === undefined ? null : placeCard(theme, idPrefix, reception, true),
+    ceremony === undefined ? null : placeCard(theme, idPrefix, ceremony, false, locale),
+    reception === undefined ? null : placeCard(theme, idPrefix, reception, true, locale),
     details.length === 0
       ? null
       : h(
           "section",
           { "data-section": "details", "aria-labelledby": `${idPrefix}-details` },
-          h("h2", { id: `${idPrefix}-details`, className: SECTION_TITLE }, "Detalles"),
+          h(
+            "h2",
+            { id: `${idPrefix}-details`, className: SECTION_TITLE },
+            texts["invitation.details"],
+          ),
           h(
             "div",
             {
@@ -456,7 +480,11 @@ export function ArchLayout({
       : h(
           "section",
           { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
-          h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+          h(
+            "h2",
+            { id: `${idPrefix}-message`, className: SECTION_TITLE },
+            texts["invitation.message"],
+          ),
           h(
             "div",
             { className: "mt-3 rounded-[1.5rem] bg-(--inv-soft) px-5 py-6 text-center" },
@@ -493,7 +521,7 @@ export function ArchLayout({
           h(
             "div",
             { className: `${CARD} text-center` },
-            h("h2", { id: `${idPrefix}-rsvp`, className: ROW_LABEL }, "Confirma tu asistencia"),
+            h("h2", { id: `${idPrefix}-rsvp`, className: ROW_LABEL }, texts["invitation.rsvp"]),
             h(
               "p",
               { className: "mt-2 text-lg font-medium break-words text-(color:--inv-ink)" },

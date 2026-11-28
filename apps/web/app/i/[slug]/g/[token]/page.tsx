@@ -4,13 +4,16 @@ import Link from "next/link";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { connection } from "next/server";
 
-import { GUEST_PAGE_COPY, PUBLIC_INVITATION_COPY } from "../../../../../lib/customer/copy.ts";
+import { PUBLIC_INVITATION_COPY } from "../../../../../lib/customer/copy.ts";
+import { guestText } from "../../../../../lib/i18n/guest-texts.ts";
 import {
   LANGUAGE_COOKIE,
   languageChoicePath,
+  rememberedLocale,
   requestedLocale,
   resolveGuestLocale,
 } from "../../../../../lib/i18n/guest-locale.ts";
+import { DEFAULT_LOCALE } from "../../../../../lib/i18n/locale.ts";
 import { languageSwitchView } from "../../../../../lib/i18n/language-switch.ts";
 import { openingAnimationTheme } from "../../../../../lib/invitation-features/opening-animation.ts";
 import type { GuestPageBlockView } from "../../../../../lib/invitation-features/invitation-features.ts";
@@ -61,10 +64,28 @@ const NO_INDEX: Metadata = { robots: { index: false, follow: false } };
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: GUEST_PAGE_COPY.pageTitle,
-  ...NO_INDEX,
-};
+/**
+ * The page title a browser tab reads, in the language the page renders (F14; L19.2): the owner's own setting when the
+ * invitation answers, and otherwise the language this device remembered for it. The read is the page's own — `cache`
+ * makes it one request — so the title and the page never disagree.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; token: string }>;
+}): Promise<Metadata> {
+  const [{ slug, token }, cookieJar] = await Promise.all([params, cookies()]);
+  const loaded = await loadGuestInvitation(slug, token);
+  const locale =
+    loaded.status === "ok"
+      ? resolveGuestLocale({
+          language: loaded.invitation.features.language,
+          remembered: cookieJar.get(LANGUAGE_COOKIE)?.value,
+        })
+      : (rememberedLocale(cookieJar.get(LANGUAGE_COOKIE)?.value) ?? DEFAULT_LOCALE);
+
+  return { title: guestText(locale, "guestPage.pageTitle"), ...NO_INDEX };
+}
 
 interface GuestInvitationPageProperties {
   params: Promise<{ slug: string; token: string }>;
@@ -137,6 +158,13 @@ export default async function GuestInvitationPage({
     notFound();
   }
 
+  // The locale of this page (F14; L19.2, L19.3): the owner's fixed choice or this guest's own, remembered for the
+  // invitation's own path. It is decided before the guest block, because the greeting, the seats, the pass, and every
+  // fixed text of the invitation follow it.
+  const locale = resolveGuestLocale({
+    language: invitation.features.language,
+    remembered: cookieJar.get(LANGUAGE_COOKIE)?.value,
+  });
   // The guest's own block: the greeting, the seats, their answer card, and their pass (S4). The pass is offered only
   // while the API says so — a confirmed guest of a package that grants `QR_PASS` — and its QR encodes the owner's
   // check-in address built from this very request's origin, so no extra setting is needed to deploy it.
@@ -160,8 +188,8 @@ export default async function GuestInvitationPage({
       ? undefined
       : guestPassView({ checkInUrl: passUrl, guest: invitation.guest });
   const guest: GuestPageBlockView = {
-    greeting: guestGreeting(invitation.guest.name),
-    seats: guestSeatsSentence(invitation.guest.seats),
+    greeting: guestGreeting(invitation.guest.name, locale),
+    seats: guestSeatsSentence(invitation.guest.seats, locale),
     ...(rsvp === undefined ? {} : { rsvp }),
     ...(pass === undefined ? {} : { pass }),
   };
@@ -183,13 +211,7 @@ export default async function GuestInvitationPage({
     invitation.expired,
     token,
   );
-  const block = publicFeatureBlock(invitation, undefined, guest, guestbook, album);
-  // The locale of this page (F14; L19.2, L19.3): the owner's fixed choice or this guest's own, remembered for the
-  // invitation's own path. Every renderer still writes Spanish until the translation slice; the prop is what it reads.
-  const locale = resolveGuestLocale({
-    language: invitation.features.language,
-    remembered: cookieJar.get(LANGUAGE_COOKIE)?.value,
-  });
+  const block = publicFeatureBlock(invitation, undefined, guest, guestbook, album, locale);
   const languageSwitch = languageSwitchView({
     language: invitation.features.language,
     locale,
@@ -202,9 +224,9 @@ export default async function GuestInvitationPage({
       ? props
       : { ...props, features: block.features, calendarHref: block.calendarHref };
   // The notices of this page's own query, rendered on the server: the answer's (S4) and the signature's (F7).
-  const notice = rsvpNotice(parameters);
-  const signatureNotice = guestbookNotice(parameters);
-  const photoNotice = guestAlbumNotice(parameters);
+  const notice = rsvpNotice(parameters, locale);
+  const signatureNotice = guestbookNotice(parameters, locale);
+  const photoNotice = guestAlbumNotice(parameters, locale);
 
   // The envelope of the opening animation (F10; L14.1, L14.2), the same overlay the public page draws: this page is the
   // guest's own link to the same published invitation, so it opens the same way.
@@ -214,6 +236,7 @@ export default async function GuestInvitationPage({
     content: invitation.content,
     hiddenFields: invitation.hiddenFields,
     plays: invitation.features.openingAnimation,
+    locale,
   });
 
   return (
@@ -227,6 +250,7 @@ export default async function GuestInvitationPage({
           invitationSlug={invitation.slug}
           plays
           theme={opening.theme}
+          locale={locale}
         />
       )}
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
@@ -241,7 +265,7 @@ export default async function GuestInvitationPage({
         <Renderer {...rendererProps} />
         <footer className="flex justify-center">
           <Link className={textButton} href="/">
-            {PUBLIC_INVITATION_COPY.madeWith}
+            {guestText(locale, "footer.madeWith")}
           </Link>
         </footer>
       </div>

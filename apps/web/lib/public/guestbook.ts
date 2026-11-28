@@ -1,4 +1,6 @@
 import { GUESTBOOK_NOTICE_COPY } from "../customer/copy.ts";
+import { guestText, type GuestTextKey } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import type {
   GuestbookBlockView,
   RsvpFormAction,
@@ -117,9 +119,23 @@ export interface GuestbookNotice {
   readonly message: string;
 }
 
-/** The Spanish notice the page's query carries, or undefined for anything the page does not know. */
+/**
+ * The sentence of each code (F14; L19.2): the code travels unchanged and only the sentence the page draws follows the
+ * locale it renders.
+ */
+const NOTICE_KEYS: Readonly<Record<GuestbookNoticeCode, GuestTextKey>> = {
+  signed: "notice.guestbook.signed",
+  invalid: "notice.guestbook.invalid",
+  closed: "notice.guestbook.closed",
+  limited: "notice.guestbook.limited",
+  unavailable: "notice.guestbook.unavailable",
+  locked: "lock.writeRefused",
+};
+
+/** The notice the page's query carries, in the locale it renders, or undefined for anything it does not know. */
 export function guestbookNotice(
   parameters: Record<string, string | string[] | undefined> = {},
+  locale: Locale = "es",
 ): GuestbookNotice | undefined {
   const code = parameters[GUESTBOOK_NOTICE_PARAM];
 
@@ -127,17 +143,17 @@ export function guestbookNotice(
     return undefined;
   }
 
-  return {
-    code: code as GuestbookNoticeCode,
-    message: GUESTBOOK_NOTICE_COPY[code as GuestbookNoticeCode],
-  };
+  const known = code as GuestbookNoticeCode;
+
+  return { code: known, message: guestText(locale, NOTICE_KEYS[known]) };
 }
 
-/** The Spanish sentence of the notice the page's query carries, or undefined for anything else. */
+/** The sentence of the notice the page's query carries, or undefined for anything else. */
 export function guestbookNoticeMessage(
   parameters: Record<string, string | string[] | undefined> = {},
+  locale: Locale = "es",
 ): string | undefined {
-  return guestbookNotice(parameters)?.message;
+  return guestbookNotice(parameters, locale)?.message;
 }
 
 /** The client call this module needs, so a test can hand it a fake and see exactly what it sent. */

@@ -1,3 +1,6 @@
+import { guestFormats } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
+
 /**
  * The album of the guests' photos (F8; S2.8, L11.4, L11.5). The API owns the gate, the bytes, the limits, and the
  * moderation: this module holds only what the guest page says about the album and how the shared features block reads
@@ -65,8 +68,8 @@ export interface GuestAlbumValue {
  * The count line under the grid (L11.5): the published photos the invitation holds, in the singular when it is one. It
  * counts the album, never the page: a guest reading the newest 60 of a larger album still reads the real total.
  */
-export function guestAlbumCount(count: number): string {
-  return count === 1 ? "1 foto publicada" : `${count} fotos publicadas`;
+export function guestAlbumCount(count: number, locale: Locale = "es"): string {
+  return guestFormats(locale).albumCount(count);
 }
 
 /**
@@ -74,8 +77,6 @@ export function guestAlbumCount(count: number): string {
  * the album otherwise. Both are plain text, so a name that looks like markup is announced as the characters the guest
  * typed.
  */
-export function guestAlbumPhotoAlt(uploaderName: string | null): string {
-  const name = uploaderName?.trim() ?? "";
-
-  return name === "" ? GUEST_ALBUM_PHOTO_ALT_FALLBACK : `Foto que subió ${name}`;
+export function guestAlbumPhotoAlt(uploaderName: string | null, locale: Locale = "es"): string {
+  return guestFormats(locale).albumPhotoAlt(uploaderName);
 }

@@ -1,3 +1,4 @@
+import { intlLocale, type Locale } from "../i18n/locale.ts";
 import { isCalendarDate, isClockTime } from "../renderers/invitation-fields.ts";
 import { isSupportedTimeZone, startInstant } from "./start-instant.ts";
 
@@ -36,14 +37,15 @@ function partsFormatter(timeZone: string): Intl.DateTimeFormat {
   return formatter;
 }
 
-function textFormatter(timeZone: string): Intl.DateTimeFormat {
-  const cached = TEXT_FORMATTERS.get(timeZone);
+function textFormatter(timeZone: string, locale: Locale): Intl.DateTimeFormat {
+  const key = `${locale}|${timeZone}`;
+  const cached = TEXT_FORMATTERS.get(key);
 
   if (cached !== undefined) {
     return cached;
   }
 
-  const formatter = new Intl.DateTimeFormat("es-MX", {
+  const formatter = new Intl.DateTimeFormat(intlLocale(locale), {
     timeZone,
     day: "numeric",
     month: "long",
@@ -53,7 +55,7 @@ function textFormatter(timeZone: string): Intl.DateTimeFormat {
     hourCycle: "h23",
   });
 
-  TEXT_FORMATTERS.set(timeZone, formatter);
+  TEXT_FORMATTERS.set(key, formatter);
   return formatter;
 }
 
@@ -70,8 +72,15 @@ function instantOf(deadline: string): Date | undefined {
   return Number.isNaN(at) ? undefined : new Date(at);
 }
 
-/** The deadline as one sentence on the invitation's clock: «5 de diciembre de 2026 a las 17:30». */
-export function formatRsvpDeadline(deadline: string, timeZone: string): string | undefined {
+/**
+ * The deadline on the invitation's clock, written for the locale the page renders (F14; L19.2): «5 de diciembre de 2026,
+ * 17:30» for a Spanish guest, «December 5, 2026, 17:30» for an English one, and always in the invitation's own zone.
+ */
+export function formatRsvpDeadline(
+  deadline: string,
+  timeZone: string,
+  locale: Locale = "es",
+): string | undefined {
   const instant = instantOf(deadline);
 
   if (instant === undefined) {
@@ -79,7 +88,7 @@ export function formatRsvpDeadline(deadline: string, timeZone: string): string |
   }
 
   try {
-    return textFormatter(timeZone).format(instant);
+    return textFormatter(timeZone, locale).format(instant);
   } catch {
     return undefined;
   }

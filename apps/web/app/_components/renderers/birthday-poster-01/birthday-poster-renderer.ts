@@ -1,11 +1,15 @@
 import { createElement, type ReactElement, useId } from "react";
 import { birthdayPosterEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
 import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
 import {
-  formatAgeLabel,
-  formatAgeUnit,
-  formatLongDate,
-} from "../../../../lib/renderers/birthday-content.ts";
+  rendererAgeLabel,
+  rendererAgeUnit,
+  rendererClockTime,
+  rendererLongDate,
+  rendererTextsFor,
+  rendererWallClock,
+} from "../../../../lib/i18n/renderer-texts.ts";
 import {
   parseBirthdayPosterConfiguration,
   parseBirthdayPosterContent,
@@ -40,6 +44,8 @@ export interface BirthdayPosterRendererProps {
   readonly calendarHref?: string;
   /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
   readonly hiddenFields?: readonly string[];
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 const h = createElement;
@@ -60,12 +66,14 @@ export function BirthdayPosterRenderer({
   features,
   calendarHref,
   hiddenFields,
+  locale,
 }: BirthdayPosterRendererProps): ReactElement {
   const { theme: themeKey } = parseBirthdayPosterConfiguration(configuration);
   const data = parseBirthdayPosterContent(content, hiddenFields);
   const hidden = hiddenFieldSet(hiddenFields);
   const theme = BIRTHDAY_THEME[themeKey];
   const idPrefix = useId();
+  const texts = rendererTextsFor(locale);
 
   // After the admission ticket and before the message: the details, then what a guest can act on (S4).
   const featuresBlock =
@@ -75,12 +83,13 @@ export function BirthdayPosterRenderer({
           features,
           facts: birthdayPosterEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
+          ...(locale === undefined ? {} : { locale }),
         });
 
   return h(
     "article",
     {
-      "aria-label": `Invitación de cumpleaños de ${data.celebrantName}`,
+      "aria-label": `${texts["birthday.ariaInvitation"]} ${data.celebrantName}`,
       "data-component-key": "birthday-poster-01",
       "data-theme": themeKey,
       className: INVITATION_ROOT,
@@ -124,7 +133,7 @@ export function BirthdayPosterRenderer({
           h(
             "p",
             { className: "text-sm font-medium uppercase tracking-[0.18em]" },
-            "¡Es mi fiesta!",
+            texts["birthday.posterKicker"],
           ),
           h(
             "h1",
@@ -140,7 +149,7 @@ export function BirthdayPosterRenderer({
             : h(
                 "p",
                 {
-                  "aria-label": formatAgeLabel(data.age),
+                  "aria-label": rendererAgeLabel(locale, data.age),
                   className: "mt-1 flex items-center justify-center gap-3",
                 },
                 h(
@@ -162,9 +171,9 @@ export function BirthdayPosterRenderer({
                     "aria-hidden": "true",
                     className: "text-left text-lg font-medium leading-tight",
                   },
-                  formatAgeUnit(data.age),
+                  rendererAgeUnit(locale, data.age),
                   h("br"),
-                  "de risas",
+                  texts["birthday.posterLaughs"],
                 ),
               ),
         ),
@@ -180,7 +189,7 @@ export function BirthdayPosterRenderer({
           },
           h("img", {
             src: data.mainPhoto,
-            alt: `Foto de ${data.celebrantName}`,
+            alt: `${texts["invitation.photoAlt"]} ${data.celebrantName}`,
             decoding: "async",
             className: "block aspect-square w-full object-cover",
           }),
@@ -191,7 +200,7 @@ export function BirthdayPosterRenderer({
               className:
                 "mt-2 break-words px-1 text-center text-base font-medium text-(color:--inv-accent)",
             },
-            `¡${data.celebrantName}!`,
+            texts["birthday.posterNameCheer"].replace("{name}", data.celebrantName),
           ),
         ),
     h(
@@ -200,7 +209,11 @@ export function BirthdayPosterRenderer({
       h(
         "section",
         { "data-section": "details", "aria-labelledby": `${idPrefix}-details` },
-        h("h2", { id: `${idPrefix}-details`, className: SECTION_TITLE }, "Tu boleto de entrada"),
+        h(
+          "h2",
+          { id: `${idPrefix}-details`, className: SECTION_TITLE },
+          texts["birthday.ticketTitle"],
+        ),
         h(
           "div",
           {
@@ -212,17 +225,17 @@ export function BirthdayPosterRenderer({
             h(
               "div",
               null,
-              h("dt", { className: TICKET_LABEL }, "Fecha"),
+              h("dt", { className: TICKET_LABEL }, texts["label.date"]),
               h(
                 "dd",
                 { className: TICKET_VALUE },
-                h("time", { dateTime: data.date }, formatLongDate(data.date)),
+                h("time", { dateTime: data.date }, rendererLongDate(locale, data.date)),
               ),
             ),
             h(
               "div",
               null,
-              h("dt", { className: TICKET_LABEL }, "Lugar"),
+              h("dt", { className: TICKET_LABEL }, texts["label.place"]),
               h(
                 "dd",
                 { className: TICKET_VALUE },
@@ -234,7 +247,7 @@ export function BirthdayPosterRenderer({
           h(
             "div",
             {
-              "aria-label": `Hora: ${data.time} h`,
+              "aria-label": `${texts["label.time"]}: ${rendererClockTime(locale, data.time)}`,
               "data-time-stub": "",
               className:
                 "relative grid shrink-0 place-content-center rounded-r-2xl whitespace-nowrap border-l-4 border-dotted border-(color:--inv-ink)/35 bg-(--inv-soft) px-3 py-3 text-center",
@@ -255,9 +268,13 @@ export function BirthdayPosterRenderer({
                 className: "whitespace-nowrap text-base leading-none text-(color:--inv-accent)",
                 style: DISPLAY_FONT,
               },
-              data.time,
+              rendererWallClock(locale, data.time),
             ),
-            h("span", { "aria-hidden": "true", className: "text-xs font-medium" }, "horas"),
+            h(
+              "span",
+              { "aria-hidden": "true", className: "text-xs font-medium" },
+              texts["birthday.ticketHours"],
+            ),
           ),
         ),
       ),
@@ -272,7 +289,11 @@ export function BirthdayPosterRenderer({
         : h(
             "section",
             { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
-            h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+            h(
+              "h2",
+              { id: `${idPrefix}-message`, className: SECTION_TITLE },
+              texts["invitation.message"],
+            ),
             h(
               "div",
               {

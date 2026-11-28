@@ -1,4 +1,6 @@
 import { GUEST_ALBUM_NOTICE_COPY } from "../customer/copy.ts";
+import { guestText, type GuestTextKey } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import {
   GUEST_ALBUM_UPLOADER_NAME_MAX_LENGTH,
   type GuestAlbumValue,
@@ -161,9 +163,25 @@ export interface GuestAlbumNotice {
   readonly message: string;
 }
 
-/** The Spanish notice the page's query carries, or undefined for anything the page does not know. */
+/**
+ * The sentence of each code (F14; L19.2): the code travels unchanged and only the sentence the page draws follows the
+ * locale it renders.
+ */
+const NOTICE_KEYS: Readonly<Record<GuestAlbumNoticeCode, GuestTextKey>> = {
+  uploaded: "notice.album.uploaded",
+  invalid: "notice.album.invalid",
+  closed: "notice.album.closed",
+  full: "notice.album.full",
+  "pending-full": "notice.album.pendingFull",
+  limited: "notice.album.limited",
+  unavailable: "notice.album.unavailable",
+  locked: "lock.writeRefused",
+};
+
+/** The notice the page's query carries, in the locale it renders, or undefined for anything it does not know. */
 export function guestAlbumNotice(
   parameters: Record<string, string | string[] | undefined> = {},
+  locale: Locale = "es",
 ): GuestAlbumNotice | undefined {
   const code = parameters[GUEST_ALBUM_NOTICE_PARAM];
 
@@ -171,17 +189,17 @@ export function guestAlbumNotice(
     return undefined;
   }
 
-  return {
-    code: code as GuestAlbumNoticeCode,
-    message: GUEST_ALBUM_NOTICE_COPY[code as GuestAlbumNoticeCode],
-  };
+  const known = code as GuestAlbumNoticeCode;
+
+  return { code: known, message: guestText(locale, NOTICE_KEYS[known]) };
 }
 
-/** The Spanish sentence of the notice the page's query carries, or undefined for anything else. */
+/** The sentence of the notice the page's query carries, or undefined for anything else. */
 export function guestAlbumNoticeMessage(
   parameters: Record<string, string | string[] | undefined> = {},
+  locale: Locale = "es",
 ): string | undefined {
-  return guestAlbumNotice(parameters)?.message;
+  return guestAlbumNotice(parameters, locale)?.message;
 }
 
 /** The client call this module needs, so a test can hand it a fake and see exactly what it sent. */

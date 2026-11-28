@@ -1,3 +1,4 @@
+import type { Locale } from "../i18n/locale.ts";
 import { themedLayoutFor } from "../renderers/themed-layouts.ts";
 import type { InvitationTheme } from "../renderers/theme-tokens.ts";
 
@@ -29,7 +30,7 @@ export const OPENING_ANIMATION_DURATION_MS = 3_000;
  */
 export const OPENING_ANIMATION_SKIP_KEYS = ["Enter", "Escape", " ", "Space", "Spacebar"] as const;
 
-/** The one line the envelope carries, in neutral Spanish (L14.2). */
+/** The one line the envelope carries, in neutral Spanish (L14.2); the page renders it through the guest dictionary. */
 export const OPENING_ANIMATION_COPY = {
   tap: "Toca para abrir",
 } as const;
@@ -107,23 +108,62 @@ const NAME_CONJUNCTIONS: ReadonlySet<string> = new Set([
  * occasion names its person after a «de» («XV años de Valentina»), which is the split; a title that states none is the
  * occasion itself and carries no initials. No title at all answers nothing, and then no overlay is drawn.
  */
-export function openingAnimationCard(title: string | undefined): OpeningAnimationCard | undefined {
+export function openingAnimationCard(
+  title: string | undefined,
+  locale: Locale = "es",
+): OpeningAnimationCard | undefined {
   const trimmed = title?.trim() ?? "";
 
   if (trimmed === "") {
     return undefined;
   }
 
-  const split = /^(.+?)\s+de\s+(.+)$/u.exec(trimmed);
+  const split = splitCelebrationTitle(trimmed, locale);
 
-  if (split === null) {
+  if (split === undefined) {
     return { occasion: trimmed, name: trimmed, initials: "" };
   }
 
-  const occasion = split[1]?.trim() ?? trimmed;
-  const name = split[2]?.trim() ?? trimmed;
+  const occasion = split.occasion;
+  const name = split.name;
 
   return { occasion, name, initials: initialsOf(name) };
+}
+
+/**
+ * The two halves of one celebration title (L14.2), read with the grammar of the locale the page renders: a Spanish page
+ * names its person after a «de» («XV años de Valentina») and an English one before a possessive («Valentina's
+ * birthday»), so the envelope draws the same occasion and the same name in both languages.
+ */
+function splitCelebrationTitle(
+  title: string,
+  locale: Locale,
+): { occasion: string; name: string } | undefined {
+  if (locale === "en") {
+    const possessive = /^(.+?)'s\s+(.+)$/u.exec(title);
+
+    if (possessive !== null) {
+      const name = possessive[1]?.trim() ?? title;
+      const occasion = possessive[2]?.trim() ?? title;
+
+      return {
+        occasion:
+          occasion === "" ? title : `${occasion[0]?.toUpperCase() ?? ""}${occasion.slice(1)}`,
+        name,
+      };
+    }
+    const of = /^(.+?)\s+of\s+(.+)$/u.exec(title);
+
+    return of === null
+      ? undefined
+      : { occasion: of[1]?.trim() ?? title, name: of[2]?.trim() ?? title };
+  }
+
+  const split = /^(.+?)\s+de\s+(.+)$/u.exec(title);
+
+  return split === null
+    ? undefined
+    : { occasion: split[1]?.trim() ?? title, name: split[2]?.trim() ?? title };
 }
 
 /**

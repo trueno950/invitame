@@ -1,4 +1,6 @@
 import { RSVP_NOTICE_COPY } from "../customer/copy.ts";
+import { guestText, type GuestTextKey } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import type { RsvpBlockView, RsvpFormAction } from "../invitation-features/invitation-features.ts";
 import { isInvitationSlug } from "../server/invitations-api.ts";
 import type {
@@ -187,9 +189,23 @@ export interface RsvpNotice {
   readonly message: string;
 }
 
-/** The Spanish notice the page's query carries, or undefined for anything the page does not know. */
+/**
+ * The sentence of each code, as the dictionary declares it (F14; L19.2). The code is what the server action redirects
+ * with and never depends on the language; only the sentence the page draws does.
+ */
+const NOTICE_KEYS: Readonly<Record<RsvpNoticeCode, GuestTextKey>> = {
+  received: "notice.rsvp.received",
+  invalid: "notice.rsvp.invalid",
+  closed: "notice.rsvp.closed",
+  limited: "notice.rsvp.limited",
+  unavailable: "notice.rsvp.unavailable",
+  locked: "lock.writeRefused",
+};
+
+/** The notice the page's query carries, in the locale it renders, or undefined for anything it does not know. */
 export function rsvpNotice(
   parameters: Record<string, string | string[] | undefined> = {},
+  locale: Locale = "es",
 ): RsvpNotice | undefined {
   const code = parameters[RSVP_NOTICE_PARAM];
 
@@ -197,14 +213,17 @@ export function rsvpNotice(
     return undefined;
   }
 
-  return { code: code as RsvpNoticeCode, message: RSVP_NOTICE_COPY[code as RsvpNoticeCode] };
+  const known = code as RsvpNoticeCode;
+
+  return { code: known, message: guestText(locale, NOTICE_KEYS[known]) };
 }
 
-/** The Spanish sentence of the notice the page's query carries, or undefined for anything else. */
+/** The sentence of the notice the page's query carries, or undefined for anything else. */
 export function rsvpNoticeMessage(
   parameters: Record<string, string | string[] | undefined> = {},
+  locale: Locale = "es",
 ): string | undefined {
-  return rsvpNotice(parameters)?.message;
+  return rsvpNotice(parameters, locale)?.message;
 }
 
 /** The client call this module needs, so a test can hand it a fake and see exactly what it sent. */

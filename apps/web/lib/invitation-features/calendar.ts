@@ -1,3 +1,5 @@
+import { guestText } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import type { EventFacts, EventPlace } from "./event-facts.ts";
 
 /**
@@ -100,19 +102,25 @@ export function calendarUid(slug: string): string {
   return `${slug}@invitame`;
 }
 
-/** Everything the file needs: the invitation's slug, the event, and the moment the file was generated. */
+/** Everything the file needs: the invitation's slug, the event, the moment the file was generated, and its language. */
 export interface IcsCalendarInput {
   readonly slug: string;
   readonly event: CalendarEvent;
   readonly stamp: Date;
+  /**
+   * The locale the guest page renders (F14; L19.2). Only the file's fixed parts follow it — the product identifier and,
+   * through the facts it is given, the layout's own derived title and place labels; every word the owner wrote is the
+   * same in both languages.
+   */
+  readonly locale?: Locale;
 }
 
 /** The `.ics` file of one invitation, ready to answer a download request. */
-export function buildIcsCalendar({ slug, event, stamp }: IcsCalendarInput): string {
+export function buildIcsCalendar({ slug, event, stamp, locale = "es" }: IcsCalendarInput): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//InvitaMe//Invitaciones//ES",
+    `PRODID:${guestText(locale, "calendar.prodid")}`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",

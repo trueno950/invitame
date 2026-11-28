@@ -5,6 +5,8 @@ import {
   type InvitationFeatures,
   showsGiftRegistry,
 } from "../../../../lib/invitation-features/invitation-features.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
+import { rendererTextsFor } from "../../../../lib/i18n/renderer-texts.ts";
 import { ELEGANT_THEME } from "../../../../lib/renderers/elegant-themes.ts";
 import { hiddenFieldSet, nameLines } from "../../../../lib/renderers/invitation-fields.ts";
 import {
@@ -38,6 +40,8 @@ export interface XVOrnamentalRendererProperties {
   readonly calendarHref?: string;
   /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
   readonly hiddenFields?: readonly string[];
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 const h = createElement;
@@ -48,29 +52,43 @@ export function XVOrnamentalRenderer({
   features,
   calendarHref,
   hiddenFields,
+  locale,
 }: XVOrnamentalRendererProperties): ReactElement {
   const { theme: themeKey } = parseXVOrnamentalConfiguration(configuration);
   const data = parseXVOrnamentalContent(content, hiddenFields);
   const hidden = hiddenFieldSet(hiddenFields);
   const theme = ELEGANT_THEME[themeKey];
+  const texts = rendererTextsFor(locale);
 
   // A section the customer switched off draws nothing, and a row it covered arrives empty (S8.3).
   const family: ArchNameRow[] = [
     ...(hidden.has("parents")
       ? []
-      : [{ key: "parents", label: "Padres", values: nameLines(data.parents) }]),
+      : [
+          {
+            key: "parents",
+            label: texts["label.parents"],
+            values: nameLines(data.parents),
+          },
+        ]),
     ...(hidden.has("honorSponsors")
       ? []
       : [
           {
             key: "honor-sponsors",
-            label: "Padrinos de honor",
+            label: texts["label.honorSponsors"],
             values: nameLines(data.honorSponsors),
           },
         ]),
     ...(data.chambelanes === undefined
       ? []
-      : [{ key: "chambelanes", label: "Chambelanes", values: nameLines(data.chambelanes) }]),
+      : [
+          {
+            key: "chambelanes",
+            label: texts["label.chambelanes"],
+            values: nameLines(data.chambelanes),
+          },
+        ]),
   ];
 
   // The gift registry is rendered only when the API gated it on and the content carries a value (F7; S7);
@@ -82,27 +100,27 @@ export function XVOrnamentalRenderer({
   const details: ArchDetail[] = [
     ...(hidden.has("dressCode")
       ? []
-      : [{ key: "dress-code", label: "Vestimenta", value: data.dressCode }]),
+      : [{ key: "dress-code", label: texts["label.dressCode"], value: data.dressCode }]),
     ...(giftRegistry === undefined
       ? []
-      : [{ key: "gift-registry", label: "Mesa de regalos", value: giftRegistry }]),
+      : [{ key: "gift-registry", label: texts["label.giftRegistry"], value: giftRegistry }]),
   ];
 
   return h(OrnamentalLayout, {
     componentKey: XV_ORNAMENTAL_COMPONENT_KEY,
     theme,
     themeKey,
-    ariaLabel: `Invitación de XV años de ${data.celebrantName}`,
-    kicker: "Mis XV años",
+    ariaLabel: `${texts["xv.ariaInvitation"]} ${data.celebrantName}`,
+    kicker: texts["xv.kicker"],
     names: [data.celebrantName],
     date: data.date,
-    photoAlt: `Foto de ${data.celebrantName}`,
+    photoAlt: `${texts["invitation.photoAlt"]} ${data.celebrantName}`,
     ...(hidden.has("ceremonyPlace")
       ? {}
       : {
           ceremony: {
             key: "ceremony",
-            label: "Misa",
+            label: texts["label.mass"],
             place: data.ceremonyPlace,
             address: data.ceremonyAddress,
             time: data.ceremonyTime,
@@ -113,7 +131,7 @@ export function XVOrnamentalRenderer({
       : {
           reception: {
             key: "reception",
-            label: "Recepción",
+            label: texts["label.reception"],
             place: data.receptionPlace,
             address: data.receptionAddress,
             time: data.receptionTime,
@@ -129,5 +147,6 @@ export function XVOrnamentalRenderer({
     facts: xvOrnamentalEventFacts(data, hiddenFields),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
+    ...(locale === undefined ? {} : { locale }),
   });
 }

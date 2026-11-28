@@ -2,8 +2,9 @@
 
 import { createElement, type CSSProperties, type ReactElement, useEffect, useState } from "react";
 
+import { guestText } from "../../../lib/i18n/guest-texts.ts";
+import type { Locale } from "../../../lib/i18n/locale.ts";
 import {
-  OPENING_ANIMATION_COPY,
   OPENING_ANIMATION_DURATION_MS,
   type OpeningAnimationCard,
   openingAnimationDecision,
@@ -98,6 +99,8 @@ export interface OpeningAnimationIslandProps {
   readonly card: OpeningAnimationCard;
   /** The invitation's own theme, so the envelope is the design's and not the app's (L14.6). */
   readonly theme: InvitationTheme;
+  /** The locale the page renders (F14; L19.2): the one line the envelope carries follows it. */
+  readonly locale: Locale;
 }
 
 export function OpeningAnimationIsland({
@@ -105,6 +108,7 @@ export function OpeningAnimationIsland({
   plays,
   card,
   theme,
+  locale,
 }: OpeningAnimationIslandProps): ReactElement | null {
   const [playing, setPlaying] = useState(false);
 
@@ -275,7 +279,7 @@ export function OpeningAnimationIsland({
     createElement(
       "p",
       { key: "hint", className: HINT, style: { color: INK } },
-      OPENING_ANIMATION_COPY.tap,
+      guestText(locale, "opening.tap"),
     ),
   );
 }

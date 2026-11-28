@@ -1,42 +1,19 @@
 import { createElement, type ReactElement, useId } from "react";
 
-import {
-  GUEST_PAGE_COPY,
-  GUESTBOOK_FORM_COPY,
-  RSVP_FORM_COPY,
-} from "../../../lib/customer/copy.ts";
+import { guestFormats, guestText } from "../../../lib/i18n/guest-texts.ts";
+import type { Locale } from "../../../lib/i18n/locale.ts";
 import { calendarEventFor, googleCalendarUrl } from "../../../lib/invitation-features/calendar.ts";
 import {
-  GIFT_REGISTRY_ENVELOPES_LINE,
-  GIFT_REGISTRY_SECTION_HINT,
-  GIFT_REGISTRY_SECTION_TITLE,
-  GIFT_REGISTRY_TRANSFER_TITLE,
-  GIFT_REGISTRY_VIEW_STORE,
   GIFT_REGISTRY_VIEW_STORE_ARROW,
   type GiftRegistry,
   clabeGroups,
 } from "../../../lib/invitation-features/gift-registry.ts";
 import { countdownParts } from "../../../lib/invitation-features/countdown.ts";
 import type { EventFacts, EventPlace } from "../../../lib/invitation-features/event-facts.ts";
-import {
-  GALLERY_SECTION_HINT,
-  GALLERY_SECTION_TITLE,
-  type GalleryPhoto,
-  galleryPhotoAlt,
-} from "../../../lib/invitation-features/gallery.ts";
+import { type GalleryPhoto, galleryPhotoAlt } from "../../../lib/invitation-features/gallery.ts";
 import {
   GUEST_ALBUM_ACCEPT,
-  GUEST_ALBUM_CLOSED_NOTE,
-  GUEST_ALBUM_EMPTY_NOTE,
-  GUEST_ALBUM_FILE_HINT,
-  GUEST_ALBUM_FILE_LABEL,
-  GUEST_ALBUM_SECTION_HINT,
-  GUEST_ALBUM_SECTION_TITLE,
-  GUEST_ALBUM_UPLOADER_HINT,
-  GUEST_ALBUM_UPLOADER_LABEL,
   GUEST_ALBUM_UPLOADER_NAME_MAX_LENGTH,
-  GUEST_ALBUM_UPLOADER_PLACEHOLDER,
-  GUEST_ALBUM_UPLOAD_LABEL,
   guestAlbumCount,
   guestAlbumPhotoAlt,
 } from "../../../lib/invitation-features/guest-album.ts";
@@ -50,27 +27,15 @@ import {
   type RsvpBlockView,
 } from "../../../lib/invitation-features/invitation-features.ts";
 import {
-  ITINERARY_DIRECTIONS_LABEL,
-  ITINERARY_SECTION_HINT,
-  ITINERARY_SECTION_TITLE,
   type ItineraryMoment,
   itineraryDirectionsUrl,
 } from "../../../lib/invitation-features/itinerary.ts";
 import {
-  LIVESTREAM_OPEN_LABEL,
-  LIVESTREAM_SECTION_TITLE,
   type Livestream,
   livestreamEmbedUrl,
   livestreamHasContent,
 } from "../../../lib/invitation-features/livestream.ts";
 import {
-  LODGING_BOOK_LABEL,
-  LODGING_DIRECTIONS_LABEL,
-  LODGING_GROUP_CODE_LABEL,
-  LODGING_SECTION_HINT,
-  LODGING_SECTION_KICKER,
-  LODGING_SECTION_TITLE,
-  LODGING_TRANSPORT_TITLE,
   type Lodging,
   type LodgingHotel,
   lodgingDirectionsUrl,
@@ -81,11 +46,7 @@ import {
   type MapPlace,
   wazeUrl,
 } from "../../../lib/invitation-features/map-links.ts";
-import {
-  MUSIC_COVER_ALT,
-  MUSIC_SECTION_TITLE,
-  musicButtonLabel,
-} from "../../../lib/invitation-features/music.ts";
+import { musicButtonLabel } from "../../../lib/invitation-features/music.ts";
 import { storedPlaceOf } from "../../../lib/invitation-features/place-point.ts";
 import {
   companionChildField,
@@ -127,6 +88,8 @@ export interface InvitationFeaturesBlockProps {
   readonly calendarHref?: string;
   /** The instant the countdown is read from; defaults to now, so a caller never computes one by accident. */
   readonly now?: Date;
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 const h = createElement;
@@ -254,6 +217,7 @@ function companionRows(
   covered: number,
   idPrefix: string,
   current: readonly RsvpCompanionValue[],
+  locale: Locale,
 ): ReactElement | null {
   if (covered < 1) {
     return null;
@@ -271,8 +235,8 @@ function companionRows(
       "data-companion-rows": "",
       className: COMPANION_FIELDSET,
     },
-    h("legend", { className: FIELD_LABEL }, RSVP_FORM_COPY.companionsLegend),
-    h("p", { className: HINT }, RSVP_FORM_COPY.companionsHint),
+    h("legend", { className: FIELD_LABEL }, guestText(locale, "rsvp.companionsLegend")),
+    h("p", { className: HINT }, guestText(locale, "rsvp.companionsHint")),
     ...rows.map((row) => {
       const nameId = `${idPrefix}-${key}-companion-${row}-name`;
       const childId = `${idPrefix}-${key}-companion-${row}-child`;
@@ -283,14 +247,18 @@ function companionRows(
         h(
           "div",
           null,
-          h("label", { className: FIELD_LABEL, htmlFor: nameId }, RSVP_FORM_COPY.companionRow(row)),
+          h(
+            "label",
+            { className: FIELD_LABEL, htmlFor: nameId },
+            guestFormats(locale).companionRow(row),
+          ),
           h("input", {
             id: nameId,
             name: companionNameField(row),
             type: "text",
             maxLength: RSVP_COMPANION_NAME_MAX_LENGTH,
             autoComplete: "off",
-            placeholder: RSVP_FORM_COPY.companionNamePlaceholder,
+            placeholder: guestText(locale, "rsvp.companionPlaceholder"),
             defaultValue: current[row - 1]?.name ?? "",
             className: FIELD,
           }),
@@ -305,7 +273,7 @@ function companionRows(
             defaultChecked: current[row - 1]?.child === true,
             className: RADIO,
           }),
-          RSVP_FORM_COPY.companionChildLabel,
+          guestText(locale, "rsvp.companionChild"),
         ),
       );
     }),
@@ -313,13 +281,18 @@ function companionRows(
 }
 
 /** The dietary restrictions of the party (F3; L6.1): one bounded text, prefilled with the last answer. */
-function dietaryNotesField(idPrefix: string, key: "rsvp" | "guest", value: string): ReactElement {
+function dietaryNotesField(
+  idPrefix: string,
+  key: "rsvp" | "guest",
+  value: string,
+  locale: Locale,
+): ReactElement {
   const id = `${idPrefix}-${key}-dietary-notes`;
 
   return h(
     "div",
     { key: `${key}-dietary`, className: "mt-3" },
-    h("label", { className: FIELD_LABEL, htmlFor: id }, RSVP_FORM_COPY.dietaryLabel),
+    h("label", { className: FIELD_LABEL, htmlFor: id }, guestText(locale, "rsvp.dietaryLabel")),
     h("textarea", {
       id,
       name: "dietaryNotes",
@@ -328,7 +301,7 @@ function dietaryNotesField(idPrefix: string, key: "rsvp" | "guest", value: strin
       defaultValue: value,
       className: DIETARY_AREA,
     }),
-    h("p", { className: HINT }, RSVP_FORM_COPY.dietaryHint),
+    h("p", { className: HINT }, guestText(locale, "rsvp.dietaryHint")),
   );
 }
 
@@ -339,16 +312,21 @@ function dietaryNotesField(idPrefix: string, key: "rsvp" | "guest", value: strin
 function deadlineSentence(
   rsvp: { readonly deadline: string | null; readonly closed: boolean },
   timeZone: string,
+  locale: Locale,
 ): string | undefined {
+  const closedGeneric = guestText(locale, "rsvp.closedGeneric");
+
   if (rsvp.deadline === null) {
-    return rsvp.closed ? RSVP_FORM_COPY.closedGeneric : undefined;
+    return rsvp.closed ? closedGeneric : undefined;
   }
-  const text = formatRsvpDeadline(rsvp.deadline, timeZone);
+  const text = formatRsvpDeadline(rsvp.deadline, timeZone, locale);
 
   if (text === undefined) {
-    return rsvp.closed ? RSVP_FORM_COPY.closedGeneric : undefined;
+    return rsvp.closed ? closedGeneric : undefined;
   }
-  return rsvp.closed ? RSVP_FORM_COPY.closedNote(text) : RSVP_FORM_COPY.deadlineNote(text);
+  const formats = guestFormats(locale);
+
+  return rsvp.closed ? formats.closedNote(text) : formats.deadlineNote(text);
 }
 
 /**
@@ -357,15 +335,25 @@ function deadlineSentence(
  * sees: a bot that fills it makes the API answer success without storing anything, and the guest never learns a
  * difference. Everything here is server-rendered, so the form works with no JavaScript at all.
  */
-function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): ReactElement {
-  const sentence = deadlineSentence(rsvp, timeZone);
+function rsvpSection(
+  rsvp: RsvpBlockView,
+  timeZone: string,
+  idPrefix: string,
+  locale: Locale,
+): ReactElement {
+  const sentence = deadlineSentence(rsvp, timeZone, locale);
+  const attendingLegend = guestText(locale, "rsvp.attendingLegend");
+  const attendingYes = guestText(locale, "rsvp.attendingYes");
+  const attendingNo = guestText(locale, "rsvp.attendingNo");
 
   return h(
     "div",
     { key: "rsvp", "data-feature": "rsvp", className: SURFACE_CARD },
-    h("h3", { className: FEATURE_TITLE }, RSVP_FORM_COPY.title),
+    h("h3", { className: FEATURE_TITLE }, guestText(locale, "rsvp.title")),
     // The invitation to answer only makes sense while answering is possible.
-    ...(rsvp.closed ? [] : [h("p", { key: "hint", className: HINT }, RSVP_FORM_COPY.hint)]),
+    ...(rsvp.closed
+      ? []
+      : [h("p", { key: "hint", className: HINT }, guestText(locale, "rsvp.hint"))]),
     ...(sentence === undefined ? [] : [h("p", { key: "deadline", className: HINT }, sentence)]),
     ...(rsvp.closed
       ? []
@@ -377,7 +365,11 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
             h(
               "div",
               { "aria-hidden": "true", className: HONEYPOT },
-              h("label", { htmlFor: `${idPrefix}-rsvp-honeypot` }, RSVP_FORM_COPY.honeypotLabel),
+              h(
+                "label",
+                { htmlFor: `${idPrefix}-rsvp-honeypot` },
+                guestText(locale, "rsvp.honeypot"),
+              ),
               h("input", {
                 id: `${idPrefix}-rsvp-honeypot`,
                 name: "honeypot",
@@ -393,7 +385,7 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-rsvp-name` },
-                RSVP_FORM_COPY.nameLabel,
+                guestText(locale, "rsvp.nameLabel"),
               ),
               h("input", {
                 id: `${idPrefix}-rsvp-name`,
@@ -402,14 +394,14 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
                 required: true,
                 maxLength: 80,
                 autoComplete: "name",
-                placeholder: RSVP_FORM_COPY.namePlaceholder,
+                placeholder: guestText(locale, "rsvp.namePlaceholder"),
                 className: FIELD,
               }),
             ),
             h(
               "fieldset",
               { className: "flex flex-col gap-1" },
-              h("legend", { className: FIELD_LABEL }, RSVP_FORM_COPY.attendingLegend),
+              h("legend", { className: FIELD_LABEL }, attendingLegend),
               h(
                 "label",
                 { className: RADIO_LABEL, htmlFor: `${idPrefix}-rsvp-yes` },
@@ -421,7 +413,7 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
                   required: true,
                   className: RADIO,
                 }),
-                RSVP_FORM_COPY.attendingYes,
+                attendingYes,
               ),
               h(
                 "label",
@@ -433,7 +425,7 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
                   value: "no",
                   className: RADIO,
                 }),
-                RSVP_FORM_COPY.attendingNo,
+                attendingNo,
               ),
             ),
             h(
@@ -442,7 +434,7 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-rsvp-party` },
-                RSVP_FORM_COPY.partyLabel,
+                guestText(locale, "rsvp.partyLabel"),
               ),
               h(
                 "select",
@@ -456,11 +448,11 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
                   h("option", { key: index + 1, value: String(index + 1) }, String(index + 1)),
                 ),
               ),
-              h("p", { className: HINT }, RSVP_FORM_COPY.partyHint),
+              h("p", { className: HINT }, guestText(locale, "rsvp.partyHint")),
             ),
-            h("p", { className: HINT }, RSVP_FORM_COPY.partyLimitNote(rsvp.partyLimit)),
-            companionRows("rsvp", rsvp.partyLimit - 1, idPrefix, []),
-            dietaryNotesField(idPrefix, "rsvp", ""),
+            h("p", { className: HINT }, guestFormats(locale).partyLimitNote(rsvp.partyLimit)),
+            companionRows("rsvp", rsvp.partyLimit - 1, idPrefix, [], locale),
+            dietaryNotesField(idPrefix, "rsvp", "", locale),
             h(CompanionRowsIsland, {
               selectId: `${idPrefix}-rsvp-party`,
               rowsId: `${idPrefix}-rsvp-companions`,
@@ -471,7 +463,7 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-rsvp-phone` },
-                RSVP_FORM_COPY.phoneLabel,
+                guestText(locale, "rsvp.phoneLabel"),
               ),
               h("input", {
                 id: `${idPrefix}-rsvp-phone`,
@@ -482,7 +474,7 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
                 maxLength: 32,
                 className: FIELD,
               }),
-              h("p", { className: HINT }, RSVP_FORM_COPY.phoneHint),
+              h("p", { className: HINT }, guestText(locale, "rsvp.phoneHint")),
             ),
             h(
               "div",
@@ -490,7 +482,7 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-rsvp-message` },
-                RSVP_FORM_COPY.messageLabel,
+                guestText(locale, "rsvp.messageLabel"),
               ),
               h("textarea", {
                 id: `${idPrefix}-rsvp-message`,
@@ -499,12 +491,12 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
                 rows: 3,
                 className: TEXT_AREA,
               }),
-              h("p", { className: HINT }, RSVP_FORM_COPY.messageHint),
+              h("p", { className: HINT }, guestText(locale, "rsvp.messageHint")),
             ),
             h(
               "div",
               { className: ACTIONS },
-              h("button", { type: "submit", className: SUBMIT }, RSVP_FORM_COPY.submit),
+              h("button", { type: "submit", className: SUBMIT }, guestText(locale, "rsvp.submit")),
             ),
           ),
         ]),
@@ -512,13 +504,13 @@ function rsvpSection(rsvp: RsvpBlockView, timeZone: string, idPrefix: string): R
 }
 
 /** The answer the guest last gave, as one sentence above their card (G4; S4). */
-function guestAnswerSentence(rsvp: GuestRsvpBlockView): string {
+function guestAnswerSentence(rsvp: GuestRsvpBlockView, locale: Locale): string {
   if (rsvp.answer === null) {
-    return GUEST_PAGE_COPY.answerPending;
+    return guestText(locale, "guestPage.answerPending");
   }
   return rsvp.answer.attending
-    ? GUEST_PAGE_COPY.answerCurrentYes(rsvp.answer.partySize)
-    : GUEST_PAGE_COPY.answerCurrentNo;
+    ? guestFormats(locale).answerCurrentYes(rsvp.answer.partySize)
+    : guestText(locale, "guestPage.answerCurrentNo");
 }
 
 /**
@@ -532,15 +524,21 @@ function guestRsvpSection(
   rsvp: GuestRsvpBlockView,
   timeZone: string,
   idPrefix: string,
+  locale: Locale,
 ): ReactElement {
-  const sentence = deadlineSentence(rsvp, timeZone);
+  const sentence = deadlineSentence(rsvp, timeZone, locale);
+  const attendingLegend = guestText(locale, "rsvp.attendingLegend");
+  const attendingYes = guestText(locale, "rsvp.attendingYes");
+  const attendingNo = guestText(locale, "rsvp.attendingNo");
 
   return h(
     "div",
     { key: "guest-rsvp", "data-feature": "guest-rsvp", className: SURFACE_CARD },
-    h("h3", { className: FEATURE_TITLE }, GUEST_PAGE_COPY.answerTitle),
-    h("p", { key: "current", className: HINT }, guestAnswerSentence(rsvp)),
-    ...(rsvp.closed ? [] : [h("p", { key: "hint", className: HINT }, GUEST_PAGE_COPY.answerHint)]),
+    h("h3", { className: FEATURE_TITLE }, guestText(locale, "guestPage.answerTitle")),
+    h("p", { key: "current", className: HINT }, guestAnswerSentence(rsvp, locale)),
+    ...(rsvp.closed
+      ? []
+      : [h("p", { key: "hint", className: HINT }, guestText(locale, "guestPage.answerHint"))]),
     ...(sentence === undefined ? [] : [h("p", { key: "deadline", className: HINT }, sentence)]),
     ...(rsvp.closed
       ? []
@@ -553,7 +551,7 @@ function guestRsvpSection(
             h(
               "fieldset",
               { className: "flex flex-col gap-1" },
-              h("legend", { className: FIELD_LABEL }, RSVP_FORM_COPY.attendingLegend),
+              h("legend", { className: FIELD_LABEL }, attendingLegend),
               h(
                 "label",
                 { className: RADIO_LABEL, htmlFor: `${idPrefix}-guest-yes` },
@@ -566,7 +564,7 @@ function guestRsvpSection(
                   defaultChecked: rsvp.answer?.attending === true,
                   className: RADIO,
                 }),
-                RSVP_FORM_COPY.attendingYes,
+                attendingYes,
               ),
               h(
                 "label",
@@ -579,7 +577,7 @@ function guestRsvpSection(
                   defaultChecked: rsvp.answer?.attending === false,
                   className: RADIO,
                 }),
-                RSVP_FORM_COPY.attendingNo,
+                attendingNo,
               ),
             ),
             h(
@@ -588,7 +586,7 @@ function guestRsvpSection(
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-guest-party` },
-                GUEST_PAGE_COPY.partyLabel,
+                guestText(locale, "guestPage.partyLabel"),
               ),
               h(
                 "select",
@@ -604,9 +602,9 @@ function guestRsvpSection(
                 ),
               ),
             ),
-            h("p", { className: HINT }, RSVP_FORM_COPY.partyLimitNote(rsvp.seats)),
-            companionRows("guest", rsvp.seats - 1, idPrefix, rsvp.companions),
-            dietaryNotesField(idPrefix, "guest", rsvp.dietaryNotes),
+            h("p", { className: HINT }, guestFormats(locale).partyLimitNote(rsvp.seats)),
+            companionRows("guest", rsvp.seats - 1, idPrefix, rsvp.companions, locale),
+            dietaryNotesField(idPrefix, "guest", rsvp.dietaryNotes, locale),
             h(CompanionRowsIsland, {
               selectId: `${idPrefix}-guest-party`,
               rowsId: `${idPrefix}-guest-companions`,
@@ -617,7 +615,7 @@ function guestRsvpSection(
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-guest-message` },
-                GUEST_PAGE_COPY.messageLabel,
+                guestText(locale, "guestPage.messageLabel"),
               ),
               h("textarea", {
                 id: `${idPrefix}-guest-message`,
@@ -627,12 +625,16 @@ function guestRsvpSection(
                 defaultValue: rsvp.message,
                 className: TEXT_AREA,
               }),
-              h("p", { className: HINT }, GUEST_PAGE_COPY.messageHint),
+              h("p", { className: HINT }, guestText(locale, "guestPage.messageHint")),
             ),
             h(
               "div",
               { className: ACTIONS },
-              h("button", { type: "submit", className: SUBMIT }, GUEST_PAGE_COPY.submit),
+              h(
+                "button",
+                { type: "submit", className: SUBMIT },
+                guestText(locale, "guestPage.submit"),
+              ),
             ),
           ),
         ]),
@@ -646,12 +648,12 @@ function guestRsvpSection(
  * photo links to its full image in a new tab without handing the opener to the other document, and there is no client
  * script at all: the grid is plain markup over the theme's own variables.
  */
-function gallerySection(photos: readonly GalleryPhoto[]): ReactElement {
+function gallerySection(photos: readonly GalleryPhoto[], locale: Locale): ReactElement {
   return h(
     "div",
     { key: "gallery", "data-feature": "gallery", className: SURFACE_CARD },
-    h("h3", { className: FEATURE_TITLE }, GALLERY_SECTION_TITLE),
-    h("p", { className: HINT }, GALLERY_SECTION_HINT),
+    h("h3", { className: FEATURE_TITLE }, guestText(locale, "gallery.title")),
+    h("p", { className: HINT }, guestText(locale, "gallery.hint")),
     h(
       "div",
       {
@@ -670,7 +672,7 @@ function gallerySection(photos: readonly GalleryPhoto[]): ReactElement {
           },
           h("img", {
             src: photo.url,
-            alt: galleryPhotoAlt(photo.alt),
+            alt: galleryPhotoAlt(photo.alt, locale),
             width: photo.width,
             height: photo.height,
             loading: "lazy",
@@ -694,6 +696,7 @@ function gallerySection(photos: readonly GalleryPhoto[]): ReactElement {
 function guestPassSection(
   pass: GuestPassBlockView,
   venue: string | undefined,
+  locale: Locale,
 ): ReactElement | null {
   let source: string;
 
@@ -710,7 +713,7 @@ function guestPassSection(
       h(
         "div",
         { key: "table" },
-        h("dt", { className: PASS_LABEL }, GUEST_PAGE_COPY.passTableLabel),
+        h("dt", { className: PASS_LABEL }, guestText(locale, "guestPage.passTable")),
         h("dd", { className: PASS_TABLE_VALUE, style: DISPLAY_FONT }, pass.tableLabel),
       ),
     );
@@ -719,7 +722,7 @@ function guestPassSection(
     h(
       "div",
       { key: "people" },
-      h("dt", { className: PASS_LABEL }, GUEST_PAGE_COPY.passPeopleLabel),
+      h("dt", { className: PASS_LABEL }, guestText(locale, "guestPage.passPeople")),
       h("dd", { className: PASS_VALUE, style: DISPLAY_FONT }, String(pass.people)),
     ),
   );
@@ -727,7 +730,7 @@ function guestPassSection(
   return h(
     "div",
     { key: "pass", "data-feature": "pass", className: `${SURFACE_CARD} overflow-hidden` },
-    h("p", { className: FEATURE_TITLE }, GUEST_PAGE_COPY.passKicker),
+    h("p", { className: FEATURE_TITLE }, guestText(locale, "guestPage.passKicker")),
     h(
       "h3",
       {
@@ -741,7 +744,7 @@ function guestPassSection(
       { className: "mt-3 grid grid-cols-[7.5rem_1fr] items-center gap-4" },
       h("img", {
         src: source,
-        alt: GUEST_PAGE_COPY.passAlt,
+        alt: guestText(locale, "guestPage.passAlt"),
         width: 224,
         height: 224,
         className: "h-auto w-full rounded-lg p-1 ring-1 ring-(--inv-soft)",
@@ -753,7 +756,9 @@ function guestPassSection(
     h(
       "p",
       { className: "text-center text-xs text-(color:--inv-ink)" },
-      venue === undefined ? GUEST_PAGE_COPY.passHint : GUEST_PAGE_COPY.passVenueHint(venue),
+      venue === undefined
+        ? guestText(locale, "guestPage.passHint")
+        : guestFormats(locale).passVenueHint(venue),
     ),
   );
 }
@@ -765,19 +770,19 @@ function guestPassSection(
  * transport card, which a transport line alone still shows. Every text is React's own text node, so the owner's words
  * are escaped and nothing they typed can become markup.
  */
-function lodgingSection(lodging: Lodging): ReactElement {
-  const hotelCards = lodging.hotels.map((hotel, index) => lodgingHotelCard(hotel, index));
+function lodgingSection(lodging: Lodging, locale: Locale): ReactElement {
+  const hotelCards = lodging.hotels.map((hotel, index) => lodgingHotelCard(hotel, index, locale));
 
   return h(
     "div",
     { key: "lodging", "data-feature": "lodging", className: SURFACE_CARD },
-    h("p", { className: FEATURE_TITLE }, LODGING_SECTION_KICKER),
+    h("p", { className: FEATURE_TITLE }, guestText(locale, "lodging.kicker")),
     h(
       "h3",
       { className: "mt-1 text-center text-2xl font-medium text-(color:--inv-ink)" },
-      LODGING_SECTION_TITLE,
+      guestText(locale, "lodging.title"),
     ),
-    h("p", { className: HINT }, LODGING_SECTION_HINT),
+    h("p", { className: HINT }, guestText(locale, "lodging.hint")),
     hotelCards.length === 0
       ? null
       : h("div", { className: "mt-3 flex flex-col gap-2.5" }, hotelCards),
@@ -793,7 +798,7 @@ function lodgingSection(lodging: Lodging): ReactElement {
           h(
             "h4",
             { className: "text-xl font-medium text-(color:--inv-ink)" },
-            LODGING_TRANSPORT_TITLE,
+            guestText(locale, "lodging.transportTitle"),
           ),
           h("p", { className: HINT }, lodging.transport),
         ),
@@ -801,7 +806,8 @@ function lodgingSection(lodging: Lodging): ReactElement {
 }
 
 /** One hotel card of the lodging section: the badge, the address and price line, the code, and the two actions. */
-function lodgingHotelCard(hotel: LodgingHotel, index: number): ReactElement {
+function lodgingHotelCard(hotel: LodgingHotel, index: number, locale: Locale): ReactElement {
+  const formats = guestFormats(locale);
   const addressAndPrice = [hotel.address, hotel.price].filter(
     (text): text is string => text !== undefined,
   );
@@ -816,10 +822,10 @@ function lodgingHotelCard(hotel: LodgingHotel, index: number): ReactElement {
           href: hotel.bookingUrl,
           target: "_blank",
           rel: "noopener noreferrer",
-          "aria-label": `${LODGING_BOOK_LABEL} en ${hotel.name} en una pestaña nueva`,
+          "aria-label": formats.hotelBookAria(hotel.name),
           className: HOTEL_BOOK_ACTION,
         },
-        LODGING_BOOK_LABEL,
+        guestText(locale, "lodging.book"),
       ),
     );
   }
@@ -832,10 +838,10 @@ function lodgingHotelCard(hotel: LodgingHotel, index: number): ReactElement {
           href: lodgingDirectionsUrl(hotel.address),
           target: "_blank",
           rel: "noopener noreferrer",
-          "aria-label": `${LODGING_DIRECTIONS_LABEL} a ${hotel.name} en Google Maps`,
+          "aria-label": formats.hotelDirectionsAria(hotel.name),
           className: HOTEL_DIRECTIONS_ACTION,
         },
-        LODGING_DIRECTIONS_LABEL,
+        guestText(locale, "itinerary.directions"),
       ),
     );
   }
@@ -861,7 +867,7 @@ function lodgingHotelCard(hotel: LodgingHotel, index: number): ReactElement {
       : h(
           "div",
           { className: HOTEL_GROUP_CODE, "data-hotel-group-code": hotel.groupCode },
-          h("span", null, LODGING_GROUP_CODE_LABEL),
+          h("span", null, guestText(locale, "lodging.groupCode")),
           h("span", { className: HOTEL_GROUP_CODE_VALUE }, hotel.groupCode),
         ),
     actions.length === 0 ? null : h("div", { className: HOTEL_ACTIONS }, actions),
@@ -874,7 +880,7 @@ function lodgingHotelCard(hotel: LodgingHotel, index: number): ReactElement {
  * other link shows only the action that opens the transmission in a new tab. The owner's note sits under the player, and
  * every text is React's own text node, so nothing the owner typed can become markup.
  */
-function livestreamSection(livestream: Livestream): ReactElement {
+function livestreamSection(livestream: Livestream, locale: Locale): ReactElement {
   const embedUrl = livestreamEmbedUrl(livestream.videoId);
 
   return h(
@@ -883,7 +889,7 @@ function livestreamSection(livestream: Livestream): ReactElement {
     h(
       "h3",
       { className: "text-center text-2xl font-medium text-(color:--inv-ink)" },
-      LIVESTREAM_SECTION_TITLE,
+      guestText(locale, "livestream.title"),
     ),
     embedUrl === null
       ? h(
@@ -895,16 +901,17 @@ function livestreamSection(livestream: Livestream): ReactElement {
               href: livestream.url,
               target: "_blank",
               rel: "noopener noreferrer",
-              "aria-label": `${LIVESTREAM_OPEN_LABEL} en una pestaña nueva`,
+              "aria-label": guestFormats(locale).livestreamOpenAria(),
               className: ACTION,
             },
-            LIVESTREAM_OPEN_LABEL,
+            guestText(locale, "livestream.open"),
           ),
         )
       : h(LivestreamPlayerIsland, {
           url: livestream.url,
           embedUrl,
           note: livestream.note,
+          locale,
         }),
     embedUrl === null && livestream.note !== null
       ? h("p", { className: HINT }, livestream.note)
@@ -917,12 +924,12 @@ function livestreamSection(livestream: Livestream): ReactElement {
  * so the timeline has a start. A moment with an address offers «Cómo llegar» as a Google Maps search of that address;
  * a moment without one offers no link, because a title is not a destination anyone can navigate to.
  */
-function itinerarySection(moments: readonly ItineraryMoment[]): ReactElement {
+function itinerarySection(moments: readonly ItineraryMoment[], locale: Locale): ReactElement {
   return h(
     "div",
     { key: "itinerary", "data-feature": "itinerary", className: SURFACE_CARD },
-    h("h3", { className: FEATURE_TITLE }, ITINERARY_SECTION_TITLE),
-    h("p", { className: HINT }, ITINERARY_SECTION_HINT),
+    h("h3", { className: FEATURE_TITLE }, guestText(locale, "itinerary.title")),
+    h("p", { className: HINT }, guestText(locale, "itinerary.hint")),
     h(
       "ol",
       { className: TIMELINE },
@@ -936,7 +943,7 @@ function itinerarySection(moments: readonly ItineraryMoment[]): ReactElement {
             { className: TIMELINE_RAIL },
             index === 0
               ? h("span", {
-                  "aria-label": "Primer momento",
+                  "aria-label": guestText(locale, "countdown.firstMoment"),
                   role: "img",
                   className: TIMELINE_DOT_FIRST,
                 })
@@ -962,10 +969,10 @@ function itinerarySection(moments: readonly ItineraryMoment[]): ReactElement {
                     href: itineraryDirectionsUrl(moment.address),
                     target: "_blank",
                     rel: "noopener noreferrer",
-                    "aria-label": `${ITINERARY_DIRECTIONS_LABEL} a ${moment.title} en Google Maps`,
+                    "aria-label": guestFormats(locale).itineraryDirectionsAria(moment.title),
                     className: TIMELINE_LINK,
                   },
-                  ITINERARY_DIRECTIONS_LABEL,
+                  guestText(locale, "itinerary.directions"),
                 ),
           ),
         ),
@@ -981,7 +988,11 @@ function itinerarySection(moments: readonly ItineraryMoment[]): ReactElement {
  * the notes and replaces the form with the closing note (S2). Every message is React's own text node, so a guest's words
  * are escaped and a URL they typed is never made clickable (L10.3).
  */
-function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): ReactElement {
+function guestbookSection(
+  guestbook: GuestbookBlockView,
+  idPrefix: string,
+  locale: Locale,
+): ReactElement {
   const notes =
     guestbook.entries.length === 0
       ? null
@@ -1005,11 +1016,11 @@ function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): Reac
   return h(
     "div",
     { key: "guestbook", "data-feature": "guestbook", className: SURFACE_CARD },
-    h("h3", { className: FEATURE_TITLE }, GUESTBOOK_FORM_COPY.title),
-    h("p", { className: HINT }, GUESTBOOK_FORM_COPY.hint),
-    notes ?? h("p", { className: HINT }, GUESTBOOK_FORM_COPY.emptyNote),
+    h("h3", { className: FEATURE_TITLE }, guestText(locale, "guestbook.title")),
+    h("p", { className: HINT }, guestText(locale, "guestbook.hint")),
+    notes ?? h("p", { className: HINT }, guestText(locale, "guestbook.empty")),
     ...(guestbook.closed
-      ? [h("p", { key: "closed", className: HINT }, GUESTBOOK_FORM_COPY.closedNote)]
+      ? [h("p", { key: "closed", className: HINT }, guestText(locale, "guestbook.closed"))]
       : [
           h(
             "form",
@@ -1021,7 +1032,7 @@ function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): Reac
               h(
                 "label",
                 { htmlFor: `${idPrefix}-guestbook-honeypot` },
-                GUESTBOOK_FORM_COPY.honeypotLabel,
+                guestText(locale, "guestbook.honeypot"),
               ),
               h("input", {
                 id: `${idPrefix}-guestbook-honeypot`,
@@ -1038,7 +1049,7 @@ function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): Reac
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-guestbook-name` },
-                GUESTBOOK_FORM_COPY.nameLabel,
+                guestText(locale, "guestbook.nameLabel"),
               ),
               h("input", {
                 id: `${idPrefix}-guestbook-name`,
@@ -1047,7 +1058,7 @@ function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): Reac
                 required: true,
                 maxLength: 60,
                 autoComplete: "name",
-                placeholder: GUESTBOOK_FORM_COPY.namePlaceholder,
+                placeholder: guestText(locale, "guestbook.namePlaceholder"),
                 className: FIELD,
               }),
             ),
@@ -1057,7 +1068,7 @@ function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): Reac
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-guestbook-message` },
-                GUESTBOOK_FORM_COPY.messageLabel,
+                guestText(locale, "guestbook.messageLabel"),
               ),
               h("textarea", {
                 id: `${idPrefix}-guestbook-message`,
@@ -1065,15 +1076,19 @@ function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): Reac
                 required: true,
                 maxLength: 500,
                 rows: 3,
-                placeholder: GUESTBOOK_FORM_COPY.messagePlaceholder,
+                placeholder: guestText(locale, "guestbook.messagePlaceholder"),
                 className: TEXT_AREA,
               }),
-              h("p", { className: HINT }, GUESTBOOK_FORM_COPY.messageHint),
+              h("p", { className: HINT }, guestText(locale, "guestbook.messageHint")),
             ),
             h(
               "div",
               { className: ACTIONS },
-              h("button", { type: "submit", className: SUBMIT }, GUESTBOOK_FORM_COPY.submit),
+              h(
+                "button",
+                { type: "submit", className: SUBMIT },
+                guestText(locale, "guestbook.submit"),
+              ),
             ),
           ),
         ]),
@@ -1088,10 +1103,14 @@ function guestbookSection(guestbook: GuestbookBlockView, idPrefix: string): Reac
  * nothing published invites its first photo instead of drawing an empty grid. Every text is React's own text node, so a
  * name that looks like markup stays the characters the guest typed.
  */
-function guestAlbumSection(album: GuestAlbumBlockView, idPrefix: string): ReactElement {
+function guestAlbumSection(
+  album: GuestAlbumBlockView,
+  idPrefix: string,
+  locale: Locale,
+): ReactElement {
   const grid =
     album.photos.length === 0
-      ? h("p", { className: HINT }, GUEST_ALBUM_EMPTY_NOTE)
+      ? h("p", { className: HINT }, guestText(locale, "album.empty"))
       : h(
           "ul",
           {
@@ -1112,7 +1131,7 @@ function guestAlbumSection(album: GuestAlbumBlockView, idPrefix: string): ReactE
                 },
                 h("img", {
                   src: photo.url,
-                  alt: guestAlbumPhotoAlt(photo.uploaderName),
+                  alt: guestAlbumPhotoAlt(photo.uploaderName, locale),
                   width: 320,
                   height: 320,
                   loading: "lazy",
@@ -1128,10 +1147,10 @@ function guestAlbumSection(album: GuestAlbumBlockView, idPrefix: string): ReactE
   return h(
     "div",
     { key: "guestAlbum", "data-feature": "guestAlbum", className: SURFACE_CARD },
-    h("h3", { className: FEATURE_TITLE }, GUEST_ALBUM_SECTION_TITLE),
-    h("p", { className: HINT }, GUEST_ALBUM_SECTION_HINT),
+    h("h3", { className: FEATURE_TITLE }, guestText(locale, "album.title")),
+    h("p", { className: HINT }, guestText(locale, "album.hint")),
     ...(album.closed
-      ? [h("p", { key: "closed", className: HINT }, GUEST_ALBUM_CLOSED_NOTE)]
+      ? [h("p", { key: "closed", className: HINT }, guestText(locale, "album.closed"))]
       : [
           h(
             "form",
@@ -1154,7 +1173,7 @@ function guestAlbumSection(album: GuestAlbumBlockView, idPrefix: string): ReactE
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-guest-album-file` },
-                GUEST_ALBUM_FILE_LABEL,
+                guestText(locale, "album.fileLabel"),
               ),
               h("input", {
                 id: `${idPrefix}-guest-album-file`,
@@ -1164,7 +1183,7 @@ function guestAlbumSection(album: GuestAlbumBlockView, idPrefix: string): ReactE
                 accept: GUEST_ALBUM_ACCEPT,
                 className: FIELD,
               }),
-              h("p", { className: HINT }, GUEST_ALBUM_FILE_HINT),
+              h("p", { className: HINT }, guestText(locale, "album.fileHint")),
             ),
             h(
               "div",
@@ -1172,7 +1191,7 @@ function guestAlbumSection(album: GuestAlbumBlockView, idPrefix: string): ReactE
               h(
                 "label",
                 { className: FIELD_LABEL, htmlFor: `${idPrefix}-guest-album-name` },
-                GUEST_ALBUM_UPLOADER_LABEL,
+                guestText(locale, "album.uploaderLabel"),
               ),
               h("input", {
                 id: `${idPrefix}-guest-album-name`,
@@ -1180,20 +1199,20 @@ function guestAlbumSection(album: GuestAlbumBlockView, idPrefix: string): ReactE
                 type: "text",
                 maxLength: GUEST_ALBUM_UPLOADER_NAME_MAX_LENGTH,
                 autoComplete: "name",
-                placeholder: GUEST_ALBUM_UPLOADER_PLACEHOLDER,
+                placeholder: guestText(locale, "album.uploaderPlaceholder"),
                 className: FIELD,
               }),
-              h("p", { className: HINT }, GUEST_ALBUM_UPLOADER_HINT),
+              h("p", { className: HINT }, guestText(locale, "album.uploaderHint")),
             ),
             h(
               "div",
               { className: ACTIONS },
-              h("button", { type: "submit", className: SUBMIT }, GUEST_ALBUM_UPLOAD_LABEL),
+              h("button", { type: "submit", className: SUBMIT }, guestText(locale, "album.upload")),
             ),
           ),
         ]),
     grid,
-    h("p", { "data-guest-album-count": "", className: HINT }, guestAlbumCount(album.count)),
+    h("p", { "data-guest-album-count": "", className: HINT }, guestAlbumCount(album.count, locale)),
   );
 }
 
@@ -1204,7 +1223,12 @@ function guestAlbumSection(album: GuestAlbumBlockView, idPrefix: string): ReactE
  * on; and the note. Every text is React's own text node, so the owner's words are escaped and nothing they typed can
  * become markup.
  */
-function giftRegistrySection(registry: GiftRegistry, idPrefix: string): ReactElement {
+function giftRegistrySection(
+  registry: GiftRegistry,
+  idPrefix: string,
+  locale: Locale,
+): ReactElement {
+  const formats = guestFormats(locale);
   const transfer = registry.transfer;
   const clabeId = `${idPrefix}-gift-clabe`;
   const stores =
@@ -1231,10 +1255,10 @@ function giftRegistrySection(registry: GiftRegistry, idPrefix: string): ReactEle
                   href: store.url,
                   target: "_blank",
                   rel: "noopener noreferrer",
-                  "aria-label": `${GIFT_REGISTRY_VIEW_STORE} de ${store.name} en una pestaña nueva`,
+                  "aria-label": formats.storeLinkAria(store.name),
                   className: STORE_LINK,
                 },
-                `${GIFT_REGISTRY_VIEW_STORE} ${GIFT_REGISTRY_VIEW_STORE_ARROW}`,
+                `${guestText(locale, "giftRegistry.viewStore")} ${GIFT_REGISTRY_VIEW_STORE_ARROW}`,
               ),
             ),
           ),
@@ -1243,34 +1267,34 @@ function giftRegistrySection(registry: GiftRegistry, idPrefix: string): ReactEle
   return h(
     "div",
     { key: "gift-registry", "data-feature": "gift-registry", className: SURFACE_CARD },
-    h("h3", { className: FEATURE_TITLE }, GIFT_REGISTRY_SECTION_TITLE),
-    h("p", { className: HINT }, GIFT_REGISTRY_SECTION_HINT),
+    h("h3", { className: FEATURE_TITLE }, guestText(locale, "giftRegistry.title")),
+    h("p", { className: HINT }, guestText(locale, "giftRegistry.hint")),
     stores,
     transfer === null
       ? null
       : h(
           "div",
           { "data-gift-transfer": "", className: TRANSFER_BLOCK },
-          h("h4", { className: TRANSFER_TITLE }, GIFT_REGISTRY_TRANSFER_TITLE),
+          h("h4", { className: TRANSFER_TITLE }, guestText(locale, "giftRegistry.transferTitle")),
           h(
             "dl",
             { className: "mt-1" },
             h(
               "div",
               { className: TRANSFER_ROW },
-              h("dt", { className: TRANSFER_LABEL }, "Banco"),
+              h("dt", { className: TRANSFER_LABEL }, guestText(locale, "giftRegistry.bank")),
               h("dd", { className: TRANSFER_VALUE }, transfer.bank),
             ),
             h(
               "div",
               { className: TRANSFER_ROW },
-              h("dt", { className: TRANSFER_LABEL }, "Titular"),
+              h("dt", { className: TRANSFER_LABEL }, guestText(locale, "giftRegistry.holder")),
               h("dd", { className: TRANSFER_VALUE }, transfer.holder),
             ),
             h(
               "div",
               { className: TRANSFER_ROW },
-              h("dt", { className: TRANSFER_LABEL }, "CLABE"),
+              h("dt", { className: TRANSFER_LABEL }, guestText(locale, "giftRegistry.clabe")),
               h(
                 "dd",
                 {
@@ -1284,9 +1308,11 @@ function giftRegistrySection(registry: GiftRegistry, idPrefix: string): ReactEle
             ),
           ),
           // The island takes the compact digits and the id of the element it selects, so both travel as plain strings.
-          h(CopyClabeIsland, { clabe: transfer.clabe, clabeId }),
+          h(CopyClabeIsland, { clabe: transfer.clabe, clabeId, locale }),
         ),
-    registry.envelopes ? h("p", { className: NOTE }, GIFT_REGISTRY_ENVELOPES_LINE) : null,
+    registry.envelopes
+      ? h("p", { className: NOTE }, guestText(locale, "giftRegistry.envelopes"))
+      : null,
     registry.note === null ? null : h("p", { className: NOTE }, registry.note),
   );
 }
@@ -1304,7 +1330,11 @@ function mapPlace(place: EventPlace, places: InvitationFeatures["places"]): MapP
 }
 
 /** The two «Cómo llegar» actions of one place, each with the accessible name that names its service. */
-function placeLinks(place: MapPlace): ReactElement {
+function placeLinks(place: MapPlace, locale: Locale): ReactElement {
+  const formats = guestFormats(locale);
+  const maps = guestText(locale, "map.googleMaps");
+  const waze = guestText(locale, "map.waze");
+
   return h(
     "div",
     { className: ACTIONS },
@@ -1314,10 +1344,10 @@ function placeLinks(place: MapPlace): ReactElement {
         href: googleMapsUrl(place),
         target: "_blank",
         rel: "noopener noreferrer",
-        "aria-label": `Cómo llegar a ${place.name} en Google Maps`,
+        "aria-label": formats.mapDirectionsAria(place.name, maps),
         className: ACTION,
       },
-      "Google Maps",
+      maps,
     ),
     h(
       "a",
@@ -1325,10 +1355,10 @@ function placeLinks(place: MapPlace): ReactElement {
         href: wazeUrl(place),
         target: "_blank",
         rel: "noopener noreferrer",
-        "aria-label": `Cómo llegar a ${place.name} en Waze`,
+        "aria-label": formats.mapDirectionsAria(place.name, waze),
         className: ACTION,
       },
-      "Waze",
+      waze,
     ),
   );
 }
@@ -1338,6 +1368,7 @@ export function InvitationFeaturesBlock({
   facts,
   calendarHref,
   now,
+  locale = "es",
 }: InvitationFeaturesBlockProps): ReactElement | null {
   // Read the id before the early return, so the hook count never depends on the feature flags.
   const idPrefix = useId();
@@ -1357,11 +1388,12 @@ export function InvitationFeaturesBlock({
       h(
         "div",
         { key: "countdown", "data-feature": "countdown", className: COUNTDOWN_CARD },
-        h("h3", { className: FEATURE_TITLE }, "Cuenta regresiva"),
+        h("h3", { className: FEATURE_TITLE }, guestText(locale, "countdown.title")),
         h(CountdownIsland, {
           targetAt: start.toISOString(),
           timeZone: features.timeZone,
           initial: countdownParts(start, now ?? new Date(), features.timeZone),
+          locale,
         }),
       ),
     );
@@ -1369,22 +1401,22 @@ export function InvitationFeaturesBlock({
 
   // The plan of the day comes right after the countdown: what is left to wait for, and then what happens when it starts.
   if (features.itinerary !== undefined && features.itinerary.length > 0) {
-    sections.push(itinerarySection(features.itinerary));
+    sections.push(itinerarySection(features.itinerary, locale));
   }
 
   // The gift registry follows the plan: where to look once a guest knows when the celebration starts (F2; L4.5).
   if (features.giftRegistryDetails !== undefined) {
-    sections.push(giftRegistrySection(features.giftRegistryDetails, idPrefix));
+    sections.push(giftRegistrySection(features.giftRegistryDetails, idPrefix, locale));
   }
 
   // The lodging follows the gifts: where to sleep and how to move, once a guest knows the day and the presents (F4).
   if (features.lodging !== undefined && lodgingHasContent(features.lodging)) {
-    sections.push(lodgingSection(features.lodging));
+    sections.push(lodgingSection(features.lodging, locale));
   }
 
   // The livestream follows: the one part of the day a guest who cannot attend still joins (F9; L12.5).
   if (features.livestream !== undefined && livestreamHasContent(features.livestream)) {
-    sections.push(livestreamSection(features.livestream));
+    sections.push(livestreamSection(features.livestream, locale));
   }
 
   if (features.map) {
@@ -1403,7 +1435,7 @@ export function InvitationFeaturesBlock({
       h(
         "div",
         { key: "map", "data-feature": "map", className: SURFACE_CARD },
-        h("h3", { className: FEATURE_TITLE }, "Cómo llegar"),
+        h("h3", { className: FEATURE_TITLE }, guestText(locale, "map.title")),
         h(
           "ul",
           { className: "mt-3 flex flex-col gap-3" },
@@ -1414,11 +1446,11 @@ export function InvitationFeaturesBlock({
               h("p", { className: PLACE_LABEL }, place.label),
               h("p", { className: PLACE_NAME, style: DISPLAY_FONT }, place.name),
               h("p", { className: PLACE_ADDRESS }, place.address),
-              placeLinks(places[index] ?? place),
+              placeLinks(places[index] ?? place, locale),
             ),
           ),
         ),
-        markers.length === 0 ? null : h(PlaceMapIsland, { places: markers }),
+        markers.length === 0 ? null : h(PlaceMapIsland, { places: markers, locale }),
       ),
     );
   }
@@ -1428,8 +1460,8 @@ export function InvitationFeaturesBlock({
       h(
         "div",
         { key: "calendar", "data-feature": "calendar", className: SURFACE_CARD },
-        h("h3", { className: FEATURE_TITLE }, "Agregar al calendario"),
-        h("p", { className: HINT }, "Guarda la fecha para no olvidarla."),
+        h("h3", { className: FEATURE_TITLE }, guestText(locale, "calendar.title")),
+        h("p", { className: HINT }, guestText(locale, "calendar.hint")),
         h(
           "div",
           { className: ACTIONS },
@@ -1441,11 +1473,15 @@ export function InvitationFeaturesBlock({
               rel: "noopener noreferrer",
               className: ACTION,
             },
-            "Google Calendar",
+            guestText(locale, "calendar.google"),
           ),
           calendarHref === undefined || calendarHref === ""
             ? null
-            : h("a", { href: calendarHref, className: ACTION }, "Descargar .ics"),
+            : h(
+                "a",
+                { href: calendarHref, className: ACTION },
+                guestText(locale, "calendar.download"),
+              ),
         ),
       ),
     );
@@ -1456,21 +1492,21 @@ export function InvitationFeaturesBlock({
       h(
         "div",
         { key: "whatsapp", "data-feature": "whatsapp", className: SURFACE_CARD },
-        h("h3", { className: FEATURE_TITLE }, "Escribir por WhatsApp"),
-        h("p", { className: HINT }, "Escribe para confirmar tu asistencia."),
+        h("h3", { className: FEATURE_TITLE }, guestText(locale, "whatsapp.title")),
+        h("p", { className: HINT }, guestText(locale, "whatsapp.hint")),
         h(
           "div",
           { className: ACTIONS },
           h(
             "a",
             {
-              href: whatsappUrl(features.whatsapp.phone, facts.title),
+              href: whatsappUrl(features.whatsapp.phone, facts.title, locale),
               target: "_blank",
               rel: "noopener noreferrer",
-              "aria-label": `Escribir por WhatsApp sobre ${facts.title}`,
+              "aria-label": guestFormats(locale).whatsappAria(facts.title),
               className: ACTION,
             },
-            "Escribir por WhatsApp",
+            guestText(locale, "whatsapp.action"),
           ),
         ),
       ),
@@ -1489,7 +1525,7 @@ export function InvitationFeaturesBlock({
       h(
         "div",
         { key: "music", "data-feature": "music", className: SURFACE_CARD },
-        h("h3", { className: FEATURE_TITLE }, MUSIC_SECTION_TITLE),
+        h("h3", { className: FEATURE_TITLE }, guestText(locale, "music.title")),
         cover === undefined
           ? null
           : h("img", {
@@ -1498,14 +1534,14 @@ export function InvitationFeaturesBlock({
               width: 300,
               height: 300,
               loading: "lazy",
-              alt: title ?? MUSIC_COVER_ALT,
+              alt: title ?? guestText(locale, "music.coverAlt"),
               // React's camel-case property for the `referrerpolicy` attribute: the CDN learns nothing about where
               // the guest came from (S2).
               referrerPolicy: "no-referrer",
               className: MUSIC_COVER,
             }),
         title === undefined ? null : h("p", { className: MUSIC_TITLE }, title),
-        h("p", { className: HINT }, "La música que elegimos para esta celebración."),
+        h("p", { className: HINT }, guestText(locale, "music.hint")),
         h(
           "div",
           { className: ACTIONS },
@@ -1517,7 +1553,7 @@ export function InvitationFeaturesBlock({
               rel: "noopener noreferrer",
               className: ACTION,
             },
-            musicButtonLabel(features.music.provider),
+            musicButtonLabel(features.music.provider, locale),
           ),
         ),
       ),
@@ -1526,7 +1562,7 @@ export function InvitationFeaturesBlock({
 
   // The creator's own photos, before the guest's own cards: nothing to decide, so they never push an action away.
   if (features.gallery !== undefined && features.gallery.length > 0) {
-    sections.push(gallerySection(features.gallery));
+    sections.push(gallerySection(features.gallery, locale));
   }
 
   // The guest's own block first: their greeting and their seats, before anything else the invitation shows (G4).
@@ -1543,14 +1579,18 @@ export function InvitationFeaturesBlock({
   // The guest's own cards come last, after everything they might need to decide: the answer first (M6 G3; S4), and the
   // wall of messages after it (F7; L10.5).
   if (features.rsvp !== undefined) {
-    sections.push(rsvpSection(features.rsvp, features.timeZone, idPrefix));
+    sections.push(rsvpSection(features.rsvp, features.timeZone, idPrefix, locale));
   }
   if (features.guest?.rsvp !== undefined) {
-    sections.push(guestRsvpSection(features.guest.rsvp, features.timeZone, idPrefix));
+    sections.push(guestRsvpSection(features.guest.rsvp, features.timeZone, idPrefix, locale));
   }
   if (features.guest?.pass !== undefined) {
     // The venue is the last place the invitation shows: the reception when there is one, the only place otherwise.
-    const pass = guestPassSection(features.guest.pass, facts.places[facts.places.length - 1]?.name);
+    const pass = guestPassSection(
+      features.guest.pass,
+      facts.places[facts.places.length - 1]?.name,
+      locale,
+    );
 
     if (pass !== null) {
       sections.push(pass);
@@ -1559,12 +1599,12 @@ export function InvitationFeaturesBlock({
 
   // The guests' own photos come next: the grid and its upload form, before the wall that closes the block (F8; L11.5).
   if (features.guestAlbum !== undefined) {
-    sections.push(guestAlbumSection(features.guestAlbum, idPrefix));
+    sections.push(guestAlbumSection(features.guestAlbum, idPrefix, locale));
   }
 
   // Last of all: the wall of messages, which closes the block with its notes and its form (F7; L10.5).
   if (features.guestbook !== undefined) {
-    sections.push(guestbookSection(features.guestbook, idPrefix));
+    sections.push(guestbookSection(features.guestbook, idPrefix, locale));
   }
 
   return h(
@@ -1577,7 +1617,7 @@ export function InvitationFeaturesBlock({
     h(
       "h2",
       { id: `${idPrefix}-features`, className: SECTION_TITLE, style: DISPLAY_FONT },
-      features.guest?.greeting ?? "Todo lo que necesitas",
+      features.guest?.greeting ?? guestText(locale, "block.heading"),
     ),
     sections,
   );

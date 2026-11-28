@@ -4,6 +4,7 @@ import {
   type IcsCalendarInput,
 } from "../invitation-features/calendar.ts";
 import { type EventFacts, eventFactsFor } from "../invitation-features/event-facts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import type { GalleryPhoto } from "../invitation-features/gallery.ts";
 import type { GiftRegistry } from "../invitation-features/gift-registry.ts";
 import {
@@ -85,13 +86,21 @@ export interface PublicFeatureBlock {
  * `hiddenFields` (S8.3) travel with it, so a place the customer switched off is never named by the map, the
  * countdown, or the calendar, and the start hour comes from a place that stays shown.
  */
-function factsOf(snapshot: {
-  componentKey: string;
-  content: unknown;
-  hiddenFields?: readonly string[];
-}): EventFacts | undefined {
+function factsOf(
+  snapshot: {
+    componentKey: string;
+    content: unknown;
+    hiddenFields?: readonly string[];
+  },
+  locale: Locale = "es",
+): EventFacts | undefined {
   try {
-    return eventFactsFor(snapshot.componentKey, snapshot.content, snapshot.hiddenFields ?? []);
+    return eventFactsFor(
+      snapshot.componentKey,
+      snapshot.content,
+      snapshot.hiddenFields ?? [],
+      locale,
+    );
   } catch {
     return undefined;
   }
@@ -173,6 +182,11 @@ export interface FeatureBlockSource {
   readonly guestAlbum?: GuestAlbumBlockView;
   /** The personal block of one guest (G4), absent on every page that is not theirs. */
   readonly guest?: GuestPageBlockView;
+  /**
+   * The locale the guest page renders (F14; L19.2), which decides the fixed words of the celebration the facts carry —
+   * the derived title and the place labels — and nothing the owner wrote. Absent reads as Spanish.
+   */
+  readonly locale?: Locale;
 }
 
 /**
@@ -187,7 +201,7 @@ export interface FeatureBlockSource {
  * feature on its own, so the preview shows what the guest page would show.
  */
 export function featureBlockParts(source: FeatureBlockSource): FeatureBlockParts | undefined {
-  const facts = factsOf(source);
+  const facts = factsOf(source, source.locale ?? "es");
 
   if (facts === undefined) {
     return undefined;
@@ -233,6 +247,7 @@ export function publicFeatureBlock(
   guest?: GuestPageBlockView,
   guestbook?: GuestbookBlockView,
   guestAlbum?: GuestAlbumBlockView,
+  locale: Locale = "es",
 ): PublicFeatureBlock | undefined {
   const parts = featureBlockParts({
     componentKey: invitation.componentKey,
@@ -257,6 +272,7 @@ export function publicFeatureBlock(
     ...(guest === undefined ? {} : { guest }),
     ...(guestbook === undefined ? {} : { guestbook }),
     ...(guestAlbum === undefined ? {} : { guestAlbum }),
+    locale,
   });
 
   return parts === undefined
@@ -282,6 +298,8 @@ export function openingAnimationBlock(invitation: {
   readonly content: unknown;
   readonly hiddenFields?: readonly string[];
   readonly plays: boolean;
+  /** The locale the page renders (F14; L19.2): the envelope's two lines are read from the derived title it shows. */
+  readonly locale?: Locale;
 }): OpeningAnimationBlock | undefined {
   if (!invitation.plays) {
     return undefined;
@@ -293,12 +311,16 @@ export function openingAnimationBlock(invitation: {
     return undefined;
   }
 
-  const facts = factsOf({
-    componentKey: invitation.componentKey,
-    content: invitation.content,
-    ...(invitation.hiddenFields === undefined ? {} : { hiddenFields: invitation.hiddenFields }),
-  });
-  const card = openingAnimationCard(facts?.title);
+  const locale = invitation.locale ?? "es";
+  const facts = factsOf(
+    {
+      componentKey: invitation.componentKey,
+      content: invitation.content,
+      ...(invitation.hiddenFields === undefined ? {} : { hiddenFields: invitation.hiddenFields }),
+    },
+    locale,
+  );
+  const card = openingAnimationCard(facts?.title, locale);
 
   return card === undefined ? undefined : { card, theme };
 }
@@ -308,8 +330,12 @@ export function openingAnimationBlock(invitation: {
  * the zone is not one this runtime formats, or the start instant is unreadable. The route handler answers
  * the same 404 in that case, so a guest never downloads a calendar of an invitation they cannot see.
  */
-export function invitationCalendar(invitation: PublicInvitation, now: Date): string | undefined {
-  const facts = factsOf(invitation);
+export function invitationCalendar(
+  invitation: PublicInvitation,
+  now: Date,
+  locale: Locale = "es",
+): string | undefined {
+  const facts = factsOf(invitation, locale);
 
   if (facts === undefined || !isSupportedTimeZone(invitation.timeZone)) {
     return undefined;
@@ -320,6 +346,7 @@ export function invitationCalendar(invitation: PublicInvitation, now: Date): str
       slug: invitation.slug,
       event: calendarEventFor(facts, startInstant(facts.date, facts.time, invitation.timeZone)),
       stamp: now,
+      locale,
     };
     return buildIcsCalendar(input);
   } catch {
@@ -335,8 +362,9 @@ export function invitationCalendar(invitation: PublicInvitation, now: Date): str
 export function invitationCalendarFile(
   invitation: PublicInvitation,
   now: Date,
+  locale: Locale = "es",
 ): InvitationCalendarFile | undefined {
-  const body = invitationCalendar(invitation, now);
+  const body = invitationCalendar(invitation, now, locale);
 
   return body === undefined ? undefined : { body, headers: INVITATION_CALENDAR_HEADERS };
 }

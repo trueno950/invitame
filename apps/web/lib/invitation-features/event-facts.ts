@@ -16,6 +16,8 @@ import { parseWeddingArchContent, type WeddingArchContent } from "../renderers/w
 import { parseWeddingOrnamentalContent } from "../renderers/wedding-ornamental-01.ts";
 import { parseXVArchContent, type XVArchContent } from "../renderers/xv-arch-01.ts";
 import { parseXVOrnamentalContent } from "../renderers/xv-ornamental-01.ts";
+import { guestFormats, guestText } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 
 /**
  * The event facts of a layout (S4): the celebration's title, when it starts, and the places a guest can be
@@ -60,10 +62,15 @@ export interface EventFacts {
  * fields of an omitted section into `hiddenFields` (S8.3), so the facts it answers name only the places that
  * stay shown, exactly like the renderer.
  */
-export type EventFactsOf = (content: unknown, hiddenFields?: readonly string[]) => EventFacts;
+export type EventFactsOf = (
+  content: unknown,
+  hiddenFields?: readonly string[],
+  locale?: Locale,
+) => EventFacts;
 
 /** The two places of a celebration that announces a ceremony and a reception, read for the shown ones. */
 function placeFactsOf(
+  locale: Locale,
   content: {
     readonly ceremonyPlace: string;
     readonly ceremonyAddress: string;
@@ -85,7 +92,7 @@ function placeFactsOf(
       ...(showsCeremony
         ? [
             {
-              label: "Ceremonia",
+              label: guestText(locale, "event.ceremony"),
               field: "ceremonyAddress",
               name: content.ceremonyPlace,
               address: content.ceremonyAddress,
@@ -95,7 +102,7 @@ function placeFactsOf(
       ...(showsReception
         ? [
             {
-              label: "Recepción",
+              label: guestText(locale, "event.reception"),
               field: "receptionAddress",
               name: content.receptionPlace,
               address: content.receptionAddress,
@@ -107,13 +114,18 @@ function placeFactsOf(
 }
 
 /** The three birthday layouts share one content shape, so they share one mapping. */
-function birthdayFacts(content: BirthdayContent): EventFacts {
+function birthdayFacts(content: BirthdayContent, locale: Locale): EventFacts {
   return {
-    title: `Cumpleaños de ${content.celebrantName}`,
+    title: guestFormats(locale).eventBirthdayTitle(content.celebrantName),
     date: content.date,
     time: content.time,
     places: [
-      { label: "Lugar", field: "address", name: content.location, address: content.address },
+      {
+        label: guestText(locale, "event.place"),
+        field: "address",
+        name: content.location,
+        address: content.address,
+      },
     ],
   };
 }
@@ -122,39 +134,47 @@ function birthdayFacts(content: BirthdayContent): EventFacts {
 export function birthdayMapEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return birthdayFacts(parseBirthdayMapContent(content, hiddenFields));
+  return birthdayFacts(parseBirthdayMapContent(content, hiddenFields), locale);
 }
 
 /** The facts of a stored `birthday-poster-01` invitation. */
 export function birthdayPosterEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return birthdayFacts(parseBirthdayPosterContent(content, hiddenFields));
+  return birthdayFacts(parseBirthdayPosterContent(content, hiddenFields), locale);
 }
 
 /** The facts of a stored `birthday-story-01` invitation. */
 export function birthdayStoryEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return birthdayFacts(parseBirthdayStoryContent(content, hiddenFields));
+  return birthdayFacts(parseBirthdayStoryContent(content, hiddenFields), locale);
 }
 
 /**
  * The facts of a stored `baby-shower-classic-01` invitation. A shower whose baby's name is a surprise is
  * named after the hosts, so the calendar and the greeting never say «Baby shower» alone.
  */
-function babyShowerFacts(content: BabyShowerContent): EventFacts {
+function babyShowerFacts(content: BabyShowerContent, locale: Locale): EventFacts {
   const celebration = content.babyName ?? content.hosts;
 
   return {
-    title: `Baby shower de ${celebration}`,
+    title: guestFormats(locale).eventBabyShowerTitle(celebration),
     date: content.date,
     time: content.time,
     places: [
-      { label: "Lugar", field: "address", name: content.location, address: content.address },
+      {
+        label: guestText(locale, "event.place"),
+        field: "address",
+        name: content.location,
+        address: content.address,
+      },
     ],
   };
 }
@@ -163,19 +183,24 @@ function babyShowerFacts(content: BabyShowerContent): EventFacts {
 export function babyShowerEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return babyShowerFacts(parseBabyShowerClassicContent(content, hiddenFields));
+  return babyShowerFacts(parseBabyShowerClassicContent(content, hiddenFields), locale);
 }
 
 /**
  * The facts of a baptism: the ceremony starts the day, and the reception is the second place, so the map,
  * the calendar description, and the copy all carry both.
  */
-function baptismFacts(content: BaptismContent, hiddenFields: readonly string[] = []): EventFacts {
+function baptismFacts(
+  content: BaptismContent,
+  hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
+): EventFacts {
   return {
-    title: `Bautizo de ${content.celebrantName}`,
+    title: guestFormats(locale).eventBaptismTitle(content.celebrantName),
     date: content.date,
-    ...placeFactsOf(content, hiddenFields),
+    ...placeFactsOf(locale, content, hiddenFields),
   };
 }
 
@@ -183,19 +208,24 @@ function baptismFacts(content: BaptismContent, hiddenFields: readonly string[] =
 export function baptismEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return baptismFacts(parseBaptismClassicContent(content, hiddenFields), hiddenFields);
+  return baptismFacts(parseBaptismClassicContent(content, hiddenFields), hiddenFields, locale);
 }
 
 /**
  * The facts of an XV años (E3c; S4): it starts with the ceremony, the reception is the second place, and
  * the title names the celebrant.
  */
-function xvArchFacts(content: XVArchContent, hiddenFields: readonly string[] = []): EventFacts {
+function xvArchFacts(
+  content: XVArchContent,
+  hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
+): EventFacts {
   return {
-    title: `XV años de ${content.celebrantName}`,
+    title: guestFormats(locale).eventXvTitle(content.celebrantName),
     date: content.date,
-    ...placeFactsOf(content, hiddenFields),
+    ...placeFactsOf(locale, content, hiddenFields),
   };
 }
 
@@ -203,19 +233,21 @@ function xvArchFacts(content: XVArchContent, hiddenFields: readonly string[] = [
 export function xvArchEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return xvArchFacts(parseXVArchContent(content, undefined, hiddenFields), hiddenFields);
+  return xvArchFacts(parseXVArchContent(content, undefined, hiddenFields), hiddenFields, locale);
 }
 
 /** The facts of a wedding (E3c; S4): the title names the couple and the day starts with the ceremony. */
 function weddingArchFacts(
   content: WeddingArchContent,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
   return {
-    title: `Boda de ${content.coupleNameOne} y ${content.coupleNameTwo}`,
+    title: guestFormats(locale).eventWeddingTitle(content.coupleNameOne, content.coupleNameTwo),
     date: content.date,
-    ...placeFactsOf(content, hiddenFields),
+    ...placeFactsOf(locale, content, hiddenFields),
   };
 }
 
@@ -223,16 +255,22 @@ function weddingArchFacts(
 export function weddingArchEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return weddingArchFacts(parseWeddingArchContent(content, undefined, hiddenFields), hiddenFields);
+  return weddingArchFacts(
+    parseWeddingArchContent(content, undefined, hiddenFields),
+    hiddenFields,
+    locale,
+  );
 }
 
 /** The facts of a stored `baptism-arch-01` invitation: the same content and facts as the themed baptism. */
 export function baptismArchEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return baptismFacts(parseBaptismArchContent(content, hiddenFields), hiddenFields);
+  return baptismFacts(parseBaptismArchContent(content, hiddenFields), hiddenFields, locale);
 }
 
 // The ornamental layouts of the elegant line (E4b; S5) read the same content as their arch siblings, so
@@ -242,24 +280,31 @@ export function baptismArchEventFacts(
 export function xvOrnamentalEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return xvArchFacts(parseXVOrnamentalContent(content, hiddenFields), hiddenFields);
+  return xvArchFacts(parseXVOrnamentalContent(content, hiddenFields), hiddenFields, locale);
 }
 
 /** The facts of a stored `wedding-ornamental-01` invitation, the same as the arch layout's. */
 export function weddingOrnamentalEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return weddingArchFacts(parseWeddingOrnamentalContent(content, hiddenFields), hiddenFields);
+  return weddingArchFacts(
+    parseWeddingOrnamentalContent(content, hiddenFields),
+    hiddenFields,
+    locale,
+  );
 }
 
 /** The facts of a stored `baptism-ornamental-01` invitation, the same as the themed baptism's. */
 export function baptismOrnamentalEventFacts(
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts {
-  return baptismFacts(parseBaptismOrnamentalContent(content, hiddenFields), hiddenFields);
+  return baptismFacts(parseBaptismOrnamentalContent(content, hiddenFields), hiddenFields, locale);
 }
 
 /** The allow-listed facts functions, keyed by the `componentKey` they belong to. */
@@ -282,8 +327,9 @@ export function eventFactsFor(
   componentKey: string,
   content: unknown,
   hiddenFields: readonly string[] = [],
+  locale: Locale = "es",
 ): EventFacts | undefined {
   const facts = EVENT_FACTS.get(componentKey);
 
-  return facts === undefined ? undefined : facts(content, hiddenFields);
+  return facts === undefined ? undefined : facts(content, hiddenFields, locale);
 }

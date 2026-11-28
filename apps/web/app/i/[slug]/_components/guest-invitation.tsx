@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { PUBLIC_INVITATION_COPY } from "../../../../lib/customer/copy.ts";
+import { guestText } from "../../../../lib/i18n/guest-texts.ts";
 import type { Locale } from "../../../../lib/i18n/locale.ts";
 import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
 import { findRenderer } from "../../../../lib/renderers/registry.ts";
@@ -40,9 +40,8 @@ export interface GuestInvitationProps {
    */
   readonly languageSwitch?: ReactNode;
   /**
-   * The locale this page renders (F14; L19.2). Every renderer still writes Spanish until the translation slice, so it
-   * is only the wrapper's `lang` for now — the closest document language a nested server component may set — and the
-   * prop each renderer will read when the fixed texts are translated.
+   * The locale this page renders (F14; L19.2): the document language of the wrapper, the footer credit, and the prop
+   * each renderer reads to draw its own fixed texts. Absent reads as Spanish.
    */
   readonly locale?: Locale;
 }
@@ -73,6 +72,7 @@ export function GuestInvitation({
     ...(hiddenFields === undefined ? {} : { hiddenFields }),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
+    ...(locale === "es" ? {} : { locale }),
   };
 
   return (
@@ -90,7 +90,7 @@ export function GuestInvitation({
         <Renderer {...props} />
         <footer className="flex justify-center">
           <Link className={textButton} href="/">
-            {PUBLIC_INVITATION_COPY.madeWith}
+            {guestText(locale, "footer.madeWith")}
           </Link>
         </footer>
       </div>

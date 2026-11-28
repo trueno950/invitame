@@ -4,12 +4,18 @@ import {
   type InvitationFeatures,
   showsGiftRegistry,
 } from "../../../../lib/invitation-features/invitation-features.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
+import {
+  rendererClockTime,
+  rendererLongDate,
+  rendererTextsFor,
+} from "../../../../lib/i18n/renderer-texts.ts";
 import {
   parseBabyShowerClassicConfiguration,
   parseBabyShowerClassicContent,
 } from "../../../../lib/renderers/baby-shower-classic-01.ts";
 import { BABY_SHOWER_THEME } from "../../../../lib/renderers/baby-shower-themes.ts";
-import { formatLongDate, hiddenFieldSet } from "../../../../lib/renderers/invitation-fields.ts";
+import { hiddenFieldSet } from "../../../../lib/renderers/invitation-fields.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import { DecorationZone } from "../illustrations/decoration.ts";
 import { CelebrationMotif } from "../themed/celebration-motif.ts";
@@ -40,6 +46,8 @@ export interface BabyShowerClassicRendererProps {
   readonly calendarHref?: string;
   /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
   readonly hiddenFields?: readonly string[];
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 const h = createElement;
@@ -76,6 +84,7 @@ export function BabyShowerClassicRenderer({
   features,
   calendarHref,
   hiddenFields,
+  locale,
 }: BabyShowerClassicRendererProps): ReactElement {
   const { theme: themeKey } = parseBabyShowerClassicConfiguration(configuration);
   const data = parseBabyShowerClassicContent(content, hiddenFields);
@@ -87,8 +96,9 @@ export function BabyShowerClassicRenderer({
     ? data.giftRegistry
     : undefined;
   const idPrefix = useId();
+  const texts = rendererTextsFor(locale);
   const headline = data.babyName ?? data.hosts;
-  const photoAlt = `Foto de ${headline}`;
+  const photoAlt = `${texts["invitation.photoAlt"]} ${headline}`;
 
   // After the details and before the photo: the information rows, then what a guest can act on (S4).
   const featuresBlock =
@@ -98,12 +108,17 @@ export function BabyShowerClassicRenderer({
           features,
           facts: babyShowerEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
+          ...(locale === undefined ? {} : { locale }),
         });
 
   return h(
     "article",
     {
-      "aria-label": `Invitación de baby shower${data.babyName === undefined ? "" : ` de ${data.babyName}`}`,
+      "aria-label": `${
+        data.babyName === undefined
+          ? texts["babyShower.ariaInvitation"]
+          : `${texts["babyShower.ariaInvitation"]} ${texts["babyShower.ariaOf"]} ${data.babyName}`
+      }`,
       "data-component-key": "baby-shower-classic-01",
       "data-theme": themeKey,
       className: `${INVITATION_ROOT} gap-6 px-5 py-6`,
@@ -142,7 +157,7 @@ export function BabyShowerClassicRenderer({
         h(
           "p",
           { className: "text-[0.7rem] font-medium uppercase tracking-[0.18em]" },
-          data.babyName === undefined ? "Baby shower" : "Baby shower de",
+          data.babyName === undefined ? texts["babyShower.kicker"] : texts["babyShower.kickerOf"],
         ),
         h(
           "h1",
@@ -152,14 +167,14 @@ export function BabyShowerClassicRenderer({
         h(
           "p",
           { className: "mt-2 text-sm" },
-          h("time", { dateTime: data.date }, formatLongDate(data.date)),
+          h("time", { dateTime: data.date }, rendererLongDate(locale, data.date)),
         ),
       ),
     ),
     h(
       "section",
       { "data-section": "details", "aria-labelledby": `${idPrefix}-details` },
-      h("h2", { id: `${idPrefix}-details`, className: SECTION_TITLE }, "Los detalles"),
+      h("h2", { id: `${idPrefix}-details`, className: SECTION_TITLE }, texts["babyShower.details"]),
       h(
         "div",
         { className: "mt-3 flex flex-col gap-2" },
@@ -169,26 +184,31 @@ export function BabyShowerClassicRenderer({
           h(
             "b",
             { className: "text-(color:--inv-accent)" },
-            h("time", { dateTime: data.date }, formatLongDate(data.date)),
+            h("time", { dateTime: data.date }, rendererLongDate(locale, data.date)),
           ),
           h(
             "span",
             { className: "whitespace-nowrap" },
-            h("time", { dateTime: data.time }, `${data.time} h`),
+            h("time", { dateTime: data.time }, rendererClockTime(locale, data.time)),
           ),
         ),
-        labelRow("location", "Lugar", data.location),
-        labelRow("address", "Dirección", data.address),
-        labelRow("hosts", "Anfitriones", data.hosts, true),
+        labelRow("location", texts["label.place"], data.location),
+        labelRow("address", texts["label.address"], data.address),
+        labelRow("hosts", texts["label.hosts"], data.hosts, true),
         data.genderReveal === true
-          ? labelRow("gender-reveal", "Revelación de género", "¡Habrá revelación!", true)
+          ? labelRow(
+              "gender-reveal",
+              texts["label.genderReveal"],
+              texts["babyShower.genderRevealValue"],
+              true,
+            )
           : null,
         giftRegistry === undefined
           ? null
           : h(
               "div",
               { key: "gift-registry", className: ROW_SOFT },
-              h("span", { className: ROW_LABEL }, "Mesa de regalos"),
+              h("span", { className: ROW_LABEL }, texts["label.giftRegistry"]),
               h("span", { className: `${ROW_VALUE} text-(color:--inv-accent)` }, giftRegistry),
             ),
       ),
@@ -199,7 +219,7 @@ export function BabyShowerClassicRenderer({
       : h(
           "section",
           { "data-section": "photo", "aria-labelledby": `${idPrefix}-photo` },
-          h("h2", { id: `${idPrefix}-photo`, className: SECTION_TITLE }, "La foto"),
+          h("h2", { id: `${idPrefix}-photo`, className: SECTION_TITLE }, texts["babyShower.photo"]),
           h(
             "figure",
             { className: `${CARD} mt-3` },
@@ -214,7 +234,7 @@ export function BabyShowerClassicRenderer({
               {
                 className: "mt-2 text-center text-sm font-medium text-(color:--inv-accent)",
               },
-              "¡Te esperamos!",
+              texts["babyShower.expect"],
             ),
           ),
         ),
@@ -228,7 +248,11 @@ export function BabyShowerClassicRenderer({
       : h(
           "section",
           { "data-section": "message", "aria-labelledby": `${idPrefix}-message` },
-          h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+          h(
+            "h2",
+            { id: `${idPrefix}-message`, className: SECTION_TITLE },
+            texts["invitation.message"],
+          ),
           h(
             "p",
             {
@@ -243,7 +267,7 @@ export function BabyShowerClassicRenderer({
       : h(
           "section",
           { "data-section": "rsvp", "aria-labelledby": `${idPrefix}-rsvp` },
-          h("h2", { id: `${idPrefix}-rsvp`, className: SECTION_TITLE }, "Confirma tu asistencia"),
+          h("h2", { id: `${idPrefix}-rsvp`, className: SECTION_TITLE }, texts["invitation.rsvp"]),
           h(
             "p",
             {

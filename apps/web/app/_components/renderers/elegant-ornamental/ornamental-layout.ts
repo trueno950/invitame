@@ -2,12 +2,17 @@ import { type CSSProperties, createElement, type ReactElement, useId } from "rea
 
 import type { EventFacts } from "../../../../lib/invitation-features/event-facts.ts";
 import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
+import {
+  rendererClockTime,
+  rendererLongDate,
+  rendererTextsFor,
+} from "../../../../lib/i18n/renderer-texts.ts";
 import {
   type ElegantTheme,
   type ElegantThemeKey,
   ORNAMENTAL_NAME_FONT,
 } from "../../../../lib/renderers/elegant-themes.ts";
-import { formatLongDate } from "../../../../lib/renderers/invitation-fields.ts";
 import { InvitationFeaturesBlock } from "../../invitation-features/invitation-features-block.ts";
 import type {
   ArchDetail,
@@ -116,6 +121,8 @@ export interface OrnamentalLayoutProperties {
   readonly features?: InvitationFeatures;
   readonly facts: EventFacts;
   readonly calendarHref?: string;
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 /** The script face of the name and the signature, at its single licensed weight. */
@@ -139,8 +146,13 @@ function monogramOf(names: readonly string[]): string {
     .join("·");
 }
 
-/** The lockup's names: one line for a celebration, two lines joined by «y» for a couple. */
-function nameLockup(themeKey: ElegantThemeKey, id: string, names: readonly string[]): ReactElement {
+/** The lockup's names: one line for a celebration, two lines joined by the locale's own «y»/«and» for a couple. */
+function nameLockup(
+  themeKey: ElegantThemeKey,
+  id: string,
+  names: readonly string[],
+  join: string,
+): ReactElement {
   const children: ReactElement[] = [];
 
   names.forEach((name, index) => {
@@ -152,7 +164,7 @@ function nameLockup(themeKey: ElegantThemeKey, id: string, names: readonly strin
             key: `join-${index}`,
             className: "my-1 block text-[0.42em] tracking-[0.24em]",
           },
-          "y",
+          join,
         ),
       );
     }
@@ -248,6 +260,7 @@ function placeBlock(
   idPrefix: string,
   place: ArchPlace,
   className: string,
+  locale: Locale | undefined,
 ): ReactElement {
   return h(
     "section",
@@ -278,7 +291,7 @@ function placeBlock(
         className: "mt-2 text-base text-(color:--inv-accent)",
         style: displayFontStyle(theme),
       },
-      h("time", { dateTime: place.time }, `${place.time} h`),
+      h("time", { dateTime: place.time }, rendererClockTime(locale, place.time)),
     ),
   );
 }
@@ -302,8 +315,10 @@ export function OrnamentalLayout({
   features,
   facts,
   calendarHref,
+  locale,
 }: OrnamentalLayoutProperties): ReactElement {
   const idPrefix = useId();
+  const texts = rendererTextsFor(locale);
   const initials = monogramOf(names);
   // A row of names the customer switched off arrives empty, and an empty row draws nothing (S8.3).
   const shownFamily = family.filter((row) => row.values.length > 0);
@@ -317,6 +332,7 @@ export function OrnamentalLayout({
           features,
           facts,
           ...(calendarHref === undefined ? {} : { calendarHref }),
+          ...(locale === undefined ? {} : { locale }),
         });
 
   return h(
@@ -382,7 +398,7 @@ export function OrnamentalLayout({
           { "data-section": "hero", "aria-labelledby": `${idPrefix}-name` },
           h("p", { className: KICKER }, kicker),
           monogram(theme, initials),
-          nameLockup(themeKey, `${idPrefix}-name`, names),
+          nameLockup(themeKey, `${idPrefix}-name`, names, texts["invitation.nameJoin"]),
           // The date lockup: the day in the theme's display face, tracked, as stationery sets it under the
           // name. A display face loaded at one weight is never emboldened, and the pair is the theme's ink on
           // its surface, so every theme keeps AA contrast (measured 5.31:1 or better).
@@ -392,7 +408,7 @@ export function OrnamentalLayout({
               className: "mt-4 text-[1.1rem] tracking-[0.14em] text-(color:--inv-ink)",
               style: displayFontStyle(theme),
             },
-            h("time", { dateTime: date }, formatLongDate(date)),
+            h("time", { dateTime: date }, rendererLongDate(locale, date)),
           ),
         ),
         h("div", { key: "rule", className: "mt-6" }, h(FoilRule)),
@@ -400,7 +416,7 @@ export function OrnamentalLayout({
           "figure",
           {
             "data-section": "cameo",
-            "aria-label": "Retrato",
+            "aria-label": texts["invitation.portrait"],
             className: "mt-2",
             // The browser default of a `figure` would add a block-end margin and 40 px inline margins; the
             // card's own rhythm sets both instead.
@@ -460,15 +476,19 @@ export function OrnamentalLayout({
                 "aria-labelledby": `${idPrefix}-family`,
                 className: BLOCK,
               },
-              h("h2", { id: `${idPrefix}-family`, className: SECTION_TITLE }, "La familia"),
+              h(
+                "h2",
+                { id: `${idPrefix}-family`, className: SECTION_TITLE },
+                texts["invitation.family"],
+              ),
               h(
                 "dl",
                 { className: "mt-4 flex flex-col" },
                 shownFamily.map((row, index) => familyRow(theme, row, index === 0)),
               ),
             ),
-        ceremony === undefined ? null : placeBlock(theme, idPrefix, ceremony, BLOCK),
-        reception === undefined ? null : placeBlock(theme, idPrefix, reception, BLOCK),
+        ceremony === undefined ? null : placeBlock(theme, idPrefix, ceremony, BLOCK, locale),
+        reception === undefined ? null : placeBlock(theme, idPrefix, reception, BLOCK, locale),
         details.length === 0
           ? null
           : h(
@@ -478,7 +498,11 @@ export function OrnamentalLayout({
                 "aria-labelledby": `${idPrefix}-details`,
                 className: BLOCK,
               },
-              h("h2", { id: `${idPrefix}-details`, className: SECTION_TITLE }, "Detalles"),
+              h(
+                "h2",
+                { id: `${idPrefix}-details`, className: SECTION_TITLE },
+                texts["invitation.details"],
+              ),
               h(
                 "dl",
                 { className: "mt-4 flex flex-col gap-4" },
@@ -513,7 +537,11 @@ export function OrnamentalLayout({
                 "aria-labelledby": `${idPrefix}-message`,
                 className: BLOCK,
               },
-              h("h2", { id: `${idPrefix}-message`, className: SECTION_TITLE }, "Mensaje"),
+              h(
+                "h2",
+                { id: `${idPrefix}-message`, className: SECTION_TITLE },
+                texts["invitation.message"],
+              ),
               h(
                 "p",
                 {
@@ -547,7 +575,7 @@ export function OrnamentalLayout({
                 "aria-labelledby": `${idPrefix}-rsvp`,
                 className: BLOCK,
               },
-              h("h2", { id: `${idPrefix}-rsvp`, className: ROW_LABEL }, "Confirma tu asistencia"),
+              h("h2", { id: `${idPrefix}-rsvp`, className: ROW_LABEL }, texts["invitation.rsvp"]),
               h(
                 "p",
                 { className: "mt-2 text-lg font-medium break-words text-(color:--inv-ink)" },

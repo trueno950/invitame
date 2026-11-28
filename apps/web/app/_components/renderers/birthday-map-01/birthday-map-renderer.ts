@@ -1,11 +1,15 @@
 import { createElement, type ReactElement, useId } from "react";
 import { birthdayMapEventFacts } from "../../../../lib/invitation-features/event-facts.ts";
 import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
 import {
-  formatAgeLabel,
-  formatAgeUnit,
-  formatLongDate,
-} from "../../../../lib/renderers/birthday-content.ts";
+  type RendererTextKey,
+  rendererAgeLabel,
+  rendererAgeUnit,
+  rendererClockTime,
+  rendererLongDate,
+  rendererTextsFor,
+} from "../../../../lib/i18n/renderer-texts.ts";
 import {
   parseBirthdayMapConfiguration,
   parseBirthdayMapContent,
@@ -40,6 +44,8 @@ export interface BirthdayMapRendererProps {
   readonly calendarHref?: string;
   /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
   readonly hiddenFields?: readonly string[];
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 const h = createElement;
@@ -52,16 +58,29 @@ const SECTION_TITLE = "mb-4 text-center text-2xl font-medium text-(color:--inv-i
 /** The artboard's scroll rods: one rolled lip above the message and one below it. */
 const SCROLL_RODS = ["-top-1.5", "-bottom-1.5"] as const;
 
-/** The four cardinal knobs of the compass rose, lettered in Spanish (N, S, E, O). */
-const COMPASS_POINTS = [
-  { key: "north", letter: "N", cx: 84, cy: 17 },
-  { key: "south", letter: "S", cx: 84, cy: 152 },
-  { key: "east", letter: "E", cx: 151, cy: 84 },
-  { key: "west", letter: "O", cx: 17, cy: 84 },
-] as const;
+/** The four cardinal knobs of the compass rose, lettered as the rendered locale letters them. */
+const COMPASS_POINTS: ReadonlyArray<{
+  readonly key: string;
+  readonly letterKey: RendererTextKey;
+  readonly cx: number;
+  readonly cy: number;
+}> = [
+  { key: "north", letterKey: "birthday.compassNorth", cx: 84, cy: 17 },
+  { key: "south", letterKey: "birthday.compassSouth", cx: 84, cy: 152 },
+  { key: "east", letterKey: "birthday.compassEast", cx: 151, cy: 84 },
+  { key: "west", letterKey: "birthday.compassWest", cx: 17, cy: 84 },
+];
 
 /** The compass rose: a decorative dial with the age at its centre, and the age label for screen readers. */
-function Compass({ age }: { readonly age: number }): ReactElement {
+function Compass({
+  age,
+  locale,
+}: {
+  readonly age: number;
+  readonly locale: Locale | undefined;
+}): ReactElement {
+  const texts = rendererTextsFor(locale);
+
   return h(
     "div",
     { className: "relative mx-auto mt-4 size-40" },
@@ -101,13 +120,15 @@ function Compass({ age }: { readonly age: number }): ReactElement {
           textAnchor: "middle",
           dominantBaseline: "central",
         },
-        COMPASS_POINTS.map(({ key, letter, cx, cy }) => h("text", { key, x: cx, y: cy }, letter)),
+        COMPASS_POINTS.map(({ key, letterKey, cx, cy }) =>
+          h("text", { key, x: cx, y: cy }, texts[letterKey]),
+        ),
       ),
     ),
     h(
       "p",
       {
-        "aria-label": formatAgeLabel(age),
+        "aria-label": rendererAgeLabel(locale, age),
         className: "absolute inset-0 grid place-content-center text-center",
       },
       h(
@@ -125,7 +146,7 @@ function Compass({ age }: { readonly age: number }): ReactElement {
           "aria-hidden": "true",
           className: "block text-xs font-medium uppercase tracking-[0.14em]",
         },
-        formatAgeUnit(age),
+        rendererAgeUnit(locale, age),
       ),
     ),
   );
@@ -137,12 +158,14 @@ export function BirthdayMapRenderer({
   features,
   calendarHref,
   hiddenFields,
+  locale,
 }: BirthdayMapRendererProps): ReactElement {
   const { theme: themeKey } = parseBirthdayMapConfiguration(configuration);
   const data = parseBirthdayMapContent(content, hiddenFields);
   const hidden = hiddenFieldSet(hiddenFields);
   const theme = BIRTHDAY_THEME[themeKey];
   const idPrefix = useId();
+  const texts = rendererTextsFor(locale);
 
   // After the route and before the message: a guest reads where the party is, then acts on it (S4).
   const featuresBlock =
@@ -152,19 +175,20 @@ export function BirthdayMapRenderer({
           features,
           facts: birthdayMapEventFacts(data, hiddenFields),
           ...(calendarHref === undefined ? {} : { calendarHref }),
+          ...(locale === undefined ? {} : { locale }),
         });
 
   const stops = [
     {
-      label: "¿Cuándo?",
-      value: h("time", { dateTime: data.date }, formatLongDate(data.date)),
+      label: texts["birthday.when"],
+      value: h("time", { dateTime: data.date }, rendererLongDate(locale, data.date)),
     },
     {
-      label: "¿A qué hora?",
-      value: h("time", { dateTime: data.time }, `${data.time} h`),
+      label: texts["birthday.whenTime"],
+      value: h("time", { dateTime: data.time }, rendererClockTime(locale, data.time)),
     },
     {
-      label: "¿Dónde?",
+      label: texts["birthday.where"],
       value: data.location,
       extra: data.address,
     },
@@ -173,7 +197,7 @@ export function BirthdayMapRenderer({
   return h(
     "article",
     {
-      "aria-label": `Invitación de cumpleaños de ${data.celebrantName}`,
+      "aria-label": `${texts["birthday.ariaInvitation"]} ${data.celebrantName}`,
       "data-component-key": "birthday-map-01",
       "data-theme": themeKey,
       className: `${INVITATION_ROOT} gap-10 px-5 py-7`,
@@ -218,7 +242,7 @@ export function BirthdayMapRenderer({
             className:
               "rounded-full border-2 border-dashed border-(--inv-accent) bg-(--inv-surface) px-4 py-1.5 text-sm font-medium text-(color:--inv-accent)",
           },
-          "¡Te invitamos a una aventura!",
+          texts["birthday.kicker"],
         ),
         h(
           "h1",
@@ -229,7 +253,7 @@ export function BirthdayMapRenderer({
           },
           data.celebrantName,
         ),
-        data.age === undefined ? null : h(Compass, { age: data.age }),
+        data.age === undefined ? null : h(Compass, { age: data.age, locale }),
         data.mainPhoto === undefined
           ? null
           : h(
@@ -240,7 +264,7 @@ export function BirthdayMapRenderer({
               },
               h("img", {
                 src: data.mainPhoto,
-                alt: `Foto de ${data.celebrantName}`,
+                alt: `${texts["invitation.photoAlt"]} ${data.celebrantName}`,
                 decoding: "async",
                 className: "aspect-square w-full rounded-lg object-cover",
               }),
@@ -250,7 +274,7 @@ export function BirthdayMapRenderer({
                   className:
                     "absolute -right-3 -bottom-3.5 grid size-20 rotate-[10deg] place-content-center rounded-full border-[3px] border-dashed border-(--inv-surface) bg-(--inv-accent) text-center text-[0.7rem] font-medium leading-tight text-(color:--inv-on-accent)",
                 },
-                "¡Gran expedición!",
+                texts["birthday.sticker"],
               ),
             ),
       ),
@@ -261,7 +285,7 @@ export function BirthdayMapRenderer({
       h(
         "h2",
         { id: `${idPrefix}-route`, className: SECTION_TITLE, style: DISPLAY_FONT },
-        "La ruta de la fiesta",
+        texts["birthday.route"],
       ),
       h(
         "div",
@@ -323,7 +347,7 @@ export function BirthdayMapRenderer({
           h(
             "h2",
             { id: `${idPrefix}-message`, className: `mt-1 ${SECTION_TITLE}`, style: DISPLAY_FONT },
-            "Mensaje",
+            texts["invitation.message"],
           ),
           h(
             "div",

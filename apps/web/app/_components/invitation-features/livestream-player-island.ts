@@ -2,12 +2,12 @@
 
 import { createElement, type ReactElement, useState } from "react";
 
+import { guestText } from "../../../lib/i18n/guest-texts.ts";
+import type { Locale } from "../../../lib/i18n/locale.ts";
 import {
-  LIVESTREAM_FALLBACK_LABEL,
   LIVESTREAM_IFRAME_ALLOW,
   LIVESTREAM_IFRAME_SANDBOX,
-  LIVESTREAM_IFRAME_TITLE,
-  LIVESTREAM_PLAY_LABEL,
+  LIVESTREAM_IFRAME_TITLES,
 } from "../../../lib/invitation-features/livestream.ts";
 
 /**
@@ -37,12 +37,15 @@ export interface LivestreamPlayerIslandProps {
   readonly embedUrl: string;
   /** The owner's note, shown under the player before and after the tap, or null when there is none. */
   readonly note: string | null;
+  /** The locale the page renders (F14; L19.2): the facade, the frame's title, and the fallback link follow it. */
+  readonly locale: Locale;
 }
 
 export function LivestreamPlayerIsland({
   url,
   embedUrl,
   note,
+  locale,
 }: LivestreamPlayerIslandProps): ReactElement {
   const [loaded, setLoaded] = useState(false);
 
@@ -53,7 +56,7 @@ export function LivestreamPlayerIsland({
     loaded
       ? createElement("iframe", {
           src: embedUrl,
-          title: LIVESTREAM_IFRAME_TITLE,
+          title: LIVESTREAM_IFRAME_TITLES[locale],
           className: FRAME,
           sandbox: LIVESTREAM_IFRAME_SANDBOX,
           allow: LIVESTREAM_IFRAME_ALLOW,
@@ -67,7 +70,7 @@ export function LivestreamPlayerIsland({
             href: url,
             target: "_blank",
             rel: "noopener noreferrer",
-            "aria-label": LIVESTREAM_PLAY_LABEL,
+            "aria-label": guestText(locale, "livestream.play"),
             className: FACADE,
             onClick: (event: { preventDefault: () => void }) => {
               event.preventDefault();
@@ -83,7 +86,7 @@ export function LivestreamPlayerIsland({
       createElement(
         "a",
         { href: url, target: "_blank", rel: "noopener noreferrer", className: FALLBACK_LINK },
-        LIVESTREAM_FALLBACK_LABEL,
+        guestText(locale, "livestream.fallback"),
       ),
     ),
   );

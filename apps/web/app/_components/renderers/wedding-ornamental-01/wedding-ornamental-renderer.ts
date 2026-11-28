@@ -5,6 +5,8 @@ import {
   type InvitationFeatures,
   showsGiftRegistry,
 } from "../../../../lib/invitation-features/invitation-features.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
+import { rendererTextsFor } from "../../../../lib/i18n/renderer-texts.ts";
 import { ELEGANT_THEME } from "../../../../lib/renderers/elegant-themes.ts";
 import { hiddenFieldSet, nameLines } from "../../../../lib/renderers/invitation-fields.ts";
 import {
@@ -36,6 +38,8 @@ export interface WeddingOrnamentalRendererProperties {
   readonly calendarHref?: string;
   /** The content fields of the sections this customer switched off (S8.3); absent hides nothing. */
   readonly hiddenFields?: readonly string[];
+  /** The locale the guest page renders (F14; L19.2); absent reads as Spanish. */
+  readonly locale?: Locale;
 }
 
 const h = createElement;
@@ -46,12 +50,14 @@ export function WeddingOrnamentalRenderer({
   features,
   calendarHref,
   hiddenFields,
+  locale,
 }: WeddingOrnamentalRendererProperties): ReactElement {
   const { theme: themeKey } = parseWeddingOrnamentalConfiguration(configuration);
   const data = parseWeddingOrnamentalContent(content, hiddenFields);
   const hidden = hiddenFieldSet(hiddenFields);
   const theme = ELEGANT_THEME[themeKey];
-  const couple = `${data.coupleNameOne} y ${data.coupleNameTwo}`;
+  const texts = rendererTextsFor(locale);
+  const couple = `${data.coupleNameOne} ${texts["invitation.nameJoin"]} ${data.coupleNameTwo}`;
 
   // A wedding that announces no family and no sponsors shows no family block at all.
   const family: ArchNameRow[] = [
@@ -60,7 +66,7 @@ export function WeddingOrnamentalRenderer({
       : [
           {
             key: "first-family",
-            label: `Familia de ${data.coupleNameOne}`,
+            label: `${texts["label.familyOf"]} ${data.coupleNameOne}`,
             values: nameLines(data.firstFamilyParents),
           },
         ]),
@@ -69,7 +75,7 @@ export function WeddingOrnamentalRenderer({
       : [
           {
             key: "second-family",
-            label: `Familia de ${data.coupleNameTwo}`,
+            label: `${texts["label.familyOf"]} ${data.coupleNameTwo}`,
             values: nameLines(data.secondFamilyParents),
           },
         ]),
@@ -78,7 +84,7 @@ export function WeddingOrnamentalRenderer({
       : [
           {
             key: "sponsors",
-            label: "Padrinos",
+            label: texts["label.sponsors"],
             values: nameLines(data.weddingSponsors),
           },
         ]),
@@ -93,27 +99,27 @@ export function WeddingOrnamentalRenderer({
   const details: ArchDetail[] = [
     ...(hidden.has("dressCode")
       ? []
-      : [{ key: "dress-code", label: "Vestimenta", value: data.dressCode }]),
+      : [{ key: "dress-code", label: texts["label.dressCode"], value: data.dressCode }]),
     ...(giftRegistry === undefined
       ? []
-      : [{ key: "gift-registry", label: "Mesa de regalos", value: giftRegistry }]),
+      : [{ key: "gift-registry", label: texts["label.giftRegistry"], value: giftRegistry }]),
   ];
 
   return h(OrnamentalLayout, {
     componentKey: WEDDING_ORNAMENTAL_COMPONENT_KEY,
     theme,
     themeKey,
-    ariaLabel: `Invitación de boda de ${couple}`,
-    kicker: "Nuestra boda",
+    ariaLabel: `${texts["wedding.ariaInvitation"]} ${couple}`,
+    kicker: texts["wedding.kicker"],
     names: [data.coupleNameOne, data.coupleNameTwo],
     date: data.date,
-    photoAlt: `Foto de ${couple}`,
+    photoAlt: `${texts["invitation.photoAlt"]} ${couple}`,
     ...(hidden.has("ceremonyPlace")
       ? {}
       : {
           ceremony: {
             key: "ceremony",
-            label: "Ceremonia",
+            label: texts["label.ceremony"],
             place: data.ceremonyPlace,
             address: data.ceremonyAddress,
             time: data.ceremonyTime,
@@ -124,7 +130,7 @@ export function WeddingOrnamentalRenderer({
       : {
           reception: {
             key: "reception",
-            label: "Recepción",
+            label: texts["label.reception"],
             place: data.receptionPlace,
             address: data.receptionAddress,
             time: data.receptionTime,
@@ -146,5 +152,6 @@ export function WeddingOrnamentalRenderer({
     facts: weddingOrnamentalEventFacts(data, hiddenFields),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
+    ...(locale === undefined ? {} : { locale }),
   });
 }

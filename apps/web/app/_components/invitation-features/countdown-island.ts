@@ -2,6 +2,7 @@
 
 import { createElement, type ReactElement, useEffect, useState } from "react";
 
+import type { Locale } from "../../../lib/i18n/locale.ts";
 import { type CountdownParts, countdownParts } from "../../../lib/invitation-features/countdown.ts";
 import { countdownMarkup } from "./countdown-markup.ts";
 
@@ -24,12 +25,15 @@ export interface CountdownIslandProps {
   readonly timeZone: string;
   /** The parts the server computed for this request: the value shown before hydration. */
   readonly initial: CountdownParts;
+  /** The locale the page renders (F14; L19.2): the units and the accessible name follow it, the numbers do not. */
+  readonly locale: Locale;
 }
 
 export function CountdownIsland({
   targetAt,
   timeZone,
   initial,
+  locale,
 }: CountdownIslandProps): ReactElement {
   const [parts, setParts] = useState<CountdownParts>(initial);
 
@@ -47,6 +51,6 @@ export function CountdownIsland({
   return createElement(
     "div",
     { "data-countdown-target": targetAt, "data-countdown-zone": timeZone },
-    countdownMarkup(parts),
+    countdownMarkup(parts, locale),
   );
 }

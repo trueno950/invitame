@@ -6,6 +6,7 @@ import {
   LANGUAGE_CHOICE_MAX_AGE_SECONDS,
   LANGUAGE_COOKIE,
   languageChoiceOutcome,
+  languageChoiceParameters,
   languageChoicePath,
   languageCookie,
   languageCookiePath,
@@ -181,5 +182,40 @@ describe("the request that remembers a language and comes back clean (F14; L19.3
       `/i/ana-y-luis/idioma?idioma=en&invitado=${TOKEN}`,
     );
     assert.equal(languageChoicePath(SLUG, "es"), "/i/ana-y-luis/idioma?idioma=es");
+  });
+
+  it("reads one value of each parameter and refuses a repeated one, exactly like the shared decision (F14; L19.3)", () => {
+    // A repeated `idioma` names no single language, so the handler sets no cookie and still comes back to the clean page:
+    // `URLSearchParams.get()` would have taken the first one, which is how a hand-edited link could choose for a guest.
+    assert.deepEqual(languageChoiceParameters(new URLSearchParams("idioma=en&idioma=es")), {
+      idioma: ["en", "es"],
+      invitado: undefined,
+    });
+    assert.deepEqual(
+      languageChoiceOutcome({
+        slug: SLUG,
+        parameters: languageChoiceParameters(new URLSearchParams("idioma=en&idioma=es")),
+        secure: true,
+      }),
+      { ok: false, target: "/i/ana-y-luis" },
+    );
+    // One value of each is read as itself, and the personal token still chooses its own page.
+    assert.deepEqual(languageChoiceParameters(new URLSearchParams(`idioma=en&invitado=${TOKEN}`)), {
+      idioma: "en",
+      invitado: TOKEN,
+    });
+    assert.deepEqual(
+      languageChoiceOutcome({
+        slug: SLUG,
+        parameters: languageChoiceParameters(new URLSearchParams(`idioma=en&invitado=${TOKEN}`)),
+        secure: true,
+      }),
+      { ok: true, target: `/i/ana-y-luis/g/${TOKEN}`, cookie: languageCookie(SLUG, "en", true) },
+    );
+    // An absent parameter is absent, never an empty string the decision could read as a language.
+    assert.deepEqual(languageChoiceParameters(new URLSearchParams("")), {
+      idioma: undefined,
+      invitado: undefined,
+    });
   });
 });

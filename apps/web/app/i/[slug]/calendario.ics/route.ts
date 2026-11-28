@@ -1,5 +1,12 @@
+import { cookies } from "next/headers";
 import { connection } from "next/server";
 
+import {
+  LANGUAGE_COOKIE,
+  languageChoiceParameters,
+  requestedLocale,
+  resolveGuestLocale,
+} from "../../../../lib/i18n/guest-locale.ts";
 import {
   invitationCalendarFile,
   invitationCalendarPath,
@@ -20,11 +27,11 @@ import { loadPublicInvitation } from "../_lib/load.ts";
  */
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ): Promise<Response> {
   await connection();
-  const { slug } = await params;
+  const [{ slug }, cookieJar] = await Promise.all([params, cookies()]);
   const loaded = await loadPublicInvitation(slug);
 
   // An invitation that stores an access code answers the locked state before the file is built (F13; L18.2), and a locked
@@ -60,7 +67,14 @@ export async function GET(
     });
   }
 
-  const file = invitationCalendarFile(loaded.invitation, new Date());
+  // The file's fixed parts follow the locale the page renders (F14; L19.2), resolved with exactly the page's own rules:
+  // the owner's setting first, then this request's `?idioma=`, then the cookie this device remembered.
+  const locale = resolveGuestLocale({
+    language: loaded.invitation.features.language,
+    requested: requestedLocale(languageChoiceParameters(new URL(request.url).searchParams)),
+    remembered: cookieJar.get(LANGUAGE_COOKIE)?.value,
+  });
+  const file = invitationCalendarFile(loaded.invitation, new Date(), locale);
 
   if (file === undefined) {
     return new Response(null, { status: 404 });

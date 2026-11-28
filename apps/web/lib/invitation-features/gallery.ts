@@ -1,3 +1,6 @@
+import { guestFormats } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
+
 /**
  * The gallery of a guest invitation (M8 S3, S4). The API answers the photos in the creator's own order, each with the
  * absolute URL of the image, the dimensions a layout reserves so the page does not jump while it loads, and the alt
@@ -25,8 +28,6 @@ export const GALLERY_FALLBACK_ALT = "Foto de la galería";
  * The alt text of one photo: the creator's own words trimmed, or the fallback description when they wrote none. A
  * photo with nothing to say is announced as one of the gallery's photos instead of by a URL or a file name.
  */
-export function galleryPhotoAlt(alt: string | null): string {
-  const text = alt?.trim() ?? "";
-
-  return text === "" ? GALLERY_FALLBACK_ALT : text;
+export function galleryPhotoAlt(alt: string | null, locale: Locale = "es"): string {
+  return guestFormats(locale).galleryPhotoAlt(alt);
 }

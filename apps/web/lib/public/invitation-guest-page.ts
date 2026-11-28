@@ -1,4 +1,5 @@
-import { GUEST_PAGE_COPY } from "../customer/copy.ts";
+import { guestFormats } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import type {
   GuestPassBlockView,
   GuestRsvpBlockView,
@@ -32,16 +33,19 @@ import { companionValues, dietaryNotesValue } from "./rsvp-companions.ts";
  * data, and the only place it travels is the request the API authorizes.
  */
 
-/** The visible greeting: «Hola, Ana», from the first word of the stored name. */
-export function guestGreeting(name: string): string {
+/**
+ * The visible greeting: «Hola, Ana» on a Spanish page and «Hi, Ana» on an English one (F14; L19.2), always from the first
+ * word of the stored name, which is the owner's own text and never translated.
+ */
+export function guestGreeting(name: string, locale: Locale = "es"): string {
   const first = name.trim().split(/\s+/)[0] ?? "";
 
-  return GUEST_PAGE_COPY.greeting(first);
+  return guestFormats(locale).greeting(first);
 }
 
 /** The seats the guest holds, as one sentence, with the singular when it is one. */
-export function guestSeatsSentence(seats: number): string {
-  return seats === 1 ? GUEST_PAGE_COPY.seatsOne : GUEST_PAGE_COPY.seatsMany(seats);
+export function guestSeatsSentence(seats: number, locale: Locale = "es"): string {
+  return guestFormats(locale).seatsSentence(seats);
 }
 
 /** The attendance card and the access pass of a personal page, as the shared features block renders them (S4). */

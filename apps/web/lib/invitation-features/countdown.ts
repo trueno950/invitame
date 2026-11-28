@@ -1,3 +1,5 @@
+import { guestFormats, guestText } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import { CALENDAR_EVENT_HOURS } from "./calendar.ts";
 import { zonedDateKey } from "./start-instant.ts";
 
@@ -56,57 +58,50 @@ export function countdownParts(target: Date, now: Date, timeZone: string): Count
   };
 }
 
-/** The numbers the countdown shows: no days for a celebration that is today, none once it started. */
-export function countdownGroups(parts: CountdownParts): readonly CountdownGroup[] {
+/**
+ * The numbers the countdown shows: no days for a celebration that is today, none once it started. Each number carries
+ * its unit in the locale the page renders (F14; L19.2), so an English guest reads «3 days» where a Spanish one reads
+ * «3 días», and an absent locale keeps exactly the Spanish units this block always drew.
+ */
+export function countdownGroups(
+  parts: CountdownParts,
+  locale: Locale = "es",
+): readonly CountdownGroup[] {
   if (parts.status === "live" || parts.status === "passed") {
     return [];
   }
 
+  const formats = guestFormats(locale);
   const days: readonly CountdownGroup[] =
     parts.days > 0
-      ? [{ key: "days", value: parts.days, unit: amount(parts.days, "día", "días") }]
+      ? [{ key: "days", value: parts.days, unit: formats.countdownDays(parts.days) }]
       : [];
 
   return [
     ...days,
-    { key: "hours", value: parts.hours, unit: amount(parts.hours, "hora", "horas") },
-    { key: "minutes", value: parts.minutes, unit: amount(parts.minutes, "minuto", "minutos") },
+    { key: "hours", value: parts.hours, unit: formats.countdownHours(parts.hours) },
+    { key: "minutes", value: parts.minutes, unit: formats.countdownMinutes(parts.minutes) },
   ];
 }
 
-/** The countdown as one neutral Spanish sentence, for the accessible name of the block. */
-export function countdownLabel(parts: CountdownParts): string {
+/**
+ * The countdown as one sentence, for the accessible name of the block (F14; L19.2): the same numbers the groups show,
+ * joined with the list rule and the verb of the locale the page renders.
+ */
+export function countdownLabel(parts: CountdownParts, locale: Locale = "es"): string {
   if (parts.status === "live") {
-    return "¡Es hoy!";
+    return guestText(locale, "countdown.live");
   }
 
   if (parts.status === "passed") {
-    return "La celebración ya pasó";
+    return guestText(locale, "countdown.passed");
   }
 
-  const shown = countdownGroups(parts).filter((group) => group.value > 0);
-  const chunks = shown.map((group) => `${group.value} ${group.unit}`);
+  const shown = countdownGroups(parts, locale).filter((group) => group.value > 0);
 
-  if (chunks.length === 0) {
-    return "Falta menos de un minuto";
+  if (shown.length === 0) {
+    return guestText(locale, "countdown.soon");
   }
 
-  // «Falta 1 día» but «Faltan 40 minutos»: the verb agrees with the amount it counts.
-  const singular = shown.length === 1 && shown[0]?.value === 1;
-
-  return `${singular ? "Falta" : "Faltan"} ${joinList(chunks)}`;
-}
-
-/** A number with its singular or plural unit: `1 día`, `3 días`. */
-function amount(value: number, singular: string, plural: string): string {
-  return value === 1 ? singular : plural;
-}
-
-/** `a`, `a y b`, `a, b y c`: the Spanish list of a sentence. */
-function joinList(chunks: readonly string[]): string {
-  if (chunks.length <= 1) {
-    return chunks.join("");
-  }
-
-  return `${chunks.slice(0, -1).join(", ")} y ${chunks.at(-1) ?? ""}`;
+  return guestFormats(locale).countdownSentence(shown);
 }

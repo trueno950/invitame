@@ -1,3 +1,6 @@
+import { guestText } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
+
 /**
  * The livestream of a guest invitation (F9; S2.9, L12.1, L12.3, L12.5). The owner keeps the link of the transmission they
  * will stream and an optional note as feature data of one invitation, and every layout draws the same card from it. The
@@ -10,7 +13,6 @@
  * from an untrusted path. Every other `https` link is a link the guest opens in a new tab.
  */
 
-/** The only payload version this deployment reads and writes; a later shape needs its own reader (L12.1). */
 export const LIVESTREAM_VERSION = 1;
 
 /** The widest link one livestream stores, mirroring the API's rule (L12.1). */
@@ -34,6 +36,15 @@ export const LIVESTREAM_FALLBACK_LABEL = "Si no carga, ábrela aquí";
 
 /** The accessible name of the player's frame, which a screen reader announces (L12.4). */
 export const LIVESTREAM_IFRAME_TITLE = "Transmisión en vivo";
+
+/**
+ * The frame's accessible names, keyed by the locale the page renders (F14; L19.2): the Spanish one is the constant
+ * above, so the name this product always wrote is unchanged, and the English page names the same frame in English.
+ */
+export const LIVESTREAM_IFRAME_TITLES: Readonly<Record<Locale, string>> = {
+  es: LIVESTREAM_IFRAME_TITLE,
+  en: guestText("en", "livestream.iframeTitle"),
+};
 
 /** The sandbox of the player: what playback needs and nothing else (L12.4). */
 export const LIVESTREAM_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-presentation";

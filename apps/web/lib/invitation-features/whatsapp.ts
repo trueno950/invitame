@@ -1,3 +1,5 @@
+import { guestFormats } from "../i18n/guest-texts.ts";
+import type { Locale } from "../i18n/locale.ts";
 import { isE164Phone } from "./invitation-features.ts";
 
 /**
@@ -6,9 +8,12 @@ import { isE164Phone } from "./invitation-features.ts";
  * personal data (AGENTS.md: never in logs), so a refusal names the rule and never repeats what it read.
  */
 
-/** The prefilled greeting of the chat, in neutral Spanish with tú. */
-function greeting(celebrationTitle: string): string {
-  return `¡Hola! Te escribo por la invitación de ${celebrationTitle}.`;
+/**
+ * The prefilled greeting of the chat, in the language the page renders (F14; L19.2): neutral Spanish with tú, or the
+ * English line. The celebration's own title is the owner's, so it travels unchanged.
+ */
+function greeting(celebrationTitle: string, locale: Locale): string {
+  return guestFormats(locale).whatsappGreeting(celebrationTitle);
 }
 
 /** The digits of an E.164 number, or a `RangeError` when the stored phone is not E.164. */
@@ -21,6 +26,12 @@ export function whatsappDigits(phone: string): string {
 }
 
 /** The `wa.me` chat that opens with the greeting already written. */
-export function whatsappUrl(phone: string, celebrationTitle: string): string {
-  return `https://wa.me/${whatsappDigits(phone)}?text=${encodeURIComponent(greeting(celebrationTitle))}`;
+export function whatsappUrl(
+  phone: string,
+  celebrationTitle: string,
+  locale: Locale = "es",
+): string {
+  return `https://wa.me/${whatsappDigits(phone)}?text=${encodeURIComponent(
+    greeting(celebrationTitle, locale),
+  )}`;
 }

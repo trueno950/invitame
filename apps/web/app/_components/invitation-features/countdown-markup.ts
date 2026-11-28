@@ -1,5 +1,7 @@
 import { createElement, type ReactElement } from "react";
 
+import { guestText } from "../../../lib/i18n/guest-texts.ts";
+import type { Locale } from "../../../lib/i18n/locale.ts";
 import {
   type CountdownParts,
   countdownGroups,
@@ -15,22 +17,22 @@ import { DISPLAY_FONT } from "../renderers/themed/theme.ts";
  * The group carries the readable sentence as its accessible name and hides the numbers it repeats, so a
  * screen reader hears «Faltan 4 días, 4 horas y 30 minutos» and not a stream of digits.
  */
-export function countdownMarkup(parts: CountdownParts): ReactElement {
-  const groups = countdownGroups(parts);
+export function countdownMarkup(parts: CountdownParts, locale: Locale = "es"): ReactElement {
+  const groups = countdownGroups(parts, locale);
   const note =
     parts.status === "today"
-      ? "¡Hoy es el día!"
+      ? guestText(locale, "countdown.today")
       : parts.status === "live"
-        ? "¡Es hoy!"
+        ? guestText(locale, "countdown.live")
         : parts.status === "passed"
-          ? "La celebración ya pasó"
+          ? guestText(locale, "countdown.passed")
           : null;
 
   return createElement(
     "div",
     {
       role: "group",
-      "aria-label": countdownLabel(parts),
+      "aria-label": countdownLabel(parts, locale),
       "data-countdown": parts.status,
       className: "mt-3 flex flex-col items-center gap-2",
     },

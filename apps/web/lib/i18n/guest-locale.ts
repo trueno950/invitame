@@ -82,6 +82,33 @@ export function requestedLocale(
   return rememberedLocale(parameters[LANGUAGE_PARAM]);
 }
 
+/**
+ * The two parameters of a language choice, read from one request's query exactly as the shared decision reads them: one
+ * value is that value, and a repeated parameter is kept as the list it is — which no reader accepts — instead of the
+ * first of its values. `URLSearchParams.get()` would silently take the first, so a hand-edited link could choose a
+ * language the guest did not; reading `getAll()` here keeps the route handler and the page on the same rule (L19.3).
+ */
+export function languageChoiceParameters(
+  search: URLSearchParams,
+): Record<string, string | string[] | undefined> {
+  return {
+    [LANGUAGE_PARAM]: oneValue(search.getAll(LANGUAGE_PARAM)),
+    [LANGUAGE_GUEST_PARAM]: oneValue(search.getAll(LANGUAGE_GUEST_PARAM)),
+  };
+}
+
+/** One query parameter's value: absent, the single value, or the repeated list no reader accepts. */
+function oneValue(values: readonly string[]): string | string[] | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+  if (values.length === 1) {
+    return values[0];
+  }
+
+  return [...values];
+}
+
 /** What decides one page load: the owner's setting, the query of this request, and the cookie this device carries. */
 export interface GuestLocaleInput {
   /** The effective language the public read answered (`features.language`); anything else reads as Spanish. */
