@@ -49,8 +49,11 @@ describe("Prisma invitation repository on PostgreSQL", () => {
 
   after(async () => {
     try {
-      // A place row references its invitation with ON DELETE RESTRICT, so the stored points go first.
+      // The rows that reference an invitation with ON DELETE RESTRICT go first: the stored points and the collaborators.
       await prisma.invitationPlace.deleteMany({
+        where: { invitationId: { in: invitationIds } },
+      });
+      await prisma.invitationCollaborator.deleteMany({
         where: { invitationId: { in: invitationIds } },
       });
       await prisma.invitation.deleteMany({ where: { id: { in: invitationIds } } });
@@ -312,6 +315,143 @@ describe("Prisma invitation repository on PostgreSQL", () => {
         true,
       );
       assert.deepEqual(await repository.listOwned(randomUUID()), []);
+    });
+  });
+
+  describe("listSharedWith (F12; L17.5)", () => {
+    interface ShareOptions {
+      /** The instant the invitation was created, so `createdAt` decides the order and the id breaks a tie. */
+      readonly createdAt?: Date;
+      /** The invitation's own id, so two rows can be created in the same instant with a known order. */
+      readonly id?: string;
+    }
+
+    /** A draft of `ownerId`'s, shared with `userId` as an accepted, standing collaborator holding `permissions`. */
+    async function shared(
+      ownerId: string,
+      userId: string,
+      permissions: readonly ("EDIT_CONTENT" | "VIEW_ATTENDANCE" | "PUBLISH")[],
+      options: ShareOptions = {},
+    ) {
+      const catalog = await newCatalog();
+      const created = await prisma.invitation.create({
+        data: {
+          ...(options.id === undefined ? {} : { id: options.id }),
+          ...(options.createdAt === undefined ? {} : { createdAt: options.createdAt }),
+          ownerId,
+          templateVersionId: catalog.templateVersionId,
+          packageId: catalog.packageId,
+          slug: newSlug(),
+        },
+      });
+      invitationIds.push(created.id);
+      await prisma.invitationCollaborator.create({
+        data: {
+          invitationId: created.id,
+          email: `m4-t3-${sequence}-${runId}@example.test`,
+          userId,
+          permissions: [...permissions],
+          invitedAt: new Date("2026-11-01T12:00:00.000Z"),
+          acceptedAt: new Date("2026-11-02T12:00:00.000Z"),
+          tokenHash: null,
+          tokenExpiresAt: null,
+        },
+      });
+
+      return created.id;
+    }
+
+    it("answers only the accepted, non-revoked rows another owner shared, with the caller's own permissions", async () => {
+      const ownerId = await newOwner();
+      const callerId = await newOwner();
+      const strangerId = await newOwner();
+      const accepted = await shared(ownerId, callerId, ["VIEW_ATTENDANCE", "EDIT_CONTENT"]);
+
+      // A pending row, a revoked row, and a row that belongs to somebody else: none of them is this caller's access.
+      const pendingCatalog = await newCatalog();
+      const pending = await prisma.invitation.create({
+        data: {
+          ownerId,
+          templateVersionId: pendingCatalog.templateVersionId,
+          packageId: pendingCatalog.packageId,
+          slug: newSlug(),
+        },
+      });
+      invitationIds.push(pending.id);
+      await prisma.invitationCollaborator.create({
+        data: {
+          invitationId: pending.id,
+          email: `m4-t3-pending-${runId}@example.test`,
+          permissions: ["PUBLISH"],
+          invitedAt: new Date("2026-11-01T12:00:00.000Z"),
+          tokenHash: "c".repeat(64),
+          tokenExpiresAt: new Date("2026-11-08T12:00:00.000Z"),
+        },
+      });
+      const revoked = await shared(ownerId, callerId, ["PUBLISH"]);
+      await prisma.invitationCollaborator.updateMany({
+        where: { invitationId: revoked, userId: callerId },
+        data: { revokedAt: new Date("2026-11-03T12:00:00.000Z") },
+      });
+      const othersInvitation = await shared(ownerId, strangerId, ["PUBLISH"]);
+
+      const listed = await repository.listSharedWith(callerId);
+
+      assert.deepEqual(
+        listed.map((row) => row.id),
+        [accepted],
+      );
+      // The permissions are the caller's own row, in the domain's canonical order, and the card's data travels with it.
+      assert.deepEqual(listed[0]?.permissions, ["EDIT_CONTENT", "VIEW_ATTENDANCE"]);
+      assert.equal(listed[0]?.ownerId, ownerId);
+      assert.deepEqual(listed[0]?.content, {});
+      // And one account's list never carries another account's invitation.
+      assert.deepEqual(
+        (await repository.listSharedWith(strangerId)).map((row) => row.id),
+        [othersInvitation],
+      );
+    });
+
+    it("never answers an invitation the caller owns, even with a standing row of its own", async () => {
+      const ownerId = await newOwner();
+      const own = await shared(ownerId, ownerId, ["PUBLISH"]);
+
+      const listed = await repository.listSharedWith(ownerId);
+
+      // It is the caller's own invitation: it belongs in the owned list, marked OWNER, and never here.
+      assert.deepEqual(
+        listed.map((row) => row.id),
+        [],
+      );
+      assert.deepEqual(
+        (await repository.listOwned(ownerId)).map((row) => row.id),
+        [own],
+      );
+    });
+
+    it("orders newest first and breaks a tie between the same instant by the id, descending", async () => {
+      const ownerId = await newOwner();
+      const callerId = await newOwner();
+      const sameInstant = new Date("2026-11-10T12:00:00.000Z");
+      const lowerId = await shared(ownerId, callerId, ["PUBLISH"], {
+        id: "00000000-0000-4000-8000-000000000001",
+        createdAt: sameInstant,
+      });
+      const higherId = await shared(ownerId, callerId, ["PUBLISH"], {
+        id: "00000000-0000-4000-8000-000000000002",
+        createdAt: sameInstant,
+      });
+      const newest = await shared(ownerId, callerId, ["VIEW_ATTENDANCE"], {
+        id: "00000000-0000-4000-8000-000000000003",
+        createdAt: new Date("2026-11-11T12:00:00.000Z"),
+      });
+
+      const listed = await repository.listSharedWith(callerId);
+
+      assert.deepEqual(
+        listed.map((row) => row.id),
+        [newest, higherId, lowerId],
+      );
     });
   });
 

@@ -45,6 +45,32 @@ revoke.
    The `CO_HOSTS` key (Premium and Deluxe) gates inviting. Withdrawing it stops new invitations; the collaborations the
    owner already granted and has not revoked keep their access, because they are a promise the owner made to a person.
 
+7. The decision is re-checked by the layers below it, and every answer says who asked.
+   The hardening pass that followed the first implementation (three native reviews of the co-hosts commits) added six
+   rules that the decision above implies but does not state on its own:
+   - Fail closed on the owner. `@InvitationOwnerId()` answers only the owner the guard resolved; with no resolved access it
+     answers the route's 404 instead of the path id or the session user, because the path is not an owner and the session
+     user is not the owner when the caller is a collaborator.
+   - Nothing is cacheable. Every invitation-scoped answer the guard authorizes — the admitted one included — carries
+     `Cache-Control: no-store`, so a read made before a revoke cannot be replayed from a proxy or a browser.
+   - The database repeats the rules it can hold. `permissions` is `NOT NULL` with at least one value and a burned token
+     carries no expiry (`20261215120000_harden_invitation_collaborators`), so a reader that does not go through the API
+     cannot store a row meaning "no access" or a link that no longer resolves yet claims a window.
+   - Ownership is inside the statements, not only in front of them. The invite target read and the invite write carry the
+     owner in their own `WHERE`, so a caller that bypassed the use case still reaches nothing; the only read that cannot
+     name an owner is the one that answers who the owner is.
+   - The capability is read as the catalog states it. The invite gate requires the `CO_HOSTS` feature row to be active, so
+     withdrawing it from the panel stops invitations even while the link is still stored.
+   - Every answer about an invitation answers the caller. The routes that admit a collaborator (the read, content,
+     features, places replace and clear, publish) build their body from the resolved access, so `role` and `permissions`
+     are never the owner's for a collaborator.
+   Revoking is idempotent, as the port documents: a second revoke answers the row as it stands rather than a 404, because
+   a retry of a request whose first attempt succeeded is not an error and the web treats both as gone. The shared list
+   answers accepted, non-revoked rows of another owner only, drops a row whose stored permissions grant nothing the
+   allow-list knows, orders by `createdAt` and then by id with a plain code-unit comparison, and is isolated from the
+   owned list: when that read fails, `GET /invitations` still answers the owned list and logs one structured warning that
+   carries no personal data.
+
 ## Consequences
 
 - Adding an invitation route now has one extra, reviewable step: declaring its permission. The matrix test and the
@@ -60,3 +86,10 @@ revoke.
 - `INVITATION_ACCESS_RESOLVER` is exported by the `collaborators` module and imported by the invitations, media, and
   payments modules. That dependency direction is deliberate: those modules own the routes, and this one owns the
   decision, so the decision cannot be duplicated.
+- The owner-scoped read the invite use case makes needs the owner, and the resolver needs to discover one, so the port has
+  two reads: `findInviteTarget(ownerId, invitationId)` scoped by the owner, and `findInvitationOwner(invitationId)`, which
+  is the only statement of this module that cannot name an owner because answering who owns the row is its whole job.
+- Two invariants live in the database because a CHECK cannot be expressed in `schema.prisma` (a scalar list is created
+  without `NOT NULL`, and a CHECK over two columns is not modelable), so the migration states them, the docs repeat them,
+  and a db-spec proves them on a database that already held rows. The migration fails loudly instead of granting a
+  permission when it meets a row it cannot repair.

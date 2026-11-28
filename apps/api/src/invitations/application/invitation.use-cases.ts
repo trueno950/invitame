@@ -1,3 +1,5 @@
+import { Logger } from "@nestjs/common";
+
 import {
   INITIAL_OPERATIONAL_SETTINGS_READER,
   type OperationalSettingsReader,
@@ -59,6 +61,7 @@ import type {
   InvitationRecordWithMusic,
   InvitationRepository,
   NewInvitation,
+  SharedInvitationRecord,
 } from "./invitation.repository";
 import type { CatalogVersionRenderData, InvitationCatalog } from "./invitation-catalog";
 import type { InvitationRole } from "../../collaborators/application/invitation-access";
@@ -455,8 +458,16 @@ export class CreateInvitationDraftUseCase {
   }
 }
 
-/** The owner's invitations, newest first (S1), each with what a card renders it from (T2; S2.6). */
+/**
+ * The owner's invitations, newest first (S1), each with what a card renders it from (T2; S2.6).
+ *
+ * The shared read is the only part that can fail on its own without costing the caller their own list, so a failure there
+ * is reported as one structured warning and the answer is the owned list: a co-host feature that is misbehaving must never
+ * make «Mis invitaciones» fail (F12; L17.5).
+ */
 export class ListOwnInvitationsUseCase {
+  private readonly logger = new Logger(ListOwnInvitationsUseCase.name);
+
   constructor(
     private readonly invitations: InvitationRepository,
     private readonly catalog: InvitationCatalog,
@@ -471,7 +482,7 @@ export class ListOwnInvitationsUseCase {
    */
   async execute(userId: string): Promise<InvitationListItem[]> {
     const owned = await this.invitations.listOwned(userId);
-    const shared = await this.invitations.listSharedWith(userId);
+    const shared = await this.sharedWith(userId);
     const versions = new Map<string, CatalogVersionRenderData | null>();
     const items: Array<InvitationListItem & { id: string; createdAt: Date }> = [];
 
@@ -500,10 +511,13 @@ export class ListOwnInvitationsUseCase {
     }
 
     // One merged list newest first, with the id breaking a tie between two rows created in the same instant, exactly as
-    // each read orders its own page.
+    // each read orders its own page. The id is compared by its code units, never by a locale: collation is a property of
+    // the runtime's locale and would order the same two rows differently in two deployments, while the two reads order
+    // theirs byte by byte in PostgreSQL.
     items.sort(
       (left, right) =>
-        right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id),
+        right.createdAt.getTime() - left.createdAt.getTime() ||
+        (left.id > right.id ? -1 : left.id < right.id ? 1 : 0),
     );
 
     return items.map(
@@ -524,6 +538,21 @@ export class ListOwnInvitationsUseCase {
         permissions: item.permissions,
       }),
     );
+  }
+
+  /**
+   * The invitations other owners shared with this account, or none when that read failed (F12; L17.5). One structured
+   * warning states the fault and nothing else: no account id, no invitation id, and none of the driver's message, because
+   * this line is operational evidence and never a place personal data or a query detail could reach.
+   */
+  private async sharedWith(userId: string): Promise<readonly SharedInvitationRecord[]> {
+    try {
+      return await this.invitations.listSharedWith(userId);
+    } catch {
+      this.logger.warn({ event: "invitation_shared_list_failed" });
+
+      return [];
+    }
   }
 }
 

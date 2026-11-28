@@ -28,8 +28,10 @@ export interface InvitationInviteTarget {
   readonly includedFeatureKeys: readonly string[];
 }
 
-/** A new invited row: the decision, the hashed token, and the instant the link stops working (L17.1). */
+/** A new invited row: the owner, the decision, the hashed token, and the instant the link stops working (L17.1). */
 export interface NewInvitationCollaborator {
+  /** The invitation's owner, so the statement itself can refuse a row outside the caller's own invitations (A4). */
+  readonly ownerId: string;
   readonly invitationId: string;
   readonly email: string;
   readonly permissions: readonly InvitationPermission[];
@@ -45,8 +47,20 @@ export interface AcceptedCollaboration {
 }
 
 export interface InvitationCollaboratorRepository {
-  /** The invitation's owner and its pinned package's feature keys, or null when no invitation has this id. */
-  findInviteTarget(invitationId: string): Promise<InvitationInviteTarget | null>;
+  /**
+   * The invitation's owner and its pinned package's feature keys, while `ownerId` owns it: another account's invitation
+   * answers null exactly like an id that names nothing, because the owner is part of the query and not only of the use
+   * case's comparison (F12; L17.4, A4). Only the feature links whose `Feature` row is active are answered, so a
+   * capability withdrawn from the catalog stops admitting new invitations even though its link is still stored (L17.5).
+   */
+  findInviteTarget(ownerId: string, invitationId: string): Promise<InvitationInviteTarget | null>;
+
+  /**
+   * The invitation's owner, or null when no invitation has this id. This is the one read that cannot name an owner — it
+   * is what answers who the owner is — and it exists so the access resolver never needs an owner-scoped read to discover
+   * one (F12; L17.4).
+   */
+  findInvitationOwner(invitationId: string): Promise<string | null>;
 
   /**
    * The permissions one account holds on one invitation right now, or null when it holds none. Only an accepted,
@@ -68,9 +82,11 @@ export interface InvitationCollaboratorRepository {
   ): Promise<readonly InvitationCollaboratorRecord[] | null>;
 
   /**
-   * Stores one invited row. Throws `CollaboratorAlreadyInvitedError` when the partial unique index already holds that
-   * address for this invitation — PostgreSQL refused it and nothing was stored — and `CollaboratorLimitReachedError`
-   * when the invitation already keeps five non-revoked collaborators, which the database's own trigger refuses.
+   * Stores one invited row, only while `ownerId` owns the named invitation: the owner is part of the write itself, so a
+   * caller that bypassed the use case stores nothing (F12; L17.4, A4). Throws `CollaboratorAlreadyInvitedError` when the
+   * partial unique index already holds that address for this invitation — PostgreSQL refused it and nothing was stored —
+   * and `CollaboratorLimitReachedError` when the invitation already keeps five non-revoked collaborators, which the
+   * database's own trigger refuses.
    */
   create(input: NewInvitationCollaborator): Promise<InvitationCollaboratorRecord>;
 
@@ -84,8 +100,8 @@ export interface InvitationCollaboratorRepository {
 
   /**
    * Revokes one standing row and burns its token in the same statement, so a link that was never used stops working and
-   * an accepted collaborator loses the access on the next request (L17.3). Idempotent: revoking an already revoked row
-   * changes nothing and answers it as it stands; null when it is not this owner's invitation or row.
+   * an accepted collaborator loses the access on the next request (L17.3). Idempotent, as documented: revoking an
+   * already revoked row changes nothing and answers it as it stands; null when it is not this owner's invitation or row.
    */
   revoke(
     ownerId: string,

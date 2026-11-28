@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, describe, it } from "node:test";
 
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 import { requireLocalDatabaseUrl } from "../../../test/database";
 import { EmailDeliveryService } from "../../email/application/email-delivery.service";
@@ -248,6 +248,75 @@ describe("invitation collaborators on real PostgreSQL (F12; L17.1)", () => {
       );
     });
 
+    it("requires at least one permission in the column itself, so no row can mean no access", async () => {
+      const { invitationId } = await newInvitation();
+      const pending = await invite(invitationId);
+
+      // Prisma always writes an array, so the only way a row could hold NULL is a reader that does not go through the API;
+      // the hardening migration makes the column itself refuse it. PostgreSQL's own state is what is asserted: 23502 is
+      // `not_null_violation`, so the refusal comes from the NOT NULL constraint and not from reading or writing around it.
+      await assert.rejects(
+        prisma.$executeRaw`UPDATE "InvitationCollaborator" SET "permissions" = NULL WHERE "id" = ${pending.id}::uuid`,
+        (error: unknown) => sqlState(error) === "23502",
+      );
+      const stored = await prisma.invitationCollaborator.findUniqueOrThrow({
+        where: { id: pending.id },
+      });
+      assert.deepEqual(stored.permissions, ["EDIT_CONTENT"]);
+    });
+
+    it("never leaves an expiry on a burned token, and still requires one on a live token", async () => {
+      const { invitationId } = await newInvitation();
+      const pending = await invite(invitationId);
+
+      // A burned digest with a live expiry is exactly what the acceptance and the revoke must never leave behind.
+      await assert.rejects(
+        prisma.$executeRaw`UPDATE "InvitationCollaborator" SET "tokenHash" = NULL WHERE "id" = ${pending.id}::uuid`,
+        (error: unknown) =>
+          sqlState(error) === "23514" && /InvitationCollaborator_token_expiry/u.test(String(error)),
+      );
+      // And a live digest without an expiry stays refused, exactly as before.
+      await assert.rejects(
+        prisma.$executeRaw`UPDATE "InvitationCollaborator" SET "tokenExpiresAt" = NULL WHERE "id" = ${pending.id}::uuid`,
+        (error: unknown) =>
+          sqlState(error) === "23514" && /InvitationCollaborator_token_expiry/u.test(String(error)),
+      );
+
+      const unchanged = await prisma.invitationCollaborator.findUniqueOrThrow({
+        where: { id: pending.id },
+      });
+      assert.ok(unchanged.tokenHash);
+      assert.ok(unchanged.tokenExpiresAt);
+
+      // Burning both together is the one shape the constraint accepts, and it is what both writes do.
+      await prisma.$executeRaw`
+        UPDATE "InvitationCollaborator"
+        SET "tokenHash" = NULL, "tokenExpiresAt" = NULL
+        WHERE "id" = ${pending.id}::uuid`;
+      const burned = await prisma.invitationCollaborator.findUniqueOrThrow({
+        where: { id: pending.id },
+      });
+      assert.equal(burned.tokenHash, null);
+      assert.equal(burned.tokenExpiresAt, null);
+    });
+
+    it("states the two hardening rules in the database catalog, so the migration is provably applied", async () => {
+      const columns = await prisma.$queryRaw<Array<{ is_nullable: string }>>`
+        SELECT "is_nullable"
+        FROM information_schema.columns
+        WHERE "table_name" = 'InvitationCollaborator' AND "column_name" = 'permissions'`;
+      assert.deepEqual(columns, [{ is_nullable: "NO" }]);
+
+      const constraints = await prisma.$queryRaw<Array<{ conname: string }>>`
+        SELECT "conname"
+        FROM pg_constraint
+        WHERE "conrelid" = '"InvitationCollaborator"'::regclass
+        ORDER BY "conname"`;
+      const names = constraints.map((row) => row.conname);
+      assert.ok(names.includes("InvitationCollaborator_permissions_granted"), names.join(","));
+      assert.ok(names.includes("InvitationCollaborator_token_expiry"), names.join(","));
+    });
+
     it("invites one address once per invitation, and lets a revoked address be invited again", async () => {
       const { invitationId } = await newInvitation();
       const email = "repetida@example.test";
@@ -313,6 +382,13 @@ describe("invitation collaborators on real PostgreSQL (F12; L17.1)", () => {
       assert.deepEqual(links.map((link) => link.package.key).sort(), ["deluxe", "premium"]);
     });
   });
+
+  /** PostgreSQL's SQLSTATE when a raw statement failed, or undefined for any other failure (23502, 23514, ...). */
+  function sqlState(error: unknown): string | undefined {
+    return error instanceof Prisma.PrismaClientKnownRequestError
+      ? (error.meta as { code?: string } | undefined)?.code
+      : undefined;
+  }
 
   /** The token one sent message carried, read back out of the link the message body prints. */
   function sentToken(message: { text: string }): string {
@@ -426,6 +502,57 @@ describe("invitation collaborators on real PostgreSQL (F12; L17.1)", () => {
       assert.equal(await prisma.invitationCollaborator.count({ where: { invitationId } }), 0);
     });
 
+    it("refuses to invite while the CO_HOSTS feature itself is inactive (L17.5)", async () => {
+      const { invitationId, ownerId } = await newInvitation();
+      const feature = await prisma.feature.findUniqueOrThrow({ where: { key: "CO_HOSTS" } });
+      await prisma.feature.update({ where: { id: feature.id }, data: { isActive: false } });
+
+      try {
+        // The link still exists; the capability is withdrawn, and every gate reads the flag, not only the link.
+        await assert.rejects(
+          inviteCollaborator.execute({
+            ownerId,
+            invitationId,
+            email: "ana@example.test",
+            permissions: ["PUBLISH"],
+          }),
+          CollaboratorFeatureNotAvailableError,
+        );
+        assert.equal(await prisma.invitationCollaborator.count({ where: { invitationId } }), 0);
+      } finally {
+        await prisma.feature.update({
+          where: { id: feature.id },
+          data: { isActive: feature.isActive },
+        });
+      }
+    });
+
+    it("scopes the invite target and the write by the owner, so a non-owner can do neither", async () => {
+      const { invitationId, ownerId } = await newInvitation();
+      const other = await newUser("not-owner");
+
+      // The read carries the owner: another account reads no target at all, so the use case's own comparison is a second
+      // guard and never the only one.
+      assert.equal(await collaborators.findInviteTarget(other, invitationId), null);
+      assert.equal((await collaborators.findInviteTarget(ownerId, invitationId))?.ownerId, ownerId);
+
+      // The write carries the owner too: asked with another account it stores nothing, even bypassing the use case.
+      await assert.rejects(
+        collaborators.create({
+          ownerId: other,
+          invitationId,
+          email: "ana@example.test",
+          permissions: ["PUBLISH"],
+          tokenHash: "e".repeat(64),
+          tokenExpiresAt: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000),
+          invitedAt: NOW,
+        }),
+        (error: unknown) =>
+          error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025",
+      );
+      assert.equal(await prisma.invitationCollaborator.count({ where: { invitationId } }), 0);
+    });
+
     it("refuses the same address twice and the sixth collaborator (L17.1)", async () => {
       const { invitationId, ownerId } = await newInvitation();
       const first = { ownerId, invitationId, permissions: ["PUBLISH"] };
@@ -511,66 +638,110 @@ describe("invitation collaborators on real PostgreSQL (F12; L17.1)", () => {
       assert.deepEqual(await accept.execute({ userId: accepting, token }), { invitationId });
     });
 
-    it("refuses an expired link, a revoked collaborator, and a token that names nothing", async () => {
+    it("refuses an expired link with the invited account and the very token the message carried", async () => {
       const { invitationId, ownerId } = await newInvitation();
-      const inviting = await newUser("expiring");
-      const link = `https://invitame.mx/colaboraciones/aceptar?token=${"a".repeat(22)}`;
-      assert.ok(link);
-
-      // An invitation sent nine days ago is already past its seven-day window at NOW.
-      const expiredAt = new Date(NOW.getTime() - 9 * 24 * 60 * 60 * 1000);
-      const stale = await inviteCollaborator.execute({
+      const email = `f12-expired-${runId}@example.test`;
+      const accepting = await newUser("expiring", email);
+      emails.clear();
+      const invited = await inviteCollaborator.execute({
         ownerId,
         invitationId,
-        email: `f12-stale-${runId}@example.test`,
+        email,
         permissions: ["PUBLISH"],
       });
-      assert.ok(stale);
+      assert.ok(invited);
+      const [message] = emails.delivered;
+      assert.ok(message);
+      const token = sentToken(message);
+
+      // Only the expiry differs from an acceptable link: the account is the invited one, the digest is the message's own,
+      // and the row is pending and unrevoked. The seven-day window closed nine days ago.
+      const expiredAt = new Date(NOW.getTime() - 9 * 24 * 60 * 60 * 1000);
       await prisma.invitationCollaborator.update({
-        where: { id: stale.id },
+        where: { id: invited.id },
         data: {
           invitedAt: expiredAt,
           tokenExpiresAt: new Date(expiredAt.getTime() + 7 * 24 * 60 * 60 * 1000),
         },
       });
-      const staleToken = "b".repeat(22);
-      await prisma.invitationCollaborator.update({
-        where: { id: stale.id },
-        data: { tokenHash: collaboratorTokenHash(staleToken) },
-      });
-      await assert.rejects(
-        accept.execute({ userId: inviting, token: staleToken }),
-        CollaborationRefusedError,
-      );
 
-      // A revoked collaborator's link is refused too, and its acceptance changes nothing.
-      const revoked = await inviteCollaborator.execute({
+      await assert.rejects(accept.execute({ userId: accepting, token }), CollaborationRefusedError);
+
+      // The refusal consumed nothing: the row is still pending and still carries the digest it was given.
+      const stale = await prisma.invitationCollaborator.findUniqueOrThrow({
+        where: { id: invited.id },
+      });
+      assert.equal(stale.acceptedAt, null);
+      assert.equal(stale.userId, null);
+      assert.equal(stale.revokedAt, null);
+      assert.equal(stale.tokenHash, collaboratorTokenHash(token));
+
+      // The same account with the same token is accepted once the window is open again, so the expiry alone decided it.
+      await prisma.invitationCollaborator.update({
+        where: { id: invited.id },
+        data: { invitedAt: NOW, tokenExpiresAt: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000) },
+      });
+      assert.deepEqual(await accept.execute({ userId: accepting, token }), { invitationId });
+    });
+
+    it("refuses a revoked collaborator with the invited account and a live token", async () => {
+      const { invitationId, ownerId } = await newInvitation();
+      const email = `f12-revoked-${runId}@example.test`;
+      const accepting = await newUser("revoked", email);
+      emails.clear();
+      const invited = await inviteCollaborator.execute({
         ownerId,
         invitationId,
-        email: `f12-revoked-${runId}@example.test`,
+        email,
         permissions: ["PUBLISH"],
       });
-      assert.ok(revoked);
-      const revokedToken = "c".repeat(22);
-      await prisma.invitationCollaborator.update({
-        where: { id: revoked.id },
-        data: { tokenHash: collaboratorTokenHash(revokedToken) },
-      });
-      assert.ok(await revoke.execute(ownerId, invitationId, revoked.id));
-      await assert.rejects(
-        accept.execute({ userId: inviting, token: revokedToken }),
-        CollaborationRefusedError,
-      );
+      assert.ok(invited);
+      const [message] = emails.delivered;
+      assert.ok(message);
+      const token = sentToken(message);
 
-      // And a token that names nothing at all is the same refusal.
+      assert.ok(await revoke.execute(ownerId, invitationId, invited.id));
+
+      // Only the revocation differs from an acceptable link at this point: the revoke burned the digest, so a live one is
+      // restored for the same token. The account is the invited one and the window is open; the row stays revoked.
+      await prisma.invitationCollaborator.update({
+        where: { id: invited.id },
+        data: {
+          tokenHash: collaboratorTokenHash(token),
+          tokenExpiresAt: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      await assert.rejects(accept.execute({ userId: accepting, token }), CollaborationRefusedError);
+
+      const revoked = await prisma.invitationCollaborator.findUniqueOrThrow({
+        where: { id: invited.id },
+      });
+      assert.equal(revoked.acceptedAt, null);
+      assert.equal(revoked.userId, null);
+      assert.ok(revoked.revokedAt);
+
+      // Lifting the revoke, and nothing else, lets the same token through: the revocation alone decided it.
+      await prisma.invitationCollaborator.update({
+        where: { id: invited.id },
+        data: { revokedAt: null },
+      });
+      assert.deepEqual(await accept.execute({ userId: accepting, token }), { invitationId });
+    });
+
+    it("refuses a token that names nothing, and one that is not a token at all", async () => {
+      const { invitationId } = await newInvitation();
+      const accepting = await newUser("unknown-token");
+
       await assert.rejects(
-        accept.execute({ userId: inviting, token: "d".repeat(22) }),
+        accept.execute({ userId: accepting, token: "d".repeat(22) }),
         CollaborationRefusedError,
       );
       await assert.rejects(
-        accept.execute({ userId: inviting, token: "not-a-token" }),
+        accept.execute({ userId: accepting, token: "not-a-token" }),
         CollaborationRefusedError,
       );
+      assert.equal(await prisma.invitationCollaborator.count({ where: { invitationId } }), 0);
     });
 
     it("lists, changes, and revokes for the owner alone, and a revoke ends the access at once", async () => {
@@ -612,11 +783,27 @@ describe("invitation collaborators on real PostgreSQL (F12; L17.1)", () => {
         null,
       );
 
-      assert.ok(await revoke.execute(ownerId, invitationId, invited.id));
+      const revokedRow = await revoke.execute(ownerId, invitationId, invited.id);
+      assert.ok(revokedRow);
       assert.equal(await resolver.resolve(accepting, invitationId), null);
-      // Revoked rows are history: the owner's screen no longer lists them, and a second revoke changes nothing.
+      // The revoke burned the token's expiry together with its digest, which the database's own rule requires.
+      const burned = await prisma.invitationCollaborator.findUniqueOrThrow({
+        where: { id: invited.id },
+      });
+      assert.equal(burned.tokenHash, null);
+      assert.equal(burned.tokenExpiresAt, null);
+      // Revoked rows are history: the owner's screen no longer lists them.
       assert.equal((await list.execute(ownerId, invitationId))?.collaborators.length, 0);
-      assert.equal(await revoke.execute(ownerId, invitationId, invited.id), null);
+      // Revoking again is idempotent, as the port documents: nothing changes and the row is answered as it stands.
+      const again = await revoke.execute(ownerId, invitationId, invited.id);
+      assert.equal(again?.id, invited.id);
+      assert.equal(again?.revokedAt?.toISOString(), revokedRow.revokedAt?.toISOString());
+      assert.deepEqual(again?.permissions, revokedRow.permissions);
+      // Another account still reaches nothing of this invitation.
+      assert.equal(
+        await revoke.execute(await newUser("other-owner"), invitationId, invited.id),
+        null,
+      );
       // The place is free again, so the same address may be invited (and accepted) later.
       assert.ok(
         await inviteCollaborator.execute({

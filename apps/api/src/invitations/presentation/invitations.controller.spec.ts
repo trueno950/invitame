@@ -1944,6 +1944,103 @@ describe("invitations routes: /invitations", () => {
     });
   });
 
+  describe("the caller's own access on every answer a collaborator reaches (F12; L17.4)", () => {
+    const POINT: PlacePoint = { label: "Parroquia de San José", lat: 20.5888, lng: -100.3899 };
+
+    /**
+     * A draft of `owner`'s, shared with one accepted collaborator holding `permissions`. The collaborator writes through
+     * the owner's own scoped statements, so every route it reaches must answer the *caller's* role and permissions —
+     * `COLLABORATOR` with its set — and never `OWNER`, which would tell the web a co-host may do what only the owner may.
+     */
+    async function sharedDraft(permissions: readonly InvitationPermission[]) {
+      const owner = await signedInCustomer();
+      const collaborator = await signedInCustomer();
+      const response = await send("POST", PATH, owner.cookie, {
+        templateVersionId: PLACE_VERSION_ID,
+        packageId: FEATURE_PACKAGE_ID,
+      });
+      assert.equal(response.status, 201);
+      const draft = (await response.json()) as Row & { id: string };
+      repository.share(draft.id, collaborator.userId, [...permissions]);
+      return { owner, collaborator, draft };
+    }
+
+    it("answers the collaborator's role on content, features, places, clear, publish, and the read", async () => {
+      const contentWriter = await sharedDraft(["EDIT_CONTENT"]);
+      const cookie = contentWriter.collaborator.cookie;
+      const id = contentWriter.draft.id;
+      const answers: Array<[string, Response]> = [
+        [
+          "content",
+          await send("PUT", `${PATH}/${id}/content`, cookie, {
+            content: { address: "Av. Juárez 45" },
+          }),
+        ],
+        [
+          "features",
+          await send("PUT", `${PATH}/${id}/features`, cookie, {
+            timeZone: "America/Mexico_City",
+            whatsappPhone: null,
+            playlistUrl: null,
+          }),
+        ],
+        ["place", await send("PUT", `${PATH}/${id}/places/address`, cookie, POINT)],
+        ["clear place", await send("DELETE", `${PATH}/${id}/places/address`, cookie)],
+        ["read", await send("GET", `${PATH}/${id}`, cookie)],
+      ];
+
+      const publisher = await sharedDraft(["PUBLISH"]);
+      const filled = await send(
+        "PUT",
+        `${PATH}/${publisher.draft.id}/content`,
+        publisher.owner.cookie,
+        {
+          content: { address: "Av. Juárez 45" },
+        },
+      );
+      assert.equal(filled.status, 200, "the draft the collaborator publishes is ready");
+      answers.push([
+        "publish",
+        await send("POST", `${PATH}/${publisher.draft.id}/publish`, publisher.collaborator.cookie),
+      ]);
+
+      for (const [name, response] of answers) {
+        assert.equal(response.status, 200, name);
+        const body = (await response.json()) as Row;
+        assert.equal(body.role, "COLLABORATOR", name);
+        assert.deepEqual(
+          body.permissions,
+          name === "publish" ? ["PUBLISH"] : ["EDIT_CONTENT"],
+          `${name} answers the caller's own permissions`,
+        );
+      }
+    });
+
+    it("keeps answering OWNER with no permissions to the owner on the same routes", async () => {
+      const owner = await signedInCustomer();
+      const created = await send("POST", PATH, owner.cookie, {
+        templateVersionId: PLACE_VERSION_ID,
+        packageId: FEATURE_PACKAGE_ID,
+      });
+      const draft = (await created.json()) as Row & { id: string };
+
+      const saved = await send("PUT", `${PATH}/${draft.id}/content`, owner.cookie, {
+        content: { address: "Av. Juárez 45" },
+      });
+      const published = await send("POST", `${PATH}/${draft.id}/publish`, owner.cookie);
+
+      for (const [name, response] of [
+        ["content", saved],
+        ["publish", published],
+      ] as const) {
+        assert.equal(response.status, 200, name);
+        const body = (await response.json()) as Row;
+        assert.equal(body.role, "OWNER", name);
+        assert.deepEqual(body.permissions, [], name);
+      }
+    });
+  });
+
   describe("PUT /invitations/:id/content", () => {
     it("replaces the content, validates it against the pinned version, and answers the owned invitation", async () => {
       const { cookie } = await signedInCustomer();

@@ -57,17 +57,14 @@ export class StoredInvitationAccessResolver implements InvitationAccessResolver 
     if (!isInvitationRowId(invitationId) || userId === "") {
       return null;
     }
-    const target = await this.collaborators.findInviteTarget(invitationId);
-    if (target === null) {
+    // Who owns the invitation is the question this resolver exists to answer, so it reads the owner and nothing else;
+    // every other read of this module carries the owner in its own `WHERE` (F12; L17.4, A4).
+    const ownerId = await this.collaborators.findInvitationOwner(invitationId);
+    if (ownerId === null) {
       return null;
     }
-    if (target.ownerId === userId) {
-      return {
-        invitationId: target.id,
-        ownerId: target.ownerId,
-        role: "OWNER",
-        permissions: [],
-      };
+    if (ownerId === userId) {
+      return { invitationId, ownerId, role: "OWNER", permissions: [] };
     }
     const stored = await this.collaborators.acceptedAccess(invitationId, userId);
     if (stored === null) {
@@ -80,8 +77,8 @@ export class StoredInvitationAccessResolver implements InvitationAccessResolver 
     }
 
     return {
-      invitationId: target.id,
-      ownerId: target.ownerId,
+      invitationId,
+      ownerId,
       role: "COLLABORATOR",
       permissions,
     };

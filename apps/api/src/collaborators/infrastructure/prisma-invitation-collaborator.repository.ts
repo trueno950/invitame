@@ -67,15 +67,23 @@ function toRecord(row: CollaboratorRow): InvitationCollaboratorRecord {
 export class PrismaInvitationCollaboratorRepository implements InvitationCollaboratorRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findInviteTarget(invitationId: string): Promise<InvitationInviteTarget | null> {
-    const row = await this.prisma.invitation.findUnique({
-      where: { id: invitationId },
+  async findInviteTarget(
+    ownerId: string,
+    invitationId: string,
+  ): Promise<InvitationInviteTarget | null> {
+    // The owner is part of the query, and only the active feature rows are read: a capability withdrawn from the
+    // catalog stops admitting new invitations even while its link is still stored (L17.5).
+    const row = await this.prisma.invitation.findFirst({
+      where: { id: invitationId, ownerId },
       select: {
         id: true,
         ownerId: true,
         package: {
           select: {
-            packageFeatures: { select: { feature: { select: { key: true } } } },
+            packageFeatures: {
+              where: { included: true, feature: { isActive: true } },
+              select: { feature: { select: { key: true } } },
+            },
           },
         },
       },
@@ -88,6 +96,15 @@ export class PrismaInvitationCollaboratorRepository implements InvitationCollabo
           ownerId: row.ownerId,
           includedFeatureKeys: row.package.packageFeatures.map((link) => link.feature.key),
         };
+  }
+
+  async findInvitationOwner(invitationId: string): Promise<string | null> {
+    const row = await this.prisma.invitation.findUnique({
+      where: { id: invitationId },
+      select: { ownerId: true },
+    });
+
+    return row === null ? null : row.ownerId;
   }
 
   async acceptedAccess(
@@ -129,9 +146,11 @@ export class PrismaInvitationCollaboratorRepository implements InvitationCollabo
 
   async create(input: NewInvitationCollaborator): Promise<InvitationCollaboratorRecord> {
     try {
+      // The invitation is connected through its id *and* its owner, so the write itself refuses another account's
+      // invitation: no statement of this adapter can reach a row outside the caller's own invitations (A4).
       const created = await this.prisma.invitationCollaborator.create({
         data: {
-          invitationId: input.invitationId,
+          invitation: { connect: { id: input.invitationId, ownerId: input.ownerId } },
           email: input.email,
           permissions: [...input.permissions],
           tokenHash: input.tokenHash,
@@ -194,7 +213,20 @@ export class PrismaInvitationCollaboratorRepository implements InvitationCollabo
       data: { revokedAt: at, tokenHash: null, tokenExpiresAt: null },
     });
     if (count === 0) {
-      return null;
+      // Nothing stood to be revoked. A row this owner already revoked is answered as it stands, which is what the port
+      // documents: revoking twice is the same outcome as revoking once, and the access is already gone. Any other reason
+      // — another owner's invitation, another invitation's row, an id that names nothing — is the caller's 404.
+      const standing = await this.prisma.invitationCollaborator.findFirst({
+        where: {
+          id: collaboratorId,
+          invitationId,
+          revokedAt: { not: null },
+          invitation: { ownerId },
+        },
+        select: COLLABORATOR_SELECT,
+      });
+
+      return standing === null ? null : toRecord(standing);
     }
 
     return this.findStanding(ownerId, invitationId, collaboratorId);

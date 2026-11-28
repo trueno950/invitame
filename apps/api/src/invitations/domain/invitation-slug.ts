@@ -27,16 +27,18 @@ export const INVITATION_SLUG_MAX_LENGTH = 60;
  * Words a slug may never be: every top-level route segment of `apps/web/app` (`admin`, `api`, `cuenta`, `fonts`,
  * `health`, `i`, `ingresar`, and Next.js's own `_next`), every API path prefix (`invitations`, `public`, `catalog`,
  * `media`, `me`, `payments`, `auth`, `health`, `admin`), and the product and catalog names that already mean a page
- * (`invitame`, `invitacion`, `invitaciones`). A full slug equal to one of them would shadow a real page, so the owner
- * may never claim one (F11; S2.11, L15.1). Stored slugs are always lower-case, and the comparison ignores case as a
- * guard.
+ * (`invitame`, `invitacion`, `invitaciones`), plus the co-hosts' Spanish acceptance route (`colaboraciones`, F12;
+ * L17.3). A full slug equal to one of them would shadow a real page, so the owner may never claim one (F11; S2.11,
+ * L15.1). Stored slugs are always lower-case, and the comparison ignores case as a guard.
  */
 export const RESERVED_INVITATION_SLUGS = [
   "admin",
   "api",
   "auth",
   "catalog",
-  // The co-hosts' acceptance route (F12; L17.3): `/collaborations/accept`.
+  // The co-hosts' acceptance routes (F12; L17.3): `/colaboraciones/aceptar` in the web app and
+  // `/collaborations/accept` on the API. Both are reserved, because a slug must never shadow either one.
+  "colaboraciones",
   "collaborations",
   "cuenta",
   "fonts",

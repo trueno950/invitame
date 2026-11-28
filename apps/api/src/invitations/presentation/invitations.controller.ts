@@ -237,6 +237,7 @@ export class InvitationsController {
   async replaceContent(
     @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
+    @InvitationCallerAccess() access: InvitationAccess,
     @Body() body: UpdateInvitationContentDto,
   ): Promise<OwnedInvitationResponse> {
     try {
@@ -249,6 +250,7 @@ export class InvitationsController {
             ? {}
             : { expectedUpdatedAt: body.expectedUpdatedAt }),
         }),
+        access,
       );
     } catch (error) {
       return mapInvitationError(error);
@@ -271,6 +273,7 @@ export class InvitationsController {
   async replaceFeatures(
     @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
+    @InvitationCallerAccess() access: InvitationAccess,
     @Body() body: UpdateInvitationFeaturesDto,
   ): Promise<OwnedInvitationResponse> {
     try {
@@ -288,6 +291,7 @@ export class InvitationsController {
           reminders: body.reminders,
           openingAnimation: body.openingAnimation,
         }),
+        access,
       );
     } catch (error) {
       return mapInvitationError(error);
@@ -383,6 +387,7 @@ export class InvitationsController {
     @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("field") field: string,
+    @InvitationCallerAccess() access: InvitationAccess,
     @Body() body: UpdateInvitationPlaceDto,
   ): Promise<OwnedInvitationResponse> {
     try {
@@ -395,6 +400,7 @@ export class InvitationsController {
           lat: body.lat,
           lng: body.lng,
         }),
+        access,
       );
     } catch (error) {
       return mapInvitationError(error);
@@ -413,10 +419,12 @@ export class InvitationsController {
     @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("field") field: string,
+    @InvitationCallerAccess() access: InvitationAccess,
   ): Promise<OwnedInvitationResponse> {
     try {
       return orOwnedInvitationNotFound(
         await this.clearPlace.execute({ ownerId: ownerId, id, field }),
+        access,
       );
     } catch (error) {
       return mapInvitationError(error);
@@ -454,9 +462,10 @@ export class InvitationsController {
   async publish(
     @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
+    @InvitationCallerAccess() access: InvitationAccess,
   ): Promise<OwnedInvitationResponse> {
     try {
-      return orOwnedInvitationNotFound(await this.publishInvitation.execute(ownerId, id));
+      return orOwnedInvitationNotFound(await this.publishInvitation.execute(ownerId, id), access);
     } catch (error) {
       return mapInvitationError(error);
     }

@@ -436,12 +436,14 @@ model InvitationCollaborator {
   // The account that accepted the invitation, or NULL while it is pending. Set once, by the acceptance write.
   userId         String?                           @db.Uuid
   // At least one of the three permissions, and never a duplicate: the database checks the count, the API domain
-  // normalizes the order and refuses a repeated permission.
+  // normalizes the order and refuses a repeated permission. `20261215120000_harden_invitation_collaborators` makes the
+  // column itself `NOT NULL`, so not even a reader outside the API can store a row that means "no access".
   permissions    InvitationCollaboratorPermission[]
   // The SHA-256 hex digest of the single-use acceptance token, or NULL once the token was burned by an acceptance or a
   // revoke. The plain token exists only in the emailed link; no column, log, or response ever carries it.
   tokenHash      String?                           @unique @db.VarChar(64)
-  // When the emailed link stops being accepted: the invitation instant plus seven days.
+  // When the emailed link stops being accepted: the invitation instant plus seven days. A burned token (NULL digest) keeps
+  // no expiry at all, which the CHECK constraint of the hardening migration requires of both columns together.
   tokenExpiresAt DateTime?                         @db.Timestamptz(6)
   invitedAt      DateTime                          @default(now()) @db.Timestamptz(6)
   // When the invited account accepted, or NULL while the invitation is pending.

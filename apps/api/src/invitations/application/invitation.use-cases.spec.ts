@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
+
+import { Logger } from "@nestjs/common";
 
 import { INITIAL_OPERATIONAL_SETTINGS } from "../../settings/domain/operational-settings";
 import {
@@ -886,6 +888,72 @@ describe("ListOwnInvitationsUseCase", () => {
       [null, null],
     );
     assert.deepEqual(listed[0]?.content, {});
+  });
+
+  it("orders the whole merged list by createdAt and then by id, comparing code units and never a locale", async () => {
+    const fixture = seeded();
+    const at = new Date(Date.UTC(2026, 11, 14, 12, 0, 0));
+    await createDraft(fixture);
+    const base = fixture.repository.rows[0];
+    assert.ok(base, "the fixture has a stored row to copy the shape from");
+    /** One row another owner shared with the caller, with the id and instants the case needs (F12; L17.5). */
+    const shared = (id: string, createdAt: Date) => ({
+      ...structuredClone(base),
+      id,
+      ownerId: randomUUID(),
+      createdAt,
+      permissions: ["VIEW_ATTENDANCE"] as const,
+    });
+    // Two rows created in the same instant, whose ids a locale-aware comparison orders the other way round: ICU collates
+    // `á` next to `a`, before `b`, while the code units put it after `b`. The API's rule is the plain code-unit one, so the
+    // answer must be `á` first, and a `localeCompare` in the merge would answer `b` first.
+    fixture.repository.sharedRows = [shared("b", at), shared("á", at)];
+
+    const listed = await new ListOwnInvitationsUseCase(fixture.repository, fixture.catalog).execute(
+      randomUUID(),
+    );
+
+    assert.deepEqual(
+      listed.map((item) => item.id),
+      ["á", "b"],
+    );
+  });
+
+  it("answers the owned list when the shared read fails, and logs one warning without personal data", async () => {
+    const fixture = seeded();
+    const owned = await createDraft(fixture);
+    fixture.repository.listSharedWith = async () => {
+      throw new Error("connection lost");
+    };
+    const recorded: unknown[][] = [];
+    const spy = mock.method(Logger.prototype, "warn", (...args: unknown[]) => {
+      recorded.push(args);
+    });
+
+    let listed: Awaited<ReturnType<ListOwnInvitationsUseCase["execute"]>>;
+    try {
+      listed = await new ListOwnInvitationsUseCase(fixture.repository, fixture.catalog).execute(
+        fixture.ownerId,
+      );
+    } finally {
+      spy.mock.restore();
+    }
+
+    // A co-host read that failed never makes «Mis invitaciones» fail: the owner still gets their own invitations.
+    assert.deepEqual(
+      listed.map((item) => item.id),
+      [owned.id],
+    );
+    const lines = recorded.filter(
+      ([first]) =>
+        (first as { event?: string } | undefined)?.event === "invitation_shared_list_failed",
+    );
+    assert.equal(lines.length, 1, "the fault is reported once");
+    assert.deepEqual(lines[0]?.[0], { event: "invitation_shared_list_failed" });
+    const text = JSON.stringify(recorded);
+    assert.equal(text.includes(fixture.ownerId), false, "no account id is logged");
+    assert.equal(text.includes(owned.id), false, "no invitation id is logged");
+    assert.equal(text.includes("connection lost"), false, "no driver message is logged");
   });
 });
 

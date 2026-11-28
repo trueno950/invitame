@@ -1248,11 +1248,16 @@ first feature whose subject is authorization itself, so the shape is one decisio
   `@InvitationOwnerOnly()` admits the owner alone. An undeclared route is owner-only, too. A controller declares
   `@InvitationRouteIdIsUuid()` when a malformed id must keep answering its `ParseUUIDPipe` 400, and
   `@InvitationRouteNotFoundBody(...)` when its module answers its own 404 body (the media routes keep `MEDIA_NOT_FOUND`).
+  Every invitation-scoped answer the guard authorizes — the admitted one included, not only the refusals — carries
+  `Cache-Control: no-store`, so no proxy or browser keeps a collaborator's read after a revoke.
 - Owner scope (`collaborators/presentation/invitation-scope.ts`): `@InvitationOwnerId()` answers the invitation's real
   owner as the guard resolved it, and every owner-scoped port of the API — the invitations, media, guestbook, RSVP,
   guest-list, places, and payment adapters — keeps its own `WHERE ownerId`, so a collaborator's write runs inside the
-  same ownership rule the owner's write already follows. Nothing outside the guard decides who may reach a row, and the
-  session user is never silently used as the owner.
+  same ownership rule the owner's write already follows. It never falls back to anything: with no resolved access the
+  route answers the invitation's 404 (the route's own body when its controller declares one), because the path id is not
+  an owner and the session user is not the owner when the caller is a collaborator. `@InvitationCallerAccess()` carries
+  the caller's own `role`/`permissions` into the answers of the routes that admit a collaborator — the read, content,
+  features, places replace and clear, and publish — so a co-host is never answered as the owner.
 - Permissions (L17.2): `EDIT_CONTENT` covers content, photos (the main photo, the gallery, the guests' photo
   moderation), features, and places; `VIEW_ATTENDANCE` covers the RSVP answers, the guest list, the CSV exports, and the
   guestbook moderation reads; `PUBLISH` covers publishing and unpublishing. Owner-only and never grantable: checkout,
@@ -1261,8 +1266,13 @@ first feature whose subject is authorization itself, so the shape is one decisio
 - Invitation (`apps/api/src/collaborators/application/collaborator.use-cases.ts`): the owner invites an address with a
   permission set through `POST /invitations/:id/collaborators`, which stores the row with the token's digest and sends
   the link through the existing `EmailDeliveryService` — no new provider, no new configuration key, and no token, email
-  body, or address in a log. `GET` lists the standing rows (never the token or its digest), `PATCH` replaces a
-  permission set, and `DELETE` revokes: the row is marked and its token burned, and the access ends immediately.
+  body, or address in a log. The invite target and the write both carry the owner in their own `WHERE` (defense in
+  depth: another account's invitation answers exactly like an id that names nothing, and a write asked with the wrong
+  owner stores nothing), and only the feature links whose `Feature` row is active are read, so a withdrawn `CO_HOSTS`
+  refuses the invitation even while its link is still stored. `GET` lists the standing rows (never the token or its
+  digest), `PATCH` replaces a permission set, and `DELETE` revokes: the row is marked and its token burned, and the
+  access ends immediately. Revoking twice is idempotent — the second answer is the row as it stands, and only a row that
+  is not this invitation's (or not this owner's) is the collaborator's 404.
 - Acceptance: `POST /collaborations/accept` needs an active session, compares the caller's own stored address with the
   invited one inside the same statement that burns the token, and answers one 404 `COLLABORATION_NOT_FOUND` for a wrong
   account, an expired link, a used link, a revoked collaborator, and a token that names nothing. A wrong account does not
@@ -1270,14 +1280,22 @@ first feature whose subject is authorization itself, so the shape is one decisio
 - Reads: `GET /invitations` answers the caller's own invitations and the ones shared with it, each with `role` and
   `permissions`, so «Mis invitaciones» shows «Compartida contigo»; `GET /invitations/:id` answers the same for a
   collaborator holding any permission. Neither carries payment data or the collaborator list, which have owner-only
-  routes of their own.
+  routes of their own. The shared read answers only accepted, non-revoked rows of another owner, drops a row whose stored
+  permissions grant nothing the allow-list knows, orders newest first with the id breaking a tie by code unit (never by
+  locale), and is isolated: when it fails, `GET /invitations` still answers the owned list and one structured warning
+  (`invitation_shared_list_failed`) records the fault with no account id, invitation id, or driver message.
 - Evidence: `apps/api/src/collaborators/presentation/invitation-authorization.matrix.spec.ts` derives every registered
   invitation route from the module's own metadata, fails when a route that names an invitation declares no permission,
   and asserts the exact status of all 342 cells — the owner, each single permission, all three, a pending collaborator,
   a revoked one, a stranger, and an anonymous caller — so a new route or a widened declaration cannot pass unnoticed.
-  `collaborators/infrastructure/invitation-collaborators.prisma.db-spec.ts` proves the migration's constraints, the
-  five-collaborator cap, the partial unique index, the acceptance that burns a token, and every refusal on real
-  PostgreSQL.
+  `collaborators/infrastructure/invitation-collaborators.prisma.db-spec.ts` proves the migration's constraints on a
+  database that already held rows, the `NOT NULL` permission set and the token/expiry equivalence of the hardening
+  migration (`20261215120000_harden_invitation_collaborators`), the owner-scoped invite target and write, the
+  five-collaborator cap, the partial unique index, an inactive `CO_HOSTS` refusing the invitation, the acceptance that
+  burns a token (the expired-link and revoked-link cases isolated, each with the invited account and the link's own
+  token), and the idempotent revoke on real PostgreSQL; `invitations/infrastructure/prisma-invitation.repository.db-spec.ts`
+  proves the shared list's filters and order there, and its unit spec proves a stored permission set the allow-list does
+  not know reads as no access.
 - Gating (L17.5): the new `CO_HOSTS` catalog key, granted to Premium and Deluxe by the additive migration and the seed,
   gates inviting. Withdrawing it stops new invitations and keeps the collaborations the owner already granted.
 

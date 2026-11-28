@@ -242,7 +242,8 @@ const FIXTURES: Record<string, RouteFixture> = {
 
 /**
  * The collaborator table as the resolver reads it (F12; L17.4): one possible row per account, whose state and
- * permissions this suite sets per case. `findInviteTarget` answers the invitation every fixture names.
+ * permissions this suite sets per case. `findInvitationOwner` answers the invitation every fixture names, and
+ * `findInviteTarget` answers it only to the account that owns it.
  */
 class MemoryCollaboratorRepository implements InvitationCollaboratorRepository {
   readonly rows = new Map<
@@ -264,10 +265,14 @@ class MemoryCollaboratorRepository implements InvitationCollaboratorRepository {
     });
   }
 
-  async findInviteTarget(id: string): Promise<InvitationInviteTarget | null> {
-    return id === INVITATION
-      ? { id, ownerId: this.ownerId, includedFeatureKeys: ["CO_HOSTS"] }
+  async findInviteTarget(ownerId: string, id: string): Promise<InvitationInviteTarget | null> {
+    return id === INVITATION && ownerId === this.ownerId
+      ? { id, ownerId, includedFeatureKeys: ["CO_HOSTS"] }
       : null;
+  }
+
+  async findInvitationOwner(id: string): Promise<string | null> {
+    return id === INVITATION ? this.ownerId : null;
   }
 
   async acceptedAccess(id: string, userId: string): Promise<readonly Permission[] | null> {
@@ -790,6 +795,34 @@ describe("the invitation authorization matrix (F12; L17.4, L17.6)", () => {
 
     assert.deepEqual(wrong, [], `${cells.length} cells checked`);
     assert.equal(cells.length, routes.length * ROWS.length);
+  });
+
+  it("marks every invitation-scoped answer no-store, an admitted one included (F12; L17.4)", async () => {
+    const missing: string[] = [];
+
+    // The owner is admitted everywhere; a collaborator holding all three is admitted on every route that is not
+    // owner-only. Both must be uncacheable: what one caller may read at one instant must not outlive a revoke in a proxy
+    // or a browser, and a refusal was the only answer that carried the header before.
+    for (const name of ["the owner", "a collaborator with all three"]) {
+      const cookie = await cookieFor(accounts.get(name) ?? "");
+      for (const route of routes) {
+        const fixture = FIXTURES[route.key];
+        const path = route.key.split(" ")[1] ?? "";
+        if (fixture === undefined || !path.includes(":id")) {
+          continue;
+        }
+        const response = await send(route, fixture, cookie);
+        await response.arrayBuffer();
+        if (response.status >= 400) {
+          continue;
+        }
+        if (response.headers.get("cache-control") !== "no-store") {
+          missing.push(`${route.key} × ${name}: ${response.status} was cacheable`);
+        }
+      }
+    }
+
+    assert.deepEqual(missing, [], "every admitted invitation answer is no-store");
   });
 
   /** What one cell must answer: the exact status, and the exact body for the refusals. */

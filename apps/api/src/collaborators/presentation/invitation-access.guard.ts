@@ -117,6 +117,8 @@ export interface InvitationScopedRequest {
   params?: Record<string, string | undefined>;
   user?: { id?: unknown };
   invitationAccess?: InvitationAccessGrant;
+  /** The 404 body this route's controller declared, so `@InvitationOwnerId()` answers the module's own body too. */
+  invitationRouteNotFound?: InvitationRouteNotFound;
 }
 
 /**
@@ -126,7 +128,9 @@ export interface InvitationScopedRequest {
  * In order: a route without an `:id` parameter is not invitation-scoped and passes (the `/invitations` list and the
  * creation route are the caller's own); a malformed id passes too, so the route's own `ParseUUIDPipe` answers the 400 it
  * always answered, or the use case its 404; a caller with no access answers the module's 404; a declared permission the
- * caller does not hold answers 403. Nothing is cached, so a revoke takes effect on the very next request.
+ * caller does not hold answers 403. Every invitation-scoped answer — the admitted one included — is marked
+ * `Cache-Control: no-store`, so no proxy or browser can keep a collaborator's read after a revoke. Nothing is cached,
+ * so a revoke takes effect on the very next request.
  */
 @Injectable()
 export class InvitationAccessGuard implements CanActivate {
@@ -144,6 +148,13 @@ export class InvitationAccessGuard implements CanActivate {
     if (invitationId === undefined) {
       return true;
     }
+    // The route's own 404 body, resolved once: the refusal below and `@InvitationOwnerId()` both answer it.
+    const notFoundBody = readInvitationRouteNotFound(this.reflector, handler, controller);
+    request.invitationRouteNotFound = notFoundBody;
+    // Every invitation-scoped answer is uncacheable, whether the guard admits the caller or refuses it: what one caller
+    // may read at one instant is not something a proxy or a browser may keep (L17.4).
+    setNotStored(context);
+
     if (!isInvitationRowId(invitationId)) {
       // A route that declared its `:id` as a uuid answers the 400 it always answered; one that did not (the album's
       // moderation routes, whose ids its use case validates) passes through to its own 404.
@@ -168,8 +179,7 @@ export class InvitationAccessGuard implements CanActivate {
       // The module's own 404 body, and never cached: a refusal is about one caller and one instant, and a revoke or a
       // shared invitation must not be remembered by a proxy or a browser (the CSV route's own `no-store` included).
       setNotStored(context);
-      const body = readInvitationRouteNotFound(this.reflector, handler, controller);
-      throw new NotFoundException({ ...body });
+      throw new NotFoundException({ ...notFoundBody });
     }
 
     if (

@@ -91,6 +91,7 @@ describe("reserved words", () => {
         "api",
         "auth",
         "catalog",
+        "colaboraciones",
         "collaborations",
         "cuenta",
         "fonts",

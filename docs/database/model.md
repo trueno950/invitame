@@ -965,8 +965,21 @@ seven-day single-use link, and what a stored row means — live in
   `InvitationCollaborator_permissions_granted` (one to three permissions, so a row never means "no access" while the
   resolver treats a row as access), `InvitationCollaborator_acceptedAt_matches_user` (the accepting account and the
   instant are both set or both NULL), `InvitationCollaborator_email_lowercase` (the stored address is already
-  normalized), and `InvitationCollaborator_token_expiry` (a burned token carries no expiry, and a live one expires after
-  the invitation).
+  normalized), and `InvitationCollaborator_token_expiry` (a live token expires after the invitation, and a burned token
+  carries no expiry at all).
+- `20261215120000_harden_invitation_collaborators` closes the two holes the first migration stated as intent but could not
+  express on a nullable column: `permissions` is `NOT NULL` (a CHECK is satisfied by NULL, and Prisma creates a
+  scalar-list column without `NOT NULL`, so a writer outside the API could store a row that means no access) and
+  `InvitationCollaborator_token_expiry` now requires the digest and the expiry to be both set or both NULL (the original
+  rule accepted a burned digest with a live window). The migration normalizes only that half-burned state — a window on a
+  token that no longer resolves — and fails loudly rather than granting a permission if it ever meets a permissionless
+  row. It adds no column and keeps the partial unique index, the trigger, and both keys untouched. Proven on a database
+  that already held pending, accepted, revoked, and half-burned rows.
+- Rollback / recovery of `20261215120000_harden_invitation_collaborators`: additive, so recovery is redeploying the
+  previous migration set, or by hand dropping `InvitationCollaborator_token_expiry` and
+  `InvitationCollaborator_permissions_granted`, re-adding them with the weaker bodies the first migration stated, and
+  dropping the column's `NOT NULL`. Every row stays exactly as it is and no collaborator gains or loses access; only the
+  hardening is lost. Never edit an applied migration file.
 - `InvitationCollaborator_invitationId_email_key` is a partial unique index over `(invitationId, email)` among
   non-revoked rows: one address is invited once per invitation, and a revoked row leaves the index so the same address
   may be invited again. The trigger `InvitationCollaborator_max_active` refuses a sixth non-revoked collaborator of one

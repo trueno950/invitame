@@ -55,7 +55,9 @@ const COLLABORATOR_ID = new ParseUUIDPipe();
  * No answer carries the acceptance token or its digest: the plain token exists only inside the email, and the row's
  * digest is not something the owner has any use for. Inviting an address is a `POST` (201, a new invitation row) and a
  * permission change is a `PATCH`, because it replaces part of the standing row; revoking is a `DELETE` that answers 200
- * with the revoked row, because nothing is deleted — the row stays as history and the access ends immediately.
+ * with the revoked row, because nothing is deleted — the row stays as history and the access ends immediately. Revoking
+ * twice is idempotent: the second answer is the same row as it stands, and only a row that is not this invitation's (or
+ * not this owner's) is the collaborator's 404.
  */
 @Controller("invitations/:id/collaborators")
 @UseGuards(InvitationAccessGuard)
@@ -144,7 +146,8 @@ export class InvitationsCollaboratorsController {
   /**
    * Revokes one collaborator, pending or accepted (L17.3): 200 with the row marked revoked. The access ends on that
    * account's next request and its unused link stops resolving in the same statement. Repeating the revoke changes
-   * nothing and answers the collaborator's 404, because the row no longer stands.
+   * nothing and answers the same row as it stands, as the port documents; only a row that is not this invitation's, or an
+   * invitation that is not this owner's, answers the collaborator's 404.
    */
   @Delete(":collaboratorId")
   @HttpCode(200)

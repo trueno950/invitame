@@ -99,7 +99,9 @@ export class InviteCollaboratorUseCase {
       throw new InvalidCollaboratorInvitationError(permissions.issues);
     }
 
-    const target = await this.collaborators.findInviteTarget(input.invitationId);
+    // The target itself is scoped by the owner, so another account's invitation answers null here even before the
+    // comparison below; the comparison stays as the second, inexpensive check it always was (A4).
+    const target = await this.collaborators.findInviteTarget(input.ownerId, input.invitationId);
     if (target === null || target.ownerId !== input.ownerId) {
       return null;
     }
@@ -110,6 +112,7 @@ export class InviteCollaboratorUseCase {
     const invitedAt = this.now();
     const token = mintCollaboratorToken();
     const write: NewInvitationCollaborator = {
+      ownerId: input.ownerId,
       invitationId: target.id,
       email: email.value,
       permissions: permissions.value,

@@ -28,7 +28,7 @@ import { storedLivestream } from "../domain/invitation-livestream";
 import { storedReminders } from "../domain/invitation-reminders";
 import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
 import { MAX_INVITATION_SLUG_RENAMES } from "../domain/invitation-slug";
-import { isInvitationPermission } from "../../collaborators/domain/invitation-collaborator";
+import { storedInvitationPermissions } from "../../collaborators/domain/invitation-collaborator";
 import {
   isAddressFieldName,
   isStoredPlacePoint,
@@ -82,18 +82,6 @@ const INVITATION_SELECT = {
 } satisfies Prisma.InvitationSelect;
 
 type InvitationRow = Prisma.InvitationGetPayload<{ select: typeof INVITATION_SELECT }>;
-
-/**
- * The invitations shared with one account, with the permissions its own accepted row grants (F12; L17.5). The row's
- * owner is deliberately not the caller: access is inside the query — the `collaborators` filter names the account, the
- * acceptance, and the absence of a revoke — so an account can never list an invitation it has no accepted row for.
- */
-const SHARED_INVITATION_SELECT = {
-  ...INVITATION_SELECT,
-  collaborators: {
-    select: { permissions: true },
-  },
-} satisfies Prisma.InvitationSelect;
 
 /**
  * The stored points of one row, keyed by their content field (S2, S3). Only a point the domain still accepts is
@@ -246,28 +234,43 @@ export class PrismaInvitationRepository implements InvitationRepository {
   async listSharedWith(userId: string): Promise<SharedInvitationRecord[]> {
     const rows = await this.prisma.invitation.findMany({
       where: {
+        // Never the caller's own: an invitation it owns is already in the owned list, and answering it here too would
+        // list it twice and mark it `COLLABORATOR` over its own row (F12; L17.5).
+        ownerId: { not: userId },
         collaborators: {
           some: { userId, acceptedAt: { not: null }, revokedAt: null },
         },
       },
+      // The caller's own accepted row travels with the invitation, and only that one: another collaborator's set is not
+      // the caller's access. Access is inside the query — the account, the acceptance, and the absence of a revoke — so
+      // an account can never list an invitation it has no accepted row for (F12; L17.5).
       select: {
-        ...SHARED_INVITATION_SELECT,
+        ...INVITATION_SELECT,
         collaborators: {
           where: { userId, acceptedAt: { not: null }, revokedAt: null },
           select: { permissions: true },
         },
       },
-      // The same order the owner's own list uses, so one merged list reads newest first.
+      // The same order the owner's own list uses, so one merged list reads newest first. PostgreSQL compares the uuid
+      // bytes, which is the plain code-unit order the merge applies to the same values.
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
 
-    return rows.map((row) => ({
-      ...toRecord(row),
-      // A row written around the API is answered by what the allow-list knows, never by what it holds (L20).
-      permissions: row.collaborators.flatMap((collaborator) =>
-        collaborator.permissions.filter(isInvitationPermission),
-      ),
-    }));
+    const shared: SharedInvitationRecord[] = [];
+    for (const row of rows) {
+      // A row written around the API is answered by what the allow-list knows, never by what it holds (L20): the known
+      // permissions in the domain's canonical order, and a set that grants none of them is no access at all, so it never
+      // reaches the list.
+      const permissions = storedInvitationPermissions(
+        row.collaborators.flatMap((collaborator) => collaborator.permissions),
+      );
+      if (permissions.length === 0) {
+        continue;
+      }
+      shared.push({ ...toRecord(row), permissions });
+    }
+
+    return shared;
   }
 
   async updateContent(
