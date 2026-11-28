@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   InvitationContentConflictError,
   InvitationPaymentRequiredError,
+  InvitationSlugRenameLimitError,
   InvitationSlugTakenError,
 } from "../application/invitation.application.errors";
 import type {
@@ -24,6 +25,7 @@ import { storedLodging } from "../domain/invitation-lodging";
 import { storedLivestream } from "../domain/invitation-livestream";
 import { storedReminders } from "../domain/invitation-reminders";
 import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
+import { MAX_INVITATION_SLUG_RENAMES } from "../domain/invitation-slug";
 import {
   isAddressFieldName,
   isStoredPlacePoint,
@@ -508,5 +510,124 @@ export class PrismaInvitationRepository implements InvitationRepository {
     });
 
     return stored === null ? null : toRecord(stored);
+  }
+
+  async findPublishedByAlias(slug: string): Promise<InvitationRecordWithMusic | null> {
+    // A previous address redirects to its invitation's current one (F11; L15.3). The alias row is read first and the
+    // invitation through it, so a draft that once held the address answers nothing, exactly like the slug read (A3).
+    const alias = await this.prisma.invitationSlugAlias.findUnique({
+      where: { slug },
+      select: { invitationId: true },
+    });
+    if (alias === null) {
+      return null;
+    }
+    const stored = await this.prisma.invitation.findFirst({
+      where: { id: alias.invitationId, status: "PUBLISHED" },
+      select: INVITATION_SELECT,
+    });
+
+    return stored === null ? null : toRecord(stored);
+  }
+
+  async countSlugAliases(invitationId: string): Promise<number> {
+    return this.prisma.invitationSlugAlias.count({ where: { invitationId } });
+  }
+
+  async isSlugInUse(slug: string, exceptInvitationId: string): Promise<boolean> {
+    // The current addresses of the other invitations, then every previous address — including one this invitation left
+    // behind, because a previous address is final (L15.1). One query per term, and the second is skipped when the first
+    // already answered.
+    const current = await this.prisma.invitation.findFirst({
+      where: { slug, NOT: { id: exceptInvitationId } },
+      select: { id: true },
+    });
+    if (current !== null) {
+      return true;
+    }
+    const alias = await this.prisma.invitationSlugAlias.findUnique({
+      where: { slug },
+      select: { slug: true },
+    });
+
+    return alias !== null;
+  }
+
+  async renameSlug(
+    ownerId: string,
+    id: string,
+    slug: string,
+  ): Promise<InvitationRecordWithMusic | null> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const stored = await tx.invitation.findFirst({
+          where: { id, ownerId },
+          select: INVITATION_SELECT,
+        });
+        if (stored === null) {
+          return null;
+        }
+        // State the rule now so the caller gets the real reason, and again inside the write below (A2, S7).
+        assertEditable(toRecord(stored).status);
+
+        const previousSlug = stored.slug;
+        if (previousSlug === slug) {
+          return toRecord(stored);
+        }
+
+        const kept = await tx.invitationSlugAlias.count({ where: { invitationId: id } });
+        if (kept >= MAX_INVITATION_SLUG_RENAMES) {
+          throw new InvitationSlugRenameLimitError(MAX_INVITATION_SLUG_RENAMES);
+        }
+
+        // The two uniqueness terms the database also holds: another invitation's current address, and any previous
+        // address. Stated here so a taken address answers its own refusal instead of a constraint violation.
+        const current = await tx.invitation.findFirst({
+          where: { slug, NOT: { id } },
+          select: { id: true },
+        });
+        if (current !== null) {
+          throw new InvitationSlugTakenError(slug);
+        }
+        const alias = await tx.invitationSlugAlias.findUnique({
+          where: { slug },
+          select: { slug: true },
+        });
+        if (alias !== null) {
+          throw new InvitationSlugTakenError(slug);
+        }
+
+        // The transaction-local setting is what the pinned-field trigger reads: it names this one invitation, lives
+        // only as long as this transaction, and is never set by any other write (see the migration).
+        await tx.$executeRaw`SELECT set_config('invitame.slug_rename', ${id}, true)`;
+
+        const changed = await tx.invitation.updateMany({
+          where: { id, ownerId, status: { in: ["DRAFT", "PUBLISHED"] } },
+          data: { slug },
+        });
+        if (changed.count !== 1) {
+          // The row stopped being editable after the read: the only other status is ARCHIVED.
+          throw new InvitationNotEditableError("ARCHIVED");
+        }
+
+        // The previous address becomes an alias, so an already shared link keeps resolving to the current one. The
+        // deferred constraint trigger refuses a rename whose alias this transaction did not store.
+        await tx.invitationSlugAlias.create({ data: { invitationId: id, slug: previousSlug } });
+
+        const renamed = await tx.invitation.findFirst({
+          where: { id, ownerId },
+          select: INVITATION_SELECT,
+        });
+
+        return renamed === null ? null : toRecord(renamed);
+      });
+    } catch (error) {
+      // Two concurrent renames can pass the two reads above and meet the unique index or an alias trigger, so the
+      // database's own refusal is reported as the taken address it is (F11; L15.1).
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new InvitationSlugTakenError(slug);
+      }
+      throw error;
+    }
   }
 }

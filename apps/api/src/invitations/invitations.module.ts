@@ -113,6 +113,14 @@ import {
   SubmitPublicGuestbookEntryUseCase,
 } from "./application/invitation-guestbook.use-cases";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "./application/music-metadata";
+import {
+  CheckInvitationSlugAvailabilityUseCase,
+  RenameInvitationSlugUseCase,
+} from "./application/invitation-slug.use-cases";
+import {
+  SLUG_AVAILABILITY_RATE_LIMITER,
+  type SlugAvailabilityRateLimiter,
+} from "./application/slug-availability-rate-limiter";
 import { PLACE_SEARCH, type PlaceSearch } from "./application/place-search";
 import { InMemoryPlaceSearchCache } from "./application/place-search-cache";
 import {
@@ -148,6 +156,7 @@ import { PrismaRsvpRepository } from "./infrastructure/prisma-rsvp.repository";
 import { PrismaRsvpRateLimiter } from "./infrastructure/prisma-rsvp-rate-limiter";
 import { PrismaGuestbookRepository } from "./infrastructure/prisma-guestbook.repository";
 import { PrismaGuestbookRateLimiter } from "./infrastructure/prisma-guestbook-rate-limiter";
+import { PrismaSlugAvailabilityRateLimiter } from "./infrastructure/prisma-slug-availability-rate-limiter";
 import { InvitationsController } from "./presentation/invitations.controller";
 import { AdminAnalyticsController } from "./presentation/admin-analytics.controller";
 import { AdminInvitationsController } from "./presentation/admin-invitations.controller";
@@ -316,6 +325,23 @@ export const INVITATION_USE_CASES: Provider[] = [
   },
   useCase(UpdateInvitationPlaceUseCase),
   useCase(ClearInvitationPlaceUseCase),
+  // The custom address (F11; S2.11, L15.3): the check answers one of four words under the owner's own limit, and the
+  // rename stores the previous address as an alias so an already shared link keeps working.
+  {
+    provide: CheckInvitationSlugAvailabilityUseCase,
+    useFactory: (invitations: InvitationRepository, rateLimiter: SlugAvailabilityRateLimiter) =>
+      new CheckInvitationSlugAvailabilityUseCase(invitations, rateLimiter),
+    inject: [INVITATION_REPOSITORY, SLUG_AVAILABILITY_RATE_LIMITER],
+  },
+  {
+    provide: RenameInvitationSlugUseCase,
+    useFactory: (
+      invitations: InvitationRepository,
+      catalog: InvitationCatalog,
+      reminders: ReminderSender,
+    ) => new RenameInvitationSlugUseCase(invitations, catalog, reminders),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, REMINDER_SENDER],
+  },
   {
     provide: UpdateInvitationContentUseCase,
     // A content save answers the same owned read, so it states the same reminder capability (F6; S6).
@@ -493,12 +519,9 @@ export const INVITATION_USE_CASES: Provider[] = [
   },
   {
     provide: GetPublicGuestUseCase,
-    useFactory: (
-      invitations: InvitationRepository,
-      guests: GuestRepository,
-      publicInvitations: GetPublicInvitationUseCase,
-    ) => new GetPublicGuestUseCase(invitations, guests, publicInvitations),
-    inject: [INVITATION_REPOSITORY, GUEST_REPOSITORY, GetPublicInvitationUseCase],
+    useFactory: (guests: GuestRepository, publicInvitations: GetPublicInvitationUseCase) =>
+      new GetPublicGuestUseCase(guests, publicInvitations),
+    inject: [GUEST_REPOSITORY, GetPublicInvitationUseCase],
   },
   {
     provide: SubmitGuestRsvpUseCase,
@@ -630,6 +653,12 @@ export const INVITATION_USE_CASES: Provider[] = [
       provide: PLACE_SEARCH_RATE_LIMITER,
       // The same `RateLimit` table Better Auth and the RSVP form use; only the key prefix and the window are place's.
       useFactory: (prisma: PrismaService) => new PrismaPlaceSearchRateLimiter(prisma),
+      inject: [PrismaService],
+    },
+    {
+      provide: SLUG_AVAILABILITY_RATE_LIMITER,
+      // The same `RateLimit` table again; only the key prefix and the window are the address check's (F11; L15.3).
+      useFactory: (prisma: PrismaService) => new PrismaSlugAvailabilityRateLimiter(prisma),
       inject: [PrismaService],
     },
     {

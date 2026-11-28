@@ -34,6 +34,7 @@ import {
 import { guestTokenHash } from "../application/guest-token";
 import {
   InvitationContentConflictError,
+  InvitationSlugRenameLimitError,
   InvitationSlugTakenError,
 } from "../application/invitation.application.errors";
 import {
@@ -72,6 +73,10 @@ import {
   PLACE_SEARCH_RATE_LIMITER,
   type PlaceSearchRateLimiter,
 } from "../application/place-search-rate-limiter";
+import {
+  SLUG_AVAILABILITY_RATE_LIMITER,
+  type SlugAvailabilityRateLimiter,
+} from "../application/slug-availability-rate-limiter";
 import {
   GUESTBOOK_REPOSITORY,
   INVITATION_GUESTBOOK_READER,
@@ -448,6 +453,61 @@ class MemoryInvitationRepository implements InvitationRepository {
     const row = this.rows.find((stored) => stored.slug === slug && stored.status === "PUBLISHED");
     return row ? structuredClone(row) : null;
   }
+
+  /** The previous addresses of every invitation (F11; L15.2, L15.3), keyed by slug. */
+  readonly aliases = new Map<string, string>();
+
+  async findPublishedByAlias(slug: string): Promise<InvitationRecordWithMusic | null> {
+    const invitationId = this.aliases.get(slug);
+    if (invitationId === undefined) {
+      return null;
+    }
+    const row = this.rows.find(
+      (stored) => stored.id === invitationId && stored.status === "PUBLISHED",
+    );
+
+    return row ? structuredClone(row) : null;
+  }
+
+  async countSlugAliases(invitationId: string): Promise<number> {
+    return [...this.aliases.values()].filter((value) => value === invitationId).length;
+  }
+
+  async isSlugInUse(slug: string, exceptInvitationId: string): Promise<boolean> {
+    const current = this.rows.some((row) => row.slug === slug && row.id !== exceptInvitationId);
+
+    return current || this.aliases.has(slug);
+  }
+
+  async renameSlug(
+    ownerId: string,
+    id: string,
+    slug: string,
+  ): Promise<InvitationRecordWithMusic | null> {
+    const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
+    if (!row) {
+      return null;
+    }
+    if (row.status === "ARCHIVED") {
+      throw new InvitationNotEditableError(row.status);
+    }
+    const previous = row.slug;
+    if (previous === slug) {
+      return structuredClone(row);
+    }
+    const kept = [...this.aliases.values()].filter((value) => value === id).length;
+    if (kept >= 5) {
+      throw new InvitationSlugRenameLimitError(5);
+    }
+    if (await this.isSlugInUse(slug, id)) {
+      throw new InvitationSlugTakenError(slug);
+    }
+    row.slug = slug;
+    row.updatedAt = new Date(row.updatedAt.getTime() + 1_000);
+    this.aliases.set(previous, id);
+
+    return structuredClone(row);
+  }
 }
 
 /**
@@ -639,6 +699,17 @@ class MemoryPlaceSearch implements PlaceSearch {
 
 /** The owner's place-search limit in memory (S2): it counts and answers whatever a test chose, so 429 is observable. */
 class MemoryPlaceSearchLimiter implements PlaceSearchRateLimiter {
+  allow = true;
+  readonly consumed: string[] = [];
+
+  async consume(ownerId: string): Promise<boolean> {
+    this.consumed.push(ownerId);
+    return this.allow;
+  }
+}
+
+/** The address-check limiter in memory (F11; L15.3): it counts who checked and lets the test close the window. */
+class MemorySlugAvailabilityLimiter implements SlugAvailabilityRateLimiter {
   allow = true;
   readonly consumed: string[] = [];
 
@@ -1274,6 +1345,7 @@ describe("invitations routes: /invitations", () => {
   const viewRepository = new MemoryInvitationViewRepository();
   const placeSearch = new MemoryPlaceSearch();
   const placeSearchLimiter = new MemoryPlaceSearchLimiter();
+  const slugAvailabilityLimiter = new MemorySlugAvailabilityLimiter();
   let app: INestApplication;
   let baseUrl: string;
   let userCounter = 0;
@@ -1314,6 +1386,8 @@ describe("invitations routes: /invitations", () => {
         { provide: INVITATION_VIEW_REPOSITORY, useValue: viewRepository },
         { provide: PLACE_SEARCH, useValue: placeSearch },
         { provide: PLACE_SEARCH_RATE_LIMITER, useValue: placeSearchLimiter },
+        // The address check counts on its own limit, on the same store (F11; L15.3).
+        { provide: SLUG_AVAILABILITY_RATE_LIMITER, useValue: slugAvailabilityLimiter },
         { provide: InMemoryPlaceSearchCache, useValue: new InMemoryPlaceSearchCache() },
         // The operational settings (M9 T13; S5, S8): this suite exercises other rules, so it composes the reader
         // that answers the values the migration seeds.
@@ -1397,6 +1471,8 @@ describe("invitations routes: /invitations", () => {
     "places",
     // Whether this deployment can send a reminder at all (F6; S6, L9.5): a capability, never a secret.
     "remindersConfigured",
+    // How many renames the owner has left (F11; L15.2).
+    "slugRenamesRemaining",
   ].sort();
 
   describe("access control", () => {
@@ -2934,6 +3010,271 @@ describe("invitations routes: /invitations", () => {
     });
   });
 
+  describe("custom address routes (F11; S2.11, L15.1-L15.3)", () => {
+    // Every test names its own address: the in-memory store is shared by the whole suite, so a repeated address
+    // would be a real conflict here just as it is in PostgreSQL (L15.1).
+    const AVAILABLE = "valentina-xv";
+
+    /** The address check of one invitation, with the query encoded as the editor sends it. */
+    const checkPath = (id: string, slug: string) =>
+      `${PATH}/${id}/slug-availability?slug=${encodeURIComponent(slug)}`;
+
+    beforeEach(() => {
+      slugAvailabilityLimiter.allow = true;
+      slugAvailabilityLimiter.consumed.length = 0;
+    });
+
+    it("answers available for a free address and spends one check of the owner's limit", async () => {
+      const { userId, cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const response = await send("GET", checkPath(draft.id, AVAILABLE), cookie);
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { slug: AVAILABLE, status: "available" });
+      assert.deepEqual(slugAvailabilityLimiter.consumed, [userId]);
+    });
+
+    it("answers taken for another invitation's address and for a previous one, naming nobody (L15.3)", async () => {
+      const first = await signedInCustomer();
+      const mine = await createDraft(first.cookie);
+      const other = await signedInCustomer();
+      const theirs = await createDraft(other.cookie);
+      // Another owner renamed their invitation after saving this address.
+      for (const slug of ["fiesta-uno", "fiesta-dos"]) {
+        assert.equal(
+          (await send("PUT", `${PATH}/${theirs.id}/slug`, other.cookie, { slug })).status,
+          200,
+        );
+      }
+
+      const current = await send("GET", checkPath(mine.id, "fiesta-dos"), first.cookie);
+      const previous = await send("GET", checkPath(mine.id, "fiesta-uno"), first.cookie);
+
+      assert.deepEqual(await current.json(), { slug: "fiesta-dos", status: "taken" });
+      assert.deepEqual(await previous.json(), { slug: "fiesta-uno", status: "taken" });
+    });
+
+    it("answers invalid and reserved without spending a check (L15.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      for (const [slug, status] of [
+        ["boda--2027", "invalid"],
+        ["Valentina", "invalid"],
+        ["ab", "invalid"],
+        ["admin", "reserved"],
+        ["invitame", "reserved"],
+      ] as const) {
+        const response = await send("GET", checkPath(draft.id, slug), cookie);
+
+        assert.equal(response.status, 200, slug);
+        assert.deepEqual(await response.json(), { slug, status }, slug);
+      }
+      assert.deepEqual(slugAvailabilityLimiter.consumed, []);
+    });
+
+    it("answers available for the owner's own current address, so saving it changes nothing", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const response = await send("GET", checkPath(draft.id, draft.slug), cookie);
+
+      assert.deepEqual(await response.json(), { slug: draft.slug, status: "available" });
+    });
+
+    it("answers 429 SLUG_AVAILABILITY_RATE_LIMITED once the owner is over the check limit", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      slugAvailabilityLimiter.allow = false;
+
+      const response = await send("GET", checkPath(draft.id, AVAILABLE), cookie);
+
+      assert.equal(response.status, 429);
+      assert.deepEqual(await response.json(), { code: "SLUG_AVAILABILITY_RATE_LIMITED" });
+    });
+
+    it("answers 404 for another customer's invitation and for an unknown id, and 400 for an id that is not a UUID", async () => {
+      const { cookie } = await signedInCustomer();
+      const other = await signedInCustomer();
+      const theirs = await createDraft(other.cookie);
+
+      for (const [id, asking] of [
+        [theirs.id, cookie],
+        [UNKNOWN_ID, cookie],
+      ] as const) {
+        const response = await send("GET", checkPath(id, AVAILABLE), asking);
+
+        assert.equal(response.status, 404, id);
+        assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+      }
+      const malformed = await send("GET", `${PATH}/not-a-uuid/slug-availability?slug=x`, cookie);
+      assert.equal(malformed.status, 400);
+    });
+
+    it("renames the address, answers the owned invitation, and keeps the previous address resolving (L15.2, L15.3)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      assert.equal(
+        (await send("PUT", `${PATH}/${draft.id}/content`, cookie, { content: { title: "Ana" } }))
+          .status,
+        200,
+      );
+      assert.equal((await send("POST", `${PATH}/${draft.id}/publish`, cookie)).status, 200);
+
+      const response = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug: AVAILABLE });
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row;
+      assert.deepEqual(Object.keys(body).sort(), OWNED_KEYS);
+      assert.equal(body.slug, AVAILABLE);
+      // The previous address is stored as an alias, and the current one answers as before.
+      assert.equal(repository.aliases.get(draft.slug), draft.id);
+
+      const alias = await send("GET", `/public/invitations/${draft.slug}`);
+      assert.equal(alias.status, 200);
+      const aliasBody = (await alias.json()) as Row;
+      assert.equal(aliasBody.slug, AVAILABLE);
+      assert.equal(aliasBody.redirectTo, AVAILABLE);
+
+      const current = await send("GET", `/public/invitations/${AVAILABLE}`);
+      const currentBody = (await current.json()) as Row;
+      assert.equal(currentBody.slug, AVAILABLE);
+      assert.equal(currentBody.redirectTo, null);
+    });
+
+    it("saves the same address without storing an alias", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const kept = repository.aliases.size;
+      const response = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug: draft.slug });
+
+      assert.equal(response.status, 200);
+      assert.equal(((await response.json()) as Row).slug, draft.slug);
+      assert.equal(repository.aliases.size, kept);
+    });
+
+    it("answers 400 INVALID_INVITATION_SLUG with its issue for an address the rule refuses", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      const kept = repository.aliases.size;
+      for (const slug of ["boda--2027", "Valentina", "ab", "-boda"]) {
+        const response = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug });
+
+        assert.equal(response.status, 400, slug);
+        assert.deepEqual(await response.json(), {
+          code: "INVALID_INVITATION_SLUG",
+          issues: [
+            "The address must be 3 to 40 characters of lower-case letters, digits, and inner hyphens.",
+          ],
+        });
+      }
+      assert.equal(repository.aliases.size, kept);
+    });
+
+    it("answers 409 INVITATION_SLUG_RESERVED for a route or product word (L15.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      for (const slug of ["admin", "cuenta", "invitame", "public", "media"]) {
+        const response = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug });
+
+        assert.equal(response.status, 409, slug);
+        assert.deepEqual(await response.json(), { code: "INVITATION_SLUG_RESERVED" });
+      }
+    });
+
+    it("answers 409 INVITATION_SLUG_TAKEN for an address another invitation holds, without renaming", async () => {
+      const mine = await signedInCustomer();
+      const draft = await createDraft(mine.cookie);
+      const other = await signedInCustomer();
+      const theirs = await createDraft(other.cookie);
+      assert.equal(
+        (await send("PUT", `${PATH}/${theirs.id}/slug`, other.cookie, { slug: "playa-uno" }))
+          .status,
+        200,
+      );
+
+      const response = await send("PUT", `${PATH}/${draft.id}/slug`, mine.cookie, {
+        slug: "playa-uno",
+      });
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_SLUG_TAKEN" });
+      assert.equal(repository.rows.find((row) => row.id === draft.id)?.slug, draft.slug);
+    });
+
+    it("answers 409 INVITATION_SLUG_TAKEN for a previous address, which is final (L15.1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      assert.equal(
+        (await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug: "mar-tres" })).status,
+        200,
+      );
+
+      const response = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug: draft.slug });
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_SLUG_TAKEN" });
+    });
+
+    it("answers 409 INVITATION_SLUG_RENAME_LIMIT for the sixth rename and keeps the fifth (L15.2)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      for (const slug of ["casa-uno", "casa-dos", "casa-tres", "casa-cuatro", "casa-cinco"]) {
+        const renamed = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug });
+
+        assert.equal(renamed.status, 200, slug);
+        assert.equal(((await renamed.json()) as Row).slug, slug);
+      }
+
+      const refused = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug: "casa-seis" });
+
+      assert.equal(refused.status, 409);
+      assert.deepEqual(await refused.json(), { code: "INVITATION_SLUG_RENAME_LIMIT" });
+      assert.equal(repository.rows.find((row) => row.id === draft.id)?.slug, "casa-cinco");
+    });
+
+    it("answers 409 INVITATION_NOT_EDITABLE for an archived invitation and keeps its address", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      assert.equal((await send("POST", `${PATH}/${draft.id}/archive`, cookie)).status, 200);
+
+      const response = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug: AVAILABLE });
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "INVITATION_NOT_EDITABLE" });
+      assert.equal(repository.rows.find((row) => row.id === draft.id)?.slug, draft.slug);
+    });
+
+    it("answers 404 for another customer's invitation and for an unknown id, and 400 for a body the pipe refuses", async () => {
+      const { cookie } = await signedInCustomer();
+      const other = await signedInCustomer();
+      const theirs = await createDraft(other.cookie);
+
+      for (const [id, asking] of [
+        [theirs.id, cookie],
+        [UNKNOWN_ID, cookie],
+      ] as const) {
+        const response = await send("PUT", `${PATH}/${id}/slug`, asking, { slug: AVAILABLE });
+
+        assert.equal(response.status, 404, id);
+        assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+      }
+
+      const mine = await createDraft(cookie);
+      for (const body of [{}, { slug: AVAILABLE, extra: 1 }, "not-an-object"]) {
+        const response = await send("PUT", `${PATH}/${mine.id}/slug`, cookie, body);
+
+        assert.equal(response.status, 400, JSON.stringify(body));
+      }
+      assert.equal(repository.rows.find((row) => row.id === mine.id)?.slug, mine.slug);
+    });
+  });
+
   describe("place routes (S1, S2, S3)", () => {
     const SUGGESTION: PlacePoint = {
       label: "Parroquia de San José, Calle Hidalgo 12, Querétaro, Querétaro",
@@ -3401,6 +3742,8 @@ describe("invitations routes: /invitations", () => {
       "hiddenFields",
       "places",
       "publishedAt",
+      // The current address a guest reached through a previous one (F11; L15.3), null for the current one.
+      "redirectTo",
       "slug",
       "timeZone",
     ];
@@ -6094,6 +6437,7 @@ describe("invitations routes: /invitations", () => {
         "hiddenFields",
         "places",
         "publishedAt",
+        "redirectTo",
         "slug",
         "timeZone",
       ]);

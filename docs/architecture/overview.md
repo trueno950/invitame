@@ -836,6 +836,49 @@ An invitation points to `TemplateVersion`, not to mutable `Template` metadata. P
 state is publicly visible; it does not rewrite the version snapshot. Public rendering must fetch the required data
 without an N+1 query pattern and must fail closed for unpublished, missing, or unauthorized resources.
 
+## Custom invitation address (current)
+
+Status: **current** (F11; S2.11, L15). A published invitation lives at `/i/<slug>`, and its owner can replace the
+generated address (`invitacion-k7m2qx`) with an address of their own (`valentina-xv`).
+
+- Rule: the address the owner types is 3 to 40 characters of lower-case letters, digits, and inner hyphens,
+  `^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$`, never with two hyphens in a row, and never a reserved word — every top-level
+  route segment of `apps/web/app` (`admin`, `api`, `cuenta`, `fonts`, `health`, `i`, `ingresar`, `_next`), every API
+  path prefix (`invitations`, `public`, `catalog`, `media`, `me`, `payments`, `auth`), and the product names
+  (`invitame`, `invitacion`, `invitaciones`). One constant holds that list
+  (`apps/api/src/invitations/domain/invitation-slug.ts`), and the suite asserts it whole, so a new route makes the
+  list speak up. The database column keeps its own broader constraints, so a generated and a chosen address are both
+  storable.
+- Uniqueness: an address may not equal any current `Invitation.slug` **or** any previous address of any invitation.
+  PostgreSQL enforces it (`Invitation_slug_key`, the `InvitationSlugAlias` primary key, and the alias triggers), and the
+  API states the same rule inside the rename transaction so the owner reads a refusal instead of a constraint error.
+- Renames: at most five per invitation. Every rename stores the previous address in `InvitationSlugAlias` in the same
+  transaction, so an already shared link keeps working forever, through a permanent redirect.
+- Database guard: `Invitation.slug` may change only inside the rename. The `Invitation_pinned_fields_immutable` trigger
+  allows it only while the transaction set the transaction-local `invitame.slug_rename` setting to that invitation's
+  id, and the deferred `Invitation_slug_rename_records_alias` constraint trigger refuses a commit whose transaction did
+  not store the previous address as an alias. `ownerId`, `packageId`, and the pinned version keep refusing exactly as
+  before, and `content` stays editable.
+- API: the owner asks `GET /invitations/:id/slug-availability?slug=` and reads `available`, `taken`, `invalid`, or
+  `reserved` — never who holds a taken address and never a package or an owner — under a per-owner limit on the shared
+  `RateLimit` store (429 `SLUG_AVAILABILITY_RATE_LIMITED`), and saves through `PUT /invitations/:id/slug`. The save is
+  400 `INVALID_INVITATION_SLUG` with its issue for an address the rule refuses, 409 `INVITATION_SLUG_RESERVED` for a
+  reserved word, 409 `INVITATION_SLUG_TAKEN` for an address already held, 409 `INVITATION_SLUG_RENAME_LIMIT` for the
+  sixth rename, 409 `INVITATION_NOT_EDITABLE` for an archived invitation, and the usual 404 for another owner's id.
+- Public read: `GET /public/invitations/:slug` answers the published invitation a previous address belonged to and adds
+  `redirectTo` with the current address (null for the current one). The web turns it into `permanentRedirect` before
+  rendering, so `/i/<alias>`, `/i/<alias>/g/<token>`, and `/i/<alias>/calendario.ics` all move permanently to the
+  current address (the calendar route answers 308 with the new file). A guest's personal token keeps working after the
+  rename; an alias whose invitation is a draft, archived, or unknown answers the same public 404 as any other invisible
+  slug.
+- Web: the editor's «Publicar» tab draws `design/custom-address/01-campo-libre.html` as the «Dirección de tu
+  invitación» block: the real prefix from configuration (`PUBLIC_WEB_ORIGIN`, `invitame.mx/i/` in production; the
+  request's own origin when it is unset), the field, a debounced server-checked state in words («✓ Disponible», «Ya
+  está en uso», «No es válida», «No está disponible», «Revisando…»), the rule, «Guardar dirección», the note that the
+  previous link keeps working, and how many renames are left (`slugRenamesRemaining` of the owner's read). Saving
+  refreshes the page's own reads, so the share panel and «Mis invitaciones» show the new address at once. The client
+  never decides availability itself: every state comes from the API's check through a server action.
+
 ## Precise locations
 
 Current status: the precise-locations work is complete end to end — the geocoding port, the stored points, the two

@@ -54,6 +54,13 @@ export interface PublicInvitation {
    * client can compute a different answer from the one the API decided.
    */
   expired: boolean;
+  /**
+   * The current address of this invitation when the guest arrived through a previous one (F11; S2.11, L15.3), or null
+   * when the slug the guest asked for is the current address. The web turns it into a permanent redirect before it
+   * renders anything, so an old link keeps working forever; the field is added beside the ones the body already
+   * carried and changes none of them (L20).
+   */
+  redirectTo: string | null;
 }
 
 /** A JSON object read from a `Json` column; arrays, null, and primitives are not objects. */

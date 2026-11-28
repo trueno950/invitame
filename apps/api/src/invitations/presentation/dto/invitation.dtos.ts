@@ -128,6 +128,17 @@ export class UpdateInvitationFeaturesDto {
 }
 
 /**
+ * `PUT /invitations/:id/slug` body (F11; S2.11, L15.3). The address the owner typed. Only presence is checked here:
+ * the domain owns the 3-to-40-character rule, the no-double-hyphen rule, and the reserved words, so a value it refuses
+ * reaches the client as 400 `INVALID_INVITATION_SLUG` (or `INVITATION_SLUG_RESERVED`) with its issue. `PUT` and not
+ * `PATCH` because the whole address is replaced, and the web client sends it from a server action.
+ */
+export class UpdateInvitationSlugDto {
+  @IsDefined()
+  slug!: unknown;
+}
+
+/**
  * `PUT /invitations/:id/places/:field` body (S2, S3). The label the geocoder answered and the two coordinates that
  * make it precise. Only presence is checked here: the domain owns the label bounds and the coordinate ranges, so a
  * value it refuses reaches the client as 400 `INVALID_INVITATION_PLACE` with its issues. A missing or null field is a

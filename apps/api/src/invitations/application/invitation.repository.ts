@@ -296,6 +296,38 @@ export interface InvitationRepository {
    * carries no owner: the slug is the only input, and it is the repository that decides what a guest may reach.
    */
   findPublishedBySlug(slug: string): Promise<InvitationRecordWithMusic | null>;
+
+  /**
+   * The published invitation a previous address belongs to (F11; S2.11, L15.3), or null when the slug is nobody's
+   * alias or its invitation is not published. It reads the alias table and then the same published row the slug read
+   * answers, so an old link redirects to the current address and a draft that once had it stays invisible (A3).
+   */
+  findPublishedByAlias(slug: string): Promise<InvitationRecordWithMusic | null>;
+
+  /**
+   * How many previous addresses this invitation keeps (F11; L15.2), which is what the owner's editor shows as the
+   * remaining renames. An unknown id answers zero, so a caller never reads a number it did not store.
+   */
+  countSlugAliases(invitationId: string): Promise<number>;
+
+  /**
+   * Whether the address is already taken (F11; L15.3): another invitation's current slug, or any invitation's previous
+   * address. `exceptInvitationId` is the owner's own invitation, whose current slug is therefore not a conflict; a slug
+   * that only the same invitation left behind is still taken, because a previous address is final. The answer names no
+   * owner and no invitation, which is what lets the availability check answer `taken` without telling who holds it.
+   */
+  isSlugInUse(slug: string, exceptInvitationId: string): Promise<boolean>;
+
+  /**
+   * Renames the public address of a DRAFT or a PUBLISHED invitation in one transaction (F11; L15.2, L15.3): the
+   * previous address becomes a row of `InvitationSlugAlias`, so an already shared link keeps redirecting, and the
+   * transaction-local setting the pinned-field trigger requires is set for that one statement pair only, so no write
+   * outside this method can change a slug. Throws `InvitationNotEditableError` for an archived invitation (A2, S7),
+   * `InvitationSlugTakenError` for an address PostgreSQL already holds, and `InvitationSlugRenameLimitError` once the
+   * invitation keeps its five previous addresses; null, changing nothing, when no row has this id or another owner has
+   * it (A4). The rename is one statement pair, so an interrupted request stores neither the new address nor an alias.
+   */
+  renameSlug(ownerId: string, id: string, slug: string): Promise<InvitationRecordWithMusic | null>;
 }
 
 export const INVITATION_REPOSITORY = Symbol("InvitationRepository");

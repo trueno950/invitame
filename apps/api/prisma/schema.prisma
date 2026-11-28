@@ -377,6 +377,8 @@ model Invitation {
   reminderDeliveries ReminderDelivery[]
   guestbookEntries   GuestbookEntry[]
   guestPhotos        GuestPhoto[]
+  // Every previous public address of this invitation (F11; S2.11, L15.2): at most five, recorded by the rename.
+  slugAliases        InvitationSlugAlias[]
 
   @@index([ownerId])
   // The administrator's status view (M9 T2; S1) reads a page newest first, optionally filtered by one status, so
@@ -388,6 +390,24 @@ model Invitation {
   // The analytics funnel (M9 T11; S2) aggregates first publications by day over one bounded window, so migration
   // 20261128130000_add_analytics_indexes adds this index concurrently for that range scan.
   @@index([firstPublishedAt])
+}
+
+// One previous public address of one invitation (F11; S2.11, L15.2). The owner may rename `/i/<slug>` at most five
+// times, and every address it leaves behind keeps resolving through a permanent redirect, so an already shared link
+// never breaks. The slug is the primary key, so PostgreSQL itself refuses a repeated previous address, and the
+// invitation reference is ON DELETE RESTRICT for the reason L24 records: an invitation is never hard-deleted here, so
+// the restriction blocks no product operation and keeps an address from outliving the invitation it points at.
+// Migration 20261213120000_add_invitation_slug_alias adds what Prisma cannot express: the guards that refuse an alias
+// equal to a live `Invitation.slug`, a sixth alias for one invitation, and a new invitation taking a previous address.
+model InvitationSlugAlias {
+  slug         String   @id @db.VarChar(60)
+  invitationId String   @db.Uuid
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+
+  // Counting one invitation's aliases is what refuses the sixth rename, and it reads this index.
+  @@index([invitationId])
 }
 
 // Feature data of one invitation, stored apart from the template (F1; S3, S4): changing the template never

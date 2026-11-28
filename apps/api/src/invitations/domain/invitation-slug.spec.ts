@@ -164,7 +164,25 @@ describe("reserved slugs", () => {
   it("lists the reserved words as lower-case data", () => {
     assert.deepEqual(
       [...RESERVED_INVITATION_SLUGS],
-      ["admin", "api", "cuenta", "ingresar", "health", "_next", "invitaciones", "invitacion"],
+      [
+        "admin",
+        "api",
+        "auth",
+        "catalog",
+        "cuenta",
+        "fonts",
+        "health",
+        "i",
+        "ingresar",
+        "invitacion",
+        "invitaciones",
+        "invitame",
+        "me",
+        "media",
+        "payments",
+        "public",
+        "_next",
+      ],
     );
   });
 

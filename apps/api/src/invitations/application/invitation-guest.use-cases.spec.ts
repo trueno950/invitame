@@ -126,6 +126,33 @@ class MemoryInvitationRepository implements InvitationRepository {
     return this.rows.find((row) => row.slug === slug && row.status === "PUBLISHED") ?? null;
   }
 
+  /** The previous addresses of each invitation (F11; L15.3), keyed by slug. */
+  readonly aliases = new Map<string, string>();
+
+  async findPublishedByAlias(slug: string): Promise<InvitationRecordWithMusic | null> {
+    const invitationId = this.aliases.get(slug);
+
+    return invitationId === undefined
+      ? null
+      : (this.rows.find((row) => row.id === invitationId && row.status === "PUBLISHED") ?? null);
+  }
+
+  async countSlugAliases(invitationId: string): Promise<number> {
+    return [...this.aliases.values()].filter((value) => value === invitationId).length;
+  }
+
+  async isSlugInUse(_slug: string, _exceptInvitationId: string): Promise<boolean> {
+    throw new Error("isSlugInUse is not used by the guest use cases");
+  }
+
+  async renameSlug(
+    _ownerId: string,
+    _id: string,
+    _slug: string,
+  ): Promise<InvitationRecordWithMusic | null> {
+    throw new Error("renameSlug is not used by the guest use cases");
+  }
+
   seed(overrides: SeedOptions = {}): InvitationRecordWithMusic {
     const at = new Date("2026-11-01T10:00:00.000Z");
     // The unique slug index is the database's: this double keeps every seeded row distinct so a slug names one row.
@@ -512,7 +539,7 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
   const update = new UpdateGuestUseCase(invitations, catalog, guests, () => NOW);
   const remove = new DeleteGuestUseCase(invitations, catalog, guests);
   const rotate = new RotateGuestTokenUseCase(invitations, catalog, guests, () => NOW);
-  const readGuest = new GetPublicGuestUseCase(invitations, guests, publicInvitations);
+  const readGuest = new GetPublicGuestUseCase(guests, publicInvitations);
   const submit = new SubmitGuestRsvpUseCase(invitations, catalog, guests, rateLimiter, () => NOW);
   const checkIn = new CheckInGuestUseCase(invitations, catalog, guests, () => NOW);
   const exportAttendance = new GetAttendanceExportUseCase(invitations, catalog, guests, rsvp);
@@ -969,6 +996,31 @@ describe("guest list use cases (M6 G2; S1, S3, S4)", () => {
   });
 
   describe("the personal page and the guest's answer", () => {
+    it("serves the personal page through a previous address and carries the current one to redirect to (F11; L15.3)", async () => {
+      const first = await seedGuest({ packageId: "deluxe", seats: 2, name: "Ana" });
+      // The owner renamed the invitation: `invitacion-previa1` is now a previous address of it.
+      invitations.aliases.set("invitacion-previa1", first.invitation.id);
+
+      const page = await readGuest.execute("invitacion-previa1", first.token);
+
+      // The token keeps working after the rename, and the page states the address the web must redirect to.
+      assert.equal(page?.guest.name, "Ana");
+      assert.equal(page?.page.slug, first.invitation.slug);
+      assert.equal(page?.page.redirectTo, first.invitation.slug);
+      // The current address itself needs no redirect.
+      assert.equal(
+        (await readGuest.execute(first.invitation.slug, first.token))?.page.redirectTo,
+        null,
+      );
+    });
+
+    it("answers nothing for a previous address whose invitation is not published (F11; L15.3, A3)", async () => {
+      const draft = invitations.seed({ status: "DRAFT" });
+      invitations.aliases.set("invitacion-previa2", draft.id);
+
+      assert.equal(await readGuest.execute("invitacion-previa2", "A".repeat(22)), null);
+    });
+
     it("answers the public page plus the guest's own block, and nothing about another guest", async () => {
       const first = await seedGuest({
         packageId: "deluxe",

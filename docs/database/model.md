@@ -78,8 +78,11 @@ catalog row, because the existing `GUEST_LIST` and `QR_PASS` keys gate the featu
 new `ReminderDelivery` table with its unique attempt key, and — in the same file, because the seed never updates an
 existing package — the `WHATSAPP_REMINDERS` catalog feature row and its link to the `deluxe` package, all inserted with
 `ON CONFLICT DO NOTHING` so a second run stores nothing. The column and the table are new, so no row is rewritten, and
-nothing is deleted. Future analytics design is documented separately in
-[`future-model.md`](future-model.md); that document does not add tables.
+nothing is deleted. F11 adds the additive `20261213120000_add_invitation_slug_alias` migration: the new
+`InvitationSlugAlias` table and a rewritten `prevent_invitation_pinned_field_mutation` function, which lets
+`Invitation.slug` change only inside the rename the API performs. No row is rewritten and no catalog key is added, so
+`InvitationSlugAlias` starts empty and every invitation keeps the address it already had. Future analytics design is
+documented separately in [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
 | --- | --- |
@@ -103,6 +106,7 @@ nothing is deleted. Future analytics design is documented separately in
 | `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary`, `giftRegistry`, `lodging`, and `livestream` (or `NULL`), the opening animation switch `openingAnimation` (`NOT NULL`, default `true`), the WhatsApp reminder switches `reminders` (or `NULL`), and timestamps |
 | `ReminderDelivery` | One attempt to deliver one WhatsApp reminder: the invitation and guest references, the `kind` (`PENDING_RSVP_7D`, `PENDING_RSVP_2D`, `EVENT_EVE`), the calendar `dueDate` of the invitation's own zone, the `status` (`pending`, `sent`, `skipped`, `failed`), a stable `reason` (up to 40 characters, `not_configured` while no provider exists), `attemptedAt`, and timestamps. The unique key `(invitationId, guestId, kind, dueDate)` is what makes a second run of the same day send nothing twice. No phone, name, or message body is stored |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
+| `InvitationSlugAlias` | One previous public address of one invitation: the `slug` (primary key, so a previous address is unique), the `invitationId`, and `createdAt`. At most five per invitation, recorded by the rename; every one keeps resolving through a permanent redirect |
 | `InvitationPlace` | The point one invitation's address field refers to: the invitation reference, the content `field` name (`address`, `ceremonyAddress`), the geocoder `label` the owner chose, the `lat`/`lng` of the point, and `updatedAt`; the pair `(invitationId, field)` is the primary key, so one address field has at most one point |
 | `PaymentEvent` | One received provider event: the nullable `paymentId` it was matched to, the `provider` and its unique `providerEventId`, the normalized `type` (`paid`, `failed`, `expired`, `refunded`), `receivedAt`, `processedAt`, the decision `outcome`, and the SHA-256 `payloadSha256` of the raw body |
 | `InvitationView` | One counted opening of one invitation's link: the invitation reference, the calendar `day` in `America/Mexico_City`, the `source` (`PUBLIC` or `GUEST`), and the `count` of openings that pair counted; the composite primary key is `(invitationId, day, source)`. No IP address, user agent, referrer, cookie, session, token, or slug |
@@ -149,6 +153,20 @@ nothing is deleted. Future analytics design is documented separately in
 - `Invitation.slug` is unique through the `Invitation_slug_key` index, so uniqueness is PostgreSQL's, not a preflight
   query. `Invitation_slug_format` requires `^[a-z0-9]+(-[a-z0-9]+)*$`, and `Invitation_slug_length` requires three to
   sixty characters (`VARCHAR(60)` caps the column as well).
+- The custom address (F11; S2.11, L15.1-L15.3) adds a narrower rule the API owns for the slug the owner types — three to
+  forty characters of lower-case letters, digits, and inner hyphens, no double hyphen, never a reserved route or product
+  word (`apps/api/src/invitations/domain/invitation-slug.ts`) — and keeps the column's own broader constraints, so a
+  generated slug and a chosen one are both storable. `Invitation.slug` may change only through the rename: the
+  `Invitation_pinned_fields_immutable` trigger refuses a slug change unless the transaction set the transaction-local
+  `invitame.slug_rename` setting to that invitation's id, and the deferred `Invitation_slug_rename_records_alias`
+  constraint trigger refuses the commit when the same transaction did not store the previous slug in
+  `InvitationSlugAlias`. `ownerId`, `packageId`, and every other pinned field keep refusing exactly as before.
+- `InvitationSlugAlias` holds every previous address. Its primary key is the slug, so a previous address is unique; the
+  `InvitationSlugAlias_guards` trigger refuses an alias equal to a live `Invitation.slug` and a sixth alias for one
+  invitation; the `Invitation_slug_not_aliased` trigger refuses a new invitation taking an address somebody left behind;
+  and the rename refuses an address that already exists as a current or a previous one. The invitation reference is
+  `ON DELETE RESTRICT`, for the reason L24 records: an invitation is never hard-deleted here, so the restriction blocks
+  no product operation and keeps a previous address from outliving the invitation it redirects to.
 - `Invitation.content` is JSONB checked to be a JSON object by `Invitation_content_object`. Ownership, the pinned
   version, the package, the slug, the status, and the archive marker stay normalized columns (S10).
 - Invitation statuses are `DRAFT`, `PUBLISHED`, and `ARCHIVED` (A2). Milestone 4 wrote `DRAFT` and `ARCHIVED`;
@@ -382,6 +400,12 @@ normalization, the playlist link allow-list, and the gating — lives in
   seeded ones), then the `OPENING_ANIMATION` `Feature` row by key, then
   `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "openingAnimation";`. Only the stored switches and the catalog key
   are lost; invitations, their content, and every other feature setting stay. Never edit the applied migration file.
+- Rollback / recovery of `20261213120000_add_invitation_slug_alias`: additive in its data, so recovery is redeploying
+  the previous migration set, or by hand dropping the three triggers and their functions the migration's own header
+  lists, restoring the previous `prevent_invitation_pinned_field_mutation` body exactly, and then
+  `DROP TABLE "InvitationSlugAlias";`. Restoring that body makes `slug` immutable again; the current address of every
+  invitation is untouched either way, and only the previous addresses stop resolving, which is a deliberate data change
+  the operator must plan. Never edit the applied migration file.
 - Rollback / recovery of `20261207120000_add_whatsapp_reminders`: additive, so recovery is redeploying the previous
   migration set, or by hand `DELETE FROM "ReminderDelivery";`, then deleting the `WHATSAPP_REMINDERS` `PackageFeature`
   links and the `WHATSAPP_REMINDERS` `Feature` row by key, then

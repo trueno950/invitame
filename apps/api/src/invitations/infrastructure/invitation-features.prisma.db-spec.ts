@@ -1449,6 +1449,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "invitationId",
         "places",
         "publishedAt",
+        // The current address a guest reached through a previous one (F11; L15.3); null for the current address.
+        "redirectTo",
         "slug",
         "timeZone",
       ]);

@@ -47,12 +47,17 @@ import {
   SetGuestbookEntryHiddenUseCase,
 } from "../application/invitation-guestbook.use-cases";
 import type { PlacePoint } from "../domain/invitation-place";
+import {
+  CheckInvitationSlugAvailabilityUseCase,
+  RenameInvitationSlugUseCase,
+} from "../application/invitation-slug.use-cases";
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import {
   CreateInvitationDto,
   UpdateInvitationContentDto,
   UpdateInvitationFeaturesDto,
   UpdateInvitationPlaceDto,
+  UpdateInvitationSlugDto,
 } from "./dto/invitation.dtos";
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import { CheckInGuestDto, CreateGuestDto, UpdateGuestDto } from "./dto/invitation-guest.dtos";
@@ -69,6 +74,8 @@ import {
   orInvitationSummaryNotFound,
   orOwnedInvitationNotFound,
   orPlaceSuggestionsNotFound,
+  orSlugAvailabilityNotFound,
+  type SlugAvailabilityResponse,
   toInvitationListItemResponse,
   toOwnedInvitationResponse,
 } from "./invitation.response";
@@ -130,6 +137,10 @@ export class InvitationsController {
     private readonly updatePlace: UpdateInvitationPlaceUseCase,
     @Inject(ClearInvitationPlaceUseCase)
     private readonly clearPlace: ClearInvitationPlaceUseCase,
+    @Inject(CheckInvitationSlugAvailabilityUseCase)
+    private readonly checkSlugAvailability: CheckInvitationSlugAvailabilityUseCase,
+    @Inject(RenameInvitationSlugUseCase)
+    private readonly renameSlug: RenameInvitationSlugUseCase,
     @Inject(ArchiveInvitationUseCase) private readonly archiveInvitation: ArchiveInvitationUseCase,
     @Inject(PublishInvitationUseCase) private readonly publishInvitation: PublishInvitationUseCase,
     @Inject(UnpublishInvitationUseCase)
@@ -271,6 +282,52 @@ export class InvitationsController {
     try {
       return orPlaceSuggestionsNotFound(
         await this.searchPlaces.execute({ ownerId: userId, id, query }),
+      );
+    } catch (error) {
+      return mapInvitationError(error);
+    }
+  }
+
+  /**
+   * Whether the owner may save the typed address (F11; S2.11, L15.3): 200 with one of `available`, `taken`, `invalid`,
+   * or `reserved`. Creator-owned, exactly like every other route of this controller: another customer's id is 404
+   * `INVITATION_NOT_FOUND` (A4). The answer never names another owner or another invitation, so a taken address only
+   * says that it is taken. The text is read raw and classified by the domain, and an owner over the check limit is
+   * 429 `SLUG_AVAILABILITY_RATE_LIMITED` and changes nothing.
+   */
+  @Get(":id/slug-availability")
+  async readSlugAvailability(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Query("slug") slug: unknown,
+  ): Promise<SlugAvailabilityResponse> {
+    try {
+      return orSlugAvailabilityNotFound(
+        await this.checkSlugAvailability.execute({ ownerId: userId, id, slug }),
+      );
+    } catch (error) {
+      return mapInvitationError(error);
+    }
+  }
+
+  /**
+   * Renames the public address of a DRAFT or a PUBLISHED invitation (F11; S2.11, L15.2, L15.3): 200 with the owned
+   * invitation, whose `slug` is the new one, so the editor shows the saved address without a second read. The previous
+   * address becomes an alias in the same transaction, so every link already shared keeps redirecting permanently to
+   * the new one. An archived invitation is 409 `INVITATION_NOT_EDITABLE`, another customer's id is 404 (A2, A4), an
+   * address the rule refuses is 400 `INVALID_INVITATION_SLUG` with its issue, a reserved word is 409
+   * `INVITATION_SLUG_RESERVED`, an address already held is 409 `INVITATION_SLUG_TAKEN`, and the sixth rename is 409
+   * `INVITATION_SLUG_RENAME_LIMIT`.
+   */
+  @Put(":id/slug")
+  async replaceSlug(
+    @SessionUserId() userId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Body() body: UpdateInvitationSlugDto,
+  ): Promise<OwnedInvitationResponse> {
+    try {
+      return orOwnedInvitationNotFound(
+        await this.renameSlug.execute({ ownerId: userId, id, slug: body.slug }),
       );
     } catch (error) {
       return mapInvitationError(error);

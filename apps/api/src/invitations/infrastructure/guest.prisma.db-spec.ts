@@ -65,7 +65,7 @@ describe("guest list on real PostgreSQL (M6 G2)", () => {
   const update = new UpdateGuestUseCase(invitations, catalog, guests, () => AT);
   const remove = new DeleteGuestUseCase(invitations, catalog, guests);
   const rotate = new RotateGuestTokenUseCase(invitations, catalog, guests, () => AT);
-  const readGuest = new GetPublicGuestUseCase(invitations, guests, publicInvitations);
+  const readGuest = new GetPublicGuestUseCase(guests, publicInvitations);
   const submit = new SubmitGuestRsvpUseCase(invitations, catalog, guests, rateLimiter, () => AT);
   const checkIn = new CheckInGuestUseCase(invitations, catalog, guests, () => AT);
   const exportAttendance = new GetAttendanceExportUseCase(invitations, catalog, guests, rsvp);

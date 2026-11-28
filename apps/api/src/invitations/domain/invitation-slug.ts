@@ -24,19 +24,31 @@ export const INVITATION_SLUG_MIN_LENGTH = 3;
 export const INVITATION_SLUG_MAX_LENGTH = 60;
 
 /**
- * Words a slug may never be: routes and product pages that already exist or will exist, so a full slug
- * equal to one of them would shadow a real page. Stored slugs are always lower-case, and the comparison
- * ignores case as a guard.
+ * Words a slug may never be: every top-level route segment of `apps/web/app` (`admin`, `api`, `cuenta`, `fonts`,
+ * `health`, `i`, `ingresar`, and Next.js's own `_next`), every API path prefix (`invitations`, `public`, `catalog`,
+ * `media`, `me`, `payments`, `auth`, `health`, `admin`), and the product and catalog names that already mean a page
+ * (`invitame`, `invitacion`, `invitaciones`). A full slug equal to one of them would shadow a real page, so the owner
+ * may never claim one (F11; S2.11, L15.1). Stored slugs are always lower-case, and the comparison ignores case as a
+ * guard.
  */
 export const RESERVED_INVITATION_SLUGS = [
   "admin",
   "api",
+  "auth",
+  "catalog",
   "cuenta",
-  "ingresar",
+  "fonts",
   "health",
-  "_next",
-  "invitaciones",
+  "i",
+  "ingresar",
   "invitacion",
+  "invitaciones",
+  "invitame",
+  "me",
+  "media",
+  "payments",
+  "public",
+  "_next",
 ] as const;
 
 /** The randomness source the generator draws from; injected so a test can be deterministic. */
@@ -84,5 +96,60 @@ export function isReservedSlug(slug: string): boolean {
 export function assertNotReservedSlug(slug: string): void {
   if (isReservedSlug(slug)) {
     throw new ReservedInvitationSlugError(slug);
+  }
+}
+
+// The address the owner types (F11; S2.11, L15.1, approval). A generated slug is neutral and random; this one is the
+// owner's own words, so it is narrower than the column: 3 to 40 characters, lower-case letters, digits, and inner
+// hyphens, never two hyphens in a row, and never a reserved word. The database column stays wider (3 to 60, the shape
+// a generated slug has); this rule is the domain's, and the rename is the only write that applies it.
+
+/** The address rule itself: one letter or digit, 1 to 38 inner characters, one letter or digit. */
+export const OWNER_INVITATION_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+export const OWNER_INVITATION_SLUG_MIN_LENGTH = 3;
+export const OWNER_INVITATION_SLUG_MAX_LENGTH = 40;
+
+/** How many times one owner may rename the address of one invitation (L15.2, approval). */
+export const MAX_INVITATION_SLUG_RENAMES = 5;
+
+/** What the owner's availability check may answer (F11; L15.3). */
+export type OwnerSlugChoice = "valid" | "invalid" | "reserved";
+
+/** The English issue an invalid address gets, for the API's `issues` list. */
+export const INVALID_OWNER_SLUG_ISSUE =
+  "The address must be 3 to 40 characters of lower-case letters, digits, and inner hyphens.";
+
+/**
+ * What the rule says about the text the owner typed: well formed and free of the reserved words, malformed, or a
+ * reserved word. A reserved word is only reported as such when it is otherwise well formed, so a one-character word
+ * such as `i` is `invalid` (it is too short) and still refused.
+ */
+export function ownerSlugChoice(value: unknown): OwnerSlugChoice {
+  if (typeof value !== "string") {
+    return "invalid";
+  }
+  const length = value.length;
+
+  if (
+    length < OWNER_INVITATION_SLUG_MIN_LENGTH ||
+    length > OWNER_INVITATION_SLUG_MAX_LENGTH ||
+    !OWNER_INVITATION_SLUG_PATTERN.test(value) ||
+    value.includes("--")
+  ) {
+    return "invalid";
+  }
+
+  return isReservedSlug(value) ? "reserved" : "valid";
+}
+
+/** The one English sentence that explains a refused address, or null when the rule accepts it. */
+export function ownerSlugIssue(value: unknown): string | null {
+  switch (ownerSlugChoice(value)) {
+    case "valid":
+      return null;
+    case "reserved":
+      return `The address ${String(value)} is reserved.`;
+    default:
+      return INVALID_OWNER_SLUG_ISSUE;
   }
 }

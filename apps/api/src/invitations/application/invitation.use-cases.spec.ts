@@ -268,6 +268,45 @@ class MemoryInvitationRepository implements InvitationRepository {
     const stored = this.rows.find((row) => row.slug === slug && row.status === "PUBLISHED");
     return stored ? { ...stored, content: { ...stored.content } } : null;
   }
+
+  /** The previous addresses of each invitation (F11; L15.3): the alias read the public redirect uses. */
+  readonly aliases = new Map<string, string>();
+
+  async findPublishedByAlias(slug: string): Promise<InvitationRecordWithMusic | null> {
+    const invitationId = this.aliases.get(slug);
+    const found =
+      invitationId === undefined
+        ? undefined
+        : this.rows.find((row) => row.id === invitationId && row.status === "PUBLISHED");
+
+    return found === undefined ? null : structuredClone(found);
+  }
+
+  async countSlugAliases(invitationId: string): Promise<number> {
+    return [...this.aliases.values()].filter((value) => value === invitationId).length;
+  }
+
+  async isSlugInUse(slug: string, exceptInvitationId: string): Promise<boolean> {
+    const current = this.rows.some((row) => row.slug === slug && row.id !== exceptInvitationId);
+
+    return current || this.aliases.has(slug);
+  }
+
+  async renameSlug(
+    ownerId: string,
+    id: string,
+    slug: string,
+  ): Promise<InvitationRecordWithMusic | null> {
+    const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
+    if (row === undefined) {
+      return null;
+    }
+    const previous = row.slug;
+    row.slug = slug;
+    this.aliases.set(previous, id);
+
+    return structuredClone(row);
+  }
 }
 
 /** An in-memory `InvitationCatalog`: published versions, any-status schemas, and package entitlements. */
@@ -2258,6 +2297,8 @@ describe("GetPublicInvitationUseCase", () => {
       hiddenFields: [],
       publishedAt: PUBLISHED_AT,
       timeZone: "America/Mexico_City",
+      // The guest asked for the current address, so the page redirects nowhere (F11; L15.3).
+      redirectTo: null,
       // The fixture's package includes no catalog feature, so only the always-available calendar is left (S4).
       features: {
         countdown: false,
@@ -2293,6 +2334,7 @@ describe("GetPublicInvitationUseCase", () => {
       "invitationId",
       "places",
       "publishedAt",
+      "redirectTo",
       "slug",
       "timeZone",
     ]);

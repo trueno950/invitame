@@ -39,6 +39,7 @@ import {
   generateInvitationSlug,
   isReservedSlug,
   isValidInvitationSlug,
+  MAX_INVITATION_SLUG_RENAMES,
 } from "../domain/invitation-slug";
 import { packageFitsTemplateVersion } from "../domain/package-fit";
 import { PACKAGE_FIT_ISSUE, publicationIssues } from "../domain/publication-readiness";
@@ -218,6 +219,11 @@ export interface OwnedInvitation extends InvitationSummary {
     reminders: InvitationReminders | null;
   };
   /**
+   * How many times this owner may still rename the address (F11; S2.11, L15.2): the rename bound minus the previous
+   * addresses the invitation keeps. It is added beside the fields the read already carried and changes none of them.
+   */
+  slugRenamesRemaining: number;
+  /**
    * Whether this deployment can deliver a WhatsApp reminder at all (F6; S6, L9.5). It is a capability, never a secret:
    * false means every send is recorded as skipped `not_configured`, and the editor says «Aún no está activo». The
    * switches are stored either way, so they work as soon as a sender is configured.
@@ -266,6 +272,7 @@ export function toOwnedInvitation(
   schema: unknown,
   includedFeatureKeys: readonly string[],
   remindersConfigured = false,
+  slugRenamesRemaining: number = MAX_INVITATION_SLUG_RENAMES,
 ): OwnedInvitation {
   return {
     ...toSummary(record),
@@ -284,6 +291,7 @@ export function toOwnedInvitation(
       openingAnimation: record.openingAnimation,
       reminders: record.reminders,
     },
+    slugRenamesRemaining,
     remindersConfigured,
     availableFeatures: availableFeatureKeys({
       includedFeatureKeys,
@@ -486,12 +494,16 @@ export class GetOwnInvitationUseCase {
 
     const snapshot = await this.catalog.findVersionSchema(stored.templateVersionId);
     const includedFeatureKeys = await includedFeatureKeysOf(this.catalog, stored.packageId);
+    // How many renames are left is the alias count, read for the same read so the editor states it without a second
+    // request (F11; L15.2).
+    const renames = await this.invitations.countSlugAliases(stored.id);
 
     return toOwnedInvitation(
       stored,
       snapshot?.schema ?? null,
       includedFeatureKeys,
       this.reminders?.isConfigured() ?? false,
+      Math.max(0, MAX_INVITATION_SLUG_RENAMES - renames),
     );
   }
 }
@@ -855,11 +867,30 @@ export class GetPublicInvitationUseCase {
     if (!isValidInvitationSlug(slug)) {
       return null;
     }
-    const published = await this.invitations.findPublishedBySlug(slug);
-    if (published === null) {
+    const resolved = await this.resolve(slug);
+
+    return resolved === null ? null : this.project(resolved.published, resolved.redirectTo);
+  }
+
+  /**
+   * The published invitation a current address or a previous one names, with the current address a redirect points at
+   * (F11; S2.11, L15.3). The current address is read first, so the ordinary guest page costs the query it always cost;
+   * only a slug no invitation currently holds is looked up in the aliases, and only a published row is answered, so a
+   * draft that once had the address still answers nothing (A3). Null means the guest sees the one 404.
+   */
+  async resolve(
+    slug: string,
+  ): Promise<{ published: InvitationRecordWithMusic; redirectTo: string | null } | null> {
+    if (!isValidInvitationSlug(slug)) {
       return null;
     }
-    return this.project(published);
+    const published = await this.invitations.findPublishedBySlug(slug);
+    if (published !== null) {
+      return { published, redirectTo: null };
+    }
+    const renamed = await this.invitations.findPublishedByAlias(slug);
+
+    return renamed === null ? null : { published: renamed, redirectTo: renamed.slug };
   }
 
   /**
@@ -867,7 +898,10 @@ export class GetPublicInvitationUseCase {
    * personal guest page composes this read with the guest's own block, so both pages share one definition of what a
    * guest may see. It throws `PublicInvitationNotRenderableError` exactly like `execute`.
    */
-  async project(published: InvitationRecordWithMusic): Promise<PublicInvitation> {
+  async project(
+    published: InvitationRecordWithMusic,
+    redirectTo: string | null = null,
+  ): Promise<PublicInvitation> {
     const render = await this.catalog.findVersionRenderData(published.templateVersionId);
     // Fail closed: with no pinned version or a renderer nobody implements there is nothing to render (A3).
     if (render === null || !this.catalog.isRendererRegistered(render.componentKey)) {
@@ -942,6 +976,8 @@ export class GetPublicInvitationUseCase {
       ),
       // An elapsed expiry is not a 404: the page still renders and the RSVP closes (S2, T3).
       expired: isInvitationExpired(published.expiresAt, this.now()),
+      // The current address a guest reached through a previous one (F11; L15.3): null for the ordinary read.
+      redirectTo,
     };
   }
 }

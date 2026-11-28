@@ -7,7 +7,8 @@
 /**
  * The unique slug index refused a new invitation and PostgreSQL stored nothing: another invitation already
  * holds this slug. The create use case retries with a fresh generated slug; presentation never sees it
- * unless every attempt collides.
+ * unless every attempt collides. The owner's rename (F11; L15.3) lets it propagate instead, because a taken
+ * address is a refusal the owner must see, not a collision to retry.
  */
 export class InvitationSlugTakenError extends Error {
   constructor(readonly slug: string) {
@@ -131,6 +132,40 @@ export class PlaceSearchRateLimitedError extends Error {
   constructor() {
     super("Too many place searches; retry when the window ends.");
     this.name = "PlaceSearchRateLimitedError";
+  }
+}
+
+/**
+ * The address the owner typed is not acceptable (F11; S2.11, L15.1): it is not 3 to 40 characters of lower-case
+ * letters, digits, and inner hyphens, or it is a reserved word. `issues` are the deterministic English explanations
+ * the domain produced; nothing was renamed.
+ */
+export class InvalidInvitationSlugError extends Error {
+  constructor(readonly issues: readonly string[]) {
+    super("The invitation address is not valid.");
+    this.name = "InvalidInvitationSlugError";
+  }
+}
+
+/**
+ * The invitation already keeps the five previous addresses its owner may create (F11; L15.2, approval), so the sixth
+ * rename is refused with its own code. Nothing was renamed.
+ */
+export class InvitationSlugRenameLimitError extends Error {
+  constructor(readonly limit: number) {
+    super(`An invitation keeps at most ${limit} previous addresses.`);
+    this.name = "InvitationSlugRenameLimitError";
+  }
+}
+
+/**
+ * The owner reached the address-check limit (F11; L15.3): too many availability checks in the window. Nothing was
+ * asked of the database and nothing was renamed; the limit rests by itself as the window ends.
+ */
+export class SlugAvailabilityRateLimitedError extends Error {
+  constructor() {
+    super("Too many address checks; retry when the window ends.");
+    this.name = "SlugAvailabilityRateLimitedError";
   }
 }
 

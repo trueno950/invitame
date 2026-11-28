@@ -399,8 +399,11 @@ export class RotateGuestTokenUseCase {
  */
 export class GetPublicGuestUseCase {
   constructor(
-    private readonly invitations: InvitationRepository,
     private readonly guests: GuestRepository,
+    /**
+     * The public read both pages share (M6 G2; F11; L15.3): it resolves the address, answers the projection, and carries
+     * the current address a previous link must redirect to, so this read never repeats the lookup.
+     */
     private readonly publicInvitations: GetPublicInvitationUseCase,
   ) {}
 
@@ -408,16 +411,19 @@ export class GetPublicGuestUseCase {
     if (!isValidInvitationSlug(slug) || !isGuestTokenFormat(token)) {
       return null;
     }
-    const published = await this.invitations.findPublishedBySlug(slug);
-    if (published === null) {
+    // A previous address of a published invitation reaches the same page and carries the redirect target (F11;
+    // L15.3), so an already shared personal link keeps working and lands on the current address.
+    const resolved = await this.publicInvitations.resolve(slug);
+    if (resolved === null) {
       return null;
     }
+    const published = resolved.published;
     const guest = await this.guests.findByToken(published.id, guestTokenHash(token));
     if (guest === null) {
       return null;
     }
 
-    const page = await this.publicInvitations.project(published);
+    const page = await this.publicInvitations.project(published, resolved.redirectTo);
     const response = guest.response;
 
     return {

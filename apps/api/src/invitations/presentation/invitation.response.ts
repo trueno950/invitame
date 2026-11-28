@@ -11,14 +11,18 @@ import {
   InvalidInvitationContentError,
   InvalidInvitationFeaturesError,
   InvalidInvitationPlaceError,
+  InvalidInvitationSlugError,
   InvalidPlaceQueryError,
   InvitationContentConflictError,
   InvitationPackageDoesNotFitError,
   InvitationPackageNotFoundError,
   InvitationPaymentRequiredError,
+  InvitationSlugRenameLimitError,
+  InvitationSlugTakenError,
   InvitationSlugUnavailableError,
   InvitationTemplateVersionNotPublishedError,
   PlaceSearchRateLimitedError,
+  SlugAvailabilityRateLimitedError,
 } from "../application/invitation.application.errors";
 import type {
   InvitationListItem,
@@ -32,6 +36,7 @@ import {
   InvitationNotEditableError,
   InvitationNotPublishableError,
   InvitationNotPublishedError,
+  ReservedInvitationSlugError,
 } from "../domain/invitation.errors";
 import type { JsonObject } from "../domain/invitation-content";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
@@ -143,6 +148,11 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
      */
     reminders: { version: 1; pendingRsvp: boolean; eventEve: boolean } | null;
   };
+  /**
+   * How many times the owner may still rename the address (F11; S2.11, L15.2). It is added beside the fields the body
+   * already carried and changes none of them, so a page deployed before it reads the body it always read (L20).
+   */
+  slugRenamesRemaining: number;
   /**
    * Whether this deployment can deliver a WhatsApp reminder at all (F6; S6, L9.5): a capability, never a secret. False
    * is what the editor's reminder block shows as «Aún no está activo», and it never hides the switches, because they
@@ -291,6 +301,13 @@ export interface PublicInvitationResponse {
    * what closes its RSVP. It is a boolean, never the instant, so the API keeps deciding when the expiration happened.
    */
   expired: boolean;
+  /**
+   * The current address when the guest arrived through a previous one (F11; S2.11, L15.3), or null when the slug the
+   * guest asked for is the current one. The web answers it with a permanent redirect before rendering, so an already
+   * shared link keeps working. It is added beside the fields the body already carried and changes none of them, so a
+   * page deployed before it reads the body it always read (L20).
+   */
+  redirectTo: string | null;
 }
 
 export function toInvitationSummaryResponse(stored: InvitationSummary): InvitationSummaryResponse {
@@ -402,6 +419,7 @@ export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitat
             },
       openingAnimation: stored.featureSettings.openingAnimation,
     },
+    slugRenamesRemaining: stored.slugRenamesRemaining,
     remindersConfigured: stored.remindersConfigured,
     availableFeatures: [...stored.availableFeatures],
     places: { ...stored.places },
@@ -521,7 +539,25 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
     places: { ...stored.places },
     // A boolean, never the instant: the guest page reads this to close the RSVP (S2, T3).
     expired: stored.expired,
+    // The current address a guest reached through a previous one (F11; L15.3).
+    redirectTo: stored.redirectTo,
   };
+}
+
+/**
+ * The answer of the address check (F11; S2.11, L15.3): the address the check is about and one of the four words the
+ * editor renders. It never names an owner or an invitation, so a taken address only says that it is taken.
+ */
+export interface SlugAvailabilityResponse {
+  slug: string;
+  status: "available" | "taken" | "invalid" | "reserved";
+}
+
+/** The address check of one owned invitation, or the owner-facing 404 (F11; L15.3, A4). */
+export function orSlugAvailabilityNotFound(
+  stored: { slug: string; status: SlugAvailabilityResponse["status"] } | null,
+): SlugAvailabilityResponse {
+  return stored === null ? notFound() : { slug: stored.slug, status: stored.status };
 }
 
 /**
@@ -572,6 +608,10 @@ export function orInvitationSummaryNotFound(
  * - a place query the domain refuses is 400 `INVALID_PLACE_QUERY` with its issues, and an owner over the search
  *   limit is 429 `PLACE_SEARCH_RATE_LIMITED` (S2);
  * - a place write the domain refuses is 400 `INVALID_INVITATION_PLACE` with its issues (S2, S3);
+ * - an address the rule refuses is 400 `INVALID_INVITATION_SLUG` with its issue, a reserved word is 409
+ *   `INVITATION_SLUG_RESERVED`, an address that is already held is 409 `INVITATION_SLUG_TAKEN`, the sixth rename is 409
+ *   `INVITATION_SLUG_RENAME_LIMIT`, and an owner over the check limit is 429 `SLUG_AVAILABILITY_RATE_LIMITED`
+ *   (F11; S2.11, L15.1-L15.3);
  * - an archived invitation is 409 with `INVITATION_NOT_EDITABLE`, or `INVITATION_ALREADY_ARCHIVED` for a
  *   repeated archive (A3, S7);
  * - a publication the lifecycle refuses is 409 with `INVITATION_ALREADY_PUBLISHED` or `INVITATION_NOT_PUBLISHED`,
@@ -618,6 +658,30 @@ export function mapInvitationError(error: unknown): never {
   if (error instanceof PlaceSearchRateLimitedError) {
     // 429 is the one answer for "you asked too often"; the editor shows it as a quiet note, never as a failure.
     throw new HttpException({ code: "PLACE_SEARCH_RATE_LIMITED" }, HttpStatus.TOO_MANY_REQUESTS);
+  }
+  if (error instanceof SlugAvailabilityRateLimitedError) {
+    // The address check has its own limit, so the owner sees one quiet note instead of a failing field (F11; L15.3).
+    throw new HttpException(
+      { code: "SLUG_AVAILABILITY_RATE_LIMITED" },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+  if (error instanceof InvalidInvitationSlugError) {
+    throw new BadRequestException({
+      code: "INVALID_INVITATION_SLUG",
+      issues: [...error.issues],
+    });
+  }
+  if (error instanceof ReservedInvitationSlugError) {
+    // The address is well formed but names a page of the product, so the owner must choose another one (F11; L15.1).
+    throw new ConflictException({ code: "INVITATION_SLUG_RESERVED" });
+  }
+  if (error instanceof InvitationSlugTakenError) {
+    // The rename is the only caller that lets this reach presentation (F11; L15.3): the answer never names the owner.
+    throw new ConflictException({ code: "INVITATION_SLUG_TAKEN" });
+  }
+  if (error instanceof InvitationSlugRenameLimitError) {
+    throw new ConflictException({ code: "INVITATION_SLUG_RENAME_LIMIT" });
   }
   if (error instanceof InvalidInvitationFeaturesError) {
     throw new BadRequestException({
