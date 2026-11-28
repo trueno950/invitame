@@ -547,13 +547,17 @@ administrator sign-in.
 - Limits are per database, shared by every API instance; the background-task cap is per process.
 - The public forms count on the same `RateLimit` table with their own key prefixes: the open RSVP and the guestbook
   allow 10 submissions per hour per client address and invitation, the guest album counts its own hourly cap, and the
-  unlock route of a password-protected invitation allows 10 failed attempts per 15 minutes per client address and
-  requested address plus 30 failed attempts per 15 minutes per client address across every address (F13; L18.3), so
-  varying the slug cannot buy a fresh budget. Both unlock budgets are spent before the lock is read, and an unlock whose
-  code matched refunds both, so only failures stay counted. The per-address key names a SHA-256 digest of the requested
-  address — known or unknown, so the budget never reveals whether an invitation exists — and the cap across addresses
-  names none. An address the request cannot supply does not spend the cross-address cap: the fallback bucket of the public
-  forms is scoped to one invitation, while a cross-address bucket would let one caller exhaust every guest's budget.
+  unlock route of a password-protected invitation counts three caps (F13; L18.3, L33): a hard ceiling of 300 verifications
+  per 15 minutes per client address whatever address it names, 10 failed attempts per 15 minutes per client address and
+  requested address, and 30 failed attempts per 15 minutes per client address across every address. The ceiling is spent
+  before the lock is read and before any hashing work, so an attempt over it answers 429 without buying scrypt work; the
+  two attempt budgets are counted before the lock is read too but no longer refuse the attempt — a spent budget only turns
+  the answer of a wrong code into 429 while the right code still opens — and an unlock whose code matched refunds the soft
+  counts it spent, so only failures stay counted. The per-address key names a SHA-256 digest of the requested address —
+  known or unknown, so the budget never reveals whether an invitation exists — and the two caps that span every address
+  name none. An address the request cannot supply spends neither of those two: the fallback bucket of the public forms is
+  scoped to one invitation, while a bucket spanning addresses would let one caller exhaust every guest's budget or every
+  guest's ceiling.
 
 ### Email delivery (current)
 
@@ -729,12 +733,15 @@ The locked state of a password-protected invitation (F13; S2.13, L18.2, L18.3)
     redirectTo is the current slug when the guest asked for a previous one (null otherwise), so the web redirects before
     drawing the lock screen and its access cookie lives at the address the invitation is served from; the route's own
     read, write, upload, or opening count never runs
-  → POST /public/invitations/:slug/unlock exchanges the shared code for an access token: 10 failed attempts per 15
-    minutes per client address and requested address plus 30 failed attempts per 15 minutes per client address across
-    every address, both on the shared RateLimit store and both spent before the lock is read (429 over either), a value
-    no code can be and a wrong code answer 401, and both refusals carry the same neutral body
-    { code: "INVITATION_PASSWORD_REJECTED" } and only the status differs; a correct code refunds both counts, so only
-    failures stay counted
+  → POST /public/invitations/:slug/unlock exchanges the shared code for an access token: a hard ceiling of 300
+    verifications per 15 minutes per client address whatever address it names, plus 10 failed attempts per 15 minutes per
+    client address and requested address and 30 failed attempts per 15 minutes per client address across every address, all
+    three on the shared RateLimit store and all three counted before the lock is read. The ceiling is the only refusal that
+    comes before the verifier (429 without any scrypt work); the two attempt budgets no longer refuse, so a right code
+    always opens — from an address whose failures spent its budget too — and refunds the soft counts it spent, while a
+    wrong code answers 429 once a soft budget is spent and 401 before that. A value no code can be answers 401 before any
+    of them, and every refusal carries the same neutral body { code: "INVITATION_PASSWORD_REJECTED" } with only the
+    status differing
   → the token is HMAC-SHA256 over the invitation id, the stored password version, and a 30-day expiry, keyed with
     INVITATION_ACCESS_SECRET; a changed or removed code raises the version and invalidates every older token
   → the web sends it in the X-Invitation-Access header from its own HttpOnly, Secure, SameSite=Lax cookie scoped to the
@@ -1363,16 +1370,22 @@ The full design is [ADR 0006](../adr/0006-invitation-access-code.md).
   `X-Invitation-Access` header; the web keeps it in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie scoped to that
   invitation's path. The invitation id is never inside the token, so a token minted for one invitation cannot open
   another even at the same version, and an edited field fails the MAC.
-- The attempts (L18.3): 10 failed attempts per 15 minutes per client address and requested address, plus 30 failed
-  attempts per 15 minutes per client address across every address, on the shared `RateLimit` store. Both budgets are
-  spent before the lock is read and before any hashing work, so no request of the route is free and a script cannot
-  probe the store or the verifier; a value no code can be (wider than 40 characters, shorter than 4, or carrying a
-  control character) is refused before either. An unlock whose code matched refunds both counts, so only failures stay
-  counted and guests behind one venue address are not locked out by their own correct unlocks. The per-address key holds
-  a digest of the requested address, known or unknown; when no client address resolves the cross-address cap is not spent,
-  because the public forms' fallback bucket spans one invitation and a bucket spanning every invitation would let one
-  caller exhaust every guest's budget. A wrong code, an unknown address, and an invitation with no code all answer the
-  same neutral body after the same scrypt work, so neither the body nor the timing is an oracle.
+- The attempts (L18.3, L33): a hard ceiling of 300 verifications per 15 minutes per client address, whatever address it
+  names, plus 10 failed attempts per 15 minutes per client address and requested address and 30 failed attempts per 15
+  minutes per client address across every address, on the shared `RateLimit` store. The ceiling is spent before the lock is
+  read and before any hashing work, and is the one cap that refuses an attempt before the verifier: over it, the route
+  answers the neutral 429 without a read or a derivation, so an abuser cannot buy unbounded hashing. It counts
+  verifications and not failures, so a correct code counts too, and it is never refunded. The two soft budgets are counted
+  before the lock is read as well but no longer refuse the attempt: once they are spent the code is still verified, a
+  right code opens and refunds the counts it spent (only failures stay counted, and a guest behind a shared venue address
+  is never locked out by its own failures or its own correct unlocks), and a wrong code answers the neutral body with 429
+  instead of 401, so the over-limit state stays observable. A value no code can be (wider than 40 characters, shorter than
+  4, or carrying a control character) is refused before any of them. The per-address key holds a digest of the requested
+  address, known or unknown; when no client address resolves, neither cap that spans every address is spent — the
+  cross-address failures and the ceiling alike — because the public forms' fallback bucket spans one invitation and a bucket
+  spanning every invitation would let one caller exhaust every guest's budget or every guest's ceiling. A wrong code, an
+  unknown address, and an invitation with no code all answer the same neutral body after the same scrypt work, so neither
+  the body nor the timing is an oracle.
 - The gating (L18.5): the `PASSWORD_PROTECTION` key, granted to Deluxe. It gates setting a code (409
   `PASSWORD_PROTECTION_NOT_AVAILABLE` without it); a stored code keeps protecting after the key is withdrawn, and the
   owner can still remove it.
@@ -1383,11 +1396,12 @@ The full design is [ADR 0006](../adr/0006-invitation-access-code.md).
   `application/invitation-password.spec.ts`, `invitation-access-token.spec.ts`, `invitation-unlock.use-cases.spec.ts`,
   `invitation-password.use-cases.spec.ts`, and `presentation/invitation-password.response.spec.ts` prove the hash (the
   accepted cost stays inside the `maxmem` the verifier passes, and a scrypt failure answers "does not match"), the
-  token, the order of the two budgets and the refund of a successful unlock, the neutral refusals, the redirect target of
+  token, the order of the hard ceiling and the two soft budgets with the 429 a spent soft budget answers to a wrong code
+  and the token a right code still mints, the refund of a successful unlock, the neutral refusals, the redirect target of
   a locked previous address, and the owner's two writes;
   `infrastructure/invitation-password.prisma.db-spec.ts` proves the migration's columns and checks, the version raise,
   the owner scope and archived refusal (including a write that lost a race to an archive), the lock read by current and
-  previous address with the hash mapping and the PUBLISHED rule, and the unlock limiter's two rules, key, and prefix on
+  previous address with the hash mapping and the PUBLISHED rule, and the unlock limiter's three rules, key, and prefix on
   real PostgreSQL; `collaborators/presentation/invitation-authorization.matrix.spec.ts` proves both owner routes are
   owner-only across its nine callers.
 

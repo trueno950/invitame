@@ -15,6 +15,8 @@ import {
   INVITATION_UNLOCK_CLIENT_SCOPE,
   INVITATION_UNLOCK_RATE_LIMIT,
   INVITATION_UNLOCK_RATE_LIMIT_KEY_PREFIX,
+  INVITATION_UNLOCK_VERIFICATION_RATE_LIMIT,
+  INVITATION_UNLOCK_VERIFICATION_SCOPE,
   invitationUnlockRateLimitKey,
   invitationUnlockRateLimitRule,
   type InvitationUnlockRateLimiter,
@@ -23,9 +25,13 @@ import {
 } from "./invitation-unlock-rate-limiter";
 import { UnlockInvitationUseCase } from "./invitation-unlock.use-cases";
 
-// The unlock route and the gate (F13; S2.13, L18.2, L18.3). The use case runs against an in-memory lock and an in-memory
-// limit, so each case observes the exact decision: which scope was counted, whether the code was even verified, which
-// token came back, and what a refusal answers.
+// The unlock route and the gate (F13; S2.13, L18.2, L18.3, L33). The use case runs against an in-memory lock and an
+// in-memory limit, so each case observes the exact decision: which scope was counted, whether the code was even verified,
+// which token came back, and what a refusal answers.
+//
+// The order the cases pin (L33): the shape refusal first, then the hard ceiling of 300 verifications per client address
+// (the one refusal that happens before the verifier), then the two soft budgets, which are counted but no longer refuse —
+// they decide whether a code that did not open the invitation answers 401 or 429.
 
 const INVITATION = "22222222-2222-4222-8222-222222222222";
 const OTHER_INVITATION = "33333333-3333-4333-8333-333333333333";
@@ -111,7 +117,7 @@ function attempt(
 }
 
 describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
-  it("mints a token for the invitation and version when the code matches", async () => {
+  it("mints a token for the invitation and version when the code matches (L33 order)", async () => {
     const locks = await locksWith(await hashInvitationPassword(PASSWORD));
     const limiter = new MemoryLimiter();
     const result = await useCase(locks, limiter).execute({
@@ -124,16 +130,22 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
     assert.ok(result.status === "unlocked");
     assert.deepEqual(result.expiresAt, new Date(NOW.getTime() + 30 * 24 * 60 * 60 * 1000));
     assert.equal(TOKENS.isValid(result.token, INVITATION, 3, NOW), true);
-    // The cap that spans every address is counted first, then the per-address budget under a digest of the requested
-    // address, so an attempt already over the cross-address cap spends nothing else.
-    assert.equal(limiter.scopes.length, 2);
-    assert.equal(limiter.scopes[0], INVITATION_UNLOCK_CLIENT_SCOPE);
-    assert.match(limiter.scopes[1] ?? "", /^address:[0-9a-f]{64}$/u);
-    assert.equal(limiter.scopes[1]?.includes(SLUG), false);
-    assert.deepEqual(limiter.addresses, ["198.18.0.1", "198.18.0.1"]);
-    // A successful unlock does not spend either budget.
+    // The hard ceiling is counted first, then the cap that spans every address, then the per-address budget under a digest
+    // of the requested address: an over-ceiling attempt spends nothing else (L33).
+    assert.deepEqual(limiter.scopes, [
+      INVITATION_UNLOCK_VERIFICATION_SCOPE,
+      INVITATION_UNLOCK_CLIENT_SCOPE,
+      invitationUnlockScope(SLUG),
+    ]);
+    assert.match(limiter.scopes[2] ?? "", /^address:[0-9a-f]{64}$/u);
+    assert.equal(limiter.scopes[2]?.includes(SLUG), false);
+    assert.deepEqual(limiter.addresses, ["198.18.0.1", "198.18.0.1", "198.18.0.1"]);
+    // A successful unlock does not spend either soft budget...
     assert.equal(limiter.count(invitationUnlockScope(SLUG), "198.18.0.1"), 0);
     assert.equal(limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, "198.18.0.1"), 0);
+    // ...but the ceiling counts verifications and not failures, so this attempt stays counted against it: it is the cap
+    // that bounds the scrypt work one client address can buy, whatever came of the code (L33).
+    assert.equal(limiter.count(INVITATION_UNLOCK_VERIFICATION_SCOPE, "198.18.0.1"), 1);
   });
 
   it("answers the neutral refusal for a wrong code, without minting anything", async () => {
@@ -154,11 +166,12 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
     });
 
     assert.deepEqual(result, { status: "rejected" });
-    assert.equal(limiter.scopes.length, 2);
-    assert.equal(limiter.scopes[0], INVITATION_UNLOCK_CLIENT_SCOPE);
+    assert.equal(limiter.scopes.length, 3);
+    assert.equal(limiter.scopes[0], INVITATION_UNLOCK_VERIFICATION_SCOPE);
+    assert.equal(limiter.scopes[1], INVITATION_UNLOCK_CLIENT_SCOPE);
     // A digest of the requested address, never the address itself, so the budget names no lookup.
-    assert.equal(limiter.scopes[1], invitationUnlockScope("no-existe"));
-    assert.equal(limiter.scopes[1]?.includes("no-existe"), false);
+    assert.equal(limiter.scopes[2], invitationUnlockScope("no-existe"));
+    assert.equal(limiter.scopes[2]?.includes("no-existe"), false);
   });
 
   it("answers the same refusal for an invitation with no access code", async () => {
@@ -206,21 +219,135 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
     }
   });
 
-  it("is limited before the lock is read or anything is verified", async () => {
+  it("refuses an attempt over the hard ceiling before the lock is read or the hasher runs (L33)", async () => {
     const locks = await locksWith(await hashInvitationPassword(PASSWORD));
     const limiter = new MemoryLimiter();
+    const address = "198.18.0.13";
+
+    // 300 verifications from one address, whatever address each of them named: the ceiling bounds the scrypt work one
+    // client can buy, so the count is what an abuser would have to spend before the refusal.
+    for (
+      let attempt = 0;
+      attempt < INVITATION_UNLOCK_VERIFICATION_RATE_LIMIT.max - 1;
+      attempt += 1
+    ) {
+      assert.equal(await limiter.consume(INVITATION_UNLOCK_VERIFICATION_SCOPE, address), true);
+    }
+    const scryptSpy = mock.method(crypto, "scrypt");
+
+    try {
+      // The three-hundredth verification still runs, and the spy is observed running it: the assertions below are about a
+      // hasher this test can see, not about a stub that might never have been reached.
+      assert.deepEqual(
+        await attempt(locks, limiter, "no-es-la-clave", { clientAddress: address }),
+        {
+          status: "rejected",
+        },
+      );
+      assert.ok(
+        scryptSpy.mock.callCount() >= 1,
+        "the spy observes the hash an in-ceiling attempt runs",
+      );
+      scryptSpy.mock.resetCalls();
+      const readsBeforeRefusal = locks.reads;
+
+      // Over the ceiling even the right code waits: no lock read, no derivation, and the neutral 429 (L33).
+      await assert.rejects(
+        () => attempt(locks, limiter, PASSWORD, { clientAddress: address }),
+        InvitationUnlockRateLimitedError,
+      );
+      assert.equal(locks.reads, readsBeforeRefusal, "no lock is read over the ceiling");
+      assert.equal(scryptSpy.mock.callCount(), 0, "the hasher is never spent over the ceiling");
+    } finally {
+      scryptSpy.mock.restore();
+    }
+    // The refused attempt spent nothing else either: the two soft counts are the one the in-ceiling verification spent.
+    assert.equal(
+      limiter.count(INVITATION_UNLOCK_VERIFICATION_SCOPE, address),
+      INVITATION_UNLOCK_VERIFICATION_RATE_LIMIT.max,
+    );
+    assert.equal(limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address), 1);
+    assert.equal(limiter.count(invitationUnlockScope(SLUG), address), 1);
+  });
+
+  it("still verifies a right code once the soft budgets are spent, and mints its token (L33)", async () => {
+    const locks = await locksWith(await hashInvitationPassword(PASSWORD));
+    const limiter = new MemoryLimiter();
+    const address = "198.18.0.14";
 
     for (let failure = 0; failure < INVITATION_UNLOCK_RATE_LIMIT.max; failure += 1) {
-      assert.deepEqual(await attempt(locks, limiter, "no-es-la-clave"), { status: "rejected" });
+      assert.deepEqual(
+        await attempt(locks, limiter, "no-es-la-clave", { clientAddress: address }),
+        {
+          status: "rejected",
+        },
+      );
+    }
+    assert.equal(
+      limiter.count(invitationUnlockScope(SLUG), address),
+      INVITATION_UNLOCK_RATE_LIMIT.max,
+    );
+    assert.equal(
+      limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address),
+      INVITATION_UNLOCK_RATE_LIMIT.max,
+    );
+    const readsBeforeUnlock = locks.reads;
+
+    // A spent soft budget no longer refuses the attempt: the code is verified, and the right one opens as it always did
+    // (L33), so a shared venue address is never locked out by its own failures.
+    const result = await attempt(locks, limiter, PASSWORD, { clientAddress: address });
+
+    assert.equal(result.status, "unlocked");
+    assert.ok(result.status === "unlocked");
+    assert.equal(locks.reads, readsBeforeUnlock + 1, "the lock is read and the code verified");
+    assert.equal(TOKENS.isValid(result.token, INVITATION, 3, NOW), true);
+    // And it refunds the spent budget's count exactly as before, so only failures stay counted; the cap that spans every
+    // address was not spent by ten failures at one invitation, so this attempt rolled through it and gave its count back.
+    assert.equal(
+      limiter.count(invitationUnlockScope(SLUG), address),
+      INVITATION_UNLOCK_RATE_LIMIT.max - 1,
+    );
+    assert.equal(
+      limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address),
+      INVITATION_UNLOCK_RATE_LIMIT.max,
+    );
+  });
+
+  it("answers the neutral 429 for a wrong code once the soft budgets are spent, and keeps counting it (L33)", async () => {
+    const locks = await locksWith(await hashInvitationPassword(PASSWORD));
+    const limiter = new MemoryLimiter();
+    const address = "198.18.0.15";
+
+    for (let failure = 0; failure < INVITATION_UNLOCK_RATE_LIMIT.max; failure += 1) {
+      assert.deepEqual(
+        await attempt(locks, limiter, "no-es-la-clave", { clientAddress: address }),
+        {
+          status: "rejected",
+        },
+      );
     }
     const readsBeforeRefusal = locks.reads;
 
+    // The attempt reaches the verifier (that is what L33 changed), and the spent budget decides the answer: the same
+    // neutral body a wrong code always answered, with the 429 that makes the over-limit state observable.
     await assert.rejects(
-      () => attempt(locks, limiter, PASSWORD, { clientAddress: "198.18.0.1" }),
+      () => attempt(locks, limiter, "no-es-la-clave", { clientAddress: address }),
       InvitationUnlockRateLimitedError,
     );
-    // The budget is spent before the read: a locked-out attempt never reaches the store or the hash.
-    assert.equal(locks.reads, readsBeforeRefusal);
+    assert.equal(
+      locks.reads,
+      readsBeforeRefusal + 1,
+      "the code is verified before the spent budget answers",
+    );
+    // It stays counted as the failure it was, in both budgets.
+    assert.equal(
+      limiter.count(invitationUnlockScope(SLUG), address),
+      INVITATION_UNLOCK_RATE_LIMIT.max,
+    );
+    assert.equal(
+      limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address),
+      INVITATION_UNLOCK_RATE_LIMIT.max + 1,
+    );
   });
 
   it("counts the attempt on a malformed address too, so no request of the route is free", async () => {
@@ -232,8 +359,8 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
     });
 
     assert.deepEqual(result, { status: "rejected" });
-    assert.equal(limiter.scopes.length, 2);
-    assert.equal(limiter.scopes[1]?.includes("NOT A SLUG"), false);
+    assert.equal(limiter.scopes.length, 3);
+    assert.equal(limiter.scopes[2]?.includes("NOT A SLUG"), false);
   });
 
   it("lets the eleventh correct unlock from one address through (a success spends no budget)", async () => {
@@ -268,7 +395,7 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
     );
   });
 
-  it("caps one address across every address, so varying the slug buys no fresh budget", async () => {
+  it("caps one address across every address, so varying the slug buys no fresh budget (L33)", async () => {
     const locks = await locksWith(await hashInvitationPassword(PASSWORD));
     const limiter = new MemoryLimiter();
     const address = "198.18.0.9";
@@ -284,12 +411,19 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
         );
       }
     }
-    // 30 failures later, an address no invitation holds is refused as well: the cap spans every slug.
+    // 30 failures later, a wrong code is refused whatever address it names: the cap spans every slug.
     await assert.rejects(
-      () => attempt(locks, limiter, PASSWORD, { slug: "cuarta", clientAddress: address }),
+      () => attempt(locks, limiter, "no-es-la-clave", { slug: "cuarta", clientAddress: address }),
       InvitationUnlockRateLimitedError,
     );
     assert.equal(limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address), 30);
+
+    // The same address, the right code: the spent cap no longer refuses it before the verifier, so it opens (L33).
+    const opened = await attempt(locks, limiter, PASSWORD, { slug: SLUG, clientAddress: address });
+
+    assert.equal(opened.status, "unlocked");
+    assert.ok(opened.status === "unlocked");
+    assert.equal(TOKENS.isValid(opened.token, INVITATION, 3, NOW), true);
   });
 
   it("does not share one bucket across every guest when no client address resolves", async () => {
@@ -312,9 +446,13 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
       INVITATION_UNLOCK_RATE_LIMIT.max,
     );
     assert.equal(limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, unknown), 0);
+    // The ceiling spans every address exactly like the cross-address cap, so the same fallback applies to it: a bucket
+    // spanning every invitation would let one caller exhaust every guest's ceiling (L33). The per-address budget is the
+    // bound that still applies, and it answers 429 to a wrong code once spent.
+    assert.equal(limiter.count(INVITATION_UNLOCK_VERIFICATION_SCOPE, unknown), 0);
   });
 
-  it("refuses an attempt already over the cross-address cap before it spends another address's budget", async () => {
+  it("verifies an attempt already over the cross-address cap, and answers a wrong code 429 (L33)", async () => {
     const locks = await locksWith(await hashInvitationPassword(PASSWORD));
     const limiter = new MemoryLimiter();
     const address = "198.18.0.11";
@@ -327,16 +465,20 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
       () => attempt(locks, limiter, "no-es-la-clave", { slug: "cuarta", clientAddress: address }),
       InvitationUnlockRateLimitedError,
     );
-    // A caller already over the cap that spans every address cannot keep spending other addresses' budgets: only that
-    // scope is consulted, and the address it named keeps its whole budget.
-    assert.equal(limiter.count(invitationUnlockScope("cuarta"), address), 0);
+    // The attempt reached the verifier, so it is a failure at the address it named and stays counted there; the cap that
+    // spans every address is not raised past its own max, and no other address's budget is touched.
+    assert.equal(limiter.count(invitationUnlockScope("cuarta"), address), 1);
     assert.equal(
       limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address),
       INVITATION_UNLOCK_CLIENT_RATE_LIMIT.max,
     );
+    assert.equal(
+      limiter.count(invitationUnlockScope(SLUG), address),
+      INVITATION_UNLOCK_RATE_LIMIT.max,
+    );
   });
 
-  it("spends no cross-address count on an attempt its own address's budget refuses", async () => {
+  it("spends the cross-address count on a wrong attempt its own address's budget had already spent (L33)", async () => {
     const locks = await locksWith(await hashInvitationPassword(PASSWORD));
     const limiter = new MemoryLimiter();
     const address = "198.18.0.12";
@@ -347,10 +489,14 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
       () => attempt(locks, limiter, "no-es-la-clave", { clientAddress: address }),
       InvitationUnlockRateLimitedError,
     );
-    // The attempt never reached the verifier, so it does not spend the budget shared by every address either: one guest
-    // retrying a capped invitation cannot lock a whole venue out of the others.
+    // The attempt is verified now, so it counts as the failure it was in both budgets: only a code that opened the
+    // invitation is refunded, and the cross-address cap keeps its own max.
     assert.equal(
       limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address),
+      INVITATION_UNLOCK_RATE_LIMIT.max + 1,
+    );
+    assert.equal(
+      limiter.count(invitationUnlockScope(SLUG), address),
       INVITATION_UNLOCK_RATE_LIMIT.max,
     );
   });

@@ -3,7 +3,7 @@
 ## Status
 
 Accepted (F13, password-protected invitation; S2.13, L18, with the owner's approval of the security design: «Sí,
-apruebo»).
+apruebo»; the attempt limits revised by L33, the owner's choice «La correcta siempre entra»).
 
 ## Context
 
@@ -75,24 +75,32 @@ factor, and it closes every public route of the invitation. Four properties had 
    there before drawing the lock screen: the access cookie it sets is scoped to the invitation's own path, and a cookie
    set at a renamed address would never reach the address the invitation is served from.
 
-6. Attempts are counted before anything is read or verified, and every refusal looks the same.
-   Two exhausted budgets are checked, in this order, before the lock is read and before any hashing work: 10 failed
-   attempts per 15 minutes per client address and requested address, and 30 failed attempts per 15 minutes per client
-   address across every address, so varying the slug cannot buy a fresh budget
-   (`apps/api/src/invitations/application/invitation-unlock-rate-limiter.ts`). Both live on the shared `RateLimit` table
-   under keys of their own holding a SHA-256 of the client address and, per address, a SHA-256 of the requested address —
-   never the address itself, and never a fact that says whether an invitation exists; an address no invitation holds
-   spends both budgets exactly like a known one. Only failures stay counted: an unlock whose code matched refunds both
-   counts, so a family sharing one venue address is not locked out by its own correct unlocks and one correct code does
-   not reset an almost-spent budget. A value no code can be — not a string, wider than the domain maximum of 40
-   characters, shorter than its minimum of 4, or carrying a control character — answers the neutral refusal before the
-   budgets, the lock read, and the hasher, so a request that could never open an invitation costs nothing. When no client
-   address resolves, the cap that spans every address is not spent: the public forms hash the shared `unknown` value into
-   a key that also names their invitation, so their fallback bucket spans one invitation, and a bucket that spanned every
-   invitation would let one caller exhaust every guest's budget; the per-address budget still applies. A wrong code, an
-   address no invitation holds, and an invitation with no code answer one neutral body
-   `{ code: "INVITATION_PASSWORD_REJECTED" }`, after the same scrypt work — a dummy verification keeps the timing of the
-   "nothing to verify" paths — and only an exhausted budget changes the status (429), which is the pattern the open RSVP
+6. Verification is bounded by a hard ceiling, and the attempt budgets decide only how a refusal answers.
+   Three counters live on the shared `RateLimit` table, under keys of their own holding a SHA-256 of the client address
+   and, per address, a SHA-256 of the requested address — never the address itself, and never a fact that says whether an
+   invitation exists; an address no invitation holds spends them exactly like a known one
+   (`apps/api/src/invitations/application/invitation-unlock-rate-limiter.ts`). The **hard ceiling** is 300 verifications per
+   15 minutes per client address, whatever requested address each of them names. It is spent before the lock is read and
+   before any hashing work, and an attempt over it answers the neutral 429 immediately: that is what bounds the scrypt work
+   one caller can buy. It counts verifications and not failures, so a correct code counts too, and it is never refunded.
+   The **soft budgets** are 10 failed attempts per 15 minutes per client address and requested address, and 30 failed
+   attempts per 15 minutes per client address across every address, so varying the slug cannot buy a fresh budget. They are
+   counted before the lock is read as well, but their exhaustion no longer refuses the attempt (L33, the owner's choice
+   «La correcta siempre entra» after 10 failures from one address left even the right code waiting 15 minutes, so a shared
+   venue Wi-Fi could block guests). Once either is spent the code is still verified: a right code opens and refunds the
+   counts it spent, exactly as before, so a family sharing one venue address is never locked out by its own failures or its
+   own correct unlocks, and a wrong code answers the same neutral body with 429 instead of 401, so the over-limit state
+   stays observable to the guest. Only a failed attempt stays counted, and one correct code does not reset an almost-spent
+   budget. A value no code can be — not a string, wider than the domain maximum of 40 characters, shorter than its minimum
+   of 4, or carrying a control character — answers the neutral refusal before the ceiling, the budgets, the lock read, and
+   the hasher, so a request that could never open an invitation costs nothing. When no client address resolves, neither
+   cap that spans every address is spent — neither the cross-address failures nor the ceiling of verifications: the public
+   forms hash the shared `unknown` value into a key that also names their invitation, so their fallback bucket spans one
+   invitation, and a bucket that spanned every invitation would let one caller exhaust every guest's budget or every
+   guest's ceiling. The per-address budget still applies. A wrong code, an address no invitation holds, and an invitation
+   with no code answer one neutral body `{ code: "INVITATION_PASSWORD_REJECTED" }`, after the same scrypt work — a dummy
+   verification keeps the timing of the "nothing to verify" paths — and only the status differs: 401 for a code refused
+   inside the soft budgets, 429 once a soft budget is spent or the ceiling is exceeded, which is the pattern the open RSVP
    and the guestbook already use for their own per-address limits. The unlock answer is a token and its expiry; nothing
    about the invitation comes back with it.
 
@@ -125,8 +133,11 @@ factor, and it closes every public route of the invitation. Four properties had 
   is locked the read carries no invitation facts, and the file answers 404.
 - The owner's read answers `passwordProtected` and never the code, and the hash never leaves the repository adapter, so
   no projection, log, response, or fixture of a read can carry it.
-- The exposure to brute force is bounded by the width of the code and the attempt limit, not by a lockout: a 4-character
-  code is weak, and the owner is shown that a longer one is better. The API refuses to make the code a password with
+- The exposure to brute force is bounded by the width of the code, the soft budgets, and the ceiling of verifications,
+  not by a lockout: a 4-character code is weak, and the owner is shown that a longer one is better. Since L33 a spent soft
+  budget no longer closes the invitation to the guests who know the code — the right code always opens — so what a guesser
+  gains is only that an exhausted budget answers 429 instead of 401; the ceiling of 300 verifications per client address
+  per 15 minutes is what keeps that from becoming unbounded hashing work. The API refuses to make the code a password with
   account semantics — there is no reset by email, no per-person code, and no second factor, because a guest who loses the
   code asks the owner for it.
 - A locked invitation is still discoverable as a slug: the 423 confirms that the address exists and is protected. That is

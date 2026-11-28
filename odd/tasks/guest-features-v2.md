@@ -460,6 +460,12 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   could block guests). Follow-ups: alias budgets multiply the per-address bound (the cross cap bounds it); a transient
   scrypt failure spends a guest's budget; the previous-address lock read takes three queries; e2e tests for the lock
   flow.
+- L33 — F13 owner decision after verification (after 10 failures from one address even the right code waited 15
+  minutes, so a shared venue Wi-Fi could block guests): verbatim choice «La correcta siempre entra (recomendado)».
+  Parent decision for the cost bound: once the soft budgets (10 failures per address and previous address, 30 across
+  addresses) are spent, a code is still verified; a right code opens and refunds as before, a wrong one answers 429; a
+  hard ceiling of 300 verifications per client address per 15 minutes answers 429 before any scrypt work, so an abuser
+  cannot buy unbounded hashing.
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on

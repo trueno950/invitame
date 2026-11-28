@@ -20,6 +20,8 @@ import {
   INVITATION_UNLOCK_CLIENT_SCOPE,
   INVITATION_UNLOCK_RATE_LIMIT,
   INVITATION_UNLOCK_RATE_LIMIT_KEY_PREFIX,
+  INVITATION_UNLOCK_VERIFICATION_RATE_LIMIT,
+  INVITATION_UNLOCK_VERIFICATION_SCOPE,
   invitationUnlockRateLimitKey,
   invitationUnlockScope,
 } from "../application/invitation-unlock-rate-limiter";
@@ -487,6 +489,26 @@ describe("the access code on real PostgreSQL (F13; S2.13, L18.1, L18.2)", () => 
       assert.equal(await limiter.consume(INVITATION_UNLOCK_CLIENT_SCOPE, address), false);
       assert.equal(key.startsWith(`${INVITATION_UNLOCK_RATE_LIMIT_KEY_PREFIX}all|`), true);
       assert.equal((await prisma.rateLimit.findUniqueOrThrow({ where: { key } })).count, 30);
+    });
+
+    it("counts 300 verifications across every address under the ceiling scope (L33)", async () => {
+      assert.deepEqual(INVITATION_UNLOCK_VERIFICATION_RATE_LIMIT, { window: 900, max: 300 });
+      const address = `f13-ceiling-address-${runId}`;
+      const key = invitationUnlockRateLimitKey(INVITATION_UNLOCK_VERIFICATION_SCOPE, address);
+      rateLimitKeys.push(key);
+
+      for (let attempt = 0; attempt < INVITATION_UNLOCK_VERIFICATION_RATE_LIMIT.max; attempt += 1) {
+        assert.equal(
+          await limiter.consume(INVITATION_UNLOCK_VERIFICATION_SCOPE, address),
+          true,
+          `verification ${attempt + 1}`,
+        );
+      }
+      // The three-hundred-first verification is refused before the hasher, and writes nothing.
+      assert.equal(await limiter.consume(INVITATION_UNLOCK_VERIFICATION_SCOPE, address), false);
+      assert.equal(key.startsWith(`${INVITATION_UNLOCK_RATE_LIMIT_KEY_PREFIX}verification|`), true);
+      assert.equal(key.includes(address), false);
+      assert.equal((await prisma.rateLimit.findUniqueOrThrow({ where: { key } })).count, 300);
     });
 
     it("leaves no row behind when a refund reaches zero, so an empty window never anchors the next attempt", async () => {

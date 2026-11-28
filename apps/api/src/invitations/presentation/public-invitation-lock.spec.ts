@@ -1,9 +1,9 @@
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
-import { randomBytes, randomUUID } from "node:crypto";
+import crypto, { randomBytes, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import { after, before, describe, it } from "node:test";
+import { after, before, describe, it, mock } from "node:test";
 
 import { type INestApplication, Module, type Provider, type Type } from "@nestjs/common";
 import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
@@ -15,6 +15,8 @@ import { PublicGuestAlbumController } from "../../media/presentation/public-gues
 import { UnlockInvitationUseCase } from "../application/invitation-unlock.use-cases";
 import {
   INVITATION_UNLOCK_CLIENT_SCOPE,
+  INVITATION_UNLOCK_VERIFICATION_RATE_LIMIT,
+  INVITATION_UNLOCK_VERIFICATION_SCOPE,
   type InvitationUnlockRateLimiter,
   invitationUnlockRateLimitRule,
   invitationUnlockScope,
@@ -59,7 +61,9 @@ import { PublicInvitationsController } from "./public-invitations.controller";
 // personal link already carries a secret of its own (L18.4) and the unlock route is where a token comes from.
 //
 // The unlock route is exercised end to end against the real use case: the right code mints a token that opens the page, a
-// wrong code answers the one neutral body, and an attempt over the cap answers the same body with 429.
+// wrong code answers the one neutral body, and an attempt over a spent soft budget answers the same body with 429 — after
+// the code was verified, so the right code still opens from an address whose failures spent its budget. The hard ceiling
+// of 300 verifications per client address is the one refusal that happens before the verifier (L33).
 
 const TRUSTED_ORIGIN = "http://localhost:3000";
 const INVITATION = "22222222-2222-4222-8222-222222222222";
@@ -191,6 +195,13 @@ class MemoryUnlockRateLimiter implements InvitationUnlockRateLimiter {
 
   count(scope: string, clientAddress: string): number {
     return this.attempts.get(`${scope}|${clientAddress}`) ?? 0;
+  }
+
+  /** Seeds a counter without an attempt, so the boundary of a 300-verification ceiling is reached without 300 requests. */
+  spend(scope: string, clientAddress: string, times: number): void {
+    const key = `${scope}|${clientAddress}`;
+
+    this.attempts.set(key, (this.attempts.get(key) ?? 0) + times);
   }
 }
 
@@ -531,15 +542,27 @@ describe("the locked state of the public invitation routes (F13; L18.2, L18.3, L
     });
   }
 
-  it("refuses a code wider than any code with the neutral 401, before it spends a budget (L18.3)", async () => {
+  it("refuses a code wider than any code with the neutral 401, before it spends a budget or the hasher (L18.3)", async () => {
     const address = "198.18.0.301";
-    const response = await unlock(LOCKED_SLUG, "a".repeat(10_000), address);
+    const scryptSpy = mock.method(crypto, "scrypt");
 
-    assert.equal(response.status, 401);
-    assert.deepEqual(await response.json(), { code: "INVITATION_PASSWORD_REJECTED" });
+    try {
+      const response = await unlock(LOCKED_SLUG, "a".repeat(10_000), address);
+
+      assert.equal(response.status, 401);
+      assert.deepEqual(await response.json(), { code: "INVITATION_PASSWORD_REJECTED" });
+      assert.equal(
+        scryptSpy.mock.callCount(),
+        0,
+        "the hasher is never spent on a value no code can be",
+      );
+    } finally {
+      scryptSpy.mock.restore();
+    }
     // A value no code can be is refused before the hash and before the attempt is counted.
     assert.equal(limiter.count(invitationUnlockScope(LOCKED_SLUG), address), 0);
     assert.equal(limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address), 0);
+    assert.equal(limiter.count(INVITATION_UNLOCK_VERIFICATION_SCOPE, address), 0);
   });
 
   it("lets the eleventh correct unlock from one address through (a success spends no budget)", async () => {
@@ -552,6 +575,69 @@ describe("the locked state of the public invitation routes (F13; L18.2, L18.3, L
     }
     assert.equal(limiter.count(invitationUnlockScope(LOCKED_SLUG), address), 0);
     assert.equal(limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address), 0);
+    // The ceiling is the exception: it counts verifications, not failures, so these eleven successes spent it (L33).
+    assert.equal(limiter.count(INVITATION_UNLOCK_VERIFICATION_SCOPE, address), 11);
+  });
+
+  it("opens with the right code after 10 failures from one address, and answers a wrong one 429 (L33)", async () => {
+    // The soft budgets no longer refuse before the verifier: an address whose failures spent its budget still opens the
+    // invitation with the code its guest was given.
+    const opening = "198.18.0.311";
+    for (let failure = 0; failure < 10; failure += 1) {
+      const refused = await unlock(LOCKED_SLUG, "no-es-la-clave", opening);
+
+      assert.equal(refused.status, 401, `failure ${failure + 1}`);
+      await refused.arrayBuffer();
+    }
+    const accepted = await unlock(LOCKED_SLUG, LOCKED_PASSWORD, opening);
+    const unlocked = (await accepted.json()) as { accessToken: string };
+
+    assert.equal(accepted.status, 200, "the right code opens over a spent budget");
+    assert.equal(typeof unlocked.accessToken, "string");
+
+    // And a wrong code from an address whose budget is spent answers 429 with the body a wrong code always answered.
+    const blocked = "198.18.0.312";
+    for (let failure = 0; failure < 10; failure += 1) {
+      const refused = await unlock(LOCKED_SLUG, "no-es-la-clave", blocked);
+
+      assert.equal(refused.status, 401, `failure ${failure + 1}`);
+      await refused.arrayBuffer();
+    }
+    const over = await unlock(LOCKED_SLUG, "no-es-la-clave", blocked);
+
+    assert.equal(over.status, 429, "a wrong code over a spent budget is 429");
+    assert.deepEqual(await over.json(), { code: "INVITATION_PASSWORD_REJECTED" });
+  });
+
+  it("answers 429 over the hard ceiling before the hasher runs, even for the right code (L33)", async () => {
+    const address = "198.18.0.321";
+    limiter.spend(
+      INVITATION_UNLOCK_VERIFICATION_SCOPE,
+      address,
+      INVITATION_UNLOCK_VERIFICATION_RATE_LIMIT.max - 1,
+    );
+    const scryptSpy = mock.method(crypto, "scrypt");
+
+    try {
+      // The three-hundredth verification from this address still runs, and the spy is observed running it.
+      const admitted = await unlock(LOCKED_SLUG, "no-es-la-clave", address);
+
+      assert.equal(admitted.status, 401);
+      assert.ok(scryptSpy.mock.callCount() >= 1, "the spy observes the hash the route runs");
+      scryptSpy.mock.resetCalls();
+
+      const refused = await unlock(LOCKED_SLUG, LOCKED_PASSWORD, address);
+
+      assert.equal(refused.status, 429, "over the ceiling even the right code waits");
+      assert.deepEqual(await refused.json(), { code: "INVITATION_PASSWORD_REJECTED" });
+      assert.equal(scryptSpy.mock.callCount(), 0, "no scrypt work over the ceiling");
+      assert.equal(
+        limiter.count(INVITATION_UNLOCK_VERIFICATION_SCOPE, address),
+        INVITATION_UNLOCK_VERIFICATION_RATE_LIMIT.max,
+      );
+    } finally {
+      scryptSpy.mock.restore();
+    }
   });
 
   it("answers 429 after 30 failures spread across different slugs, with the same neutral body (L18.3)", async () => {

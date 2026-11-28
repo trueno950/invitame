@@ -25,9 +25,9 @@ export class InvalidInvitationPasswordError extends Error {
 }
 
 /**
- * One client address already spent its unlock attempts on this invitation (L18.3). Nothing was verified and no token was
- * minted; the caller answers the same neutral body a wrong code answers, so a locked-out attempt tells an attacker
- * nothing about the code it tried.
+ * One client address spent its unlock budget (L18.3, as revised by L33): either the hard verification ceiling, refused
+ * before any hashing, or a soft failure budget, answered after a wrong code was verified. No token was minted; the caller
+ * answers the same neutral body a wrong code answers, so the refusal tells an attacker nothing about the code it tried.
  */
 export class InvitationUnlockRateLimitedError extends Error {
   constructor() {

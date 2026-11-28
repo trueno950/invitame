@@ -762,7 +762,7 @@ export const INVITATION_USE_CASES: Provider[] = [
     {
       provide: INVITATION_UNLOCK_RATE_LIMITER,
       // The same `RateLimit` table Better Auth and every other public form use; only the key prefix and the window are the
-      // unlock route's (F13; L18.3).
+      // unlock route's (F13; L18.3, L33: a hard verification ceiling and two soft failure budgets).
       useFactory: (prisma: PrismaService) => new PrismaInvitationUnlockRateLimiter(prisma),
       inject: [PrismaService],
     },
