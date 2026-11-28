@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
-import crypto, { randomBytes } from "node:crypto";
-import { describe, it, mock } from "node:test";
+import { randomBytes } from "node:crypto";
+import { describe, it } from "node:test";
 
 import {
   hashInvitationPassword,
   INVITATION_PASSWORD_DUMMY_HASH,
   INVITATION_PASSWORD_HASH_PREFIX,
-  INVITATION_PASSWORD_SCRYPT,
   INVITATION_PASSWORD_SALT_BYTES,
+  INVITATION_PASSWORD_SCRYPT,
   INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS,
+  type InvitationPasswordDerivation,
   spendInvitationPasswordVerification,
   verifyInvitationPassword,
 } from "./invitation-password";
@@ -151,21 +152,18 @@ describe("verifyInvitationPassword (L18.1, L18.4)", () => {
     );
   });
 
-  it("answers false, never throws, when scrypt fails during verification", async () => {
+  it("answers false, never throws, when any derivation fails during verification", async () => {
     // A value the process cannot derive is a code that does not match: failing closed locks the invitation, and an
-    // error out of the route would answer a status the neutral refusal never uses.
+    // error out of the route would answer a status the neutral refusal never uses. The derivation is injected because
+    // this module imports `scrypt` by name — replacing a property of the default `crypto` object would never be observed
+    // — so the refusal runs through the same `catch` a real scrypt failure reaches.
     const stored = await hashInvitationPassword(PASSWORD);
-    const failing = mock.method(crypto, "scrypt", (...args: unknown[]) => {
-      const callback = args.at(-1) as (error: Error, derived?: Buffer) => void;
-      callback(new Error("scrypt is unavailable"));
-    });
+    const failingDerivation: InvitationPasswordDerivation = async () => {
+      throw new Error("scrypt is unavailable");
+    };
 
-    try {
-      assert.equal(await verifyInvitationPassword(stored, PASSWORD), false);
-      assert.equal(await spendInvitationPasswordVerification(PASSWORD), false);
-    } finally {
-      failing.mock.restore();
-    }
+    assert.equal(await verifyInvitationPassword(stored, PASSWORD, failingDerivation), false);
+    assert.equal(await spendInvitationPasswordVerification(PASSWORD, failingDerivation), false);
   });
 });
 

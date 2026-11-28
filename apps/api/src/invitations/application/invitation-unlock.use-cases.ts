@@ -22,10 +22,10 @@ import {
 // 1. a value no access code can be — not a string, wider than the domain maximum, shorter than its minimum, or carrying
 //    a control character — answers the neutral refusal before anything else, so a request that could never open an
 //    invitation never spends a guest's budget or the hasher;
-// 2. the two attempt budgets are spent before the lock is read and before any scrypt work: the per-address one under a
-//    digest of the requested address (or, for an address nothing resolves, of that address), and the cap that spans
-//    every address under the caller's own client address, so varying the slug cannot buy a fresh budget and an address
-//    no invitation holds is limited exactly like a known one;
+// 2. the two attempt budgets are spent before the lock is read and before any scrypt work: the cap that spans every
+//    address under the caller's own client address first, then the per-address one under a digest of the requested
+//    address (or, for an address nothing resolves, of that address), so a caller already over the cap that spans every
+//    address cannot keep spending other invitations' budgets, and varying the slug cannot buy a fresh one;
 // 3. the lock is read; an address no published invitation holds, and an invitation with no code, answer the same neutral
 //    refusal as a wrong code, after the same scrypt work, so the answer is never an oracle for "does this invitation
 //    exist" or "is it protected";
@@ -56,8 +56,9 @@ export type UnlockInvitationResult =
 /**
  * One unlock attempt (F13; L18.2, L18.3). Answers `rejected` — never an error and never a different body — for a value
  * no code can be, a code that does not match, an address no published invitation holds, and an invitation with no access
- * code; throws `InvitationUnlockRateLimitedError` when this address is over its cap for the requested address or over
- * the cap that spans every address, and changes nothing.
+ * code; throws `InvitationUnlockRateLimitedError` when this address is over the cap that spans every address or over
+ * its cap for the requested address (in that order, so an attempt already over the shared cap spends nothing else),
+ * and changes nothing.
  */
 export class UnlockInvitationUseCase {
   constructor(
@@ -77,16 +78,23 @@ export class UnlockInvitationUseCase {
     }
     const slug = String(input.slug);
     const scope = invitationUnlockScope(slug);
-    // The attempt is counted before the lock is read, so a script cannot probe the store or the verifier for free.
-    if (!(await this.rateLimiter.consume(scope, input.clientAddress))) {
-      throw new InvitationUnlockRateLimitedError();
-    }
     const countsPerClient = input.clientAddress !== UNKNOWN_CLIENT_ADDRESS;
 
+    // The cap that spans every address is spent first, so an attempt a caller is already over is refused before it
+    // touches any address's budget; the per-address budget follows before the lock is read, so a script cannot probe
+    // the store or the verifier for free either.
     if (
       countsPerClient &&
       !(await this.rateLimiter.consume(INVITATION_UNLOCK_CLIENT_SCOPE, input.clientAddress))
     ) {
+      throw new InvitationUnlockRateLimitedError();
+    }
+    if (!(await this.rateLimiter.consume(scope, input.clientAddress))) {
+      // An attempt this address's own budget refuses never reached the verifier, so it does not spend the budget shared
+      // with every other address either: one guest retrying a capped invitation cannot lock a whole venue out.
+      if (countsPerClient) {
+        await this.refund(INVITATION_UNLOCK_CLIENT_SCOPE, input.clientAddress);
+      }
       throw new InvitationUnlockRateLimitedError();
     }
 
@@ -110,8 +118,9 @@ export class UnlockInvitationUseCase {
   }
 
   /**
-   * Gives one counted attempt back after the code matched. A failed refund never refuses a correct code: the worst case
-   * is a counter that keeps counting this unlock, and the store's own failure surfaces on the next attempt's `consume`.
+   * Gives one counted attempt back after the code matched, or after a cap refused an attempt that spent another one. A
+   * failed refund never refuses a correct code: the worst case is a counter that keeps counting this unlock, and the
+   * store's own failure surfaces on the next attempt's `consume`.
    */
   private async refund(scope: string, clientAddress: string): Promise<void> {
     await this.rateLimiter.refund(scope, clientAddress).catch(() => undefined);

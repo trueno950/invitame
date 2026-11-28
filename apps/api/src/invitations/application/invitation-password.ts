@@ -75,6 +75,13 @@ interface ScryptParameters {
   readonly keyLength: number;
 }
 
+/** One key derivation: Node's scrypt unless a test injects its own; a parameter, so production never changes. */
+export type InvitationPasswordDerivation = (
+  password: string,
+  salt: Buffer,
+  parameters: ScryptParameters,
+) => Promise<Buffer>;
+
 /** Derives one key with the platform's scrypt, as a promise. */
 function deriveKey(password: string, salt: Buffer, parameters: ScryptParameters): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -181,6 +188,8 @@ function parseStoredHash(
 export async function verifyInvitationPassword(
   storedHash: string | null,
   presented: unknown,
+  /** The derivation to consume: Node's scrypt unless a test injects one; it never changes the answer. */
+  derive: InvitationPasswordDerivation = deriveKey,
 ): Promise<boolean> {
   if (storedHash === null) {
     return false;
@@ -192,7 +201,7 @@ export async function verifyInvitationPassword(
   }
   const password = typeof presented === "string" ? presented.trim() : "";
   try {
-    const derived = await deriveKey(password, parsed.salt, parsed.parameters);
+    const derived = await derive(password, parsed.salt, parsed.parameters);
 
     return derived.length === parsed.key.length && timingSafeEqual(derived, parsed.key);
   } catch {
@@ -207,8 +216,12 @@ export async function verifyInvitationPassword(
  * answers in the same time as one that had (L18.3). The presented value is still consumed, so the two paths cannot be
  * told apart by their cost.
  */
-export async function spendInvitationPasswordVerification(presented: unknown): Promise<false> {
-  await verifyInvitationPassword(INVITATION_PASSWORD_DUMMY_HASH, presented);
+export async function spendInvitationPasswordVerification(
+  presented: unknown,
+  /** The derivation to consume, as in `verifyInvitationPassword`; a failed one still answers false. */
+  derive: InvitationPasswordDerivation = deriveKey,
+): Promise<false> {
+  await verifyInvitationPassword(INVITATION_PASSWORD_DUMMY_HASH, presented, derive);
 
   return false;
 }

@@ -488,6 +488,24 @@ describe("the access code on real PostgreSQL (F13; S2.13, L18.1, L18.2)", () => 
       assert.equal(key.startsWith(`${INVITATION_UNLOCK_RATE_LIMIT_KEY_PREFIX}all|`), true);
       assert.equal((await prisma.rateLimit.findUniqueOrThrow({ where: { key } })).count, 30);
     });
+
+    it("leaves no row behind when a refund reaches zero, so an empty window never anchors the next attempt", async () => {
+      const scope = invitationUnlockScope(`f13-refund-${runId}`);
+      const address = `f13-refund-address-${runId}`;
+      const key = invitationUnlockRateLimitKey(scope, address);
+      rateLimitKeys.push(key);
+
+      assert.equal(await limiter.consume(scope, address), true);
+      await limiter.refund(scope, address);
+
+      // A row left at count 0 keeps the window start of the attempt it no longer counts, so the next attempt inside that
+      // window would inherit the old anchor instead of opening a fresh one: the refund of the last count removes it.
+      assert.equal(await prisma.rateLimit.findUnique({ where: { key } }), null);
+
+      // And the address still counts normally afterwards, from a window of its own.
+      assert.equal(await limiter.consume(scope, address), true);
+      assert.equal((await prisma.rateLimit.findUniqueOrThrow({ where: { key } })).count, 1);
+    });
   });
 
   describe("the owner's writes close the archive race (A2, F13)", () => {
