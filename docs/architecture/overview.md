@@ -545,6 +545,11 @@ administrator sign-in.
   `auth/auth-request-guard.ts` returns `503 {"code":"SERVICE_UNAVAILABLE",...}` with no internal detail and
   logs an `auth_request_unavailable` warning with the path and error class only: no code row, no email.
 - Limits are per database, shared by every API instance; the background-task cap is per process.
+- The public forms count on the same `RateLimit` table with their own key prefixes: the open RSVP and the guestbook
+  allow 10 submissions per hour per client address and invitation, the guest album counts its own hourly cap, and the
+  unlock route of a password-protected invitation allows 10 attempts per 15 minutes per client address and invitation
+  (F13; L18.3). The unlock key names the invitation id, or a SHA-256 digest of the requested address when no published
+  invitation holds it, so the budget never reveals whether an invitation exists.
 
 ### Email delivery (current)
 
@@ -705,6 +710,29 @@ Public URL /i/<slug>
   → web selects a component from the local renderer registry by componentKey
   → web maps timeZone and the gated features to one shared features block (countdown, map, calendar, WhatsApp)
   → registry renders the invitation with data, never with executable database content
+
+The locked state of a password-protected invitation (F13; S2.13, L18.2, L18.3)
+  → every public invitation route of the API declares InvitationLockGuard (invitations/presentation/
+    invitation-lock.guard.ts), which runs after the global session guard and before the route's handler
+  → the guard asks one gate (application/invitation-lock.ts) about the address the request names: one query reads the
+    invitation id, its stored access-code hash, its password version, and its content, for a PUBLISHED row whose current
+    or previous slug matches
+  → an invitation with no code, and an address no visible invitation holds, pass through unchanged, so the route answers
+    exactly what it always answered
+  → a coded invitation without a token the deployment minted answers 423 { code: "INVITATION_LOCKED", displayName } and
+    nothing else: the display name is the celebrant's, the baby's, or the couple's names ("Ana y Luis"), never the date,
+    the places, the message, a guest, or an id, and the route's own read, write, upload, or opening count never runs
+  → POST /public/invitations/:slug/unlock exchanges the shared code for an access token: 10 attempts per 15 minutes per
+    client address and invitation on the shared RateLimit store (429 over it), a wrong code 401, and both refusals carry
+    the same neutral body { code: "INVITATION_PASSWORD_REJECTED" } and only the status differs
+  → the token is HMAC-SHA256 over the invitation id, the stored password version, and a 30-day expiry, keyed with
+    INVITATION_ACCESS_SECRET; a changed or removed code raises the version and invalidates every older token
+  → the web sends it in the X-Invitation-Access header from its own HttpOnly, Secure, SameSite=Lax cookie scoped to the
+    invitation's path
+  → the two personal-link routes (/public/invitations/:slug/guests/:token and its RSVP) and the unlock route itself are
+    the only exemptions, each declared with @SkipInvitationPassword(), because a personal link already carries a secret
+  → a locked request never builds the public projection, so the calendar file, which the web builds from that same read,
+    answers 404 while the invitation is locked and no invitation data leaves the API
 
 Public RSVP form (the open form, when the pinned package grants RSVP and no guest list)
   → apps/api POST /public/invitations/:slug/rsvp (@Public, Cache-Control: no-store)
@@ -1298,6 +1326,46 @@ first feature whose subject is authorization itself, so the shape is one decisio
   not know reads as no access.
 - Gating (L17.5): the new `CO_HOSTS` catalog key, granted to Premium and Deluxe by the additive migration and the seed,
   gates inviting. Withdrawing it stops new invitations and keeps the collaborations the owner already granted.
+
+## Password-protected invitation (current)
+
+Implemented by F13 (S2.13, L18, with the owner's approval of the security design: «Sí, apruebo»). The owner closes one
+invitation behind a shared access code, and the API — never the web — decides whether a request may see the invitation.
+The full design is [ADR 0006](../adr/0006-invitation-access-code.md).
+
+- The code (L18.1): a shared access code of 4 to 40 characters, trimmed, with no control character. It is never a user
+  credential, it is stored only as an encoded `crypto.scrypt` hash with a random 16-byte salt, and the owner's read
+  answers only `passwordProtected: boolean`. Setting, replacing, and removing it are owner-only routes
+  (`PUT`/`DELETE /invitations/:id/password`), so a collaborator holding `EDIT_CONTENT` cannot change who may open the
+  invitation. Every write raises `passwordVersion`, which is what invalidates older tokens.
+- The gate (L18.2, L18.4): `InvitationLockGuard` is declared on both public invitation controllers, so every public
+  invitation route is gated by default, and the two personal-link routes plus the unlock route are the only exemptions
+  (a personal link already carries a secret of its own). While a code is set, the public read, the open RSVP, the
+  guestbook signature, the guests' album upload, the calendar file (through the read it is built from), and any later
+  public invitation endpoint answer 423 with the lock state and one display name and no other invitation data.
+- The token (L18.2): `POST /public/invitations/:slug/unlock` answers an HMAC-SHA256 token over the invitation id, the
+  stored password version, and a 30-day expiry, keyed with `INVITATION_ACCESS_SECRET`. The gate accepts it in the
+  `X-Invitation-Access` header; the web keeps it in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie scoped to that
+  invitation's path. The invitation id is never inside the token, so a token minted for one invitation cannot open
+  another even at the same version, and an edited field fails the MAC.
+- The attempts (L18.3): 10 per 15 minutes per client address and invitation on the shared `RateLimit` store. The attempt
+  is counted before anything else, an unknown address is limited under a digest of itself, and a wrong code, an unknown
+  address, and an invitation with no code all answer the same neutral body after the same scrypt work, so neither the
+  body nor the timing is an oracle.
+- The gating (L18.5): the `PASSWORD_PROTECTION` key, granted to Deluxe. It gates setting a code (409
+  `PASSWORD_PROTECTION_NOT_AVAILABLE` without it); a stored code keeps protecting after the key is withdrawn, and the
+  owner can still remove it.
+- Evidence: `invitations/presentation/public-invitation-lock.spec.ts` derives every registered public invitation route
+  from the controllers' own metadata and fails when one is neither gated nor one of the three exact exemptions, then
+  tries each gated route without a token (423 with the display name, and the route's use case never running), with a
+  token of another invitation, of an older version, or an expired one (423), and with a valid token (the handler runs);
+  `application/invitation-password.spec.ts`, `invitation-access-token.spec.ts`, `invitation-unlock.use-cases.spec.ts`,
+  `invitation-password.use-cases.spec.ts`, and `presentation/invitation-password.response.spec.ts` prove the hash, the
+  token, the attempt order, the neutral refusals, and the owner's two writes;
+  `infrastructure/invitation-password.prisma.db-spec.ts` proves the migration's columns and checks, the version raise,
+  the owner scope and archived refusal, the lock read by current and previous address, and the withdrawn-key case on real
+  PostgreSQL; `collaborators/presentation/invitation-authorization.matrix.spec.ts` proves both owner routes are
+  owner-only across its nine callers.
 
 ## Administrator invitation status view (current)
 

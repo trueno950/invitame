@@ -12,6 +12,7 @@ import {
   Param,
   Post,
   Req,
+  UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -21,6 +22,7 @@ import { Public } from "../../auth/access-control/access-control";
 import type { RuntimeEnvironment } from "../../config/environment";
 import { PublicInvitationNotRenderableError } from "../application/invitation.application.errors";
 import { GetPublicInvitationUseCase } from "../application/invitation.use-cases";
+import { UnlockInvitationUseCase } from "../application/invitation-unlock.use-cases";
 import {
   type InvitationViewSource,
   RecordInvitationViewUseCase,
@@ -32,6 +34,14 @@ import {
 import { SubmitPublicRsvpUseCase } from "../application/invitation-rsvp.use-cases";
 import { SubmitPublicGuestbookEntryUseCase } from "../application/invitation-guestbook.use-cases";
 import { type ClientAddressRequest, clientAddressOf } from "./client-address";
+// biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
+import { UnlockInvitationDto } from "./dto/invitation-password.dtos";
+import { InvitationLockGuard, SkipInvitationPassword } from "./invitation-lock.guard";
+import {
+  type InvitationUnlockedResponse,
+  mapInvitationUnlockError,
+  orInvitationUnlocked,
+} from "./invitation-password.response";
 // biome-ignore lint/style/useImportType: the pipe needs the class at runtime.
 import { SubmitGuestRsvpDto } from "./dto/invitation-guest.dtos";
 // biome-ignore lint/style/useImportType: the pipe needs the class at runtime.
@@ -92,9 +102,15 @@ class NoStoreInterceptor implements NestInterceptor {
  * `GUEST` for a guest's personal link, and never a 404, an unrenderable invitation, an RSVP submission, or the owner's
  * own preview. The count is fire-and-forget — the guest never waits for it, and a failure is one structured line
  * instead of a different answer — so the opening counter can never take the public page down.
+ *
+ * F13 (S2.13, L18.2) adds the gate: the class declares `InvitationLockGuard`, so every route below — the page, the open
+ * RSVP, and the guestbook — is refused with the locked answer while the invitation stores an access code and the request
+ * presents no valid access token. The two personal-link routes and the unlock route declare `@SkipInvitationPassword()`:
+ * a personal link already carries a secret of its own (L18.4), and the unlock route is how a token is obtained.
  */
 @Controller("public/invitations")
 @Public()
+@UseGuards(InvitationLockGuard)
 @UseInterceptors(NoStoreInterceptor)
 export class PublicInvitationsController {
   private readonly logger = new Logger(PublicInvitationsController.name);
@@ -110,6 +126,8 @@ export class PublicInvitationsController {
     private readonly submitGuestRsvp: SubmitGuestRsvpUseCase,
     @Inject(SubmitPublicGuestbookEntryUseCase)
     private readonly submitGuestbookEntry: SubmitPublicGuestbookEntryUseCase,
+    @Inject(UnlockInvitationUseCase)
+    private readonly unlockInvitation: UnlockInvitationUseCase,
     @Inject(RecordInvitationViewUseCase)
     private readonly recordView: RecordInvitationViewUseCase,
     @Inject(ConfigService)
@@ -149,6 +167,7 @@ export class PublicInvitationsController {
    * guest is read, and the body is uncacheable.
    */
   @Get(":slug/guests/:token")
+  @SkipInvitationPassword()
   async readGuest(
     @Param("slug") slug: string,
     @Param("token") token: string,
@@ -184,6 +203,7 @@ export class PublicInvitationsController {
    */
   @Post(":slug/guests/:token/rsvp")
   @HttpCode(202)
+  @SkipInvitationPassword()
   async submitGuest(
     @Param("slug") slug: string,
     @Param("token") token: string,
@@ -292,6 +312,35 @@ export class PublicInvitationsController {
       return signed ? GUESTBOOK_ACCEPTED_RESPONSE : publicInvitationNotFound();
     } catch (error) {
       return mapGuestbookError(error);
+    }
+  }
+
+  /**
+   * The exchange a guest makes from the lock screen (F13; S2.13, L18.2): the shared access code in, an access token out.
+   * `@SkipInvitationPassword()` because this is the route that mints the token the other routes accept. The slug is the
+   * only input that names the invitation, and the code is the only input that attempts to open it; the token is signed over
+   * the invitation id, its current password version, and an expiry 30 days ahead, so a changed or removed code stops every
+   * token minted before it. An attempt over this address's cap for this invitation is 429 and a code that does not match is
+   * 401, both with the one neutral body; a malformed body is 400 from the global pipe.
+   */
+  @Post(":slug/unlock")
+  @HttpCode(200)
+  @SkipInvitationPassword()
+  async unlock(
+    @Param("slug") slug: string,
+    @Body() body: UnlockInvitationDto,
+    @Req() request: ClientAddressRequest,
+  ): Promise<InvitationUnlockedResponse> {
+    try {
+      return orInvitationUnlocked(
+        await this.unlockInvitation.execute({
+          slug,
+          password: body.password,
+          clientAddress: clientAddressOf(request, this.clientIpHeader()),
+        }),
+      );
+    } catch (error) {
+      return mapInvitationUnlockError(error);
     }
   }
 

@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import { Controller, HttpCode, Inject, Param, Post, Req } from "@nestjs/common";
+import { Controller, HttpCode, Inject, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
 import { Public } from "../../auth/access-control/access-control";
@@ -8,6 +8,7 @@ import {
   type ClientAddressRequest,
   clientAddressOf,
 } from "../../invitations/presentation/client-address";
+import { InvitationLockGuard } from "../../invitations/presentation/invitation-lock.guard";
 import { publicInvitationNotFound } from "../../invitations/presentation/invitation.response";
 import { UploadGuestPhotoUseCase } from "../application/guest-album.use-cases";
 import { MAX_UPLOAD_REQUEST_BYTES } from "../domain/media-asset";
@@ -30,9 +31,14 @@ import { mapMultipartError } from "./media.response";
  * bounds the whole body at 16 MB (a 413 past it) and accepts only `file` and `uploaderName`, so a field one route
  * accepts is refused on the other. Nothing about the guest's address, session, or user is stored: the address is read
  * only to count the hourly per-person limit, and the rate limiter hashes it before writing the `RateLimit` key.
+ *
+ * F13 (S2.13, L18.2) adds the password gate: the class declares `InvitationLockGuard`, so a locked invitation answers the
+ * locked state and stores no object, no row, and no count — the guard refuses the request before this handler reads the
+ * body. There is no exemption here: an anonymous upload is exactly what an access code must protect.
  */
 @Controller("public/invitations")
 @Public()
+@UseGuards(InvitationLockGuard)
 export class PublicGuestAlbumController {
   constructor(
     @Inject(UploadGuestPhotoUseCase)

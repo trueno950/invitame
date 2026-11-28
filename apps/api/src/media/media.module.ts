@@ -20,6 +20,7 @@ import {
 } from "../invitations/application/invitation-gallery";
 import { INVITATION_MEDIA_COUNT_READER } from "../invitations/application/invitation-media-counts";
 import { INVITATION_GUEST_ALBUM_READER } from "../invitations/application/invitation-guest-album";
+import { InvitationPasswordModule } from "../invitations/invitation-password.module";
 import {
   GetGuestAlbumUseCase,
   ReadPublicGuestAlbumUseCase,
@@ -90,7 +91,10 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
  */
 @Module({
   // `CollaboratorsModule` provides the guard the owner routes declare and the one resolver it consults (F12; L17.4).
-  imports: [CatalogModule, CollaboratorsModule, SettingsModule],
+  // `InvitationPasswordModule` provides the gate the guests' album upload declares (F13; L18.2): the public album route
+  // lives in this module, and the decision must be the invitations module's, so both import one module that owns it and
+  // neither imports the other.
+  imports: [CatalogModule, CollaboratorsModule, InvitationPasswordModule, SettingsModule],
   controllers: [
     InvitationsMediaController,
     MediaController,

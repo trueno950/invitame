@@ -68,6 +68,9 @@ import {
   type InvitationViewRepository,
 } from "../application/invitation-views";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "../application/music-metadata";
+import { UnlockInvitationUseCase } from "../application/invitation-unlock.use-cases";
+import { createInvitationAccessTokens } from "../application/invitation-access-token";
+import { InvitationPasswordGate } from "../application/invitation-lock";
 import { REMINDER_SENDER } from "../../reminders/application/reminder-sender";
 import { NotConfiguredReminderSender } from "../../reminders/infrastructure/not-configured-reminder-sender";
 import { PLACE_SEARCH, type PlaceSearch } from "../application/place-search";
@@ -1529,6 +1532,21 @@ describe("invitations routes: /invitations", () => {
         // The operational settings (M9 T13; S5, S8): this suite exercises other rules, so it composes the reader
         // that answers the values the migration seeds.
         { provide: OPERATIONAL_SETTINGS_READER, useValue: INITIAL_OPERATIONAL_SETTINGS_READER },
+        // The password gate the public controller declares, always open: this suite's subject is the owner's own routes,
+        // and the locked state of every public route is proved by `public-invitation-lock.spec.ts` (F13; L18.2).
+        {
+          provide: InvitationPasswordGate,
+          useValue: new InvitationPasswordGate(
+            { findLockBySlug: async () => null },
+            createInvitationAccessTokens(secret),
+          ),
+        },
+        // The unlock route's use case, which the public controller injects: unreachable here, because the routes this
+        // suite serves are the owner's.
+        {
+          provide: UnlockInvitationUseCase,
+          useValue: { execute: async () => ({ status: "rejected" }) },
+        },
       ],
     })
     class InvitationsTestModule {}

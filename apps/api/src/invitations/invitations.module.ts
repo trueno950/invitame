@@ -122,6 +122,18 @@ import {
   ClearInvitationPasswordUseCase,
   SetInvitationPasswordUseCase,
 } from "./application/invitation-password.use-cases";
+import { UnlockInvitationUseCase } from "./application/invitation-unlock.use-cases";
+import {
+  INVITATION_UNLOCK_RATE_LIMITER,
+  type InvitationUnlockRateLimiter,
+} from "./application/invitation-unlock-rate-limiter";
+import {
+  INVITATION_ACCESS_TOKENS,
+  type InvitationAccessTokens,
+} from "./application/invitation-access-token";
+import { INVITATION_LOCK_READER, type InvitationLockReader } from "./application/invitation-lock";
+import { PrismaInvitationUnlockRateLimiter } from "./infrastructure/prisma-invitation-unlock-rate-limiter";
+import { InvitationPasswordModule } from "./invitation-password.module";
 import {
   SLUG_AVAILABILITY_RATE_LIMITER,
   type SlugAvailabilityRateLimiter,
@@ -389,6 +401,17 @@ export const INVITATION_USE_CASES: Provider[] = [
     inject: [INVITATION_REPOSITORY],
   },
   {
+    // The guest's exchange of the shared code for an access token (F13; L18.2, L18.3): the same lock read and token
+    // service the guard consults, and the attempt limit on the shared RateLimit table.
+    provide: UnlockInvitationUseCase,
+    useFactory: (
+      locks: InvitationLockReader,
+      tokens: InvitationAccessTokens,
+      rateLimiter: InvitationUnlockRateLimiter,
+    ) => new UnlockInvitationUseCase(locks, tokens, rateLimiter),
+    inject: [INVITATION_LOCK_READER, INVITATION_ACCESS_TOKENS, INVITATION_UNLOCK_RATE_LIMITER],
+  },
+  {
     provide: GetPublicInvitationUseCase,
     useFactory: (
       invitations: InvitationRepository,
@@ -619,6 +642,9 @@ export const INVITATION_USE_CASES: Provider[] = [
     // The one authorization resolver every invitation route consults, and the guard its controllers declare (F12;
     // L17.4). The module exports both, so this one never reaches the collaborator table's repository directly.
     CollaboratorsModule,
+    // The gate of a password-protected invitation (F13; L18.2): the one lock read, the token service, and the guard the
+    // public controllers declare. It imports nothing from this module, so the two directions cannot cycle.
+    InvitationPasswordModule,
     MediaModule,
     PaymentsModule,
     RemindersModule,
@@ -731,6 +757,13 @@ export const INVITATION_USE_CASES: Provider[] = [
     {
       provide: GUEST_REPOSITORY,
       useFactory: (prisma: PrismaService) => new PrismaGuestRepository(prisma),
+      inject: [PrismaService],
+    },
+    {
+      provide: INVITATION_UNLOCK_RATE_LIMITER,
+      // The same `RateLimit` table Better Auth and every other public form use; only the key prefix and the window are the
+      // unlock route's (F13; L18.3).
+      useFactory: (prisma: PrismaService) => new PrismaInvitationUnlockRateLimiter(prisma),
       inject: [PrismaService],
     },
   ],

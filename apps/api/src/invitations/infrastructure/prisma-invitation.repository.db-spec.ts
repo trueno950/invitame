@@ -154,12 +154,15 @@ describe("Prisma invitation repository on PostgreSQL", () => {
 
   /** The stored row as the repository reports it: the port flattens the one-to-one feature settings row (F1, F6). */
   async function storedRecord(id: string) {
-    const row = await stored(id);
+    // The access code's two columns are read and reduced the way the adapter does (F13; L18.1): the hash never leaves
+    // the adapter, so this expectation carries only the boolean — and the version, which no read answers.
+    const { passwordHash, passwordVersion: _passwordVersion, ...row } = await stored(id);
     const settings = await prisma.invitationFeatureSettings.findUnique({
       where: { invitationId: id },
     });
     return {
       ...row,
+      passwordProtected: passwordHash !== null,
       whatsappPhone: settings?.whatsappPhone ?? null,
       playlistUrl: settings?.playlistUrl ?? null,
       playlistTitle: settings?.playlistTitle ?? null,
