@@ -181,6 +181,12 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
    */
   slugRenamesRemaining: number;
   /**
+   * Whether a shared access code protects this invitation (F13; S2.13, L18.1). It is added beside the fields the body
+   * already carried and changes none of them, so a page deployed before it reads the body it always read (L20). The code
+   * itself is never answered: the owner sees it once, when setting it.
+   */
+  passwordProtected: boolean;
+  /**
    * Whether this deployment can deliver a WhatsApp reminder at all (F6; S6, L9.5): a capability, never a secret. False
    * is what the editor's reminder block shows as «Aún no está activo», and it never hides the switches, because they
    * are stored and take effect the moment a provider is configured.
@@ -461,6 +467,7 @@ export function toOwnedInvitationResponse(
     },
     slugRenamesRemaining: stored.slugRenamesRemaining,
     remindersConfigured: stored.remindersConfigured,
+    passwordProtected: stored.passwordProtected,
     availableFeatures: [...stored.availableFeatures],
     places: { ...stored.places },
   };

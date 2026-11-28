@@ -38,6 +38,7 @@ import type {
   InvitationRecordWithMusic,
   InvitationRepository,
   NewInvitation,
+  InvitationPasswordState,
 } from "./invitation.repository";
 import {
   ArchiveInvitationUseCase,
@@ -129,6 +130,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       livestream: null,
       openingAnimation: true,
       reminders: null,
+      passwordProtected: false,
       rsvpDeadline: null,
       places: {},
       ...input,
@@ -299,6 +301,15 @@ class MemoryInvitationRepository implements InvitationRepository {
     const current = this.rows.some((row) => row.slug === slug && row.id !== exceptInvitationId);
 
     return current || this.aliases.has(slug);
+  }
+
+  /** The access-code writes are not part of this suite; `invitation-password.use-cases.spec.ts` proves them (F13). */
+  async setPassword(): Promise<InvitationPasswordState | null> {
+    throw new Error("setPassword is not used by this suite");
+  }
+
+  async clearPassword(): Promise<InvitationPasswordState | null> {
+    throw new Error("clearPassword is not used by this suite");
   }
 
   async renameSlug(
@@ -1028,6 +1039,23 @@ describe("GetOwnInvitationUseCase", () => {
     assert.equal(await useCase.execute(otherOwnerId, created.id), null);
     assert.equal(await useCase.execute(fixture.ownerId, UNKNOWN_ID), null);
     assert.equal(await useCase.execute(fixture.ownerId, MALFORMED_ID), null);
+  });
+
+  it("states whether a shared access code protects the invitation, and never the code (F13; L18.1)", async () => {
+    const fixture = seeded();
+    const created = await createDraft(fixture);
+    const useCase = new GetOwnInvitationUseCase(fixture.repository, fixture.catalog);
+
+    const fresh = await useCase.execute(fixture.ownerId, created.id);
+    assert.equal(fresh?.passwordProtected, false);
+
+    const stored = fixture.repository.rows.find((row) => row.id === created.id);
+    assert.ok(stored);
+    stored.passwordProtected = true;
+
+    const protectedRow = await useCase.execute(fixture.ownerId, created.id);
+    assert.equal(protectedRow?.passwordProtected, true);
+    assert.equal(JSON.stringify(protectedRow).includes("scrypt$"), false);
   });
 });
 

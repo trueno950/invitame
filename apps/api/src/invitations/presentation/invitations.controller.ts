@@ -39,6 +39,10 @@ import {
   UpdateInvitationFeaturesUseCase,
 } from "../application/invitation.use-cases";
 import {
+  ClearInvitationPasswordUseCase,
+  SetInvitationPasswordUseCase,
+} from "../application/invitation-password.use-cases";
+import {
   CheckInGuestUseCase,
   CreateGuestUseCase,
   DeleteGuestUseCase,
@@ -75,6 +79,8 @@ import {
 } from "./dto/invitation.dtos";
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import { CheckInGuestDto, CreateGuestDto, UpdateGuestDto } from "./dto/invitation-guest.dtos";
+// biome-ignore lint/style/useImportType: the pipe needs the class at runtime.
+import { SetInvitationPasswordDto } from "./dto/invitation-password.dtos";
 // The global ValidationPipe reads these classes from emitted metadata, so they are value imports.
 // biome-ignore lint/style/useImportType: the pipe needs the classes at runtime.
 import { UpdateRsvpSettingsDto } from "./dto/invitation-rsvp.dtos";
@@ -114,6 +120,11 @@ import {
   orGuestbookReadNotFound,
 } from "./invitation-guestbook.response";
 import {
+  type InvitationPasswordStateResponse,
+  mapInvitationPasswordError,
+  orInvitationPasswordState,
+} from "./invitation-password.response";
+import {
   mapRsvpError,
   orRsvpReadNotFound,
   orRsvpSettingsNotFound,
@@ -148,6 +159,10 @@ export class InvitationsController {
     private readonly updateContent: UpdateInvitationContentUseCase,
     @Inject(UpdateInvitationFeaturesUseCase)
     private readonly updateFeatures: UpdateInvitationFeaturesUseCase,
+    @Inject(SetInvitationPasswordUseCase)
+    private readonly setPassword: SetInvitationPasswordUseCase,
+    @Inject(ClearInvitationPasswordUseCase)
+    private readonly clearPassword: ClearInvitationPasswordUseCase,
     @Inject(SearchPlacesUseCase) private readonly searchPlaces: SearchPlacesUseCase,
     @Inject(UpdateInvitationPlaceUseCase)
     private readonly updatePlace: UpdateInvitationPlaceUseCase,
@@ -295,6 +310,54 @@ export class InvitationsController {
       );
     } catch (error) {
       return mapInvitationError(error);
+    }
+  }
+
+  /**
+   * Sets or replaces the shared access code of a DRAFT or a PUBLISHED invitation (F13; S2.13, L18.1, L18.5): 200 with only
+   * whether a code is set and the new version, never the code and never the hash. Owner-only and never a permission: a
+   * collaborator holding `EDIT_CONTENT` edits content, photos, and features, and the code decides who may see the
+   * invitation at all, so it is not theirs to change (L17.2, L18). Another customer's id is 404 (A4), an archived
+   * invitation is 409 `INVITATION_NOT_EDITABLE` (A2), a value the domain refuses is 400 `INVALID_INVITATION_PASSWORD` with
+   * its issues, and a pinned package that does not grant `PASSWORD_PROTECTION` is 409 `PASSWORD_PROTECTION_NOT_AVAILABLE`
+   * and stores nothing (L18.5). `PUT` and not `PATCH`: the whole code is replaced. Every call raises the password version,
+   * so every token minted before it stops opening the invitation (L18.2).
+   */
+  @Put(":id/password")
+  @InvitationOwnerOnly()
+  async replacePassword(
+    @InvitationOwnerId() ownerId: string,
+    @Param("id", INVITATION_ID) id: string,
+    @Body() body: SetInvitationPasswordDto,
+  ): Promise<InvitationPasswordStateResponse> {
+    try {
+      return orInvitationPasswordState(
+        await this.setPassword.execute({ ownerId, id, password: body.password }),
+      );
+    } catch (error) {
+      return mapInvitationPasswordError(error);
+    }
+  }
+
+  /**
+   * Removes the shared access code of a DRAFT or a PUBLISHED invitation (F13; S2.13, L18.1, L18.5): 200 with no code set
+   * and the new version, so every token minted while the code protected the invitation stops opening it (L18.2).
+   * Owner-only like the set, and another customer's id is 404 (A4) and an archived invitation 409
+   * `INVITATION_NOT_EDITABLE` (A2). It is deliberately not gated by `PASSWORD_PROTECTION`: a package that withdrew the key
+   * must never lock an owner out of the invitation they own, and removing a code only opens the page to the guests the
+   * owner already shares it with. Removing a code that is not set changes no data and answers the stored version.
+   */
+  @Delete(":id/password")
+  @HttpCode(200)
+  @InvitationOwnerOnly()
+  async removePassword(
+    @InvitationOwnerId() ownerId: string,
+    @Param("id", INVITATION_ID) id: string,
+  ): Promise<InvitationPasswordStateResponse> {
+    try {
+      return orInvitationPasswordState(await this.clearPassword.execute({ ownerId, id }));
+    } catch (error) {
+      return mapInvitationPasswordError(error);
     }
   }
 

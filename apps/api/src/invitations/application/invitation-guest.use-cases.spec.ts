@@ -19,6 +19,7 @@ import type {
   InvitationRecord,
   InvitationRecordWithMusic,
   InvitationRepository,
+  InvitationPasswordState,
 } from "./invitation.repository";
 import { GetPublicInvitationUseCase } from "./invitation.use-cases";
 import type {
@@ -149,6 +150,15 @@ class MemoryInvitationRepository implements InvitationRepository {
     throw new Error("isSlugInUse is not used by the guest use cases");
   }
 
+  /** The access-code writes are not part of this suite; `invitation-password.use-cases.spec.ts` proves them (F13). */
+  async setPassword(): Promise<InvitationPasswordState | null> {
+    throw new Error("setPassword is not used by this suite");
+  }
+
+  async clearPassword(): Promise<InvitationPasswordState | null> {
+    throw new Error("clearPassword is not used by this suite");
+  }
+
   async renameSlug(
     _ownerId: string,
     _id: string,
@@ -180,6 +190,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       livestream: null,
       openingAnimation: true,
       reminders: null,
+      passwordProtected: false,
       rsvpDeadline: overrides.rsvpDeadline ?? null,
       rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
       places: {},

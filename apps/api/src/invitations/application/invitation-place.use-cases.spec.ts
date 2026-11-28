@@ -15,6 +15,7 @@ import type {
   InvitationRecordWithMusic,
   InvitationRepository,
   NewInvitation,
+  InvitationPasswordState,
 } from "./invitation.repository";
 import type { CatalogPackageEntitlements, InvitationCatalog } from "./invitation-catalog";
 import {
@@ -76,6 +77,7 @@ function record(overrides: Partial<InvitationRecordWithMusic> = {}): InvitationR
     livestream: null,
     openingAnimation: true,
     reminders: null,
+    passwordProtected: false,
     rsvpDeadline: null,
     rsvpPartyLimit: 4,
     archivedAt: null,
@@ -207,6 +209,15 @@ class MemoryInvitationRepository implements InvitationRepository {
     const current = this.rows.some((row) => row.slug === slug && row.id !== exceptInvitationId);
 
     return current || this.aliases.has(slug);
+  }
+
+  /** The access-code writes are not part of this suite; `invitation-password.use-cases.spec.ts` proves them (F13). */
+  async setPassword(): Promise<InvitationPasswordState | null> {
+    throw new Error("setPassword is not used by this suite");
+  }
+
+  async clearPassword(): Promise<InvitationPasswordState | null> {
+    throw new Error("clearPassword is not used by this suite");
   }
 
   async renameSlug(

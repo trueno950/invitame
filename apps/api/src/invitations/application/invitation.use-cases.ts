@@ -246,6 +246,12 @@ export interface OwnedInvitation extends InvitationSummary {
    */
   remindersConfigured: boolean;
   /**
+   * Whether a shared access code protects this invitation (F13; S2.13, L18.1). The owner's read answers only this
+   * boolean: the code is shown once while it is set and never read back, and the hash never leaves the repository. A
+   * read that answers false is what the editor's «Invitación con contraseña» block shows as off.
+   */
+  passwordProtected: boolean;
+  /**
    * The gated keys of the features this invitation will show, `CALENDAR` included (S4). The package's keys are
    * read at request time, because the gate is about what the catalog grants now.
    */
@@ -314,6 +320,9 @@ export function toOwnedInvitation(
     },
     slugRenamesRemaining,
     remindersConfigured,
+    // The one fact the editor needs about the code (F13; L18.1): whether one is set. The value is never the code or its
+    // hash, and every owned answer of a route that returns the invitation states it.
+    passwordProtected: record.passwordProtected,
     availableFeatures: availableFeatureKeys({
       includedFeatureKeys,
       whatsappPhone: record.whatsappPhone,

@@ -170,6 +170,21 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
    * the API reads null instead of a value no rule validated.
    */
   reminders: InvitationReminders | null;
+  /**
+   * Whether this invitation stores a shared access code (F13; S2.13, L18.1). It is the only thing any read answers about
+   * the code: the hash itself never leaves the adapter, so no projection, log, or response can carry it.
+   */
+  passwordProtected: boolean;
+}
+
+/**
+ * What the owner's two access-code writes answer (F13; L18.1): whether a code is set now, and the version the write
+ * stored. The version rises on every set, replace, and remove, so a token minted for an older one stops opening the
+ * invitation (L18.2).
+ */
+export interface InvitationPasswordState {
+  readonly passwordProtected: boolean;
+  readonly passwordVersion: number;
 }
 
 /**
@@ -306,6 +321,28 @@ export interface InvitationRepository {
    * when it is archived; null, changing nothing, for an id that is missing or belongs to another owner (A4).
    */
   unpublish(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null>;
+
+  /**
+   * Stores the encoded access-code hash of a DRAFT or a PUBLISHED invitation and raises its password version by one, in
+   * one statement whose `WHERE` names the owner (F13; L18.1, L18.2). The raise happens in the statement itself, so two
+   * concurrent writes still leave a version that is higher than both reads and every token minted before either write
+   * stops opening the invitation. Throws `InvitationNotEditableError` for an archived invitation (A2); null, changing
+   * nothing, when no row has this id or another owner has it (A4). The plain code is never part of this call: the caller
+   * hashes it, and this port stores only the encoded value.
+   */
+  setPassword(
+    ownerId: string,
+    id: string,
+    passwordHash: string,
+  ): Promise<InvitationPasswordState | null>;
+
+  /**
+   * Clears the stored access-code hash of a DRAFT or a PUBLISHED invitation and raises its password version by one, with
+   * the same owner scope, the same archived refusal, and the same concurrency rule as `setPassword` (F13; L18.1, L18.2).
+   * Clearing an invitation that has no code is a successful clear: it still raises the version, so a token minted while a
+   * code was set can never open the invitation again even if the same code is set once more.
+   */
+  clearPassword(ownerId: string, id: string): Promise<InvitationPasswordState | null>;
 
   /**
    * The public read (S2, A3): the one row with this slug, in one query, while it is PUBLISHED. An expired invitation

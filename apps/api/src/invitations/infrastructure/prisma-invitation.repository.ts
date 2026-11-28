@@ -8,6 +8,7 @@ import {
 } from "../application/invitation.application.errors";
 import type {
   InvitationFeatureSettingsWrite,
+  InvitationPasswordState,
   InvitationPlaceWrite,
   InvitationRecordWithMusic,
   InvitationRepository,
@@ -43,6 +44,9 @@ const INVITATION_SELECT = {
   slug: true,
   status: true,
   content: true,
+  // Read only to answer whether a code is set: the hash itself never leaves this adapter (F13; L18.1).
+  passwordHash: true,
+  passwordVersion: true,
   timeZone: true,
   rsvpDeadline: true,
   rsvpPartyLimit: true,
@@ -146,6 +150,9 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     openingAnimation: row.featureSettings?.openingAnimation ?? true,
     // The reminder switches read as none when a row written around the API does not satisfy their rules (F6; L9.1).
     reminders: storedReminders(row.featureSettings?.reminders),
+    // Whether an access code protects the invitation (F13; L18.1). The hash is read and reduced to this boolean here, so no
+    // projection, log, response, or test fixture of a read can carry it.
+    passwordProtected: row.passwordHash !== null,
     rsvpDeadline: row.rsvpDeadline,
     rsvpPartyLimit: row.rsvpPartyLimit,
     // The points are keyed by their content field, which is the name the layout's address field carries (S2).
@@ -444,6 +451,65 @@ export class PrismaInvitationRepository implements InvitationRepository {
       return toRecord(
         await tx.invitation.findUniqueOrThrow({ where: { id }, select: INVITATION_SELECT }),
       );
+    });
+  }
+
+  /**
+   * Stores the encoded access-code hash and raises the password version, in one statement scoped by the owner (F13;
+   * L18.1, L18.2). The raise is part of the statement, so two concurrent writes still leave a version above both reads and
+   * every token minted before either write stops opening the invitation.
+   */
+  async setPassword(
+    ownerId: string,
+    id: string,
+    passwordHash: string,
+  ): Promise<InvitationPasswordState | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const stored = await tx.invitation.findFirst({
+        where: { id, ownerId },
+        select: INVITATION_SELECT,
+      });
+      if (stored === null) {
+        return null;
+      }
+      // State the rule now so the caller gets the real reason: only an archived invitation is refused (A2, S7).
+      assertEditable(toRecord(stored).status);
+
+      const updated = await tx.invitation.update({
+        where: { id },
+        data: { passwordHash, passwordVersion: { increment: 1 } },
+        select: { passwordHash: true, passwordVersion: true },
+      });
+
+      return {
+        passwordProtected: updated.passwordHash !== null,
+        passwordVersion: updated.passwordVersion,
+      };
+    });
+  }
+
+  /** Clears the stored access code and raises the password version, with the same owner scope and refusals (F13). */
+  async clearPassword(ownerId: string, id: string): Promise<InvitationPasswordState | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const stored = await tx.invitation.findFirst({
+        where: { id, ownerId },
+        select: INVITATION_SELECT,
+      });
+      if (stored === null) {
+        return null;
+      }
+      assertEditable(toRecord(stored).status);
+
+      const updated = await tx.invitation.update({
+        where: { id },
+        data: { passwordHash: null, passwordVersion: { increment: 1 } },
+        select: { passwordHash: true, passwordVersion: true },
+      });
+
+      return {
+        passwordProtected: updated.passwordHash !== null,
+        passwordVersion: updated.passwordVersion,
+      };
     });
   }
 

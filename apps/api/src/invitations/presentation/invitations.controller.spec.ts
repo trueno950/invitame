@@ -41,6 +41,7 @@ import {
 import {
   INVITATION_REPOSITORY,
   type InvitationFeatureSettingsWrite,
+  type InvitationPasswordState,
   type InvitationPlaceWrite,
   type InvitationRecord,
   type InvitationRecordWithMusic,
@@ -67,6 +68,9 @@ import {
   type InvitationViewRepository,
 } from "../application/invitation-views";
 import { MUSIC_METADATA_PROVIDER, type MusicMetadataProvider } from "../application/music-metadata";
+import { UnlockInvitationUseCase } from "../application/invitation-unlock.use-cases";
+import { createInvitationAccessTokens } from "../application/invitation-access-token";
+import { InvitationPasswordGate } from "../application/invitation-lock";
 import { REMINDER_SENDER } from "../../reminders/application/reminder-sender";
 import { NotConfiguredReminderSender } from "../../reminders/infrastructure/not-configured-reminder-sender";
 import { PLACE_SEARCH, type PlaceSearch } from "../application/place-search";
@@ -174,6 +178,8 @@ const GUESTBOOK_PACKAGE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const GUEST_ALBUM_PACKAGE_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 /** An ACTIVE package that grants `OPENING_ANIMATION` and no other implemented key: the envelope (F10; L14.4). */
 const OPENING_ANIMATION_PACKAGE_ID = "acacacac-acac-4cac-8cac-acacacacacac";
+/** An ACTIVE package that grants `PASSWORD_PROTECTION` and no other implemented key: the access code (F13; L18.5). */
+const PASSWORD_PACKAGE_ID = "adadadad-adad-4dad-8dad-adadadadadad";
 /** A PUBLISHED version whose schema declares the address fields a place may belong to (S2). */
 const PLACE_VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 /** A PUBLISHED version whose schema declares the legacy gift registry text field (F2; L4.3). */
@@ -292,6 +298,8 @@ class MemoryInvitationRepository implements InvitationRepository {
       livestream: null,
       openingAnimation: true,
       reminders: null,
+      // Every new invitation starts with no access code (F13; L18.1).
+      passwordProtected: false,
       rsvpDeadline: null,
       rsvpPartyLimit: 4,
       places: {},
@@ -324,6 +332,46 @@ class MemoryInvitationRepository implements InvitationRepository {
       [place.field]: { label: place.label, lat: place.lat, lng: place.lng },
     };
     return structuredClone(row);
+  }
+
+  /** The encoded hash this double stored, so a test observes what the port received (F13; L18.1). */
+  readonly passwordHashes = new Map<string, string>();
+  private readonly passwordVersions = new Map<string, number>();
+
+  async setPassword(
+    ownerId: string,
+    id: string,
+    passwordHash: string,
+  ): Promise<InvitationPasswordState | null> {
+    const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
+    if (!row) {
+      return null;
+    }
+    if (row.status === "ARCHIVED") {
+      throw new InvitationNotEditableError(row.status);
+    }
+    const version = (this.passwordVersions.get(id) ?? 0) + 1;
+    this.passwordVersions.set(id, version);
+    this.passwordHashes.set(id, passwordHash);
+    row.passwordProtected = true;
+
+    return { passwordProtected: true, passwordVersion: version };
+  }
+
+  async clearPassword(ownerId: string, id: string): Promise<InvitationPasswordState | null> {
+    const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
+    if (!row) {
+      return null;
+    }
+    if (row.status === "ARCHIVED") {
+      throw new InvitationNotEditableError(row.status);
+    }
+    const version = (this.passwordVersions.get(id) ?? 0) + 1;
+    this.passwordVersions.set(id, version);
+    this.passwordHashes.delete(id);
+    row.passwordProtected = false;
+
+    return { passwordProtected: false, passwordVersion: version };
   }
 
   async clearPlace(
@@ -657,6 +705,11 @@ class MemoryInvitationCatalog implements InvitationCatalog {
     [
       OPENING_ANIMATION_PACKAGE_ID,
       { status: "ACTIVE", includedFeatureKeys: ["OPENING_ANIMATION"], durationDays: 30 },
+    ],
+    // The access code key alone (F13; L18.5).
+    [
+      PASSWORD_PACKAGE_ID,
+      { status: "ACTIVE", includedFeatureKeys: ["PASSWORD_PROTECTION"], durationDays: 180 },
     ],
   ]);
 
@@ -1479,11 +1532,26 @@ describe("invitations routes: /invitations", () => {
         // The operational settings (M9 T13; S5, S8): this suite exercises other rules, so it composes the reader
         // that answers the values the migration seeds.
         { provide: OPERATIONAL_SETTINGS_READER, useValue: INITIAL_OPERATIONAL_SETTINGS_READER },
+        // The password gate the public controller declares, always open: this suite's subject is the owner's own routes,
+        // and the locked state of every public route is proved by `public-invitation-lock.spec.ts` (F13; L18.2).
+        {
+          provide: InvitationPasswordGate,
+          useValue: new InvitationPasswordGate(
+            { findLockBySlug: async () => null },
+            createInvitationAccessTokens(secret),
+          ),
+        },
+        // The unlock route's use case, which the public controller injects: unreachable here, because the routes this
+        // suite serves are the owner's.
+        {
+          provide: UnlockInvitationUseCase,
+          useValue: { execute: async () => ({ status: "rejected" }) },
+        },
       ],
     })
     class InvitationsTestModule {}
 
-    app = await createApp(InvitationsTestModule, { logger: false });
+    app = await createApp(InvitationsTestModule, { logger: false, abortOnError: false });
     await app.listen(0, "127.0.0.1");
     baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   });
@@ -1568,6 +1636,8 @@ describe("invitations routes: /invitations", () => {
     "remindersConfigured",
     // How many renames the owner has left (F11; L15.2).
     "slugRenamesRemaining",
+    // Whether a shared access code protects the invitation (F13; L18.1): only this boolean, never the code.
+    "passwordProtected",
     // The caller's own role and permissions (F12; L17.4, L17.5).
     "role",
     "permissions",
@@ -3244,6 +3314,145 @@ describe("invitations routes: /invitations", () => {
     });
   });
 
+  describe("access-code routes (F13; S2.13, L18.1, L18.5)", () => {
+    /** A draft of the package that grants the capability, and its cookie. */
+    async function protectedDraft(packageId: string = PASSWORD_PACKAGE_ID) {
+      const { cookie } = await signedInCustomer();
+      const created = (await (
+        await send("POST", PATH, cookie, { templateVersionId: PUBLISHED_VERSION_ID, packageId })
+      ).json()) as Row & { id: string; slug: string };
+
+      return { cookie, created };
+    }
+
+    it("stores only the hash and answers whether a code is set and the new version", async () => {
+      const { cookie, created } = await protectedDraft();
+      const response = await send("PUT", `${PATH}/${created.id}/password`, cookie, {
+        password: "clave-familiar",
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { passwordProtected: true, passwordVersion: 1 });
+      // The value the port received is the encoded scrypt hash, never the code, and the answer never carries either.
+      const stored = repository.passwordHashes.get(created.id);
+      assert.ok(stored);
+      assert.equal(stored.startsWith("scrypt$"), true);
+      assert.equal(stored.includes("clave-familiar"), false);
+
+      // The owner's read now states that a code is set, and still answers no code and no hash.
+      const read = await send("GET", `${PATH}/${created.id}`, cookie);
+      const body = (await read.json()) as Row;
+      assert.equal(body.passwordProtected, true);
+      assert.equal(JSON.stringify(body).includes("scrypt$"), false);
+      assert.equal(JSON.stringify(body).includes("clave-familiar"), false);
+    });
+
+    it("raises the version on every set and on the removal, and opens the invitation again", async () => {
+      const { cookie, created } = await protectedDraft();
+      const path = `${PATH}/${created.id}/password`;
+
+      assert.deepEqual(await (await send("PUT", path, cookie, { password: "primera" })).json(), {
+        passwordProtected: true,
+        passwordVersion: 1,
+      });
+      assert.deepEqual(await (await send("PUT", path, cookie, { password: "segunda" })).json(), {
+        passwordProtected: true,
+        passwordVersion: 2,
+      });
+
+      const removed = await send("DELETE", path, cookie);
+      assert.equal(removed.status, 200);
+      assert.deepEqual(await removed.json(), { passwordProtected: false, passwordVersion: 3 });
+      assert.equal(repository.passwordHashes.has(created.id), false);
+      assert.equal(
+        ((await (await send("GET", `${PATH}/${created.id}`, cookie)).json()) as Row)
+          .passwordProtected,
+        false,
+      );
+
+      // Removing a code that is not set changes no data and still raises the version.
+      assert.deepEqual(await (await send("DELETE", path, cookie)).json(), {
+        passwordProtected: false,
+        passwordVersion: 4,
+      });
+    });
+
+    it("refuses a value the domain refuses, and stores nothing", async () => {
+      const { cookie, created } = await protectedDraft();
+
+      // The domain's own refusals: too short, too long, and a control character the owner cannot type.
+      for (const password of ["abc", "a".repeat(41), "clave\u0000familiar"]) {
+        const response = await send("PUT", `${PATH}/${created.id}/password`, cookie, { password });
+
+        assert.equal(response.status, 400, JSON.stringify(password));
+        const body = (await response.json()) as Row;
+        assert.equal(body.code, "INVALID_INVITATION_PASSWORD");
+        assert.ok(Array.isArray(body.issues));
+      }
+      // A value that is not a string, and a missing field, are malformed requests the global pipe refuses.
+      for (const body of [{ password: 42 }, { password: null }, {}]) {
+        assert.equal(
+          (await send("PUT", `${PATH}/${created.id}/password`, cookie, body)).status,
+          400,
+          JSON.stringify(body),
+        );
+      }
+      assert.equal(repository.passwordHashes.has(created.id), false);
+    });
+
+    it("refuses a pinned package that does not grant PASSWORD_PROTECTION (L18.5)", async () => {
+      const { cookie, created } = await protectedDraft(ACTIVE_PACKAGE_ID);
+      const response = await send("PUT", `${PATH}/${created.id}/password`, cookie, {
+        password: "clave-familiar",
+      });
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { code: "PASSWORD_PROTECTION_NOT_AVAILABLE" });
+      assert.equal(repository.passwordHashes.has(created.id), false);
+    });
+
+    it("refuses an archived invitation and another customer's invitation", async () => {
+      const { cookie, created } = await protectedDraft();
+      const other = await signedInCustomer();
+
+      assert.equal((await send("POST", `${PATH}/${created.id}/archive`, cookie)).status, 200);
+      const archived = await send("PUT", `${PATH}/${created.id}/password`, cookie, {
+        password: "clave-familiar",
+      });
+      assert.equal(archived.status, 409);
+      assert.deepEqual(await archived.json(), { code: "INVITATION_NOT_EDITABLE" });
+      assert.equal((await send("DELETE", `${PATH}/${created.id}/password`, cookie)).status, 409);
+
+      const foreign = await protectedDraft();
+      for (const method of ["PUT", "DELETE"]) {
+        const response = await send(
+          method,
+          `${PATH}/${foreign.created.id}/password`,
+          other.cookie,
+          method === "PUT" ? { password: "clave-familiar" } : undefined,
+        );
+        assert.equal(response.status, 404, method);
+        assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+      }
+      assert.equal(repository.passwordHashes.has(foreign.created.id), false);
+    });
+
+    it("refuses a malformed id with the controller's own 400, so no port ever sees it", async () => {
+      const { cookie } = await signedInCustomer();
+
+      for (const method of ["PUT", "DELETE"]) {
+        const response = await send(
+          method,
+          `${PATH}/not-a-uuid/password`,
+          cookie,
+          method === "PUT" ? { password: "clave-familiar" } : undefined,
+        );
+
+        assert.equal(response.status, 400, method);
+      }
+    });
+  });
+
   describe("custom address routes (F11; S2.11, L15.1-L15.3)", () => {
     // Every test names its own address: the in-memory store is shared by the whole suite, so a repeated address
     // would be a real conflict here just as it is in PostgreSQL (L15.1).
@@ -4155,6 +4364,8 @@ describe("invitations routes: /invitations", () => {
         livestream: overrides.livestream ?? null,
         openingAnimation: overrides.openingAnimation ?? true,
         reminders: overrides.reminders ?? null,
+        // The fixture stores no access code; the gate is what the F13 suite proves.
+        passwordProtected: false,
         rsvpDeadline: overrides.rsvpDeadline ?? null,
         rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
         places: overrides.places ?? {},
@@ -7041,6 +7252,7 @@ describe("invitations routes: /invitations", () => {
         livestream: null,
         openingAnimation: true,
         reminders: null,
+        passwordProtected: false,
         rsvpDeadline: null,
         rsvpPartyLimit: 4,
         places: {},

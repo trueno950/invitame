@@ -7,7 +7,11 @@ import { INITIAL_OPERATIONAL_SETTINGS } from "../../settings/domain/operational-
 import { InvitationNotEditableError } from "../domain/invitation.errors";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
-import type { InvitationRecordWithMusic, InvitationRepository } from "./invitation.repository";
+import type {
+  InvitationRecordWithMusic,
+  InvitationPasswordState,
+  InvitationRepository,
+} from "./invitation.repository";
 import type {
   CatalogPackageEntitlements,
   CatalogTemplateVersionSnapshot,
@@ -124,6 +128,15 @@ class MemoryInvitationRepository implements InvitationRepository {
     return current || this.aliases.has(slug);
   }
 
+  /** The access-code writes are not part of this suite; `invitation-password.use-cases.spec.ts` proves them (F13). */
+  async setPassword(): Promise<InvitationPasswordState | null> {
+    throw new Error("setPassword is not used by this suite");
+  }
+
+  async clearPassword(): Promise<InvitationPasswordState | null> {
+    throw new Error("clearPassword is not used by this suite");
+  }
+
   async renameSlug(
     ownerId: string,
     id: string,
@@ -161,6 +174,7 @@ class MemoryInvitationRepository implements InvitationRepository {
       livestream: null,
       openingAnimation: true,
       reminders: null,
+      passwordProtected: false,
       rsvpDeadline: overrides.rsvpDeadline ?? null,
       rsvpPartyLimit: overrides.rsvpPartyLimit ?? 4,
       places: {},

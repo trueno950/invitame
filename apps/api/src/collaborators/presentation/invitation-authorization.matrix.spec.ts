@@ -60,6 +60,10 @@ import {
   CheckInvitationSlugAvailabilityUseCase,
   RenameInvitationSlugUseCase,
 } from "../../invitations/application/invitation-slug.use-cases";
+import {
+  ClearInvitationPasswordUseCase,
+  SetInvitationPasswordUseCase,
+} from "../../invitations/application/invitation-password.use-cases";
 import type {
   GuestListRead,
   GuestWithToken,
@@ -193,6 +197,10 @@ const FIXTURES: Record<string, RouteFixture> = {
   "GET /invitations/:id/places/search": { success: 200 },
   "GET /invitations/:id/slug-availability": { success: 200 },
   "PUT /invitations/:id/slug": { success: 200, body: { slug: "valentina-xv" } },
+  // The shared access code (F13; S2.13, L18): the code decides who may see the invitation at all, so both routes are
+  // owner-only and a collaborator is refused however many permissions it holds.
+  "PUT /invitations/:id/password": { success: 200, body: { password: "clave-familiar" } },
+  "DELETE /invitations/:id/password": { success: 200 },
   "PUT /invitations/:id/places/:field": {
     success: 200,
     body: { label: "Parroquia de San José", lat: 20.5888, lng: -100.3899 },
@@ -321,6 +329,7 @@ const RECORD: InvitationRecordWithMusic = {
   livestream: null,
   openingAnimation: true,
   reminders: null,
+  passwordProtected: false,
   rsvpDeadline: null,
   rsvpPartyLimit: 4,
   places: {},
@@ -448,6 +457,8 @@ const USE_CASE_STUBS: Provider[] = [
   stub(ClearInvitationPlaceUseCase, OWNED),
   stub(CheckInvitationSlugAvailabilityUseCase, { slug: "valentina-xv", status: "available" }),
   stub(RenameInvitationSlugUseCase, OWNED),
+  stub(SetInvitationPasswordUseCase, { passwordProtected: true, passwordVersion: 1 }),
+  stub(ClearInvitationPasswordUseCase, { passwordProtected: false, passwordVersion: 1 }),
   stub(ArchiveInvitationUseCase, SUMMARY),
   stub(PublishInvitationUseCase, OWNED),
   stub(UnpublishInvitationUseCase, SUMMARY),
