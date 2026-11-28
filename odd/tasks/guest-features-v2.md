@@ -466,6 +466,14 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   addresses) are spent, a code is still verified; a right code opens and refunds as before, a wrong one answers 429; a
   hard ceiling of 300 verifications per client address per 15 minutes answers 429 before any scrypt work, so an abuser
   cannot buy unbounded hashing.
+- L34 — L33 evidence: commits `3bcd678` (the right code always opens; a hard ceiling of 300 verifications per client
+  address per 15 minutes before any hashing; soft budgets decide 429 versus 401 after verification) and `8a15eea`
+  (review correction: an unresolved client address, which has no ceiling, still refuses a spent budget before any
+  hashing, even the right code; only the budgets an attempt counted are refunded; the ADR states the new bound of 300
+  verifications per address per 15 minutes). Native review `review-75997c33b36345b1` approved after the 55-line
+  correction. Independent verification over HTTP with resolved and unresolved addresses: every L33 point met (over the
+  ceiling answered in 2-5 ms against about 50 ms for a verification; a guest who never fails behaves as before).
+  Gates: API 2537/2537, invitations db-specs 248/248. Follow-up: the verifier's real-store ceiling db-spec.
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
