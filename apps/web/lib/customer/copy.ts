@@ -326,6 +326,50 @@ export const INVITATION_NOTICE_CODES = [
 ] as const;
 export type InvitationNoticeCode = (typeof INVITATION_NOTICE_CODES)[number];
 
+/**
+ * The custom address block of the «Publicar» tab (F11; S2.11, L15.4), in the words of the artboard
+ * `design/custom-address/01-campo-libre.html`: the field, the state under it, the rule, the save, and the promise that an
+ * already shared link keeps working. Neutral Spanish, in the second person.
+ */
+export const ADDRESS_COPY = {
+  heading: "Dirección de tu invitación",
+  lead: "Elige una dirección fácil de recordar y de compartir.",
+  label: "Tu dirección",
+  available: "✓ Disponible",
+  taken: "Ya está en uso",
+  invalid: "No es válida",
+  reserved: "No está disponible",
+  checking: "Revisando…",
+  rateLimited: "Espera un momento y vuelve a intentarlo.",
+  unavailable: "No pudimos revisarla ahora. Inténtalo de nuevo.",
+  rule: "Solo letras minúsculas, números y guiones; de 3 a 40 caracteres.",
+  save: "Guardar dirección",
+  saving: "Guardando…",
+  saved: "Listo, guardamos tu nueva dirección.",
+  /** The line that names the address the invitation has today (L15.4). */
+  currentAddress: (address: string) => `Tu dirección actual: ${address}`,
+  /** The line that previews the typed address, shown only once the API answered it is available (L15.4). */
+  nextAddress: (address: string) => `Así quedará: ${address}`,
+  /** Why the save is off while the field is empty (L15.4). */
+  needAddress: "Escribe una dirección para poder guardarla.",
+  /** Why the save is off while the field holds the address the invitation already has (L15.4). */
+  alreadyCurrent: "Esta ya es la dirección de tu invitación. Escribe una nueva para cambiarla.",
+  /** Why the save is off while a check is in flight (L15.4). */
+  waitingForCheck: "Esperamos la comprobación antes de guardarla.",
+  /** Why the save is off when the check could not be answered (L15.4). */
+  saveNeedsCheck: "Sin la comprobación no podemos guardarla. Inténtalo de nuevo.",
+  previousLinkNote:
+    "Si ya compartiste el enlace anterior, seguirá funcionando y llevará a la nueva dirección.",
+  renamesLeft: (remaining: number) => `Te quedan ${remaining} cambios de dirección.`,
+  oneRenameLeft: "Te queda 1 cambio de dirección.",
+  noRenamesLeft: "Ya no puedes cambiar la dirección.",
+  notChecked: "Escribe una dirección para revisarla.",
+  archiveNote: "Una invitación archivada conserva su dirección.",
+  step: "Dirección pública",
+  saveFailed: "No pudimos guardar la dirección. Inténtalo de nuevo.",
+  notFound: "No encontramos tu invitación.",
+} as const;
+
 /** What a finished action confirms; the code travels in the page's query, the text lives here. */
 export const INVITATION_NOTICE_COPY: Record<InvitationNoticeCode, string> = {
   created: "¡Listo! Creamos tu invitación. Ahora personalízala a tu gusto.",
@@ -371,6 +415,12 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "place-search-rate-limited":
     "Hicimos muchas búsquedas seguidas. Espera un momento o escribe la dirección a mano.",
   "place-invalid": "No pudimos guardar esa ubicación. Vuelve a elegir una sugerencia de la lista.",
+  "slug-invalid": "Solo letras minúsculas, números y guiones; de 3 a 40 caracteres.",
+  "slug-reserved": "Esa dirección es parte del sitio. Elige otra.",
+  "slug-taken": "Ya está en uso. Prueba con otra dirección.",
+  "slug-rename-limit": "Ya no puedes cambiar la dirección de esta invitación.",
+  "slug-rate-limited":
+    "Revisaste muchas direcciones seguidas. Espera un momento y vuelve a intentarlo.",
   "not-editable": "Esta invitación está archivada y ya no se puede editar.",
   "already-archived": "Esta invitación ya está archivada.",
   "already-published": "Esta invitación ya está publicada.",

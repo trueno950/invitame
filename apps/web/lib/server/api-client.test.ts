@@ -71,6 +71,7 @@ function client(overrides: Partial<WebServerConfig> = {}, timeoutMs?: number) {
   return createApiClient({
     config: {
       apiOrigin,
+      publicWebOrigin: undefined,
       proxySecret: PROXY_SECRET,
       clientIpHeader: "x-invitame-client-ip",
       edgeClientIpHeader: "x-real-ip",
@@ -319,6 +320,7 @@ describe("sendApiRequest without a cookie", () => {
       {
         config: {
           apiOrigin,
+          publicWebOrigin: undefined,
           proxySecret: PROXY_SECRET,
           clientIpHeader: "x-invitame-client-ip",
           edgeClientIpHeader: "x-real-ip",

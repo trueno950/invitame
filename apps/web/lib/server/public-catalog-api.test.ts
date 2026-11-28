@@ -89,6 +89,7 @@ function client() {
   return createPublicCatalogClient({
     config: {
       apiOrigin,
+      publicWebOrigin: undefined,
       proxySecret: PROXY_SECRET,
       clientIpHeader: "x-invitame-client-ip",
       edgeClientIpHeader: "x-real-ip",
@@ -114,6 +115,7 @@ describe("landing price list read", () => {
     const anonymous = createPublicCatalogClient({
       config: {
         apiOrigin,
+        publicWebOrigin: undefined,
         proxySecret: undefined,
         clientIpHeader: "x-invitame-client-ip",
         edgeClientIpHeader: "x-real-ip",

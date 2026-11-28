@@ -87,6 +87,8 @@ const PUBLIC: PublicInvitation = {
   places: {},
   // The read-only state the API decided (S2, T3): the page still renders and its RSVP is closed.
   expired: false,
+  // The guest asked for the current address, so the page redirects nowhere (F11; L15.3).
+  redirectTo: null,
 };
 
 /** One guest's open RSVP answer, as the guest page posts it (M6 G3; S4). */
@@ -152,6 +154,7 @@ function client() {
   return createPublicInvitationsClient({
     config: {
       apiOrigin,
+      publicWebOrigin: undefined,
       proxySecret: PROXY_SECRET,
       clientIpHeader: "x-invitame-client-ip",
       edgeClientIpHeader: "x-real-ip",
@@ -178,6 +181,7 @@ describe("public read", () => {
     const anonymous = createPublicInvitationsClient({
       config: {
         apiOrigin,
+        publicWebOrigin: undefined,
         proxySecret: undefined,
         clientIpHeader: "x-invitame-client-ip",
         edgeClientIpHeader: "x-real-ip",
@@ -1219,5 +1223,34 @@ describe("the guest's photo upload (F8; L11.3, L11.5)", () => {
       assert.equal(error.kind, "invalid-response");
       return true;
     });
+  });
+});
+
+// The custom address (F11; S2.11, L15.3): a guest who follows an already shared link reaches the invitation and the
+// current address it must redirect to. The field is added beside the ones the body already carried, so a page talking to
+// an API written before it reads the body it always read (L20).
+describe("the current address of a previous link (F11; L15.3)", () => {
+  it("reads the address a previous link must redirect to", () => {
+    const renamed = parsePublicInvitation({ ...PUBLIC, redirectTo: "valentina-xv" });
+
+    assert.equal(renamed?.redirectTo, "valentina-xv");
+    assert.equal(renamed?.slug, PUBLIC.slug);
+  });
+
+  it("reads an absent field as no redirect, for an API written before it (L20)", () => {
+    const { redirectTo, ...older } = PUBLIC;
+
+    assert.equal(redirectTo, null);
+    assert.equal(parsePublicInvitation(older)?.redirectTo, null);
+  });
+
+  it("refuses a redirect target that is not a slug", () => {
+    for (const value of [7, "", "Valentina", "boda/2027", "x".repeat(61), []]) {
+      assert.equal(
+        parsePublicInvitation({ ...PUBLIC, redirectTo: value }),
+        undefined,
+        String(value),
+      );
+    }
   });
 });

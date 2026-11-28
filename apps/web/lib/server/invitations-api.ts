@@ -1,3 +1,4 @@
+import { ADDRESS_RENAMES_MAX } from "../customer/address.ts";
 import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "../customer/omittable-sections.ts";
 import { isE164Phone, isInvitationFeatureKey } from "../invitation-features/invitation-features.ts";
 import {
@@ -81,6 +82,12 @@ export interface OwnedInvitation extends InvitationSummary {
   missingRequiredFields: string[];
   /** The stored IANA zone the guest's countdown and calendar use (S4). */
   timeZone: string;
+  /**
+   * How many times the owner may still rename the address (F11; S2.11, L15.2). It is absent from a body written before
+   * the field existed, and a reader then states the product's bound, which is what an invitation that never renamed
+   * has (L20).
+   */
+  slugRenamesRemaining: number;
   /**
    * The stored feature data: a phone is E.164, and the playlist link is an `https` URL on an allow-listed music
    * host; each is null when the invitation has none (S4, S7).
@@ -406,7 +413,12 @@ export type InvitationFailure =
   | "payment-provider-unavailable"
   | "simulated-payment-disabled"
   | "payment-not-found"
-  | "payment-redirect-refused";
+  | "payment-redirect-refused"
+  | "slug-invalid"
+  | "slug-reserved"
+  | "slug-taken"
+  | "slug-rename-limit"
+  | "slug-rate-limited";
 
 /**
  * A refused call, plus the readiness `issues` the API returned for a publish it refused: English
@@ -458,6 +470,34 @@ function isInvitationStatus(value: unknown): value is InvitationStatus {
  */
 export function isInvitationSlug(value: unknown): value is string {
   return typeof value === "string" && value.length <= MAX_SLUG_LENGTH && SLUG.test(value);
+}
+
+/**
+ * The four words the availability check answers (F11; S2.11, L15.3): free, held by somebody, malformed, or a reserved
+ * word. The check never names the owner who holds an address, so this client has nothing else to read.
+ */
+export const SLUG_AVAILABILITY_STATUSES = ["available", "taken", "invalid", "reserved"] as const;
+export type SlugAvailabilityStatus = (typeof SLUG_AVAILABILITY_STATUSES)[number];
+
+export interface SlugAvailability {
+  readonly slug: string;
+  readonly status: SlugAvailabilityStatus;
+}
+
+/** The longest address a body may echo; the rule allows 40 characters (F11; L15.1). */
+const MAX_OWNER_SLUG_LENGTH = 60;
+
+/** One availability answer: the address it is about and one of the four words, or nothing for another shape. */
+export function parseSlugAvailability(value: unknown): SlugAvailability | undefined {
+  const answer = record(value);
+  const status = answer?.status;
+
+  return answer !== undefined &&
+    typeof answer.slug === "string" &&
+    answer.slug.length <= MAX_OWNER_SLUG_LENGTH &&
+    SLUG_AVAILABILITY_STATUSES.some((candidate) => candidate === status)
+    ? { slug: answer.slug, status: status as SlugAvailabilityStatus }
+    : undefined;
 }
 
 function isPrimitive(value: unknown): boolean {
@@ -746,6 +786,11 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
   // is a boolean or the body is refused, so a shape nobody writes never becomes a capability.
   const remindersConfigured =
     owned.remindersConfigured === undefined ? false : owned.remindersConfigured;
+  // A body written before F11 carries no count, and an invitation that never renamed keeps the product's bound (L20).
+  const slugRenamesRemaining =
+    owned.slugRenamesRemaining === undefined
+      ? ADDRESS_RENAMES_MAX
+      : parseRenamesRemaining(owned.slugRenamesRemaining);
 
   if (
     content === undefined ||
@@ -753,6 +798,7 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     featureSettings === undefined ||
     availableFeatures === undefined ||
     places === undefined ||
+    slugRenamesRemaining === undefined ||
     typeof remindersConfigured !== "boolean" ||
     !isInvitationTimeZone(owned.timeZone)
   ) {
@@ -764,11 +810,22 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     content,
     missingRequiredFields: missing,
     timeZone: owned.timeZone,
+    slugRenamesRemaining,
     featureSettings,
     remindersConfigured,
     availableFeatures,
     places,
   };
+}
+
+/** How many renames are left: a whole number between none and the bound, or nothing when a body states another shape. */
+function parseRenamesRemaining(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= ADDRESS_RENAMES_MAX
+    ? value
+    : undefined;
 }
 
 /**
@@ -1675,6 +1732,11 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVITATION_ALREADY_PUBLISHED: "already-published",
   INVITATION_NOT_PUBLISHED: "not-published",
   INVITATION_PAYMENT_REQUIRED: "payment-required",
+  INVALID_INVITATION_SLUG: "slug-invalid",
+  INVITATION_SLUG_RESERVED: "slug-reserved",
+  INVITATION_SLUG_TAKEN: "slug-taken",
+  INVITATION_SLUG_RENAME_LIMIT: "slug-rename-limit",
+  SLUG_AVAILABILITY_RATE_LIMITED: "slug-rate-limited",
 };
 
 const SIGNED_OUT: InvitationResult<never> = { ok: false, failure: "signed-out" };
@@ -1684,6 +1746,9 @@ const PAYMENT_NOT_FOUND_RESULT: InvitationResult<never> = {
   ok: false,
   failure: "payment-not-found",
 };
+/** The answer an address check gives without a request: longer than a slug can be, so it cannot be one (F11). */
+const SLUG_CHECK_REFUSED: InvitationResult<never> = { ok: false, failure: "slug-invalid" };
+
 /** The answer a search gives without a request: a text the API would refuse anyway, so it costs nothing (S2). */
 const PLACE_QUERY_REFUSED: InvitationResult<never> = {
   ok: false,
@@ -1906,6 +1971,31 @@ export function createInvitationsClient(
      */
     list: (): Promise<InvitationResult<InvitationListItem[]>> =>
       call("GET", INVITATIONS, undefined, parseInvitationListItems),
+    /**
+     * `GET /invitations/:id/slug-availability?slug=`: whether the typed address may be saved, in the four words the
+     * editor renders (F11; L15.3), or `not-found` for an invitation this session does not own.
+     */
+    checkSlugAvailability: (
+      id: string,
+      slug: string,
+    ): Promise<InvitationResult<SlugAvailability>> => {
+      const text = slug.trim();
+
+      return text.length > MAX_OWNER_SLUG_LENGTH
+        ? Promise.resolve(SLUG_CHECK_REFUSED)
+        : onDraft(id, `/slug-availability?slug=${encodeURIComponent(text)}`, (path) =>
+            call("GET", path, undefined, parseSlugAvailability),
+          );
+    },
+    /**
+     * `PUT /invitations/:id/slug`: saves the address and answers the renamed invitation (F11; L15.2, L15.3). Called
+     * from a server action; `PUT` because the whole address is replaced. The previous address becomes an alias the API
+     * stores in the same transaction, so an already shared link keeps working.
+     */
+    renameSlug: (id: string, slug: string): Promise<InvitationResult<OwnedInvitation>> =>
+      onDraft(id, "/slug", (path) =>
+        call("PUT", path, { slug: slug.trim() }, parseOwnedInvitation),
+      ),
     /** `GET /invitations/:id`: one own draft with its content and missing fields (S7). */
     get: (id: string): Promise<InvitationResult<OwnedInvitation>> =>
       onDraft(id, "", (path) => call("GET", path, undefined, parseOwnedInvitation)),

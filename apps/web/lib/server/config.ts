@@ -11,6 +11,12 @@ export interface WebServerConfig {
   apiOrigin: string;
   /** Shared web-to-API secret, from `AUTH_PROXY_SECRET`; the same value as the API's. */
   proxySecret: string | undefined;
+  /**
+   * The origin the product's own public pages live at, from `PUBLIC_WEB_ORIGIN` (F11; S2.11, L15.4): the editor shows
+   * the address of an invitation under it (`invitame.mx/i/`), so the prefix comes from configuration instead of being
+   * hard-coded. It is optional: without it a page uses the origin of its own request.
+   */
+  publicWebOrigin: string | undefined;
   /** Lower-case header the API reads the client IP from; the API's `AUTH_CLIENT_IP_HEADER`. */
   clientIpHeader: string;
   /** Lower-case header the platform edge overwrites with the client IP, from `AUTH_EDGE_CLIENT_IP_HEADER`. */
@@ -65,6 +71,8 @@ function readSetting(
 
 const API_ORIGIN_ERROR =
   "API_ORIGIN must be an http or https origin without a path, query, fragment, or credentials.";
+const PUBLIC_WEB_ORIGIN_ERROR =
+  "PUBLIC_WEB_ORIGIN must be an http or https origin without a path, query, fragment, or credentials.";
 
 /**
  * Any spelling of a bare http(s) origin, stored in its normalized form, which the proxy compares
@@ -75,8 +83,20 @@ const API_ORIGIN_ERROR =
  * a valid origin never contains `@`, and any `@` fails the startup like real credentials (L59, T11e).
  */
 function parseApiOrigin(value: string): string {
+  return parseOrigin(value, API_ORIGIN_ERROR);
+}
+
+/** The same rule for the product's own public origin: a bare http(s) origin, normalized, or nothing at all. */
+function parsePublicWebOrigin(environment: Environment): string | undefined {
+  const value = readOptional(environment, "PUBLIC_WEB_ORIGIN");
+
+  return value === undefined ? undefined : parseOrigin(value, PUBLIC_WEB_ORIGIN_ERROR);
+}
+
+/** Reads one bare http(s) origin in its normalized form, or fails with the message the setting owns. */
+function parseOrigin(value: string, message: string): string {
   if (value.includes("@")) {
-    throw new Error(API_ORIGIN_ERROR);
+    throw new Error(message);
   }
 
   let url: URL;
@@ -84,11 +104,11 @@ function parseApiOrigin(value: string): string {
   try {
     url = new URL(value);
   } catch {
-    throw new Error(API_ORIGIN_ERROR);
+    throw new Error(message);
   }
 
   if ((url.protocol !== "http:" && url.protocol !== "https:") || url.href !== `${url.origin}/`) {
-    throw new Error(API_ORIGIN_ERROR);
+    throw new Error(message);
   }
 
   return url.origin;
@@ -135,6 +155,7 @@ export function parseWebServerConfig(environment: Environment): WebServerConfig 
     readSetting(environment, "API_ORIGIN", production, DEFAULT_API_ORIGIN),
   );
   const proxySecret = parseProxySecret(environment, production);
+  const publicWebOrigin = parsePublicWebOrigin(environment);
   const clientIpHeader = parseHeaderName(
     "AUTH_CLIENT_IP_HEADER",
     readSetting(environment, "AUTH_CLIENT_IP_HEADER", production, DEFAULT_CLIENT_IP_HEADER),
@@ -155,7 +176,7 @@ export function parseWebServerConfig(environment: Environment): WebServerConfig 
     );
   }
 
-  return { apiOrigin, proxySecret, clientIpHeader, edgeClientIpHeader };
+  return { apiOrigin, proxySecret, publicWebOrigin, clientIpHeader, edgeClientIpHeader };
 }
 
 let cached: WebServerConfig | undefined;

@@ -245,6 +245,7 @@ describe("refreshSessionCookies through the real proxy", () => {
   function config(): WebServerConfig {
     return {
       apiOrigin,
+      publicWebOrigin: undefined,
       proxySecret: PROXY_SECRET,
       clientIpHeader: "x-invitame-client-ip",
       edgeClientIpHeader: "x-real-ip",

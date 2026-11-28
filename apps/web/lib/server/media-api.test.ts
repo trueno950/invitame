@@ -92,6 +92,7 @@ function client() {
     {
       config: {
         apiOrigin,
+        publicWebOrigin: undefined,
         proxySecret: PROXY_SECRET,
         clientIpHeader: "x-test-ip",
         edgeClientIpHeader: "x-test-edge",
@@ -328,6 +329,7 @@ describe("media upload", () => {
       {
         config: {
           apiOrigin,
+          publicWebOrigin: undefined,
           proxySecret: PROXY_SECRET,
           clientIpHeader: "x",
           edgeClientIpHeader: "x",

@@ -102,6 +102,7 @@ function client(cookie: string | null = `theme=dark; ${SESSION_COOKIE}; _ga=GA1`
     {
       config: {
         apiOrigin,
+        publicWebOrigin: undefined,
         proxySecret: PROXY_SECRET,
         clientIpHeader: "x-invitame-client-ip",
         edgeClientIpHeader: "x-real-ip",

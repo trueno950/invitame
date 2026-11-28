@@ -39,6 +39,7 @@ const INVITATION: OwnedInvitation = {
   content: { celebrantName: "Ana", mainPhoto: "https://cdn.example.com/ana.jpg" },
   missingRequiredFields: [],
   timeZone: "America/Mexico_City",
+  slugRenamesRemaining: 5,
   featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["COUNTDOWN", "GALLERY", "CALENDAR"],
   places: {},

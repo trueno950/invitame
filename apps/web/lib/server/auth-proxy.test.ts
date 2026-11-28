@@ -68,6 +68,7 @@ beforeEach(() => {
 function config(overrides: Partial<WebServerConfig> = {}): WebServerConfig {
   return {
     apiOrigin,
+    publicWebOrigin: undefined,
     proxySecret: PROXY_SECRET,
     clientIpHeader: CLIENT_IP_HEADER,
     edgeClientIpHeader: EDGE_HEADER,

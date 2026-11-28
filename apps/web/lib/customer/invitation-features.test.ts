@@ -35,6 +35,7 @@ const OWNED: OwnedInvitation = {
   content: { celebrantName: "Ana" },
   missingRequiredFields: [],
   timeZone: "America/Tijuana",
+  slugRenamesRemaining: 5,
   featureSettings: { whatsappPhone: "+525512345678", playlistUrl: PLAYLIST },
   availableFeatures: ["COUNTDOWN", "MAP", "WHATSAPP", "CALENDAR"],
   places: {},

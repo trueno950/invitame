@@ -42,6 +42,7 @@ const INVITATION: OwnedInvitation = {
   content: { celebrantName: "Ana" },
   missingRequiredFields: [],
   timeZone: "America/Mexico_City",
+  slugRenamesRemaining: 5,
   featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["RSVP", "GUEST_LIST", "QR_PASS", "CALENDAR"],
   places: {},

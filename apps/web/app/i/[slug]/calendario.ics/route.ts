@@ -1,6 +1,9 @@
 import { connection } from "next/server";
 
-import { invitationCalendarFile } from "../../../../lib/public/invitation-features.ts";
+import {
+  invitationCalendarFile,
+  invitationCalendarPath,
+} from "../../../../lib/public/invitation-features.ts";
 import { loadPublicInvitation } from "../_lib/load.ts";
 
 /**
@@ -24,6 +27,18 @@ export async function GET(
 
   if (loaded.status !== "ok") {
     return new Response(null, { status: 404 });
+  }
+
+  // A previous address downloads nothing of its own: it answers a permanent redirect to the file of the current
+  // address, so an already shared calendar link keeps working (F11; S2.11, L15.3).
+  if (loaded.invitation.redirectTo !== null) {
+    return new Response(null, {
+      status: 308,
+      headers: {
+        location: invitationCalendarPath(loaded.invitation.redirectTo),
+        "cache-control": "no-store",
+      },
+    });
   }
 
   const file = invitationCalendarFile(loaded.invitation, new Date());

@@ -76,6 +76,7 @@ function client(
     {
       config: {
         apiOrigin: origin,
+        publicWebOrigin: undefined,
         proxySecret: PROXY_SECRET,
       } as never,
     },

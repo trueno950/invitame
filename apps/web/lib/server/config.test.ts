@@ -38,6 +38,8 @@ describe("parseWebServerConfig", () => {
       assert.deepEqual(parseWebServerConfig({ NODE_ENV }), {
         apiOrigin: "http://localhost:3001",
         proxySecret: undefined,
+        // The product's own public origin is optional: without it a page uses its own request origin (F11; L15.4).
+        publicWebOrigin: undefined,
         clientIpHeader: "x-forwarded-for",
         edgeClientIpHeader: "x-forwarded-for",
       });
@@ -56,6 +58,7 @@ describe("parseWebServerConfig", () => {
       {
         apiOrigin: "http://api.railway.internal:3001",
         proxySecret: PROXY_SECRET,
+        publicWebOrigin: undefined,
         clientIpHeader: "x-invitame-client-ip",
         edgeClientIpHeader: "x-real-ip",
       },

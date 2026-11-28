@@ -164,6 +164,12 @@ export interface PublicInvitation {
    * an expiration of its own.
    */
   expired: boolean;
+  /**
+   * The current address when the guest arrived through a previous one (F11; S2.11, L15.3), or null when the slug the
+   * guest asked for is the current one. The page answers it with a permanent redirect before it renders anything. An API
+   * written before the field answers none, which reads as null, so a rolling deploy keeps both generations working (L20).
+   */
+  redirectTo: string | null;
 }
 
 export type PublicInvitationResult =
@@ -569,6 +575,14 @@ export function parsePublicInvitation(
     return undefined;
   }
 
+  // An absent field is an API written before F11 and means "no redirect"; a value that is not a slug is not this
+  // contract, so the whole body is refused instead of being followed (L20).
+  const redirectTo = invitation.redirectTo === undefined ? null : invitation.redirectTo;
+
+  if (!(redirectTo === null || isInvitationSlug(redirectTo))) {
+    return undefined;
+  }
+
   return {
     slug: invitation.slug,
     componentKey,
@@ -580,6 +594,7 @@ export function parsePublicInvitation(
     places,
     hiddenFields,
     expired,
+    redirectTo,
   };
 }
 

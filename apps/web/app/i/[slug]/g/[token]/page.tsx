@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { GUEST_PAGE_COPY, PUBLIC_INVITATION_COPY } from "../../../../../lib/customer/copy.ts";
 import type { GuestPageBlockView } from "../../../../../lib/invitation-features/invitation-features.ts";
-import { checkInUrl } from "../../../../../lib/public/guest-pass.ts";
+import { checkInUrl, personalGuestPath } from "../../../../../lib/public/guest-pass.ts";
 import { guestAlbumNotice, publicGuestAlbumBlock } from "../../../../../lib/public/guest-album.ts";
 import { guestbookNotice, publicGuestbookBlock } from "../../../../../lib/public/guestbook.ts";
 import {
@@ -84,6 +84,15 @@ export default async function GuestInvitationPage({
   }
 
   const invitation = loaded.invitation;
+  // A previous address of the invitation keeps serving this guest's link: the page sends them permanently to the same
+  // personal page under the current address, with the same token (F11; L15.3).
+  if (invitation.redirectTo !== null) {
+    const target = personalGuestPath(invitation.redirectTo, token);
+
+    if (target !== undefined) {
+      permanentRedirect(target);
+    }
+  }
   const Renderer = findRenderer(invitation.componentKey);
 
   if (Renderer === undefined) {

@@ -128,6 +128,7 @@ function client() {
     {
       config: {
         apiOrigin,
+        publicWebOrigin: undefined,
         proxySecret: PROXY_SECRET,
         clientIpHeader: "x-invitame-client-ip",
         edgeClientIpHeader: "x-real-ip",

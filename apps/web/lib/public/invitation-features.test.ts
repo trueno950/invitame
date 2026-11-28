@@ -56,6 +56,8 @@ const PUBLIC: PublicInvitation = {
   places: {},
   // The read-only flag the API decided (S2, T3); this projection only renders what it is given.
   expired: false,
+  // The guest asked for the current address, so nothing redirects (F11; L15.3).
+  redirectTo: null,
 };
 
 const NOW = new Date("2026-11-13T10:00:00.000Z");

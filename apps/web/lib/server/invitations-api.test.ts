@@ -58,6 +58,8 @@ const OWNED = {
   content: { celebrantName: "Ana", age: 7 },
   missingRequiredFields: ["date", "time"],
   timeZone: "America/Mexico_City",
+  // How many renames the owner has left (F11; L15.2): an invitation that never renamed keeps the product's bound.
+  slugRenamesRemaining: 5,
   featureSettings: {
     whatsappPhone: null,
     playlistUrl: null,
@@ -237,6 +239,7 @@ function client(cookie: string | null = `theme=dark; ${SESSION_COOKIE}; _ga=GA1`
     {
       config: {
         apiOrigin,
+        publicWebOrigin: undefined,
         proxySecret: PROXY_SECRET,
         clientIpHeader: "x-invitame-client-ip",
         edgeClientIpHeader: "x-real-ip",
@@ -1695,5 +1698,76 @@ describe("the guest album key of the owner read (F8; L11.2)", () => {
       "CALENDAR",
       "GUEST_ALBUM",
     ]);
+  });
+});
+
+// The custom address (F11; S2.11, L15.3). The editor asks one check per debounced pause and saves through a second
+// route; both are owner-only, so this client sends the session cookie like every other one, and the address itself is
+// the only value it puts in a path or a query.
+describe("the custom address routes (F11; L15.3)", () => {
+  it("asks the availability check with the address in the query and reads its four words", async () => {
+    for (const status of ["available", "taken", "invalid", "reserved"] as const) {
+      answer(200, { slug: "valentina-xv", status });
+
+      const checked = await client().checkSlugAvailability(ID, "valentina-xv");
+
+      assert.deepEqual(checked, { ok: true, value: { slug: "valentina-xv", status } });
+    }
+    assert.equal(received[0]?.url, `/invitations/${ID}/slug-availability?slug=valentina-xv`);
+  });
+
+  it("sends the save as a PUT with only the address, and reads the renamed invitation", async () => {
+    answer(200, { ...OWNED, slug: "valentina-xv", slugRenamesRemaining: 4 });
+
+    const saved = await client().renameSlug(ID, "valentina-xv");
+
+    assert.equal(received[0]?.method, "PUT");
+    assert.equal(received[0]?.url, `/invitations/${ID}/slug`);
+    assert.deepEqual(JSON.parse(received[0]?.body ?? ""), { slug: "valentina-xv" });
+    assert.equal(saved.ok && saved.value.slug, "valentina-xv");
+    assert.equal(saved.ok && saved.value.slugRenamesRemaining, 4);
+  });
+
+  it("maps every refusal to its own failure and fails closed on anything else", async () => {
+    const cases = [
+      [400, { code: "INVALID_INVITATION_SLUG", issues: ["must be lower case"] }, "slug-invalid"],
+      [409, { code: "INVITATION_SLUG_RESERVED" }, "slug-reserved"],
+      [409, { code: "INVITATION_SLUG_TAKEN" }, "slug-taken"],
+      [409, { code: "INVITATION_SLUG_RENAME_LIMIT" }, "slug-rename-limit"],
+      [429, { code: "SLUG_AVAILABILITY_RATE_LIMITED" }, "slug-rate-limited"],
+    ] as const;
+
+    for (const [status, body, failure] of cases) {
+      answer(status, body);
+      assert.deepEqual(
+        await client().renameSlug(ID, "valentina-xv"),
+        { ok: false, failure },
+        body.code,
+      );
+    }
+
+    answer(409, { code: "INVITATION_NOT_EDITABLE" });
+    assert.deepEqual(await client().renameSlug(ID, "valentina-xv"), {
+      ok: false,
+      failure: "not-editable",
+    });
+
+    answer(500, "boom");
+    await assert.rejects(client().renameSlug(ID, "valentina-xv"), (error: unknown) => {
+      assert.equal((error as ApiClientError).kind, "unavailable");
+      return true;
+    });
+  });
+
+  it("answers not-found without a request for an id that cannot be one", async () => {
+    assert.deepEqual(await client().renameSlug("not-a-uuid", "valentina-xv"), {
+      ok: false,
+      failure: "not-found",
+    });
+    assert.deepEqual(await client().checkSlugAvailability("not-a-uuid", "valentina-xv"), {
+      ok: false,
+      failure: "not-found",
+    });
+    assert.equal(received.length, 0);
   });
 });

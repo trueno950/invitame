@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
@@ -9,7 +9,7 @@ import {
   openingAnimationBlock,
   publicFeatureBlock,
 } from "../../../lib/public/invitation-features.ts";
-import { invitationMetadata } from "../../../lib/public/invitation-page.ts";
+import { invitationMetadata, publicInvitationPath } from "../../../lib/public/invitation-page.ts";
 import { rendererAcceptsProps } from "../../../lib/public/invitation-render.ts";
 import { publicRsvpBlock, rsvpNotice } from "../../../lib/public/invitation-rsvp.ts";
 import { findRenderer } from "../../../lib/renderers/registry.ts";
@@ -88,6 +88,11 @@ export default async function PublicInvitationPage({
   }
 
   const invitation = loaded.invitation;
+  // An already shared link keeps working: a previous address answers the same invitation and this page sends the guest
+  // permanently to the current one before rendering anything (F11; S2.11, L15.3).
+  if (invitation.redirectTo !== null) {
+    permanentRedirect(publicInvitationPath(invitation.redirectTo));
+  }
   const Renderer = findRenderer(invitation.componentKey);
 
   if (Renderer === undefined) {

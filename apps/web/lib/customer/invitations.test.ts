@@ -245,6 +245,7 @@ const OWNED: OwnedInvitation = {
   content: { celebrantName: "Ana" },
   missingRequiredFields: ["age", "date", "time", "location", "address", "mainPhoto", "message"],
   timeZone: "America/Mexico_City",
+  slugRenamesRemaining: 5,
   featureSettings: { whatsappPhone: null, playlistUrl: null },
   availableFeatures: ["COUNTDOWN", "MAP", "CALENDAR"],
   places: {},
@@ -913,6 +914,9 @@ function stub(answers: Answers = {}): Stub {
       calls.push(`savePlace:${id}:${field}`);
       return answers.savePlace?.() ?? unexpected("savePlace");
     },
+    checkSlugAvailability: () =>
+      Promise.resolve({ ok: false as const, failure: "not-found" as const }),
+    renameSlug: () => Promise.resolve({ ok: false as const, failure: "not-found" as const }),
     clearPlace: (id, field) => {
       calls.push(`clearPlace:${id}:${field}`);
       return answers.clearPlace?.() ?? unexpected("clearPlace");

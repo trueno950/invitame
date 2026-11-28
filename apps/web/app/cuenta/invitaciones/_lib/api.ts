@@ -77,6 +77,9 @@ export const invitations = {
   savePlace: (id: string, field: string, point: Parameters<InvitationsClient["savePlace"]>[2]) =>
     logged((api) => api.savePlace(id, field, point)),
   clearPlace: (id: string, field: string) => logged((api) => api.clearPlace(id, field)),
+  checkSlugAvailability: (id: string, slug: string) =>
+    logged((api) => api.checkSlugAvailability(id, slug)),
+  renameSlug: (id: string, slug: string) => logged((api) => api.renameSlug(id, slug)),
   updateInvitationFeatures: (
     id: string,
     features: Parameters<InvitationsClient["updateInvitationFeatures"]>[1],

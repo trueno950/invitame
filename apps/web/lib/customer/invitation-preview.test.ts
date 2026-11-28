@@ -125,6 +125,8 @@ function invitation(overrides: Partial<OwnedInvitation> = {}): OwnedInvitation {
     templateVersionId: VERSION_ID,
     packageId: "0a1b2c3d-4e5f-4a6b-8c7d-000000000004",
     slug: "valentina-2027",
+    // The invitation never renamed, so it keeps every rename it may make (F11; L15.2).
+    slugRenamesRemaining: 5,
     status: "DRAFT",
     publishedAt: null,
     archivedAt: null,

@@ -124,6 +124,7 @@ function client(
     {
       config: {
         apiOrigin,
+        publicWebOrigin: undefined,
         proxySecret: PROXY_SECRET,
         clientIpHeader: "x-invitame-client-ip",
         edgeClientIpHeader: "x-real-ip",
@@ -576,6 +577,7 @@ describe("fails closed", () => {
       {
         config: {
           apiOrigin: "http://127.0.0.1:1",
+          publicWebOrigin: undefined,
           proxySecret: PROXY_SECRET,
           clientIpHeader: "x-invitame-client-ip",
           edgeClientIpHeader: "x-real-ip",

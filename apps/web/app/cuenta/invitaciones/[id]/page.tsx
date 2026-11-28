@@ -9,6 +9,7 @@ import {
   INVITATION_ERROR_COPY,
   PAYMENT_COPY,
 } from "../../../../lib/customer/copy.ts";
+import { addressPrefix } from "../../../../lib/customer/address.ts";
 import {
   EDITOR_FIELD_PARAM,
   invitationHeading,
@@ -94,6 +95,8 @@ import {
   reminderPreviewMessage,
 } from "../../../../lib/customer/reminders.ts";
 import { EditorShell } from "./_components/editor-shell.tsx";
+import { AddressField } from "./_components/address-field.tsx";
+import { getWebServerConfig } from "../../../../lib/server/config.ts";
 
 export const metadata: Metadata = {
   title: INVITATION_COPY.detailPageTitle,
@@ -354,6 +357,11 @@ export default async function InvitationDetailPage({
     (mainPhotoUrl(invitation.content) === null ? 0 : 1);
   /** The absolute address the share panel copies and shares, from the origin this request resolved (T1; S2.2). */
   const publicUrl = publicHref === null ? "" : absolutePublicUrl(origin, publicHref);
+  /**
+   * The prefix the address block shows, from the deployment's own public origin when it is configured and from this
+   * request's origin otherwise, so the owner reads the real address and the product hard-codes no host (F11; L15.4).
+   */
+  const addressOrigin = getWebServerConfig().publicWebOrigin ?? origin;
   const missing = missingFieldsMessage(invitation.missingRequiredFields);
   const editable = pinned !== undefined && !archived;
   const rows =
@@ -423,6 +431,14 @@ export default async function InvitationDetailPage({
               unpublish: unpublishInvitationAction,
               archive: archiveInvitationAction,
             }}
+            address={
+              <AddressField
+                invitationId={invitation.id}
+                prefix={addressPrefix(addressOrigin)}
+                renamesRemaining={invitation.slugRenamesRemaining}
+                slug={invitation.slug}
+              />
+            }
             attendance={attendance}
             content={invitation.content}
             featureView={features}

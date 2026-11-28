@@ -441,10 +441,15 @@ export interface EditorShellProps {
    * Undefined while the page cannot name the occasion, and the block then offers the switches without a preview.
    */
   readonly reminderPreview: string | undefined;
-  /** The server-rendered blocks: the photo upload, the gallery, and the payment panel. */
+  /** The server-rendered blocks: the photo upload, the gallery, the payment panel, and the address (F11; L15.4). */
   readonly mainPhoto: ReactNode;
   readonly gallery: ReactNode;
   readonly payment: ReactNode;
+  /**
+   * The address block of the «Publicar» tab (F11; L15.4), rendered by the page because it holds the server actions and the
+   * configured prefix. A draft whose invitation cannot be renamed offers nothing here.
+   */
+  readonly address: ReactNode;
   /** Shown in «Contenido» instead of the fields when the pinned version left the catalog (the rest stays editable). */
   readonly readOnlyContent?: ReactNode;
   readonly actions: {
@@ -484,6 +489,7 @@ export function EditorShell({
   mainPhoto,
   gallery,
   payment,
+  address,
   actions,
 }: EditorShellProps) {
   const [section, setSection] = useState<EditorSection>(initialSection ?? DEFAULT_EDITOR_SECTION);
@@ -837,6 +843,9 @@ export function EditorShell({
                 </div>
               )}
             </div>
+
+            {/* The address where the invitation is published, and the one place it changes (F11; L15.4). */}
+            {address}
 
             {status === "PUBLISHED" ? (
               <>

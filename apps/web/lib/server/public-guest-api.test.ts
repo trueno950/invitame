@@ -40,6 +40,8 @@ const GUEST_PAGE: PublicGuestInvitation = {
   timeZone: "America/Mexico_City",
   // The read-only flag the API decided (S2, T3): this personal page still renders and only its answer closes.
   expired: false,
+  // The guest asked for the current address, so nothing redirects (F11; L15.3).
+  redirectTo: null,
   features: {
     countdown: true,
     map: true,
@@ -131,6 +133,7 @@ function client() {
   return createPublicInvitationsClient({
     config: {
       apiOrigin,
+      publicWebOrigin: undefined,
       proxySecret: PROXY_SECRET,
       clientIpHeader: "x-invitame-client-ip",
       edgeClientIpHeader: "x-real-ip",
