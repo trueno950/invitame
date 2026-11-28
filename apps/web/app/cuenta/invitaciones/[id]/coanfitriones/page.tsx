@@ -258,7 +258,7 @@ export default async function CollaboratorsPage({
     );
   }
 
-  if (invitation.status === "unavailable" || list.status === "unavailable") {
+  if (invitation.status === "unavailable") {
     return (
       <RefusedShell
         body={COLLABORATOR_COPY.unavailable}
@@ -268,11 +268,22 @@ export default async function CollaboratorsPage({
     );
   }
 
-  // Owner-only, and the API already refused anybody else; the note is what a caller who cannot be told apart sees.
+  // Owner-only, and the API already refused anybody else. The role is read before the list's outcome, because the API
+  // refuses the list to a collaborator, and that refusal must read as owner-only, never as a passing failure.
   if (!editorAccessView(invitation.value.access).showCollaborators) {
     return (
       <RefusedShell
         body={COLLABORATOR_COPY.ownerOnly}
+        heading={COLLABORATOR_COPY.heading}
+        invitationId={id}
+      />
+    );
+  }
+
+  if (list.status === "unavailable") {
+    return (
+      <RefusedShell
+        body={COLLABORATOR_COPY.unavailable}
         heading={COLLABORATOR_COPY.heading}
         invitationId={id}
       />
