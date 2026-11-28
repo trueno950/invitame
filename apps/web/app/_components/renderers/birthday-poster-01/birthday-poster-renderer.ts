@@ -81,7 +81,7 @@ export function BirthdayPosterRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: birthdayPosterEventFacts(data, hiddenFields),
+          facts: birthdayPosterEventFacts(data, hiddenFields, locale),
           ...(calendarHref === undefined ? {} : { calendarHref }),
           ...(locale === undefined ? {} : { locale }),
         });

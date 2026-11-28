@@ -106,7 +106,7 @@ export function BabyShowerClassicRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: babyShowerEventFacts(data, hiddenFields),
+          facts: babyShowerEventFacts(data, hiddenFields, locale),
           ...(calendarHref === undefined ? {} : { calendarHref }),
           ...(locale === undefined ? {} : { locale }),
         });

@@ -134,7 +134,7 @@ export function BaptismClassicRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: baptismEventFacts(data, hiddenFields),
+          facts: baptismEventFacts(data, hiddenFields, locale),
           ...(calendarHref === undefined ? {} : { calendarHref }),
           ...(locale === undefined ? {} : { locale }),
         });

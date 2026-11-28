@@ -96,7 +96,7 @@ export function BirthdayStoryRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: birthdayStoryEventFacts(data, hiddenFields),
+          facts: birthdayStoryEventFacts(data, hiddenFields, locale),
           ...(calendarHref === undefined ? {} : { calendarHref }),
           ...(locale === undefined ? {} : { locale }),
         });

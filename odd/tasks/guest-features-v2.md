@@ -474,6 +474,14 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   correction. Independent verification over HTTP with resolved and unresolved addresses: every L33 point met (over the
   ceiling answered in 2-5 ms against about 50 ms for a verification; a guest who never fails behaves as before).
   Gates: API 2537/2537, invitations db-specs 248/248. Follow-up: the verifier's real-store ceiling db-spec.
+- L35 — F14 evidence: commits `8535f8c` (API: `InvitationFeatureSettings.language` with its check, `ENGLISH_INVITATION`
+  for every package, the effective `features.language`; native review approved), `2c1a0f7` (web locale plumbing, the
+  ES / EN switch through `GET /i/<slug>/idioma` and its cookie, the owner setting; native review approved), `390f544`
+  (every fixed guest text from typed renderer and guest dictionaries; assess medium, not due), and the follow-up that
+  hands the locale to the facts each renderer gives its features block (a browser check found «LUGAR» in the English
+  «Getting there» card; RED on 4 layouts, GREEN). Browser: EN renders every fixed text in English with `lang="en"`, ES
+  goes back. Gates: web 2664/2664. Intentionally Spanish: the 404/outage note, the owner's WhatsApp share text, and the
+  lock screen before a guest chose a language (a locked read carries no facts, L18.3).
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on

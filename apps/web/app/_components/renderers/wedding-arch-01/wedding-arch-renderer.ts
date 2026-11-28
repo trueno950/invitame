@@ -148,7 +148,7 @@ export function WeddingArchRenderer({
         }),
     ...(hidden.has("rsvpContact") ? {} : { rsvpContact: data.rsvpContact }),
     ...(data.mainPhoto === undefined ? {} : { mainPhoto: data.mainPhoto }),
-    facts: weddingArchEventFacts(data, hiddenFields),
+    facts: weddingArchEventFacts(data, hiddenFields, locale),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
     ...(locale === undefined ? {} : { locale }),

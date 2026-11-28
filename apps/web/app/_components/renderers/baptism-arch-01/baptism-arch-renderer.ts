@@ -126,7 +126,7 @@ export function BaptismArchRenderer({
       : { message: { text: data.message, signature: data.celebrantName } }),
     ...(hidden.has("rsvpContact") ? {} : { rsvpContact: data.rsvpContact }),
     ...(data.mainPhoto === undefined ? {} : { mainPhoto: data.mainPhoto }),
-    facts: baptismArchEventFacts(data, hiddenFields),
+    facts: baptismArchEventFacts(data, hiddenFields, locale),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
     ...(locale === undefined ? {} : { locale }),

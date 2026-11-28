@@ -149,7 +149,7 @@ export function WeddingOrnamentalRenderer({
         }),
     ...(hidden.has("rsvpContact") ? {} : { rsvpContact: data.rsvpContact }),
     ...(data.mainPhoto === undefined ? {} : { mainPhoto: data.mainPhoto }),
-    facts: weddingOrnamentalEventFacts(data, hiddenFields),
+    facts: weddingOrnamentalEventFacts(data, hiddenFields, locale),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
     ...(locale === undefined ? {} : { locale }),

@@ -129,7 +129,7 @@ export function BaptismOrnamentalRenderer({
       : { message: { text: data.message, signature: data.celebrantName } }),
     ...(hidden.has("rsvpContact") ? {} : { rsvpContact: data.rsvpContact }),
     ...(data.mainPhoto === undefined ? {} : { mainPhoto: data.mainPhoto }),
-    facts: baptismOrnamentalEventFacts(data, hiddenFields),
+    facts: baptismOrnamentalEventFacts(data, hiddenFields, locale),
     ...(features === undefined ? {} : { features }),
     ...(calendarHref === undefined ? {} : { calendarHref }),
     ...(locale === undefined ? {} : { locale }),

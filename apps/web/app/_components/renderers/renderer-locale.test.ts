@@ -581,3 +581,36 @@ describe("the renderers in English", () => {
     });
   }
 });
+
+describe("the renderers' features block in English", () => {
+  // The block's place card reads the facts each renderer builds, so the facts follow the page locale too (L19.2).
+  const features = {
+    timeZone: "America/Mexico_City",
+    countdown: false,
+    map: true,
+    calendar: true,
+    whatsapp: null,
+    music: null,
+    giftRegistry: false,
+    gallery: [],
+    itinerary: [],
+  } as unknown as NonNullable<RendererProps["features"]>;
+
+  for (const layout of LAYOUTS) {
+    it(`${layout.key} hands the locale to the facts its features block reads`, () => {
+      const html = readable(
+        renderToStaticMarkup(
+          createElement(layout.Renderer, {
+            configuration: layout.configuration,
+            content: layout.content,
+            features,
+            locale: "en",
+          }),
+        ),
+      );
+
+      assert.doesNotMatch(html, />Lugar</, layout.key);
+      assert.doesNotMatch(html, /Cómo llegar/, layout.key);
+    });
+  }
+});

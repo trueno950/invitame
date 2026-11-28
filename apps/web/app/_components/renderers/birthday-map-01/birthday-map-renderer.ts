@@ -173,7 +173,7 @@ export function BirthdayMapRenderer({
       ? null
       : h(InvitationFeaturesBlock, {
           features,
-          facts: birthdayMapEventFacts(data, hiddenFields),
+          facts: birthdayMapEventFacts(data, hiddenFields, locale),
           ...(calendarHref === undefined ? {} : { calendarHref }),
           ...(locale === undefined ? {} : { locale }),
         });
