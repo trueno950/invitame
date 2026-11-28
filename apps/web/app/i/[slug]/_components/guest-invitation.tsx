@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { PUBLIC_INVITATION_COPY } from "../../../../lib/customer/copy.ts";
+import type { Locale } from "../../../../lib/i18n/locale.ts";
 import type { InvitationFeatures } from "../../../../lib/invitation-features/invitation-features.ts";
 import { findRenderer } from "../../../../lib/renderers/registry.ts";
 import { textButton } from "../../../_components/ui.ts";
@@ -33,6 +34,17 @@ export interface GuestInvitationProps {
   readonly signatureNotice?: ReactNode;
   /** The uploaded photo's notice, drawn above the invitation for the same reason (F8; L11.5). */
   readonly photoNotice?: ReactNode;
+  /**
+   * The ES / EN switch of an invitation that offers both languages, drawn above the invitation (F14; L19.2, L19.3).
+   * Absent for a single-language invitation, and for the owner's preview, which has no guest choice to offer.
+   */
+  readonly languageSwitch?: ReactNode;
+  /**
+   * The locale this page renders (F14; L19.2). Every renderer still writes Spanish until the translation slice, so it
+   * is only the wrapper's `lang` for now — the closest document language a nested server component may set — and the
+   * prop each renderer will read when the fixed texts are translated.
+   */
+  readonly locale?: Locale;
 }
 
 export function GuestInvitation({
@@ -45,6 +57,8 @@ export function GuestInvitation({
   notice,
   signatureNotice,
   photoNotice,
+  languageSwitch,
+  locale = "es",
 }: GuestInvitationProps) {
   const Renderer = findRenderer(componentKey);
 
@@ -62,8 +76,14 @@ export function GuestInvitation({
   };
 
   return (
-    <main className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10">
+    <main
+      className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10"
+      lang={locale}
+    >
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
+        {languageSwitch === undefined ? null : (
+          <div className="flex justify-end">{languageSwitch}</div>
+        )}
         {notice ?? null}
         {signatureNotice ?? null}
         {photoNotice ?? null}

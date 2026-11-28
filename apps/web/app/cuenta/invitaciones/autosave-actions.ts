@@ -136,6 +136,11 @@ export async function autosaveFeaturesAction(
           // The reminder switches are part of it too (F6; L9.1): saving the zone or the phone never switches a reminder
           // off that the owner stored.
           reminders: read.value.featureSettings.reminders ?? null,
+          // The language is part of it too (F14; L19.1): saving the zone, the phone, or any other field never rewrites the
+          // choice the owner stored, and a body written before the column existed keeps it out of the write (L19.5).
+          ...(read.value.featureSettings.language === undefined
+            ? {}
+            : { language: read.value.featureSettings.language }),
         },
         parsed.changes,
       ),

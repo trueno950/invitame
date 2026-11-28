@@ -937,6 +937,26 @@ export const FEATURE_COPY = {
   openingAnimationOff: "Desactivada",
   openingAnimationArchivedNote:
     "La animación se guarda con la invitación, así que puedes consultarla aquí aunque ya no se pueda editar.",
+  /**
+   * The language block of «Funciones» (F14; S2.14, L19.1), following
+   * `design/english-invitation/02-idioma-anfitrion.html`: three options with their one-line explanation, and the note that
+   * what the owner wrote stays as written. The fixed texts are the dictionary's, never this copy.
+   */
+  languageTitle: "Idioma de tu invitación",
+  languageHint:
+    "Los textos fijos (botones, títulos, cuenta regresiva) se traducen solos; lo que tú escribes se queda como lo escribiste.",
+  /** The three options of the block, each with the one line the artboard gives it (F14; L19.1). */
+  languageChoice: {
+    es: { label: "Solo español", hint: "Como hoy." },
+    "es-en": {
+      label: "Español e inglés",
+      hint: "Tus invitados eligen el idioma con un botón ES / EN.",
+    },
+    en: { label: "Solo inglés", hint: "Para invitados del extranjero." },
+  },
+  languageNote: "Si quieres, puedes escribir tu mensaje en ambos idiomas en el campo «Mensaje».",
+  languageArchivedNote:
+    "El idioma se guarda con la invitación, así que puedes consultarlo aquí aunque ya no se pueda editar.",
   archivedNote:
     "Esta invitación está archivada: puedes consultar sus funcionalidades, pero ya no editarlas.",
 } as const;
@@ -1034,6 +1054,7 @@ export const FEATURE_ISSUE_COPY = {
     "Revisa los recordatorios: cada opción debe estar activada o desactivada. Vuelve a intentarlo.",
   livestream:
     "Revisa la transmisión en vivo: el enlace debe empezar con https y medir hasta 500 caracteres, y la nota hasta 120.",
+  language: "Elige uno de los tres idiomas: solo español, español e inglés, o solo inglés.",
   other:
     "Hay un dato de las funcionalidades que no pudimos guardar. Revísalo y vuelve a intentarlo.",
 } as const;

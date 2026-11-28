@@ -1,6 +1,7 @@
 import { ITINERARY_MAX_ITEMS } from "../invitation-features/itinerary.ts";
 import { deadlineInstant } from "../invitation-features/rsvp-deadline.ts";
 import { isInvitationTimeZone } from "../invitation-features/time-zones.ts";
+import { type InvitationLanguage, isInvitationLanguage } from "../i18n/invitation-language.ts";
 import { isCalendarDate, isClockTime, isPlainObject } from "../renderers/invitation-fields.ts";
 import {
   type InvitationFailure,
@@ -280,6 +281,7 @@ export const FEATURE_CHANGE_FIELDS = [
   "lodging",
   "livestream",
   "openingAnimation",
+  "language",
 ] as const;
 
 /** The feature data one autosave asks to change; a key left out is a field the creator did not touch. */
@@ -297,6 +299,8 @@ export interface FeatureChanges {
   readonly livestream?: LivestreamDraft | null;
   /** The opening animation switch the owner flipped (F10; L14.3). */
   readonly openingAnimation?: boolean;
+  /** The language the owner picked (F14; L19.1). */
+  readonly language?: InvitationLanguage;
   /** The reminder switches as the editor holds them (F6; L9.1). */
   readonly reminders?: RemindersDraft;
 }
@@ -562,6 +566,7 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
     lodging?: LodgingDraft | null;
     livestream?: LivestreamDraft | null;
     openingAnimation?: boolean;
+    language?: InvitationLanguage;
     reminders?: RemindersDraft;
   } = {};
 
@@ -638,6 +643,16 @@ export function parseFeatureChanges(payload: unknown): FeatureChangesParse {
       changes.openingAnimation = value;
       continue;
     }
+    if (name === "language") {
+      // The three options are a closed set: a radio only holds one of them, so anything else is refused with its own
+      // sentence instead of being guessed into Spanish (F14; L19.1).
+      if (!isInvitationLanguage(value)) {
+        issues.push({ field: name, message: FEATURE_ISSUE_COPY.language });
+        continue;
+      }
+      changes.language = value;
+      continue;
+    }
     if (name === "reminders") {
       const reminders = readRemindersDraft(value);
       if (reminders === undefined) {
@@ -673,6 +688,9 @@ export function mergeFeatureChanges(
   // body that never carried it — an API written before the column existed — keeps it out of the write, which the API
   // reads as "keep the stored one".
   const openingAnimation = changes.openingAnimation ?? stored.openingAnimation;
+  // The language follows the same rule (F14; L19.1, L19.5): a save of another field carries the stored choice, and a body
+  // written before the column existed keeps it out of the write, so the API keeps its own default.
+  const language = changes.language ?? stored.language;
 
   if (Object.hasOwn(changes, "livestream")) {
     // A livestream the contract refuses is left out of the change instead of clearing what is stored (F9; L12.1).
@@ -733,6 +751,7 @@ export function mergeFeatureChanges(
     ...(lodging === undefined ? {} : { lodging }),
     ...(livestream === undefined ? {} : { livestream }),
     ...(openingAnimation === undefined ? {} : { openingAnimation }),
+    ...(language === undefined ? {} : { language }),
     reminders,
   };
 }
@@ -867,6 +886,7 @@ function fieldIssuesOf(channel: AutosaveChannel, issues: readonly string[]): Aut
       lodging: "lodging",
       livestream: "livestream",
       reminders: "reminders",
+      language: "language",
     };
     for (const code of featureIssueCodes(issues)) {
       const field = Object.hasOwn(fieldOf, code) ? fieldOf[code] : undefined;

@@ -259,6 +259,9 @@ export const INVITATION_FEATURE_KEYS = [
   // The access code (F13; S2.13, L18.5): a Deluxe invitation's owner read answers it, and it is never rendered as a
   // guest block — a code is access control, not a feature card.
   "PASSWORD_PROTECTION",
+  // The English invitation (F14; S2.14, L19.4): every package grants it, and it is never rendered as a guest block —
+  // it gates whether the stored language reaches a guest, and the fixed texts live in the typed dictionary.
+  "ENGLISH_INVITATION",
   "CALENDAR",
 ] as const;
 

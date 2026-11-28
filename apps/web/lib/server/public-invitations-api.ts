@@ -6,6 +6,7 @@ import {
   type GuestAlbumValue,
 } from "../invitation-features/guest-album.ts";
 import { type GiftRegistry, parseGiftRegistry } from "../invitation-features/gift-registry.ts";
+import { type InvitationLanguage, storedInvitationLanguage } from "../i18n/invitation-language.ts";
 import {
   isE164Phone,
   type GuestbookEntryValue,
@@ -112,6 +113,13 @@ export interface PublicInvitationFeatures {
    * so a page deployed earlier keeps rendering and never covers the invitation (L20).
    */
   readonly openingAnimation: boolean;
+  /**
+   * The language the page renders (F14; L19.2, L19.5): the API's effective answer — the owner's stored choice while the
+   * pinned package grants `ENGLISH_INVITATION` and Spanish otherwise. An API body written before F14 answers no field, so
+   * it stays absent here and the projection of an older body reads exactly as it did (L20); `resolveGuestLocale` reads
+   * Spanish from an absent value.
+   */
+  readonly language?: InvitationLanguage;
   /**
    * The guestbook wall (F7; L10.4): the visible entries newest first, at most 50, or null when the pinned package does
    * not grant `GUESTBOOK`. An empty list is a granted wall waiting for its first message, so the page still offers the
@@ -513,6 +521,11 @@ function parsePublicFeatures(
   // reads as off, and any value that is not the documented boolean reads as off too, because refusing a whole invitation
   // over a decoration would be worse than showing it directly.
   const openingAnimation = parseOpeningAnimations(features.openingAnimation);
+  // The language is read the same way (F14; L19.5, L20): an absent field is an API written before F14 and stays
+  // absent — the projection of an older body therefore reads byte for byte as it did, and `resolveGuestLocale` reads
+  // Spanish from it — while a value this deployment does not know is no language it renders and reads as Spanish.
+  const language =
+    features.language === undefined ? undefined : storedInvitationLanguage(features.language);
   // The wall follows the same rule (F7; L20): an absent field (a body written before F7) reads as none, and another
   // shape refuses the body instead of reaching a guest.
   const guestbook = parsePublicGuestbook(features.guestbook);
@@ -546,6 +559,7 @@ function parsePublicFeatures(
     lodging,
     livestream,
     openingAnimation,
+    ...(language === undefined ? {} : { language }),
     guestbook,
     guestAlbum,
     music,

@@ -25,6 +25,7 @@ export const FEATURE_ISSUE_CODES = [
   "lodging",
   "livestream",
   "reminders",
+  "language",
   "other",
 ] as const;
 export type FeatureIssueCode = (typeof FEATURE_ISSUE_CODES)[number];
@@ -43,6 +44,8 @@ const PLAYLIST_SCHEME_ISSUE = "playlistUrl must be an https link";
 const PLAYLIST_HOST_ISSUE =
   "playlistUrl must link to Spotify, Apple Music, YouTube, Deezer, or SoundCloud";
 const PLAYLIST_LENGTH_ISSUE = "playlistUrl must be at most 500 characters";
+/** The API's own sentence for a language it refuses (F14; L19.1); `invitation-language.ts` writes it. */
+const LANGUAGE_ISSUE = "language must be one of es, es-en, en";
 
 const CODE_BY_ISSUE: Readonly<Record<string, FeatureIssueCode>> = {
   [TIME_ZONE_ISSUE]: "timezone",
@@ -54,6 +57,7 @@ const CODE_BY_ISSUE: Readonly<Record<string, FeatureIssueCode>> = {
   [PLAYLIST_SCHEME_ISSUE]: "playlist",
   [PLAYLIST_HOST_ISSUE]: "playlist",
   [PLAYLIST_LENGTH_ISSUE]: "playlist",
+  [LANGUAGE_ISSUE]: "language",
 };
 
 /**
@@ -106,7 +110,7 @@ export function featureIssuesTarget(path: string, codes: readonly FeatureIssueCo
 }
 
 const ISSUE_CODE =
-  /^(?:timezone|phone|phone-type|playlist|itinerary|gift-registry|lodging|livestream|reminders|other)$/;
+  /^(?:timezone|phone|phone-type|playlist|itinerary|gift-registry|lodging|livestream|reminders|language|other)$/;
 
 /** The Spanish sentence of one code; nothing at all for a code this page does not know. */
 function issueMessage(code: string): string | undefined {

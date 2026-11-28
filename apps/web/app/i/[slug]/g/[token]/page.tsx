@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import Link from "next/link";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { GUEST_PAGE_COPY, PUBLIC_INVITATION_COPY } from "../../../../../lib/customer/copy.ts";
+import {
+  LANGUAGE_COOKIE,
+  languageChoicePath,
+  requestedLocale,
+  resolveGuestLocale,
+} from "../../../../../lib/i18n/guest-locale.ts";
+import { languageSwitchView } from "../../../../../lib/i18n/language-switch.ts";
+import { openingAnimationTheme } from "../../../../../lib/invitation-features/opening-animation.ts";
 import type { GuestPageBlockView } from "../../../../../lib/invitation-features/invitation-features.ts";
 import { checkInUrl, personalGuestPath } from "../../../../../lib/public/guest-pass.ts";
 import { guestAlbumNotice, publicGuestAlbumBlock } from "../../../../../lib/public/guest-album.ts";
@@ -26,6 +34,7 @@ import { requestOrigin } from "../../../../../lib/server/request-origin.ts";
 import { OpeningAnimationIsland } from "../../../../_components/invitation-features/opening-animation-island.ts";
 import { textButton } from "../../../../_components/ui.ts";
 import { InvitationMessage } from "../../_components/invitation-message.tsx";
+import { LanguageSwitch } from "../../_components/language-switch.ts";
 import {
   GuestAlbumNoticeNote,
   GuestbookNoticeNote,
@@ -68,7 +77,12 @@ export default async function GuestInvitationPage({
 }: GuestInvitationPageProperties) {
   // Rendered per request, so an owner's change and the guest's own answer are visible at once (S4).
   await connection();
-  const [{ slug, token }, parameters] = await Promise.all([params, searchParams]);
+  const [cookieJar, { slug, token }, parameters] = await Promise.all([
+    cookies(),
+    params,
+    searchParams,
+  ]);
+
   const loaded = await loadGuestInvitation(slug, token);
 
   if (loaded.status === "not-found") {
@@ -84,6 +98,13 @@ export default async function GuestInvitationPage({
   }
 
   const invitation = loaded.invitation;
+  // The guest's language choice goes through the same one route handler as the public page, and comes back to this
+  // guest's own personal page (F14; L19.3), at the address the invitation is served from.
+  const requested = requestedLocale(parameters);
+
+  if (requested !== undefined) {
+    redirect(languageChoicePath(invitation.redirectTo ?? invitation.slug, requested, token));
+  }
   // A previous address of the invitation keeps serving this guest's link: the page sends them permanently to the same
   // personal page under the current address, with the same token (F11; L15.3).
   if (invitation.redirectTo !== null) {
@@ -163,6 +184,19 @@ export default async function GuestInvitationPage({
     token,
   );
   const block = publicFeatureBlock(invitation, undefined, guest, guestbook, album);
+  // The locale of this page (F14; L19.2, L19.3): the owner's fixed choice or this guest's own, remembered for the
+  // invitation's own path. Every renderer still writes Spanish until the translation slice; the prop is what it reads.
+  const locale = resolveGuestLocale({
+    language: invitation.features.language,
+    remembered: cookieJar.get(LANGUAGE_COOKIE)?.value,
+  });
+  const languageSwitch = languageSwitchView({
+    language: invitation.features.language,
+    locale,
+    slug: invitation.slug,
+    guestToken: token,
+  });
+  const theme = openingAnimationTheme(invitation.componentKey, invitation.configuration);
   const rendererProps =
     block === undefined
       ? props
@@ -183,7 +217,10 @@ export default async function GuestInvitationPage({
   });
 
   return (
-    <main className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10">
+    <main
+      className="paper-wash relative isolate min-h-screen px-4 py-6 text-ink sm:px-8 sm:py-10"
+      lang={locale}
+    >
       {opening === undefined ? null : (
         <OpeningAnimationIsland
           card={opening.card}
@@ -193,6 +230,11 @@ export default async function GuestInvitationPage({
         />
       )}
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
+        {languageSwitch === undefined ? null : (
+          <div className="flex justify-end">
+            <LanguageSwitch view={languageSwitch} {...(theme === undefined ? {} : { theme })} />
+          </div>
+        )}
         {notice === undefined ? null : <RsvpNoticeNote notice={notice} />}
         {signatureNotice === undefined ? null : <GuestbookNoticeNote notice={signatureNotice} />}
         {photoNotice === undefined ? null : <GuestAlbumNoticeNote notice={photoNotice} />}

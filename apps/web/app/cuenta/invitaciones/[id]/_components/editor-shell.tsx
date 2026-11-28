@@ -541,6 +541,8 @@ export function EditorShell({
     livestream: featureView.livestream,
     // The opening animation switch starts from what the invitation stores, on by default (F10; L14.3).
     openingAnimation: featureView.openingAnimation,
+    // The language starts from what the invitation stores, Spanish for a body written before F14 (F14; L19.1, L19.5).
+    language: featureView.language,
     reminders: featureView.reminders,
   }));
   const [rsvp, setRsvp] = useState<RsvpValues>(() => ({

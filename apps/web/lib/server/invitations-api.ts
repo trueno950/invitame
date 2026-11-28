@@ -7,6 +7,7 @@ import {
   parseInvitationAccess,
 } from "../customer/invitation-access.ts";
 import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "../customer/omittable-sections.ts";
+import { type InvitationLanguage, storedInvitationLanguage } from "../i18n/invitation-language.ts";
 import { isE164Phone, isInvitationFeatureKey } from "../invitation-features/invitation-features.ts";
 import {
   type GiftRegistryPayload,
@@ -151,6 +152,11 @@ export interface OwnedInvitation extends InvitationSummary {
      * reader treats that as "no settings" exactly like null.
      */
     reminders?: RemindersPayload | null;
+    /**
+     * The language the owner stored (F14; L19.1), always one of `es`, `es-en`, or `en`. It is absent from a body written
+     * before the column existed, and the editor then shows the column's default, Spanish (L19.5).
+     */
+    language?: InvitationLanguage;
   };
   /**
    * Whether this deployment can deliver a WhatsApp reminder at all (F6; S6, L9.5). It is a capability, never a secret:
@@ -214,6 +220,11 @@ export interface InvitationFeatureInput {
    * the PUT replaces the whole feature data.
    */
   reminders?: RemindersPayload | null;
+  /**
+   * The language the owner stored (F14; L19.1). The API accepts an omitted value as "keep the stored one", and a field
+   * the editor does not change still travels as the stored language, because the PUT replaces the whole feature data.
+   */
+  language?: InvitationLanguage;
 }
 
 // The RSVP routes of the owner (M6 G1, G3; S1, S4). The deadline is an ISO instant or null, the party limit is how
@@ -804,6 +815,12 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     return undefined;
   }
 
+  // The language follows the strictest reading of the two (F14; L19.1, L19.5): an absent value is an API written before
+  // the column existed and stays absent, so the editor shows the column's default, while a value this deployment does
+  // not know reads as Spanish instead of refusing the editor over a language.
+  const language =
+    settings.language === undefined ? undefined : storedInvitationLanguage(settings.language);
+
   // The stored metadata follows the same rules the guest page applies to a public body (S2): a title of at most 200
   // characters and a cover on an allow-listed image host over `https`. A value this deployment does not accept is
   // dropped to null instead of refusing the whole invitation, because the link is still the owner's playlist.
@@ -822,6 +839,7 @@ function parseFeatureSettings(value: unknown): OwnedInvitation["featureSettings"
     livestream,
     ...(openingAnimation === undefined ? {} : { openingAnimation }),
     reminders,
+    ...(language === undefined ? {} : { language }),
   };
 }
 

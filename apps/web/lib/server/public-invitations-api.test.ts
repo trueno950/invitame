@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { after, before, beforeEach, describe, it } from "node:test";
 
+import { resolveGuestLocale } from "../i18n/guest-locale.ts";
 import { ApiClientError } from "./api-client.ts";
 import {
   createPublicInvitationsClient,
@@ -65,6 +66,8 @@ const PUBLIC: PublicInvitation = {
     },
     // The opening animation is the read's own decision: granted and switched on (F10; L14.4).
     openingAnimation: true,
+    // The effective language the API answered (F14; L19.5): this invitation offers both languages.
+    language: "es-en",
     // The livestream is read with the video id the API resolved, so the block can frame only that id (F9; L12.3).
     livestream: {
       url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -469,6 +472,7 @@ describe("parsePublicInvitation", () => {
           openingAnimation: false,
           // The itinerary is null while the package grants no `ITINERARY` or the invitation stores none (F1; L3.3).
           itinerary: null,
+          // This body is written before F14, so it carries no language at all (F14; L19.5, L20).
           // The gallery is always a list, empty when the package grants no `GALLERY` (M8 S4).
           guestbook: null,
           guestAlbum: null,
@@ -1462,5 +1466,47 @@ describe("one unlock attempt (F13; L18.2, L18.3)", () => {
       failure: "rejected",
     });
     assert.equal(received.length, 0);
+  });
+});
+
+describe("the language of the public read (F14; L19.2, L19.5, L20)", () => {
+  it("reads the effective language the API answered, so the page renders the owner's choice", () => {
+    assert.equal(parsePublicInvitation(PUBLIC)?.features.language, "es-en");
+    assert.equal(
+      parsePublicInvitation({
+        ...PUBLIC,
+        features: { ...PUBLIC.features, language: "en" },
+      })?.features.language,
+      "en",
+    );
+    assert.equal(
+      parsePublicInvitation({
+        ...PUBLIC,
+        features: { ...PUBLIC.features, language: "es" },
+      })?.features.language,
+      "es",
+    );
+  });
+
+  it("keeps an absent field out of the projection, so an older API body reads exactly as it did (L19.5, L20)", () => {
+    const { language: _omitted, ...features } = PUBLIC.features;
+    const parsed = parsePublicInvitation({ ...PUBLIC, features });
+
+    assert.ok(parsed);
+    assert.equal(Object.hasOwn(parsed.features, "language"), false);
+    // The page still renders Spanish from it, which is the language every row that predates F14 keeps.
+    assert.equal(resolveGuestLocale({ language: parsed.features.language }), "es");
+  });
+
+  it("reads a value no invitation could store as Spanish instead of refusing a guest's invitation", () => {
+    for (const language of ["ES", "es-MX", 3, null, {}, []]) {
+      const parsed = parsePublicInvitation({
+        ...PUBLIC,
+        features: { ...PUBLIC.features, language },
+      });
+
+      assert.ok(parsed, JSON.stringify(language));
+      assert.equal(parsed.features.language, "es", JSON.stringify(language));
+    }
   });
 });

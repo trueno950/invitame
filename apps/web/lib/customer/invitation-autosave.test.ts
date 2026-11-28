@@ -8,6 +8,7 @@ import {
   INVITATION_ERROR_COPY,
   RSVP_SETTINGS_ISSUE_COPY,
 } from "./copy.ts";
+import { featureIssueCodes } from "./feature-issues.ts";
 import {
   type AutosaveFieldIssue,
   invalidPayload,
@@ -958,5 +959,55 @@ describe("every refusal becomes a Spanish result the status line can show (S2, S
       invalidPayload([{ field: "itinerary", message: FEATURE_ISSUE_COPY.itinerary }]).message,
       FEATURE_ISSUE_COPY.itinerary,
     );
+  });
+});
+
+describe("a language autosave (F14; L19.1)", () => {
+  it("sends the language the owner picked, and carries the stored one through a save of another field", () => {
+    const pick = parseFeatureChanges({ language: "es-en" });
+
+    assert.equal(pick.ok, true);
+    // A stored language travels through a save of another field, because the PUT replaces the whole feature data.
+    const stored = { ...STORED_FEATURES, language: "en" as const };
+    const other = parseFeatureChanges({ timeZone: "America/Tijuana" });
+
+    assert.deepEqual(other.ok ? mergeFeatureChanges(stored, other.changes) : undefined, {
+      timeZone: "America/Tijuana",
+      whatsappPhone: "+525512345678",
+      playlistUrl: STORED_FEATURES.playlistUrl,
+      itinerary: STORED_FEATURES.itinerary,
+      giftRegistry: null,
+      lodging: null,
+      livestream: null,
+      reminders: null,
+      language: "en",
+    });
+
+    const merged = pick.ok ? mergeFeatureChanges(stored, pick.changes) : undefined;
+
+    assert.equal(merged?.language, "es-en");
+  });
+
+  it("keeps the language out of the write when a body written before F14 carried none (L19.5)", () => {
+    const older = parseFeatureChanges({ timeZone: "America/Cancun" });
+    const merged = mergeFeatureChanges(STORED_FEATURES, older.ok ? older.changes : {});
+
+    assert.equal(Object.hasOwn(merged, "language"), false);
+  });
+
+  it("refuses a value no control could have written", () => {
+    for (const language of ["ES", "es-MX", "pt", "", true, {}, []]) {
+      const parsed = parseFeatureChanges({ language });
+
+      assert.equal(parsed.ok, false, JSON.stringify(language));
+      assert.deepEqual(parsed.ok ? [] : parsed.fieldIssues, [
+        { field: "language", message: FEATURE_ISSUE_COPY.language },
+      ]);
+    }
+  });
+
+  it("names the language when the API refuses it", () => {
+    assert.deepEqual(featureIssueCodes(["language must be one of es, es-en, en"]), ["language"]);
+    assert.equal(featureIssueCodes(["language must be one of es, es-en, en"]).length, 1);
   });
 });

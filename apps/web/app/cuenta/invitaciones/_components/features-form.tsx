@@ -205,6 +205,24 @@ function OpeningAnimationSummary({ view }: { view: FeatureSettingsView }) {
   );
 }
 
+/** The stored language as one line, which is what an archived invitation shows (F14; L19.1). */
+function LanguageSummary({ view }: { view: FeatureSettingsView }) {
+  if (!view.showLanguage) {
+    return null;
+  }
+
+  const label =
+    view.languages.find((choice) => choice.value === view.language)?.label ?? view.language;
+
+  return (
+    <div>
+      <p className={fieldLabel}>{FEATURE_COPY.languageTitle}</p>
+      <p className="mt-2 text-sm leading-6 text-ink">{label}</p>
+      <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.languageArchivedNote}</p>
+    </div>
+  );
+}
+
 /** The stored reminder switches as a read-only pair, which is what an archived invitation shows (F6; L9.5). */
 function RemindersSummary({ view }: { view: FeatureSettingsView }) {
   if (!view.showReminders) {
@@ -256,6 +274,7 @@ export function FeaturesSummary({ view }: { view: FeatureSettingsView }) {
         <LodgingSummary view={view} />
         <LivestreamSummary view={view} />
         <OpeningAnimationSummary view={view} />
+        <LanguageSummary view={view} />
         <RemindersSummary view={view} />
         <p className="text-sm leading-6 text-muted">{FEATURE_COPY.archivedNote}</p>
         <AutomaticFeatures view={view} />

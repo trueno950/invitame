@@ -1,8 +1,17 @@
 import type { Metadata } from "next";
-import { notFound, permanentRedirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { LOCK_SCREEN_COPY, PUBLIC_INVITATION_COPY } from "../../../lib/customer/copy.ts";
+import {
+  LANGUAGE_COOKIE,
+  languageChoicePath,
+  requestedLocale,
+  resolveGuestLocale,
+} from "../../../lib/i18n/guest-locale.ts";
+import { languageSwitchView } from "../../../lib/i18n/language-switch.ts";
+import { openingAnimationTheme } from "../../../lib/invitation-features/opening-animation.ts";
 import { guestAlbumNotice, publicGuestAlbumBlock } from "../../../lib/public/guest-album.ts";
 import { guestbookNotice, publicGuestbookBlock } from "../../../lib/public/guestbook.ts";
 import {
@@ -22,6 +31,7 @@ import { publicRsvpBlock, rsvpNotice } from "../../../lib/public/invitation-rsvp
 import { findRenderer } from "../../../lib/renderers/registry.ts";
 import { OpeningAnimationIsland } from "../../_components/invitation-features/opening-animation-island.ts";
 import { GuestInvitation } from "./_components/guest-invitation.tsx";
+import { LanguageSwitch } from "./_components/language-switch.ts";
 import { InvitationMessage } from "./_components/invitation-message.tsx";
 import { InvitationLockScreen } from "./_components/lock-screen.ts";
 import {
@@ -88,7 +98,7 @@ export default async function PublicInvitationPage({
 }: PublicInvitationPageProperties) {
   // Rendered per request, so an owner's change is visible at once and no page is reused (A6, S7).
   await connection();
-  const [{ slug }, parameters] = await Promise.all([params, searchParams]);
+  const [cookieJar, { slug }, parameters] = await Promise.all([cookies(), params, searchParams]);
   const loaded = await loadPublicInvitation(slug);
 
   if (loaded.status === "not-found") {
@@ -128,6 +138,14 @@ export default async function PublicInvitationPage({
   }
 
   const invitation = loaded.invitation;
+  // A request that carries the guest's language choice (`?idioma=`) goes through the one route handler that remembers it
+  // in a cookie and comes back to this clean address, so the page itself never writes a cookie (F14; L19.3). It names the
+  // address the invitation is served from, so the cookie covers the page the guest actually lands on.
+  const requested = requestedLocale(parameters);
+
+  if (requested !== undefined) {
+    redirect(languageChoicePath(invitation.redirectTo ?? invitation.slug, requested));
+  }
   // An already shared link keeps working: a previous address answers the same invitation and this page sends the guest
   // permanently to the current one before rendering anything (F11; S2.11, L15.3).
   if (invitation.redirectTo !== null) {
@@ -180,6 +198,18 @@ export default async function PublicInvitationPage({
     invitation.expired,
   );
   const block = publicFeatureBlock(invitation, rsvp, undefined, guestbook, album);
+  // The language this page renders (F14; L19.2, L19.3): the owner's fixed choice, or the guest's own with an invitation
+  // that offers both. Every renderer still draws Spanish until the translation slice; the prop is what it will read.
+  const locale = resolveGuestLocale({
+    language: invitation.features.language,
+    remembered: cookieJar.get(LANGUAGE_COOKIE)?.value,
+  });
+  const languageSwitch = languageSwitchView({
+    language: invitation.features.language,
+    locale,
+    slug: invitation.slug,
+  });
+  const theme = openingAnimationTheme(invitation.componentKey, invitation.configuration);
   // The notices of this page's own query, rendered on the server: the answer's (G3; S4), the signature's (F7), and the
   // photo's (F8).
   const notice = rsvpNotice(parameters);
@@ -212,9 +242,17 @@ export default async function PublicInvitationPage({
         configuration={invitation.configuration}
         content={invitation.content}
         hiddenFields={invitation.hiddenFields}
+        locale={locale}
         {...(block === undefined
           ? {}
           : { features: block.features, calendarHref: block.calendarHref })}
+        {...(languageSwitch === undefined
+          ? {}
+          : {
+              languageSwitch: (
+                <LanguageSwitch view={languageSwitch} {...(theme === undefined ? {} : { theme })} />
+              ),
+            })}
         {...(notice === undefined ? {} : { notice: <RsvpNoticeNote notice={notice} /> })}
         {...(signatureNotice === undefined
           ? {}

@@ -10,7 +10,12 @@ import {
 } from "./copy.ts";
 import { featureIssueCodes, featureIssueMessages, featureIssuesTarget } from "./feature-issues.ts";
 import { OWNER_ACCESS } from "./invitation-access.ts";
-import { featureSettingsView, TIME_ZONE_CHOICES, timeZoneLabel } from "./invitation-features.ts";
+import {
+  featureSettingsView,
+  INVITATION_LANGUAGE_CHOICES,
+  TIME_ZONE_CHOICES,
+  timeZoneLabel,
+} from "./invitation-features.ts";
 import { invitationPageNotices } from "./invitations.ts";
 
 // The creator's «Funcionalidades» section (F3; S3, S4): the time zone select with Spanish labels, the
@@ -354,6 +359,39 @@ describe("featureSettingsView", () => {
 
     assert.equal(FEATURE_COPY.openingAnimationLabel, "Animación de apertura");
     assert.match(FEATURE_COPY.openingAnimationHint, /sobre/);
+  });
+
+  it("offers the invitation's language to a granting package, Spanish unless the owner stored another (F14; L19.1)", () => {
+    const englishPackage = creatorPackage(PACKAGE_ID, ["ENGLISH_INVITATION"]);
+    const everything = creatorPackage(PACKAGE_ID, ["OPENING_ANIMATION", "ENGLISH_INVITATION"]);
+
+    // An invitation that never chose a language reads as the column's default, Spanish.
+    assert.equal(featureSettingsView(OWNED, [englishPackage]).showLanguage, true);
+    assert.equal(featureSettingsView(OWNED, [englishPackage]).language, "es");
+    assert.equal(
+      featureSettingsView(
+        { ...OWNED, featureSettings: { ...OWNED.featureSettings, language: "es-en" } },
+        [englishPackage],
+      ).language,
+      "es-en",
+    );
+
+    // A package without the key, and a catalog that could not be read, offer no language block at all.
+    assert.equal(featureSettingsView(OWNED, [BASIC]).showLanguage, false);
+    assert.equal(featureSettingsView(OWNED, undefined).showLanguage, false);
+    // The block is independent of the other switches the same tab draws.
+    assert.equal(featureSettingsView(OWNED, [everything]).showOpeningAnimation, true);
+
+    // The three options and their one-line explanations are the artboard's own Spanish (L19.1).
+    assert.deepEqual(
+      INVITATION_LANGUAGE_CHOICES.map((choice) => choice.label),
+      ["Solo español", "Español e inglés", "Solo inglés"],
+    );
+    assert.deepEqual(
+      INVITATION_LANGUAGE_CHOICES.map((choice) => choice.value),
+      ["es", "es-en", "en"],
+    );
+    assert.match(INVITATION_LANGUAGE_CHOICES[1]?.hint ?? "", /ES \/ EN/);
   });
 
   it("names the reminder copy in Spanish (F6; L9.5, L9.6)", () => {

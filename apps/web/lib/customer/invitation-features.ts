@@ -1,4 +1,9 @@
 import { INVITATION_TIME_ZONES, isInvitationTimeZone } from "../invitation-features/time-zones.ts";
+import {
+  type InvitationLanguage,
+  INVITATION_LANGUAGES,
+  storedInvitationLanguage,
+} from "../i18n/invitation-language.ts";
 import type { CreatorPackage, OwnedInvitation } from "../server/invitations-api.ts";
 import { FEATURE_COPY, INVITATION_TIME_ZONE_LABELS } from "./copy.ts";
 import { type GiftRegistryDraft, giftRegistryDraftOf } from "./gift-registry.ts";
@@ -33,6 +38,21 @@ export function timeZoneLabel(value: string): string {
   return isInvitationTimeZone(value) ? INVITATION_TIME_ZONE_LABELS[value] : value;
 }
 
+/** One option of the language block: the stored value, its label, and the one line that explains it (F14; L19.1). */
+export interface InvitationLanguageChoice {
+  readonly value: InvitationLanguage;
+  readonly label: string;
+  readonly hint: string;
+}
+
+/**
+ * The three options of «Idioma de tu invitación», in the artboard's order (F14; L19.1), with the owner's own Spanish:
+ * what the guest reads is the dictionary's, never this copy. They are always all three, because the choice is stored
+ * with the invitation and changing the package never rewrites it.
+ */
+export const INVITATION_LANGUAGE_CHOICES: readonly InvitationLanguageChoice[] =
+  INVITATION_LANGUAGES.map((value) => ({ value, ...FEATURE_COPY.languageChoice[value] }));
+
 /** The automatic features a guest sees, in the order the features block shows them (S4). */
 const AUTOMATIC_FEATURES = [
   { key: "COUNTDOWN", label: FEATURE_COPY.automaticCountdown },
@@ -58,6 +78,8 @@ const GUESTBOOK_FEATURE_KEY = "GUESTBOOK";
 const GUEST_ALBUM_FEATURE_KEY = "GUEST_ALBUM";
 /** The catalog key that grants the opening animation (F10; L14.4), granted by every seeded package. */
 const OPENING_ANIMATION_FEATURE_KEY = "OPENING_ANIMATION";
+/** The catalog key that lets the stored language reach a guest (F14; L19.4), granted by every seeded package. */
+const ENGLISH_INVITATION_FEATURE_KEY = "ENGLISH_INVITATION";
 
 /** Everything the section renders for one draft. */
 export interface FeatureSettingsView {
@@ -132,6 +154,19 @@ export interface FeatureSettingsView {
    * existed carries no switch, and the column's own default is what the switch then shows.
    */
   readonly openingAnimation: boolean;
+  /**
+   * Whether the package includes ENGLISH_INVITATION, which is the only reason the «Idioma de tu invitación» block is
+   * shown (F14; L19.1, L19.4). A package without the key keeps the stored choice private instead of offering an editor
+   * that would not reach a guest.
+   */
+  readonly showLanguage: boolean;
+  /**
+   * The stored language (F14; L19.1), Spanish unless the owner chose another. A body written before the column existed
+   * carries no language, and the column's own default is what the block then shows (L19.5).
+   */
+  readonly language: InvitationLanguage;
+  /** The three options of the block, with their labels and one-line explanations (F14; L19.1). */
+  readonly languages: readonly InvitationLanguageChoice[];
   /**
    * Whether the package includes GUESTBOOK, which is the only reason the «Funciones» tab links to the invitation's
    * «Libro de firmas» screen (F7; L10.2, L10.6). A package without the key keeps a stored book private instead of
@@ -240,6 +275,9 @@ export function featureSettingsView(
     remindersConfigured: invitation.remindersConfigured === true,
     showOpeningAnimation: included.has(OPENING_ANIMATION_FEATURE_KEY),
     openingAnimation: invitation.featureSettings.openingAnimation ?? true,
+    showLanguage: included.has(ENGLISH_INVITATION_FEATURE_KEY),
+    language: storedInvitationLanguage(invitation.featureSettings.language),
+    languages: INVITATION_LANGUAGE_CHOICES,
     showGuestbook: included.has(GUESTBOOK_FEATURE_KEY),
     showGuestAlbum: included.has(GUEST_ALBUM_FEATURE_KEY),
     showRsvp: included.has(RSVP_FEATURE_KEY),

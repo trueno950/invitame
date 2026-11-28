@@ -983,6 +983,37 @@ describe("validators", () => {
     }
   });
 
+  it("reads the stored language and tolerates a body written before it (F14; L19.1, L19.5)", () => {
+    const stored = {
+      ...OWNED,
+      featureSettings: { ...OWNED.featureSettings, language: "es-en" },
+    };
+
+    assert.equal(parseOwnedInvitation(stored)?.featureSettings.language, "es-en");
+    assert.equal(
+      parseOwnedInvitation({
+        ...OWNED,
+        featureSettings: { ...OWNED.featureSettings, language: "en" },
+      })?.featureSettings.language,
+      "en",
+    );
+
+    // A body written before F14 carries no language: the editor then shows the column's own default, Spanish (L19.5).
+    assert.equal(parseOwnedInvitation(OWNED)?.featureSettings.language, undefined);
+
+    // A value no write could have stored reads as Spanish instead of refusing the editor over a language.
+    for (const language of ["ES", "es-MX", 7, null, {}]) {
+      assert.equal(
+        parseOwnedInvitation({
+          ...OWNED,
+          featureSettings: { ...OWNED.featureSettings, language },
+        })?.featureSettings.language,
+        "es",
+        JSON.stringify(language),
+      );
+    }
+  });
+
   it("refuses a summary with a status, slug, timestamp, or id that breaks the contract", () => {
     const broken = [
       { ...SUMMARY, id: "1" },

@@ -11,6 +11,7 @@ import type { FeatureSettingsView } from "../../../../../lib/customer/invitation
 import { timeZoneLabel } from "../../../../../lib/customer/invitation-features.ts";
 import type { RsvpSettingsView } from "../../../../../lib/customer/invitation-rsvp.ts";
 import type { ContentField } from "../../../../../lib/customer/invitations.ts";
+import type { InvitationLanguage } from "../../../../../lib/i18n/invitation-language.ts";
 import {
   addGiftRegistryStore,
   canAddGiftRegistryStore,
@@ -557,6 +558,8 @@ export interface FeatureValues {
   readonly livestream: LivestreamDraft;
   /** The opening animation switch as the browser holds it, on by default (F10; L14.3). */
   readonly openingAnimation: boolean;
+  /** The language the owner picked as the browser holds it, Spanish by default (F14; L19.1). */
+  readonly language: InvitationLanguage;
   /** The WhatsApp reminder switches as the browser holds them (F6; L9.1). */
   readonly reminders: RemindersDraft;
 }
@@ -1480,6 +1483,69 @@ function AutomaticFeatures({ view }: { view: FeatureSettingsView }) {
 }
 
 /**
+ * The «Idioma de tu invitación» block of «Funciones» (F14; S2.14, L19.1), following
+ * `design/english-invitation/02-idioma-anfitrion.html` with the app's own tokens: three radio options, each with its
+ * one-line explanation, and the note that the owner's own text stays as written.
+ *
+ * Native radios inside their labels: the group is named by its `legend`, the arrow keys move through it as a browser
+ * radio group does, and a choice is one deliberate action that is saved at once, like the switches. The active option
+ * is never colour alone — the dot is filled and the card carries the primary ring.
+ */
+function LanguageFields({
+  view,
+  value,
+  issue,
+  onChange,
+  onFlush,
+}: {
+  view: FeatureSettingsView;
+  value: InvitationLanguage;
+  issue: string | undefined;
+  onChange: (next: Partial<FeatureValues>) => void;
+  onFlush: () => void;
+}) {
+  return (
+    <fieldset aria-describedby={issue === undefined ? undefined : "language-error"}>
+      <legend className={fieldLabel}>{FEATURE_COPY.languageTitle}</legend>
+      <p className={fieldHint}>{FEATURE_COPY.languageHint}</p>
+      <div className="mt-3 flex flex-col gap-2.5">
+        {view.languages.map((choice) => {
+          const checked = choice.value === value;
+
+          return (
+            <label
+              className={`flex cursor-pointer items-start gap-3 rounded-field bg-surface p-3.5 ring-[1.5px] transition-colors motion-reduce:transition-none ${
+                checked ? "ring-primary bg-rose-50" : "ring-rose-100"
+              }`}
+              key={choice.value}
+            >
+              <input
+                checked={checked}
+                className="mt-1 size-4 shrink-0 accent-primary"
+                name="invitation-language"
+                onChange={() => {
+                  onChange({ language: choice.value });
+                  // A choice is one deliberate action: it is sent at once instead of waiting for the debounce.
+                  onFlush();
+                }}
+                type="radio"
+                value={choice.value}
+              />
+              <span>
+                <span className="block text-sm font-medium text-ink">{choice.label}</span>
+                <span className="block text-sm leading-6 text-muted">{choice.hint}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-sm leading-6 text-muted">{FEATURE_COPY.languageNote}</p>
+      <FieldRefusal id="language-error" message={issue} />
+    </fieldset>
+  );
+}
+
+/**
  * The time zone, the WhatsApp number, and the playlist link of one invitation (S4). A field whose key the package
  * does not grant is not offered at all: the autosave fills it from what is stored, so saving one field never clears
  * another.
@@ -1627,6 +1693,16 @@ export function FeatureFields({
           onFlush={onFlush}
           preview={reminderPreview}
           values={values}
+          view={view}
+        />
+      ) : null}
+
+      {view.showLanguage ? (
+        <LanguageFields
+          issue={issues?.language}
+          onChange={onChange}
+          onFlush={onFlush}
+          value={values.language}
           view={view}
         />
       ) : null}
