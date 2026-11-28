@@ -442,6 +442,24 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   pre-existing timing flake). Follow-ups: an e2e test of the acceptance return route (it imports `next/headers`, so the
   node test runner cannot load it); anonymous invitation answers carry no `Cache-Control` (pre-existing global guard);
   a malformed id on publish answers 404 instead of 400.
+- L32 — F13 evidence: commits `804c0b6` (data, scrypt hash, HMAC access token, `INVITATION_ACCESS_SECRET`, migration
+  `20261216120000_add_invitation_password`, key `PASSWORD_PROTECTION` for deluxe), `517ca44` + `cb522de` (owner set and
+  remove; the correction registers the two use cases the controller injects), `35afe7d` (the lock on every public route
+  and the unlock), `3b06fc0` + `7a43f13` (hardening: only failed attempts count, budgets spent before any work, a
+  cross-address cap, code and scrypt bounds, unsafe secrets refused, a locked previous address redirects first, owner
+  writes in one guarded statement; the correction proves the scrypt-failure path, consumes the cross cap first, and
+  drops a refunded empty limit row), `b4379ad` (web: lock screen, HttpOnly per-invitation cookie, owner block),
+  `ae6754e` and `3b66586` (the save and remove forms post natively, so the one-time share line reaches the painted page
+  and the block updates at once; native assess: not due). Native review: `review-209cd8c04c8bcfba`,
+  `review-bd2f4db09e414cac`, `review-97ef11bd16419485`, `review-201c10d7ee8b8325`, `review-324c45039e81a8ca`, all
+  approved (two after corrections; one scope-changed recovery replaced by a fresh review of the corrected range). Lesson:
+  per-commit typechecks must run with `--incremental false`. Independent verification: every L18 item and the approval
+  met (45 probes, 18 browser checks, timing of wrong versus unknown 39.4 ms vs 39.7 ms, a byte-identical public read
+  for an invitation without a code). Gates: API 2533/2533, web 2550/2550, db-specs 582/582 on a recreated database.
+  Open owner decision: after 10 failures from one address, even the right code waits 15 minutes (a shared venue Wi-Fi
+  could block guests). Follow-ups: alias budgets multiply the per-address bound (the cross cap bounds it); a transient
+  scrypt failure spends a guest's budget; the previous-address lock read takes three queries; e2e tests for the lock
+  flow.
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
