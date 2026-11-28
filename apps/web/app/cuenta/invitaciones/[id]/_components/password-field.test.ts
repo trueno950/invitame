@@ -42,6 +42,20 @@ describe("the block that shows a saved code once (F13; L18.1)", () => {
     }
   });
 
+  it("posts its remove form natively too, so the block reads «Sin contraseña» on the page the owner lands on", () => {
+    const guarded: string[] = BLOCK.match(/<GuardedForm\b[^>]*>/g) ?? [];
+    const removeForms = guarded.filter((form) => /\baction=\{removeAction\}/.test(form));
+
+    assert.ok(removeForms.length > 0, guarded.join("\n"));
+    for (const form of removeForms) {
+      assert.match(
+        form,
+        /\bnative\b/,
+        `the form that removes the code must post natively: ${form}`,
+      );
+    }
+  });
+
   it("gives that form the action Next.js renders as the form's own endpoint", () => {
     assert.match(
       GUARD,

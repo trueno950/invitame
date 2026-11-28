@@ -138,7 +138,7 @@ export function PasswordField({
               </details>
             ) : null}
             <p className={fieldHint}>{PASSWORD_COPY.changeNote}</p>
-            <GuardedForm action={removeAction} section="publicar">
+            <GuardedForm action={removeAction} native section="publicar">
               <input name="id" type="hidden" value={invitationId} />
               <button className={`${quietButton} w-full sm:w-auto`} type="submit">
                 {PASSWORD_COPY.remove}
