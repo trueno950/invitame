@@ -46,6 +46,7 @@ import {
   type InvitationRecordWithMusic,
   type InvitationRepository,
   type NewInvitation,
+  type SharedInvitationRecord,
 } from "../application/invitation.repository";
 import {
   type CatalogPackageEntitlements,
@@ -120,6 +121,11 @@ import type { InvitationReminders } from "../domain/invitation-reminders";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
 import type { RsvpSettings } from "../domain/invitation-rsvp";
+import {
+  type InvitationAccess,
+  INVITATION_ACCESS_RESOLVER,
+} from "../../collaborators/application/invitation-access";
+import type { InvitationPermission } from "../../collaborators/domain/invitation-collaborator";
 import { INVITATION_USE_CASES } from "../invitations.module";
 import { InvitationsController } from "./invitations.controller";
 import { PublicInvitationsController } from "./public-invitations.controller";
@@ -346,6 +352,51 @@ class MemoryInvitationRepository implements InvitationRepository {
       .filter((row) => row.ownerId === ownerId)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map((row) => structuredClone(row));
+  }
+
+  /**
+   * The invitations shared with an account (F12; L17.5), as the suite seeds them: the account's own accepted rows and the
+   * permissions each one grants. The access rule is inside the lookup — the account, the acceptance, and the absence of a
+   * revoke — so a row this map does not name is invisible here, exactly like the adapter's `WHERE`.
+   */
+  private readonly shared = new Map<string, Map<string, InvitationPermission[]>>();
+
+  /** Seeds one accepted, standing collaborator row for the suite's list and read cases. */
+  share(invitationId: string, userId: string, permissions: InvitationPermission[]): void {
+    const forUser = this.shared.get(userId) ?? new Map<string, InvitationPermission[]>();
+    forUser.set(invitationId, permissions);
+    this.shared.set(userId, forUser);
+  }
+
+  /** The three answers the authorization resolver gives, read from this suite's own rows and shared map (L17.4). */
+  accessFor(userId: string, invitationId: string): InvitationAccess | null {
+    const row = this.rows.find((stored) => stored.id === invitationId);
+    if (row === undefined) {
+      return null;
+    }
+    if (row.ownerId === userId) {
+      return { invitationId, ownerId: userId, role: "OWNER", permissions: [] };
+    }
+    const permissions = this.shared.get(userId)?.get(invitationId);
+
+    return permissions === undefined
+      ? null
+      : { invitationId, ownerId: row.ownerId, role: "COLLABORATOR", permissions };
+  }
+
+  async listSharedWith(userId: string): Promise<SharedInvitationRecord[]> {
+    const forUser = this.shared.get(userId);
+    if (forUser === undefined) {
+      return [];
+    }
+
+    return this.rows
+      .filter((row) => row.ownerId !== userId && forUser.has(row.id))
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((row) => ({
+        ...structuredClone(row),
+        permissions: forUser.get(row.id) ?? [],
+      }));
   }
 
   async updateContent(
@@ -1386,6 +1437,22 @@ describe("invitations routes: /invitations", () => {
       controllers: [InvitationsController, PublicInvitationsController],
       providers: [
         ...INVITATION_USE_CASES,
+        // The one authorization resolver every invitation route consults (F12; L17.4), over this suite's own memory
+        // repository: the owner of the row, an accepted collaborator whose permissions the suite seeded, or nobody — the
+        // same three answers the Prisma resolver gives, without a database.
+        {
+          provide: INVITATION_ACCESS_RESOLVER,
+          useValue: {
+            resolve: async (
+              userId: string,
+              invitationId: string,
+            ): Promise<InvitationAccess | null> => {
+              const access = repository.accessFor(userId, invitationId);
+
+              return access;
+            },
+          },
+        },
         { provide: INVITATION_REPOSITORY, useValue: repository },
         { provide: INVITATION_CATALOG, useValue: catalog },
         // Publication is free in Milestone 5; the publish use case asks this gate (S6).
@@ -1480,7 +1547,15 @@ describe("invitations routes: /invitations", () => {
     "updatedAt",
   ];
   /** One row of `GET /invitations`: the summary plus what a card renders the invitation from (T2; S2.6). */
-  const LIST_KEYS = [...SUMMARY_KEYS, "componentKey", "configuration", "content"].sort();
+  const LIST_KEYS = [
+    ...SUMMARY_KEYS,
+    "componentKey",
+    "configuration",
+    "content",
+    // The caller's own role and permissions (F12; L17.5).
+    "role",
+    "permissions",
+  ].sort();
   const OWNED_KEYS = [
     ...SUMMARY_KEYS,
     "content",
@@ -1493,6 +1568,9 @@ describe("invitations routes: /invitations", () => {
     "remindersConfigured",
     // How many renames the owner has left (F11; L15.2).
     "slugRenamesRemaining",
+    // The caller's own role and permissions (F12; L17.4, L17.5).
+    "role",
+    "permissions",
   ].sort();
 
   describe("access control", () => {
@@ -1754,6 +1832,45 @@ describe("invitations routes: /invitations", () => {
 
       assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), []);
+    });
+
+    it("adds the invitations shared with the caller, marked with its role and permissions (F12; L17.5)", async () => {
+      const owner = await signedInCustomer();
+      const shared = await signedInCustomer();
+      const stranger = await signedInCustomer();
+      const theirs = await createDraft(owner.cookie);
+      const own = await createDraft(shared.cookie);
+      repository.share(theirs.id, shared.userId, ["VIEW_ATTENDANCE"]);
+
+      const response = await send("GET", PATH, shared.cookie);
+
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as Row[];
+      assert.deepEqual(
+        body.map((item) => item.id),
+        [own.id, theirs.id],
+        "newest first across both reads",
+      );
+      for (const item of body) {
+        assert.deepEqual(Object.keys(item).sort(), LIST_KEYS);
+        assert.equal(item.ownerId, undefined);
+      }
+      assert.equal(body[0]?.role, "OWNER");
+      assert.deepEqual(body[0]?.permissions, []);
+      assert.equal(body[1]?.role, "COLLABORATOR");
+      assert.deepEqual(body[1]?.permissions, ["VIEW_ATTENDANCE"]);
+
+      // The same caller reading the shared invitation answers the same role, and a stranger still sees nothing of it.
+      const read = await send("GET", `${PATH}/${theirs.id}`, shared.cookie);
+      assert.equal(read.status, 200);
+      const readBody = (await read.json()) as Row;
+      assert.equal(readBody.role, "COLLABORATOR");
+      assert.deepEqual(readBody.permissions, ["VIEW_ATTENDANCE"]);
+      const strangerList = await send("GET", PATH, stranger.cookie);
+      assert.deepEqual(
+        ((await strangerList.json()) as Row[]).map((item) => item.id),
+        [],
+      );
     });
   });
 
@@ -3096,14 +3213,19 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(slugAvailabilityLimiter.consumed, [userId, userId, userId, userId, userId]);
     });
 
-    it("spends one check for an unknown invitation, so the limit is counted before anything is read (R4-003)", async () => {
+    it("refuses an unknown invitation before anything is read, so no check is spent (F12; L17.4, R4-003)", async () => {
       const { userId, cookie } = await signedInCustomer();
 
       const response = await send("GET", checkPath(UNKNOWN_ID, "valentina-xv"), cookie);
 
       assert.equal(response.status, 404);
       assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
-      assert.deepEqual(slugAvailabilityLimiter.consumed, [userId]);
+      // Since F12 the access resolver answers before the handler, so an id nobody may reach is refused without reading
+      // the address or spending one of the caller's checks. The property R4-003 protects still holds, one step earlier:
+      // an invitation the caller does not own is never a way to learn which addresses are held, free or not.
+      assert.deepEqual(slugAvailabilityLimiter.consumed, []);
+      assert.equal(await repository.countSlugAliases(UNKNOWN_ID), 0);
+      assert.equal(userId.length > 0, true);
     });
 
     it("answers 429 for the 121st check of the window, the invalid ones counted first (R4-003)", async () => {

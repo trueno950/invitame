@@ -157,6 +157,13 @@ class MemoryInvitationRepository implements InvitationRepository {
       .map((row) => ({ ...row, content: { ...row.content } }));
   }
 
+  /** No collaborator rows in this suite, so nothing is shared with anybody (F12; L17.5). */
+  sharedRows: Array<InvitationRecordWithMusic & { permissions: readonly string[] }> = [];
+
+  async listSharedWith(_userId: string): Promise<never[]> {
+    return this.sharedRows as never[];
+  }
+
   async updateContent(
     ownerId: string,
     id: string,

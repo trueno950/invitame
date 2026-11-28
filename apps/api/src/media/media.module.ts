@@ -6,6 +6,7 @@ import {
   type CatalogPublicContract,
 } from "../catalog/application/public/catalog-public-reader";
 import { CatalogModule } from "../catalog/catalog.module";
+import { CollaboratorsModule } from "../collaborators/collaborators.module";
 import type { RuntimeEnvironment } from "../config/environment";
 import { PrismaService } from "../database/prisma.service";
 import {
@@ -88,7 +89,8 @@ function assetUrlFrom(config: ConfigService<RuntimeEnvironment, true>): AssetUrl
  * photo exactly where it is.
  */
 @Module({
-  imports: [CatalogModule, SettingsModule],
+  // `CollaboratorsModule` provides the guard the owner routes declare and the one resolver it consults (F12; L17.4).
+  imports: [CatalogModule, CollaboratorsModule, SettingsModule],
   controllers: [
     InvitationsMediaController,
     MediaController,

@@ -9,6 +9,7 @@ import {
 } from "../catalog/application/public/catalog-public-reader";
 import { CatalogModule } from "../catalog/catalog.module";
 import type { RuntimeEnvironment } from "../config/environment";
+import { CollaboratorsModule } from "../collaborators/collaborators.module";
 import { PrismaService } from "../database/prisma.service";
 import { MediaModule } from "../media/media.module";
 import {
@@ -597,6 +598,9 @@ export const INVITATION_USE_CASES: Provider[] = [
   imports: [
     AdminModule,
     CatalogModule,
+    // The one authorization resolver every invitation route consults, and the guard its controllers declare (F12;
+    // L17.4). The module exports both, so this one never reaches the collaborator table's repository directly.
+    CollaboratorsModule,
     MediaModule,
     PaymentsModule,
     RemindersModule,

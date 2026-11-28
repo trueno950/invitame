@@ -9,6 +9,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { MemoryPaymentCatalog, MemoryPaymentRepository } from "../../../test/memory-payments";
 import { createApp } from "../../app.setup";
 import { AccessControlModule } from "../../auth/access-control/access-control.module";
+import { INVITATION_ACCESS_RESOLVER } from "../../collaborators/application/invitation-access";
 import { createAuth } from "../../auth/auth.factory";
 import { BackgroundTasks } from "../../auth/sign-in-code/background-tasks";
 import { SignInCodeSender } from "../../auth/sign-in-code/sign-in-code-sender";
@@ -166,6 +167,20 @@ async function startHarness(paymentsEnvironment: Record<string, unknown>): Promi
     ],
     controllers: [InvitationPaymentsController, PaymentsController],
     providers: [
+      // The invitation routes declare `InvitationAccessGuard` (F12; L17.4); this suite exercises the payment rules, so
+      // the resolver answers the session user as the owner of whatever id the path names and the repository fake decides
+      // what a foreign or missing one is, exactly as before.
+      {
+        provide: INVITATION_ACCESS_RESOLVER,
+        useValue: {
+          resolve: async (userId: string, invitationId: string) => ({
+            invitationId,
+            ownerId: userId,
+            role: "OWNER" as const,
+            permissions: [],
+          }),
+        },
+      },
       { provide: PAYMENTS_MODE_TOKEN, useValue: mode },
       { provide: PAYMENT_PROVIDER, useValue: provider },
       { provide: PAYMENT_REPOSITORY, useValue: repository },

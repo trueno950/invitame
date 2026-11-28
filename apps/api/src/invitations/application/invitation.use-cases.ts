@@ -61,6 +61,8 @@ import type {
   NewInvitation,
 } from "./invitation.repository";
 import type { CatalogVersionRenderData, InvitationCatalog } from "./invitation-catalog";
+import type { InvitationRole } from "../../collaborators/application/invitation-access";
+import type { InvitationPermission } from "../../collaborators/domain/invitation-collaborator";
 import type { InvitationGalleryReader } from "./invitation-gallery";
 import type { InvitationGuestbookReader } from "./guestbook.repository";
 import type { InvitationGuestAlbumReader } from "./invitation-guest-album";
@@ -183,6 +185,17 @@ export interface InvitationListItem extends InvitationSummary {
   content: JsonObject;
   componentKey: string | null;
   configuration: unknown;
+  /**
+   * The caller's role on this row (F12; L17.5): `OWNER` for an invitation the caller owns, `COLLABORATOR` for one another
+   * owner shared with it. The card renders «Compartida contigo» from it, and the web offers only the tabs the role may
+   * use; the API checks every route's permission again on each request, so this is a convenience, never a guard.
+   */
+  role: InvitationRole;
+  /**
+   * The permissions the caller holds here, in the domain's canonical order: empty for the owner, whose authority is not a
+   * permission set, and at least one for a collaborator (L17.2).
+   */
+  permissions: readonly InvitationPermission[];
 }
 
 /**
@@ -450,30 +463,67 @@ export class ListOwnInvitationsUseCase {
   ) {}
 
   /**
-   * Every invitation of the owner, newest first. The render data of a pinned version is read once per distinct
-   * snapshot, so a list of many drafts of one template costs one catalog read; a version the catalog does not know
-   * answers no renderer, and the card then falls back to the content it already has.
+   * Every invitation the caller may reach, newest first: the ones it owns and, since F12, the ones another owner shared
+   * with it (L17.5), each marked with the caller's role and permissions. Both reads scope access inside their own query,
+   * so nothing the caller has no standing on can appear here. The render data of a pinned version is read once per
+   * distinct snapshot, so a list of many drafts of one template costs one catalog read; a version the catalog does not
+   * know answers no renderer, and the card then falls back to the content it already has.
    */
-  async execute(ownerId: string): Promise<InvitationListItem[]> {
-    const stored = await this.invitations.listOwned(ownerId);
+  async execute(userId: string): Promise<InvitationListItem[]> {
+    const owned = await this.invitations.listOwned(userId);
+    const shared = await this.invitations.listSharedWith(userId);
     const versions = new Map<string, CatalogVersionRenderData | null>();
-    const items: InvitationListItem[] = [];
+    const items: Array<InvitationListItem & { id: string; createdAt: Date }> = [];
 
-    for (const record of stored) {
-      let render = versions.get(record.templateVersionId);
+    for (const record of [
+      ...owned.map((row) => ({ row, role: "OWNER" as const, permissions: [] as const })),
+      ...shared.map((row) => ({
+        row,
+        role: "COLLABORATOR" as const,
+        permissions: row.permissions,
+      })),
+    ]) {
+      let render = versions.get(record.row.templateVersionId);
 
       if (render === undefined) {
-        render = await this.catalog.findVersionRenderData(record.templateVersionId);
-        versions.set(record.templateVersionId, render);
+        render = await this.catalog.findVersionRenderData(record.row.templateVersionId);
+        versions.set(record.row.templateVersionId, render);
       }
       items.push({
-        ...toSummary(record),
-        content: record.content,
+        ...toSummary(record.row),
+        content: record.row.content,
         componentKey: render?.componentKey ?? null,
         configuration: render?.configuration ?? null,
+        role: record.role,
+        permissions: [...record.permissions],
       });
     }
-    return items;
+
+    // One merged list newest first, with the id breaking a tie between two rows created in the same instant, exactly as
+    // each read orders its own page.
+    items.sort(
+      (left, right) =>
+        right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id),
+    );
+
+    return items.map(
+      (item): InvitationListItem => ({
+        id: item.id,
+        templateVersionId: item.templateVersionId,
+        packageId: item.packageId,
+        slug: item.slug,
+        status: item.status,
+        archivedAt: item.archivedAt,
+        publishedAt: item.publishedAt,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        content: item.content,
+        componentKey: item.componentKey,
+        configuration: item.configuration,
+        role: item.role,
+        permissions: item.permissions,
+      }),
+    );
   }
 }
 

@@ -12,6 +12,7 @@ import type {
   InvitationRecordWithMusic,
   InvitationRepository,
   NewInvitation,
+  SharedInvitationRecord,
 } from "../application/invitation.repository";
 import {
   InvitationAlreadyArchivedError,
@@ -27,6 +28,7 @@ import { storedLivestream } from "../domain/invitation-livestream";
 import { storedReminders } from "../domain/invitation-reminders";
 import { archive, assertEditable, publish, unpublish } from "../domain/invitation-lifecycle";
 import { MAX_INVITATION_SLUG_RENAMES } from "../domain/invitation-slug";
+import { isInvitationPermission } from "../../collaborators/domain/invitation-collaborator";
 import {
   isAddressFieldName,
   isStoredPlacePoint,
@@ -80,6 +82,18 @@ const INVITATION_SELECT = {
 } satisfies Prisma.InvitationSelect;
 
 type InvitationRow = Prisma.InvitationGetPayload<{ select: typeof INVITATION_SELECT }>;
+
+/**
+ * The invitations shared with one account, with the permissions its own accepted row grants (F12; L17.5). The row's
+ * owner is deliberately not the caller: access is inside the query — the `collaborators` filter names the account, the
+ * acceptance, and the absence of a revoke — so an account can never list an invitation it has no accepted row for.
+ */
+const SHARED_INVITATION_SELECT = {
+  ...INVITATION_SELECT,
+  collaborators: {
+    select: { permissions: true },
+  },
+} satisfies Prisma.InvitationSelect;
 
 /**
  * The stored points of one row, keyed by their content field (S2, S3). Only a point the domain still accepts is
@@ -227,6 +241,33 @@ export class PrismaInvitationRepository implements InvitationRepository {
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
     return rows.map(toRecord);
+  }
+
+  async listSharedWith(userId: string): Promise<SharedInvitationRecord[]> {
+    const rows = await this.prisma.invitation.findMany({
+      where: {
+        collaborators: {
+          some: { userId, acceptedAt: { not: null }, revokedAt: null },
+        },
+      },
+      select: {
+        ...SHARED_INVITATION_SELECT,
+        collaborators: {
+          where: { userId, acceptedAt: { not: null }, revokedAt: null },
+          select: { permissions: true },
+        },
+      },
+      // The same order the owner's own list uses, so one merged list reads newest first.
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+
+    return rows.map((row) => ({
+      ...toRecord(row),
+      // A row written around the API is answered by what the allow-list knows, never by what it holds (L20).
+      permissions: row.collaborators.flatMap((collaborator) =>
+        collaborator.permissions.filter(isInvitationPermission),
+      ),
+    }));
   }
 
   async updateContent(

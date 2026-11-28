@@ -1,6 +1,20 @@
-import { Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 
-import { SessionUserId } from "../../auth/access-control/session-user-id";
+import {
+  InvitationAccessGuard,
+  InvitationOwnerOnly,
+  InvitationRouteIdIsUuid,
+} from "../../collaborators/presentation/invitation-access.guard";
+import { InvitationOwnerId } from "../../collaborators/presentation/invitation-scope";
 import {
   GetInvitationPaymentUseCase,
   StartCheckoutUseCase,
@@ -29,6 +43,8 @@ const INVITATION_ID = new ParseUUIDPipe();
  * - `GET /invitations/:id/payment`: 200 `{ paymentRequired, status, amountMinor, currency, paidAt }`.
  */
 @Controller("invitations")
+@UseGuards(InvitationAccessGuard)
+@InvitationRouteIdIsUuid()
 export class InvitationPaymentsController {
   constructor(
     @Inject(StartCheckoutUseCase) private readonly checkout: StartCheckoutUseCase,
@@ -38,12 +54,13 @@ export class InvitationPaymentsController {
 
   @Post(":id/checkout")
   @HttpCode(200)
+  @InvitationOwnerOnly()
   async startCheckout(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<CheckoutResponse> {
     try {
-      const result = await this.checkout.execute({ ownerId: userId, invitationId: id });
+      const result = await this.checkout.execute({ ownerId: ownerId, invitationId: id });
 
       return toCheckoutResponse(result ?? paymentInvitationNotFound());
     } catch (error) {
@@ -52,11 +69,12 @@ export class InvitationPaymentsController {
   }
 
   @Get(":id/payment")
+  @InvitationOwnerOnly()
   async read(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<InvitationPaymentResponse> {
-    const status = await this.readPayment.execute({ ownerId: userId, invitationId: id });
+    const status = await this.readPayment.execute({ ownerId: ownerId, invitationId: id });
 
     return toInvitationPaymentResponse(status ?? paymentInvitationNotFound());
   }

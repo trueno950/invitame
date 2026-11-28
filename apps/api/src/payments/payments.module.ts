@@ -6,6 +6,7 @@ import {
   type CatalogPublicContract,
 } from "../catalog/application/public/catalog-public-reader";
 import { CatalogModule } from "../catalog/catalog.module";
+import { CollaboratorsModule } from "../collaborators/collaborators.module";
 import {
   PAYMENTS_MODE,
   type PaymentsEnvironment,
@@ -82,7 +83,9 @@ function createPaymentProvider(payments: PaymentsEnvironment): PaymentProvider {
  * module instead of binding an adapter of its own — the one seam Milestone 5 left for exactly this (S3).
  */
 @Module({
-  imports: [CatalogModule],
+  // `CollaboratorsModule` provides the guard the owner's payment routes declare and the one resolver it consults (F12;
+  // L17.4). Paying is owner-only and never grantable, so both of those routes declare `@InvitationOwnerOnly()`.
+  imports: [CatalogModule, CollaboratorsModule],
   controllers: [InvitationPaymentsController, PaymentsController, AdminPaymentsController],
   providers: [
     {

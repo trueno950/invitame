@@ -11,9 +11,16 @@ import {
   Patch,
   Post,
   Req,
+  UseGuards,
 } from "@nestjs/common";
 
-import { SessionUserId } from "../../auth/access-control/session-user-id";
+import {
+  InvitationAccessGuard,
+  InvitationRouteIdIsUuid,
+  InvitationRouteNotFoundBody,
+  RequireInvitationPermission,
+} from "../../collaborators/presentation/invitation-access.guard";
+import { InvitationOwnerId } from "../../collaborators/presentation/invitation-scope";
 import {
   DeleteMediaUseCase,
   ListOwnMediaUseCase,
@@ -50,6 +57,11 @@ const ASSET_ID = new ParseUUIDPipe();
  * upload (15 MB) plus the boundary, the fields, and the part headers (S5 «Tamaño de foto»).
  */
 @Controller("invitations/:id/media")
+@UseGuards(InvitationAccessGuard)
+@InvitationRouteIdIsUuid()
+// The module's own 404 for a caller with no access to the invitation, byte for byte the body the routes answered before
+// (F12; L17.4): the status, the code, and the message stay the media module's.
+@InvitationRouteNotFoundBody({ code: "MEDIA_NOT_FOUND", message: "Media not found." })
 export class InvitationsMediaController {
   constructor(
     @Inject(UploadMediaUseCase) private readonly upload: UploadMediaUseCase,
@@ -67,15 +79,16 @@ export class InvitationsMediaController {
    */
   @Post()
   @HttpCode(201)
+  @RequireInvitationPermission("EDIT_CONTENT")
   async create(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Req() request: IncomingMessage,
   ): Promise<MediaAssetResponse> {
     try {
       const form = await readMultipartUpload(request, { maxBytes: MAX_UPLOAD_REQUEST_BYTES });
       const view = await this.upload.execute({
-        ownerId: userId,
+        ownerId: ownerId,
         invitationId: id,
         kind: form.fields.get("kind"),
         alt: form.fields.get("alt") ?? null,
@@ -93,12 +106,13 @@ export class InvitationsMediaController {
    * owner read exposes media only through this route: no invitation response carries a storage key or a media row.
    */
   @Get()
+  @RequireInvitationPermission("EDIT_CONTENT")
   async list(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<MediaAssetResponse[]> {
     try {
-      return (await this.listOwn.execute(userId, id)).map(toMediaAssetResponse);
+      return (await this.listOwn.execute(ownerId, id)).map(toMediaAssetResponse);
     } catch (error) {
       return mapMediaError(error);
     }
@@ -112,12 +126,13 @@ export class InvitationsMediaController {
    * customer's invitation, an unknown id, and a malformed id are the one media 404 (A4).
    */
   @Get("limits")
+  @RequireInvitationPermission("EDIT_CONTENT")
   async limits(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<MediaUploadLimitsResponse> {
     try {
-      const limits: MediaUploadLimits = await this.readLimits.execute(userId, id);
+      const limits: MediaUploadLimits = await this.readLimits.execute(ownerId, id);
 
       return toMediaUploadLimitsResponse(limits);
     } catch (error) {
@@ -131,8 +146,9 @@ export class InvitationsMediaController {
    * foreign, or deleted asset is 404 `MEDIA_NOT_FOUND` like an unknown id (A4).
    */
   @Patch(":assetId")
+  @RequireInvitationPermission("EDIT_CONTENT")
   async update(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("assetId", ASSET_ID) assetId: string,
     @Body() body: UpdateMediaDto,
@@ -140,7 +156,7 @@ export class InvitationsMediaController {
     try {
       return toMediaAssetResponse(
         await this.updateAsset.execute({
-          ownerId: userId,
+          ownerId: ownerId,
           invitationId: id,
           assetId,
           ...(body.alt === undefined ? {} : { alt: body.alt }),
@@ -159,13 +175,14 @@ export class InvitationsMediaController {
    */
   @Delete(":assetId")
   @HttpCode(200)
+  @RequireInvitationPermission("EDIT_CONTENT")
   async remove(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("assetId", ASSET_ID) assetId: string,
   ): Promise<{ status: "deleted" }> {
     try {
-      await this.deleteMedia.execute(userId, id, assetId);
+      await this.deleteMedia.execute(ownerId, id, assetId);
 
       return { status: "deleted" };
     } catch (error) {

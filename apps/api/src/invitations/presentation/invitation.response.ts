@@ -39,6 +39,8 @@ import {
   InvitationNotPublishedError,
   ReservedInvitationSlugError,
 } from "../domain/invitation.errors";
+import type { InvitationRole } from "../../collaborators/application/invitation-access";
+import type { InvitationPermission } from "../../collaborators/domain/invitation-collaborator";
 import type { JsonObject } from "../domain/invitation-content";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { PlacePoint } from "../domain/invitation-place";
@@ -75,7 +77,24 @@ export interface InvitationListItemResponse extends InvitationSummaryResponse {
   content: JsonObject;
   componentKey: string | null;
   configuration: unknown;
+  /**
+   * The caller's role on this row (F12; L17.5): `OWNER` for an invitation the session user owns, `COLLABORATOR` for one
+   * another owner shared with it. The card renders «Compartida contigo» from it and offers only the tabs the role may
+   * use; the API checks every permission again on each request, so the field is a convenience the web never relies on.
+   */
+  role: InvitationRoleResponse;
+  /**
+   * What the caller may do here, in the domain's canonical order: empty for the owner, whose authority is not a
+   * permission set, and at least one permission for a collaborator (L17.2).
+   */
+  permissions: readonly InvitationPermissionResponse[];
 }
+
+/** Who the caller is for one invitation, as the reads answer it (F12; L17.4). */
+export type InvitationRoleResponse = InvitationRole;
+
+/** One grantable permission, as the reads answer it (F12; L17.2). */
+export type InvitationPermissionResponse = InvitationPermission;
 
 /**
  * One invitation as its owner edits it: the stored fields, the content, the feature data, the gated features the
@@ -84,6 +103,13 @@ export interface InvitationListItemResponse extends InvitationSummaryResponse {
 export interface OwnedInvitationResponse extends InvitationSummaryResponse {
   content: JsonObject;
   missingRequiredFields: string[];
+  /**
+   * The caller's role on this invitation (F12; L17.4, L17.5): `OWNER`, or `COLLABORATOR` when another owner shared it.
+   * The editor offers only what the role may do, and the API checks the route's permission again on every request.
+   */
+  role: InvitationRoleResponse;
+  /** What the caller may do here: empty for the owner, at least one permission for a collaborator (L17.2). */
+  permissions: readonly InvitationPermissionResponse[];
   /** The stored IANA zone (S4). */
   timeZone: string;
   /**
@@ -333,14 +359,27 @@ export function toInvitationListItemResponse(
     content: stored.content,
     componentKey: stored.componentKey,
     configuration: stored.configuration,
+    role: stored.role,
+    permissions: [...stored.permissions],
   };
 }
 
-export function toOwnedInvitationResponse(stored: OwnedInvitation): OwnedInvitationResponse {
+export function toOwnedInvitationResponse(
+  stored: OwnedInvitation,
+  access: {
+    readonly role: InvitationRoleResponse;
+    readonly permissions: readonly InvitationPermissionResponse[];
+  } = {
+    role: "OWNER",
+    permissions: [],
+  },
+): OwnedInvitationResponse {
   return {
     ...toInvitationSummaryResponse(stored),
     content: stored.content,
     missingRequiredFields: [...stored.missingRequiredFields],
+    role: access.role,
+    permissions: [...access.permissions],
     timeZone: stored.timeZone,
     featureSettings: {
       whatsappPhone: stored.featureSettings.whatsappPhone,
@@ -578,8 +617,14 @@ function notFound(): never {
   throw new NotFoundException({ code: "INVITATION_NOT_FOUND" });
 }
 
-export function orOwnedInvitationNotFound(stored: OwnedInvitation | null): OwnedInvitationResponse {
-  return stored === null ? notFound() : toOwnedInvitationResponse(stored);
+export function orOwnedInvitationNotFound(
+  stored: OwnedInvitation | null,
+  access?: {
+    readonly role: InvitationRoleResponse;
+    readonly permissions: readonly InvitationPermissionResponse[];
+  },
+): OwnedInvitationResponse {
+  return stored === null ? notFound() : toOwnedInvitationResponse(stored, access);
 }
 
 /**

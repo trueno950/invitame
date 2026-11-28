@@ -146,6 +146,10 @@ class MemoryInvitationRepository implements InvitationRepository {
     throw new Error("not used");
   }
 
+  async listSharedWith(_userId: string): Promise<never[]> {
+    throw new Error("not used");
+  }
+
   async updateContent(
     _ownerId: string,
     _id: string,

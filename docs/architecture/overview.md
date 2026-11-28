@@ -1231,6 +1231,56 @@ Turning it on is a configuration and adapter change, never a code change in the 
   the moment a provider is configured) and the state of each spoken in words, and the preview built from the
   invitation's own occasion, deadline, and public address.
 
+## Co-hosts and invitation authorization (current)
+
+Implemented by F12 (S2.12, L17, owner approval of the security design). One resolver decides who may reach an
+invitation, each route declares what that caller needs, and a route that declares nothing is owner-only. This is the
+first feature whose subject is authorization itself, so the shape is one decision point rather than a check per route.
+
+- Resolver (`apps/api/src/collaborators/application/invitation-access.ts`): `resolve(userId, invitationId)` answers
+  `OWNER`, `COLLABORATOR` with the permission set its accepted, non-revoked row grants, or `null`. It reads the stored
+  rows on every request and caches nothing, so a revoke ends the access on the next request. A row written around the
+  API is answered by what the domain allow-list knows, never by what it happens to hold.
+- Guard and declarations (`collaborators/presentation/invitation-access.guard.ts`): `InvitationAccessGuard` runs after
+  the global `AccessControlGuard`, reads the route's declaration, and answers the module's own 404 for a caller with no
+  access or 403 `INVITATION_FORBIDDEN` for a declared permission it does not hold. `@RequireInvitationPermission(...)`
+  admits an accepted collaborator holding any of the named permissions and the owner;
+  `@InvitationOwnerOnly()` admits the owner alone. An undeclared route is owner-only, too. A controller declares
+  `@InvitationRouteIdIsUuid()` when a malformed id must keep answering its `ParseUUIDPipe` 400, and
+  `@InvitationRouteNotFoundBody(...)` when its module answers its own 404 body (the media routes keep `MEDIA_NOT_FOUND`).
+- Owner scope (`collaborators/presentation/invitation-scope.ts`): `@InvitationOwnerId()` answers the invitation's real
+  owner as the guard resolved it, and every owner-scoped port of the API — the invitations, media, guestbook, RSVP,
+  guest-list, places, and payment adapters — keeps its own `WHERE ownerId`, so a collaborator's write runs inside the
+  same ownership rule the owner's write already follows. Nothing outside the guard decides who may reach a row, and the
+  session user is never silently used as the owner.
+- Permissions (L17.2): `EDIT_CONTENT` covers content, photos (the main photo, the gallery, the guests' photo
+  moderation), features, and places; `VIEW_ATTENDANCE` covers the RSVP answers, the guest list, the CSV exports, and the
+  guestbook moderation reads; `PUBLISH` covers publishing and unpublishing. Owner-only and never grantable: checkout,
+  payment, refunds, archiving, renaming the address (F11), and managing collaborators. Writing the guest list, hiding
+  guestbook entries, and the RSVP settings stay owner-only as well, because L17 grants only reads there.
+- Invitation (`apps/api/src/collaborators/application/collaborator.use-cases.ts`): the owner invites an address with a
+  permission set through `POST /invitations/:id/collaborators`, which stores the row with the token's digest and sends
+  the link through the existing `EmailDeliveryService` — no new provider, no new configuration key, and no token, email
+  body, or address in a log. `GET` lists the standing rows (never the token or its digest), `PATCH` replaces a
+  permission set, and `DELETE` revokes: the row is marked and its token burned, and the access ends immediately.
+- Acceptance: `POST /collaborations/accept` needs an active session, compares the caller's own stored address with the
+  invited one inside the same statement that burns the token, and answers one 404 `COLLABORATION_NOT_FOUND` for a wrong
+  account, an expired link, a used link, a revoked collaborator, and a token that names nothing. A wrong account does not
+  consume the link the right account can still use.
+- Reads: `GET /invitations` answers the caller's own invitations and the ones shared with it, each with `role` and
+  `permissions`, so «Mis invitaciones» shows «Compartida contigo»; `GET /invitations/:id` answers the same for a
+  collaborator holding any permission. Neither carries payment data or the collaborator list, which have owner-only
+  routes of their own.
+- Evidence: `apps/api/src/collaborators/presentation/invitation-authorization.matrix.spec.ts` derives every registered
+  invitation route from the module's own metadata, fails when a route that names an invitation declares no permission,
+  and asserts the exact status of all 342 cells — the owner, each single permission, all three, a pending collaborator,
+  a revoked one, a stranger, and an anonymous caller — so a new route or a widened declaration cannot pass unnoticed.
+  `collaborators/infrastructure/invitation-collaborators.prisma.db-spec.ts` proves the migration's constraints, the
+  five-collaborator cap, the partial unique index, the acceptance that burns a token, and every refusal on real
+  PostgreSQL.
+- Gating (L17.5): the new `CO_HOSTS` catalog key, granted to Premium and Deluxe by the additive migration and the seed,
+  gates inviting. Withdrawing it stops new invitations and keeps the collaborations the owner already granted.
+
 ## Administrator invitation status view (current)
 
 Implemented by Milestone 9 T2 (S1, L3, L4), with the administrator's unpublish added by T8 (S4, S6, L9). An

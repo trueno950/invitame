@@ -11,9 +11,23 @@ import {
   Put,
   Query,
   Res,
+  UseGuards,
 } from "@nestjs/common";
 
 import { SessionUserId } from "../../auth/access-control/session-user-id";
+import type { InvitationAccess } from "../../collaborators/application/invitation-access";
+import {
+  InvitationAccessGuard,
+  InvitationRouteIdIsUuid,
+} from "../../collaborators/presentation/invitation-access.guard";
+import {
+  InvitationOwnerOnly,
+  RequireInvitationPermission,
+} from "../../collaborators/presentation/invitation-access.guard";
+import {
+  InvitationCallerAccess,
+  InvitationOwnerId,
+} from "../../collaborators/presentation/invitation-scope";
 import {
   ArchiveInvitationUseCase,
   CreateInvitationDraftUseCase,
@@ -122,6 +136,8 @@ const INVITATION_ID = new ParseUUIDPipe();
  * the database, so no client can publish by changing its own state (S3).
  */
 @Controller("invitations")
+@UseGuards(InvitationAccessGuard)
+@InvitationRouteIdIsUuid()
 export class InvitationsController {
   constructor(
     @Inject(CreateInvitationDraftUseCase)
@@ -184,20 +200,31 @@ export class InvitationsController {
 
   /**
    * The session user's invitations, newest first, each with what its card renders it from (T2; S2.6); an owner without
-   * any gets an empty list (S1).
+   * any gets an empty list (S1). Since F12 it also answers the invitations other owners shared with this caller, each
+   * marked with the caller's role and permissions (L17.5), so «Mis invitaciones» shows «Compartida contigo» and the web
+   * only offers the tabs that role may use. The array stays one list of the same rows: an invitation the caller owns is
+   * `OWNER`, one shared with it is `COLLABORATOR`, and nothing else appears.
    */
   @Get()
   async list(@SessionUserId() userId: string): Promise<InvitationListItemResponse[]> {
     return (await this.listOwn.execute(userId)).map(toInvitationListItemResponse);
   }
 
-  /** One of the session user's invitations, with its content and the fields it still lacks (S7). */
+  /**
+   * One invitation the caller may reach, with its content and the fields it still lacks (S7). Since F12 it answers the
+   * owner's own invitation and any invitation shared with the caller where it holds at least one permission (L17.4),
+   * together with the caller's `role` and `permissions` so the editor offers only what that role may do. A collaborator
+   * answers exactly what an owner answers, with one exception the design states: nothing here carries payment data,
+   * which has its own owner-only route (L17.2).
+   */
   @Get(":id")
+  @RequireInvitationPermission("EDIT_CONTENT", "VIEW_ATTENDANCE", "PUBLISH")
   async read(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
+    @InvitationCallerAccess() access: InvitationAccess,
   ): Promise<OwnedInvitationResponse> {
-    return orOwnedInvitationNotFound(await this.getOwn.execute(userId, id));
+    return orOwnedInvitationNotFound(await this.getOwn.execute(ownerId, id), access);
   }
 
   /**
@@ -206,15 +233,16 @@ export class InvitationsController {
    * names `expectedUpdatedAt` is a conditional write and answers 409 when another writer committed first (S2).
    */
   @Put(":id/content")
+  @RequireInvitationPermission("EDIT_CONTENT")
   async replaceContent(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Body() body: UpdateInvitationContentDto,
   ): Promise<OwnedInvitationResponse> {
     try {
       return orOwnedInvitationNotFound(
         await this.updateContent.execute({
-          ownerId: userId,
+          ownerId: ownerId,
           id,
           content: body.content,
           ...(body.expectedUpdatedAt === undefined
@@ -239,15 +267,16 @@ export class InvitationsController {
    * `itinerary`, `giftRegistry`, `lodging`, `livestream`, or `reminders` keeps the stored one. `PUT` and not `PATCH`: the whole feature data is replaced.
    */
   @Put(":id/features")
+  @RequireInvitationPermission("EDIT_CONTENT")
   async replaceFeatures(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Body() body: UpdateInvitationFeaturesDto,
   ): Promise<OwnedInvitationResponse> {
     try {
       return orOwnedInvitationNotFound(
         await this.updateFeatures.execute({
-          ownerId: userId,
+          ownerId: ownerId,
           id,
           timeZone: body.timeZone,
           whatsappPhone: body.whatsappPhone,
@@ -274,14 +303,15 @@ export class InvitationsController {
    * `PLACE_SEARCH_RATE_LIMITED` (S2). The request carries no session data beyond the owner the guard attached.
    */
   @Get(":id/places/search")
+  @RequireInvitationPermission("EDIT_CONTENT")
   async searchPlacesIn(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Query("q") query: unknown,
   ): Promise<readonly PlacePoint[]> {
     try {
       return orPlaceSuggestionsNotFound(
-        await this.searchPlaces.execute({ ownerId: userId, id, query }),
+        await this.searchPlaces.execute({ ownerId: ownerId, id, query }),
       );
     } catch (error) {
       return mapInvitationError(error);
@@ -297,14 +327,15 @@ export class InvitationsController {
    * `SLUG_AVAILABILITY_RATE_LIMITED` and changes nothing.
    */
   @Get(":id/slug-availability")
+  @InvitationOwnerOnly()
   async readSlugAvailability(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Query("slug") slug: unknown,
   ): Promise<SlugAvailabilityResponse> {
     try {
       return orSlugAvailabilityNotFound(
-        await this.checkSlugAvailability.execute({ ownerId: userId, id, slug }),
+        await this.checkSlugAvailability.execute({ ownerId: ownerId, id, slug }),
       );
     } catch (error) {
       return mapInvitationError(error);
@@ -324,14 +355,15 @@ export class InvitationsController {
    * way to learn which addresses are held.
    */
   @Put(":id/slug")
+  @InvitationOwnerOnly()
   async replaceSlug(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Body() body: UpdateInvitationSlugDto,
   ): Promise<OwnedInvitationResponse> {
     try {
       return orOwnedInvitationNotFound(
-        await this.renameSlug.execute({ ownerId: userId, id, slug: body.slug }),
+        await this.renameSlug.execute({ ownerId: ownerId, id, slug: body.slug }),
       );
     } catch (error) {
       return mapInvitationError(error);
@@ -346,8 +378,9 @@ export class InvitationsController {
    * and a foreign id is 404 (A2, A4). `PUT` and not `PATCH`: the whole point is replaced.
    */
   @Put(":id/places/:field")
+  @RequireInvitationPermission("EDIT_CONTENT")
   async replacePlace(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("field") field: string,
     @Body() body: UpdateInvitationPlaceDto,
@@ -355,7 +388,7 @@ export class InvitationsController {
     try {
       return orOwnedInvitationNotFound(
         await this.updatePlace.execute({
-          ownerId: userId,
+          ownerId: ownerId,
           id,
           field,
           label: body.label,
@@ -375,14 +408,15 @@ export class InvitationsController {
    */
   @Delete(":id/places/:field")
   @HttpCode(200)
+  @RequireInvitationPermission("EDIT_CONTENT")
   async clearPlaceOf(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("field") field: string,
   ): Promise<OwnedInvitationResponse> {
     try {
       return orOwnedInvitationNotFound(
-        await this.clearPlace.execute({ ownerId: userId, id, field }),
+        await this.clearPlace.execute({ ownerId: ownerId, id, field }),
       );
     } catch (error) {
       return mapInvitationError(error);
@@ -395,12 +429,13 @@ export class InvitationsController {
    */
   @Post(":id/archive")
   @HttpCode(200)
+  @InvitationOwnerOnly()
   async archive(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<InvitationSummaryResponse> {
     try {
-      return orInvitationSummaryNotFound(await this.archiveInvitation.execute(userId, id));
+      return orInvitationSummaryNotFound(await this.archiveInvitation.execute(ownerId, id));
     } catch (error) {
       return mapInvitationError(error);
     }
@@ -415,12 +450,13 @@ export class InvitationsController {
    */
   @Post(":id/publish")
   @HttpCode(200)
+  @RequireInvitationPermission("PUBLISH")
   async publish(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<OwnedInvitationResponse> {
     try {
-      return orOwnedInvitationNotFound(await this.publishInvitation.execute(userId, id));
+      return orOwnedInvitationNotFound(await this.publishInvitation.execute(ownerId, id));
     } catch (error) {
       return mapInvitationError(error);
     }
@@ -434,12 +470,13 @@ export class InvitationsController {
    */
   @Post(":id/unpublish")
   @HttpCode(200)
+  @RequireInvitationPermission("PUBLISH")
   async unpublish(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<InvitationSummaryResponse> {
     try {
-      return orInvitationSummaryNotFound(await this.unpublishInvitation.execute(userId, id));
+      return orInvitationSummaryNotFound(await this.unpublishInvitation.execute(ownerId, id));
     } catch (error) {
       return mapInvitationError(error);
     }
@@ -453,15 +490,16 @@ export class InvitationsController {
    * and `null` clears the deadline.
    */
   @Put(":id/rsvp-settings")
+  @InvitationOwnerOnly()
   async replaceRsvpSettings(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Body() body: UpdateRsvpSettingsDto,
   ): Promise<RsvpSettingsResponse> {
     try {
       return orRsvpSettingsNotFound(
         await this.updateRsvpSettings.execute({
-          ownerId: userId,
+          ownerId: ownerId,
           id,
           deadline: body.deadline,
           partyLimit: body.partyLimit,
@@ -479,11 +517,12 @@ export class InvitationsController {
    * never erased (A2).
    */
   @Get(":id/rsvp")
+  @RequireInvitationPermission("VIEW_ATTENDANCE")
   async readRsvp(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<RsvpReadResponse> {
-    return orRsvpReadNotFound(await this.getRsvpResponses.execute(userId, id));
+    return orRsvpReadNotFound(await this.getRsvpResponses.execute(ownerId, id));
   }
 
   /**
@@ -494,11 +533,12 @@ export class InvitationsController {
    * become unreachable after a catalog change.
    */
   @Get(":id/guestbook")
+  @RequireInvitationPermission("VIEW_ATTENDANCE")
   async readGuestbook(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<GuestbookReadResponse> {
-    return orGuestbookReadNotFound(await this.getGuestbookEntries.execute(userId, id));
+    return orGuestbookReadNotFound(await this.getGuestbookEntries.execute(ownerId, id));
   }
 
   /**
@@ -508,8 +548,9 @@ export class InvitationsController {
    * the screen could not tell apart from a malformed body.
    */
   @Put(":id/guestbook/:entryId")
+  @InvitationOwnerOnly()
   async updateGuestbookEntry(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("entryId") entryId: string,
     @Body() body: UpdateGuestbookEntryDto,
@@ -517,7 +558,7 @@ export class InvitationsController {
     try {
       return orGuestbookEntry(
         await this.setGuestbookEntryHidden.execute({
-          ownerId: userId,
+          ownerId: ownerId,
           id,
           entryId,
           hidden: body.hidden,
@@ -536,14 +577,15 @@ export class InvitationsController {
    * responses, unchanged from G1.
    */
   @Get(":id/rsvp.csv")
+  @RequireInvitationPermission("VIEW_ATTENDANCE")
   async exportRsvp(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Res({ passthrough: true }) reply: RsvpCsvReply,
   ): Promise<string> {
     // The header is set before the read, so it is on the 404 too.
     reply.setHeader("Cache-Control", "no-store");
-    const exported = await this.exportAttendance.execute(userId, id);
+    const exported = await this.exportAttendance.execute(ownerId, id);
     if (exported === null) {
       // The same 404 every owner route answers, so a foreign invitation is indistinguishable from an unknown one.
       rsvpInvitationNotFound();
@@ -561,12 +603,13 @@ export class InvitationsController {
    * invitation stays readable (A2); a package that does not grant `GUEST_LIST` is 409 `GUEST_LIST_NOT_AVAILABLE`.
    */
   @Get(":id/guests")
+  @RequireInvitationPermission("VIEW_ATTENDANCE")
   async readGuests(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
   ): Promise<GuestListResponse> {
     try {
-      return orGuestListNotFound(await this.listGuests.execute(userId, id));
+      return orGuestListNotFound(await this.listGuests.execute(ownerId, id));
     } catch (error) {
       return mapGuestError(error);
     }
@@ -579,15 +622,16 @@ export class InvitationsController {
    * invitation is 404 (A4).
    */
   @Post(":id/guests")
+  @InvitationOwnerOnly()
   async createGuestFor(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Body() body: CreateGuestDto,
   ): Promise<GuestWithTokenResponse> {
     try {
       return orGuestWithTokenResponse(
         await this.createGuest.execute({
-          ownerId: userId,
+          ownerId: ownerId,
           id,
           name: body.name,
           seats: body.seats,
@@ -607,8 +651,9 @@ export class InvitationsController {
    * that could not hold the party the guest already confirmed is 409 `GUEST_SEATS_BELOW_RESPONSE` with that party.
    */
   @Put(":id/guests/:guestId")
+  @InvitationOwnerOnly()
   async replaceGuest(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("guestId", INVITATION_ID) guestId: string,
     @Body() body: UpdateGuestDto,
@@ -616,7 +661,7 @@ export class InvitationsController {
     try {
       return orGuestResponseItem(
         await this.updateGuest.execute({
-          ownerId: userId,
+          ownerId: ownerId,
           id,
           guestId,
           name: body.name,
@@ -638,13 +683,14 @@ export class InvitationsController {
    */
   @Delete(":id/guests/:guestId")
   @HttpCode(200)
+  @InvitationOwnerOnly()
   async removeGuest(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("guestId", INVITATION_ID) guestId: string,
   ): Promise<DeletedGuestResponse> {
     try {
-      return orDeletedGuestResponse(await this.deleteGuest.execute(userId, id, guestId));
+      return orDeletedGuestResponse(await this.deleteGuest.execute(ownerId, id, guestId));
     } catch (error) {
       return mapGuestError(error);
     }
@@ -657,13 +703,14 @@ export class InvitationsController {
    */
   @Post(":id/guests/:guestId/token")
   @HttpCode(200)
+  @InvitationOwnerOnly()
   async rotateGuestTokenFor(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Param("guestId", INVITATION_ID) guestId: string,
   ): Promise<GuestWithTokenResponse> {
     try {
-      return orGuestWithTokenResponse(await this.rotateGuestToken.execute(userId, id, guestId));
+      return orGuestWithTokenResponse(await this.rotateGuestToken.execute(ownerId, id, guestId));
     } catch (error) {
       return mapGuestError(error);
     }
@@ -679,14 +726,15 @@ export class InvitationsController {
    */
   @Post(":id/guests/check-in")
   @HttpCode(200)
+  @InvitationOwnerOnly()
   async checkInGuestAt(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id", INVITATION_ID) id: string,
     @Body() body: CheckInGuestDto,
   ): Promise<GuestCheckInResponse> {
     try {
       return orGuestCheckInResponse(
-        await this.checkInGuest.execute({ ownerId: userId, id, token: body.token }),
+        await this.checkInGuest.execute({ ownerId: ownerId, id, token: body.token }),
       );
     } catch (error) {
       return mapGuestError(error);

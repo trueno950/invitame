@@ -1,6 +1,10 @@
-import { Body, Controller, Get, Inject, Param, Patch } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, UseGuards } from "@nestjs/common";
 
-import { SessionUserId } from "../../auth/access-control/session-user-id";
+import {
+  InvitationAccessGuard,
+  RequireInvitationPermission,
+} from "../../collaborators/presentation/invitation-access.guard";
+import { InvitationOwnerId } from "../../collaborators/presentation/invitation-scope";
 import {
   GetGuestAlbumUseCase,
   ReviewGuestPhotoUseCase,
@@ -28,6 +32,7 @@ import {
  * cannot tell a malformed id apart from a missing one.
  */
 @Controller("invitations/:id/guest-photos")
+@UseGuards(InvitationAccessGuard)
 export class InvitationsGuestAlbumController {
   constructor(
     @Inject(GetGuestAlbumUseCase) private readonly getAlbum: GetGuestAlbumUseCase,
@@ -40,11 +45,12 @@ export class InvitationsGuestAlbumController {
    * readable: archiving is read-only, never erased (A2).
    */
   @Get()
+  @RequireInvitationPermission("EDIT_CONTENT")
   async read(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id") id: string,
   ): Promise<GuestAlbumReadResponse> {
-    return orGuestAlbumReadNotFound(await this.getAlbum.execute(userId, id));
+    return orGuestAlbumReadNotFound(await this.getAlbum.execute(ownerId, id));
   }
 
   /**
@@ -54,8 +60,9 @@ export class InvitationsGuestAlbumController {
    * 409 `GUEST_ALBUM_FULL` (L26).
    */
   @Patch(":photoId")
+  @RequireInvitationPermission("EDIT_CONTENT")
   async review(
-    @SessionUserId() userId: string,
+    @InvitationOwnerId() ownerId: string,
     @Param("id") id: string,
     @Param("photoId") photoId: string,
     @Body() body: ReviewGuestPhotoDto,
@@ -63,7 +70,7 @@ export class InvitationsGuestAlbumController {
     try {
       return orReviewedGuestPhoto(
         await this.reviewPhoto.execute({
-          ownerId: userId,
+          ownerId: ownerId,
           invitationId: id,
           photoId,
           status: orReviewState(body.status),

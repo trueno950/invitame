@@ -6,6 +6,7 @@ import type { InvitationLivestream } from "../domain/invitation-livestream";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
 import type { InvitationReminders } from "../domain/invitation-reminders";
 import type { PlacePoint } from "../domain/invitation-place";
+import type { InvitationPermission } from "../../collaborators/domain/invitation-collaborator";
 
 /** One stored invitation; `content` is always a JSON object (the `Invitation_content_object` check). */
 export interface InvitationRecord {
@@ -172,6 +173,15 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
 }
 
 /**
+ * One invitation shared with an account, and what that account's own row grants (F12; L17.5). It is the same record the
+ * owner's reads answer, plus the permission set of the accepted collaborator row the query matched — never the owner's
+ * authority, which is not a permission set at all.
+ */
+export interface SharedInvitationRecord extends InvitationRecordWithMusic {
+  readonly permissions: readonly InvitationPermission[];
+}
+
+/**
  * One stored place to write (S2): the content field it belongs to, the label the geocoder answered, and the
  * coordinates. The application validates all of them before the port is asked; the port only persists them.
  */
@@ -204,6 +214,14 @@ export interface InvitationRepository {
 
   /** Every invitation of this owner, newest first; an owner with none gets an empty list. */
   listOwned(ownerId: string): Promise<InvitationRecordWithMusic[]>;
+
+  /**
+   * The invitations another owner shared with this account, newest first, each with the permissions its own accepted and
+   * non-revoked row grants (F12; L17.5). Access is inside the query — the account, the acceptance, and the absence of a
+   * revoke are all in the `WHERE` — so an account can never list an invitation it has no accepted row for, and a revoked
+   * one disappears from the list on the next request.
+   */
+  listSharedWith(userId: string): Promise<SharedInvitationRecord[]>;
 
   /**
    * Replaces the content of a DRAFT or a PUBLISHED invitation, in one statement whose `WHERE` names the owner

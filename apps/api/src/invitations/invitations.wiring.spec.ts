@@ -10,6 +10,11 @@ import { NestFactory } from "@nestjs/core";
 import { AuthService } from "@thallesp/nestjs-better-auth";
 
 import { AppModule } from "../app.module";
+import {
+  INVITATION_ACCESS_RESOLVER,
+  StoredInvitationAccessResolver,
+} from "../collaborators/application/invitation-access";
+import { InvitationAccessGuard } from "../collaborators/presentation/invitation-access.guard";
 import { createApp } from "../app.setup";
 import { CATALOG_PUBLIC_READER } from "../catalog/application/public/catalog-public-reader";
 import { createConfigModule } from "../config/config.module";
@@ -338,6 +343,15 @@ describe("InvitationsModule wiring", () => {
       assert.ok(
         context.get<PlaceSearchRateLimiter>(PLACE_SEARCH_RATE_LIMITER, { strict: false }) instanceof
           PrismaPlaceSearchRateLimiter,
+      );
+      // The one invitation access resolver every route of this module consults, and the guard its controller declares,
+      // come from the collaborators module (F12; L17.4): this module imports it and never binds a resolver of its own.
+      assert.ok(
+        context.get(INVITATION_ACCESS_RESOLVER, { strict: false }) instanceof
+          StoredInvitationAccessResolver,
+      );
+      assert.ok(
+        context.get(InvitationAccessGuard, { strict: false }) instanceof InvitationAccessGuard,
       );
       assert.ok(
         context.get(InMemoryPlaceSearchCache, { strict: false }) instanceof

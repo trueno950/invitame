@@ -58,6 +58,10 @@ class MemoryInvitationRepository implements InvitationRepository {
     return Promise.reject(new Error("listOwned is not used by the RSVP use cases"));
   }
 
+  listSharedWith(): Promise<never[]> {
+    return Promise.reject(new Error("listSharedWith is not used by the RSVP use cases"));
+  }
+
   updateContent(): Promise<InvitationRecordWithMusic | null> {
     return Promise.reject(new Error("updateContent is not used by the RSVP use cases"));
   }
