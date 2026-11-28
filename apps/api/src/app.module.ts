@@ -4,6 +4,7 @@ import { AdminModule } from "./admin/admin.module";
 import { AccessControlModule } from "./auth/access-control/access-control.module";
 import { registerAuthModule } from "./auth/auth.registration";
 import { CatalogModule } from "./catalog/catalog.module";
+import { CollaboratorsModule } from "./collaborators/collaborators.module";
 import { createConfigModule } from "./config/config.module";
 import { PrismaModule } from "./database/prisma.module";
 import { EmailModule } from "./email/email.module";
@@ -46,6 +47,9 @@ export class AppModule {
         // contract the invitations and media modules consume, and serves `/admin/settings`. It imports the admin
         // module for the audit recorder and nothing imports it back.
         SettingsModule,
+        // The co-hosts (F12; S2.12, L17): the collaborator table, its routes, and the one authorization resolver the
+        // invitation, media, and payments modules import.
+        CollaboratorsModule,
         InvitationsModule,
         PaymentsModule,
       ],
