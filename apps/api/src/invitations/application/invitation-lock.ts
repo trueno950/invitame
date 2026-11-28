@@ -27,6 +27,12 @@ export interface StoredInvitationLock {
   readonly passwordVersion: number;
   /** The stored content, so the lock screen can name the celebration without a second read (L18.3). */
   readonly content: JsonObject;
+  /**
+   * The current address a previous one must redirect to (F11; L15.3), or null when the requested address already is the
+   * current one. A locked read carries it so the web can send the guest to the address its own access cookie is scoped
+   * to before drawing the lock screen: a cookie set at a renamed address never reaches the current one.
+   */
+  readonly redirectTo: string | null;
 }
 
 /**
@@ -48,6 +54,8 @@ export type InvitationPasswordGateDecision =
       readonly locked: true;
       /** The only invitation data a locked answer carries (L18.3), or null when the content names nobody. */
       readonly displayName: string | null;
+      /** The current address the web redirects to before drawing the lock screen (F11; L15.3), when one applies. */
+      readonly redirectTo: string | null;
     };
 
 /**
@@ -85,6 +93,10 @@ export class InvitationPasswordGate {
 
     return admitted
       ? { locked: false }
-      : { locked: true, displayName: lockScreenDisplayName(lock.content) };
+      : {
+          locked: true,
+          displayName: lockScreenDisplayName(lock.content),
+          redirectTo: lock.redirectTo,
+        };
   }
 }

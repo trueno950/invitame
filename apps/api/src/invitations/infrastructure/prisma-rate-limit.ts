@@ -54,3 +54,25 @@ export async function consumeRateLimit(
 
   return rows.length === 1;
 }
+
+/**
+ * Gives one already counted event back to `key`, so a caller counts only the events that should stay counted — the unlock
+ * route refunds an attempt that turned out to be a correct code. The refund touches only a row still inside its window
+ * and never lets a count go below zero; a key with no row, or a window that already ended, changes nothing. A store
+ * failure is an error, never a silent allow.
+ */
+export async function refundRateLimit(
+  prisma: PrismaClient,
+  key: string,
+  rule: RateLimitRule,
+): Promise<void> {
+  const windowStart = Date.now() - rule.window * 1000;
+
+  await prisma.$executeRaw`
+    UPDATE "RateLimit"
+    SET "count" = "count" - 1
+    WHERE "key" = ${key}
+      AND "lastRequest" > ${windowStart}
+      AND "count" > 0
+  `;
+}

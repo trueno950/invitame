@@ -90,21 +90,40 @@ describe("the owner's access-code answers (L18.1, L18.5)", () => {
 });
 
 describe("the locked answer (L18.2, L18.3)", () => {
-  it("is 423 and carries the lock state and the display name, and nothing else", () => {
+  it("is 423 and carries the lock state, the display name, and no redirect for a current address", () => {
     assert.throws(
-      () => invitationLocked("Ana y Luis"),
+      () => invitationLocked("Ana y Luis", null),
       (error: unknown) =>
         error instanceof HttpException &&
         error.getStatus() === HttpStatus.LOCKED &&
         JSON.stringify(error.getResponse()) ===
-          JSON.stringify({ code: "INVITATION_LOCKED", displayName: "Ana y Luis" }),
+          JSON.stringify({
+            code: "INVITATION_LOCKED",
+            displayName: "Ana y Luis",
+            redirectTo: null,
+          }),
     );
     assert.throws(
-      () => invitationLocked(null),
+      () => invitationLocked(null, null),
       (error: unknown) =>
         error instanceof HttpException &&
         JSON.stringify(error.getResponse()) ===
-          JSON.stringify({ code: "INVITATION_LOCKED", displayName: null }),
+          JSON.stringify({ code: "INVITATION_LOCKED", displayName: null, redirectTo: null }),
+    );
+  });
+
+  it("carries the current address a previous one must redirect to before the lock screen (F11; L15.3)", () => {
+    assert.throws(
+      () => invitationLocked("Ana y Luis", "boda-protegida"),
+      (error: unknown) =>
+        error instanceof HttpException &&
+        error.getStatus() === HttpStatus.LOCKED &&
+        JSON.stringify(error.getResponse()) ===
+          JSON.stringify({
+            code: "INVITATION_LOCKED",
+            displayName: "Ana y Luis",
+            redirectTo: "boda-protegida",
+          }),
     );
   });
 });

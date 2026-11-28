@@ -41,6 +41,12 @@ export interface InvitationLockedResponse {
    * stored content names nobody, so the lock screen shows its generic line.
    */
   displayName: string | null;
+  /**
+   * The current address a previous one must redirect to before the lock screen (F11; L15.3), or null when the request
+   * already names the current address. The web redirects first so the access cookie it sets lives at the address the
+   * invitation is served from: a cookie scoped to a renamed address never reaches the current one.
+   */
+  redirectTo: string | null;
 }
 
 /**
@@ -84,12 +90,13 @@ export function orInvitationPasswordState(
 }
 
 /**
- * The locked answer of one public request (L18.2, L18.3): 423 Locked with only the lock state and the display name. It
- * is thrown from the guard, before the route runs, so a locked request reads, writes, uploads, or counts nothing.
+ * The locked answer of one public request (L18.2, L18.3): 423 Locked with only the lock state, the display name, and the
+ * current address a previous one must redirect to. It is thrown from the guard, before the route runs, so a locked
+ * request reads, writes, uploads, or counts nothing.
  */
-export function invitationLocked(displayName: string | null): never {
+export function invitationLocked(displayName: string | null, redirectTo: string | null): never {
   throw new HttpException(
-    { code: "INVITATION_LOCKED", displayName } satisfies InvitationLockedResponse,
+    { code: "INVITATION_LOCKED", displayName, redirectTo } satisfies InvitationLockedResponse,
     HttpStatus.LOCKED,
   );
 }

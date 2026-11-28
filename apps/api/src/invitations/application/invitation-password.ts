@@ -11,6 +11,21 @@ import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 // The comparison is `crypto.timingSafeEqual` over the two derived keys, which always have the same length, so the
 // comparison never depends on where two values differ and no byte of a stored hash is a timing oracle.
 
+/**
+ * The bounds a *stored* hash's parameters must satisfy before they are used (they are read from the database, so a row
+ * written around the API must not be able to make this process allocate an unbounded amount of memory). A value outside
+ * them is treated as no usable hash, and the invitation stays locked instead of opening.
+ */
+export const INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS = {
+  N: { minimum: 2 ** 14, maximum: 2 ** 15 },
+  r: { minimum: 1, maximum: 16 },
+  p: { minimum: 1, maximum: 4 },
+} as const;
+const ACCEPTED_N = INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS.N;
+const ACCEPTED_R = INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS.r;
+const ACCEPTED_P = INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS.p;
+const ACCEPTED_KEY_LENGTH = { minimum: 32, maximum: 64 };
+
 /** The scrypt cost this deployment writes for a new access code. */
 export const INVITATION_PASSWORD_SCRYPT = {
   /** CPU/memory cost: 2^14, the interactive-login profile of RFC 7914 §2 (about 16 MB and a few tens of ms). */
@@ -21,8 +36,17 @@ export const INVITATION_PASSWORD_SCRYPT = {
   p: 1,
   /** The derived key width in bytes. */
   keyLength: 64,
-  /** The upper bound scrypt may allocate; stated so a raised cost never meets Node's lower default silently. */
-  maxMemory: 64 * 1024 * 1024,
+  /**
+   * The upper bound scrypt may allocate, derived from the widest stored parameters this deployment accepts rather than
+   * stated apart from them: Node refuses a derivation whose `128 * r * (N + p + 2)` bytes exceed `maxmem`, and a bound
+   * that disagreed with the parser would turn a readable row into a thrown error instead of a locked invitation.
+   */
+  maxMemory:
+    128 *
+    INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS.r.maximum *
+    (INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS.N.maximum +
+      INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS.p.maximum +
+      2),
 } as const;
 
 /** The random salt width of one access code: 128 bits, a fresh salt for every password. */
@@ -30,16 +54,6 @@ export const INVITATION_PASSWORD_SALT_BYTES = 16;
 
 /** The first field of every encoded hash; a value without it is not a hash this deployment wrote. */
 export const INVITATION_PASSWORD_HASH_PREFIX = "scrypt";
-
-/**
- * The bounds a *stored* hash's parameters must satisfy before they are used (they are read from the database, so a row
- * written around the API must not be able to make this process allocate an unbounded amount of memory). A value outside
- * them is treated as no usable hash, and the invitation stays locked instead of opening.
- */
-const ACCEPTED_N = { minimum: 2 ** 14, maximum: 2 ** 18 };
-const ACCEPTED_R = { minimum: 1, maximum: 16 };
-const ACCEPTED_P = { minimum: 1, maximum: 4 };
-const ACCEPTED_KEY_LENGTH = { minimum: 32, maximum: 64 };
 
 /** The random source minting reads; injected so a test can observe the salt width. */
 export type PasswordRandomBytes = (size: number) => Buffer;
@@ -141,8 +155,7 @@ function parseStoredHash(
  * Hashes one already validated access code (L18.1): the encoded scrypt value with a fresh random salt and the current
  * cost. The plain value is used here and nowhere else — it is not stored, returned, or logged by this function or its
  * caller — and the same code hashed twice answers two different values.
- */
-export async function hashInvitationPassword(
+ */ export async function hashInvitationPassword(
   password: string,
   random: PasswordRandomBytes = randomBytes,
 ): Promise<string> {
@@ -178,9 +191,15 @@ export async function verifyInvitationPassword(
     return false;
   }
   const password = typeof presented === "string" ? presented.trim() : "";
-  const derived = await deriveKey(password, parsed.salt, parsed.parameters);
+  try {
+    const derived = await deriveKey(password, parsed.salt, parsed.parameters);
 
-  return derived.length === parsed.key.length && timingSafeEqual(derived, parsed.key);
+    return derived.length === parsed.key.length && timingSafeEqual(derived, parsed.key);
+  } catch {
+    // A derivation this process cannot perform is a code that does not match: failing closed locks the invitation, and a
+    // thrown error would answer a status the neutral refusal never uses.
+    return false;
+  }
 }
 
 /**

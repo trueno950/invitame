@@ -1025,24 +1025,36 @@ control character — live in `apps/api/src/invitations/domain/invitation-passwo
 - `Invitation.passwordHash` stores the encoded `crypto.scrypt` value — `scrypt$<N>$<r>$<p>$<salt>$<key>`, with a fresh
   random 16-byte salt per password and the cost the API writes (`N=16384`, `r=8`, `p=1`, 64-byte key) — and never the
   plain code. The parameters travel inside the value, so a later cost raise verifies against the cost each row was
-  written with and needs no migration. The comparison is `crypto.timingSafeEqual` over two derived keys of the same
-  width.
+  written with and needs no migration. The widest stored `N`, `r`, and `p` the verifier accepts and the `maxmem` it
+  passes are one rule: `maxmem` is derived from them (`128 * r * (N + p + 2)`), so a row the parser accepts can never
+  make Node refuse the derivation, and any scrypt failure during verification answers false instead of throwing. The
+  comparison is `crypto.timingSafeEqual` over two derived keys of the same width.
 - The columns live on `Invitation` and not on `InvitationFeatureSettings` on purpose: the feature settings are writable
   through the features `PUT` by any collaborator holding `EDIT_CONTENT`, and the code decides who may see the invitation
   at all, so no collaborator may set, replace, or remove it. The access code's two routes are owner-only.
 - `Invitation.passwordVersion` is `INTEGER NOT NULL DEFAULT 0` and every set, replace, and removal raises it in the
   statement that writes (`passwordVersion: { increment: 1 }`), so two concurrent writes still leave a version above both
-  reads. The access token is an HMAC-SHA256 over the invitation id, this number, and the expiry, keyed with
+  reads. Setting and clearing are one `updateMany` each whose `WHERE` carries the id, the owner, and not-ARCHIVED, so an
+  invitation archived between the owner's read and the write matches no row and a code can never land on an archived
+  invitation; the statement's count is zero, and the status is read only to answer the archived refusal or the null. The
+  access token is an HMAC-SHA256 over the invitation id, this number, and the expiry, keyed with
   `INVITATION_ACCESS_SECRET`; the gate compares the token's version with the stored one, so a changed or removed code
   invalidates every token minted before it.
 - The two CHECK constraints keep a row written around the API from storing a value no verifier can read:
   `Invitation_password_hash_format` (`passwordHash IS NULL OR passwordHash LIKE 'scrypt$%'`) and
   `Invitation_password_version` (`passwordVersion >= 0`). A stored value the verifier cannot parse reads as no usable
   hash, which locks the invitation instead of opening it.
-- The lock read is one statement (`infrastructure/prisma-invitation-lock.repository.ts`): the invitation id, the hash, the
-  version, and the content, for a row that is PUBLISHED and whose current slug or any previous slug
-  (`InvitationSlugAlias`) is the requested address. It is the only statement of the API that reads `passwordHash`, and
-  nothing returns it.
+- The lock read (`infrastructure/prisma-invitation-lock.repository.ts`) resolves the requested address exactly as the
+  public read does: the current slug first, in one query on its unique index, then — only when no invitation currently
+  holds it — through `InvitationSlugAlias` and its invitation, and only a PUBLISHED row. It answers the invitation id, the
+  hash, the version, the content, and the current slug a previous address redirects to (null for a current address). It
+  is the only statement of the API that reads `passwordHash`, and nothing returns it.
+- The unlock spends two budgets on the shared `RateLimit` table before it reads the lock: 10 failed attempts per 15
+  minutes per client address and requested address, and 30 failed attempts per 15 minutes per client address across every
+  address. The keys carry the `unlock|` prefix, a SHA-256 of the client address, and a SHA-256 of the requested address
+  (known or unknown) or the shared `all` scope, so no key names an invitation, an address, or a person. Only failures stay
+  counted: an unlock whose code matched refunds both counts, so a successful unlock never spends a budget. A value no
+  code can be is refused before either budget, and when no client address resolves the cross-address cap is not spent.
 - Nothing is deleted and no row is rewritten: the removal clears the hash, raises the version, and keeps the invitation
   exactly where it is (archived stays archived, published stays published).
 - The capability is the `PASSWORD_PROTECTION` key, granted to Deluxe by the migration (`ON CONFLICT DO NOTHING`) and

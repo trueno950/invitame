@@ -270,25 +270,42 @@ describe("SetInvitationPasswordUseCase (L18.1, L18.5)", () => {
 });
 
 describe("ClearInvitationPasswordUseCase (L18.1, L18.5)", () => {
-  it("removes the code, raises the version, and does not need the catalog key", async () => {
+  it("removes a stored code after the catalog withdrew the key, and raises the version", async () => {
     const invitations = new MemoryInvitations();
     invitations.seed();
     const catalog = new MemoryCatalog();
-    // The package withdrew the key: the owner must still be able to open their own invitation again.
+    // The code is set while the package still grants the key, so there really is a code to remove.
+    await setUseCase(invitations, catalog).execute({
+      ownerId: OWNER,
+      id: INVITATION,
+      password: PASSWORD,
+    });
+    assert.equal(
+      invitations.stored.length,
+      1,
+      "a code must be set before its removal proves anything",
+    );
+    assert.equal(await verifyInvitationPassword(invitations.stored[0]?.hash ?? "", PASSWORD), true);
+    // The package withdraws the key: setting a new code is refused, and the owner must still be able to open their own
+    // invitation again.
     catalog.keys = [];
-    await setUseCase(invitations, catalog)
-      .execute({
-        ownerId: OWNER,
-        id: INVITATION,
-        password: PASSWORD,
-      })
-      .catch(() => undefined);
+    await assert.rejects(
+      () =>
+        setUseCase(invitations, catalog).execute({
+          ownerId: OWNER,
+          id: INVITATION,
+          password: "otra-clave",
+        }),
+      InvitationPasswordNotAvailableError,
+    );
+
     const state = await new ClearInvitationPasswordUseCase(invitations).execute({
       ownerId: OWNER,
       id: INVITATION,
     });
 
-    assert.deepEqual(state, { passwordProtected: false, passwordVersion: 1 });
+    assert.deepEqual(state, { passwordProtected: false, passwordVersion: 2 });
+    assert.equal(invitations.stored.length, 1, "the removal stores no new hash");
   });
 
   it("answers null for an id that names nothing or another owner's invitation (A4)", async () => {

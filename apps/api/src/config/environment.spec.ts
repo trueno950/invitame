@@ -614,6 +614,39 @@ describe("validateEnvironment", () => {
       }
     });
 
+    it("refuses the development default in production, without echoing it", () => {
+      const published = "invitame-local-invitation-access-secret";
+
+      assertRejectedWithoutEcho(
+        productionEnvironment({ INVITATION_ACCESS_SECRET: published }),
+        "INVITATION_ACCESS_SECRET must differ from the development default.",
+        published,
+      );
+      // The same value is still what development and test fall back to, so a local checkout keeps working.
+      assert.equal(
+        validateEnvironment(environmentWith({ NODE_ENV: "development" })).INVITATION_ACCESS_SECRET,
+        published,
+      );
+    });
+
+    it("must differ from the payments webhook secret, without echoing either", () => {
+      const webhookSecret = randomBytes(32).toString("base64url");
+      const environment = productionEnvironment({
+        PAYMENTS_MODE: "mercadopago",
+        MERCADOPAGO_ACCESS_TOKEN: randomBytes(32).toString("base64url"),
+        MERCADOPAGO_WEBHOOK_SECRET: webhookSecret,
+        PAYMENTS_WEBHOOK_BASE_URL: "https://api.example.test",
+        PAYMENTS_RETURN_BASE_URL: "https://app.example.test",
+        INVITATION_ACCESS_SECRET: webhookSecret,
+      });
+
+      assertRejectedWithoutEcho(
+        environment,
+        "INVITATION_ACCESS_SECRET must differ from MERCADOPAGO_WEBHOOK_SECRET.",
+        webhookSecret,
+      );
+    });
+
     it("must differ from every other server secret, without echoing either", () => {
       const cases: Array<[Record<string, unknown>, string]> = [
         [

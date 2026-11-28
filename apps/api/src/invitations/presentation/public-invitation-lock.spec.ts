@@ -13,7 +13,12 @@ import { createApp } from "../../app.setup";
 import { createConfigModule } from "../../config/config.module";
 import { PublicGuestAlbumController } from "../../media/presentation/public-guest-album.controller";
 import { UnlockInvitationUseCase } from "../application/invitation-unlock.use-cases";
-import type { InvitationUnlockRateLimiter } from "../application/invitation-unlock-rate-limiter";
+import {
+  INVITATION_UNLOCK_CLIENT_SCOPE,
+  type InvitationUnlockRateLimiter,
+  invitationUnlockRateLimitRule,
+  invitationUnlockScope,
+} from "../application/invitation-unlock-rate-limiter";
 import {
   createInvitationAccessTokens,
   INVITATION_ACCESS_TOKEN_LIFETIME_SECONDS,
@@ -159,17 +164,33 @@ class MemoryLockReader implements InvitationLockReader {
   }
 }
 
-/** The unlock limit on its own counter, so the assertions observe the cap and not the shared table (L18.3). */
+/** The unlock limit on its own counters, so the assertions observe the caps and not the shared table (L18.3). */
 class MemoryUnlockRateLimiter implements InvitationUnlockRateLimiter {
   readonly attempts = new Map<string, number>();
-  max = 10;
 
   async consume(scope: string, clientAddress: string): Promise<boolean> {
     const key = `${scope}|${clientAddress}`;
     const count = (this.attempts.get(key) ?? 0) + 1;
+
+    if (count > invitationUnlockRateLimitRule(scope).max) {
+      return false;
+    }
     this.attempts.set(key, count);
 
-    return count <= this.max;
+    return true;
+  }
+
+  async refund(scope: string, clientAddress: string): Promise<void> {
+    const key = `${scope}|${clientAddress}`;
+    const count = this.attempts.get(key) ?? 0;
+
+    if (count > 0) {
+      this.attempts.set(key, count - 1);
+    }
+  }
+
+  count(scope: string, clientAddress: string): number {
+    return this.attempts.get(`${scope}|${clientAddress}`) ?? 0;
   }
 }
 
@@ -196,13 +217,16 @@ describe("the locked state of the public invitation routes (F13; L18.2, L18.3, L
       passwordHash,
       passwordVersion: 3,
       content: { coupleNameOne: "Ana", coupleNameTwo: "Luis", message: "Los esperamos" },
+      redirectTo: null,
     });
-    // A previous address of the same invitation: the gate reads it exactly like the current one (F11; L15.2).
+    // A previous address of the same invitation: the gate reads it exactly like the current one and carries the current
+    // address the web must redirect to before the lock screen (F11; L15.2, L15.3).
     locks.locks.set(ALIAS_SLUG, {
       invitationId: INVITATION,
       passwordHash,
       passwordVersion: 3,
       content: { coupleNameOne: "Ana", coupleNameTwo: "Luis" },
+      redirectTo: LOCKED_SLUG,
     });
     // An invitation without an access code: nothing changes for it (L18.2).
     locks.locks.set(OPEN_SLUG, {
@@ -210,6 +234,7 @@ describe("the locked state of the public invitation routes (F13; L18.2, L18.3, L
       passwordHash: null,
       passwordVersion: 0,
       content: { celebrantName: "Emilia" },
+      redirectTo: null,
     });
 
     const spy = (token: Type<unknown>, value: unknown): Provider => ({
@@ -357,14 +382,19 @@ describe("the locked state of the public invitation routes (F13; L18.2, L18.3, L
         answers.push(`${route.key}: ${response.status}`);
         continue;
       }
-      // The body is exactly the lock: no slug, no content, no features, no id, no guest.
-      assert.deepEqual(body, { code: "INVITATION_LOCKED", displayName: DISPLAY_NAME }, route.key);
+      // The body is exactly the lock: no slug, no content, no features, no id, no guest, and no redirect for the address
+      // the guest already asked for.
+      assert.deepEqual(
+        body,
+        { code: "INVITATION_LOCKED", displayName: DISPLAY_NAME, redirectTo: null },
+        route.key,
+      );
       assert.equal(after, before, `${route.key} ran its use case while locked`);
     }
     assert.deepEqual(answers, [], "every gated route answers 423 while the invitation is locked");
   });
 
-  it("gates a previous address of the same invitation exactly like the current one (F11; L15.2)", async () => {
+  it("answers a previous address with the current one to redirect to before the lock screen (F11; L15.2, L15.3)", async () => {
     for (const route of routes) {
       if (EXEMPT_ROUTES.includes(route.key)) {
         continue;
@@ -373,7 +403,11 @@ describe("the locked state of the public invitation routes (F13; L18.2, L18.3, L
       const body: unknown = await response.json();
 
       assert.equal(response.status, 423, route.key);
-      assert.deepEqual(body, { code: "INVITATION_LOCKED", displayName: DISPLAY_NAME }, route.key);
+      assert.deepEqual(
+        body,
+        { code: "INVITATION_LOCKED", displayName: DISPLAY_NAME, redirectTo: LOCKED_SLUG },
+        route.key,
+      );
     }
   });
 
@@ -486,6 +520,60 @@ describe("the locked state of the public invitation routes (F13; L18.2, L18.3, L
     const page = await send(read, LOCKED_SLUG, unlocked.accessToken);
     await page.arrayBuffer();
     assert.equal(page.status, 404, "the minted token opens the invitation");
+  });
+
+  /** One unlock attempt through the route, with the client address the limit reads. */
+  function unlock(slug: string, password: string, clientAddress: string): Promise<Response> {
+    return fetch(`${baseUrl}/public/invitations/${slug}/unlock`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": clientAddress },
+      body: JSON.stringify({ password }),
+    });
+  }
+
+  it("refuses a code wider than any code with the neutral 401, before it spends a budget (L18.3)", async () => {
+    const address = "198.18.0.301";
+    const response = await unlock(LOCKED_SLUG, "a".repeat(10_000), address);
+
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { code: "INVITATION_PASSWORD_REJECTED" });
+    // A value no code can be is refused before the hash and before the attempt is counted.
+    assert.equal(limiter.count(invitationUnlockScope(LOCKED_SLUG), address), 0);
+    assert.equal(limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address), 0);
+  });
+
+  it("lets the eleventh correct unlock from one address through (a success spends no budget)", async () => {
+    const address = "198.18.0.302";
+
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      const accepted = await unlock(LOCKED_SLUG, LOCKED_PASSWORD, address);
+
+      assert.equal(accepted.status, 200, `unlock ${attempt + 1} must succeed`);
+    }
+    assert.equal(limiter.count(invitationUnlockScope(LOCKED_SLUG), address), 0);
+    assert.equal(limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address), 0);
+  });
+
+  it("answers 429 after 30 failures spread across different slugs, with the same neutral body (L18.3)", async () => {
+    const address = "198.18.0.303";
+    const neutral = { code: "INVITATION_PASSWORD_REJECTED" };
+
+    // Ten failures at each of three different slugs: the per-address caps are spent and the cap across every address is
+    // what refuses the thirtieth-first attempt at a fourth slug.
+    for (const slug of [LOCKED_SLUG, ALIAS_SLUG, OPEN_SLUG]) {
+      for (let failure = 0; failure < 10; failure += 1) {
+        const refused = await unlock(slug, "no-es-la-clave", address);
+
+        assert.equal(refused.status, 401, `${slug} failure ${failure + 1}`);
+        assert.deepEqual(await refused.json(), neutral);
+      }
+    }
+    assert.equal(limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address), 30);
+
+    const over = await unlock("no-existe", "no-es-la-clave", address);
+
+    assert.equal(over.status, 429, "varying the slug buys no fresh budget");
+    assert.deepEqual(await over.json(), neutral);
   });
 
   it("answers the same neutral body for a wrong code and for an attempt over the cap (L18.3)", async () => {

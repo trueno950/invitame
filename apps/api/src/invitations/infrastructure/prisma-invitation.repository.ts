@@ -455,62 +455,69 @@ export class PrismaInvitationRepository implements InvitationRepository {
   }
 
   /**
-   * Stores the encoded access-code hash and raises the password version, in one statement scoped by the owner (F13;
-   * L18.1, L18.2). The raise is part of the statement, so two concurrent writes still leave a version above both reads and
-   * every token minted before either write stops opening the invitation.
+   * Stores the encoded access-code hash and raises the password version, in one statement whose `WHERE` names the id, the
+   * owner, and a row that is not archived (F13; L18.1, L18.2). Carrying the archived refusal inside the statement is what
+   * closes the race a read-then-write leaves open: an invitation archived between the owner's read and this write matches
+   * no row, so a code can never land on an archived invitation. The raise is part of the statement, so two concurrent
+   * writes still leave a version above both reads and every token minted before either write stops opening the invitation.
    */
   async setPassword(
     ownerId: string,
     id: string,
     passwordHash: string,
   ): Promise<InvitationPasswordState | null> {
-    return this.prisma.$transaction(async (tx) => {
-      const stored = await tx.invitation.findFirst({
-        where: { id, ownerId },
-        select: INVITATION_SELECT,
-      });
-      if (stored === null) {
-        return null;
-      }
-      // State the rule now so the caller gets the real reason: only an archived invitation is refused (A2, S7).
-      assertEditable(toRecord(stored).status);
-
-      const updated = await tx.invitation.update({
-        where: { id },
-        data: { passwordHash, passwordVersion: { increment: 1 } },
-        select: { passwordHash: true, passwordVersion: true },
-      });
-
-      return {
-        passwordProtected: updated.passwordHash !== null,
-        passwordVersion: updated.passwordVersion,
-      };
+    const { count } = await this.prisma.invitation.updateMany({
+      where: { id, ownerId, status: { not: "ARCHIVED" } },
+      data: { passwordHash, passwordVersion: { increment: 1 } },
     });
+
+    return count === 0 ? this.passwordWriteMiss(ownerId, id) : this.passwordState(id);
   }
 
-  /** Clears the stored access code and raises the password version, with the same owner scope and refusals (F13). */
+  /**
+   * Clears the stored access code and raises the password version, in one statement with the same id, owner, and
+   * not-archived `WHERE` as `setPassword` (F13; L18.1, L18.2).
+   */
   async clearPassword(ownerId: string, id: string): Promise<InvitationPasswordState | null> {
-    return this.prisma.$transaction(async (tx) => {
-      const stored = await tx.invitation.findFirst({
-        where: { id, ownerId },
-        select: INVITATION_SELECT,
-      });
-      if (stored === null) {
-        return null;
-      }
-      assertEditable(toRecord(stored).status);
-
-      const updated = await tx.invitation.update({
-        where: { id },
-        data: { passwordHash: null, passwordVersion: { increment: 1 } },
-        select: { passwordHash: true, passwordVersion: true },
-      });
-
-      return {
-        passwordProtected: updated.passwordHash !== null,
-        passwordVersion: updated.passwordVersion,
-      };
+    const { count } = await this.prisma.invitation.updateMany({
+      where: { id, ownerId, status: { not: "ARCHIVED" } },
+      data: { passwordHash: null, passwordVersion: { increment: 1 } },
     });
+
+    return count === 0 ? this.passwordWriteMiss(ownerId, id) : this.passwordState(id);
+  }
+
+  /**
+   * The answer of a write whose one statement matched no row: another owner's id and an id that names nothing answer null
+   * without saying which, and an archived invitation states its own refusal (A2, A4). The stored status is read only to
+   * tell those two answers apart.
+   */
+  private async passwordWriteMiss(ownerId: string, id: string): Promise<null> {
+    const stored = await this.prisma.invitation.findFirst({
+      where: { id, ownerId },
+      select: { status: true },
+    });
+
+    if (stored?.status === "ARCHIVED") {
+      throw new InvitationNotEditableError("ARCHIVED");
+    }
+
+    return null;
+  }
+
+  /** The state one access-code write leaves, carrying only whether a code is set and its version (never the hash). */
+  private async passwordState(id: string): Promise<InvitationPasswordState | null> {
+    const stored = await this.prisma.invitation.findUnique({
+      where: { id },
+      select: { passwordHash: true, passwordVersion: true },
+    });
+
+    return stored === null
+      ? null
+      : {
+          passwordProtected: stored.passwordHash !== null,
+          passwordVersion: stored.passwordVersion,
+        };
   }
 
   async archive(ownerId: string, id: string): Promise<InvitationRecordWithMusic | null> {

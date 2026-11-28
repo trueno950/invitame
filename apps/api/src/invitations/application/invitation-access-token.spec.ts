@@ -70,13 +70,16 @@ describe("the invitation access token (L18.2)", () => {
 
   it("refuses an edited version, an edited expiry, an edited MAC, and a token of another secret", () => {
     const minted = tokens.mint(INVITATION, 3, issuedAt);
-    const [prefix, version, expiry, mac] = minted.token.split(".");
+    const [prefix, version, expiry, mac = ""] = minted.token.split(".");
     const later = Number(expiry) + 10 ** 6;
+    // One byte of the MAC flipped, deterministically: the value is never a literal that could coincide with the real one.
+    const flippedMac = `${mac[0] === "A" ? "B" : "A"}${mac.slice(1)}`;
+    assert.notEqual(flippedMac, mac);
 
     for (const presented of [
       `${prefix}.4.${expiry}.${mac}`,
       `${prefix}.3.${later}.${mac}`,
-      `${prefix}.3.${expiry}.${mac?.slice(0, -2)}AA`,
+      `${prefix}.3.${expiry}.${flippedMac}`,
       "not-a-token",
       "",
       `${prefix}.3.${expiry}`,

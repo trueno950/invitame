@@ -1551,7 +1551,7 @@ describe("invitations routes: /invitations", () => {
     })
     class InvitationsTestModule {}
 
-    app = await createApp(InvitationsTestModule, { logger: false, abortOnError: false });
+    app = await createApp(InvitationsTestModule, { logger: false });
     await app.listen(0, "127.0.0.1");
     baseUrl = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   });

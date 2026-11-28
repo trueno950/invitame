@@ -91,7 +91,7 @@ export class InvitationLockGuard implements CanActivate {
     );
 
     if (decision.locked) {
-      invitationLocked(decision.displayName);
+      invitationLocked(decision.displayName, decision.redirectTo);
     }
 
     return true;

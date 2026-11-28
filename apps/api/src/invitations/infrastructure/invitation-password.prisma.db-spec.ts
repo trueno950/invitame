@@ -15,10 +15,19 @@ import {
   ClearInvitationPasswordUseCase,
   SetInvitationPasswordUseCase,
 } from "../application/invitation-password.use-cases";
+import {
+  INVITATION_UNLOCK_CLIENT_RATE_LIMIT,
+  INVITATION_UNLOCK_CLIENT_SCOPE,
+  INVITATION_UNLOCK_RATE_LIMIT,
+  INVITATION_UNLOCK_RATE_LIMIT_KEY_PREFIX,
+  invitationUnlockRateLimitKey,
+  invitationUnlockScope,
+} from "../application/invitation-unlock-rate-limiter";
 import type { CatalogPackageEntitlements } from "../application/invitation-catalog";
 import type { InvitationCatalog } from "../application/invitation-catalog";
 import { InvitationNotEditableError } from "../domain/invitation.errors";
 import { PrismaInvitationLockRepository } from "./prisma-invitation-lock.repository";
+import { PrismaInvitationUnlockRateLimiter } from "./prisma-invitation-unlock-rate-limiter";
 import { PrismaInvitationRepository } from "./prisma-invitation.repository";
 
 // The access code on real PostgreSQL (F13; S2.13, L18.1, L18.2, L18.5): the two additive columns of the migration, the
@@ -57,6 +66,7 @@ describe("the access code on real PostgreSQL (F13; S2.13, L18.1, L18.2)", () => 
   const packageIds: string[] = [];
   const featureIds: string[] = [];
   const invitationIds: string[] = [];
+  const rateLimitKeys: string[] = [];
   let sequence = 0;
 
   after(async () => {
@@ -75,7 +85,10 @@ describe("the access code on real PostgreSQL (F13; S2.13, L18.1, L18.2)", () => 
       await prisma.feature.deleteMany({ where: { id: { in: featureIds } } });
       await prisma.rateLimit.deleteMany({
         where: {
-          OR: invitationIds.map((id) => ({ key: { startsWith: `unlock|invitation:${id}|` } })),
+          OR: [
+            ...(rateLimitKeys.length === 0 ? [] : [{ key: { in: rateLimitKeys } }]),
+            ...invitationIds.map((id) => ({ key: { startsWith: `unlock|invitation:${id}|` } })),
+          ],
         },
       });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
@@ -343,21 +356,53 @@ describe("the access code on real PostgreSQL (F13; S2.13, L18.1, L18.2)", () => 
 
       const byCurrent = await locks.findLockBySlug(invitation.slug);
       assert.equal(byCurrent?.invitationId, invitation.id);
+      // The hash the row stores is the hash the lock answers, and the version travels with it.
       assert.equal(byCurrent?.passwordHash, hash);
       assert.equal(byCurrent?.passwordVersion, 1);
       assert.deepEqual(byCurrent?.content, { coupleNameOne: "Ana", coupleNameTwo: "Luis" });
+      // The current address needs no redirect.
+      assert.equal(byCurrent?.redirectTo, null);
 
-      // A previous address of the same invitation answers the same lock (F11; L15.2).
+      // A previous address of the same invitation answers the same lock and carries the current address to redirect to
+      // before the lock screen (F11; L15.2, L15.3).
       const previousSlug = newSlug();
       assert.ok(await invitations.renameSlug(ownerId, invitation.id, previousSlug));
+      const byCurrentAfterRename = await locks.findLockBySlug(previousSlug);
+      assert.equal(byCurrentAfterRename?.invitationId, invitation.id);
+      assert.equal(byCurrentAfterRename?.passwordHash, hash);
+      assert.equal(byCurrentAfterRename?.redirectTo, null);
       const byPrevious = await locks.findLockBySlug(invitation.slug);
       assert.equal(byPrevious?.invitationId, invitation.id);
-      assert.equal((await locks.findLockBySlug(previousSlug))?.invitationId, invitation.id);
+      assert.equal(byPrevious?.passwordHash, hash);
+      assert.equal(byPrevious?.redirectTo, previousSlug);
+
+      // An archived invitation keeps no visible lock, exactly like the public read.
+      const { invitation: archived, ownerId: archivedOwner } = await newInvitation();
+      await invitations.setPassword(
+        archivedOwner,
+        archived.id,
+        await hashInvitationPassword("clave"),
+      );
+      assert.ok(await invitations.archive(archivedOwner, archived.id));
+      assert.equal(await locks.findLockBySlug(archived.slug), null);
 
       // A draft is not visible, so it has no lock to read, and neither does an unknown address.
       const { invitation: draft } = await newInvitation({ publish: false });
       assert.equal(await locks.findLockBySlug(draft.slug), null);
       assert.equal(await locks.findLockBySlug(`f13-unknown-${runId}`), null);
+
+      // A previous address whose invitation was unpublished answers no lock either, exactly like the public read: the
+      // alias is kept, and the status alone decides whether anything is served.
+      const { invitation: reopened, ownerId: reopenedOwner } = await newInvitation();
+      await invitations.setPassword(
+        reopenedOwner,
+        reopened.id,
+        await hashInvitationPassword("clave"),
+      );
+      const leftBehind = reopened.slug;
+      assert.ok(await invitations.renameSlug(reopenedOwner, reopened.id, newSlug()));
+      assert.ok(await invitations.unpublish(reopenedOwner, reopened.id));
+      assert.equal(await locks.findLockBySlug(leftBehind), null);
     });
 
     it("locks a stored code and opens it with a token minted for the stored version", async () => {
@@ -368,6 +413,7 @@ describe("the access code on real PostgreSQL (F13; S2.13, L18.1, L18.2)", () => 
       assert.deepEqual(await gate.check(invitation.slug, undefined), {
         locked: true,
         displayName: "Ana y Luis",
+        redirectTo: null,
       });
       assert.deepEqual(await gate.check(invitation.slug, tokens.mint(invitation.id, 1).token), {
         locked: false,
@@ -378,6 +424,7 @@ describe("the access code on real PostgreSQL (F13; S2.13, L18.1, L18.2)", () => 
       assert.deepEqual(await gate.check(invitation.slug, tokens.mint(invitation.id, 1).token), {
         locked: true,
         displayName: "Ana y Luis",
+        redirectTo: null,
       });
 
       // And a removal opens it again, because there is no code to enforce.
@@ -395,7 +442,94 @@ describe("the access code on real PostgreSQL (F13; S2.13, L18.1, L18.2)", () => 
       assert.deepEqual(await gate.check(invitation.slug, undefined), {
         locked: true,
         displayName: "Ana y Luis",
+        redirectTo: null,
       });
+    });
+  });
+
+  describe("the unlock limiter on the shared RateLimit table (L18.3)", () => {
+    const limiter = new PrismaInvitationUnlockRateLimiter(prisma);
+
+    it("counts 10 failures per client address and requested address, and gives a success back", async () => {
+      assert.deepEqual(INVITATION_UNLOCK_RATE_LIMIT, { window: 900, max: 10 });
+      assert.deepEqual(INVITATION_UNLOCK_CLIENT_RATE_LIMIT, { window: 900, max: 30 });
+      const scope = invitationUnlockScope(`f13-limit-${runId}`);
+      const address = `f13-limit-address-a-${runId}`;
+      const key = invitationUnlockRateLimitKey(scope, address);
+      rateLimitKeys.push(key);
+
+      for (let attempt = 0; attempt < INVITATION_UNLOCK_RATE_LIMIT.max; attempt += 1) {
+        assert.equal(await limiter.consume(scope, address), true, `attempt ${attempt + 1}`);
+      }
+      // Over the cap the store answers false and writes nothing.
+      assert.equal(await limiter.consume(scope, address), false);
+      assert.equal((await prisma.rateLimit.findUniqueOrThrow({ where: { key } })).count, 10);
+
+      // A successful unlock refunds its own count, so only failures stay counted.
+      await limiter.refund(scope, address);
+      assert.equal((await prisma.rateLimit.findUniqueOrThrow({ where: { key } })).count, 9);
+      assert.equal(await limiter.consume(scope, address), true);
+
+      // The key holds the prefix and no plain address or slug.
+      assert.equal(key.startsWith(INVITATION_UNLOCK_RATE_LIMIT_KEY_PREFIX), true);
+      assert.equal(key.includes(address), false);
+      assert.equal(key.includes("f13-limit-"), false);
+    });
+
+    it("counts 30 failures across every address under the shared scope", async () => {
+      const address = `f13-limit-address-b-${runId}`;
+      const key = invitationUnlockRateLimitKey(INVITATION_UNLOCK_CLIENT_SCOPE, address);
+      rateLimitKeys.push(key);
+
+      for (let attempt = 0; attempt < INVITATION_UNLOCK_CLIENT_RATE_LIMIT.max; attempt += 1) {
+        assert.equal(await limiter.consume(INVITATION_UNLOCK_CLIENT_SCOPE, address), true);
+      }
+      assert.equal(await limiter.consume(INVITATION_UNLOCK_CLIENT_SCOPE, address), false);
+      assert.equal(key.startsWith(`${INVITATION_UNLOCK_RATE_LIMIT_KEY_PREFIX}all|`), true);
+      assert.equal((await prisma.rateLimit.findUniqueOrThrow({ where: { key } })).count, 30);
+    });
+  });
+
+  describe("the owner's writes close the archive race (A2, F13)", () => {
+    it("refuses a code whose statement lost a race to an archive, leaving the archived row without one", async () => {
+      const { invitation, ownerId } = await newInvitation({ publish: false });
+      const hash = await hashInvitationPassword("clave-familiar");
+      let markArchived!: () => void;
+      const archivedRowWritten = new Promise<void>((resolve) => {
+        markArchived = resolve;
+      });
+      let releaseArchive!: () => void;
+      const hold = new Promise<void>((resolve) => {
+        releaseArchive = resolve;
+      });
+      // The archive holds the row lock until the write has reached it; the write then re-checks its own `WHERE` against
+      // the committed status, which is exactly the race the previous read-then-write left open.
+      const archiving = prisma.$transaction(
+        async (tx) => {
+          await tx.invitation.updateMany({
+            where: { id: invitation.id },
+            data: { status: "ARCHIVED", archivedAt: new Date() },
+          });
+          markArchived();
+          await hold;
+        },
+        { timeout: 15_000 },
+      );
+
+      await archivedRowWritten;
+      const writing = invitations.setPassword(ownerId, invitation.id, hash);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      releaseArchive();
+      await archiving;
+
+      await assert.rejects(writing, InvitationNotEditableError);
+      const stored = await prisma.invitation.findUniqueOrThrow({
+        where: { id: invitation.id },
+        select: { status: true, passwordHash: true, passwordVersion: true },
+      });
+      assert.equal(stored.status, "ARCHIVED");
+      assert.equal(stored.passwordHash, null, "no code lands on an archived invitation");
+      assert.equal(stored.passwordVersion, 0);
     });
   });
 });

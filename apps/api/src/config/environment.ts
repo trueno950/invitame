@@ -425,8 +425,9 @@ function parseInvitationAccessSecret(environment: Record<string, unknown>): stri
 }
 
 /**
- * The rules the access-token key shares with the other server secrets (F13; L18.2): production must name one, and a leaked
- * key must never also sign sessions, prove a web-to-API request, or sign a payment event.
+ * The rules the access-token key shares with the other server secrets (F13; L18.2): production must name one, a leaked key
+ * must never also sign sessions, prove a web-to-API request, sign a payment event, or be the value this repository
+ * publishes, and production must never keep the published development default.
  */
 function validateInvitationAccessSecret(
   secret: string | undefined,
@@ -435,6 +436,7 @@ function validateInvitationAccessSecret(
     BETTER_AUTH_SECRET: string;
     AUTH_PROXY_SECRET: string | undefined;
     AUTH_PROXY_SECRET_PREVIOUS: string | undefined;
+    PAYMENTS: PaymentsEnvironment;
   },
 ): string {
   if (secret === undefined) {
@@ -444,11 +446,22 @@ function validateInvitationAccessSecret(
 
     return DEFAULT_INVITATION_ACCESS_SECRET;
   }
+  if (
+    nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION &&
+    secret === DEFAULT_INVITATION_ACCESS_SECRET
+  ) {
+    throw new Error("INVITATION_ACCESS_SECRET must differ from the development default.");
+  }
+  const paymentsWebhookSecret =
+    environment.PAYMENTS.mode === PAYMENTS_MODE.MERCADOPAGO
+      ? environment.PAYMENTS.webhookSecret
+      : undefined;
   const collision = (
     [
       ["BETTER_AUTH_SECRET", environment.BETTER_AUTH_SECRET],
       ["AUTH_PROXY_SECRET", environment.AUTH_PROXY_SECRET],
       ["AUTH_PROXY_SECRET_PREVIOUS", environment.AUTH_PROXY_SECRET_PREVIOUS],
+      ["MERCADOPAGO_WEBHOOK_SECRET", paymentsWebhookSecret],
     ] as const
   ).find(([, candidate]) => candidate === secret);
 

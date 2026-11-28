@@ -1,4 +1,4 @@
-import { IsString, MaxLength } from "class-validator";
+import { IsString } from "class-validator";
 
 /**
  * `PUT /invitations/:id/password` body (F13; S2.13, L18.1): the plain access code the owner sets or replaces. The value is
@@ -12,12 +12,11 @@ export class SetInvitationPasswordDto {
 }
 
 /**
- * `POST /public/invitations/:slug/unlock` body (F13; L18.2): the access code a guest was given. The bound keeps one request
- * from spending the verifier on a body far wider than any code and keeps the neutral refusal about the code itself; a
- * value over it is a malformed request (400), which says nothing about any invitation.
+ * `POST /public/invitations/:slug/unlock` body (F13; L18.2): the access code a guest was given. Only the shape is checked
+ * here; the width the domain accepts (4 to 40 characters, no control character) is the use case's own rule, so a value
+ * that cannot be a code answers the same neutral 401 as a wrong one instead of a body error that distinguishes it.
  */
 export class UnlockInvitationDto {
   @IsString()
-  @MaxLength(200)
   password!: string;
 }

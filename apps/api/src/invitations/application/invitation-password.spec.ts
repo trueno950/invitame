@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
-import { describe, it } from "node:test";
+import crypto, { randomBytes } from "node:crypto";
+import { describe, it, mock } from "node:test";
 
 import {
   hashInvitationPassword,
@@ -8,6 +8,7 @@ import {
   INVITATION_PASSWORD_HASH_PREFIX,
   INVITATION_PASSWORD_SCRYPT,
   INVITATION_PASSWORD_SALT_BYTES,
+  INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS,
   spendInvitationPasswordVerification,
   verifyInvitationPassword,
 } from "./invitation-password";
@@ -112,13 +113,59 @@ describe("verifyInvitationPassword (L18.1, L18.4)", () => {
   });
 
   it("verifies against the cost the stored hash was written with, not the current one", async () => {
-    // A row written when the deployment used a lower cost keeps opening its invitation.
+    // A row written with a cost this deployment no longer writes keeps opening its invitation. The cost is deliberately
+    // a different N than the writer's default, so a verifier that ignored the stored parameters would answer false.
     const { scryptSync } = await import("node:crypto");
+    const storedCost = { N: 2 ** 15, r: 8, p: 1 };
+    assert.notEqual(storedCost.N, INVITATION_PASSWORD_SCRYPT.N);
     const salt = randomBytes(INVITATION_PASSWORD_SALT_BYTES);
-    const key = scryptSync(PASSWORD, salt, 64, { N: 16_384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
-    const stored = `scrypt$16384$8$1$${salt.toString("base64url")}$${key.toString("base64url")}`;
+    const key = scryptSync(PASSWORD, salt, INVITATION_PASSWORD_SCRYPT.keyLength, {
+      ...storedCost,
+      maxmem: INVITATION_PASSWORD_SCRYPT.maxMemory,
+    });
+    const stored = `scrypt$${storedCost.N}$${storedCost.r}$${storedCost.p}$${salt.toString("base64url")}$${key.toString("base64url")}`;
 
     assert.equal(await verifyInvitationPassword(stored, PASSWORD), true);
+    assert.equal(await verifyInvitationPassword(stored, "otra-clave"), false);
+  });
+
+  it("accepts no stored cost that asks scrypt for more memory than the verifier passes", () => {
+    // Node refuses a derivation whose `128 * r * (N + p + 2)` bytes exceed `maxmem`, and that refusal must be a
+    // parameter the parser already rejected, never an error thrown out of a verification.
+    const bounds = INVITATION_PASSWORD_STORED_SCRYPT_BOUNDS;
+    const cost = INVITATION_PASSWORD_SCRYPT;
+
+    for (const N of [bounds.N.minimum, bounds.N.maximum]) {
+      for (const r of [bounds.r.minimum, bounds.r.maximum]) {
+        for (const p of [bounds.p.minimum, bounds.p.maximum]) {
+          assert.ok(
+            128 * r * (N + p + 2) <= cost.maxMemory,
+            `N=${N} r=${r} p=${p} must fit within maxmem=${cost.maxMemory}`,
+          );
+        }
+      }
+    }
+    assert.ok(
+      128 * cost.r * (cost.N + cost.p + 2) <= cost.maxMemory,
+      "the cost this deployment writes must fit the same bound",
+    );
+  });
+
+  it("answers false, never throws, when scrypt fails during verification", async () => {
+    // A value the process cannot derive is a code that does not match: failing closed locks the invitation, and an
+    // error out of the route would answer a status the neutral refusal never uses.
+    const stored = await hashInvitationPassword(PASSWORD);
+    const failing = mock.method(crypto, "scrypt", (...args: unknown[]) => {
+      const callback = args.at(-1) as (error: Error, derived?: Buffer) => void;
+      callback(new Error("scrypt is unavailable"));
+    });
+
+    try {
+      assert.equal(await verifyInvitationPassword(stored, PASSWORD), false);
+      assert.equal(await spendInvitationPasswordVerification(PASSWORD), false);
+    } finally {
+      failing.mock.restore();
+    }
   });
 });
 

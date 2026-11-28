@@ -39,7 +39,11 @@ factor, and it closes every public route of the invitation. Four properties had 
    verification reads the cost each row was written with. Verification is `crypto.timingSafeEqual` over two derived keys
    of the same width; a stored value the verifier cannot parse answers false, which locks the invitation instead of
    opening it, and a stored hash is bounded so a row written around the API cannot make the process allocate without
-   limit. The plain value is never stored, logged, or returned; the owner sees it once, while setting it.
+   limit. That bound and the accepted stored parameters are one rule, not two: the `maxmem` the verifier passes is
+   derived from the widest stored `N`, `r`, and `p` it accepts (`128 * r * (N + p + 2)`), so a row the parser accepts can
+   never make Node refuse the derivation, and any scrypt failure during verification answers "does not match" (false)
+   rather than throwing a status the neutral refusal never uses. The plain value is never stored, logged, or returned;
+   the owner sees it once, while setting it.
 
 3. The token is an HMAC-SHA256 over the invitation id, the password version, and the expiry.
    `invaccess1.<version>.<expiry>.<mac>`, keyed with `INVITATION_ACCESS_SECRET`, valid for 30 days
@@ -52,28 +56,45 @@ factor, and it closes every public route of the invitation. Four properties had 
 4. The gate runs at the HTTP boundary of every public invitation route.
    `InvitationLockGuard` (`apps/api/src/invitations/presentation/invitation-lock.guard.ts`) is declared on both public
    invitation controllers, so a route added later is gated by default. It reads one lock — the invitation id, the hash,
-   the version, and the content, for a PUBLISHED row whose current or previous address matches — and answers 423 with the
-   lock state and one display name and nothing else. The route's handler never runs on a locked request, so no read,
-   write, upload, or opening count happens. The two personal-link routes and the unlock route are the only exemptions,
-   declared one by one, and the HTTP suite reads the registered controllers and fails when a public route is neither
-   gated nor one of those three. A lock read that fails is an error, never a pass: the guard refuses a request it cannot
-   judge instead of serving an invitation that may be locked.
+   the version, and the content — and resolves the requested address exactly as the public read does: the current slug
+   first, in one query on its unique index, and only a slug no invitation currently holds through
+   `InvitationSlugAlias` and its invitation, for a PUBLISHED row. A previous address answers the same lock and no other
+   invitation than the page would serve. The locked answer is 423 with the lock state, one display name, and the current
+   address a previous one must redirect to (null for a current address); the route's handler never runs on a locked
+   request, so no read, write, upload, or opening count happens. The two personal-link routes and the unlock route are
+   the only exemptions, declared one by one, and the HTTP suite reads the registered controllers and fails when a public
+   route is neither gated nor one of those three. A lock read that fails is an error, never a pass: the guard refuses a
+   request it cannot judge instead of serving an invitation that may be locked.
 
-5. The locked answer carries exactly one invitation fact: a display name.
+5. The locked answer carries exactly two invitation facts: a display name and, for a renamed address, the current one.
    The celebrant's name, the baby's name, or the couple's two names joined with « y », collapsed to one line and cut to 80
    characters (`lockScreenDisplayName`), or null when the stored content names nobody. Nothing else — no date, no place,
-   no message, no guest, no id, no slug, no feature — travels to a locked client, and the display name is computed from
-   the stored content alone, so the lock screen says who is celebrating without saying what the invitation contains.
+   no message, no guest, no id, no slug of the request, no feature — travels to a locked client, and the display name is
+   computed from the stored content alone, so the lock screen says who is celebrating without saying what the invitation
+   contains. The redirect target is the current slug when the guest asked for a previous one, so the web sends the browser
+   there before drawing the lock screen: the access cookie it sets is scoped to the invitation's own path, and a cookie
+   set at a renamed address would never reach the address the invitation is served from.
 
-6. Attempts are counted before anything is verified, and every refusal looks the same.
-   10 attempts per 15 minutes per client address and invitation on the shared `RateLimit` table, under a key of its own
-   that holds a SHA-256 of the address and, when no published invitation holds the requested address, a SHA-256 of that
-   address instead of an id
-   (`apps/api/src/invitations/application/invitation-unlock-rate-limiter.ts`). A wrong code, an address no invitation
-   holds, and an invitation with no code answer one neutral body `{ code: "INVITATION_PASSWORD_REJECTED" }`, after the
-   same scrypt work — a dummy verification keeps the timing of the "nothing to verify" paths — and only an exhausted
-   budget changes the status (429), which is the pattern the open RSVP and the guestbook already use for their own
-   per-address limits. The unlock answer is a token and its expiry; nothing about the invitation comes back with it.
+6. Attempts are counted before anything is read or verified, and every refusal looks the same.
+   Two exhausted budgets are checked, in this order, before the lock is read and before any hashing work: 10 failed
+   attempts per 15 minutes per client address and requested address, and 30 failed attempts per 15 minutes per client
+   address across every address, so varying the slug cannot buy a fresh budget
+   (`apps/api/src/invitations/application/invitation-unlock-rate-limiter.ts`). Both live on the shared `RateLimit` table
+   under keys of their own holding a SHA-256 of the client address and, per address, a SHA-256 of the requested address —
+   never the address itself, and never a fact that says whether an invitation exists; an address no invitation holds
+   spends both budgets exactly like a known one. Only failures stay counted: an unlock whose code matched refunds both
+   counts, so a family sharing one venue address is not locked out by its own correct unlocks and one correct code does
+   not reset an almost-spent budget. A value no code can be — not a string, wider than the domain maximum of 40
+   characters, shorter than its minimum of 4, or carrying a control character — answers the neutral refusal before the
+   budgets, the lock read, and the hasher, so a request that could never open an invitation costs nothing. When no client
+   address resolves, the cap that spans every address is not spent: the public forms hash the shared `unknown` value into
+   a key that also names their invitation, so their fallback bucket spans one invitation, and a bucket that spanned every
+   invitation would let one caller exhaust every guest's budget; the per-address budget still applies. A wrong code, an
+   address no invitation holds, and an invitation with no code answer one neutral body
+   `{ code: "INVITATION_PASSWORD_REJECTED" }`, after the same scrypt work — a dummy verification keeps the timing of the
+   "nothing to verify" paths — and only an exhausted budget changes the status (429), which is the pattern the open RSVP
+   and the guestbook already use for their own per-address limits. The unlock answer is a token and its expiry; nothing
+   about the invitation comes back with it.
 
 7. The token travels in a header and the web keeps it out of reach of scripts.
    `X-Invitation-Access` on the public routes, set by the web from its own `HttpOnly`, `Secure`, `SameSite=Lax` cookie
@@ -92,9 +113,10 @@ factor, and it closes every public route of the invitation. Four properties had 
 - The invitation id, the password version, and the expiry are the only facts the token binds. Rotating
   `INVITATION_ACCESS_SECRET` ends every guest's unlock at once, and there is no previous-key window; a rotated code or a
   removal ends the tokens of one invitation. Both are documented in the runbook.
-- Every public invitation request costs one extra query for the lock. That is deliberate: the gate must know whether the
-  invitation is locked before the route reads, renders, or writes anything, and it must do so from stored state rather
-  than from a cached decision, so a code set a second ago protects the page on the next request.
+- Every public invitation request costs one extra lock read (one query for a current address, two when the address is a
+  previous one). That is deliberate: the gate must know whether the invitation is locked before the route reads, renders,
+  or writes anything, and it must do so from stored state rather than from a cached decision, so a code set a second ago
+  protects the page on the next request.
 - The gate protects the invitation's own routes, not an object's URL. Guest photos and gallery images are served by
   opaque asset ids through `/media/:assetId`, which carries no slug and knows nothing about a password; a locked read
   answers no photo URL at all, so no new id reaches a guest, and an id a guest already had before the code was set keeps
@@ -108,4 +130,5 @@ factor, and it closes every public route of the invitation. Four properties had 
   account semantics — there is no reset by email, no per-person code, and no second factor, because a guest who loses the
   code asks the owner for it.
 - A locked invitation is still discoverable as a slug: the 423 confirms that the address exists and is protected. That is
-  the price of drawing a lock screen instead of a 404, and the display name is the one fact it carries.
+  the price of drawing a lock screen instead of a 404, and the display name and (for a previous address) the current
+  address to redirect to are the only facts it carries.

@@ -547,9 +547,13 @@ administrator sign-in.
 - Limits are per database, shared by every API instance; the background-task cap is per process.
 - The public forms count on the same `RateLimit` table with their own key prefixes: the open RSVP and the guestbook
   allow 10 submissions per hour per client address and invitation, the guest album counts its own hourly cap, and the
-  unlock route of a password-protected invitation allows 10 attempts per 15 minutes per client address and invitation
-  (F13; L18.3). The unlock key names the invitation id, or a SHA-256 digest of the requested address when no published
-  invitation holds it, so the budget never reveals whether an invitation exists.
+  unlock route of a password-protected invitation allows 10 failed attempts per 15 minutes per client address and
+  requested address plus 30 failed attempts per 15 minutes per client address across every address (F13; L18.3), so
+  varying the slug cannot buy a fresh budget. Both unlock budgets are spent before the lock is read, and an unlock whose
+  code matched refunds both, so only failures stay counted. The per-address key names a SHA-256 digest of the requested
+  address — known or unknown, so the budget never reveals whether an invitation exists — and the cap across addresses
+  names none. An address the request cannot supply does not spend the cross-address cap: the fallback bucket of the public
+  forms is scoped to one invitation, while a cross-address bucket would let one caller exhaust every guest's budget.
 
 ### Email delivery (current)
 
@@ -714,17 +718,23 @@ Public URL /i/<slug>
 The locked state of a password-protected invitation (F13; S2.13, L18.2, L18.3)
   → every public invitation route of the API declares InvitationLockGuard (invitations/presentation/
     invitation-lock.guard.ts), which runs after the global session guard and before the route's handler
-  → the guard asks one gate (application/invitation-lock.ts) about the address the request names: one query reads the
-    invitation id, its stored access-code hash, its password version, and its content, for a PUBLISHED row whose current
-    or previous slug matches
+  → the guard asks one gate (application/invitation-lock.ts) about the address the request names: it resolves the address
+    exactly as the public read does — the current slug first, then a previous one through InvitationSlugAlias — and reads
+    the invitation id, its stored access-code hash, its password version, and its content, for a PUBLISHED row
   → an invitation with no code, and an address no visible invitation holds, pass through unchanged, so the route answers
     exactly what it always answered
-  → a coded invitation without a token the deployment minted answers 423 { code: "INVITATION_LOCKED", displayName } and
-    nothing else: the display name is the celebrant's, the baby's, or the couple's names ("Ana y Luis"), never the date,
-    the places, the message, a guest, or an id, and the route's own read, write, upload, or opening count never runs
-  → POST /public/invitations/:slug/unlock exchanges the shared code for an access token: 10 attempts per 15 minutes per
-    client address and invitation on the shared RateLimit store (429 over it), a wrong code 401, and both refusals carry
-    the same neutral body { code: "INVITATION_PASSWORD_REJECTED" } and only the status differs
+  → a coded invitation without a token the deployment minted answers 423
+    { code: "INVITATION_LOCKED", displayName, redirectTo } and nothing else: the display name is the celebrant's, the
+    baby's, or the couple's names ("Ana y Luis"), never the date, the places, the message, a guest, or an id, and
+    redirectTo is the current slug when the guest asked for a previous one (null otherwise), so the web redirects before
+    drawing the lock screen and its access cookie lives at the address the invitation is served from; the route's own
+    read, write, upload, or opening count never runs
+  → POST /public/invitations/:slug/unlock exchanges the shared code for an access token: 10 failed attempts per 15
+    minutes per client address and requested address plus 30 failed attempts per 15 minutes per client address across
+    every address, both on the shared RateLimit store and both spent before the lock is read (429 over either), a value
+    no code can be and a wrong code answer 401, and both refusals carry the same neutral body
+    { code: "INVITATION_PASSWORD_REJECTED" } and only the status differs; a correct code refunds both counts, so only
+    failures stay counted
   → the token is HMAC-SHA256 over the invitation id, the stored password version, and a 30-day expiry, keyed with
     INVITATION_ACCESS_SECRET; a changed or removed code raises the version and invalidates every older token
   → the web sends it in the X-Invitation-Access header from its own HttpOnly, Secure, SameSite=Lax cookie scoped to the
@@ -1342,16 +1352,24 @@ The full design is [ADR 0006](../adr/0006-invitation-access-code.md).
   invitation route is gated by default, and the two personal-link routes plus the unlock route are the only exemptions
   (a personal link already carries a secret of its own). While a code is set, the public read, the open RSVP, the
   guestbook signature, the guests' album upload, the calendar file (through the read it is built from), and any later
-  public invitation endpoint answer 423 with the lock state and one display name and no other invitation data.
+  public invitation endpoint answer 423 with the lock state, one display name, and the current address a previous one
+  must redirect to, and no other invitation data. The lock read resolves the address exactly as the public read does:
+  the current slug first, then a previous one.
 - The token (L18.2): `POST /public/invitations/:slug/unlock` answers an HMAC-SHA256 token over the invitation id, the
   stored password version, and a 30-day expiry, keyed with `INVITATION_ACCESS_SECRET`. The gate accepts it in the
   `X-Invitation-Access` header; the web keeps it in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie scoped to that
   invitation's path. The invitation id is never inside the token, so a token minted for one invitation cannot open
   another even at the same version, and an edited field fails the MAC.
-- The attempts (L18.3): 10 per 15 minutes per client address and invitation on the shared `RateLimit` store. The attempt
-  is counted before anything else, an unknown address is limited under a digest of itself, and a wrong code, an unknown
-  address, and an invitation with no code all answer the same neutral body after the same scrypt work, so neither the
-  body nor the timing is an oracle.
+- The attempts (L18.3): 10 failed attempts per 15 minutes per client address and requested address, plus 30 failed
+  attempts per 15 minutes per client address across every address, on the shared `RateLimit` store. Both budgets are
+  spent before the lock is read and before any hashing work, so no request of the route is free and a script cannot
+  probe the store or the verifier; a value no code can be (wider than 40 characters, shorter than 4, or carrying a
+  control character) is refused before either. An unlock whose code matched refunds both counts, so only failures stay
+  counted and guests behind one venue address are not locked out by their own correct unlocks. The per-address key holds
+  a digest of the requested address, known or unknown; when no client address resolves the cross-address cap is not spent,
+  because the public forms' fallback bucket spans one invitation and a bucket spanning every invitation would let one
+  caller exhaust every guest's budget. A wrong code, an unknown address, and an invitation with no code all answer the
+  same neutral body after the same scrypt work, so neither the body nor the timing is an oracle.
 - The gating (L18.5): the `PASSWORD_PROTECTION` key, granted to Deluxe. It gates setting a code (409
   `PASSWORD_PROTECTION_NOT_AVAILABLE` without it); a stored code keeps protecting after the key is withdrawn, and the
   owner can still remove it.
@@ -1360,11 +1378,14 @@ The full design is [ADR 0006](../adr/0006-invitation-access-code.md).
   tries each gated route without a token (423 with the display name, and the route's use case never running), with a
   token of another invitation, of an older version, or an expired one (423), and with a valid token (the handler runs);
   `application/invitation-password.spec.ts`, `invitation-access-token.spec.ts`, `invitation-unlock.use-cases.spec.ts`,
-  `invitation-password.use-cases.spec.ts`, and `presentation/invitation-password.response.spec.ts` prove the hash, the
-  token, the attempt order, the neutral refusals, and the owner's two writes;
+  `invitation-password.use-cases.spec.ts`, and `presentation/invitation-password.response.spec.ts` prove the hash (the
+  accepted cost stays inside the `maxmem` the verifier passes, and a scrypt failure answers "does not match"), the
+  token, the order of the two budgets and the refund of a successful unlock, the neutral refusals, the redirect target of
+  a locked previous address, and the owner's two writes;
   `infrastructure/invitation-password.prisma.db-spec.ts` proves the migration's columns and checks, the version raise,
-  the owner scope and archived refusal, the lock read by current and previous address, and the withdrawn-key case on real
-  PostgreSQL; `collaborators/presentation/invitation-authorization.matrix.spec.ts` proves both owner routes are
+  the owner scope and archived refusal (including a write that lost a race to an archive), the lock read by current and
+  previous address with the hash mapping and the PUBLISHED rule, and the unlock limiter's two rules, key, and prefix on
+  real PostgreSQL; `collaborators/presentation/invitation-authorization.matrix.spec.ts` proves both owner routes are
   owner-only across its nine callers.
 
 ## Administrator invitation status view (current)
