@@ -39,6 +39,7 @@ import {
   publishIssueMessages,
   unpublishInvitation,
 } from "./invitations.ts";
+import { OWNER_ACCESS as OWNER_ACCESS_FIXTURE } from "./invitation-access.ts";
 import { NAVIGATION_COPY } from "./navigation-copy.ts";
 import { templateChoiceCards } from "./template-preview.ts";
 import { chooserOccasions, resolveChooserStep, stepHref } from "./template-steps.ts";
@@ -238,12 +239,17 @@ const RENDERER = {
 };
 
 /** One row of the list as `GET /invitations` answers it, with what its card renders (T2; S2.6). */
-const LIST_ITEM: InvitationListItem = { ...SUMMARY, ...RENDERER };
+const LIST_ITEM: InvitationListItem = {
+  ...SUMMARY,
+  ...RENDERER,
+  access: OWNER_ACCESS_FIXTURE,
+};
 
 const OWNED: OwnedInvitation = {
   ...SUMMARY,
   content: { celebrantName: "Ana" },
   missingRequiredFields: ["age", "date", "time", "location", "address", "mainPhoto", "message"],
+  access: OWNER_ACCESS_FIXTURE,
   timeZone: "America/Mexico_City",
   slugRenamesRemaining: 5,
   featureSettings: { whatsappPhone: null, playlistUrl: null },
@@ -631,6 +637,7 @@ describe("invitationRows", () => {
           statusLabel: "Borrador",
           publicHref: null,
           createdOn: "11 nov 2026",
+          shared: false,
         },
         {
           id: ID,
@@ -642,6 +649,7 @@ describe("invitationRows", () => {
           statusLabel: "Publicada",
           publicHref: "/i/invitacion-k7m2qx",
           createdOn: "11 nov 2026",
+          shared: false,
         },
         {
           id: ID,
@@ -653,9 +661,26 @@ describe("invitationRows", () => {
           statusLabel: "Archivada",
           publicHref: null,
           createdOn: "11 nov 2026",
+          shared: false,
         },
       ],
     );
+  });
+
+  it("marks an invitation another owner shared with the caller, in words as well as in tone (F12; L17.5)", () => {
+    const owned = invitationRows([LIST_ITEM])[0];
+    const shared = invitationRows([
+      {
+        ...LIST_ITEM,
+        access: { role: "COLLABORATOR", permissions: ["VIEW_ATTENDANCE"] },
+      },
+    ])[0];
+
+    assert.equal(owned?.shared, false);
+    assert.equal(shared?.shared, true);
+    // A shared invitation still links to its own editor and lists exactly as it did (L17.5).
+    assert.equal(shared?.href, owned?.href);
+    assert.equal(shared?.title, owned?.title);
   });
 
   it("names the couple, the baby, or the hosts of the celebration (S2.6)", () => {
@@ -1009,6 +1034,13 @@ function stub(answers: Answers = {}): Stub {
       calls.push("setGuestbookEntryHidden");
       return unexpected("setGuestbookEntryHidden");
     },
+    // The co-hosts' routes (F12; L17.3) belong to their own module, which proves them; this stub only keeps the client
+    // shape whole for the invitation commands these tests drive.
+    collaborators: () => unexpected("collaborators"),
+    inviteCollaborator: () => unexpected("inviteCollaborator"),
+    updateCollaboratorPermissions: () => unexpected("updateCollaboratorPermissions"),
+    revokeCollaborator: () => unexpected("revokeCollaborator"),
+    acceptCollaboration: () => unexpected("acceptCollaboration"),
   };
   return { api, calls };
 }

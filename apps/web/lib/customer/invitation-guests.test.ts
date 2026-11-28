@@ -8,6 +8,7 @@ import type {
   InvitationResult,
   OwnedInvitation,
 } from "../server/invitations-api.ts";
+import { OWNER_ACCESS } from "./invitation-access.ts";
 import {
   createGuest,
   GUEST_PATHS,
@@ -41,6 +42,7 @@ const INVITATION: OwnedInvitation = {
   updatedAt: AT,
   content: { celebrantName: "Ana" },
   missingRequiredFields: [],
+  access: OWNER_ACCESS,
   timeZone: "America/Mexico_City",
   slugRenamesRemaining: 5,
   featureSettings: { whatsappPhone: null, playlistUrl: null },

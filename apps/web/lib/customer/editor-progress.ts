@@ -167,6 +167,21 @@ export function editorProgress(input: EditorProgressInput): EditorProgress {
 }
 
 /**
+ * The guidance of one caller's editor (F12; L17.5). A collaborator holds a subset of the permissions, so it may use a
+ * subset of the tabs, and a step whose tab it cannot open would send it to a panel it does not have. This keeps the
+ * steps of the tabs the caller may use, in their own order, and offers as the next step the first of them that is not
+ * done — nothing at all when every one of them is.
+ */
+export function restrictedProgress(
+  progress: EditorProgress,
+  sections: readonly EditorSection[],
+): EditorProgress {
+  const steps = progress.steps.filter((step) => sections.includes(step.section));
+
+  return { ...progress, steps, next: steps.find((step) => step.state !== "done") };
+}
+
+/**
  * One request to open a field: the field's name and a nonce, so asking for the same field twice focuses it twice. A
  * count instead of a flag keeps the request itself in the editor's state, where a second click is a new fact.
  */

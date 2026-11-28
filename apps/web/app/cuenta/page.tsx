@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { loadAccountView } from "../../lib/customer/account.ts";
+import { isCollaborationAcceptPath } from "../../lib/customer/collaboration.ts";
 import { ACCOUNT_COPY } from "../../lib/customer/copy.ts";
 import { isCheckInPath } from "../../lib/public/guest-pass.ts";
 import { getOwnProfile } from "../../lib/server/session-api.ts";
@@ -32,14 +33,18 @@ export default async function AccountPage() {
     redirect("/ingresar");
   }
 
-  // A visitor who opened a guest's access pass before signing in comes back to it (M6 G4; S4). The one-time store
-  // answers a bare check-in path it validated, never an absolute or arbitrary target, and reading it deletes it, so a
-  // later visit to this page is a plain account page.
+  // A visitor who opened a guest's access pass, or a co-host's acceptance, before signing in comes back to it (M6 G4;
+  // S4, F12; L17.3). The one-time store answers a bare path it validated — a check-in page or the acceptance with one
+  // well-formed token — never an absolute or arbitrary target, and reading it deletes it, so a later visit here is a
+  // plain account page.
   const handle = (await cookies()).get(AFTER_SIGN_IN_COOKIE)?.value;
   const pending =
     handle === undefined
       ? undefined
-      : afterSignIn.take(handle, (path): path is string => isCheckInPath(path));
+      : afterSignIn.take(
+          handle,
+          (path): path is string => isCheckInPath(path) || isCollaborationAcceptPath(path),
+        );
 
   if (pending !== undefined) {
     redirect(pending);

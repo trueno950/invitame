@@ -34,13 +34,20 @@ export interface SessionRefresh {
 
 /**
  * Every page whose server render reads the session through the API (`GET /me` or `PATCH /me`):
- * `/ingresar`, which sends a signed-in visitor to `/cuenta`, and `/cuenta` with everything under it.
+ * `/ingresar`, which sends a signed-in visitor to `/cuenta`, `/cuenta` with everything under it, and
+ * the co-host's acceptance (`/colaboraciones`, which reads the session before it offers its one form; F12).
  * Each such read refreshes the stored session without a cookie for the browser, so the refresh here
  * must run before every one of them. `proxy.ts` repeats this as its static `matcher`, which Next.js
  * requires to be a literal.
  */
 export function isSessionPagePath(pathname: string): boolean {
-  return pathname === "/ingresar" || pathname === "/cuenta" || pathname.startsWith("/cuenta/");
+  return (
+    pathname === "/ingresar" ||
+    pathname === "/cuenta" ||
+    pathname.startsWith("/cuenta/") ||
+    pathname === "/colaboraciones" ||
+    pathname.startsWith("/colaboraciones/")
+  );
 }
 
 /**

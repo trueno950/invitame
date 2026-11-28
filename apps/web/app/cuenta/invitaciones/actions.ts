@@ -31,6 +31,11 @@ import {
   showGuestPhoto,
 } from "../../../lib/customer/guest-album.ts";
 import { hideGuestbookEntry, showGuestbookEntry } from "../../../lib/customer/guestbook.ts";
+import {
+  inviteCollaborator,
+  revokeCollaboratorAccess,
+  saveCollaboratorPermissions,
+} from "../../../lib/customer/collaboration.ts";
 import { guestShareUrl } from "../../../lib/public/guest-pass.ts";
 import { requestOrigin } from "../../../lib/server/request-origin.ts";
 import { guestLinkCookie, guestLinks } from "../../../lib/server/single-use-flash.ts";
@@ -214,4 +219,25 @@ export async function hideGuestPhotoAction(formData: FormData): Promise<void> {
 /** Publishes one hidden guest photo again, coming back to the published tab (F8; L11.6). */
 export async function showGuestPhotoAction(formData: FormData): Promise<void> {
   redirect(await showGuestPhoto(invitations, formData));
+}
+
+/**
+ * Invites one person to collaborate (F12; L17.1, L17.3). The owner's screen posts the address and the marked chips, and
+ * the action asks the API to email the single-use link; the answer is the screen's own notice, never the link.
+ */
+export async function inviteCollaboratorAction(formData: FormData): Promise<void> {
+  redirect(await inviteCollaborator(invitations, formData));
+}
+
+/** Replaces what one collaborator may do (F12; L17.3). */
+export async function saveCollaboratorPermissionsAction(formData: FormData): Promise<void> {
+  redirect(await saveCollaboratorPermissions(invitations, formData));
+}
+
+/**
+ * Revokes one collaborator, whose access ends on that account's next request (F12; L17.3). A collaborator the API no
+ * longer knows comes back as the same confirmation, because the state the owner asked for already holds.
+ */
+export async function revokeCollaboratorAction(formData: FormData): Promise<void> {
+  redirect(await revokeCollaboratorAccess(invitations, formData));
 }

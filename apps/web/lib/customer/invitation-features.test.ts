@@ -9,6 +9,7 @@ import {
   INVITATION_NOTICE_COPY,
 } from "./copy.ts";
 import { featureIssueCodes, featureIssueMessages, featureIssuesTarget } from "./feature-issues.ts";
+import { OWNER_ACCESS } from "./invitation-access.ts";
 import { featureSettingsView, TIME_ZONE_CHOICES, timeZoneLabel } from "./invitation-features.ts";
 import { invitationPageNotices } from "./invitations.ts";
 
@@ -34,6 +35,7 @@ const OWNED: OwnedInvitation = {
   updatedAt: AT,
   content: { celebrantName: "Ana" },
   missingRequiredFields: [],
+  access: OWNER_ACCESS,
   timeZone: "America/Tijuana",
   slugRenamesRemaining: 5,
   featureSettings: { whatsappPhone: "+525512345678", playlistUrl: PLAYLIST },

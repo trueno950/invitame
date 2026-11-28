@@ -462,6 +462,11 @@ export interface InvitationRow {
   /** `/i/<slug>` while the invitation is published; null while it is a draft or archived. */
   publicHref: string | null;
   createdOn: string;
+  /**
+   * Whether another owner shared this invitation with the caller (F12; L17.5): the card marks it «Compartida contigo»,
+   * in words as well as in tone, so a person knows which of the rows are theirs.
+   */
+  shared: boolean;
 }
 
 /**
@@ -487,6 +492,7 @@ export function invitationRows(items: readonly InvitationListItem[]): Invitation
     statusLabel: statusLabel(item.status),
     publicHref: item.status === "PUBLISHED" ? publicInvitationPath(item.slug) : null,
     createdOn: formatDate(item.createdAt),
+    shared: item.access.role === "COLLABORATOR",
   }));
 }
 

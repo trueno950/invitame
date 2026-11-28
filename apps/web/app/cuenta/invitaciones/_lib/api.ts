@@ -99,6 +99,20 @@ export const invitations = {
   ) => logged((api) => api.reviewGuestPhoto(id, photoId, status)),
   setGuestbookEntryHidden: (id: string, entryId: string, hidden: boolean) =>
     logged((api) => api.setGuestbookEntryHidden(id, entryId, hidden)),
+  collaborators: (id: string) => logged((api) => api.collaborators(id)),
+  inviteCollaborator: (
+    id: string,
+    email: string,
+    permissions: Parameters<InvitationsClient["inviteCollaborator"]>[2],
+  ) => logged((api) => api.inviteCollaborator(id, email, permissions)),
+  updateCollaboratorPermissions: (
+    id: string,
+    collaboratorId: string,
+    permissions: Parameters<InvitationsClient["updateCollaboratorPermissions"]>[2],
+  ) => logged((api) => api.updateCollaboratorPermissions(id, collaboratorId, permissions)),
+  revokeCollaborator: (id: string, collaboratorId: string) =>
+    logged((api) => api.revokeCollaborator(id, collaboratorId)),
+  acceptCollaboration: (token: string) => logged((api) => api.acceptCollaboration(token)),
   guests: (id: string) => logged((api) => api.guests(id)),
   createGuest: (id: string, guest: Parameters<InvitationsClient["createGuest"]>[1]) =>
     logged((api) => api.createGuest(id, guest)),

@@ -74,4 +74,26 @@ describe("proxy and the outage notice for the page", () => {
     }
     assert.equal(await headerForPage(pageRequest("/ingresar", { cookie: SESSION_COOKIE })), "1");
   });
+
+  it("refreshes the session of the co-host's acceptance before it renders (F12; L17.3)", async () => {
+    // The acceptance reads the session to decide whether the visitor signs in first, so the proxy that refreshes every
+    // session page runs here too: the outage header proves the refresh happened instead of being skipped.
+    apiStatus = 503;
+    assert.equal(
+      await headerForPage(
+        pageRequest("/colaboraciones/aceptar?token=aaaaaaaaaaaaaaaaaaaaaa", {
+          cookie: SESSION_COOKIE,
+        }),
+      ),
+      "1",
+    );
+
+    apiStatus = 200;
+    assert.equal(
+      await headerForPage(pageRequest("/colaboraciones/aceptar", { cookie: SESSION_COOKIE })),
+      null,
+    );
+    // An anonymous visitor never reaches the API through the proxy, and the page sends them through sign-in itself.
+    assert.equal(await headerForPage(pageRequest("/colaboraciones/aceptar", {})), null);
+  });
 });

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { OwnedInvitation, RsvpRead, RsvpSettings } from "../server/invitations-api.ts";
+import { OWNER_ACCESS } from "./invitation-access.ts";
 import {
+  partySizeLabel,
   RSVP_PATHS,
   rsvpCsvResponse,
   rsvpResponsesView,
@@ -29,6 +31,7 @@ const INVITATION: OwnedInvitation = {
   updatedAt: AT,
   content: { celebrantName: "Ana" },
   missingRequiredFields: [],
+  access: OWNER_ACCESS,
   timeZone: "America/Mexico_City",
   slugRenamesRemaining: 5,
   featureSettings: { whatsappPhone: null, playlistUrl: null },
@@ -79,6 +82,11 @@ const READ: RsvpRead = {
 };
 
 describe("rsvpSettingsView", () => {
+  it("reads the party limit in words, in both numbers the product writes (M6 G3; F12)", () => {
+    assert.equal(partySizeLabel(1), "1 persona");
+    assert.equal(partySizeLabel(2), "2 personas");
+    assert.equal(partySizeLabel(10), "10 personas");
+  });
   it("writes the stored deadline in the invitation's own zone and offers 1 to 10 people", () => {
     const view = rsvpSettingsView(INVITATION, SETTINGS);
 

@@ -36,5 +36,5 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
 // Must be a literal (Next.js reads it at build time); keep it equal to `isSessionPagePath`.
 export const config = {
-  matcher: ["/ingresar", "/cuenta", "/cuenta/:path*"],
+  matcher: ["/ingresar", "/cuenta", "/cuenta/:path*", "/colaboraciones/:path*"],
 };

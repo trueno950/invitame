@@ -255,6 +255,7 @@ export const INVITATION_FEATURE_KEYS = [
   "GUEST_LIST",
   "QR_PASS",
   "GALLERY",
+  "CO_HOSTS",
   "CALENDAR",
 ] as const;
 

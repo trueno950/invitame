@@ -44,6 +44,11 @@ import {
   statusLabel,
 } from "../../../../lib/customer/invitations.ts";
 import {
+  COLLABORATOR_PATHS,
+  editorAccessView,
+  landingSection,
+} from "../../../../lib/customer/collaboration.ts";
+import {
   NO_OMITTABLE_SECTIONS,
   OMITTED_SECTIONS_PROPERTY,
   omittableSectionsOf,
@@ -288,30 +293,44 @@ export default async function InvitationDetailPage({
   }
 
   const invitation = loaded.value;
+  /**
+   * What this caller may use on the invitation (F12; L17.4, L17.5): it owns every capability, and a collaborator holds
+   * only the permissions the API answered. The editor offers the tabs and the actions of this view, and the API checks
+   * every route again — hiding is a convenience, never a guard.
+   */
+  const access = editorAccessView(invitation.access);
   const templates = catalog === "unavailable" || !catalog.ok ? undefined : catalog.value;
   /** The creator catalog's packages, which decide whether the WhatsApp field is offered (F3; S4). */
   const packages =
     packageCatalog === "unavailable" || !packageCatalog.ok ? undefined : packageCatalog.value;
   const features = featureSettingsView(invitation, packages);
-  // The «Asistencia» tab is offered only when the package includes RSVP, and it is read after the catalog because the
-  // package decides whether the page offers it at all (M6 G3; S4).
-  const rsvp = features.showRsvp
-    ? resolveRead(await attempt(() => invitations.readRsvp(invitation.id)))
-    : undefined;
+  // The «Asistencia» tab is offered only when the package includes RSVP and the caller may see who answered, and it is
+  // read after the catalog because the package decides whether the page offers it at all (M6 G3; S4, F12).
+  const rsvp =
+    features.showRsvp && access.canViewAttendance
+      ? resolveRead(await attempt(() => invitations.readRsvp(invitation.id)))
+      : undefined;
   // The limits the two media forms refuse and state, and the gallery cap the section states (M9 T13, T15; S5, S8): read
   // once, from the owner's own route, so the configured size and cap reach the page without a deploy. An archived
   // invitation offers no form, so it asks nothing.
-  const limits = invitation.status === "ARCHIVED" ? null : await mediaLimitsOf(invitation.id);
-  // The «Galería» is offered only when the package grants `GALLERY`, and it is read after the catalog because the
-  // owner read already names the gated keys (M8 S3, S4). A failed read keeps the rest of the draft editable.
+  const limits =
+    invitation.status === "ARCHIVED" || !access.canEditContent
+      ? null
+      : await mediaLimitsOf(invitation.id);
+  // The «Galería» is offered only when the package grants `GALLERY` and the caller may edit the content, and it is read
+  // after the catalog because the owner read already names the gated keys (M8 S3, S4; F12). A failed read keeps the rest
+  // of the draft editable.
   const mediaState: MediaSectionView | "unavailable" | "unreadable" =
-    invitation.availableFeatures.includes("GALLERY")
+    invitation.availableFeatures.includes("GALLERY") && access.canEditContent
       ? await gallerySection(invitation, limits)
       : "unavailable";
-  // The payment state the panel renders is the API's (M7 T2; S1, S4). A read that fails leaves the page as it was,
-  // because the API's own payment gate is what refuses a publication that still owes money: the panel and the
-  // disabled button are a convenience, never the guard.
-  const paymentState = await attempt(() => invitations.payment(invitation.id));
+  // The payment state the panel renders is the API's (M7 T2; S1, S4), and paying is the owner's alone (F12; L17.2), so
+  // a collaborator asks nothing here. A read that fails leaves the page as it was, because the API's own payment gate is
+  // what refuses a publication that still owes money: the panel and the disabled button are a convenience, never the
+  // guard.
+  const paymentState = access.showPayment
+    ? await attempt(() => invitations.payment(invitation.id))
+    : "unavailable";
   const payment =
     paymentState === "unavailable" || !paymentState.ok ? undefined : paymentState.value;
   const paymentPanel = payment === undefined ? undefined : paymentPanelView(payment);
@@ -410,6 +429,7 @@ export default async function InvitationDetailPage({
     invitation.timeZone,
     invitation.featureSettings,
     invitation.status,
+    invitation.access,
     rsvp?.status === "ok" ? rsvp.value.settings : null,
     pinned?.template.publishedVersion.id ?? null,
   ]);
@@ -426,31 +446,44 @@ export default async function InvitationDetailPage({
 
         {!archived ? (
           <EditorShell
+            access={access}
+            allowedSections={access.sections}
             actions={{
               publish: publishInvitationAction,
               unpublish: unpublishInvitationAction,
               archive: archiveInvitationAction,
             }}
             address={
-              <AddressField
-                invitationId={invitation.id}
-                prefix={addressPrefix(addressOrigin)}
-                renamesRemaining={invitation.slugRenamesRemaining}
-                slug={invitation.slug}
-              />
+              access.showAddress ? (
+                <AddressField
+                  invitationId={invitation.id}
+                  prefix={addressPrefix(addressOrigin)}
+                  renamesRemaining={invitation.slugRenamesRemaining}
+                  slug={invitation.slug}
+                />
+              ) : null
             }
             attendance={attendance}
+            collaboratorsHref={
+              access.showCollaborators && invitation.availableFeatures.includes("CO_HOSTS")
+                ? COLLABORATOR_PATHS.page(invitation.id)
+                : undefined
+            }
             content={invitation.content}
             featureView={features}
             gallery={<GallerySectionBlock state={mediaState} />}
             guestListHref={RSVP_PATHS.responses(invitation.id)}
             guestbookHref={
-              features.showGuestbook ? GUESTBOOK_OWNER_PATHS.page(invitation.id) : undefined
+              features.showGuestbook && access.showGuestbook
+                ? GUESTBOOK_OWNER_PATHS.page(invitation.id)
+                : undefined
             }
             guestAlbumHref={
-              features.showGuestAlbum ? GUEST_ALBUM_OWNER_PATHS.page(invitation.id) : undefined
+              features.showGuestAlbum && access.canEditContent
+                ? GUEST_ALBUM_OWNER_PATHS.page(invitation.id)
+                : undefined
             }
-            initialSection={section}
+            initialSection={landingSection(access.sections, section)}
             initialField={focusField}
             invitationId={invitation.id}
             omittable={omittable}
@@ -469,7 +502,7 @@ export default async function InvitationDetailPage({
               />
             }
             payment={
-              paymentPanel === undefined ? null : (
+              paymentPanel === undefined || !access.showPayment ? null : (
                 <PaymentPanel
                   action={startCheckoutAction}
                   invitationId={invitation.id}

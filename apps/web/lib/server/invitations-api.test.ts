@@ -9,6 +9,8 @@ import {
   createInvitationsClient,
   isInvitationId,
   parseCheckout,
+  parseCollaborator,
+  parseCollaboratorList,
   parseCreatorPackages,
   parseCreatorTemplates,
   parseInvitationListItems,
@@ -51,12 +53,16 @@ const LIST_ITEM = {
   content: { celebrantName: "Ana", date: "2026-12-05" },
   componentKey: "birthday-poster-01",
   configuration: { componentKey: "birthday-poster-01" },
+  // The caller's role on the row (F12; L17.5): this fixture is the owner's own invitation.
+  access: { role: "OWNER", permissions: [] },
 };
 
 const OWNED = {
   ...SUMMARY,
   content: { celebrantName: "Ana", age: 7 },
   missingRequiredFields: ["date", "time"],
+  // The caller's role on the invitation (F12; L17.4): the owner's own answer.
+  access: { role: "OWNER", permissions: [] },
   timeZone: "America/Mexico_City",
   // How many renames the owner has left (F11; L15.2): an invitation that never renamed keeps the product's bound.
   slugRenamesRemaining: 5,
@@ -1003,7 +1009,14 @@ describe("validators", () => {
     assert.deepEqual(parseInvitationListItems([{ ...LIST_ITEM, ownerId: "leak" }]), [LIST_ITEM]);
     // A row written before the fields existed still lists, and its card falls back to the summary.
     assert.deepEqual(parseInvitationListItems([SUMMARY]), [
-      { ...SUMMARY, content: {}, componentKey: null, configuration: null },
+      {
+        ...SUMMARY,
+        content: {},
+        componentKey: null,
+        configuration: null,
+        // A row written before F12 carries no role, and it read as the owner's own (L20).
+        access: { role: "OWNER", permissions: [] },
+      },
     ]);
     assert.deepEqual(parseInvitationListItems([]), []);
   });
@@ -1767,6 +1780,221 @@ describe("the custom address routes (F11; L15.3)", () => {
     assert.deepEqual(await client().checkSlugAvailability("not-a-uuid", "valentina-xv"), {
       ok: false,
       failure: "not-found",
+    });
+    assert.equal(received.length, 0);
+  });
+});
+
+// The co-hosts' routes (F12; S2.12, L17). A read answers the caller's `role` and `permissions`; an older API body that
+// carries neither reads as the owner (L20). The owner's screen lists, invites, changes permissions, and revokes, and the
+// recipient accepts once. Every refusal keeps its own failure name so the web can state one neutral Spanish notice.
+const COLLABORATOR_ID = "1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a";
+const COLLABORATOR_TOKEN = "a".repeat(22);
+const COLLABORATOR = {
+  id: COLLABORATOR_ID,
+  email: "jorge@correo.com",
+  permissions: ["EDIT_CONTENT", "VIEW_ATTENDANCE"],
+  status: "PENDING",
+  invitedAt: AT,
+  acceptedAt: null,
+};
+const COLLABORATOR_LIST = { maxCollaborators: 5, collaborators: [COLLABORATOR] };
+
+describe("the caller's role and permissions on the invitation reads (F12; L17.4, L17.5)", () => {
+  it("reads a row shared with the caller and its permissions", () => {
+    const shared = {
+      ...LIST_ITEM,
+      role: "COLLABORATOR",
+      permissions: ["EDIT_CONTENT", "PUBLISH"],
+    };
+    const [row] = parseInvitationListItems([shared]) ?? [];
+
+    assert.deepEqual(row?.access, {
+      role: "COLLABORATOR",
+      permissions: ["EDIT_CONTENT", "PUBLISH"],
+    });
+
+    const owned = parseOwnedInvitation({
+      ...OWNED,
+      role: "COLLABORATOR",
+      permissions: ["VIEW_ATTENDANCE"],
+    });
+    assert.deepEqual(owned?.access, { role: "COLLABORATOR", permissions: ["VIEW_ATTENDANCE"] });
+  });
+
+  it("reads a body written before F12 as the owner, which is what an older API meant (L20)", () => {
+    const [row] = parseInvitationListItems([LIST_ITEM]) ?? [];
+
+    assert.deepEqual(row?.access, { role: "OWNER", permissions: [] });
+    assert.deepEqual(parseOwnedInvitation(OWNED)?.access, { role: "OWNER", permissions: [] });
+    assert.deepEqual(parseOwnedInvitation({ ...OWNED, role: "OWNER", permissions: [] })?.access, {
+      role: "OWNER",
+      permissions: [],
+    });
+  });
+
+  it("refuses a role or a permission set the contract does not have", () => {
+    for (const access of [
+      { role: "ADMIN", permissions: [] },
+      { role: "COLLABORATOR", permissions: ["PAY"] },
+      { role: "COLLABORATOR", permissions: [] },
+      { role: "COLLABORATOR", permissions: ["EDIT_CONTENT", "EDIT_CONTENT"] },
+      { permissions: ["EDIT_CONTENT"] },
+    ]) {
+      assert.equal(
+        parseOwnedInvitation({ ...OWNED, ...access }),
+        undefined,
+        JSON.stringify(access),
+      );
+      assert.equal(
+        parseInvitationListItems([{ ...LIST_ITEM, ...access }]),
+        undefined,
+        JSON.stringify(access),
+      );
+    }
+  });
+
+  it("accepts the CO_HOSTS key the owner read answers, and still refuses a key it does not implement", () => {
+    const featured = parseOwnedInvitation({
+      ...OWNED,
+      availableFeatures: ["COUNTDOWN", "CO_HOSTS", "CALENDAR"],
+    });
+
+    assert.deepEqual(featured?.availableFeatures, ["COUNTDOWN", "CO_HOSTS", "CALENDAR"]);
+    assert.equal(
+      parseOwnedInvitation({ ...OWNED, availableFeatures: ["CO_HOSTS", "UNKNOWN_KEY"] }),
+      undefined,
+    );
+  });
+});
+
+describe("the owner's collaborator reads and writes (F12; L17.3)", () => {
+  it("reads the standing collaborators and the cap the screen states", () => {
+    assert.deepEqual(parseCollaboratorList(COLLABORATOR_LIST), COLLABORATOR_LIST);
+    assert.deepEqual(parseCollaborator(COLLABORATOR), COLLABORATOR);
+  });
+
+  it("refuses a collaborator row the contract does not have", () => {
+    for (const row of [
+      { ...COLLABORATOR, email: "" },
+      { ...COLLABORATOR, status: "DELETED" },
+      { ...COLLABORATOR, permissions: [] },
+      { ...COLLABORATOR, permissions: ["PAY"] },
+      { ...COLLABORATOR, invitedAt: "ayer" },
+      { ...COLLABORATOR, acceptedAt: "ayer" },
+      { ...COLLABORATOR, id: "no-es-uuid" },
+    ]) {
+      assert.equal(parseCollaborator(row), undefined, JSON.stringify(row));
+    }
+    assert.equal(parseCollaboratorList({ maxCollaborators: 0, collaborators: [] }), undefined);
+    assert.equal(parseCollaboratorList({ maxCollaborators: 5, collaborators: {} }), undefined);
+  });
+
+  it("sends every route of the screen and the acceptance with its own method and body", async () => {
+    const api = client();
+    const calls: Array<[() => Promise<unknown>, string, string, unknown, unknown]> = [
+      [
+        () => api.collaborators(ID),
+        "GET",
+        `/invitations/${ID}/collaborators`,
+        undefined,
+        COLLABORATOR_LIST,
+      ],
+      [
+        () => api.inviteCollaborator(ID, "jorge@correo.com", ["EDIT_CONTENT"]),
+        "POST",
+        `/invitations/${ID}/collaborators`,
+        { email: "jorge@correo.com", permissions: ["EDIT_CONTENT"] },
+        COLLABORATOR,
+      ],
+      [
+        () => api.updateCollaboratorPermissions(ID, COLLABORATOR_ID, ["PUBLISH"]),
+        "PATCH",
+        `/invitations/${ID}/collaborators/${COLLABORATOR_ID}`,
+        { permissions: ["PUBLISH"] },
+        COLLABORATOR,
+      ],
+      [
+        () => api.revokeCollaborator(ID, COLLABORATOR_ID),
+        "DELETE",
+        `/invitations/${ID}/collaborators/${COLLABORATOR_ID}`,
+        undefined,
+        COLLABORATOR,
+      ],
+      [
+        () => api.acceptCollaboration(COLLABORATOR_TOKEN),
+        "POST",
+        "/collaborations/accept",
+        { token: COLLABORATOR_TOKEN },
+        { invitationId: ID },
+      ],
+    ];
+
+    for (const [call, method, path, body, expected] of calls) {
+      received = [];
+      answer(200, expected);
+      const result = await call();
+
+      assert.deepEqual(result, { ok: true, value: expected }, `${method} ${path}`);
+      assert.equal(received[0]?.method, method, `${method} ${path}`);
+      assert.equal(received[0]?.url, path, `${method} ${path}`);
+      assert.equal(received[0]?.body, body === undefined ? "" : JSON.stringify(body));
+    }
+  });
+
+  it("maps every refusal of the screen to its own failure, never to a raw code", async () => {
+    const cases: Array<[number, { code: string }, string]> = [
+      [400, { code: "INVALID_COLLABORATOR_INVITATION" }, "collaborator-invalid"],
+      [409, { code: "CO_HOSTS_NOT_AVAILABLE" }, "co-hosts-unavailable"],
+      [409, { code: "COLLABORATOR_ALREADY_INVITED" }, "collaborator-already-invited"],
+      [409, { code: "COLLABORATOR_LIMIT_REACHED" }, "collaborator-limit-reached"],
+      [404, { code: "COLLABORATOR_NOT_FOUND" }, "collaborator-not-found"],
+      [403, { code: "INVITATION_FORBIDDEN" }, "forbidden"],
+      [503, { code: "COLLABORATOR_EMAIL_UNAVAILABLE" }, "collaborator-email-unavailable"],
+    ];
+
+    for (const [status, body, failure] of cases) {
+      answer(status, body);
+      assert.deepEqual(
+        await client().inviteCollaborator(ID, "jorge@correo.com", ["PUBLISH"]),
+        { ok: false, failure },
+        body.code,
+      );
+    }
+
+    answer(404, { code: "COLLABORATION_NOT_FOUND" });
+    assert.deepEqual(await client().acceptCollaboration(COLLABORATOR_TOKEN), {
+      ok: false,
+      failure: "collaboration-not-found",
+    });
+  });
+
+  it("makes no request for an id or a token that cannot name one, and none without a session", async () => {
+    const api = client();
+
+    assert.deepEqual(await api.collaborators("no-es-uuid"), { ok: false, failure: "not-found" });
+    assert.deepEqual(await api.inviteCollaborator("no-es-uuid", "a@b.mx", ["PUBLISH"]), {
+      ok: false,
+      failure: "not-found",
+    });
+    assert.deepEqual(await api.updateCollaboratorPermissions(ID, "no-es-uuid", ["PUBLISH"]), {
+      ok: false,
+      failure: "collaborator-not-found",
+    });
+    assert.deepEqual(await api.revokeCollaborator(ID, "no-es-uuid"), {
+      ok: false,
+      failure: "collaborator-not-found",
+    });
+    for (const token of ["", "abc", `${COLLABORATOR_TOKEN}=`]) {
+      assert.deepEqual(await api.acceptCollaboration(token), {
+        ok: false,
+        failure: "collaboration-not-found",
+      });
+    }
+    assert.deepEqual(await client(null).collaborators(ID), { ok: false, failure: "signed-out" });
+    assert.deepEqual(await client(null).acceptCollaboration(COLLABORATOR_TOKEN), {
+      ok: false,
+      failure: "signed-out",
     });
     assert.equal(received.length, 0);
   });

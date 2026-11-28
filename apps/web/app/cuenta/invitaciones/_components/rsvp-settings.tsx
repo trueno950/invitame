@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { RSVP_COPY } from "../../../../lib/customer/copy.ts";
-import type { RsvpSettingsView } from "../../../../lib/customer/invitation-rsvp.ts";
+import { partySizeLabel, type RsvpSettingsView } from "../../../../lib/customer/invitation-rsvp.ts";
 import { fieldLabel, textButton } from "../../../_components/ui.ts";
 
 /**
@@ -35,11 +35,6 @@ function ResponsesLink({ view }: { view: RsvpSettingsView }) {
   );
 }
 
-/** «1 persona», «2 personas»: the party limit as the creator reads it. */
-function partyLabel(party: number): string {
-  return party === 1 ? "1 persona" : `${party} personas`;
-}
-
 /** The archived invitation's settings: readable, with no form and no way to save. */
 export function RsvpSettingsSummary({ view }: { view: RsvpSettingsView }) {
   return (
@@ -53,7 +48,7 @@ export function RsvpSettingsSummary({ view }: { view: RsvpSettingsView }) {
         </p>
         <p className={fieldLabel}>
           {RSVP_COPY.partyLimitLabel}:{" "}
-          <span className="font-normal text-ink">{partyLabel(view.partyLimit)}</span>
+          <span className="font-normal text-ink">{partySizeLabel(view.partyLimit)}</span>
         </p>
         <ResponsesLink view={view} />
         <p className="text-sm leading-6 text-muted">{RSVP_COPY.archivedNote}</p>

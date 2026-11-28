@@ -87,8 +87,14 @@ export function InvitationCard({ row }: { row: InvitationRow }): ReactElement {
             {row.title}
           </p>
           <p className="text-sm break-words text-muted">{secondary}</p>
-          <div className="mt-0.5 self-start">
+          <div className="mt-0.5 flex flex-wrap items-center gap-2 self-start">
             <StatusBadge label={row.statusLabel} />
+            {/* Another owner shared this invitation with this person (F12; L17.5): the mark is text as well as tone. */}
+            {row.shared ? (
+              <span className="inline-flex items-center rounded-full bg-rose-50 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-rose-100">
+                {INVITATION_COPY.sharedBadge}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -97,7 +103,7 @@ export function InvitationCard({ row }: { row: InvitationRow }): ReactElement {
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
         <Link className={textButton} href={row.href}>
-          {INVITATION_COPY.editLink}
+          {row.shared ? INVITATION_COPY.sharedOpenLink : INVITATION_COPY.editLink}
         </Link>
         {row.publicHref === null ? null : (
           <Link className={textButton} href={row.publicHref} rel="noreferrer" target="_blank">

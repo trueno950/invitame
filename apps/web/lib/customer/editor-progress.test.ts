@@ -12,6 +12,7 @@ import {
   nextStepLabel,
   parseEditorField,
   progressMeta,
+  restrictedProgress,
   stepStateLabel,
 } from "./editor-progress.ts";
 
@@ -230,5 +231,51 @@ describe("nextStepLabel", () => {
     assert.equal(nextStepLabel("fotos"), "Siguiente: Fotos");
     assert.equal(nextStepLabel("publicar"), "Publicar");
     assert.equal(nextStepLabel("funciones"), "Siguiente: Funciones");
+  });
+});
+
+describe("restrictedProgress", () => {
+  it("keeps the owner the three steps it always had, in their own order", () => {
+    const progress = restrictedProgress(editorProgress(STARTING), [
+      "contenido",
+      "fotos",
+      "funciones",
+      "asistencia",
+      "publicar",
+    ]);
+
+    assert.deepEqual(
+      progress.steps.map((step) => step.section),
+      ["contenido", "fotos", "publicar"],
+    );
+    assert.equal(progress.next?.section, "contenido");
+    assert.equal(progress.done, 0);
+    assert.equal(progress.total, 12);
+  });
+
+  it("offers a collaborator only the steps of the tabs it may use, and never one it cannot open", () => {
+    const content = restrictedProgress(editorProgress(COMPLETE), [
+      "contenido",
+      "fotos",
+      "funciones",
+    ]);
+    const publish = restrictedProgress(editorProgress(STARTING), ["publicar"]);
+    const attendance = restrictedProgress(editorProgress(STARTING), ["asistencia"]);
+
+    assert.deepEqual(
+      content.steps.map((step) => step.section),
+      ["contenido", "fotos"],
+    );
+    // Every step of the content tabs is done, so the phone's bar offers no next step instead of publishing.
+    assert.equal(content.next, undefined);
+
+    assert.deepEqual(
+      publish.steps.map((step) => step.section),
+      ["publicar"],
+    );
+    assert.equal(publish.next?.section, "publicar");
+
+    assert.deepEqual(attendance.steps, []);
+    assert.equal(attendance.next, undefined);
   });
 });

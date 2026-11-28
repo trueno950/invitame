@@ -160,6 +160,12 @@ export const INVITATION_COPY = {
   listEmpty: "Aún no tienes invitaciones. Crea una cuando quieras: es gratis.",
   newLink: "Nueva invitación",
   editLink: "Editar",
+  /**
+   * The text badge of a row another owner shared with this person (F12; L17.5). It says «Compartida contigo» in words,
+   * so which rows are the person's own never depends on a tone alone, and the card's action reads «Abrir».
+   */
+  sharedBadge: "Compartida contigo",
+  sharedOpenLink: "Abrir",
   chosen: "Elegido",
   mostChosen: "El más elegido",
   changeOccasion: "Cambiar",
@@ -307,6 +313,74 @@ export const INVITATION_COPY = {
   backToAccount: "Volver a mi cuenta",
 } as const;
 
+/**
+ * The co-hosts' screen (F12; S2.12, L17.3, L17.5), in the words of the artboard
+ * `design/co-hosts/02-con-permisos.html`: the permission chips, the state of each person in words, the cap stated in
+ * words, and the note that paying, archiving, and managing co-hosts stay with the owner. Neutral Spanish, in the
+ * second person («tú»).
+ */
+export const COLLABORATOR_PERMISSION_LABELS = {
+  EDIT_CONTENT: "Editar contenido",
+  VIEW_ATTENDANCE: "Ver asistencia",
+  PUBLISH: "Publicar",
+} as const;
+
+export const COLLABORATOR_COPY = {
+  pageTitle: "Coanfitriones | InvitaMe",
+  eyebrow: "Coanfitriones",
+  heading: "Coanfitriones",
+  intro: "Decide qué puede hacer cada persona.",
+  inviteHeading: "Invita a alguien",
+  emailLabel: "Correo de la persona",
+  emailHint: "Le enviaremos un enlace para aceptar. Debe entrar con esta misma dirección.",
+  chipsLabel: "¿Qué puede hacer?",
+  chipsHint: "Marca al menos una opción.",
+  inviteSubmit: "Enviar invitación",
+  savePermissions: "Guardar permisos",
+  revoke: "Quitar acceso",
+  revokeNamed: (email: string) => `Quitar acceso a ${email}`,
+  permissionsHeading: "Permisos",
+  listHeading: "Quienes te ayudan",
+  /** The state of a person the invitation waits for (L17.3), with the date of the invitation. */
+  invited: (date: string) => `Invitación enviada el ${date}`,
+  /** The state of a person who accepted, with the date of the acceptance. */
+  accepted: (date: string) => `Aceptó el ${date}`,
+  /** The same two states while the read answered no readable date, which no API answer does. */
+  invitedNoDate: "Invitación enviada",
+  acceptedNoDate: "Aceptó",
+  /** The state of a row that no longer has access, which the API does not list but a page may still hold. */
+  revoked: "Sin acceso",
+  /** The cap the read answered, stated in words (L17.1). */
+  limit: (max: number) => `Puedes invitar hasta ${max} personas por invitación.`,
+  /** Why the invitation is no longer offered at the cap. */
+  limitReached: (max: number) =>
+    `Ya son ${max} personas, el máximo por invitación. Quita a alguien para invitar a otra.`,
+  /** How many places are left, in words. */
+  remaining: (left: number) => (left === 1 ? "Te queda 1 lugar." : `Te quedan ${left} lugares.`),
+  empty: "Todavía no invitaste a nadie.",
+  /** The owner-only line of the artboard: paying, archiving, and managing co-hosts are never permissions (L17.2). */
+  ownerNote: "Solo tú puedes pagar, archivar o quitar coanfitriones.",
+  /** The chip that stays locked: paying is the owner's alone (L17.2). */
+  payChip: "Pagar",
+  payChipNote: "Solo el dueño",
+  notAvailable:
+    "Esta invitación no incluye coanfitriones. Se muestra con los paquetes Premium y Deluxe.",
+  ownerOnly: "Solo el dueño de la invitación puede ver esta pantalla.",
+  backToInvitation: "Volver a la invitación",
+  unavailable: "No pudimos cargar los coanfitriones. Inténtalo de nuevo en unos minutos.",
+  /** The acceptance screen the emailed link opens (L17.3). */
+  acceptPageTitle: "Aceptar la colaboración | InvitaMe",
+  acceptEyebrow: "Colaboración",
+  acceptHeading: "Te invitaron a colaborar",
+  acceptIntro: "Al aceptar podrás entrar a la invitación con los permisos que te dieron.",
+  acceptSubmit: "Aceptar la invitación",
+  acceptSignIn: "Entra con la misma dirección de correo a la que llegó la invitación.",
+  /** The one refusal of an acceptance: it never reveals which of the reasons it was (L17.3). */
+  acceptRefused:
+    "Ese enlace ya no funciona. Pídele a la persona que te invitó que te mande uno nuevo.",
+  acceptUnavailable: "No pudimos aceptar la invitación ahora. Inténtalo de nuevo en unos minutos.",
+} as const;
+
 export const INVITATION_NOTICE_CODES = [
   "created",
   "saved",
@@ -323,6 +397,10 @@ export const INVITATION_NOTICE_CODES = [
   "gallery-uploaded",
   "media-saved",
   "media-removed",
+  "collaborator-invited",
+  "collaborator-saved",
+  "collaborator-revoked",
+  "collaboration-accepted",
 ] as const;
 export type InvitationNoticeCode = (typeof INVITATION_NOTICE_CODES)[number];
 
@@ -387,6 +465,11 @@ export const INVITATION_NOTICE_COPY: Record<InvitationNoticeCode, string> = {
   "gallery-uploaded": "Listo, agregamos la foto a tu galería.",
   "media-saved": "Listo, guardamos los cambios de la galería.",
   "media-removed": "Listo, quitamos la foto de tu galería.",
+  "collaborator-invited":
+    "Listo, enviamos la invitación. Le pedimos entrar con esa misma dirección de correo.",
+  "collaborator-saved": "Listo, guardamos los permisos.",
+  "collaborator-revoked": "Listo, esa persona ya no tiene acceso.",
+  "collaboration-accepted": "Listo, ya colaboras en esta invitación.",
 };
 
 /**
@@ -442,6 +525,17 @@ export const INVITATION_ERROR_COPY: Record<InvitationErrorCode, string> = {
   "guest-list-unavailable":
     "Esta invitación no incluye la lista de invitados. Se muestra con el paquete Deluxe.",
   "guest-not-found": "No encontramos ese invitado en esta invitación.",
+  "collaborator-invalid": "Revisa la dirección de correo y marca al menos un permiso.",
+  "co-hosts-unavailable": COLLABORATOR_COPY.notAvailable,
+  "collaborator-already-invited":
+    "Esa persona ya tiene una invitación o ya colabora en esta invitación.",
+  "collaborator-limit-reached":
+    "Esta invitación ya tiene el máximo de coanfitriones. Quita a alguien para invitar a otra persona.",
+  "collaborator-email-unavailable":
+    "Guardamos la invitación, pero no pudimos enviar el correo. Quita el acceso y vuelve a invitar a la persona.",
+  "collaborator-not-found": "Esa persona ya no colabora en esta invitación.",
+  "collaboration-not-found": COLLABORATOR_COPY.acceptRefused,
+  forbidden: "Esta acción solo la puede hacer el dueño de la invitación.",
   "guestbook-entry-not-found": "No encontramos ese mensaje en esta invitación.",
   "guest-photo-not-found": "No encontramos esa foto en el álbum de esta invitación.",
   "guest-not-confirmed":
@@ -798,6 +892,8 @@ export const RSVP_COPY = {
   partyLimitHint: "Cada invitado puede confirmar de 1 a este número de personas.",
   archivedNote:
     "Esta invitación está archivada: puedes consultar la configuración de asistencia, pero ya no editarla.",
+  /** Why a collaborator reads the settings and changes nothing: the route is the owner's alone (F12; L17.2). */
+  ownerOnlyNote: "Solo el dueño de la invitación puede cambiar esta configuración.",
   unavailable:
     "No pudimos leer la configuración de asistencia. Inténtalo de nuevo en unos minutos.",
   responsesLink: "Ver respuestas",
@@ -993,6 +1089,8 @@ export const EDITOR_COPY = {
   funcionesGuestbookOpen: "Abrir el libro de firmas",
   /** The link from «Funciones» to the invitation's own album screen (F8; L11.6). */
   funcionesGuestAlbumOpen: "Abrir el álbum de fotos",
+  /** The link from «Funciones» to the owner's co-hosts screen (F12; L17.5). */
+  funcionesCollaboratorsOpen: "Coanfitriones",
   /** The «Publicar» tab: the state of the draft, its public link, and the one action that changes it. */
   publishMeta: {
     unpaid: "sin pagar",

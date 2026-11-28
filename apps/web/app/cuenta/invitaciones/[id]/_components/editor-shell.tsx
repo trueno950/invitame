@@ -25,13 +25,17 @@ import {
   missingFieldHref,
   nextStepLabel,
   progressMeta,
+  restrictedProgress,
   stepStateLabel,
 } from "../../../../../lib/customer/editor-progress.ts";
 import {
+  type EditorAccessView,
+  landingSection,
+} from "../../../../../lib/customer/collaboration.ts";
+import { partySizeLabel } from "../../../../../lib/customer/invitation-rsvp.ts";
+import {
   type AttendanceTab,
-  DEFAULT_EDITOR_SECTION,
   EDITOR_SECTION_PARAM,
-  EDITOR_SECTIONS,
   type EditorSection,
   editorSectionTarget,
   missingRequiredNames,
@@ -141,6 +145,9 @@ const PANEL_ID = "editor-panel";
 const STATUS_ID = "editor-save-status";
 
 const miniLabel = "text-xs font-medium uppercase tracking-[0.18em] text-primary";
+
+/** The line of one read-only setting a collaborator may read but not change (F12; L17.2). */
+const settingReadOnly = "text-sm font-medium text-muted";
 
 const saveNowButton = `inline-flex min-h-9 shrink-0 items-center rounded-full px-3 text-sm font-semibold text-primary transition-colors hover:bg-rose-100 disabled:opacity-70 ${focusRing}`;
 
@@ -409,6 +416,19 @@ export interface EditorShellProps {
   readonly attendance: AttendanceTab;
   /** The guest list page of a package that grants it instead, for the note of a package with neither. */
   readonly guestListHref: string | undefined;
+  /**
+   * The co-hosts screen, offered to the owner of a package that grants CO_HOSTS and to nobody else (F12; L17.5).
+   * Managing collaborators is owner-only and never a permission (L17.2), so a collaborator never sees the way in.
+   */
+  readonly collaboratorsHref: string | undefined;
+  /**
+   * What this caller may use in the editor (F12; L17.5): the tabs to offer, and the owner-only actions to hide. It is a
+   * convenience — the API checks the permission of every route again — but it keeps a collaborator from being offered a
+   * control that could only fail.
+   */
+  readonly access: EditorAccessView;
+  /** The editor's tabs this caller may open, in the editor's own order. */
+  readonly allowedSections: readonly EditorSection[];
   /** The «Libro de firmas» screen of a package that grants the guestbook (F7; L10.6). */
   readonly guestbookHref: string | undefined;
   /** The album screen of a package that grants the guests' photos (F8; L11.6). */
@@ -463,6 +483,9 @@ export function EditorShell({
   readOnlyContent,
   invitationId,
   initialSection,
+  access,
+  allowedSections,
+  collaboratorsHref,
   sections,
   omittable,
   content,
@@ -492,7 +515,11 @@ export function EditorShell({
   address,
   actions,
 }: EditorShellProps) {
-  const [section, setSection] = useState<EditorSection>(initialSection ?? DEFAULT_EDITOR_SECTION);
+  // The tab the page asked for, as long as this caller may open it (F12; L17.5): a shared link that names a tab a
+  // collaborator cannot use lands on the first one it can, never on an empty panel.
+  const [section, setSection] = useState<EditorSection>(() =>
+    landingSection(allowedSections, initialSection),
+  );
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
   const [values, setValues] = useState<Record<string, unknown>>(() => ({ ...content }));
@@ -600,11 +627,12 @@ export function EditorShell({
 
   // A back navigation restores the URL the browser had; the tab follows it instead of silently disagreeing with it.
   useEffect(() => {
-    const onPopState = () => setSection(sectionFromSearch(window.location.search));
+    const onPopState = () =>
+      setSection(landingSection(allowedSections, sectionFromSearch(window.location.search)));
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [allowedSections]);
 
   const focusStatus = useCallback(() => {
     statusLine.current?.focus();
@@ -632,16 +660,22 @@ export function EditorShell({
   const missing = missingRequiredNames(shownFields, values);
   // The three first steps and the progress above them, counted by `missingRequiredNames` itself, so «4 de 12» and the
   // «Contenido» tab never disagree (T1; S2.1).
-  const progress = editorProgress({
-    required: shownFields.filter((field) => field.required).length,
-    missing: missing.length,
-    photoCount,
-    published: status === "PUBLISHED",
-  });
+  const progress = restrictedProgress(
+    editorProgress({
+      required: shownFields.filter((field) => field.required).length,
+      missing: missing.length,
+      photoCount,
+      published: status === "PUBLISHED",
+    }),
+    allowedSections,
+  );
   const next = progress.next;
   // A missing-field link opens the «Contenido» tab with the card of that field open and the field focused (S2.4). The
   // queue is flushed first, so the card never opens on a field whose value is still on its way.
   const openField = (name: string) => {
+    if (!allowedSections.includes("contenido")) {
+      return;
+    }
     void autosave.flush();
     setSection("contenido");
     setFocus((current) => fieldFocus(name, current));
@@ -654,7 +688,7 @@ export function EditorShell({
     [sections, values, omittable],
   );
 
-  const tabs: readonly EditorTabView[] = EDITOR_SECTIONS.map((candidate) => {
+  const tabs: readonly EditorTabView[] = allowedSections.map((candidate) => {
     const meta =
       candidate === "contenido"
         ? progressMeta(progress.done, progress.total)
@@ -770,8 +804,9 @@ export function EditorShell({
               values={features}
               view={featureView}
             />
-            {/* The guestbook's messages are signed by the guests, so the tab links to their own screen (F7; L10.6). */}
-            {guestbookHref === undefined ? null : (
+            {/* The owners' messages are signed by the guests, so the tab links to their own screen (F7; L10.6).
+                Moderating them is the owner's alone (L17.2), so a collaborator is offered no way in. */}
+            {guestbookHref === undefined || !access.showGuestbook ? null : (
               <p className="mt-4">
                 <GuardedLink className={textButton} href={guestbookHref}>
                   {EDITOR_COPY.funcionesGuestbookOpen}
@@ -779,10 +814,18 @@ export function EditorShell({
               </p>
             )}
             {/* The guests' photos wait for the owner's review, so the tab links to their own screen (F8; L11.6). */}
-            {guestAlbumHref === undefined ? null : (
+            {guestAlbumHref === undefined || !access.canEditContent ? null : (
               <p className="mt-4">
                 <GuardedLink className={textButton} href={guestAlbumHref}>
                   {EDITOR_COPY.funcionesGuestAlbumOpen}
+                </GuardedLink>
+              </p>
+            )}
+            {/* Co-hosts (F12; L17.5): the owner's own screen, offered only while the package grants the key. */}
+            {collaboratorsHref === undefined ? null : (
+              <p className="mt-4">
+                <GuardedLink className={textButton} href={collaboratorsHref}>
+                  {EDITOR_COPY.funcionesCollaboratorsOpen}
                 </GuardedLink>
               </p>
             )}
@@ -806,7 +849,7 @@ export function EditorShell({
                   </p>
                 ) : null}
               </div>
-            ) : (
+            ) : access.owner ? (
               <RsvpFields
                 issues={issues}
                 onChange={changeRsvp}
@@ -814,6 +857,31 @@ export function EditorShell({
                 values={rsvp}
                 view={rsvpView}
               />
+            ) : (
+              // The settings are the owner's alone (L17.2), so a collaborator that may see attendance reads them and
+              // changes nothing; the way to the answers stays.
+              <div className="flex flex-col gap-3">
+                <p className={settingReadOnly}>
+                  {RSVP_COPY.deadlineLabel}:{" "}
+                  <span className="font-normal text-ink">
+                    {rsvpView.deadlineText === "" ? RSVP_COPY.deadlineNone : rsvpView.deadlineText}
+                  </span>
+                </p>
+                <p className={settingReadOnly}>
+                  {RSVP_COPY.partyLimitLabel}:{" "}
+                  <span className="font-normal text-ink">
+                    {partySizeLabel(rsvpView.partyLimit)}
+                  </span>
+                </p>
+                <p className="text-sm leading-6 text-muted">{RSVP_COPY.ownerOnlyNote}</p>
+                {guestListHref === undefined ? null : (
+                  <p>
+                    <GuardedLink className={textButton} href={guestListHref}>
+                      {EDITOR_COPY.attendanceGuestListOpen}
+                    </GuardedLink>
+                  </p>
+                )}
+              </div>
             )}
           </Panel>
         );
@@ -844,8 +912,9 @@ export function EditorShell({
               )}
             </div>
 
-            {/* The address where the invitation is published, and the one place it changes (F11; L15.4). */}
-            {address}
+            {/* The address where the invitation is published, and the one place it changes (F11; L15.4). Renaming it
+                is owner-only (L17.2), so a collaborator sees no field that could only be refused. */}
+            {access.showAddress ? address : null}
 
             {status === "PUBLISHED" ? (
               <>
@@ -855,9 +924,10 @@ export function EditorShell({
               </>
             ) : null}
 
-            {payment}
+            {/* The payment panel and the checkout: the owner's alone (L17.2). */}
+            {access.showPayment ? payment : null}
 
-            {status === "DRAFT" ? (
+            {status === "DRAFT" && access.canPublish ? (
               <GuardedForm
                 action={actions.publish}
                 className="flex flex-col gap-3 rounded-field bg-surface p-4 ring-1 ring-gold/45"
@@ -875,7 +945,7 @@ export function EditorShell({
               </GuardedForm>
             ) : null}
 
-            {status === "PUBLISHED" ? (
+            {status === "PUBLISHED" && access.canPublish ? (
               <GuardedForm
                 action={actions.unpublish}
                 className="flex flex-col gap-3 rounded-field bg-surface p-4 ring-1 ring-gold/45"
@@ -892,20 +962,22 @@ export function EditorShell({
               </GuardedForm>
             ) : null}
 
-            <GuardedForm
-              action={actions.archive}
-              className="flex flex-col gap-3 rounded-field bg-surface p-4 ring-1 ring-gold/45"
-              section="publicar"
-            >
-              <input name="id" type="hidden" value={invitationId} />
-              <p className={miniLabel}>{INVITATION_COPY.archiveHeading}</p>
-              <p className="text-sm leading-6 text-muted">{INVITATION_COPY.archiveHint}</p>
-              <div>
-                <button className={quietButton} type="submit">
-                  {INVITATION_COPY.archive}
-                </button>
-              </div>
-            </GuardedForm>
+            {access.showArchive ? (
+              <GuardedForm
+                action={actions.archive}
+                className="flex flex-col gap-3 rounded-field bg-surface p-4 ring-1 ring-gold/45"
+                section="publicar"
+              >
+                <input name="id" type="hidden" value={invitationId} />
+                <p className={miniLabel}>{INVITATION_COPY.archiveHeading}</p>
+                <p className="text-sm leading-6 text-muted">{INVITATION_COPY.archiveHint}</p>
+                <div>
+                  <button className={quietButton} type="submit">
+                    {INVITATION_COPY.archive}
+                  </button>
+                </div>
+              </GuardedForm>
+            ) : null}
           </Panel>
         );
       default:
@@ -941,16 +1013,18 @@ export function EditorShell({
         className="grid gap-4 pb-28 lg:grid-cols-[9.5rem_minmax(0,1fr)_20rem] lg:items-start lg:gap-5 lg:pb-0 xl:grid-cols-[11rem_minmax(0,1fr)_24.5rem] xl:gap-6 2xl:grid-cols-[12rem_minmax(0,1fr)_28rem] 2xl:gap-8"
         data-editor-shell=""
       >
-        <div className="lg:col-span-3">
-          <FirstStepsCard
-            detailPath={detailPath}
-            fields={fields}
-            missing={missing}
-            onOpen={openField}
-            onSelect={setSection}
-            progress={progress}
-          />
-        </div>
+        {access.canEditContent ? (
+          <div className="lg:col-span-3">
+            <FirstStepsCard
+              detailPath={detailPath}
+              fields={fields}
+              missing={missing}
+              onOpen={openField}
+              onSelect={setSection}
+              progress={progress}
+            />
+          </div>
+        ) : null}
 
         <div className="lg:hidden">
           <EditorTabList

@@ -56,6 +56,11 @@ export interface RsvpSettingsView {
   readonly responsesLabel: string;
 }
 
+/** «1 persona», «2 personas»: the party limit as the creator reads it (M6 G3; F12). */
+export function partySizeLabel(party: number): string {
+  return party === 1 ? "1 persona" : `${party} personas`;
+}
+
 /**
  * The section of one invitation (S4). The deadline is read in the invitation's own zone, so the creator writes and
  * reads the same wall clock the guest sees, and every party from 1 to 10 is offered because the API accepts them

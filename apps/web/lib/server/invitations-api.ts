@@ -1,4 +1,11 @@
 import { ADDRESS_RENAMES_MAX } from "../customer/address.ts";
+import { isCollaborationToken } from "../customer/collaboration-link.ts";
+import {
+  type InvitationAccess,
+  type InvitationPermission,
+  INVITATION_PERMISSIONS,
+  parseInvitationAccess,
+} from "../customer/invitation-access.ts";
 import { OMITTED_SECTIONS_PROPERTY, parseOmittedSections } from "../customer/omittable-sections.ts";
 import { isE164Phone, isInvitationFeatureKey } from "../invitation-features/invitation-features.ts";
 import {
@@ -80,6 +87,12 @@ export interface InvitationSummary {
 export interface OwnedInvitation extends InvitationSummary {
   content: Record<string, unknown>;
   missingRequiredFields: string[];
+  /**
+   * Who the caller is on this invitation (F12; L17.4): `OWNER` for the invitation's own owner, `COLLABORATOR` for an
+   * accepted, non-revoked co-host holding at least one permission. The editor offers only what this role may use, and
+   * the API checks the route's permission again on every request (L17.4).
+   */
+  access: InvitationAccess;
   /** The stored IANA zone the guest's countdown and calendar use (S4). */
   timeZone: string;
   /**
@@ -293,6 +306,31 @@ export interface RsvpCsv {
   readonly contentDisposition: string;
 }
 
+/** The three states one stored collaborator row can be in (F12; L17.3); revoked rows are never listed. */
+export const COLLABORATOR_STATUSES = ["PENDING", "ACTIVE", "REVOKED"] as const;
+export type CollaboratorStatus = (typeof COLLABORATOR_STATUSES)[number];
+
+/**
+ * One collaborator as the owner's screen reads it (F12; L17.3): the invited address, what it may do, and its state.
+ * Nothing that could become a link is here — the plain acceptance token exists only inside the email — and no account
+ * id is answered, so a person is shown by their address.
+ */
+export interface InvitationCollaborator {
+  readonly id: string;
+  readonly email: string;
+  readonly permissions: readonly InvitationPermission[];
+  readonly status: CollaboratorStatus;
+  readonly invitedAt: string;
+  /** When the invitee accepted, or null while the invitation is pending. */
+  readonly acceptedAt: string | null;
+}
+
+/** The owner's read of one invitation's co-hosts and the cap the screen states (F12; L17.1). */
+export interface CollaboratorList {
+  readonly maxCollaborators: number;
+  readonly collaborators: readonly InvitationCollaborator[];
+}
+
 /** One template a creator may start from, with the version the draft will be pinned to (S8). */
 export interface CreatorTemplate {
   id: string;
@@ -418,7 +456,15 @@ export type InvitationFailure =
   | "slug-reserved"
   | "slug-taken"
   | "slug-rename-limit"
-  | "slug-rate-limited";
+  | "slug-rate-limited"
+  | "collaborator-invalid"
+  | "co-hosts-unavailable"
+  | "collaborator-already-invited"
+  | "collaborator-limit-reached"
+  | "collaborator-email-unavailable"
+  | "collaborator-not-found"
+  | "collaboration-not-found"
+  | "forbidden";
 
 /**
  * A refused call, plus the readiness `issues` the API returned for a publish it refused: English
@@ -566,6 +612,11 @@ export interface InvitationListItem extends InvitationSummary {
   componentKey: string | null;
   /** The version's stored configuration, kept unread: the renderer's own parser decides whether it draws. */
   configuration: unknown;
+  /**
+   * Who the caller is on this row (F12; L17.5): `OWNER` for an invitation it owns, `COLLABORATOR` for one another owner
+   * shared with it. The card renders «Compartida contigo» from it and offers only the tabs the role may use.
+   */
+  access: InvitationAccess;
 }
 
 /**
@@ -583,8 +634,13 @@ export function parseInvitationListItem(value: unknown): InvitationListItem | un
 
   const content = item.content === undefined ? {} : parseContent(item.content);
   const componentKey = item.componentKey ?? null;
+  const access = parseInvitationAccess(item);
 
-  if (content === undefined || !(componentKey === null || isNonEmptyString(componentKey))) {
+  if (
+    content === undefined ||
+    access === undefined ||
+    !(componentKey === null || isNonEmptyString(componentKey))
+  ) {
     return undefined;
   }
 
@@ -593,6 +649,7 @@ export function parseInvitationListItem(value: unknown): InvitationListItem | un
     content,
     componentKey,
     configuration: item.configuration ?? null,
+    access,
   };
 }
 
@@ -782,6 +839,9 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
   const featureSettings = parseFeatureSettings(owned.featureSettings);
   const availableFeatures = parseAllowedNames(owned.availableFeatures, isInvitationFeatureKey);
   const places = parseStoredPlaces(owned.places);
+  // The caller's role on this invitation (F12; L17.4): a body written before F12 carries neither field and reads as the
+  // owner, which is what an older API meant (L20).
+  const access = parseInvitationAccess(owned);
   // A body written before F6 carries no capability at all, which reads as "not configured" (L20); an explicit value
   // is a boolean or the body is refused, so a shape nobody writes never becomes a capability.
   const remindersConfigured =
@@ -798,6 +858,7 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     featureSettings === undefined ||
     availableFeatures === undefined ||
     places === undefined ||
+    access === undefined ||
     slugRenamesRemaining === undefined ||
     typeof remindersConfigured !== "boolean" ||
     !isInvitationTimeZone(owned.timeZone)
@@ -809,6 +870,7 @@ export function parseOwnedInvitation(value: unknown): OwnedInvitation | undefine
     ...summary,
     content,
     missingRequiredFields: missing,
+    access,
     timeZone: owned.timeZone,
     slugRenamesRemaining,
     featureSettings,
@@ -1345,6 +1407,100 @@ export function parseGuestAlbumRead(value: unknown, apiOrigin: string): GuestAlb
 // only shape the API mints, so a value that cannot have been minted names no guest and no request is sent.
 
 /** The widest guest name, in characters: the API's own bound on `Guest.name`. */
+/** The longest address the API stores for an account and for an invited collaborator. */
+const COLLABORATOR_EMAIL_MAX_LENGTH = 320;
+/** The most collaborators one invitation can keep; a read that states another cap is not this contract. */
+const MAX_COLLABORATORS = 50;
+
+/**
+ * A collaborator's permission set, or nothing: at least one allow-listed permission, no repeat, answered in the domain's
+ * canonical order. The owner's own access is not read here — it carries no set at all.
+ */
+function parseCollaboratorPermissions(value: unknown): InvitationPermission[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) {
+    return undefined;
+  }
+
+  const granted = new Set<InvitationPermission>();
+  for (const entry of value) {
+    const permission = INVITATION_PERMISSIONS.find((candidate) => candidate === entry);
+
+    if (permission === undefined || granted.has(permission)) {
+      return undefined;
+    }
+    granted.add(permission);
+  }
+  return INVITATION_PERMISSIONS.filter((permission) => granted.has(permission));
+}
+
+function isCollaboratorStatus(value: unknown): value is CollaboratorStatus {
+  return typeof value === "string" && (COLLABORATOR_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * One collaborator the owner's screen lists (F12; L17.3). A row of another shape refuses the whole read: the screen
+ * offers a permission change on what it renders, so nothing guessed may reach it.
+ */
+export function parseCollaborator(value: unknown): InvitationCollaborator | undefined {
+  const row = record(value);
+  const permissions = parseCollaboratorPermissions(row?.permissions);
+
+  if (
+    row === undefined ||
+    permissions === undefined ||
+    !isInvitationId(row.id) ||
+    !isNonEmptyString(row.email) ||
+    row.email.length > COLLABORATOR_EMAIL_MAX_LENGTH ||
+    !isCollaboratorStatus(row.status) ||
+    !isTimestamp(row.invitedAt) ||
+    !(row.acceptedAt === null || isTimestamp(row.acceptedAt))
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: row.id,
+    email: row.email,
+    permissions,
+    status: row.status,
+    invitedAt: row.invitedAt,
+    acceptedAt: row.acceptedAt,
+  };
+}
+
+/** The owner's read of the co-hosts and the cap, or nothing when the body is not that shape (F12; L17.1). */
+export function parseCollaboratorList(value: unknown): CollaboratorList | undefined {
+  const body = record(value);
+  const collaborators = mapAll(body?.collaborators, parseCollaborator);
+  const max = body?.maxCollaborators;
+
+  if (
+    body === undefined ||
+    collaborators === undefined ||
+    typeof max !== "number" ||
+    !Number.isSafeInteger(max) ||
+    max < 1 ||
+    max > MAX_COLLABORATORS
+  ) {
+    return undefined;
+  }
+
+  return { maxCollaborators: max, collaborators };
+}
+
+/** The acceptance's answer: the invitation it opened, so the web knows where to go (F12; L17.3). */
+export interface AcceptedCollaboration {
+  readonly invitationId: string;
+}
+
+export function parseAcceptedCollaboration(value: unknown): AcceptedCollaboration | undefined {
+  const body = record(value);
+
+  return body !== undefined && isInvitationId(body.invitationId)
+    ? { invitationId: body.invitationId }
+    : undefined;
+}
+
 export const GUEST_NAME_MAX_LENGTH = 80;
 /** The seats one guest may be given, mirrored so no page offers what the API refuses (S4). */
 export const GUEST_SEATS_MIN = 1;
@@ -1737,6 +1893,14 @@ const CODE_FAILURES: Record<string, InvitationFailure> = {
   INVITATION_SLUG_TAKEN: "slug-taken",
   INVITATION_SLUG_RENAME_LIMIT: "slug-rename-limit",
   SLUG_AVAILABILITY_RATE_LIMITED: "slug-rate-limited",
+  INVALID_COLLABORATOR_INVITATION: "collaborator-invalid",
+  CO_HOSTS_NOT_AVAILABLE: "co-hosts-unavailable",
+  COLLABORATOR_ALREADY_INVITED: "collaborator-already-invited",
+  COLLABORATOR_LIMIT_REACHED: "collaborator-limit-reached",
+  COLLABORATOR_EMAIL_UNAVAILABLE: "collaborator-email-unavailable",
+  COLLABORATOR_NOT_FOUND: "collaborator-not-found",
+  COLLABORATION_NOT_FOUND: "collaboration-not-found",
+  INVITATION_FORBIDDEN: "forbidden",
 };
 
 const SIGNED_OUT: InvitationResult<never> = { ok: false, failure: "signed-out" };
@@ -1756,6 +1920,16 @@ const PLACE_QUERY_REFUSED: InvitationResult<never> = {
 };
 /** The answer a guest route gives without a request: an id or a token that names no guest of this invitation. */
 const GUEST_NOT_FOUND_RESULT: InvitationResult<never> = { ok: false, failure: "guest-not-found" };
+/** The answer a collaborator route gives without a request: an id that cannot be one names no row. */
+const COLLABORATOR_NOT_FOUND_RESULT: InvitationResult<never> = {
+  ok: false,
+  failure: "collaborator-not-found",
+};
+/** The one answer of an acceptance that never left this process: a token of another shape names nothing (L17.3). */
+const COLLABORATION_REFUSED: InvitationResult<never> = {
+  ok: false,
+  failure: "collaboration-not-found",
+};
 
 /** The most readiness issues one refusal is read with, so a hostile body cannot grow the list. */
 const MAX_ISSUES = 20;
@@ -1822,13 +1996,14 @@ const readsBody = (status: number): boolean =>
   (status >= 200 && status <= 299) ||
   status === 400 ||
   status === 402 ||
+  status === 403 ||
   status === 404 ||
   status === 409 ||
   status === 429 ||
   status === 503;
 
 /** The statuses whose fixed code this client maps; anything else keeps its own default outcome. */
-const REFUSAL_STATUSES: readonly number[] = [400, 402, 404, 409, 429, 503];
+const REFUSAL_STATUSES: readonly number[] = [400, 402, 403, 404, 409, 429, 503];
 
 /** The content type and the attachment filename the RSVP CSV route answers with (M6 G3; S4). */
 const RSVP_CSV_CONTENT_TYPE = "text/csv";
@@ -1836,6 +2011,7 @@ const RSVP_CSV_DISPOSITION = /^attachment; filename="[A-Za-z0-9._-]{1,80}"$/;
 
 const INVITATIONS = "/invitations";
 const PAYMENTS = "/payments";
+const COLLABORATIONS = "/collaborations";
 
 /**
  * `readCookieHeader` supplies the current request's `Cookie` header at each call; the client keeps
@@ -1951,6 +2127,19 @@ export function createInvitationsClient(
   function guestbookEntryPath(id: string, entryId: string): string | undefined {
     return isInvitationId(id) && isInvitationId(entryId)
       ? `${INVITATIONS}/${id}/guestbook/${entryId}`
+      : undefined;
+  }
+
+  /** The path of one collaborator route (F12; L17.3), or undefined when an id cannot be one. */
+  function collaboratorPath(id: string, collaboratorId?: string): string | undefined {
+    if (!isInvitationId(id)) {
+      return undefined;
+    }
+    if (collaboratorId === undefined) {
+      return `${INVITATIONS}/${id}/collaborators`;
+    }
+    return isInvitationId(collaboratorId)
+      ? `${INVITATIONS}/${id}/collaborators/${collaboratorId}`
       : undefined;
   }
 
@@ -2221,6 +2410,70 @@ export function createInvitationsClient(
         ? Promise.resolve(GUEST_NOT_FOUND_RESULT)
         : call("POST", path, { token }, parseGuestCheckIn);
     },
+    /**
+     * `GET /invitations/:id/collaborators`: the standing co-hosts and the cap, oldest first (F12; L17.3, L17.5).
+     * Owner-only, so a collaborator answers 403 `INVITATION_FORBIDDEN` and a stranger the module's 404.
+     */
+    collaborators: (id: string): Promise<InvitationResult<CollaboratorList>> => {
+      const path = collaboratorPath(id);
+
+      return path === undefined
+        ? Promise.resolve(NOT_FOUND)
+        : call("GET", path, undefined, parseCollaboratorList);
+    },
+    /**
+     * `POST /invitations/:id/collaborators`: invites one address with a permission set (F12; L17.1, L17.3). Called from
+     * a server action; the answer is the invited row and never the link the email carries.
+     */
+    inviteCollaborator: (
+      id: string,
+      email: string,
+      permissions: readonly InvitationPermission[],
+    ): Promise<InvitationResult<InvitationCollaborator>> => {
+      const path = collaboratorPath(id);
+
+      return path === undefined
+        ? Promise.resolve(NOT_FOUND)
+        : call("POST", path, { email, permissions: [...permissions] }, parseCollaborator);
+    },
+    /**
+     * `PATCH /invitations/:id/collaborators/:collaboratorId`: replaces what one collaborator may do (F12; L17.3).
+     * Called from a server action, because a browser cannot send `PATCH`.
+     */
+    updateCollaboratorPermissions: (
+      id: string,
+      collaboratorId: string,
+      permissions: readonly InvitationPermission[],
+    ): Promise<InvitationResult<InvitationCollaborator>> => {
+      const path = collaboratorPath(id, collaboratorId);
+
+      return path === undefined
+        ? Promise.resolve(COLLABORATOR_NOT_FOUND_RESULT)
+        : call("PATCH", path, { permissions: [...permissions] }, parseCollaborator);
+    },
+    /**
+     * `DELETE /invitations/:id/collaborators/:collaboratorId`: revokes a pending or accepted collaborator, whose access
+     * ends on the next request (F12; L17.3). Repeating the revoke answers the collaborator's 404.
+     */
+    revokeCollaborator: (
+      id: string,
+      collaboratorId: string,
+    ): Promise<InvitationResult<InvitationCollaborator>> => {
+      const path = collaboratorPath(id, collaboratorId);
+
+      return path === undefined
+        ? Promise.resolve(COLLABORATOR_NOT_FOUND_RESULT)
+        : call("DELETE", path, undefined, parseCollaborator);
+    },
+    /**
+     * `POST /collaborations/accept`: accepts the emailed collaboration and answers the invitation it opened (F12;
+     * L17.3). The caller is the session user, and the API compares that account's address with the invited one; a token
+     * that cannot have been minted names nothing, so no request is made.
+     */
+    acceptCollaboration: (token: string): Promise<InvitationResult<AcceptedCollaboration>> =>
+      isCollaborationToken(token)
+        ? call("POST", `${COLLABORATIONS}/accept`, { token }, parseAcceptedCollaboration)
+        : Promise.resolve(COLLABORATION_REFUSED),
     /**
      * `GET /invitations/:id/rsvp.csv`: the same read as a file (M6 G3; S1, S4). The API's own content type and
      * attachment filename are kept, because the route that answers the browser passes them through.

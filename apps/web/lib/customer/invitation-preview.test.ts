@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CreatorTemplate, OwnedInvitation, RsvpSettings } from "../server/invitations-api.ts";
 import type { MediaAsset } from "../server/media-api.ts";
+import { OWNER_ACCESS } from "./invitation-access.ts";
 import {
   INVITATION_PREVIEW_COPY,
   invitationPreviewPath,
@@ -134,6 +135,7 @@ function invitation(overrides: Partial<OwnedInvitation> = {}): OwnedInvitation {
     updatedAt: "2026-11-01T00:00:00.000Z",
     content: { celebrantName: "Ana Sofía" },
     missingRequiredFields: [],
+    access: OWNER_ACCESS,
     timeZone: "America/Mexico_City",
     featureSettings: {
       whatsappPhone: null,
