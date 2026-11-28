@@ -5,6 +5,7 @@ import {
   availableFeatureKeys,
   CALENDAR_FEATURE_KEY,
   DEFAULT_INVITATION_TIME_ZONE,
+  ENGLISH_INVITATION_FEATURE_KEY,
   IMPLEMENTED_INVITATION_FEATURES,
   INVITATION_TIME_ZONES,
   ITINERARY_FEATURE_KEY,
@@ -757,6 +758,46 @@ describe("feature gating (S4, F1)", () => {
       ...gate,
     });
 
+  it("answers the language the guest page renders, only while the package grants ENGLISH_INVITATION (F14; L19.5)", () => {
+    const GATE = {
+      includedFeatureKeys: ["ENGLISH_INVITATION"],
+      whatsappPhone: null,
+      playlistUrl: null,
+      playlistTitle: null,
+      playlistCoverUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+      lodging: null,
+      livestream: null,
+      openingAnimation: true,
+      rsvpDeadline: null,
+      rsvpPartyLimit: 4,
+    };
+
+    // Granted: the answer is the owner's choice itself, so a page deployed before F14 reads a language it understands
+    // instead of a switch it would have to interpret (L19.5).
+    for (const language of ["es", "es-en", "en"] as const) {
+      assert.equal(publicInvitationFeatures({ ...GATE, language }).language, language);
+    }
+    // A body written before the column existed, or a row no rule validated, reads as Spanish.
+    for (const language of [undefined, null, "ES", "en-US", 42]) {
+      assert.equal(
+        publicInvitationFeatures({ ...GATE, language: language as never }).language,
+        "es",
+        String(language),
+      );
+    }
+    // Withdrawn: Spanish, whatever the owner chose, and the stored choice is not lost by the read.
+    for (const language of ["es", "es-en", "en"] as const) {
+      assert.equal(
+        publicInvitationFeatures({ ...GATE, includedFeatureKeys: ["COUNTDOWN"], language })
+          .language,
+        "es",
+        language,
+      );
+    }
+  });
+
   it("answers the guestbook with its visible entries only while the package grants it (F7; L10.4)", () => {
     const entries = [
       { authorName: "Tía Rosa", message: "¡Que sea un día hermoso!" },
@@ -822,7 +863,7 @@ describe("feature gating (S4, F1)", () => {
     );
   });
 
-  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_ALBUM, LIVESTREAM, GUEST_LIST, QR_PASS, GALLERY, OPENING_ANIMATION, CO_HOSTS, and PASSWORD_PROTECTION, with CALENDAR always added", () => {
+  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_ALBUM, LIVESTREAM, GUEST_LIST, QR_PASS, GALLERY, OPENING_ANIMATION, CO_HOSTS, PASSWORD_PROTECTION, and ENGLISH_INVITATION, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
       "ITINERARY",
       "COUNTDOWN",
@@ -843,6 +884,9 @@ describe("feature gating (S4, F1)", () => {
       // The shared access code (F13; S2.13, L18.5): it is in the allow-list so the owner's read offers it, and it is
       // never a guest block.
       "PASSWORD_PROTECTION",
+      // The English invitation (F14; S2.14, L19.4): like the access code it is a capability and not a card, so the key
+      // is offered while no data decides it.
+      "ENGLISH_INVITATION",
     ]);
     assert.equal(CALENDAR_FEATURE_KEY, "CALENDAR");
     assert.equal(PASSWORD_PROTECTION_FEATURE_KEY, "PASSWORD_PROTECTION");
@@ -865,6 +909,9 @@ describe("feature gating (S4, F1)", () => {
     // The opening animation is granted the same way, whether the owner switched it on or off (F10; L14.3, L14.4):
     // the key is the gate and the switch is the data.
     assert.deepEqual(gated(["OPENING_ANIMATION"]), ["OPENING_ANIMATION", "CALENDAR"]);
+    // The English invitation is a capability of its own too (F14; L19.4): the stored language is the data.
+    assert.deepEqual(gated(["ENGLISH_INVITATION"]), ["ENGLISH_INVITATION", "CALENDAR"]);
+    assert.equal(ENGLISH_INVITATION_FEATURE_KEY, "ENGLISH_INVITATION");
   });
 
   it("shows the features each seeded package includes, plus CALENDAR", () => {
@@ -1024,6 +1071,9 @@ describe("feature gating (S4, F1)", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        // The package grants neither ENGLISH_INVITATION nor a language was ever stored, so the guest reads Spanish
+        // (F14; L19.5).
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1292,6 +1342,7 @@ describe("feature gating (S4, F1)", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1316,6 +1367,7 @@ describe("feature gating (S4, F1)", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1340,6 +1392,7 @@ describe("feature gating (S4, F1)", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],

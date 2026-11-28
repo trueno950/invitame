@@ -125,6 +125,14 @@ export class UpdateInvitationFeaturesDto {
    */
   @IsOptional()
   openingAnimation?: unknown;
+
+  /**
+   * Optional like the fields above (F14; L19.1): a body that omits it keeps the stored language, so a client built before
+   * F14 can still save the rest without clearing a language it never knew about. `es`, `es-en`, and `en` are the only
+   * accepted values, and the domain names the issue of any other one.
+   */
+  @IsOptional()
+  language?: unknown;
 }
 
 /**

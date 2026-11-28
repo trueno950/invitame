@@ -1753,6 +1753,7 @@ describe("invitations routes: /invitations", () => {
         livestream: null,
         openingAnimation: true,
         reminders: null,
+        language: "es",
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -1970,6 +1971,7 @@ describe("invitations routes: /invitations", () => {
         livestream: null,
         openingAnimation: true,
         reminders: null,
+        language: "es",
       });
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
     });
@@ -2246,6 +2248,7 @@ describe("invitations routes: /invitations", () => {
         livestream: null,
         openingAnimation: true,
         reminders: null,
+        language: "es",
       });
       // The ACTIVE fixture package includes no catalog feature, so only the calendar is offered (S4).
       assert.deepEqual(body.availableFeatures, ["CALENDAR"]);
@@ -2298,6 +2301,7 @@ describe("invitations routes: /invitations", () => {
           livestream: null,
           openingAnimation: true,
           reminders: null,
+          language: "es",
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.whatsappPhone, null);
       }
@@ -2340,6 +2344,7 @@ describe("invitations routes: /invitations", () => {
         livestream: null,
         openingAnimation: true,
         reminders: null,
+        language: "es",
       });
       assert.deepEqual(musicMetadata.asked, [{ playlistUrl: PLAYLIST, provider: "spotify" }]);
 
@@ -2372,6 +2377,7 @@ describe("invitations routes: /invitations", () => {
         livestream: null,
         openingAnimation: true,
         reminders: null,
+        language: "es",
       });
 
       // A later owner read answers the same stored metadata, so the editor and the preview render it too (S2).
@@ -2388,6 +2394,7 @@ describe("invitations routes: /invitations", () => {
         livestream: null,
         openingAnimation: true,
         reminders: null,
+        language: "es",
       });
     });
 
@@ -2434,6 +2441,7 @@ describe("invitations routes: /invitations", () => {
         livestream: null,
         openingAnimation: true,
         reminders: null,
+        language: "es",
       });
       assert.equal(musicMetadata.asked.length, 1);
     });
@@ -3053,6 +3061,7 @@ describe("invitations routes: /invitations", () => {
           livestream: null,
           openingAnimation: true,
           reminders: null,
+          language: "es",
         });
         assert.equal(repository.rows.find((row) => row.id === draft.id)?.playlistUrl, null);
       }
@@ -4409,6 +4418,8 @@ describe("invitations routes: /invitations", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        // The fixture's package grants no ENGLISH_INVITATION, so the guest reads Spanish (F14; L19.5).
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -4583,6 +4594,7 @@ describe("invitations routes: /invitations", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -4621,6 +4633,7 @@ describe("invitations routes: /invitations", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -5021,6 +5034,7 @@ describe("invitations routes: /invitations", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],

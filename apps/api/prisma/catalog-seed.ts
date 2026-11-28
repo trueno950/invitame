@@ -131,6 +131,12 @@ const FEATURE_SEEDS = [
     description: "Protege tu invitación con un código de acceso que compartes con tus invitados.",
   },
   {
+    key: "ENGLISH_INVITATION",
+    name: "Invitación en inglés",
+    description:
+      "Los textos fijos de tu invitación en español y en inglés, con un botón ES / EN para tus invitados.",
+  },
+  {
     key: "GUEST_ALBUM",
     name: "Álbum de fotos de invitados",
     description: "Tus invitados suben sus fotos y tú decides cuáles aparecen en la invitación.",
@@ -166,7 +172,14 @@ const PACKAGE_SEEDS = [
     description: "Una selección inicial para empezar a planificar.",
     // S1: «Básico 30 días». Each package states its own lifetime, counted from the publication instant.
     durationDays: 30,
-    featureKeys: ["ITINERARY", "COUNTDOWN", "MAP", "WHATSAPP", "OPENING_ANIMATION"],
+    featureKeys: [
+      "ITINERARY",
+      "COUNTDOWN",
+      "MAP",
+      "WHATSAPP",
+      "OPENING_ANIMATION",
+      "ENGLISH_INVITATION",
+    ],
   },
   {
     key: "premium",
@@ -187,6 +200,7 @@ const PACKAGE_SEEDS = [
       "LIVESTREAM",
       "OPENING_ANIMATION",
       "CO_HOSTS",
+      "ENGLISH_INVITATION",
     ],
   },
   {
@@ -214,6 +228,7 @@ const PACKAGE_SEEDS = [
       "OPENING_ANIMATION",
       "CO_HOSTS",
       "PASSWORD_PROTECTION",
+      "ENGLISH_INVITATION",
     ],
   },
 ] as const;

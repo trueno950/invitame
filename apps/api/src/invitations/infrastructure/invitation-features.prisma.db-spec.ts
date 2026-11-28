@@ -914,6 +914,151 @@ describe("invitation feature data (real PostgreSQL)", () => {
       assert.ok(granted.includes("deluxe"), "deluxe grants OPENING_ANIMATION");
     });
 
+    it("adds a NOT NULL language column with the es default and the three-value check, and grants ENGLISH_INVITATION to every seeded package (F14; L19.1, L19.4)", async () => {
+      const columns = await prisma.$queryRaw<
+        Array<{
+          is_nullable: string;
+          column_default: string | null;
+          data_type: string;
+          character_maximum_length: number | null;
+        }>
+      >`
+        SELECT is_nullable, column_default, data_type, character_maximum_length
+        FROM information_schema.columns
+        WHERE table_name = 'InvitationFeatureSettings' AND column_name = 'language'
+      `;
+
+      // Additive and Spanish by default: every row written before the migration reads `es` without being rewritten.
+      assert.deepEqual(columns, [
+        {
+          is_nullable: "NO",
+          column_default: "'es'::character varying",
+          data_type: "character varying",
+          character_maximum_length: 5,
+        },
+      ]);
+
+      // The three values L19.1 names, held by the database as well as by the domain.
+      const checks = await prisma.$queryRaw<Array<{ definition: string }>>`
+        SELECT check_clause AS definition
+        FROM information_schema.check_constraints
+        WHERE constraint_name = 'InvitationFeatureSettings_language_check'
+      `;
+      assert.equal(checks.length, 1);
+      assert.match(checks[0]?.definition ?? "", /'es'/);
+      assert.match(checks[0]?.definition ?? "", /'es-en'/);
+      assert.match(checks[0]?.definition ?? "", /'en'/);
+
+      const rows = await prisma.packageFeature.findMany({
+        where: { feature: { key: "ENGLISH_INVITATION" } },
+        select: { package: { select: { key: true } } },
+      });
+      // Every seeded package grants it, so the catalog can withdraw it later without a code change (L19.4).
+      const granted = rows.map((row) => row.package.key);
+
+      assert.ok(granted.includes("basic"), "basic grants ENGLISH_INVITATION");
+      assert.ok(granted.includes("premium"), "premium grants ENGLISH_INVITATION");
+      assert.ok(granted.includes("deluxe"), "deluxe grants ENGLISH_INVITATION");
+    });
+
+    it("holds the language to the three stored values, and a row inserted without one reads Spanish (F14; L19.1)", async () => {
+      const { invitation } = await newDraft(SEEDED_PACKAGE_FEATURES.basic);
+
+      // A row inserted without a language — a pre-migration row, or a write that never named it — reads `es`.
+      const defaults = await prisma.invitationFeatureSettings.create({
+        data: { invitationId: invitation.id },
+        select: { language: true },
+      });
+      assert.deepEqual(defaults, { language: "es" });
+
+      for (const language of ["es", "es-en", "en"] as const) {
+        assert.deepEqual(
+          await prisma.invitationFeatureSettings.update({
+            where: { invitationId: invitation.id },
+            data: { language },
+            select: { language: true },
+          }),
+          { language },
+        );
+      }
+
+      // A row written around the API is refused by the database instead of storing a locale no page can render. Every
+      // value fits the column's five characters, so only the three-value check can refuse it.
+      for (const language of ["ES", "En", "en-US", "eng", ""]) {
+        await assert.rejects(
+          prisma.invitationFeatureSettings.update({
+            where: { invitationId: invitation.id },
+            data: { language },
+          }),
+          /InvitationFeatureSettings_language_check/,
+          language,
+        );
+      }
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { language: true },
+        }),
+        { language: "en" },
+      );
+    });
+
+    it("stores the language, keeps it when a write omits it, and answers it on the owner and guest reads (F14; L19.1, L19.5)", async () => {
+      const { invitation } = await newDraft([
+        ...SEEDED_PACKAGE_FEATURES.basic,
+        "ENGLISH_INVITATION",
+      ]);
+
+      // An invitation with no settings row reads the column's default, which is what the first write would store.
+      assert.equal((await repository.findOwned(invitation.ownerId, invitation.id))?.language, "es");
+
+      const BASE = {
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        playlistTitle: null,
+        playlistCoverUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: null,
+        openingAnimation: true,
+        reminders: null,
+      } as const;
+
+      const chosen = await repository.updateFeatures(invitation.ownerId, invitation.id, {
+        ...BASE,
+        language: "es-en",
+      });
+
+      assert.equal(chosen?.language, "es-en");
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { language: true },
+        }),
+        { language: "es-en" },
+      );
+
+      // A write that never names the language — a client built before F14 — keeps what the owner chose.
+      const kept = await repository.updateFeatures(invitation.ownerId, invitation.id, BASE);
+
+      assert.equal(kept?.language, "es-en");
+      assert.deepEqual(
+        await prisma.invitationFeatureSettings.findUniqueOrThrow({
+          where: { invitationId: invitation.id },
+          select: { language: true },
+        }),
+        { language: "es-en" },
+      );
+
+      const english = await repository.updateFeatures(invitation.ownerId, invitation.id, {
+        ...BASE,
+        language: "en",
+      });
+      assert.equal(english?.language, "en");
+    });
+
     it("stores the opening animation switch, and an omitted switch keeps the stored one (F10; L14.3)", async () => {
       const { invitation } = await newDraft(SEEDED_PACKAGE_FEATURES.basic);
 
@@ -1268,6 +1413,8 @@ describe("invitation feature data (real PostgreSQL)", () => {
             lodging: null,
             livestream: null,
             openingAnimation: true,
+            // The seeded packages in this fixture grant no ENGLISH_INVITATION, so the guest reads Spanish (F14; L19.5).
+            language: "es",
             // Premium and Deluxe grant the guestbook, so their wall is an empty list (F7; L10.2, L10.4).
             guestbook: packageKey === "basic" ? null : [],
             // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
@@ -1333,6 +1480,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         lodging: null,
         livestream: null,
         openingAnimation: true,
+        language: "es",
         guestbook: [],
         guestAlbum: null,
         gallery: [],
@@ -1361,6 +1509,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         lodging: null,
         livestream: null,
         openingAnimation: true,
+        language: "es",
         guestbook: [],
         guestAlbum: { photos: [], count: 0 },
         gallery: [],
@@ -1398,6 +1547,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -1428,6 +1578,7 @@ describe("invitation feature data (real PostgreSQL)", () => {
         "guestAlbum",
         "guestbook",
         "itinerary",
+        "language",
         "livestream",
         "lodging",
         "map",

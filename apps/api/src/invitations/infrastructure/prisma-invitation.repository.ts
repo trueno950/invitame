@@ -24,6 +24,7 @@ import {
 import type { JsonObject } from "../domain/invitation-content";
 import { storedGiftRegistry } from "../domain/invitation-gift-registry";
 import { storedItinerary } from "../domain/invitation-itinerary";
+import { storedInvitationLanguage } from "../domain/invitation-language";
 import { storedLodging } from "../domain/invitation-lodging";
 import { storedLivestream } from "../domain/invitation-livestream";
 import { storedReminders } from "../domain/invitation-reminders";
@@ -71,6 +72,8 @@ const INVITATION_SELECT = {
       livestream: true,
       openingAnimation: true,
       reminders: true,
+      // The language the owner chose (F14; L19.1) travels with the row too, so an owned or public read stays one query.
+      language: true,
     },
   },
   // The stored points travel with the row too (S2): the public projection decides which of them a guest may see, and
@@ -148,6 +151,8 @@ function toRecord(row: InvitationRow): InvitationRecordWithMusic {
     // The opening animation switch (F10; L14.3): a row with no settings row reads the column's default, which is what the
     // first write stores, so an invitation that never saved feature data still plays the animation.
     openingAnimation: row.featureSettings?.openingAnimation ?? true,
+    // The language reads as `es` for a row written around the API, which is the column's default (F14; L19.5).
+    language: storedInvitationLanguage(row.featureSettings?.language),
     // The reminder switches read as none when a row written around the API does not satisfy their rules (F6; L9.1).
     reminders: storedReminders(row.featureSettings?.reminders),
     // Whether an access code protects the invitation (F13; L18.1). The hash is read and reduced to this boolean here, so no
@@ -367,6 +372,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
             ? {}
             : { openingAnimation: features.openingAnimation }),
           reminders: jsonPayloadColumn(features.reminders),
+          // A write that names the language stores it; one that omits it keeps the column's default, `es` (F14; L19.1).
+          ...(features.language === undefined ? {} : { language: features.language }),
         },
         update: {
           whatsappPhone: features.whatsappPhone,
@@ -386,6 +393,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
             ? {}
             : { openingAnimation: features.openingAnimation }),
           reminders: jsonPayloadColumn(features.reminders),
+          // An omitted language keeps the stored one, so a write that predates F14 never resets it (F14; L19.1).
+          ...(features.language === undefined ? {} : { language: features.language }),
         },
       });
 

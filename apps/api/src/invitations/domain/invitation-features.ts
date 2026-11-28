@@ -45,6 +45,11 @@ import {
   validateItinerary,
 } from "./invitation-itinerary";
 import {
+  effectiveInvitationLanguage,
+  type InvitationLanguage,
+  storedInvitationLanguage,
+} from "./invitation-language";
+import {
   type InvitationLodging,
   lodgingHasContent,
   type PublicLodging,
@@ -118,6 +123,9 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   // The shared access code (F13; S2.13, L18.5). It is in the allow-list so the owner's read offers it when the package
   // grants it, and it is never rendered as a guest block: a code is access control, not a feature card.
   "PASSWORD_PROTECTION",
+  // The English invitation (F14; S2.14, L19.4). Like the access code it is a capability and not a card: the key gates
+  // whether the stored language reaches a guest, and the fixed texts live in the web's typed dictionary.
+  "ENGLISH_INVITATION",
 ] as const;
 
 export type ImplementedInvitationFeature = (typeof IMPLEMENTED_INVITATION_FEATURES)[number];
@@ -202,6 +210,14 @@ export const CO_HOSTS_FEATURE_KEY = "CO_HOSTS";
  * is an explicit act and not a side effect of a catalog change.
  */
 export const PASSWORD_PROTECTION_FEATURE_KEY = "PASSWORD_PROTECTION";
+
+/**
+ * The catalog key that grants the English invitation (F14; S2.14, L19.4), granted to every seeded package so the
+ * catalogue can withdraw it later without a code change. It is the grant of the stored `language` column: the public read
+ * answers the owner's choice while the pinned package grants the key and Spanish otherwise (L19.5), and no guest block
+ * depends on it. A package that never grants it keeps a stored choice that a later grant restores.
+ */
+export const ENGLISH_INVITATION_FEATURE_KEY = "ENGLISH_INVITATION";
 
 /**
  * The message a value that is not a boolean is refused with (F10; L14.3). The switch has no other shape: `null` and an
@@ -765,6 +781,12 @@ export interface InvitationFeatureGate {
   readonly rsvpDeadline: Date | null;
   /** The owner's party limit, 1 to 10 (M6 S4). */
   readonly rsvpPartyLimit: number;
+  /**
+   * The language the owner stored (F14; L19.1), or no value when the caller answers none — a row written before the
+   * column existed and a page deployed before F14 both read Spanish (L19.5). The grant of `ENGLISH_INVITATION` decides
+   * whether it reaches a guest, so the gate reads the stored choice, never the answer.
+   */
+  readonly language?: InvitationLanguage;
 }
 
 /**
@@ -898,6 +920,13 @@ export interface PublicInvitationFeatures {
      */
     readonly qrPass: boolean;
   };
+  /**
+   * The language a guest's page renders (F14; S2.14, L19.1, L19.5): the owner's stored choice while the pinned package
+   * grants `ENGLISH_INVITATION`, and Spanish otherwise. It is the decision itself — `es`, `es-en`, or `en` — never the
+   * stored value and never a boolean, so a page reads one answer. A body written before F14 answers no field at all, and
+   * the web reads that as `es`, so a page deployed before the API keeps rendering Spanish (L20).
+   */
+  readonly language: InvitationLanguage;
 }
 
 /**
@@ -957,6 +986,12 @@ export function publicInvitationFeatures(
     // The animation is the one feature whose data is a switch rather than a payload: the grant decides whether the
     // owner's choice counts at all, and the switch decides whether the page draws the envelope (F10; L14.4).
     openingAnimation: keys.has(OPENING_ANIMATION_FEATURE_KEY) && gate.openingAnimation,
+    // The language follows the same rule (F14; L19.5): the grant decides whether the stored choice reaches a guest, and a
+    // package without the key answers Spanish without losing what the owner picked.
+    language: effectiveInvitationLanguage(
+      keys.has(ENGLISH_INVITATION_FEATURE_KEY),
+      storedInvitationLanguage(gate.language),
+    ),
     // The wall is the feature, not its data: a granted package answers its visible entries even while there are none.
     guestbook: keys.has(GUESTBOOK_FEATURE_KEY) ? [...guestbookEntries] : null,
     // The album follows the same rule (F8; L11.4): the grant carries the published photos the read collected, and a

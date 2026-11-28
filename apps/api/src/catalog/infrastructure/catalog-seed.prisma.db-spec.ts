@@ -58,6 +58,8 @@ const SEEDED_FEATURE_KEYS = [
   "QR_PASS",
   // F13 (L18.5): the access code of a password-protected invitation, granted by Deluxe only.
   "PASSWORD_PROTECTION",
+  // F14 (L19.4): the language of the invitation, granted by every seeded package.
+  "ENGLISH_INVITATION",
 ];
 const SEEDED_PACKAGE_KEYS = ["basic", "premium", "deluxe"];
 const PREMIUM_FEATURE_KEYS = [
@@ -73,6 +75,8 @@ const PREMIUM_FEATURE_KEYS = [
   "LIVESTREAM",
   "OPENING_ANIMATION",
   "CO_HOSTS",
+  // F14 (L19.4): every seeded package, Premium included, grants the invitation's language.
+  "ENGLISH_INVITATION",
 ];
 
 const ZERO_SUMMARY = {

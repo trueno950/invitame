@@ -275,13 +275,14 @@ export class InvitationsController {
   /**
    * Replaces the feature data of a DRAFT or a PUBLISHED invitation (F1, F2, F4, F6; S4, S7): the time zone, the
    * WhatsApp phone, the playlist link, the itinerary, the gift registry, the lodging, the livestream, the opening
-   * animation switch, and the WhatsApp
+   * animation switch, the language of the invitation, and the WhatsApp
    * reminder switches. Creator-owned and refused for an archived invitation exactly like a content save; `null` or an empty
    * `whatsappPhone` clears the stored phone, `null` or an empty `playlistUrl` clears the stored link, `null` or an empty
    * list clears the stored itinerary, `null` or an empty registry clears the stored registry, `null` or a payload with
    * no hotel and no transport line clears the stored lodging, `null` or a payload without a link clears the stored
    * livestream, and `null` or a pair of switches with nothing on clears the stored reminder switches. An omitted
-   * `itinerary`, `giftRegistry`, `lodging`, `livestream`, or `reminders` keeps the stored one. `PUT` and not `PATCH`: the whole feature data is replaced.
+   * `itinerary`, `giftRegistry`, `lodging`, `livestream`, `reminders`, or `language` keeps the stored one. `PUT` and not
+   * `PATCH`: the whole feature data is replaced.
    */
   @Put(":id/features")
   @RequireInvitationPermission("EDIT_CONTENT")

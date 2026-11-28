@@ -174,6 +174,11 @@ export interface OwnedInvitationResponse extends InvitationSummaryResponse {
      * back, and the switches work as soon as a sender is configured.
      */
     reminders: { version: 1; pendingRsvp: boolean; eventEve: boolean } | null;
+    /**
+     * The stored language of the invitation (F14; L19.1): `es`, `es-en`, or `en`. The owner's read answers the stored choice
+     * so the editor shows the option it holds; the public read answers the decision instead.
+     */
+    language: "es" | "es-en" | "en";
   };
   /**
    * How many times the owner may still rename the address (F11; S2.11, L15.2). It is added beside the fields the body
@@ -323,6 +328,13 @@ export interface PublicInvitationResponse {
       partyLimit: number;
       qrPass: boolean;
     };
+    /**
+     * The language a guest's page renders (F14; S2.14, L19.1, L19.5): `es`, `es-en`, or `en`. With `es-en` the page draws
+     * the server-rendered ES / EN switch; with `en` every fixed text is English. It is the effective answer — the owner's
+     * choice while the package grants `ENGLISH_INVITATION` and Spanish otherwise — added beside the fields the body
+     * already carried and changing none of them, so a page deployed before it reads the body it always read (L20).
+     */
+    language: "es" | "es-en" | "en";
   };
   /**
    * The stored points a guest may see, keyed by the address field each one belongs to (S2): only while the package
@@ -464,6 +476,7 @@ export function toOwnedInvitationResponse(
               eventEve: stored.featureSettings.reminders.eventEve,
             },
       openingAnimation: stored.featureSettings.openingAnimation,
+      language: stored.featureSettings.language,
     },
     slugRenamesRemaining: stored.slugRenamesRemaining,
     remindersConfigured: stored.remindersConfigured,
@@ -559,6 +572,10 @@ export function toPublicInvitationResponse(stored: PublicInvitation): PublicInvi
               note: stored.features.livestream.note,
             },
       openingAnimation: stored.features.openingAnimation,
+      // The language the page renders (F14; L19.5): the owner's choice while the package grants it, Spanish otherwise. It is
+      // added beside the fields the body already carried and changes none of them, so a page deployed before it reads the
+      // body it always read, and a page that reads an absent field renders Spanish (L20).
+      language: stored.features.language,
       guestbook:
         stored.features.guestbook === null
           ? null

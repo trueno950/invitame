@@ -1,6 +1,7 @@
 import type { JsonObject } from "../domain/invitation-content";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
+import type { InvitationLanguage } from "../domain/invitation-language";
 import type { InvitationLodging } from "../domain/invitation-lodging";
 import type { InvitationLivestream } from "../domain/invitation-livestream";
 import type { InvitationStatus } from "../domain/invitation-lifecycle";
@@ -96,6 +97,12 @@ export interface InvitationFeatureSettingsWrite {
   openingAnimation?: boolean;
   /** The validated reminder switches, or null while the owner switched nothing on (F6; L9.1). */
   reminders: InvitationReminders | null;
+  /**
+   * The language of the invitation (F14; L19.1). A write that names it stores it; an absent value keeps the stored one,
+   * which is what lets a client built before F14 save the other fields without clearing a language it never knew about,
+   * and a first write that never names it stores the column's own default (`es`).
+   */
+  language?: InvitationLanguage;
 }
 
 /** A new DRAFT: the owner from the session, the pinned snapshot, the chosen package, and a generated slug. */
@@ -175,6 +182,12 @@ export interface InvitationRecordWithMusic extends InvitationRecord {
    * the code: the hash itself never leaves the adapter, so no projection, log, or response can carry it.
    */
   passwordProtected: boolean;
+  /**
+   * The language the owner stored (F14; L19.1), read as one of the three values so no reader has to interpret a column.
+   * It is absent only when a caller answers no value at all — a fixture of a server built before this column — and that
+   * reads as `es`, which is the column's default and the answer an older body carries (L19.5).
+   */
+  language?: InvitationLanguage;
 }
 
 /**

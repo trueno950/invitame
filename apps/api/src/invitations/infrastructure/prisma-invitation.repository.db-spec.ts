@@ -174,6 +174,8 @@ describe("Prisma invitation repository on PostgreSQL", () => {
       livestream: null,
       // No settings row yet means the column's default, true, which is what the port answers (F10; L14.3).
       openingAnimation: settings?.openingAnimation ?? true,
+      // And the language's default, `es`, which is what a row written before F14 reads (F14; L19.1).
+      language: settings?.language ?? "es",
       reminders: null,
       // No place row yet means no stored point, which is the empty object the port answers (S2).
       places: {},

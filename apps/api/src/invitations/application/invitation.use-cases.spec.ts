@@ -207,6 +207,10 @@ class MemoryInvitationRepository implements InvitationRepository {
     stored.itinerary = features.itinerary;
     stored.lodging = features.lodging;
     stored.reminders = features.reminders;
+    // An omitted language keeps the stored one, as the adapter writes it (F14; L19.1).
+    if (features.language !== undefined) {
+      stored.language = features.language;
+    }
     stored.updatedAt = new Date(stored.updatedAt.getTime() + 1000);
     return { ...stored, content: { ...stored.content } };
   }
@@ -1020,6 +1024,7 @@ describe("GetOwnInvitationUseCase", () => {
       livestream: null,
       openingAnimation: true,
       reminders: null,
+      language: "es",
     });
     // WhatsApp needs a stored phone, and no catalog feature outside the implemented list appears (S4).
     assert.deepEqual(stored?.availableFeatures, [
@@ -1225,6 +1230,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       livestream: null,
       openingAnimation: true,
       reminders: null,
+      language: "es",
     });
     assert.deepEqual(updated?.availableFeatures, [
       "COUNTDOWN",
@@ -1242,6 +1248,66 @@ describe("UpdateInvitationFeaturesUseCase", () => {
     assert.equal(fixture.repository.rows[0]?.timeZone, "America/Tijuana");
     assert.equal(fixture.repository.rows[0]?.whatsappPhone, PHONE);
     assert.equal(fixture.repository.rows[0]?.playlistUrl, PLAYLIST);
+  });
+
+  it("stores the language the owner chose, keeps it when a write omits it, and refuses any other value (F14; L19.1)", async () => {
+    const fixture = seeded({
+      includedFeatureKeys: [...SEEDED_PACKAGE_FEATURES.basic, "ENGLISH_INVITATION"],
+    });
+    const created = await createDraft(fixture);
+    const useCase = features(fixture);
+    const save = (extra: Record<string, unknown>) =>
+      useCase.execute({
+        ownerId: fixture.ownerId,
+        id: created.id,
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: null,
+        openingAnimation: true,
+        reminders: null,
+        ...extra,
+      });
+
+    // The first write stores Spanish whatever it sends, because an invitation starts in Spanish (L19.1).
+    const first = await save({});
+    assert.equal(first?.featureSettings.language, "es");
+    assert.equal(fixture.repository.rows[0]?.language, "es");
+
+    // The owner's choice is stored and answered by the owner's read, so the editor shows what the guest will read.
+    for (const language of ["es-en", "en", "es"] as const) {
+      const chosen = await save({ language });
+      assert.equal(chosen?.featureSettings.language, language);
+      assert.equal(fixture.repository.rows[0]?.language, language);
+    }
+
+    // A write that never names the language — a client built before F14 — keeps the stored one instead of clearing it.
+    await save({ language: "en" });
+    const omitted = await save({});
+    assert.equal(omitted?.featureSettings.language, "en");
+    assert.equal(fixture.repository.rows[0]?.language, "en");
+
+    // A value outside the three languages is refused with its own issue, after every value the write validates before
+    // it, and nothing is stored: the row keeps the language the owner had chosen.
+    const before = { ...fixture.repository.rows[0] };
+    for (const language of ["ES", "en ", "en-US", "", null, 42, ["en"]] as const) {
+      await assert.rejects(
+        save({ language, timeZone: "Europe/Madrid" }),
+        (error: unknown) => {
+          assert.ok(error instanceof InvalidInvitationFeaturesError);
+          assert.deepEqual(error.issues, [
+            "timeZone must be one of the supported time zones",
+            "language must be one of es, es-en, en",
+          ]);
+          return true;
+        },
+        String(language),
+      );
+    }
+    assert.deepEqual(fixture.repository.rows[0], before);
   });
 
   it("clears the stored phone with null or an empty value and drops WhatsApp from the gated features", async () => {
@@ -1290,6 +1356,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
           livestream: null,
           openingAnimation: true,
           reminders: null,
+          language: "es",
         },
         String(cleared),
       );
@@ -1853,6 +1920,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       livestream: null,
       openingAnimation: true,
       reminders: null,
+      language: "es",
     });
     // The metadata is stored with the link, so a later or public read answers it without a provider.
     assert.equal(fixture.repository.rows[0]?.playlistTitle, METADATA.title);
@@ -1936,6 +2004,7 @@ describe("UpdateInvitationFeaturesUseCase", () => {
       livestream: null,
       openingAnimation: true,
       reminders: null,
+      language: "es",
     });
     assert.equal(fixture.repository.rows[0]?.playlistUrl, PLAYLIST);
   });
@@ -2415,6 +2484,8 @@ describe("GetPublicInvitationUseCase", () => {
         lodging: null,
         livestream: null,
         openingAnimation: false,
+        // The fixture's package grants no ENGLISH_INVITATION, so the guest page renders Spanish (F14; L19.5).
+        language: "es",
         guestbook: null,
         guestAlbum: null,
         gallery: [],
@@ -2623,6 +2694,8 @@ describe("GetPublicInvitationUseCase", () => {
           lodging: null,
           livestream: null,
           openingAnimation: true,
+          // The fixture's packages grant no ENGLISH_INVITATION, so the guest page renders Spanish (F14; L19.5).
+          language: "es",
           // Premium and Deluxe grant the guestbook, so their wall is an empty list; Basic answers no wall (F7; L10.2).
           guestbook: packageKey === "basic" ? null : [],
           // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
@@ -2674,6 +2747,8 @@ describe("GetPublicInvitationUseCase", () => {
           lodging: null,
           livestream: null,
           openingAnimation: true,
+          // Still Spanish: no fixture grants the language key (F14; L19.5).
+          language: "es",
           // Premium and Deluxe grant the guestbook, so their wall is an empty list; Basic answers no wall (F7; L10.2).
           guestbook: packageKey === "basic" ? null : [],
           // Deluxe grants the album (F8; L11.2), so its album is empty rather than absent (L11.4).
@@ -2699,6 +2774,7 @@ describe("GetPublicInvitationUseCase", () => {
         "guestAlbum",
         "guestbook",
         "itinerary",
+        "language",
         "livestream",
         "lodging",
         "map",
@@ -2709,6 +2785,62 @@ describe("GetPublicInvitationUseCase", () => {
       ]);
       assert.equal(JSON.stringify(page).includes("COUNTDOWN"), false);
     }
+  });
+
+  it("answers the effective language of the guest page while the package grants ENGLISH_INVITATION (F14; L19.5)", async () => {
+    const granted = seeded({
+      includedFeatureKeys: [...SEEDED_PACKAGE_FEATURES.premium, "ENGLISH_INVITATION"],
+    });
+    const created = await publishedInvitation(granted);
+    const save = (language?: unknown) =>
+      features(granted).execute({
+        ownerId: granted.ownerId,
+        id: created.id,
+        timeZone: "America/Mexico_City",
+        whatsappPhone: null,
+        playlistUrl: null,
+        itinerary: null,
+        giftRegistry: null,
+        lodging: null,
+        livestream: null,
+        openingAnimation: true,
+        reminders: null,
+        ...(language === undefined ? {} : { language }),
+      });
+
+    // A body written before F14 stores Spanish without being asked, and the guest page reads it as Spanish.
+    await save();
+    assert.equal((await publicReader(granted).execute(created.slug))?.features.language, "es");
+
+    // Both languages answer the choice itself, so the page can draw its ES / EN switch without interpreting a switch.
+    await save("es-en");
+    assert.equal((await publicReader(granted).execute(created.slug))?.features.language, "es-en");
+    await save("en");
+    assert.equal((await publicReader(granted).execute(created.slug))?.features.language, "en");
+
+    // A package that withdraws the key answers Spanish while the stored choice stays in the row, so re-granting it
+    // restores what the owner picked instead of a language the catalog change erased.
+    const withdrawn = seeded({ includedFeatureKeys: SEEDED_PACKAGE_FEATURES.premium });
+    const otherCreated = await publishedInvitation(withdrawn);
+    await features(withdrawn).execute({
+      ownerId: withdrawn.ownerId,
+      id: otherCreated.id,
+      timeZone: "America/Mexico_City",
+      whatsappPhone: null,
+      playlistUrl: null,
+      itinerary: null,
+      giftRegistry: null,
+      lodging: null,
+      livestream: null,
+      openingAnimation: true,
+      reminders: null,
+      language: "es-en",
+    });
+    assert.equal(
+      (await publicReader(withdrawn).execute(otherCreated.slug))?.features.language,
+      "es",
+    );
+    assert.equal(withdrawn.repository.rows[0]?.language, "es-en");
   });
 
   it("keeps a stored phone private when the package does not include WHATSAPP (S4)", async () => {
@@ -2743,6 +2875,7 @@ describe("GetPublicInvitationUseCase", () => {
       lodging: null,
       livestream: null,
       openingAnimation: false,
+      language: "es",
       guestbook: null,
       guestAlbum: null,
       gallery: [],

@@ -567,6 +567,13 @@ model InvitationFeatureSettings {
   // the page shows the invitation directly. The pinned package's `OPENING_ANIMATION` key is the other half of the gate:
   // the public read answers the animation only while the catalog grants the key and this column is true.
   openingAnimation Boolean  @default(true)
+  // The language of the invitation (F14; S2.14, L19.1): `es` (default), `es-en` (the guest chooses with the ES / EN
+  // switch), or `en`. The column names one stored choice and nothing else — no text, no translation, no locale-specific
+  // formatting; the web's typed dictionary owns every fixed string and the domain
+  // (`domain/invitation-language.ts`) owns the allow-list and the answer a guest reads. Migration
+  // 20261217120000_add_invitation_language adds the CHECK constraint "InvitationFeatureSettings_language_check" that
+  // holds the column to those three values, which Prisma cannot express.
+  language         String   @default("es") @db.VarChar(5)
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 

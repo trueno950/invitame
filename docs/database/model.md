@@ -87,7 +87,13 @@ nothing is deleted. F11 adds the additive `20261213120000_add_invitation_slug_al
 `Invitation_password_version` checks, and — in the same file, because the seed never updates an existing package — the
 `PASSWORD_PROTECTION` catalog feature row and its link to the `deluxe` package, both inserted with `ON CONFLICT DO
 NOTHING` so a second run stores nothing. Both columns are nullable or have a default, so no row is rewritten; every
-invitation that existed before it reads no access code and version 0, which is exactly how it behaved. Future analytics
+invitation that existed before it reads no access code and version 0, which is exactly how it behaved. F14 adds the
+additive `20261217120000_add_invitation_language` migration: the `InvitationFeatureSettings.language` column
+(`VARCHAR(5)`, `NOT NULL`, default `es`), its `InvitationFeatureSettings_language_check` check
+(`IN ('es', 'es-en', 'en')`), and — in the same file, because the seed never updates an existing package — the
+`ENGLISH_INVITATION` catalog feature row and its links to the `basic`, `premium`, and `deluxe` packages, both inserted
+with `ON CONFLICT DO NOTHING` so a second run stores nothing. The column has a default, so no row is rewritten and every
+invitation that existed before it reads Spanish, which is exactly the language it served. Future analytics
 design is documented separately in [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
@@ -109,7 +115,7 @@ design is documented separately in [`future-model.md`](future-model.md); that do
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, the bounded companions `[{ name, child }]` of the party (one per extra person while attending, or `NULL` for an older answer), optional `dietaryNotes` (up to 300 characters), an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), the optional `tableLabel` the owner assigned (1-12 characters, printed on that guest's access pass), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
-| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary`, `giftRegistry`, `lodging`, and `livestream` (or `NULL`), the opening animation switch `openingAnimation` (`NOT NULL`, default `true`), the WhatsApp reminder switches `reminders` (or `NULL`), and timestamps |
+| `InvitationFeatureSettings` | Optional one-to-one feature data of one invitation, keyed by the invitation id: the E.164 `whatsappPhone` (or `NULL`), the `https` `playlistUrl` (or `NULL`), the playlist `playlistTitle` and `playlistCoverUrl` the provider's oEmbed answer named (or `NULL`), the bounded presentation payloads `itinerary`, `giftRegistry`, `lodging`, and `livestream` (or `NULL`), the opening animation switch `openingAnimation` (`NOT NULL`, default `true`), the WhatsApp reminder switches `reminders` (or `NULL`), the invitation's language `language` (`VARCHAR(5)`, `NOT NULL`, default `es`), and timestamps |
 | `ReminderDelivery` | One attempt to deliver one WhatsApp reminder: the invitation and guest references, the `kind` (`PENDING_RSVP_7D`, `PENDING_RSVP_2D`, `EVENT_EVE`), the calendar `dueDate` of the invitation's own zone, the `status` (`pending`, `sent`, `skipped`, `failed`), a stable `reason` (up to 40 characters, `not_configured` while no provider exists), `attemptedAt`, and timestamps. The unique key `(invitationId, guestId, kind, dueDate)` is what makes a second run of the same day send nothing twice. No phone, name, or message body is stored |
 | `Payment` | One checkout intent of one invitation: the `packageId` whose price it buys, the `amountMinor` and `currency` snapshot taken at checkout, the `status` (`pending`, `paid`, `failed`, `expired`, `refunded`), the provider adapter key, the provider's own `providerReference` (unique per provider, `NULL` until created), the unique server-generated `idempotencyKey`, `paidAt`, and timestamps |
 | `InvitationSlugAlias` | One previous public address of one invitation: the `slug` (primary key, so a previous address is unique), the `invitationId`, and `createdAt`. At most five per invitation, recorded by the rename; every one keeps resolving through a permanent redirect |
@@ -343,6 +349,16 @@ normalization, the playlist link allow-list, and the gating — lives in
   `OPENING_ANIMATION` key, which the migration and the seed grant to every package (L14.4), and the public read answers
   whether the animation plays — the grant and the switch together — so the catalog can withdraw the capability later
   without a code change.
+- `InvitationFeatureSettings.language` is `VARCHAR(5)`, `NOT NULL`, and defaults to `es` (F14; L19.1), and
+  `InvitationFeatureSettings_language_check` holds it to `es`, `es-en`, or `en`. It stores one choice and nothing else: no
+  text, no translation, no locale-specific formatting. The API domain
+  (`apps/api/src/invitations/domain/invitation-language.ts`) owns the allow-list and the answer a guest reads — the owner's
+  choice while the pinned package grants `ENGLISH_INVITATION`, and `es` otherwise (L19.5) — the web owns the typed
+  dictionary of every fixed string in each locale, and dates and times are formatted with `Intl` for the rendered locale.
+  The default is `es`, so every row that existed before the migration reads the language the product already served
+  without being rewritten, and the features write accepts it as OPTIONAL, so a client built before F14 never clears a
+  stored choice (the same rule as the opening animation switch). The gate is the new `ENGLISH_INVITATION` key, which the
+  migration and the seed grant to every package (L19.4).
 - `InvitationFeatureSettings.reminders` is JSONB and nullable, and holds the two WhatsApp reminder switches as one
   versioned payload (F6; L9.1): `{ "version": 1, "pendingRsvp": boolean, "eventEve": boolean }`. `NULL` is "no reminder
   settings", and so is a pair with nothing switched on, which the API normalizes to `NULL` before writing. It is
@@ -412,6 +428,12 @@ normalization, the playlist link allow-list, and the gating — lives in
   `DROP TABLE "InvitationSlugAlias";`. Restoring that body makes `slug` immutable again; the current address of every
   invitation is untouched either way, and only the previous addresses stop resolving, which is a deliberate data change
   the operator must plan. Never edit the applied migration file.
+- Rollback / recovery of `20261217120000_add_invitation_language`: additive, so recovery is redeploying the previous
+  migration set, or by hand deleting every `PackageFeature` link of the `ENGLISH_INVITATION` feature (not only the seeded
+  ones), then the `ENGLISH_INVITATION` `Feature` row by key, then
+  `ALTER TABLE "InvitationFeatureSettings" DROP CONSTRAINT "InvitationFeatureSettings_language_check";` and
+  `ALTER TABLE "InvitationFeatureSettings" DROP COLUMN "language";`. Only the stored choices and the catalog key are
+  lost; invitations, their content, and every other feature setting stay. Never edit the applied migration file.
 - Rollback / recovery of `20261207120000_add_whatsapp_reminders`: additive, so recovery is redeploying the previous
   migration set, or by hand `DELETE FROM "ReminderDelivery";`, then deleting the `WHATSAPP_REMINDERS` `PackageFeature`
   links and the `WHATSAPP_REMINDERS` `Feature` row by key, then

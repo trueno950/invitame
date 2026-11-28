@@ -26,6 +26,11 @@ import {
 } from "../domain/invitation-features";
 import type { InvitationGiftRegistry } from "../domain/invitation-gift-registry";
 import type { InvitationItinerary } from "../domain/invitation-itinerary";
+import {
+  type InvitationLanguage,
+  storedInvitationLanguage,
+  validateInvitationLanguage,
+} from "../domain/invitation-language";
 import type { InvitationLodging } from "../domain/invitation-lodging";
 import type { InvitationLivestream } from "../domain/invitation-livestream";
 import type { InvitationReminders } from "../domain/invitation-reminders";
@@ -158,6 +163,12 @@ export interface UpdateFeaturesInput {
    * switching a reminder off that it never knew about.
    */
   reminders?: unknown;
+  /**
+   * The language of the invitation as the request carried it, or `undefined` when the body omitted it (F14; L19.1): an
+   * omitted value keeps the stored language, which is what lets a client built before F14 save the other fields without
+   * clearing a language it never knew about.
+   */
+  language?: unknown;
 }
 
 /** A row of "Mis invitaciones": the editor loads one invitation when it opens it. */
@@ -233,6 +244,8 @@ export interface OwnedInvitation extends InvitationSummary {
     openingAnimation: boolean;
     /** The stored reminder switches, or null while the owner switched nothing on (F6; L9.1). */
     reminders: InvitationReminders | null;
+    /** The stored language (F14; L19.1), `es` unless the owner chose both languages or English only. */
+    language: InvitationLanguage;
   };
   /**
    * How many times this owner may still rename the address (F11; S2.11, L15.2): the rename bound minus the previous
@@ -317,6 +330,8 @@ export function toOwnedInvitation(
       livestream: record.livestream,
       openingAnimation: record.openingAnimation,
       reminders: record.reminders,
+      // The stored choice itself, so the editor shows the option the guest page will use (F14; L19.1).
+      language: storedInvitationLanguage(record.language),
     },
     slugRenamesRemaining,
     remindersConfigured,
@@ -723,14 +738,23 @@ export class UpdateInvitationFeaturesUseCase {
       // switched on clears them.
       reminders: input.reminders === undefined ? stored.reminders : input.reminders,
     });
-    if (!validation.ok) {
-      throw new InvalidInvitationFeaturesError(validation.issues);
+    // The language is the last value the write validates (F14; L19.1): an omitted value keeps the stored one, exactly
+    // like the switch above, and only one of the three stored values is accepted.
+    const language = validateInvitationLanguage(
+      input.language === undefined ? storedInvitationLanguage(stored.language) : input.language,
+    );
+    if (!validation.ok || !language.ok) {
+      throw new InvalidInvitationFeaturesError([
+        ...(validation.ok ? [] : validation.issues),
+        ...(language.ok ? [] : [language.issue]),
+      ]);
     }
 
     const metadata = await this.playlistMetadataOf(stored, validation.value.playlistUrl);
 
     const updated = await this.invitations.updateFeatures(input.ownerId, input.id, {
       ...validation.value,
+      language: language.value,
       playlistTitle: metadata.title,
       playlistCoverUrl: metadata.coverUrl,
     });
@@ -1044,6 +1068,9 @@ export class GetPublicInvitationUseCase {
         lodging: published.lodging,
         livestream: published.livestream,
         openingAnimation: published.openingAnimation,
+        // The stored choice read as one of the three values: a row written before the column existed answers `es`, which is
+        // the column's default (F14; L19.5).
+        language: storedInvitationLanguage(published.language),
         rsvpDeadline: published.rsvpDeadline,
         rsvpPartyLimit: published.rsvpPartyLimit,
       },
