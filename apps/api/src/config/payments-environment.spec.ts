@@ -55,6 +55,8 @@ function environmentWith(overrides: Record<string, unknown> = {}): Record<string
     environment.RESEND_API_KEY ??= "test-resend-key";
     environment.AUTH_CLIENT_IP_HEADER ??= "cf-connecting-ip";
     environment.AUTH_PROXY_SECRET ??= randomBytes(32).toString("base64url");
+    // F13 (L18.2): production names the invitation access-token key too.
+    environment.INVITATION_ACCESS_SECRET ??= randomBytes(32).toString("base64url");
   }
 
   return environment;

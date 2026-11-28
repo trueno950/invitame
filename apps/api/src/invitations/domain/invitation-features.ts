@@ -115,6 +115,9 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   "GALLERY",
   "OPENING_ANIMATION",
   "CO_HOSTS",
+  // The shared access code (F13; S2.13, L18.5). It is in the allow-list so the owner's read offers it when the package
+  // grants it, and it is never rendered as a guest block: a code is access control, not a feature card.
+  "PASSWORD_PROTECTION",
 ] as const;
 
 export type ImplementedInvitationFeature = (typeof IMPLEMENTED_INVITATION_FEATURES)[number];
@@ -190,6 +193,15 @@ export const OPENING_ANIMATION_FEATURE_KEY = "OPENING_ANIMATION";
  * collaboration the owner already granted and has not revoked.
  */
 export const CO_HOSTS_FEATURE_KEY = "CO_HOSTS";
+
+/**
+ * The catalog key that grants the shared access code (F13; S2.13, L18.5), granted by Deluxe. It gates *setting* a code:
+ * a package that does not grant it answers 409 `PASSWORD_PROTECTION_NOT_AVAILABLE` and stores nothing. Withdrawing the key
+ * later keeps a stored code protecting its invitation, because a lock that disappeared when a catalog link was removed
+ * would publish an invitation the owner had deliberately closed; the owner can still remove the code themselves, which
+ * is an explicit act and not a side effect of a catalog change.
+ */
+export const PASSWORD_PROTECTION_FEATURE_KEY = "PASSWORD_PROTECTION";
 
 /**
  * The message a value that is not a boolean is refused with (F10; L14.3). The switch has no other shape: `null` and an

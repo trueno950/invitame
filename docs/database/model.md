@@ -81,8 +81,14 @@ existing package — the `WHATSAPP_REMINDERS` catalog feature row and its link t
 nothing is deleted. F11 adds the additive `20261213120000_add_invitation_slug_alias` migration: the new
 `InvitationSlugAlias` table and a rewritten `prevent_invitation_pinned_field_mutation` function, which lets
 `Invitation.slug` change only inside the rename the API performs. No row is rewritten and no catalog key is added, so
-`InvitationSlugAlias` starts empty and every invitation keeps the address it already had. Future analytics design is
-documented separately in [`future-model.md`](future-model.md); that document does not add tables.
+`InvitationSlugAlias` starts empty and every invitation keeps the address it already had. F13 adds the additive
+`20261216120000_add_invitation_password` migration: the nullable `Invitation.passwordHash` column (`VARCHAR(255)`), the
+`Invitation.passwordVersion` column (`INTEGER NOT NULL DEFAULT 0`), the `Invitation_password_hash_format` and
+`Invitation_password_version` checks, and — in the same file, because the seed never updates an existing package — the
+`PASSWORD_PROTECTION` catalog feature row and its link to the `deluxe` package, both inserted with `ON CONFLICT DO
+NOTHING` so a second run stores nothing. Both columns are nullable or have a default, so no row is rewritten; every
+invitation that existed before it reads no access code and version 0, which is exactly how it behaved. Future analytics
+design is documented separately in [`future-model.md`](future-model.md); that document does not add tables.
 
 | Model | Role |
 | --- | --- |
@@ -99,7 +105,7 @@ documented separately in [`future-model.md`](future-model.md); that document doe
 | `PackagePrice` | Append-only price history of a package: integer `amountMinor` in the smallest currency unit plus an ISO `currency`; the row with no `retiredAt` is the current price |
 | `Template` | Mutable template master metadata and category relation |
 | `TemplateVersion` | Immutable renderer identity, render, and form-data contract for one template version |
-| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the publication-derived expiry `expiresAt`, the never-cleared first publication `firstPublishedAt`, JSONB `content`, the archive marker, the IANA `timeZone`, and the RSVP settings `rsvpDeadline` and `rsvpPartyLimit` |
+| `Invitation` | Creator-owned invitation pinned to one `TemplateVersion`, one `Package`, and a unique public `slug`; carries its lifecycle `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), the publication marker `publishedAt`, the publication-derived expiry `expiresAt`, the never-cleared first publication `firstPublishedAt`, JSONB `content`, the archive marker, the IANA `timeZone`, the RSVP settings `rsvpDeadline` and `rsvpPartyLimit`, and the access code of a password-protected invitation — only its encoded `crypto.scrypt` hash `passwordHash` (or `NULL`) and the `passwordVersion` every change raises |
 | `RsvpResponse` | One guest's attendance answer to one invitation: the normalized `dedupeKey` (normalized name plus normalized phone) unique per invitation, the nullable `guestId` of a personal-link answer (unique, so one guest has one answer), the display `name`, `attending`, `partySize`, the bounded companions `[{ name, child }]` of the party (one per extra person while attending, or `NULL` for an older answer), optional `dietaryNotes` (up to 300 characters), an optional E.164 `phone`, an optional `message`, and timestamps |
 | `MediaAsset` | One uploaded photo of one invitation: `kind` (`main-photo` or `gallery`), the unique `storageKey` of its object, `mime` (`image/webp`), `byteSize`, `width`, `height`, the gallery `position`, the optional `alt` text, the `status` (`stored` or `deleted`), and timestamps |
 | `Guest` | One person on an invitation's guest list: the invitation reference, `name` (1-80), `seats` (1-10), the optional `tableLabel` the owner assigned (1-12 characters, printed on that guest's access pass), an optional E.164 `phone`, an optional `note` (up to 200), the unique SHA-256 `tokenHash` of the personal link and when it was issued, the first `checkedInAt`, and timestamps |
@@ -1005,6 +1011,51 @@ seven-day single-use link, and what a stored row means — live in
   "InvitationCollaborator";` and `DROP TYPE "InvitationCollaboratorPermission";`. Only the collaborator rows and the
   catalog key are lost, and every collaborator loses all access, which is the safe direction. Never edit the applied
   migration file.
+
+## Password-protected invitation (F13)
+
+Current status: the columns exist, the owner sets, replaces, and removes the code, and the public invitation routes answer
+the locked state while a code is set (F13; S2.13, L18.1-L18.5). The rules of the value — 4 to 40 characters, trimmed, no
+control character — live in `apps/api/src/invitations/domain/invitation-password.ts`; the hashing and the token live in
+`apps/api/src/invitations/application/`.
+
+- The code is a *shared access code*, never a user credential: every guest of one invitation types the same value, it
+  names no person, and it grants nothing beyond that one invitation's public page. There is no account, no session, no
+  recovery question, and no per-person code.
+- `Invitation.passwordHash` stores the encoded `crypto.scrypt` value — `scrypt$<N>$<r>$<p>$<salt>$<key>`, with a fresh
+  random 16-byte salt per password and the cost the API writes (`N=16384`, `r=8`, `p=1`, 64-byte key) — and never the
+  plain code. The parameters travel inside the value, so a later cost raise verifies against the cost each row was
+  written with and needs no migration. The comparison is `crypto.timingSafeEqual` over two derived keys of the same
+  width.
+- The columns live on `Invitation` and not on `InvitationFeatureSettings` on purpose: the feature settings are writable
+  through the features `PUT` by any collaborator holding `EDIT_CONTENT`, and the code decides who may see the invitation
+  at all, so no collaborator may set, replace, or remove it. The access code's two routes are owner-only.
+- `Invitation.passwordVersion` is `INTEGER NOT NULL DEFAULT 0` and every set, replace, and removal raises it in the
+  statement that writes (`passwordVersion: { increment: 1 }`), so two concurrent writes still leave a version above both
+  reads. The access token is an HMAC-SHA256 over the invitation id, this number, and the expiry, keyed with
+  `INVITATION_ACCESS_SECRET`; the gate compares the token's version with the stored one, so a changed or removed code
+  invalidates every token minted before it.
+- The two CHECK constraints keep a row written around the API from storing a value no verifier can read:
+  `Invitation_password_hash_format` (`passwordHash IS NULL OR passwordHash LIKE 'scrypt$%'`) and
+  `Invitation_password_version` (`passwordVersion >= 0`). A stored value the verifier cannot parse reads as no usable
+  hash, which locks the invitation instead of opening it.
+- The lock read is one statement (`infrastructure/prisma-invitation-lock.repository.ts`): the invitation id, the hash, the
+  version, and the content, for a row that is PUBLISHED and whose current slug or any previous slug
+  (`InvitationSlugAlias`) is the requested address. It is the only statement of the API that reads `passwordHash`, and
+  nothing returns it.
+- Nothing is deleted and no row is rewritten: the removal clears the hash, raises the version, and keeps the invitation
+  exactly where it is (archived stays archived, published stays published).
+- The capability is the `PASSWORD_PROTECTION` key, granted to Deluxe by the migration (`ON CONFLICT DO NOTHING`) and
+  declared in the seed (`apps/api/prisma/catalog-seed.ts`), so the panel may grant or withdraw it without a deployment.
+  The key gates *setting* a code: a package that does not grant it answers 409 `PASSWORD_PROTECTION_NOT_AVAILABLE` and
+  stores nothing. Withdrawing it later never removes a stored code — a lock that disappeared when a catalog link was
+  removed would publish an invitation its owner had deliberately closed — and the owner can still remove it, because
+  removing opens the page to the guests the owner already shares it with.
+- Rollback / recovery of `20261216120000_add_invitation_password`: additive, so recovery is redeploying the previous
+  migration set, or by hand deleting the `PASSWORD_PROTECTION` `PackageFeature` links and the `PASSWORD_PROTECTION`
+  `Feature` row by key, then dropping the two constraints and the two columns. Every stored access code is lost and every
+  locked invitation becomes public again, which is why that is a deliberate, human-approved action and not routine
+  recovery. Never edit the applied migration file.
 
 ## Deliberately absent
 

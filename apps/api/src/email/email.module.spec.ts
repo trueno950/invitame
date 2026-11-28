@@ -76,6 +76,7 @@ describe("EmailModule", () => {
         RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
         AUTH_CLIENT_IP_HEADER: "x-forwarded-for",
         AUTH_PROXY_SECRET: randomBytes(32).toString("base64url"),
+        INVITATION_ACCESS_SECRET: randomBytes(32).toString("base64url"),
         // M7 S4: production names its payment mode explicitly; this suite charges nothing.
         PAYMENTS_MODE: "free",
       }),

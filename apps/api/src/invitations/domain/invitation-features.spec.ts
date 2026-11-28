@@ -16,6 +16,7 @@ import {
   normalizePlaylistUrl,
   normalizeWhatsAppPhone,
   OPENING_ANIMATION_FEATURE_KEY,
+  PASSWORD_PROTECTION_FEATURE_KEY,
   PLAYLIST_COVER_URL_MAX_LENGTH,
   PLAYLIST_TITLE_MAX_LENGTH,
   PLAYLIST_URL_LENGTH_ISSUE,
@@ -821,7 +822,7 @@ describe("feature gating (S4, F1)", () => {
     );
   });
 
-  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_ALBUM, LIVESTREAM, GUEST_LIST, QR_PASS, GALLERY, OPENING_ANIMATION, and CO_HOSTS, with CALENDAR always added", () => {
+  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_ALBUM, LIVESTREAM, GUEST_LIST, QR_PASS, GALLERY, OPENING_ANIMATION, CO_HOSTS, and PASSWORD_PROTECTION, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
       "ITINERARY",
       "COUNTDOWN",
@@ -839,14 +840,20 @@ describe("feature gating (S4, F1)", () => {
       "GALLERY",
       "OPENING_ANIMATION",
       "CO_HOSTS",
+      // The shared access code (F13; S2.13, L18.5): it is in the allow-list so the owner's read offers it, and it is
+      // never a guest block.
+      "PASSWORD_PROTECTION",
     ]);
     assert.equal(CALENDAR_FEATURE_KEY, "CALENDAR");
+    assert.equal(PASSWORD_PROTECTION_FEATURE_KEY, "PASSWORD_PROTECTION");
     assert.equal(ITINERARY_FEATURE_KEY, "ITINERARY");
     assert.equal(OPENING_ANIMATION_FEATURE_KEY, "OPENING_ANIMATION");
     // The itinerary arrived with F1 and is granted to every package; a key this batch does not implement never
     // becomes a feature.
     assert.deepEqual(gated(["ITINERARY"]), ["ITINERARY", "CALENDAR"]);
     assert.deepEqual(gated(["GALLERY"]), ["GALLERY", "CALENDAR"]);
+    // The access code is a capability of its own: no stored data decides it, so a granting package always offers it.
+    assert.deepEqual(gated(["PASSWORD_PROTECTION"]), ["PASSWORD_PROTECTION", "CALENDAR"]);
     assert.deepEqual(gated(["VIDEO"]), ["CALENDAR"]);
     // The guest list and its QR pass are implemented by M6 G2 (S3, S4).
     assert.deepEqual(gated(["GUEST_LIST", "QR_PASS"]), ["GUEST_LIST", "QR_PASS", "CALENDAR"]);

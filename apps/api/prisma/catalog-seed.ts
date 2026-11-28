@@ -126,6 +126,11 @@ const FEATURE_SEEDS = [
     description: "Un sobre con sello que tus invitados abren antes de ver la invitación.",
   },
   {
+    key: "PASSWORD_PROTECTION",
+    name: "Invitación con contraseña",
+    description: "Protege tu invitación con un código de acceso que compartes con tus invitados.",
+  },
+  {
     key: "GUEST_ALBUM",
     name: "Álbum de fotos de invitados",
     description: "Tus invitados suben sus fotos y tú decides cuáles aparecen en la invitación.",
@@ -208,6 +213,7 @@ const PACKAGE_SEEDS = [
       "QR_PASS",
       "OPENING_ANIMATION",
       "CO_HOSTS",
+      "PASSWORD_PROTECTION",
     ],
   },
 ] as const;

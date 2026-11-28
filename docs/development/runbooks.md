@@ -519,6 +519,33 @@ service; each has a startup rule that names the variable and never echoes a valu
 must be updated on both sides — a mismatch produces `400 PAYMENT_WEBHOOK_REJECTED` on every delivery, which is
 [§2](#2-payment-webhook-or-refund-incident)'s first row.
 
+### `INVITATION_ACCESS_SECRET` — required in production, rotating it ends every unlock
+
+F13 (`L18.2`) signs the access token of a password-protected invitation with this key: an HMAC-SHA256 over the invitation
+id, the stored password version, and a 30-day expiry. It is a server secret of its own, decided apart from the others
+(`apps/api/src/config/environment.ts`), and it lives in the API environment only:
+
+| Key | Rule |
+| --- | --- |
+| `INVITATION_ACCESS_SECRET` | At least 32 characters. **Required in production** — the API refuses to start without it — and it must differ from `BETTER_AUTH_SECRET`, `AUTH_PROXY_SECRET`, and `AUTH_PROXY_SECRET_PREVIOUS`. Development and test fall back to a fixed local value (`invitame-local-invitation-access-secret`), so a local checkout needs no new variable. Never logged, echoed, or returned |
+
+The API's example environment template is human-owned and was not edited by this feature, so this table is the documented
+home of the variable until that template is next revised: add it there and to the deployment's variable matrix with the
+other API secrets.
+
+Rotation: there is no previous-key window. Replacing the value invalidates every access token minted before it, so every
+guest of a password-protected invitation has to type the shared code again — which is a nuisance, not a lockout, because
+the code itself is unchanged and the lock screen is what they see. Rotate it on a suspicion of compromise, with the
+owner's approval, and expect the guests of those invitations to unlock once more. Nothing else is affected: sessions,
+payments, and media keep their own keys.
+
+Diagnosing it from the logs: the API logs nothing about a token or a code. A guest who reports «no me abre» either has a
+token that no longer verifies (a rotated secret, or a code the owner replaced or removed, which raised the password
+version) or has spent the 10 attempts of their address in 15 minutes — and the unlock route answers the same neutral
+refusal either way. The owner settles it from the invitation's own `passwordProtected` field: if a code is set, share it
+again, unless the package withdrew `PASSWORD_PROTECTION`, in which case a stored code still protects and only the owner
+can remove it.
+
 ### `BETTER_AUTH_SECRET` — no rotation path yet
 
 **There is no rotation path for `BETTER_AUTH_SECRET`, and this document does not pretend otherwise.** Better Auth's

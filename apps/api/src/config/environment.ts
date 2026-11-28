@@ -175,6 +175,12 @@ export interface RuntimeEnvironment {
   /** Better Auth signing secret; never logged or echoed in error messages. */
   BETTER_AUTH_SECRET: string;
   /**
+   * The HMAC key of the invitation access tokens (F13; S2.13, L18.2), from `INVITATION_ACCESS_SECRET`: the shared access
+   * code of a password-protected invitation is exchanged for a token this key signs. Required in production, with a
+   * development and test default; never logged, echoed, or returned.
+   */
+  INVITATION_ACCESS_SECRET: string;
+  /**
    * Public web origin through which the web proxies `/api/auth` to the API (L33). It is one of
    * `TRUSTED_ORIGINS` and uses https in production, so every auth cookie is `Secure` there.
    */
@@ -257,6 +263,17 @@ const DATABASE_PROTOCOLS = ["postgresql:", "postgres:"] as const;
 const MINIMUM_AUTH_SECRET_LENGTH = 32;
 /** L36: the shared web-to-API secret has 32 characters or more, decided apart from the auth secret. */
 const MINIMUM_PROXY_SECRET_LENGTH = 32;
+/**
+ * F13 (L18.2): the key of the invitation access tokens has 32 characters or more, like every other server secret in this
+ * file. A shorter value is refused at startup and never echoed.
+ */
+const MINIMUM_INVITATION_ACCESS_SECRET_LENGTH = 32;
+/**
+ * The development and test default of `INVITATION_ACCESS_SECRET`: a fixed, published value, so a local checkout needs no
+ * new variable and every developer's tokens are interchangeable with their own database. Production never reads it — the
+ * variable is required there — so a deployment can never sign an access token with a value that lives in this repository.
+ */
+const DEFAULT_INVITATION_ACCESS_SECRET = "invitame-local-invitation-access-secret";
 /** Better Auth's default client IP header; trusted only outside production by default. */
 const DEFAULT_CLIENT_IP_HEADER = "x-forwarded-for";
 // RFC 9110 field-name token characters: one header, never a list.
@@ -384,6 +401,62 @@ function validateProxySecretLength(name: string, value: string): string {
   }
 
   return value;
+}
+
+/**
+ * The invitation access-token key (F13; L18.2). Production requires it, because a deployment that signed its guests'
+ * access tokens with the value this repository publishes would hand anyone with the source a way into every locked
+ * invitation; development and test fall back to that value so a local checkout needs no new variable. A configured value
+ * shorter than the floor is refused, and no message echoes it.
+ */
+function parseInvitationAccessSecret(environment: Record<string, unknown>): string | undefined {
+  const value = readOptionalString(environment.INVITATION_ACCESS_SECRET);
+
+  if (!value) {
+    return undefined;
+  }
+  if (value.length < MINIMUM_INVITATION_ACCESS_SECRET_LENGTH) {
+    throw new Error(
+      `INVITATION_ACCESS_SECRET must be at least ${MINIMUM_INVITATION_ACCESS_SECRET_LENGTH} characters long.`,
+    );
+  }
+
+  return value;
+}
+
+/**
+ * The rules the access-token key shares with the other server secrets (F13; L18.2): production must name one, and a leaked
+ * key must never also sign sessions, prove a web-to-API request, or sign a payment event.
+ */
+function validateInvitationAccessSecret(
+  secret: string | undefined,
+  nodeEnvironment: NodeEnvironment,
+  environment: {
+    BETTER_AUTH_SECRET: string;
+    AUTH_PROXY_SECRET: string | undefined;
+    AUTH_PROXY_SECRET_PREVIOUS: string | undefined;
+  },
+): string {
+  if (secret === undefined) {
+    if (nodeEnvironment === NODE_ENVIRONMENT.PRODUCTION) {
+      throw new Error("INVITATION_ACCESS_SECRET must be provided in production.");
+    }
+
+    return DEFAULT_INVITATION_ACCESS_SECRET;
+  }
+  const collision = (
+    [
+      ["BETTER_AUTH_SECRET", environment.BETTER_AUTH_SECRET],
+      ["AUTH_PROXY_SECRET", environment.AUTH_PROXY_SECRET],
+      ["AUTH_PROXY_SECRET_PREVIOUS", environment.AUTH_PROXY_SECRET_PREVIOUS],
+    ] as const
+  ).find(([, candidate]) => candidate === secret);
+
+  if (collision) {
+    throw new Error(`INVITATION_ACCESS_SECRET must differ from ${collision[0]}.`);
+  }
+
+  return secret;
 }
 
 /** A leaked proxy secret must not also sign sessions, and the reverse. */
@@ -980,6 +1053,9 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
     PAYMENTS: parsePaymentsEnvironment(environment, nodeEnvironment),
   };
 
+  // Read once, here, so the resolved value can be checked against the secrets above after every single-variable rule ran.
+  const configuredInvitationAccessSecret = parseInvitationAccessSecret(environment);
+
   // Cross-field rules run last, so every single-variable error keeps its precedence.
   validateAuthBaseUrl(validated.AUTH_BASE_URL, validated.TRUSTED_ORIGINS, nodeEnvironment);
   validateDistinctSecrets(
@@ -989,5 +1065,14 @@ export function validateEnvironment(environment: Record<string, unknown>): Runti
   );
   validateDistinctPaymentsSecret(validated.PAYMENTS, validated);
 
-  return validated;
+  return {
+    ...validated,
+    // The access-token key is resolved last: it is required in production and defaults in development and test, and it
+    // must not repeat another server secret (F13; L18.2).
+    INVITATION_ACCESS_SECRET: validateInvitationAccessSecret(
+      configuredInvitationAccessSecret,
+      nodeEnvironment,
+      validated,
+    ),
+  };
 }

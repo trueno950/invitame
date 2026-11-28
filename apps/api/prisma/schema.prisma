@@ -353,6 +353,18 @@ model Invitation {
   slug              String           @unique @db.VarChar(60)
   status            InvitationStatus @default(DRAFT)
   content           Json             @default("{}") @db.JsonB
+  // The shared access code of a password-protected invitation (F13; S2.13, L18.1), or NULL while the invitation
+  // has none. It is never the plain value: the API stores the encoded `crypto.scrypt` hash with its own random salt
+  // (`scrypt$<N>$<r>$<p>$<salt>$<key>`, `domain/invitation-password.ts` and `application/invitation-password.ts`), so
+  // a database reader cannot replay the code and no read ever answers it. It lives on the invitation and not on
+  // `InvitationFeatureSettings` because it is access control, not presentation data: the feature settings are writable
+  // by a collaborator holding `EDIT_CONTENT`, and no collaborator may set, replace, or remove the owner's code.
+  passwordHash      String?          @db.VarChar(255)
+  // How many times the access code of this invitation changed, including its removal (F13; L18.2). It starts at 0 and
+  // every set, replace, or remove adds one, so an access token minted for an older version stops opening the
+  // invitation: the token's signature covers this number and the gate compares it. The column is NOT NULL with a
+  // default, so every row that existed before the migration reads 0 and no token of it can exist.
+  passwordVersion   Int              @default(0)
   // The IANA zone the guest's countdown and calendar links use. The allow-list lives in the API domain
   // (`domain/invitation-features.ts`, S4); the database checks the shape and the default.
   timeZone          String           @default("America/Mexico_City") @db.VarChar(64)

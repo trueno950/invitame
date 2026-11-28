@@ -56,6 +56,8 @@ const SEEDED_FEATURE_KEYS = [
   "WHATSAPP_REMINDERS",
   "GUEST_LIST",
   "QR_PASS",
+  // F13 (L18.5): the access code of a password-protected invitation, granted by Deluxe only.
+  "PASSWORD_PROTECTION",
 ];
 const SEEDED_PACKAGE_KEYS = ["basic", "premium", "deluxe"];
 const PREMIUM_FEATURE_KEYS = [

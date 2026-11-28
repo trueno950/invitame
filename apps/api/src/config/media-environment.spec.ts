@@ -56,6 +56,8 @@ function productionVariables(overrides: Record<string, unknown> = {}): Record<st
     RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
     AUTH_CLIENT_IP_HEADER: "x-real-ip",
     AUTH_PROXY_SECRET: randomBytes(32).toString("base64url"),
+    // F13 (L18.2): production names the invitation access-token key too.
+    INVITATION_ACCESS_SECRET: randomBytes(32).toString("base64url"),
     MEDIA_PUBLIC_BASE_URL: "https://api.example.test",
     // Payments have no default in production (M7 S4): every production case names its mode.
     PAYMENTS_MODE: "free",

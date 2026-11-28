@@ -38,6 +38,8 @@ function productionVariables(overrides: Record<string, unknown> = {}): Record<st
     MEDIA_S3_ACCESS_KEY_ID: "access-key-id",
     MEDIA_S3_SECRET_ACCESS_KEY: "secret-access-key",
     AUTH_PROXY_SECRET: randomBytes(32).toString("base64url"),
+    // F13 (L18.2): production names the invitation access-token key too.
+    INVITATION_ACCESS_SECRET: randomBytes(32).toString("base64url"),
     AUTH_CLIENT_IP_HEADER: "x-forwarded-for",
     AUTH_TRUSTED_PROXIES: "10.0.0.0/8",
     PAYMENTS_MODE: "free",

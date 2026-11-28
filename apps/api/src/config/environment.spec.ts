@@ -7,6 +7,8 @@ import { validateEnvironment } from "./environment";
 // Generated per run: secrets never live in source.
 const SECRET = randomBytes(32).toString("base64url");
 const PROXY_SECRET = randomBytes(32).toString("base64url");
+// F13 (L18.2): the key of the invitation access tokens, required in production like the other server secrets.
+const INVITATION_ACCESS_SECRET = randomBytes(32).toString("base64url");
 const PRODUCTION_ORIGIN = "https://app.example.test";
 
 /** A valid production media configuration: production refuses the local driver, so every case needs a bucket. */
@@ -45,6 +47,8 @@ function environmentWith(overrides: Record<string, unknown> = {}): Record<string
     for (const [name, value] of Object.entries(PRODUCTION_MEDIA)) {
       environment[name] ??= value;
     }
+    // Production names the access-token key too (F13; L18.2).
+    environment.INVITATION_ACCESS_SECRET ??= INVITATION_ACCESS_SECRET;
   }
 
   return environment;
@@ -523,6 +527,113 @@ describe("validateEnvironment", () => {
           { AUTH_TRUSTED_PROXIES: proxies },
           "AUTH_TRUSTED_PROXIES must list IP addresses or CIDR ranges.",
         );
+      }
+    });
+  });
+
+  describe("INVITATION_ACCESS_SECRET (invitation access tokens, F13; L18.2)", () => {
+    function productionEnvironment(
+      overrides: Record<string, unknown> = {},
+    ): Record<string, unknown> {
+      return environmentWith({
+        NODE_ENV: "production",
+        CORS_ORIGIN: PRODUCTION_ORIGIN,
+        AUTH_BASE_URL: PRODUCTION_ORIGIN,
+        EMAIL_FROM: "InvitaMe <no-reply@example.test>",
+        RESEND_API_KEY: `re_${randomBytes(16).toString("hex")}`,
+        AUTH_CLIENT_IP_HEADER: "x-real-ip",
+        AUTH_PROXY_SECRET: PROXY_SECRET,
+        ...overrides,
+      });
+    }
+
+    function assertRejectedWithoutEcho(
+      environment: Record<string, unknown>,
+      message: string,
+      secret: string,
+    ): void {
+      assert.throws(
+        () => validateEnvironment(environment),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal(error.message, message);
+          assert.ok(!error.message.includes(secret), "the secret is never echoed");
+          return true;
+        },
+      );
+    }
+
+    it("defaults in development and test, so a local checkout needs no new variable", () => {
+      for (const NODE_ENV of ["development", "test"]) {
+        const secret = validateEnvironment(environmentWith({ NODE_ENV })).INVITATION_ACCESS_SECRET;
+
+        assert.equal(typeof secret, "string");
+        assert.ok(secret.length >= 32, "the development default meets the same floor");
+        assert.equal(
+          validateEnvironment(environmentWith({ NODE_ENV, INVITATION_ACCESS_SECRET: "   " }))
+            .INVITATION_ACCESS_SECRET,
+          secret,
+          "a blank value counts as absent",
+        );
+      }
+    });
+
+    it("is required in production, because the value this repository publishes must never sign a guest's token", () => {
+      // Absent and blank both count as not configured; the helper fills the production defaults, so the key is removed.
+      const absent = productionEnvironment();
+      delete absent.INVITATION_ACCESS_SECRET;
+
+      for (const environment of [
+        absent,
+        productionEnvironment({ INVITATION_ACCESS_SECRET: "   " }),
+      ]) {
+        assertRejectedWithoutEcho(
+          environment,
+          "INVITATION_ACCESS_SECRET must be provided in production.",
+          "invitame-local-invitation-access-secret",
+        );
+      }
+      assert.equal(
+        validateEnvironment(productionEnvironment()).INVITATION_ACCESS_SECRET,
+        INVITATION_ACCESS_SECRET,
+      );
+    });
+
+    it("refuses a secret shorter than 32 characters without echoing it", () => {
+      const shortSecret = "p".repeat(31);
+
+      for (const environment of [
+        environmentWith({ INVITATION_ACCESS_SECRET: shortSecret }),
+        productionEnvironment({ INVITATION_ACCESS_SECRET: shortSecret }),
+      ]) {
+        assertRejectedWithoutEcho(
+          environment,
+          "INVITATION_ACCESS_SECRET must be at least 32 characters long.",
+          shortSecret,
+        );
+      }
+    });
+
+    it("must differ from every other server secret, without echoing either", () => {
+      const cases: Array<[Record<string, unknown>, string]> = [
+        [
+          { INVITATION_ACCESS_SECRET: SECRET },
+          "INVITATION_ACCESS_SECRET must differ from BETTER_AUTH_SECRET.",
+        ],
+        [
+          { INVITATION_ACCESS_SECRET: PROXY_SECRET, AUTH_PROXY_SECRET: PROXY_SECRET },
+          "INVITATION_ACCESS_SECRET must differ from AUTH_PROXY_SECRET.",
+        ],
+      ];
+
+      for (const [overrides, message] of cases) {
+        for (const environment of [environmentWith(overrides), productionEnvironment(overrides)]) {
+          assertRejectedWithoutEcho(
+            environment,
+            message,
+            String(overrides.INVITATION_ACCESS_SECRET),
+          );
+        }
       }
     });
   });
