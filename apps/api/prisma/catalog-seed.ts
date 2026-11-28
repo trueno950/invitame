@@ -131,6 +131,12 @@ const FEATURE_SEEDS = [
     description: "Tus invitados suben sus fotos y tú decides cuáles aparecen en la invitación.",
   },
   {
+    key: "CO_HOSTS",
+    name: "Co-anfitriones",
+    description:
+      "Invita a otras personas a ayudarte con la invitación, con los permisos que tú elijas.",
+  },
+  {
     key: "WHATSAPP_REMINDERS",
     name: "Recordatorios por WhatsApp",
     description:
@@ -175,6 +181,7 @@ const PACKAGE_SEEDS = [
       "GUESTBOOK",
       "LIVESTREAM",
       "OPENING_ANIMATION",
+      "CO_HOSTS",
     ],
   },
   {
@@ -200,6 +207,7 @@ const PACKAGE_SEEDS = [
       "GUEST_LIST",
       "QR_PASS",
       "OPENING_ANIMATION",
+      "CO_HOSTS",
     ],
   },
 ] as const;

@@ -105,6 +105,20 @@ enum InvitationViewSource {
   GUEST
 }
 
+// The three things a co-host may be allowed to do on somebody else's invitation (F12; S2.12, L17.2). The stored value
+// is the row's `permissions` array, so a collaborator holds at least one and at most these three. Paying, refunds,
+// archiving, the address rename, and managing collaborators are owner-only and are not enumerated here on purpose:
+// a permission that cannot be granted never becomes a bug that grants it.
+enum InvitationCollaboratorPermission {
+  // Content, photos (main photo, gallery, the guests' photo moderation), features, and places.
+  EDIT_CONTENT
+  // The RSVP answers, the guest list, the CSV exports, and the guestbook moderation reads. Reads only: writing the
+  // guest list and moderating the guestbook stay owner-only.
+  VIEW_ATTENDANCE
+  // Publishing and unpublishing.
+  PUBLISH
+}
+
 // Better Auth `user` model. Better Auth's `name` field is mapped onto `displayName`.
 // `role` is server-side only and never accepted as client input.
 model User {
@@ -126,6 +140,8 @@ model User {
   // The audit rows this account took as an administrator, and the ones that changed it (M9 T6; S6).
   adminActionsTaken   AdminAction[] @relation("AdminActionActor")
   adminActionsAgainst AdminAction[] @relation("AdminActionTarget")
+  // The invitations shared with this account as an accepted collaborator (F12; L17.1).
+  collaborations      InvitationCollaborator[] @relation("InvitationCollaboratorUser")
 }
 
 // Better Auth `session` model: database sessions carried by the API cookie.
@@ -379,6 +395,8 @@ model Invitation {
   guestPhotos        GuestPhoto[]
   // Every previous public address of this invitation (F11; S2.11, L15.2): at most five, recorded by the rename.
   slugAliases        InvitationSlugAlias[]
+  // The people the owner invited to collaborate (F12; S2.12, L17.1): at most five non-revoked at a time.
+  collaborators      InvitationCollaborator[]
 
   @@index([ownerId])
   // The administrator's status view (M9 T2; S1) reads a page newest first, optionally filtered by one status, so
@@ -390,6 +408,55 @@ model Invitation {
   // The analytics funnel (M9 T11; S2) aggregates first publications by day over one bounded window, so migration
   // 20261128130000_add_analytics_indexes adds this index concurrently for that range scan.
   @@index([firstPublishedAt])
+}
+
+// One person the owner invited to collaborate on one invitation (F12; S2.12, L17.1, L17.3). The row is the
+// authorization decision itself: the invited address, the permission set, and the account that accepted it. The
+// acceptance token is never stored — only its SHA-256 hex digest, next to the instant it stops being valid — and it is
+// burned (`tokenHash` set to NULL) the moment the invitation is accepted, so a link that leaked afterwards opens
+// nothing. `revokedAt` is the owner's revoke and takes effect on the next request, because the access resolver reads
+// this row every time and caches nothing.
+//
+// Why the invitation reference is ON DELETE RESTRICT (L24): the same convention as every other reference to
+// `Invitation`. An invitation is archived, never hard-deleted — archiving is its only terminal lifecycle write — so
+// the restriction never blocks an operation the owner has, and a collaborator row never outlives the invitation it
+// points at. The user reference is RESTRICT too: an account is disabled, never deleted.
+//
+// What Prisma cannot express, and migration 20261214120000_add_invitation_collaborators adds: the partial unique index
+// over (invitationId, email) among non-revoked rows, so one address is invited once per invitation while a revoked
+// address may be invited again; the CHECK constraints "InvitationCollaborator_permissions_granted" (at least one) and
+// "InvitationCollaborator_token_expiry" (the token window is positive); and the trigger that refuses a sixth
+// non-revoked collaborator of one invitation, which PostgreSQL has to count because a CHECK cannot read other rows.
+model InvitationCollaborator {
+  id             String                            @id @default(uuid()) @db.Uuid
+  invitationId   String                            @db.Uuid
+  // The invited address, trimmed and lower-cased on the way in, so an acceptance matches the account's own address
+  // whatever case either side was written with. 1 to 320 characters, the width of `User.email`.
+  email          String                            @db.VarChar(320)
+  // The account that accepted the invitation, or NULL while it is pending. Set once, by the acceptance write.
+  userId         String?                           @db.Uuid
+  // At least one of the three permissions, and never a duplicate: the database checks the count, the API domain
+  // normalizes the order and refuses a repeated permission.
+  permissions    InvitationCollaboratorPermission[]
+  // The SHA-256 hex digest of the single-use acceptance token, or NULL once the token was burned by an acceptance or a
+  // revoke. The plain token exists only in the emailed link; no column, log, or response ever carries it.
+  tokenHash      String?                           @unique @db.VarChar(64)
+  // When the emailed link stops being accepted: the invitation instant plus seven days.
+  tokenExpiresAt DateTime?                         @db.Timestamptz(6)
+  invitedAt      DateTime                          @default(now()) @db.Timestamptz(6)
+  // When the invited account accepted, or NULL while the invitation is pending.
+  acceptedAt     DateTime?                         @db.Timestamptz(6)
+  // When the owner revoked the access, or NULL while it stands. Revoking keeps the row as history and ends the
+  // access on the next request.
+  revokedAt      DateTime?                         @db.Timestamptz(6)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  user       User?      @relation("InvitationCollaboratorUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  // The owner's screen and the five-collaborator count read one invitation's rows; the resolver reads one account's
+  // accepted row for one invitation.
+  @@index([invitationId])
+  @@index([userId])
 }
 
 // One previous public address of one invitation (F11; S2.11, L15.2). The owner may rename `/i/<slug>` at most five

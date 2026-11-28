@@ -114,6 +114,7 @@ export const IMPLEMENTED_INVITATION_FEATURES = [
   "QR_PASS",
   "GALLERY",
   "OPENING_ANIMATION",
+  "CO_HOSTS",
 ] as const;
 
 export type ImplementedInvitationFeature = (typeof IMPLEMENTED_INVITATION_FEATURES)[number];
@@ -180,6 +181,15 @@ export const LIVESTREAM_FEATURE_KEY = "LIVESTREAM";
  * envelope, so the key stays granted while the owner switches it off.
  */
 export const OPENING_ANIMATION_FEATURE_KEY = "OPENING_ANIMATION";
+
+/**
+ * The catalog key that grants co-hosts (F12; S2.12, L17.5), granted by Premium and Deluxe. It is the key the invite route
+ * checks before it stores an invitation, so the capability is catalog data the panel can withdraw: a package that does
+ * not grant it answers 409 `CO_HOSTS_NOT_AVAILABLE`. The collaborator rows a package once allowed stay stored and keep
+ * their access while the invitation's own promises stand; withdrawing the key stops new invitations, never a
+ * collaboration the owner already granted and has not revoked.
+ */
+export const CO_HOSTS_FEATURE_KEY = "CO_HOSTS";
 
 /**
  * The message a value that is not a boolean is refused with (F10; L14.3). The switch has no other shape: `null` and an

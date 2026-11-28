@@ -944,6 +944,55 @@ already carry, so there is no second writer that could drift from the truth and 
   `"Payment_createdAt_idx"`, `"Payment_paidAt_idx"`, and `"Invitation_firstPublishedAt_idx"`, which costs the funnel its
   range scans and nothing else. Never edit an applied migration file.
 
+## Co-hosts (invitation collaborators)
+
+Current status: the `InvitationCollaborator` table exists, the API invites, accepts, lists, changes, and revokes
+(`apps/api/src/collaborators`), and every invitation route of the API resolves its caller through the same access
+resolver (F12; S2.12, L17.1, L17.3, L17.4, L17.5). The rules — the three grantable permissions, the invited address, the
+seven-day single-use link, and what a stored row means — live in
+`apps/api/src/collaborators/domain/invitation-collaborator.ts`.
+
+- `InvitationCollaborator` stores one person the owner invited to collaborate: `invitationId`, `email`
+  (`VARCHAR(320)`, trimmed and lower-cased on the way in), `userId` (`UUID`, nullable, set by the acceptance),
+  `permissions` (`InvitationCollaboratorPermission[]`: `EDIT_CONTENT` | `VIEW_ATTENDANCE` | `PUBLISH`), `tokenHash`
+  (`VARCHAR(64)`, nullable, the SHA-256 hex digest of the acceptance token), `tokenExpiresAt`, `invitedAt`,
+  `acceptedAt`, and `revokedAt` (`TIMESTAMPTZ(6)`, the last three nullable).
+- The plain acceptance token is never stored. It is 128 bits from `crypto.randomBytes`, base64url-encoded, and it exists
+  only inside the emailed link; the row keeps its digest behind `InvitationCollaborator_tokenHash_key`, so a database
+  reader cannot replay a link and the acceptance is an index probe on the digest. The same two helpers the guest's
+  personal token uses are reused, not reimplemented. The link works for seven days from the invitation and once.
+- The CHECK constraints repeat the API's rules for a reader that does not go through it:
+  `InvitationCollaborator_permissions_granted` (one to three permissions, so a row never means "no access" while the
+  resolver treats a row as access), `InvitationCollaborator_acceptedAt_matches_user` (the accepting account and the
+  instant are both set or both NULL), `InvitationCollaborator_email_lowercase` (the stored address is already
+  normalized), and `InvitationCollaborator_token_expiry` (a burned token carries no expiry, and a live one expires after
+  the invitation).
+- `InvitationCollaborator_invitationId_email_key` is a partial unique index over `(invitationId, email)` among
+  non-revoked rows: one address is invited once per invitation, and a revoked row leaves the index so the same address
+  may be invited again. The trigger `InvitationCollaborator_max_active` refuses a sixth non-revoked collaborator of one
+  invitation, counting under the invitation's own row lock so two simultaneous invitations cannot both take the last
+  place (L17.1). PostgreSQL has to count because a CHECK cannot read other rows.
+- Both references are `ON DELETE RESTRICT`, the convention every invitation reference follows here: an invitation is
+  archived and an account is disabled, never hard-deleted, so neither key keeps the owner from an operation they have
+  (L24). The table references no `Guest`, `MediaAsset`, or `Payment`, so a collaborator never blocks a removal.
+- The permissions are the whole grantable surface (`EDIT_CONTENT` = content, photos, the guests' photo moderation,
+  features, places; `VIEW_ATTENDANCE` = RSVP answers, guest list, CSV exports, guestbook moderation reads; `PUBLISH` =
+  publishing and unpublishing). Paying, checkout, refunds, archiving, renaming the address, and managing collaborators
+  are owner-only and are not enumerated anywhere, so they cannot be granted by a request, a stored row, or a catalog
+  change. Writing the guest list, moderation of the guestbook, and the RSVP settings stay owner-only as well.
+- Nothing is deleted: revoking sets `revokedAt` and burns the token in the same statement, so the row stays as history
+  and the access ends on that account's next request — the resolver reads the row on every request and caches nothing.
+- The capability is the new `CO_HOSTS` key, granted to Premium and Deluxe by the migration (`ON CONFLICT DO NOTHING`)
+  and declared in the seed (`apps/api/prisma/catalog-seed.ts`), so the panel may grant or withdraw it without a
+  deployment. Withdrawing it stops new invitations (409 `CO_HOSTS_NOT_AVAILABLE`); the collaborations the owner already
+  granted and has not revoked keep their access, because they are a promise the owner made, not a package entitlement.
+- Rollback / recovery of `20261214120000_add_invitation_collaborators`: additive, so recovery is redeploying the
+  previous migration set, or by hand dropping the `InvitationCollaborator_max_active` trigger and its function, deleting
+  the `CO_HOSTS` `PackageFeature` links and the `CO_HOSTS` `Feature` row by key, then `DROP TABLE
+  "InvitationCollaborator";` and `DROP TYPE "InvitationCollaboratorPermission";`. Only the collaborator rows and the
+  catalog key are lost, and every collaborator loses all access, which is the safe direction. Never edit the applied
+  migration file.
+
 ## Deliberately absent
 
 There is no stored aggregate, event stream, or per-visitor analytics table. The `Invitation` table stores authoring,

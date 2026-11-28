@@ -821,7 +821,7 @@ describe("feature gating (S4, F1)", () => {
     );
   });
 
-  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_ALBUM, LIVESTREAM, GUEST_LIST, QR_PASS, GALLERY, and OPENING_ANIMATION, with CALENDAR always added", () => {
+  it("implements exactly ITINERARY, COUNTDOWN, MAP, RSVP, WHATSAPP, MUSIC, GIFT_REGISTRY, LODGING, GUESTBOOK, GUEST_ALBUM, LIVESTREAM, GUEST_LIST, QR_PASS, GALLERY, OPENING_ANIMATION, and CO_HOSTS, with CALENDAR always added", () => {
     assert.deepEqual(IMPLEMENTED_INVITATION_FEATURES, [
       "ITINERARY",
       "COUNTDOWN",
@@ -838,6 +838,7 @@ describe("feature gating (S4, F1)", () => {
       "QR_PASS",
       "GALLERY",
       "OPENING_ANIMATION",
+      "CO_HOSTS",
     ]);
     assert.equal(CALENDAR_FEATURE_KEY, "CALENDAR");
     assert.equal(ITINERARY_FEATURE_KEY, "ITINERARY");

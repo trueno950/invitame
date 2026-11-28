@@ -36,6 +36,8 @@ export const RESERVED_INVITATION_SLUGS = [
   "api",
   "auth",
   "catalog",
+  // The co-hosts' acceptance route (F12; L17.3): `/collaborations/accept`.
+  "collaborations",
   "cuenta",
   "fonts",
   "health",

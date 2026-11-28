@@ -169,6 +169,7 @@ describe("reserved slugs", () => {
         "api",
         "auth",
         "catalog",
+        "collaborations",
         "cuenta",
         "fonts",
         "health",
