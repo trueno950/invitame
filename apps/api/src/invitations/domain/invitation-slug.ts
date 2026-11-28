@@ -44,6 +44,7 @@ export const RESERVED_INVITATION_SLUGS = [
   "invitacion",
   "invitaciones",
   "invitame",
+  "invitations",
   "me",
   "media",
   "payments",

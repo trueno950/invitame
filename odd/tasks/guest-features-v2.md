@@ -237,6 +237,11 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
      «✓ Disponible» / «Ya está en uso» / «No es válida» state (debounced, server-checked), the rule hint, «Guardar
      dirección», and the note that the previous link keeps working; the share panel and the list show the new
      address. Queued after F10.
+  Owner approval, verbatim choice: «Sí, apruebo» (the six-point summary: 3-40 lowercase letters, digits, inner
+  hyphens, no reserved words; unique across current and previous slugs; at most 5 renames; every previous slug keeps
+  working through a permanent redirect, including the personal and calendar routes; the database lets the slug change
+  only through the rename, everything else stays guarded as today; owner-only, refused when archived, and the
+  availability check never reveals who holds a taken slug).
 - L17 — F12: owner picked `design/co-hosts/02-con-permisos.html` («Con permisos»); the other two are alternatives.
   Security-sensitive (authorization): per `AGENTS.md` the owner must approve this security design before
   implementation. Proposed design (binding once approved):
@@ -405,6 +410,19 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   no extra requests, aria-hidden, no focus) and frames matching the artboard; the guest-token page, the owner preview,
   and the authenticated PUT were checked in code only. Gates: API 2372/2372, web 2377/2377, db-specs 533/533 on a
   recreated database. Pending regression tests from the verifier (truth tables, catalog replay, e2e).
+- L30 — F11 evidence: commits `a18e315` (API: migration `20261213120000_add_invitation_slug_alias`, rewritten pinned-field
+  trigger, alias table, routes, redirect target), `f64dd84` (web block and permanent redirects), `30587f4` (review
+  hardening: real renames-left count in every owned answer, concurrent rename refusals mapped to 409 codes, the
+  per-owner limit consumed first on both address routes) and the evidence commit (`invitations` added to the reserved
+  words, with a test that reads every web route segment and API prefix from the code). The block was polished after a
+  browser check (save only after «✓ Disponible», no empty box, «Tu dirección actual» / «Así quedará»). Native review:
+  `review-b6cee7e60ac16706` (API, approved; the concurrency critical was refuted) and `review-32d8f15591ad4cf4`
+  (hardening, approved). Advisories for later: the publish answer adds a sequential alias count read; the P2002
+  handler runs a follow-up query. Independent verification: every L15 item and the approval met, with a base-versus-
+  candidate comparison of the database guard, 308 redirects for the public, personal, and calendar routes through a
+  chain of renames, six concurrent renames without a 500, and only the added fields in the reads. Gates: API
+  2411/2411, web 2441/2441, db-specs 543/543 on a recreated database. A transient git pack-index message during a commit
+  was checked with `git fsck` (clean).
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on

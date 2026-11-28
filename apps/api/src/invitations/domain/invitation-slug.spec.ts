@@ -177,6 +177,7 @@ describe("reserved slugs", () => {
         "invitacion",
         "invitaciones",
         "invitame",
+        "invitations",
         "me",
         "media",
         "payments",

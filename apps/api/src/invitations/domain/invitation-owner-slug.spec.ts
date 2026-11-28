@@ -99,6 +99,7 @@ describe("reserved words", () => {
         "invitacion",
         "invitaciones",
         "invitame",
+        "invitations",
         "me",
         "media",
         "payments",
