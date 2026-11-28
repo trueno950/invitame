@@ -119,6 +119,10 @@ import {
   RenameInvitationSlugUseCase,
 } from "./application/invitation-slug.use-cases";
 import {
+  ClearInvitationPasswordUseCase,
+  SetInvitationPasswordUseCase,
+} from "./application/invitation-password.use-cases";
+import {
   SLUG_AVAILABILITY_RATE_LIMITER,
   type SlugAvailabilityRateLimiter,
 } from "./application/slug-availability-rate-limiter";
@@ -369,6 +373,20 @@ export const INVITATION_USE_CASES: Provider[] = [
       reminders: ReminderSender,
     ) => new UpdateInvitationFeaturesUseCase(invitations, catalog, music, reminders),
     inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, MUSIC_METADATA_PROVIDER, REMINDER_SENDER],
+  },
+  // The owner's two access-code writes (F13; S2.13, L18.1): the set is gated by the pinned package's
+  // PASSWORD_PROTECTION key, the removal is not, and both raise the stored version so every older token stops working.
+  {
+    provide: SetInvitationPasswordUseCase,
+    useFactory: (invitations: InvitationRepository, catalog: InvitationCatalog) =>
+      new SetInvitationPasswordUseCase(invitations, catalog),
+    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG],
+  },
+  {
+    provide: ClearInvitationPasswordUseCase,
+    useFactory: (invitations: InvitationRepository) =>
+      new ClearInvitationPasswordUseCase(invitations),
+    inject: [INVITATION_REPOSITORY],
   },
   {
     provide: GetPublicInvitationUseCase,
