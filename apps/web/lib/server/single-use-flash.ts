@@ -11,6 +11,9 @@ import { randomBytes } from "node:crypto";
  * the browser carries only an opaque handle, in a cookie that is httpOnly, `SameSite=Strict`, path-scoped to the
  * single page that reads it, and short-lived. The page takes the value out of the store as it renders it, which
  * deletes it: a reload, a second tab, or a later visit cannot show it again, and the lingering cookie names nothing.
+ * The render that takes it therefore has to be the render the browser paints, so a form that hands one of these values
+ * over posts natively instead of calling its action from the browser: a page that consumes one must not be rendered
+ * twice (F13; L18.1).
  *
  * Boundaries: the store is this Node.js process's memory. The deployment runs one web server, so the action and the
  * page it redirects to see the same map; a second web replica would need a shared store, and the hand-off would

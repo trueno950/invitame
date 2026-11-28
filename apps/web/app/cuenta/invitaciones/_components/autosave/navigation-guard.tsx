@@ -114,6 +114,14 @@ export interface GuardedFormProps {
   action: (formData: FormData) => Promise<void>;
   /** The tab the redirect comes back to, which the editor's actions read from the submitted form. */
   section?: EditorSection;
+  /**
+   * Whether the browser posts this form itself once the autosave is settled, instead of the editor calling the action
+   * from the browser (F13; L18.1). A form whose action hands one value over to the page it redirects to needs it: an
+   * action called from the browser answers with that page, and Next.js then navigates there and renders it again, so a
+   * value the first render took out of its one-time store is never painted. A native form is a real post the browser
+   * follows, so the page the owner lands on is the only render.
+   */
+  native?: boolean;
   className?: string;
   children: ReactNode;
 }
@@ -121,18 +129,30 @@ export interface GuardedFormProps {
 /**
  * A form whose submit waits for the autosave. The form itself stays a plain form: its fields, its hidden ids, and its
  * file input are the ones the server action already reads, and one hidden field names the tab the owner came back to.
+ * A `native` form is posted by the browser — Next.js renders the action as the form's own endpoint — and the others call
+ * the action from the browser, which keeps the editor on its page while it works.
  */
-export function GuardedForm({ action, section, className, children }: GuardedFormProps) {
+export function GuardedForm({ action, section, native, className, children }: GuardedFormProps) {
   const navigate = useGuardedNavigation();
   const [, startTransition] = useTransition();
 
   return (
     <form
+      action={native ? action : undefined}
       className={className}
       onSubmit={(event) => {
         event.preventDefault();
-        // Read the form now, while it is still on screen: the file input of an upload keeps its file.
-        const submitted = new FormData(event.currentTarget);
+        // Read the form before the wait: the file input of an upload keeps its file, and the element outlives the flush.
+        const element = event.currentTarget;
+
+        if (native === true) {
+          // The browser's own post: it follows the 303 the action redirects with, so the page it lands on renders once.
+          navigate(() => element.submit());
+          return;
+        }
+
+        const submitted = new FormData(element);
+
         navigate(() => {
           // A server action that redirects is called inside a transition, as Next.js expects of a client submit.
           startTransition(() => {

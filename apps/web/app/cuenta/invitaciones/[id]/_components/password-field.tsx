@@ -43,7 +43,10 @@ function PasswordSaveForm({
   readonly submitLabel: string;
 }): ReactNode {
   return (
-    <GuardedForm action={action} className="flex flex-col gap-2" section="publicar">
+    // The browser posts this form itself (`native`): the save answers with the ready-to-share line, and the page the
+    // browser lands on has to be the only render, or the render this action answers with takes the line first and the
+    // owner never sees it.
+    <GuardedForm action={action} className="flex flex-col gap-2" native section="publicar">
       <input name="id" type="hidden" value={invitationId} />
       <label className={fieldLabel} htmlFor={PASSWORD_FIELD_ID}>
         {PASSWORD_COPY.label}

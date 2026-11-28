@@ -8,6 +8,7 @@ import {
   removeInvitationPassword,
   saveInvitationPassword,
 } from "../../../lib/customer/password-protection.ts";
+import { getWebServerConfig } from "../../../lib/server/config.ts";
 import { isInvitationId } from "../../../lib/server/invitations-api.ts";
 import { requestOrigin } from "../../../lib/server/request-origin.ts";
 import { passwordShareCookie, passwordShares } from "../../../lib/server/single-use-flash.ts";
@@ -39,7 +40,11 @@ function landed(formData: FormData, target: string): string {
 export async function saveInvitationPasswordAction(formData: FormData): Promise<void> {
   const [requestHeaders, cookieStore] = await Promise.all([headers(), cookies()]);
   const origin = requestOrigin(requestHeaders);
-  const outcome = await saveInvitationPassword(invitations, formData, { origin });
+  // The line the owner shares names the same host as the address block of the «Publicar» tab, which shows the configured
+  // public origin when there is one (F11; L15.4). The cookie's `secure` still follows the scheme this request arrived on.
+  const outcome = await saveInvitationPassword(invitations, formData, {
+    origin: getWebServerConfig().publicWebOrigin ?? origin,
+  });
 
   if (outcome.kind === "refused") {
     redirect(landed(formData, outcome.target));

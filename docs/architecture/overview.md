@@ -852,7 +852,10 @@ only an opaque 22-character handle, in a cookie that is `httpOnly`, `SameSite=St
 attendance page (`/cuenta/invitaciones/<id>/asistencia`) or to `/cuenta`, and `Secure` under https. The page takes the
 value out of the store as it renders, which deletes it, so a reload, a second tab, or a later visit shows nothing
 instead of the link again — Next.js allows no cookie deletion during a server render, which is why the store rather
-than the cookie is what makes the reveal single-use. The after-sign-in return uses the same store with a bare
+than the cookie is what makes the reveal single-use. Because the first render takes the value, the render that takes it
+must be the one the browser paints: a form whose action hands a one-time value over posts natively (F13: the access
+code's ready-to-share line), since a browser-invoked action renders its redirect target once inside the POST answer and
+the client router then renders it again without the value. The after-sign-in return uses the same store with a bare
 `/cuenta/acceso/<slug>/<token>` path, re-validated when it is read, so the return can never leave `/cuenta`. The store
 lives in the web process's memory, which is what the single Node.js web server this repository targets provides; a
 deployment with more than one web replica would need a shared store, and until then the hand-off would degrade to
