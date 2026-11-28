@@ -423,6 +423,25 @@ verification, CI, and its own merge to `master` before the next starts. Task IDs
   chain of renames, six concurrent renames without a 500, and only the added fields in the reads. Gates: API
   2411/2411, web 2441/2441, db-specs 543/543 on a recreated database. A transient git pack-index message during a commit
   was checked with `git fsck` (clean).
+- L31 — F12 evidence: commits `9e1617d` (data: table, migration `20261214120000_add_invitation_collaborators`, key
+  `CO_HOSTS` for premium and deluxe), `d16f24e` (invite, accept, update, revoke; resolver and guard), `5f408da` (every
+  invitation, media, and payment route declares its permission; shared list; generated authorization matrix),
+  `e6b5865` (hardening from the three reviews: fail-closed scope decorators, `no-store` on every authorized answer,
+  migration `20261215120000_harden_invitation_collaborators` with non-empty permissions and no expiry on a burned
+  token, owner-scoped writes, inactive `CO_HOSTS` refuses, idempotent revoke, the caller's role in every answer, shared
+  list without own or invalid rows, `colaboraciones` reserved), `a2c70a2` (web: co-hosts screen, acceptance at
+  `/colaboraciones/aceptar` with the sign-in return, «Compartida contigo», role-based tabs) and `05e49d5` (a collaborator
+  opening the co-hosts screen reads «Solo el dueño…» instead of a passing failure; native assess: not due, 15 lines).
+  Native review: `review-6608b338d803d375`, `review-00765ca03e3d81d6`, `review-21712d467b5b59ba`,
+  `review-8ee3bd0e474fa319`, `review-4f2feab8ac32e8fc`, all approved. Browser check with two real accounts: invite,
+  email link, accept, permission-limited tabs, «Compartida contigo», owner sees «Aceptó», revoke takes effect on the
+  next load. Independent verification: every L17 item met, its own 315-cell matrix on a real database and sessions,
+  one identical refusal for every bad acceptance, no open redirect on the sign-in return, no token in logs or bodies,
+  owner behavior unchanged versus the base. Gates: API 2439/2439, web 2471/2471 (2487 with e2e helpers), db-specs
+  568/568 on a recreated database (one sign-in-code expiry test flaked once in the full run and passed 3/3 alone; a
+  pre-existing timing flake). Follow-ups: an e2e test of the acceptance return route (it imports `next/headers`, so the
+  node test runner cannot load it); anonymous invitation answers carry no `Cache-Control` (pre-existing global guard);
+  a malformed id on publish answers 404 instead of 400.
 - L16 — CI run 262 failed after F1's merge: `catalog-seed.prisma.db-spec.ts` hardcodes the seeded feature keys and
   premium's list, so a fresh database (CI) seeded `ITINERARY` while the spec did not expect it; the local dev DB hid
   it because its packages predate the key and the seed never updates them. Fixed in `644a535` (reproduced and green on
