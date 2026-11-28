@@ -292,8 +292,9 @@ export class InvitationsController {
    * Whether the owner may save the typed address (F11; S2.11, L15.3): 200 with one of `available`, `taken`, `invalid`,
    * or `reserved`. Creator-owned, exactly like every other route of this controller: another customer's id is 404
    * `INVITATION_NOT_FOUND` (A4). The answer never names another owner or another invitation, so a taken address only
-   * says that it is taken. The text is read raw and classified by the domain, and an owner over the check limit is
-   * 429 `SLUG_AVAILABILITY_RATE_LIMITED` and changes nothing.
+   * says that it is taken. The text is read raw and classified by the domain, the owner's limit is counted before the
+   * invitation is even read, so no request of the route is free (R4-003), and an owner over that limit is 429
+   * `SLUG_AVAILABILITY_RATE_LIMITED` and changes nothing.
    */
   @Get(":id/slug-availability")
   async readSlugAvailability(
@@ -316,8 +317,11 @@ export class InvitationsController {
    * address becomes an alias in the same transaction, so every link already shared keeps redirecting permanently to
    * the new one. An archived invitation is 409 `INVITATION_NOT_EDITABLE`, another customer's id is 404 (A2, A4), an
    * address the rule refuses is 400 `INVALID_INVITATION_SLUG` with its issue, a reserved word is 409
-   * `INVITATION_SLUG_RESERVED`, an address already held is 409 `INVITATION_SLUG_TAKEN`, and the sixth rename is 409
-   * `INVITATION_SLUG_RENAME_LIMIT`.
+   * `INVITATION_SLUG_RESERVED`, an address already held is 409 `INVITATION_SLUG_TAKEN`, the sixth rename is 409
+   * `INVITATION_SLUG_RENAME_LIMIT`, a rename that lost a race with another rename of the same invitation is 409
+   * `INVITATION_SLUG_RENAME_CONFLICT`, and an owner over the address limit is 429 `SLUG_AVAILABILITY_RATE_LIMITED` and
+   * changes nothing. Every attempt counts against that limit before anything is read (R1), so the route is never a free
+   * way to learn which addresses are held.
    */
   @Put(":id/slug")
   async replaceSlug(

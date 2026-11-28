@@ -1,9 +1,9 @@
 import { assertEditable } from "../domain/invitation-lifecycle";
 import {
-  MAX_INVITATION_SLUG_RENAMES,
   ownerSlugChoice,
   ownerSlugIssue,
   type OwnerSlugChoice,
+  remainingSlugRenames,
 } from "../domain/invitation-slug";
 import { ReservedInvitationSlugError } from "../domain/invitation.errors";
 import {
@@ -21,10 +21,11 @@ import type { SlugAvailabilityRateLimiter } from "./slug-availability-rate-limit
 //
 // - `CheckInvitationSlugAvailabilityUseCase` answers whether the typed address may be saved — `available`, `taken`,
 //   `invalid`, or `reserved` — and never names another owner, another invitation, or what they hold. It counts one
-//   check against the owner's own limit and answers a malformed address before anything is looked up.
+//   check against the owner's own limit before it reads or classifies anything, so no request of the route is free.
 // - `RenameInvitationSlugUseCase` saves it: the domain rule first, then the repository's one transaction, which stores
 //   the previous address as an alias so an already shared link keeps working, refuses an archived invitation, and
-//   refuses the sixth rename with its own error (L15.2).
+//   refuses the sixth rename with its own error (L15.2). It counts the same limit, before it looks anything up, so a
+//   rename can never be used to probe which addresses are held.
 //
 // Neither command reads another owner's row: the invitation is resolved by `findOwned`, so a foreign id answers
 // exactly like an unknown one (A4).
@@ -64,8 +65,10 @@ function echoedSlug(value: unknown): string {
 /**
  * Answers whether the owner may save the typed address (F11; S2.11, L15.3). Null when no invitation of this owner has
  * this id (A4); `SlugAvailabilityRateLimitedError` when the owner is over the check limit; otherwise the one word the
- * editor renders. The rule is the domain's, and the one lookup it makes is scoped to this owner's own invitation, so a
- * taken address says nothing about who holds it.
+ * editor renders. The owner's limit is counted first, for every request of the route — a malformed or reserved address
+ * and an id that names nothing included (R4-003) — so no request is answered without spending its slot and the check is
+ * never a free oracle. The rule is the domain's, and the one lookup it makes is scoped to this owner's own invitation,
+ * so a taken address says nothing about who holds it.
  */
 export class CheckInvitationSlugAvailabilityUseCase {
   constructor(
@@ -74,6 +77,10 @@ export class CheckInvitationSlugAvailabilityUseCase {
   ) {}
 
   async execute(input: CheckSlugAvailabilityInput): Promise<SlugAvailabilityAnswer | null> {
+    if (!(await this.rateLimiter.consume(input.ownerId))) {
+      throw new SlugAvailabilityRateLimitedError();
+    }
+
     if (!isInvitationId(input.id)) {
       return null;
     }
@@ -89,12 +96,6 @@ export class CheckInvitationSlugAvailabilityUseCase {
       return { slug, status: choice };
     }
 
-    // Only a check that has to look something up spends the owner's limit: a malformed or reserved address is
-    // answered by the rule itself, so typing it costs nothing (L15.3).
-    if (!(await this.rateLimiter.consume(input.ownerId))) {
-      throw new SlugAvailabilityRateLimitedError();
-    }
-
     // The owner's own current address is available: saving it changes nothing and stores no alias.
     const taken = slug !== stored.slug && (await this.invitations.isSlugInUse(slug, stored.id));
 
@@ -108,16 +109,23 @@ export class CheckInvitationSlugAvailabilityUseCase {
  * it as an alias in the same transaction. An archived invitation is refused before the address is read (A2, S7); a
  * foreign id answers null (A4); an address the rule refuses throws `InvalidInvitationSlugError` or
  * `ReservedInvitationSlugError`; an address another invitation holds (or a previous address of any invitation)
- * throws `InvitationSlugTakenError`; the sixth rename throws `InvitationSlugRenameLimitError`.
+ * throws `InvitationSlugTakenError`; the sixth rename throws `InvitationSlugRenameLimitError`; a rename that lost a race
+ * with another rename of the same invitation throws `InvitationSlugRenameConflictError` (R4-002). Every attempt counts
+ * against the owner's address limit before anything is read (R1), so a rename never probes a held address for free.
  */
 export class RenameInvitationSlugUseCase {
   constructor(
     private readonly invitations: InvitationRepository,
     private readonly catalog: InvitationCatalog,
     private readonly reminders?: ReminderSender,
+    private readonly rateLimiter: SlugAvailabilityRateLimiter = { consume: async () => true },
   ) {}
 
   async execute(input: RenameSlugInput): Promise<OwnedInvitation | null> {
+    if (!(await this.rateLimiter.consume(input.ownerId))) {
+      throw new SlugAvailabilityRateLimitedError();
+    }
+
     if (!isInvitationId(input.id)) {
       return null;
     }
@@ -159,8 +167,8 @@ export class RenameInvitationSlugUseCase {
       stored,
       snapshot?.schema ?? null,
       entitlements?.includedFeatureKeys ?? [],
+      remainingSlugRenames(renames),
       this.reminders?.isConfigured() ?? false,
-      Math.max(0, MAX_INVITATION_SLUG_RENAMES - renames),
     );
   }
 }

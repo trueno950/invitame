@@ -339,8 +339,14 @@ export const INVITATION_USE_CASES: Provider[] = [
       invitations: InvitationRepository,
       catalog: InvitationCatalog,
       reminders: ReminderSender,
-    ) => new RenameInvitationSlugUseCase(invitations, catalog, reminders),
-    inject: [INVITATION_REPOSITORY, INVITATION_CATALOG, REMINDER_SENDER],
+      rateLimiter: SlugAvailabilityRateLimiter,
+    ) => new RenameInvitationSlugUseCase(invitations, catalog, reminders, rateLimiter),
+    inject: [
+      INVITATION_REPOSITORY,
+      INVITATION_CATALOG,
+      REMINDER_SENDER,
+      SLUG_AVAILABILITY_RATE_LIMITER,
+    ],
   },
   {
     provide: UpdateInvitationContentUseCase,

@@ -39,7 +39,7 @@ import {
   generateInvitationSlug,
   isReservedSlug,
   isValidInvitationSlug,
-  MAX_INVITATION_SLUG_RENAMES,
+  remainingSlugRenames,
 } from "../domain/invitation-slug";
 import { packageFitsTemplateVersion } from "../domain/package-fit";
 import { PACKAGE_FIT_ISSUE, publicationIssues } from "../domain/publication-readiness";
@@ -271,8 +271,13 @@ export function toOwnedInvitation(
   record: InvitationRecordWithMusic,
   schema: unknown,
   includedFeatureKeys: readonly string[],
+  /**
+   * How many renames the invitation still has, from the previous addresses it keeps (F11; L15.2, R3-001). It is a
+   * required argument on purpose: every owned answer states the stored count, so no route falls back to the whole
+   * allowance and reports five renames left after the owner already spent some.
+   */
+  slugRenamesRemaining: number,
   remindersConfigured = false,
-  slugRenamesRemaining: number = MAX_INVITATION_SLUG_RENAMES,
 ): OwnedInvitation {
   return {
     ...toSummary(record),
@@ -396,6 +401,8 @@ export class CreateInvitationDraftUseCase {
       created,
       version.schema,
       entitlements.includedFeatureKeys,
+      // A draft just created keeps no previous address, so it has the whole allowance (F11; L15.2).
+      remainingSlugRenames(0),
       this.reminders?.isConfigured() ?? false,
     );
   }
@@ -502,8 +509,10 @@ export class GetOwnInvitationUseCase {
       stored,
       snapshot?.schema ?? null,
       includedFeatureKeys,
+      // How many renames are left is the alias count, read for the same read so the editor states it without a second
+      // request (F11; L15.2).
+      remainingSlugRenames(renames),
       this.reminders?.isConfigured() ?? false,
-      Math.max(0, MAX_INVITATION_SLUG_RENAMES - renames),
     );
   }
 }
@@ -551,12 +560,17 @@ export class UpdateInvitationContentUseCase {
       return null;
     }
 
-    const includedFeatureKeys = await includedFeatureKeysOf(this.catalog, updated.packageId);
+    const [includedFeatureKeys, renames] = await Promise.all([
+      includedFeatureKeysOf(this.catalog, updated.packageId),
+      // The content save answers the same owned invitation as the read, so it states the same renames left (R3-001).
+      this.invitations.countSlugAliases(updated.id),
+    ]);
 
     return toOwnedInvitation(
       updated,
       snapshot?.schema ?? null,
       includedFeatureKeys,
+      remainingSlugRenames(renames),
       this.reminders?.isConfigured() ?? false,
     );
   }
@@ -636,15 +650,18 @@ export class UpdateInvitationFeaturesUseCase {
       return null;
     }
 
-    const [snapshot, includedFeatureKeys] = await Promise.all([
+    const [snapshot, includedFeatureKeys, renames] = await Promise.all([
       this.catalog.findVersionSchema(updated.templateVersionId),
       includedFeatureKeysOf(this.catalog, updated.packageId),
+      // The feature save answers the same owned invitation as the read, so it states the same renames left (R3-001).
+      this.invitations.countSlugAliases(updated.id),
     ]);
 
     return toOwnedInvitation(
       updated,
       snapshot?.schema ?? null,
       includedFeatureKeys,
+      remainingSlugRenames(renames),
       this.reminders?.isConfigured() ?? false,
     );
   }
@@ -798,6 +815,8 @@ export class PublishInvitationUseCase {
       published,
       snapshot?.schema ?? null,
       entitlements?.includedFeatureKeys ?? [],
+      // Publishing answers the same owned invitation as the read, so it states the same renames left (R3-001).
+      remainingSlugRenames(await this.invitations.countSlugAliases(published.id)),
       this.reminders?.isConfigured() ?? false,
     );
   }

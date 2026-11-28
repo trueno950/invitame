@@ -17,6 +17,7 @@ import {
   InvitationPackageDoesNotFitError,
   InvitationPackageNotFoundError,
   InvitationPaymentRequiredError,
+  InvitationSlugRenameConflictError,
   InvitationSlugRenameLimitError,
   InvitationSlugTakenError,
   InvitationSlugUnavailableError,
@@ -610,8 +611,9 @@ export function orInvitationSummaryNotFound(
  * - a place write the domain refuses is 400 `INVALID_INVITATION_PLACE` with its issues (S2, S3);
  * - an address the rule refuses is 400 `INVALID_INVITATION_SLUG` with its issue, a reserved word is 409
  *   `INVITATION_SLUG_RESERVED`, an address that is already held is 409 `INVITATION_SLUG_TAKEN`, the sixth rename is 409
- *   `INVITATION_SLUG_RENAME_LIMIT`, and an owner over the check limit is 429 `SLUG_AVAILABILITY_RATE_LIMITED`
- *   (F11; S2.11, L15.1-L15.3);
+ *   `INVITATION_SLUG_RENAME_LIMIT`, a rename that lost a race with another rename of the same invitation is 409
+ *   `INVITATION_SLUG_RENAME_CONFLICT`, and an owner over the address limit is 429 `SLUG_AVAILABILITY_RATE_LIMITED`, for a
+ *   check and for a rename alike (F11; S2.11, L15.1-L15.3);
  * - an archived invitation is 409 with `INVITATION_NOT_EDITABLE`, or `INVITATION_ALREADY_ARCHIVED` for a
  *   repeated archive (A3, S7);
  * - a publication the lifecycle refuses is 409 with `INVITATION_ALREADY_PUBLISHED` or `INVITATION_NOT_PUBLISHED`,
@@ -682,6 +684,11 @@ export function mapInvitationError(error: unknown): never {
   }
   if (error instanceof InvitationSlugRenameLimitError) {
     throw new ConflictException({ code: "INVITATION_SLUG_RENAME_LIMIT" });
+  }
+  if (error instanceof InvitationSlugRenameConflictError) {
+    // A concurrent rename of the same invitation stored the address that was current here first, so the owner retries
+    // and reads the invitation as it stands: never a false "taken" (F11; L15.2, R4-002).
+    throw new ConflictException({ code: "INVITATION_SLUG_RENAME_CONFLICT" });
   }
   if (error instanceof InvalidInvitationFeaturesError) {
     throw new BadRequestException({

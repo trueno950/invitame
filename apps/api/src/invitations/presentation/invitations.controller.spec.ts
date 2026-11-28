@@ -34,6 +34,7 @@ import {
 import { guestTokenHash } from "../application/guest-token";
 import {
   InvitationContentConflictError,
+  InvitationSlugRenameConflictError,
   InvitationSlugRenameLimitError,
   InvitationSlugTakenError,
 } from "../application/invitation.application.errors";
@@ -75,6 +76,7 @@ import {
 } from "../application/place-search-rate-limiter";
 import {
   SLUG_AVAILABILITY_RATE_LIMITER,
+  SLUG_AVAILABILITY_RATE_LIMIT,
   type SlugAvailabilityRateLimiter,
 } from "../application/slug-availability-rate-limiter";
 import {
@@ -456,6 +458,8 @@ class MemoryInvitationRepository implements InvitationRepository {
 
   /** The previous addresses of every invitation (F11; L15.2, L15.3), keyed by slug. */
   readonly aliases = new Map<string, string>();
+  /** Whether the next rename answers the concurrent-rename conflict the adapter raises (R4-002). */
+  renameConflict = false;
 
   async findPublishedByAlias(slug: string): Promise<InvitationRecordWithMusic | null> {
     const invitationId = this.aliases.get(slug);
@@ -484,6 +488,12 @@ class MemoryInvitationRepository implements InvitationRepository {
     id: string,
     slug: string,
   ): Promise<InvitationRecordWithMusic | null> {
+    // The one outcome only PostgreSQL can produce: a concurrent rename of the same invitation stored the previous
+    // address first, so this one must be retried rather than answered as a taken address (R4-002).
+    if (this.renameConflict) {
+      this.renameConflict = false;
+      throw new InvitationSlugRenameConflictError();
+    }
     const row = this.rows.find((stored) => stored.id === id && stored.ownerId === ownerId);
     if (!row) {
       return null;
@@ -708,14 +718,24 @@ class MemoryPlaceSearchLimiter implements PlaceSearchRateLimiter {
   }
 }
 
-/** The address-check limiter in memory (F11; L15.3): it counts who checked and lets the test close the window. */
+/**
+ * The address-check limiter in memory (F11; L15.3): it counts who checked, lets the test close the window, and, when a
+ * `max` is set, enforces the real cap so a request over it is observable as the 429 the store answers.
+ */
 class MemorySlugAvailabilityLimiter implements SlugAvailabilityRateLimiter {
   allow = true;
+  /** The cap this fake enforces per owner, or null while the answer is `allow` alone. */
+  max: number | null = null;
   readonly consumed: string[] = [];
 
   async consume(ownerId: string): Promise<boolean> {
     this.consumed.push(ownerId);
-    return this.allow;
+
+    if (!this.allow) {
+      return false;
+    }
+
+    return this.max === null || this.consumed.length <= this.max;
   }
 }
 
@@ -3055,8 +3075,8 @@ describe("invitations routes: /invitations", () => {
       assert.deepEqual(await previous.json(), { slug: "fiesta-uno", status: "taken" });
     });
 
-    it("answers invalid and reserved without spending a check (L15.1)", async () => {
-      const { cookie } = await signedInCustomer();
+    it("spends one check for every request of the owner, an invalid or reserved address included (L15.3)", async () => {
+      const { userId, cookie } = await signedInCustomer();
       const draft = await createDraft(cookie);
 
       for (const [slug, status] of [
@@ -3071,7 +3091,40 @@ describe("invitations routes: /invitations", () => {
         assert.equal(response.status, 200, slug);
         assert.deepEqual(await response.json(), { slug, status }, slug);
       }
-      assert.deepEqual(slugAvailabilityLimiter.consumed, []);
+      // The limit is counted first (R4-003): a request the rule itself answers still spends one of the owner's slots,
+      // so the check is never free.
+      assert.deepEqual(slugAvailabilityLimiter.consumed, [userId, userId, userId, userId, userId]);
+    });
+
+    it("spends one check for an unknown invitation, so the limit is counted before anything is read (R4-003)", async () => {
+      const { userId, cookie } = await signedInCustomer();
+
+      const response = await send("GET", checkPath(UNKNOWN_ID, "valentina-xv"), cookie);
+
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { code: "INVITATION_NOT_FOUND" });
+      assert.deepEqual(slugAvailabilityLimiter.consumed, [userId]);
+    });
+
+    it("answers 429 for the 121st check of the window, the invalid ones counted first (R4-003)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      slugAvailabilityLimiter.max = SLUG_AVAILABILITY_RATE_LIMIT.max;
+
+      try {
+        for (let check = 1; check <= SLUG_AVAILABILITY_RATE_LIMIT.max; check += 1) {
+          const accepted = await send("GET", checkPath(draft.id, "boda--2027"), cookie);
+
+          assert.equal(accepted.status, 200, `check ${check}`);
+        }
+
+        const refused = await send("GET", checkPath(draft.id, "boda--2027"), cookie);
+
+        assert.equal(refused.status, 429);
+        assert.deepEqual(await refused.json(), { code: "SLUG_AVAILABILITY_RATE_LIMITED" });
+      } finally {
+        slugAvailabilityLimiter.max = null;
+      }
     });
 
     it("answers available for the owner's own current address, so saving it changes nothing", async () => {
@@ -3236,6 +3289,78 @@ describe("invitations routes: /invitations", () => {
       assert.equal(refused.status, 409);
       assert.deepEqual(await refused.json(), { code: "INVITATION_SLUG_RENAME_LIMIT" });
       assert.equal(repository.rows.find((row) => row.id === draft.id)?.slug, "casa-cinco");
+    });
+
+    it("states the real renames left in every owned answer, never the product bound (R3-001)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+
+      for (const [slug, remaining] of [
+        ["nube-uno", 4],
+        ["nube-dos", 3],
+      ] as const) {
+        const renamed = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug });
+
+        assert.equal(renamed.status, 200, slug);
+        assert.equal(((await renamed.json()) as Row).slugRenamesRemaining, remaining, slug);
+      }
+
+      // Every route that answers the owned invitation states the same number as the owner's own read, so a save made
+      // on another tab never tells the editor that the whole allowance is left again.
+      const saves: Array<[string, Row]> = [
+        ["content", { content: { title: "Ana" } }],
+        ["features", { timeZone: "America/Mexico_City", whatsappPhone: null, playlistUrl: null }],
+      ];
+      for (const [route, body] of saves) {
+        const response = await send("PUT", `${PATH}/${draft.id}/${route}`, cookie, body);
+
+        assert.equal(response.status, 200, route);
+        assert.equal(((await response.json()) as Row).slugRenamesRemaining, 3, route);
+      }
+
+      const read = await send("GET", `${PATH}/${draft.id}`, cookie);
+      assert.equal(((await read.json()) as Row).slugRenamesRemaining, 3);
+    });
+
+    it("answers 429 over the address limit for a rename and changes nothing (R1)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      slugAvailabilityLimiter.max = 2;
+
+      try {
+        for (const slug of ["sol-uno", "sol-dos"]) {
+          const renamed = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug });
+
+          assert.equal(renamed.status, 200, slug);
+        }
+        const kept = new Map(repository.aliases);
+
+        const refused = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, { slug: "sol-tres" });
+
+        assert.equal(refused.status, 429);
+        assert.deepEqual(await refused.json(), { code: "SLUG_AVAILABILITY_RATE_LIMITED" });
+        assert.equal(repository.rows.find((row) => row.id === draft.id)?.slug, "sol-dos");
+        assert.deepEqual(repository.aliases, kept);
+      } finally {
+        slugAvailabilityLimiter.max = null;
+      }
+    });
+
+    it("answers 409 INVITATION_SLUG_RENAME_CONFLICT when a concurrent rename moved the same invitation (R4-002)", async () => {
+      const { cookie } = await signedInCustomer();
+      const draft = await createDraft(cookie);
+      repository.renameConflict = true;
+
+      try {
+        const response = await send("PUT", `${PATH}/${draft.id}/slug`, cookie, {
+          slug: "luna-uno",
+        });
+
+        assert.equal(response.status, 409);
+        assert.deepEqual(await response.json(), { code: "INVITATION_SLUG_RENAME_CONFLICT" });
+      } finally {
+        repository.renameConflict = false;
+      }
     });
 
     it("answers 409 INVITATION_NOT_EDITABLE for an archived invitation and keeps its address", async () => {

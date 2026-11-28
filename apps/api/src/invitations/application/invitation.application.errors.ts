@@ -159,6 +159,18 @@ export class InvitationSlugRenameLimitError extends Error {
 }
 
 /**
+ * The rename lost a race with another rename of the same invitation (F11; L15.2): the address that was current when
+ * this rename read the invitation had already become a previous address, so nothing was stored and the owner retries.
+ * It is never reported as a taken address, because the address the owner asked for is not held by anybody.
+ */
+export class InvitationSlugRenameConflictError extends Error {
+  constructor() {
+    super("The invitation changed while the address was being saved; retry the rename.");
+    this.name = "InvitationSlugRenameConflictError";
+  }
+}
+
+/**
  * The owner reached the address-check limit (F11; L15.3): too many availability checks in the window. Nothing was
  * asked of the database and nothing was renamed; the limit rests by itself as the window ends.
  */

@@ -6,6 +6,7 @@ import { type Prisma, PrismaClient } from "@prisma/client";
 
 import { requireLocalDatabaseUrl } from "../../../test/database";
 import {
+  InvitationSlugRenameConflictError,
   InvitationSlugRenameLimitError,
   InvitationSlugTakenError,
 } from "../application/invitation.application.errors";
@@ -268,6 +269,153 @@ describe("invitation custom address on PostgreSQL", () => {
     assert.equal(
       await prisma.invitationSlugAlias.count({ where: { invitationId: invitation.id } }),
       0,
+    );
+  });
+
+  /**
+   * Runs two renames of one invitation as two concurrent transactions (R4-002) and answers both outcomes. A third
+   * transaction holds the invitation's own row lock while both renames finish their reads, so both of them read the
+   * same current address before either writes: the interleaving is deterministic, and the database still decides which
+   * rename wins. `await` on the answer settles both renames.
+   */
+  async function raceTwoRenames(
+    invitation: { id: string; ownerId: string },
+    first: string,
+    second: string,
+  ): Promise<Array<PromiseSettledResult<{ slug: string } | null>>> {
+    let lockedTheRow!: () => void;
+    const rowLocked = new Promise<void>((resolve) => {
+      lockedTheRow = resolve;
+    });
+    const blocker = prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT "id" FROM "Invitation" WHERE "id" = ${invitation.id}::uuid FOR UPDATE`;
+        lockedTheRow();
+        await waitUntilRenamesAreBlocked(2);
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    );
+
+    await rowLocked;
+    const renames = Promise.allSettled([
+      repository.renameSlug(invitation.ownerId, invitation.id, first),
+      repository.renameSlug(invitation.ownerId, invitation.id, second),
+    ]);
+
+    try {
+      await blocker;
+    } catch (error) {
+      // Never leave the two renames open: the blocker's rollback released the row, so they finish on their own.
+      await renames;
+      throw error;
+    }
+
+    return renames;
+  }
+
+  /** How many sessions are waiting for a lock while running a statement of the invitation table. */
+  async function waitingInvitationStatements(): Promise<number> {
+    const rows = await prisma.$queryRaw<Array<{ waiting: number }>>`
+      SELECT count(*)::int AS "waiting"
+      FROM pg_stat_activity
+      WHERE "datname" = current_database()
+        AND "state" = 'active'
+        AND "wait_event_type" = 'Lock'
+        AND "query" LIKE '%"Invitation"%'
+    `;
+
+    return rows[0]?.waiting ?? 0;
+  }
+
+  /** Waits, bounded, until `expected` statements of this suite are blocked on the invitation's row lock. */
+  async function waitUntilRenamesAreBlocked(expected: number): Promise<void> {
+    const deadline = Date.now() + 10_000;
+
+    while (Date.now() < deadline) {
+      if ((await waitingInvitationStatements()) >= expected) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    assert.fail(`two renames did not reach the invitation's row lock within 10 s`);
+  }
+
+  /** The one row the race left live, with every address it keeps as a previous one (R4-002). */
+  async function storedAddresses(invitationId: string): Promise<{
+    live: string;
+    previous: string[];
+  }> {
+    const stored = await prisma.invitation.findUniqueOrThrow({ where: { id: invitationId } });
+    const previous = await prisma.invitationSlugAlias.findMany({
+      where: { invitationId },
+      select: { slug: true },
+      orderBy: { slug: "asc" },
+    });
+
+    return { live: stored.slug, previous: previous.map((row) => row.slug) };
+  }
+
+  it("answers the rename limit, never a server fault, when two renames reach the fifth previous address at once (R4-002)", async () => {
+    const invitation = await newInvitation();
+    for (let rename = 0; rename < 4; rename += 1) {
+      await repository.renameSlug(invitation.ownerId, invitation.id, newSlug());
+    }
+
+    const first = newSlug();
+    const second = newSlug();
+    const outcomes = await raceTwoRenames(invitation, first, second);
+
+    const accepted = outcomes.filter((outcome) => outcome.status === "fulfilled");
+    const refused = outcomes.filter(
+      (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected",
+    );
+
+    assert.equal(accepted.length, 1, "exactly one rename is stored");
+    assert.equal(refused.length, 1, "the other one is refused");
+    assert.ok(
+      refused[0]?.reason instanceof InvitationSlugRenameLimitError,
+      `the loser reads the documented limit, not the database's own refusal: ${String(refused[0]?.reason)}`,
+    );
+
+    const stored = await storedAddresses(invitation.id);
+    assert.equal(stored.previous.length, 5, "the invitation keeps its five previous addresses");
+    assert.equal(new Set(stored.previous).size, 5, "every previous address is unique");
+    assert.ok(!stored.previous.includes(stored.live), "the live address is nobody's previous one");
+    assert.ok(
+      stored.live === first || stored.live === second,
+      "the live address is the one the winning rename asked for",
+    );
+  });
+
+  it("answers a retry-safe conflict, never a false taken address, for a rename that read a stale previous address (R4-002)", async () => {
+    const invitation = await newInvitation();
+
+    const first = newSlug();
+    const second = newSlug();
+    const outcomes = await raceTwoRenames(invitation, first, second);
+
+    const accepted = outcomes.filter((outcome) => outcome.status === "fulfilled");
+    const refused = outcomes.filter(
+      (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected",
+    );
+
+    assert.equal(accepted.length, 1, "exactly one rename is stored");
+    assert.equal(refused.length, 1, "the other one is refused");
+    assert.ok(
+      refused[0]?.reason instanceof InvitationSlugRenameConflictError,
+      `the loser reads the conflict to retry, not a taken address: ${String(refused[0]?.reason)}`,
+    );
+
+    const stored = await storedAddresses(invitation.id);
+    assert.deepEqual(
+      stored.previous,
+      [invitation.slug],
+      "the address it started with is its only alias",
+    );
+    assert.ok(
+      stored.live === first || stored.live === second,
+      "the live address is the one the winning rename asked for",
     );
   });
 

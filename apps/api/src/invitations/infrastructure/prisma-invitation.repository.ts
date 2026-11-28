@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   InvitationContentConflictError,
   InvitationPaymentRequiredError,
+  InvitationSlugRenameConflictError,
   InvitationSlugRenameLimitError,
   InvitationSlugTakenError,
 } from "../application/invitation.application.errors";
@@ -97,6 +98,19 @@ function toStoredPlaces(rows: InvitationRow["places"]): Record<string, PlacePoin
 /** The shape of a JSON object as PostgreSQL returns it; arrays, null, and primitives are not objects. */
 function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The sentence the alias-limit trigger of `20261213120000_add_invitation_slug_alias` raises. */
+const ALIAS_LIMIT_REFUSAL = "Invitation slug alias limit reached";
+
+/**
+ * Whether the alias-limit trigger refused the write (F11; L15.2, R4-002). The trigger's refusal reaches this adapter as
+ * a driver error that carries no Prisma code, so the one fixed sentence the migration states is what identifies it; the
+ * message is compared and never stored, logged, or returned, and a sentence that does not match is not treated as this
+ * refusal.
+ */
+function isAliasLimitReached(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(ALIAS_LIMIT_REFUSAL);
 }
 
 function toRecord(row: InvitationRow): InvitationRecordWithMusic {
@@ -622,10 +636,19 @@ export class PrismaInvitationRepository implements InvitationRepository {
         return renamed === null ? null : toRecord(renamed);
       });
     } catch (error) {
-      // Two concurrent renames can pass the two reads above and meet the unique index or an alias trigger, so the
-      // database's own refusal is reported as the taken address it is (F11; L15.1).
+      // Two concurrent renames can pass every read above and meet the database's own guards, so each refusal is
+      // reported as the outcome it is, never as a server fault or a false "taken" (F11; L15.2, R4-002).
+      if (isAliasLimitReached(error)) {
+        throw new InvitationSlugRenameLimitError(MAX_INVITATION_SLUG_RENAMES);
+      }
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new InvitationSlugTakenError(slug);
+        // A unique key refused the write. When the address the owner asked for is held by somebody else, it is the
+        // taken address it always was; otherwise the winning rename of this same invitation already stored the
+        // address that was current here, so the owner retries and reads the current state.
+        if (await this.isSlugInUse(slug, id)) {
+          throw new InvitationSlugTakenError(slug);
+        }
+        throw new InvitationSlugRenameConflictError();
       }
       throw error;
     }

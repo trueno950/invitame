@@ -860,11 +860,20 @@ generated address (`invitacion-k7m2qx`) with an address of their own (`valentina
   not store the previous address as an alias. `ownerId`, `packageId`, and the pinned version keep refusing exactly as
   before, and `content` stays editable.
 - API: the owner asks `GET /invitations/:id/slug-availability?slug=` and reads `available`, `taken`, `invalid`, or
-  `reserved` — never who holds a taken address and never a package or an owner — under a per-owner limit on the shared
-  `RateLimit` store (429 `SLUG_AVAILABILITY_RATE_LIMITED`), and saves through `PUT /invitations/:id/slug`. The save is
-  400 `INVALID_INVITATION_SLUG` with its issue for an address the rule refuses, 409 `INVITATION_SLUG_RESERVED` for a
-  reserved word, 409 `INVITATION_SLUG_TAKEN` for an address already held, 409 `INVITATION_SLUG_RENAME_LIMIT` for the
-  sixth rename, 409 `INVITATION_NOT_EDITABLE` for an archived invitation, and the usual 404 for another owner's id.
+  `reserved` — never who holds a taken address and never a package or an owner — and saves through
+  `PUT /invitations/:id/slug`. Both routes count one event of the same per-owner limit on the shared `RateLimit` store
+  **before** they read or classify anything, so every request of an authenticated owner spends its slot: a malformed or
+  reserved address, an id that names nothing, another owner's invitation, and a rename that will be refused all count,
+  and the address routes are never a free way to learn which addresses are held. An owner over the limit gets 429
+  `SLUG_AVAILABILITY_RATE_LIMITED` from either route and nothing changes. The save is 400 `INVALID_INVITATION_SLUG`
+  with its issue for an address the rule refuses, 409 `INVITATION_SLUG_RESERVED` for a reserved word, 409
+  `INVITATION_SLUG_TAKEN` for an address already held, 409 `INVITATION_SLUG_RENAME_LIMIT` for the sixth rename —
+  including one that races another rename into the sixth place, which the alias trigger refuses — 409
+  `INVITATION_SLUG_RENAME_CONFLICT` for a rename that lost a race to another rename of the same invitation (the
+  previous address it was about to store was already stored by the winner, so nothing was written and the owner
+  retries and reads the invitation as it stands), 409 `INVITATION_NOT_EDITABLE` for an archived invitation, and the
+  usual 404 for another owner's id. Two concurrent renames of one invitation therefore always end with one stored
+  address and each other's refusal, never a server fault and never a false “taken”.
 - Public read: `GET /public/invitations/:slug` answers the published invitation a previous address belonged to and adds
   `redirectTo` with the current address (null for the current one). The web turns it into `permanentRedirect` before
   rendering, so `/i/<alias>`, `/i/<alias>/g/<token>`, and `/i/<alias>/calendario.ics` all move permanently to the
@@ -875,9 +884,11 @@ generated address (`invitacion-k7m2qx`) with an address of their own (`valentina
   invitación» block: the real prefix from configuration (`PUBLIC_WEB_ORIGIN`, `invitame.mx/i/` in production; the
   request's own origin when it is unset), the field, a debounced server-checked state in words («✓ Disponible», «Ya
   está en uso», «No es válida», «No está disponible», «Revisando…»), the rule, «Guardar dirección», the note that the
-  previous link keeps working, and how many renames are left (`slugRenamesRemaining` of the owner's read). Saving
-  refreshes the page's own reads, so the share panel and «Mis invitaciones» show the new address at once. The client
-  never decides availability itself: every state comes from the API's check through a server action.
+  previous link keeps working, and how many renames are left (`slugRenamesRemaining`, which every owned answer of
+  the API states — the read, the content, feature, place, publish, and rename answers — so two tabs always show the
+  same remaining count). Saving refreshes the page's own reads, so the share panel and «Mis invitaciones» show the new
+  address at once. The client never decides availability itself: every state comes from the API's check through a
+  server action.
 
 ## Precise locations
 

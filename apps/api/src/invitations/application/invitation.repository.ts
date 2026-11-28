@@ -323,9 +323,12 @@ export interface InvitationRepository {
    * previous address becomes a row of `InvitationSlugAlias`, so an already shared link keeps redirecting, and the
    * transaction-local setting the pinned-field trigger requires is set for that one statement pair only, so no write
    * outside this method can change a slug. Throws `InvitationNotEditableError` for an archived invitation (A2, S7),
-   * `InvitationSlugTakenError` for an address PostgreSQL already holds, and `InvitationSlugRenameLimitError` once the
-   * invitation keeps its five previous addresses; null, changing nothing, when no row has this id or another owner has
-   * it (A4). The rename is one statement pair, so an interrupted request stores neither the new address nor an alias.
+   * `InvitationSlugTakenError` for an address PostgreSQL already holds, `InvitationSlugRenameLimitError` once the
+   * invitation keeps its five previous addresses — including when a concurrent rename took the fifth place, which the
+   * alias trigger refuses — and `InvitationSlugRenameConflictError` when a concurrent rename of this same invitation
+   * stored the address that was current here first, so the caller retries; null, changing nothing, when no row has this
+   * id or another owner has it (A4). The rename is one statement pair, so an interrupted request stores neither the new
+   * address nor an alias.
    */
   renameSlug(ownerId: string, id: string, slug: string): Promise<InvitationRecordWithMusic | null>;
 }

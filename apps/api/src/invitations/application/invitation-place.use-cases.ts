@@ -1,4 +1,5 @@
 import { assertEditable } from "../domain/invitation-lifecycle";
+import { remainingSlugRenames } from "../domain/invitation-slug";
 import {
   addressFieldNames,
   isAddressFieldName,
@@ -230,15 +231,18 @@ export class UpdateInvitationPlaceUseCase {
 
   /** The owner's view of the row the write answered, with the schema and the gated features it already had. */
   private async owned(stored: Parameters<typeof toOwnedInvitation>[0]): Promise<OwnedInvitation> {
-    const [snapshot, entitlements] = await Promise.all([
+    const [snapshot, entitlements, renames] = await Promise.all([
       this.catalog.findVersionSchema(stored.templateVersionId),
       this.catalog.findPackageEntitlements(stored.packageId),
+      // The same owned invitation the read answers, so the same renames left (F11; L15.2, R3-001).
+      this.invitations.countSlugAliases(stored.id),
     ]);
 
     return toOwnedInvitation(
       stored,
       snapshot?.schema ?? null,
       entitlements?.includedFeatureKeys ?? [],
+      remainingSlugRenames(renames),
     );
   }
 }
@@ -279,15 +283,18 @@ export class ClearInvitationPlaceUseCase {
       return null;
     }
 
-    const [snapshot, entitlements] = await Promise.all([
+    const [snapshot, entitlements, renames] = await Promise.all([
       this.catalog.findVersionSchema(updated.templateVersionId),
       this.catalog.findPackageEntitlements(updated.packageId),
+      // The same owned invitation the read answers, so the same renames left (F11; L15.2, R3-001).
+      this.invitations.countSlugAliases(updated.id),
     ]);
 
     return toOwnedInvitation(
       updated,
       snapshot?.schema ?? null,
       entitlements?.includedFeatureKeys ?? [],
+      remainingSlugRenames(renames),
     );
   }
 }

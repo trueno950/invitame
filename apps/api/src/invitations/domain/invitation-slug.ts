@@ -112,6 +112,14 @@ export const OWNER_INVITATION_SLUG_MAX_LENGTH = 40;
 /** How many times one owner may rename the address of one invitation (L15.2, approval). */
 export const MAX_INVITATION_SLUG_RENAMES = 5;
 
+/**
+ * How many renames an invitation that keeps `previous` previous addresses still has (F11; L15.2). Every owned answer
+ * states this same number, so no route can report the whole allowance after a rename.
+ */
+export function remainingSlugRenames(previous: number): number {
+  return Math.max(0, MAX_INVITATION_SLUG_RENAMES - previous);
+}
+
 /** What the owner's availability check may answer (F11; L15.3). */
 export type OwnerSlugChoice = "valid" | "invalid" | "reserved";
 
