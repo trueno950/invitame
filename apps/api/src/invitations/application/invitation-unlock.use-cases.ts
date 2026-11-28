@@ -103,16 +103,27 @@ export class UnlockInvitationUseCase {
     // The two soft budgets are still counted before the lock is read, so every attempt that reaches the verifier is one a
     // failure can be charged for — but their exhaustion no longer refuses it (L33): it is recorded and only decides the
     // answer of a code that did not open the invitation.
+    // Only a budget whose consume counted the attempt is refunded on success: refunding one that refused would erase a
+    // spent budget by one (review R4-001).
     let budgetSpent = false;
+    let clientCounted = false;
+    let addressCounted = false;
 
-    if (
-      countsPerClient &&
-      !(await this.rateLimiter.consume(INVITATION_UNLOCK_CLIENT_SCOPE, input.clientAddress))
-    ) {
-      budgetSpent = true;
+    if (countsPerClient) {
+      clientCounted = await this.rateLimiter.consume(
+        INVITATION_UNLOCK_CLIENT_SCOPE,
+        input.clientAddress,
+      );
+      budgetSpent ||= !clientCounted;
     }
-    if (!(await this.rateLimiter.consume(scope, input.clientAddress))) {
-      budgetSpent = true;
+    addressCounted = await this.rateLimiter.consume(scope, input.clientAddress);
+    budgetSpent ||= !addressCounted;
+
+    // An unresolved client address has no hard ceiling (one bucket would span every guest), so for it a spent budget
+    // still refuses before the lock read and the verifier, as before L33: the right code always opens only for a caller
+    // the ceiling can bound (review R1, R3-001).
+    if (!countsPerClient && budgetSpent) {
+      throw new InvitationUnlockRateLimitedError();
     }
 
     const lock = isValidInvitationSlug(slug) ? await this.locks.findLockBySlug(slug) : null;
@@ -125,8 +136,10 @@ export class UnlockInvitationUseCase {
     if (!(await verifyInvitationPassword(lock.passwordHash, validated.password))) {
       return this.refuse(budgetSpent);
     }
-    await this.refund(scope, input.clientAddress);
-    if (countsPerClient) {
+    if (addressCounted) {
+      await this.refund(scope, input.clientAddress);
+    }
+    if (clientCounted) {
       await this.refund(INVITATION_UNLOCK_CLIENT_SCOPE, input.clientAddress);
     }
     const minted = this.tokens.mint(lock.invitationId, lock.passwordVersion, this.now());

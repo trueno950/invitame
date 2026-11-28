@@ -301,11 +301,12 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
     assert.ok(result.status === "unlocked");
     assert.equal(locks.reads, readsBeforeUnlock + 1, "the lock is read and the code verified");
     assert.equal(TOKENS.isValid(result.token, INVITATION, 3, NOW), true);
-    // And it refunds the spent budget's count exactly as before, so only failures stay counted; the cap that spans every
-    // address was not spent by ten failures at one invitation, so this attempt rolled through it and gave its count back.
+    // A spent budget is not refunded by the right code (its consume refused, so there is nothing to give back): the
+    // over-limit state stays, and the next wrong code still answers 429 (review R4-001). The cap that spans every address
+    // was not spent by ten failures at one invitation, so this attempt counted there and gave its count back.
     assert.equal(
       limiter.count(invitationUnlockScope(SLUG), address),
-      INVITATION_UNLOCK_RATE_LIMIT.max - 1,
+      INVITATION_UNLOCK_RATE_LIMIT.max,
     );
     assert.equal(
       limiter.count(INVITATION_UNLOCK_CLIENT_SCOPE, address),
@@ -450,6 +451,14 @@ describe("UnlockInvitationUseCase (L18.2, L18.3)", () => {
     // spanning every invitation would let one caller exhaust every guest's ceiling (L33). The per-address budget is the
     // bound that still applies, and it answers 429 to a wrong code once spent.
     assert.equal(limiter.count(INVITATION_UNLOCK_VERIFICATION_SCOPE, unknown), 0);
+    // With no ceiling to bound it, a spent budget refuses before the lock read and the verifier, even the right code
+    // (review R1, R3-001): an unresolved caller can never buy unbounded hashing.
+    const readsBefore = locks.reads;
+    await assert.rejects(
+      () => attempt(locks, limiter, PASSWORD, { clientAddress: unknown }),
+      InvitationUnlockRateLimitedError,
+    );
+    assert.equal(locks.reads, readsBefore, "no lock read, so no verification");
   });
 
   it("verifies an attempt already over the cross-address cap, and answers a wrong code 429 (L33)", async () => {

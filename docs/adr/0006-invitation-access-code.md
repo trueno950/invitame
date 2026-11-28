@@ -135,9 +135,12 @@ factor, and it closes every public route of the invitation. Four properties had 
   no projection, log, response, or fixture of a read can carry it.
 - The exposure to brute force is bounded by the width of the code, the soft budgets, and the ceiling of verifications,
   not by a lockout: a 4-character code is weak, and the owner is shown that a longer one is better. Since L33 a spent soft
-  budget no longer closes the invitation to the guests who know the code — the right code always opens — so what a guesser
-  gains is only that an exhausted budget answers 429 instead of 401; the ceiling of 300 verifications per client address
-  per 15 minutes is what keeps that from becoming unbounded hashing work. The API refuses to make the code a password with
+  budget no longer closes the invitation to the guests who know the code — the right code always opens — so a guesser with
+  a resolved client address keeps guessing past the soft budgets, with 200 against 429 as the signal, up to the ceiling
+  of 300 verifications per client address per 15 minutes (about 28 800 a day per address, ten times the 30 failures the
+  cross-address cap allowed before L33): the owner accepted that in exchange for never blocking a venue's shared Wi-Fi,
+  and the ceiling is what keeps it from becoming unbounded hashing work. A caller whose address does not resolve has no
+  ceiling to bound it, so for it a spent budget still refuses before any hashing, even the right code. The API refuses to make the code a password with
   account semantics — there is no reset by email, no per-person code, and no second factor, because a guest who loses the
   code asks the owner for it.
 - A locked invitation is still discoverable as a slug: the 423 confirms that the address exists and is protected. That is
